@@ -54,38 +54,23 @@ let testCompile() =
         ]
 
     let prototype =
-        {
-            Id = newId()
-            AttributeScope = Ag.Scope.Root
-            
-            IsActive            = AVal.constant true
-            RenderPass          = RenderPass.main
-            
-            DrawCalls           = Direct(AVal.constant [ callInfo ])
-            Mode                = IndexedGeometryMode.TriangleList
-
-            Surface             = Surface.Backend (surface :> ISurface)
-
-            DepthState          = DepthState.Default
-            BlendState          = BlendState.Default
-            StencilState        = StencilState.Default
-            RasterizerState     = { RasterizerState.Default with FrontFace = AVal.constant WindingOrder.CounterClockwise }
-            
-            Indices             = None
-            InstanceAttributes  = AttributeProvider.Empty
-            VertexAttributes    = attributes
-            
-            Uniforms            = uniforms V3d.Zero
-
-            Activate            = fun () -> { new IDisposable with member x.Dispose() = () }
-        }
+        let ro = RenderObject()
+        ro.DrawCalls        <- Direct(AVal.constant [ callInfo ])
+        ro.Surface          <- Surface.Backend (surface :> ISurface)
+        ro.RasterizerState  <- { RasterizerState.Default with FrontFace = AVal.constant WindingOrder.CounterClockwise }
+        ro.VertexAttributes <- attributes
+        ro.Uniforms         <- uniforms V3d.Zero
+        ro
 
     let framebuffer = runtime.CreateFramebuffer(signature, AVal.constant(V2i(1024, 1024)))
     framebuffer.Acquire()
 
     let objects =
-        Array.init (1 <<< 20) (fun i -> { RenderObject.Clone(prototype) with Uniforms = uniforms (V3d(i,0,0)) } :> IRenderObject )
-
+        Array.init (1 <<< 20) (fun i ->
+            let ro = RenderObject.Clone prototype
+            ro.Uniforms <- uniforms (V3d(i,0,0))
+            ro :> IRenderObject
+        )
 
     let fbo = framebuffer.GetValue()
 

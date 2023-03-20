@@ -249,14 +249,13 @@ module Instancing =
                         else 
                             UniformProvider.Empty
 
-                    { o with 
-                        Id = newId()
-                        Surface = Surface.FShadeSimple newEffect
-                        InstanceAttributes = att  
-                        VertexAttributes = vatt  
-                        DrawCalls = newCall
-                        Uniforms = UniformProvider.union newUniforms o.Uniforms
-                    } :> IRenderObject
+                    let ro = RenderObject.Clone o
+                    ro.Surface <- Surface.FShadeSimple newEffect
+                    ro.InstanceAttributes <- att
+                    ro.VertexAttributes <- vatt
+                    ro.DrawCalls <- newCall
+                    ro.Uniforms <- UniformProvider.union newUniforms o.Uniforms
+                    ro :> IRenderObject
 
                 | :? MultiRenderObject as o ->
                     o.Children |> List.map (applyTrafos uniforms model cnt) |> MultiRenderObject :> IRenderObject

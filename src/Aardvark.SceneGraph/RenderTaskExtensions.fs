@@ -48,7 +48,7 @@ module RenderTask =
                 return { color = c; depth = d }
             }
 
-    module RenderObjects =
+    module private RenderObjects =
 
         let private uniformProvider (color : aval<#ITexture>) (depth : aval<#ITexture>) =
             { new IUniformProvider with
@@ -76,28 +76,15 @@ module RenderTask =
                 member x.Dispose() = ()
             }
 
-        let baseObject =
-            { RenderObject.Create() with
-                AttributeScope = Ag.Scope.Root
-                IsActive = AVal.constant true
-                RenderPass = RenderPass.main
-                DrawCalls = Direct (AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
-                Mode = IndexedGeometryMode.TriangleList
-                Surface = Shaders.fs |> toEffect |> Surface.FShadeSimple
-                DepthState = DepthState.Default
-                BlendState = BlendState.Default
-                StencilState = StencilState.Default
-                RasterizerState = RasterizerState.Default
-                Indices = BufferView(AVal.constant (ArrayBuffer [|0;1;2; 0;2;3|] :> IBuffer), typeof<int>) |> Some
-                InstanceAttributes = AttributeProvider.Empty
-                VertexAttributes = attributeProvider
-                Uniforms = UniformProvider.Empty
-            }
-
         let create (color : aval<#ITexture>) (depth : aval<#ITexture>) =
-            { RenderObject.Clone(baseObject) with
-                Uniforms = uniformProvider color depth
-            }
+            let ro = RenderObject()
+            ro.DrawCalls <- Direct (AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.Surface <- Shaders.fs |> toEffect |> Surface.FShadeSimple
+            ro.Indices <- BufferView(AVal.constant (ArrayBuffer [|0;1;2; 0;2;3|] :> IBuffer), typeof<int>) |> Some
+            ro.VertexAttributes <- attributeProvider
+            ro.Uniforms <- uniformProvider color depth
+            ro
 
     let cache (t : IRenderTask) : IRenderTask =
         
@@ -140,11 +127,9 @@ module RenderTask =
                     t |> RenderTask.renderToColorAndDepth size
 
                 let compose =
-                    ASet.ofList [
-                        { RenderObjects.create color depth with
-                            Surface = effect |> FShade.Effect.compose |> Surface.FShadeSimple
-                        }:> IRenderObject
-                    ]
+                    let ro = RenderObjects.create color depth
+                    ro.Surface <- effect |> FShade.Effect.compose |> Surface.FShadeSimple
+                    ASet.single (ro :> IRenderObject)
 
                 let composeTask = runtime.CompileRender(signature, compose)
 

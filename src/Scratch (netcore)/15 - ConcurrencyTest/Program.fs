@@ -183,12 +183,9 @@ let main argv =
                     AVal.constant tex, template.Activate
             else texture :> aval<_>, template.Activate
 
-        let ro =
-            { template with
-                Id = newId()
-                Uniforms = uniforms trafo texture
-                Activate = activate
-            } :> IRenderObject
+        let ro = RenderObject.Clone template
+        ro.Uniforms <- uniforms trafo texture
+        ro.Activate <- activate
 
         let ro =
             if prepareIt then

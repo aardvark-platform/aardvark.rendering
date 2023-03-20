@@ -48,7 +48,7 @@ module RasterizerState =
 module RenderObject =
 
     let ofScope (scope : Ag.Scope) =
-        let rj = RenderObject.Create()
+        let rj = RenderObject()
 
         rj.AttributeScope <- scope
         rj.Indices <- scope.VertexIndexBuffer

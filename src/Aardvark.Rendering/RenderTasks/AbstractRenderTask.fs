@@ -52,7 +52,9 @@ type AbstractRenderTask() =
         hookProvider uniforms
 
     member x.HookRenderObject (ro : RenderObject) =
-        { ro with Uniforms = hookProvider ro.Uniforms }
+        let copy = RenderObject ro
+        copy.Uniforms <- hookProvider ro.Uniforms
+        copy
 
     // NOTE: Hacky solution for concurrency issues.
     // This is lock is used for all OpenGL render tasks, basically preventing any concurrency.

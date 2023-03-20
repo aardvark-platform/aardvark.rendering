@@ -20,13 +20,12 @@ module AfterShader =
         let rec adjust (e : FShade.Effect) (o : IRenderObject) =
                 match o with
                 | :? RenderObject as o ->
-                    { o with
-                        Id = newId()
-                        Surface =
-                            match o.Surface with
-                            | Surface.FShadeSimple o -> Surface.FShadeSimple (FShade.Effect.compose [o; e])
-                            | s -> s
-                    } :> IRenderObject
+                    let ro = RenderObject.Clone o
+                    ro.Surface <-
+                        match o.Surface with
+                        | Surface.FShadeSimple o -> Surface.FShadeSimple (FShade.Effect.compose [o; e])
+                        | s -> s
+                    ro :> IRenderObject
                 | :? MultiRenderObject as o ->
                     o.Children |> List.map (adjust e) |> MultiRenderObject :> IRenderObject
                 | _ ->

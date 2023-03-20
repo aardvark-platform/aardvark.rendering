@@ -1,17 +1,32 @@
 ﻿namespace Aardvark.Rendering
 
 open System
-open FSharp.Data.Adaptive
+open System.Threading
 open Aardvark.Base
-
 open Aardvark.Rendering
+open FSharp.Data.Adaptive
 
 [<AutoOpen>]
 module private RenderObjectHelpers =
     let nopActivate () = Disposable.empty
 
+/// Unique ID for render objects.
+[<Struct; StructuredFormatDisplay("{AsString}")>]
+type RenderObjectId private (value : int) =
+    static let mutable currentId = -1
+    static let invalid = RenderObjectId(currentId)
+
+    static member Invalid = invalid
+    static member New() = RenderObjectId(Interlocked.Increment(&currentId))
+    static member op_Explicit(id : RenderObjectId) = id.Value
+
+    member x.IsValid = x.Value <> invalid.Value
+    member private x.Value = value
+    member private x.AsString = x.ToString()
+    override x.ToString() = string value
+
 type IRenderObject =
-    abstract member Id : int
+    abstract member Id : RenderObjectId
     abstract member RenderPass : RenderPass
     abstract member AttributeScope : Ag.Scope
 
@@ -22,36 +37,83 @@ type IPreparedRenderObject =
     abstract member Update : AdaptiveToken * RenderToken -> unit
     abstract member Original : Option<RenderObject>
 
-and [<CustomEquality; CustomComparison>] RenderObject =
-    {
-        Id : int
-        mutable AttributeScope : Ag.Scope
+and RenderObject private (id : RenderObjectId,
+                          attributeScope : Ag.Scope, isActive : aval<bool>, renderPass : RenderPass, drawCalls : DrawCalls, mode : IndexedGeometryMode,
+                          surface : Surface, depthState : DepthState, blendState : BlendState, stencilState : StencilState, rasterizerState : RasterizerState,
+                          indices : BufferView option, instanceAttributes : IAttributeProvider, vertexAttributes : IAttributeProvider,
+                          uniforms : IUniformProvider, activate : unit -> IDisposable) =
+    static let empty =
+        RenderObject(
+            id                 = RenderObjectId.Invalid,
+            attributeScope     = Ag.Scope.Root,
+            isActive           = AVal.constant true,
+            renderPass         = RenderPass.main,
+            drawCalls          = Direct (AVal.constant []),
+            mode               = IndexedGeometryMode.TriangleList,
+            surface            = Surface.None,
+            depthState         = DepthState.Default,
+            blendState         = BlendState.Default,
+            stencilState       = StencilState.Default,
+            rasterizerState    = RasterizerState.Default,
+            indices            = None,
+            instanceAttributes = AttributeProvider.Empty,
+            vertexAttributes   = AttributeProvider.Empty,
+            uniforms           = UniformProvider.Empty,
+            activate           = nopActivate
+        )
 
-        mutable IsActive            : aval<bool>
-        mutable RenderPass          : RenderPass
+    member val Id                 = id
+    member val AttributeScope     = attributeScope     with get, set
+    member val IsActive           = isActive           with get, set
+    member val RenderPass         = renderPass         with get, set
+    member val DrawCalls          = drawCalls          with get, set
+    member val Mode               = mode               with get, set
+    member val Surface            = surface            with get, set
+    member val DepthState         = depthState         with get, set
+    member val BlendState         = blendState         with get, set
+    member val StencilState       = stencilState       with get, set
+    member val RasterizerState    = rasterizerState    with get, set
+    member val Indices            = indices            with get, set
+    member val InstanceAttributes = instanceAttributes with get, set
+    member val VertexAttributes   = vertexAttributes   with get, set
+    member val Uniforms           = uniforms           with get, set
+    member val Activate           = activate           with get, set
 
-        mutable DrawCalls           : DrawCalls
-        mutable Mode                : IndexedGeometryMode
+    private new(id : RenderObjectId, other : RenderObject) =
+        RenderObject(
+            id                 = id,
+            attributeScope     = other.AttributeScope,
+            isActive           = other.IsActive,
+            renderPass         = other.RenderPass,
+            drawCalls          = other.DrawCalls,
+            mode               = other.Mode,
+            surface            = other.Surface,
+            depthState         = other.DepthState,
+            blendState         = other.BlendState,
+            stencilState       = other.StencilState,
+            rasterizerState    = other.RasterizerState,
+            indices            = other.Indices,
+            instanceAttributes = other.InstanceAttributes,
+            vertexAttributes   = other.VertexAttributes,
+            uniforms           = other.Uniforms,
+            activate           = other.Activate
+        )
 
-        mutable Surface             : Surface
+    /// Creates an empty render object with a unique id.
+    new() =
+        RenderObject(id = RenderObjectId.New(), other = empty)
 
-        mutable DepthState          : DepthState
-        mutable BlendState          : BlendState
-        mutable StencilState        : StencilState
-        mutable RasterizerState     : RasterizerState
+    /// Creates a copy of the given render object.
+    /// Note: The copy will have the same id as the original.
+    new(other : RenderObject) =
+        RenderObject(id = other.Id, other = other)
 
-        mutable Indices             : Option<BufferView>
-        mutable InstanceAttributes  : IAttributeProvider
-        mutable VertexAttributes    : IAttributeProvider
+    /// Clones the given render object and assigns a newly generated id.
+    static member Clone(ro : RenderObject) =
+        RenderObject(id = RenderObjectId.New(), other = ro)
 
-        mutable Uniforms            : IUniformProvider
-
-        mutable Activate            : unit -> IDisposable
-    }
-    interface IRenderObject with
-        member x.Id = x.Id
-        member x.RenderPass = x.RenderPass
-        member x.AttributeScope = x.AttributeScope
+    [<Obsolete("Use default constructor instead.")>]
+    static member Create() = RenderObject()
 
     member x.Path =
         if System.Object.ReferenceEquals(x.AttributeScope,Ag.Scope.Root) then "EMPTY"
@@ -69,77 +131,36 @@ and [<CustomEquality; CustomComparison>] RenderObject =
             else
                 None
 
-    static member Create() =
-        { Id = newId()
-          AttributeScope = Ag.Scope.Root
-          IsActive = Unchecked.defaultof<_>
-          RenderPass = RenderPass.main
-          DrawCalls = Unchecked.defaultof<_>
-
-          Mode = IndexedGeometryMode.TriangleList
-          Surface = Surface.None
-          DepthState = Unchecked.defaultof<_>
-          BlendState = Unchecked.defaultof<_>
-          StencilState = Unchecked.defaultof<_>
-          RasterizerState = Unchecked.defaultof<_>
-          Indices = None
-          InstanceAttributes = Unchecked.defaultof<_>
-          VertexAttributes = Unchecked.defaultof<_>
-          Uniforms = Unchecked.defaultof<_>
-          Activate = nopActivate
-        }
-
-    static member Clone(org : RenderObject) =
-        { org with Id = newId() }
-
-    override x.GetHashCode() = x.Id
+    override x.GetHashCode() = int x.Id
     override x.Equals o =
         match o with
-            | :? RenderObject as o -> x.Id = o.Id
-            | _ -> false
+        | :? RenderObject as o -> x.Id = o.Id
+        | _ -> false
+
+    interface IEquatable<RenderObject> with
+        member x.Equals(other) = (x.Id = other.Id)
+
+    interface IComparable<RenderObject> with
+        member x.CompareTo(other) = compare x.Id other.Id
 
     interface IComparable with
         member x.CompareTo o =
             match o with
-                | :? RenderObject as o -> compare x.Id o.Id
-                | _ -> failwith "uncomparable"
+            | :? RenderObject as o -> compare x.Id o.Id
+            | _ -> failwith "uncomparable"
 
-[<AutoOpen>]
-module RenderObjectExtensions =
-
-    let private empty =
-        { Id = -1
-          AttributeScope = Ag.Scope.Root
-          IsActive = Unchecked.defaultof<_>
-          RenderPass = RenderPass.main
-          DrawCalls = Unchecked.defaultof<_>
-          Mode = IndexedGeometryMode.TriangleList
-          Surface = Surface.None
-          DepthState = Unchecked.defaultof<_>
-          BlendState = Unchecked.defaultof<_>
-          StencilState = Unchecked.defaultof<_>
-          RasterizerState = Unchecked.defaultof<_>
-          Indices = None
-          InstanceAttributes = AttributeProvider.Empty
-          VertexAttributes = AttributeProvider.Empty
-          Uniforms = UniformProvider.Empty
-          Activate = nopActivate
-        }
-
-    type RenderObject with
-        static member Empty =
-            empty
-
-        member x.IsValid =
-            x.Id >= 0
+    interface IRenderObject with
+        member x.Id = x.Id
+        member x.RenderPass = x.RenderPass
+        member x.AttributeScope = x.AttributeScope
 
 
 type MultiRenderObject(children : list<IRenderObject>) =
     let first =
         lazy (
             match children with
-                | [] -> failwith "[MultiRenderObject] cannot be empty"
-                | h::_ -> h
+            | [] -> failwith "[MultiRenderObject] cannot be empty"
+            | h::_ -> h
         )
 
     member x.Children = children
@@ -152,5 +173,5 @@ type MultiRenderObject(children : list<IRenderObject>) =
     override x.GetHashCode() = children.GetHashCode()
     override x.Equals o =
         match o with
-            | :? MultiRenderObject as o -> children.Equals(o.Children)
-            | _ -> false
+        | :? MultiRenderObject as o -> children.Equals(o.Children)
+        | _ -> false

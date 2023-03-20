@@ -89,7 +89,7 @@ type LodNodeSem() =
         let view = scope.ViewTrafo
         let proj = scope.ProjTrafo
 
-        let id = newId()
+        let id = RenderObjectId.New()
         let obj =
             { new ILodRenderObject with
                 member x.Id = id

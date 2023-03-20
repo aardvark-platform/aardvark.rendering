@@ -194,11 +194,10 @@ let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature)
 
     // next instantiate the objects (using copy)
     let renderObjects =
-        trafos |> Array.map (fun trafo -> 
-            { template with
-                Id = newId()
-                Uniforms = uniforms trafo
-            } :> IRenderObject
+        trafos |> Array.map (fun trafo ->
+            let ro = RenderObject.Clone template
+            ro.Uniforms <- uniforms trafo
+            ro :> IRenderObject
         )
 
     Log.startTimed "[custom render objects] compile scene"

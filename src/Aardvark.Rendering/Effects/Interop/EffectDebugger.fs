@@ -11,7 +11,11 @@ type EffectDebugger private() =
             | Surface.FShadeSimple e ->
                 match FShade.EffectDebugger.register e with
                 | Some (:? aval<FShade.Effect> as e) ->
-                    e |> AVal.map (fun e -> { o with Id = newId(); Surface = Surface.FShadeSimple e } :> IRenderObject)
+                    e |> AVal.map (fun e ->
+                        let ro = RenderObject.Clone o
+                        ro.Surface <- Surface.FShadeSimple e
+                        ro :> IRenderObject
+                    )
                 | _ ->
                     AVal.constant (o :> IRenderObject)
             | _ ->

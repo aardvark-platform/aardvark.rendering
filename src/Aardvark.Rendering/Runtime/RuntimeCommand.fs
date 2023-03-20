@@ -53,7 +53,7 @@ type RuntimeCommand =
         RuntimeCommand.LodTreeCmd(surface, pipeline, geometries)
 
 type CommandRenderObject(pass : RenderPass, scope : Ag.Scope, command : RuntimeCommand) =
-    let id = newId()
+    let id = RenderObjectId.New()
 
     member x.Id = id
     member x.RenderPass = pass

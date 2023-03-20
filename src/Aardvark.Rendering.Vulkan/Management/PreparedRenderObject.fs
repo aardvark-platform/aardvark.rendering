@@ -56,7 +56,7 @@ type PreparedRenderObject(device         : Device,
 
 
 type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
-    let id = newId()
+    let id = RenderObjectId.New()
 
     let first =
         match children with

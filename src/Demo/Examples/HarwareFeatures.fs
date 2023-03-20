@@ -159,11 +159,9 @@ module HarwareFeatures =
                     for y in -size .. size do
                         for z in -size .. size do
                             let trafo = Trafo3d.Scale(0.3) * Trafo3d.Translation(float x, float y, float z)
-                            yield 
-                                { template with
-                                    Id = newId()
-                                    Uniforms = uniforms trafo
-                                } :> IRenderObject
+                            let ro = RenderObject.Clone template
+                            ro.Uniforms <- uniforms trafo
+                            yield ro :> IRenderObject
             ]
 
 

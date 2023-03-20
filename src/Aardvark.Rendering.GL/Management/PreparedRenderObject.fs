@@ -721,7 +721,7 @@ module PreparedPipelineStateAssembler =
 type PreparedCommand(ctx : Context, renderPass : RenderPass, renderObject : RenderObject option) =
     
     let mutable refCount = 1
-    let id = newId()
+    let id = RenderObjectId.New()
 
     let mutable cleanup : list<unit -> unit> = []
     
