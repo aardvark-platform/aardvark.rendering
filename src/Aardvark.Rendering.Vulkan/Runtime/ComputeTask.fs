@@ -148,9 +148,9 @@ module internal ComputeTaskInternals =
         module private CommandStreamExtensions =
 
             type VKVM.CommandStream with
-                member x.Sync(buffer : Buffer, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags) =
+                member x.Sync(buffer : Buffer, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags, queueFlags : QueueFlags) =
                     let supportedStages =
-                        VkPipelineStageFlags.ofQueueFlags QueueFlags.Compute
+                        VkPipelineStageFlags.ofQueueFlags queueFlags
 
                     let srcStage, srcAccess =
                         let stage = VkBufferUsageFlags.toSrcStageFlags buffer.Usage
@@ -172,9 +172,9 @@ module internal ComputeTaskInternals =
                         [||], [| barrier |], [||]
                     )
 
-                member x.Sync(img : ImageSubresourceRange, layout : VkImageLayout, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags) =
+                member x.Sync(img : ImageSubresourceRange, layout : VkImageLayout, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags, queueFlags : QueueFlags) =
                     let supportedStages =
-                        VkPipelineStageFlags.ofQueueFlags QueueFlags.Compute
+                        VkPipelineStageFlags.ofQueueFlags queueFlags
 
                     let srcStage, srcAccess =
                         let stage = VkImageLayout.toSrcStageFlags layout
@@ -245,7 +245,7 @@ module internal ComputeTaskInternals =
                             stream.TransformLayout(image, layout, VkImageLayout.ShaderReadOnlyOptimal)
                 }
 
-            let private compileS (cmd : ComputeCommand) : State<CompilerState, unit> =
+            let private compileS (queueFlags : QueueFlags) (cmd : ComputeCommand) : State<CompilerState, unit> =
                 state {
                     match cmd with
                     | ComputeCommand.BindCmd shader ->
@@ -301,7 +301,7 @@ module internal ComputeTaskInternals =
                         let srcAccess = VkAccessFlags.ofResourceAccess srcAccess
                         let dstAccess = VkAccessFlags.ofResourceAccess dstAccess
                         let! stream = CompilerState.stream
-                        stream.Sync(buffer, srcAccess, dstAccess) |> ignore
+                        stream.Sync(buffer, srcAccess, dstAccess, queueFlags) |> ignore
 
                     | ComputeCommand.CopyImageCmd (src, srcOffset, dst, dstOffset, size) ->
                         let src = ImageSubresourceLayers.ofFramebufferOutput src
@@ -364,7 +364,7 @@ module internal ComputeTaskInternals =
                         let dstAccess = VkAccessFlags.ofResourceAccess dstAccess
                         let aspect = TextureFormat.toAspect image.TextureFormat
                         let! stream = CompilerState.stream
-                        stream.Sync(image.[aspect], layout, srcAccess, dstAccess) |> ignore
+                        stream.Sync(image.[aspect], layout, srcAccess, dstAccess, queueFlags) |> ignore
                 }
 
             let private epilogue : State<CompilerState, unit> =
@@ -373,18 +373,18 @@ module internal ComputeTaskInternals =
                     do! restoreLayouts images
                 }
 
-            let compile (cmds : seq<ComputeCommand>) =
+            let compile (queueFlags : QueueFlags) (cmds : seq<ComputeCommand>) =
                 let mutable state = CompilerState.empty
 
                 for cmd in cmds do
-                    let c = compileS cmd
+                    let c = compileS queueFlags cmd
                     c.Run(&state)
 
                 epilogue.Run(&state)
 
                 { state with Commands = List.rev state.Commands }
 
-        type CommandCompiler(owner : IAdaptiveObject, manager : ResourceManager, resources : ResourceLocationSet, input : alist<ComputeCommand>) =
+        type CommandCompiler(owner : IAdaptiveObject, queueFlags : QueueFlags, manager : ResourceManager, resources : ResourceLocationSet, input : alist<ComputeCommand>) =
             let reader = input.GetReader()
             let inputs = Dict<Index, ComputeInputBinding>()
             let nested = Dict<Index, IComputeTask>()
@@ -452,7 +452,7 @@ module internal ComputeTaskInternals =
                 // Compile updated command list
                 if deltas.Count > 0 then
                     compiled.Commands |> List.iter (fun c -> c.Dispose())
-                    compiled <- ComputeCommand.compile commands
+                    compiled <- ComputeCommand.compile queueFlags commands
                     true
                 else
                     false
@@ -572,7 +572,7 @@ module internal ComputeTaskInternals =
         let secondary = System.Collections.Generic.List<CommandBuffer>()
         let secondaryAvailable = System.Collections.Generic.Queue<CommandBuffer>()
 
-        let compiler = new CommandCompiler(this, manager, resources, input)
+        let compiler = new CommandCompiler(this, family.Flags, manager, resources, input)
         let prepared = System.Collections.Generic.List<IPreparedCommand>()
 
         let getSecondaryCommandBuffer() =
