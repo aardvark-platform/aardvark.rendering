@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering
 
 open System
+open System.Threading
 open Aardvark.Base
 open Aardvark.Rendering.Raytracing
 open FSharp.Data.Adaptive
@@ -37,10 +38,22 @@ module DebugLevel =
         if enable then DebugLevel.Normal else DebugLevel.None
 
 
+/// Unique ID for render tasks.
+[<Struct; StructuredFormatDisplay("{AsString}")>]
+type RenderTaskId private (value : int) =
+    static let mutable currentId = 0
+
+    static member New() = RenderTaskId(Interlocked.Increment(&currentId))
+    static member op_Explicit(id : RenderTaskId) = id.Value
+
+    member private x.Value = value
+    member private x.AsString = x.ToString()
+    override x.ToString() = string value
+
 type IRenderTask =
     inherit IDisposable
     inherit IAdaptiveObject
-    abstract member Id : int
+    abstract member Id : RenderTaskId
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
     abstract member Update : AdaptiveToken * RenderToken -> unit

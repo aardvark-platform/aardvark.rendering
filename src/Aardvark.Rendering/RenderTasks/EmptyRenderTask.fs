@@ -4,7 +4,7 @@ open FSharp.Data.Adaptive
 
 type EmptyRenderTask private() =
     inherit ConstantObject()
-    let id = newId()
+    let id = RenderTaskId.New()
     static let instance = new EmptyRenderTask() :> IRenderTask
     static member Instance = instance
 

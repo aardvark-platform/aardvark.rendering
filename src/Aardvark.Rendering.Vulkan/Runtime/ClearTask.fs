@@ -8,7 +8,7 @@ open FSharp.Data.Adaptive
 type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValues>) =
     inherit AdaptiveObject()
 
-    let id = newId()
+    let id = RenderTaskId.New()
     let pool = device.GraphicsFamily.CreateCommandPool()
     let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
 

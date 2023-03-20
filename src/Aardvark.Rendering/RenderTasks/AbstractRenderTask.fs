@@ -9,7 +9,7 @@ open FSharp.Data.Adaptive
 type AbstractRenderTask() =
     inherit AdaptiveObject()
 
-    let id = newId()
+    let id = RenderTaskId.New()
 
     static let resourcesInUse = obj()
 

@@ -13,14 +13,11 @@ module private RenderObjectHelpers =
 /// Unique ID for render objects.
 [<Struct; StructuredFormatDisplay("{AsString}")>]
 type RenderObjectId private (value : int) =
-    static let mutable currentId = -1
-    static let invalid = RenderObjectId(currentId)
+    static let mutable currentId = 0
 
-    static member Invalid = invalid
     static member New() = RenderObjectId(Interlocked.Increment(&currentId))
     static member op_Explicit(id : RenderObjectId) = id.Value
 
-    member x.IsValid = x.Value <> invalid.Value
     member private x.Value = value
     member private x.AsString = x.ToString()
     override x.ToString() = string value
@@ -44,7 +41,7 @@ and RenderObject private (id : RenderObjectId,
                           uniforms : IUniformProvider, activate : unit -> IDisposable) =
     static let empty =
         RenderObject(
-            id                 = RenderObjectId.Invalid,
+            id                 = RenderObjectId(),
             attributeScope     = Ag.Scope.Root,
             isActive           = AVal.constant true,
             renderPass         = RenderPass.main,
