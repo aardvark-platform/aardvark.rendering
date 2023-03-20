@@ -5,11 +5,16 @@ open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open System
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 
 type IRaytracingTask =
     inherit IDisposable
     inherit IAdaptiveObject
+
+    /// Updates the resources of the task without running it.
     abstract member Update : token: AdaptiveToken * renderToken: RenderToken -> unit
+
+    /// Updates and runs the task.
     abstract member Run : token: AdaptiveToken * renderToken: RenderToken -> unit
 
 and IRaytracingRuntime =
@@ -24,67 +29,112 @@ and IRaytracingRuntime =
     /// Compiles a raytracing task for the given pipeline and commands.
     abstract member CompileTrace : pipeline: RaytracingPipelineState * commands: alist<RaytracingCommand> -> IRaytracingTask
 
-and [<RequireQualifiedAccess>] RaytracingCommand =
-    | TraceRaysCmd       of size: V3i
-    | SyncBufferCmd      of buffer: IBackendBuffer * src: ResourceAccess * dst: ResourceAccess
-    | SyncTextureCmd     of texture: IBackendTexture * src: ResourceAccess * dst: ResourceAccess
-    | TransformLayoutCmd of texture: IBackendTexture * src: TextureLayout * dst: TextureLayout
+and [<RequireQualifiedAccess>]
+    RaytracingCommand =
+    | TraceRaysCmd        of size: V3i
+    | SyncBufferCmd       of buffer: IBackendBuffer * srcAccess: ResourceAccess * dstAccess: ResourceAccess
+    | SyncTextureCmd      of texture: ITextureRange * layout: TextureLayout * srcAccess: ResourceAccess * dstAccess: ResourceAccess
+    | TransformLayoutCmd  of texture: ITextureRange * srcLayout: TextureLayout * dstLayout: TextureLayout
 
-    static member TraceRays(size : int) =
-        RaytracingCommand.TraceRaysCmd(V3i(size, 1, 1))
+    static member inline TraceRays(size : int) =
+        RaytracingCommand.TraceRaysCmd (V3i(size, 1, 1))
 
-    static member TraceRays(size : V2i) =
-        RaytracingCommand.TraceRaysCmd(V3i(size, 1))
+    static member inline TraceRays(size : V2i) =
+        RaytracingCommand.TraceRaysCmd size.XYI
 
-    static member TraceRays(size : V3i) =
-        RaytracingCommand.TraceRaysCmd(size)
+    static member inline TraceRays(size : V3i) =
+        RaytracingCommand.TraceRaysCmd size
 
-    static member TraceRaysToTexture(texture : IBackendTexture) = [
-        RaytracingCommand.TransformLayout(texture, TextureLayout.ShaderRead, TextureLayout.ShaderWrite)
-        RaytracingCommand.TraceRays(texture.Size)
-        RaytracingCommand.TransformLayout(texture, TextureLayout.ShaderWrite, TextureLayout.ShaderRead)
-    ]
+    static member inline Sync(buffer : IBackendBuffer,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
+        RaytracingCommand.SyncBufferCmd(buffer, srcAccess, dstAccess)
 
-    static member TransformLayout(texture : IBackendTexture, src : TextureLayout, dst : TextureLayout) =
-        RaytracingCommand.TransformLayoutCmd(texture, src, dst)
+    static member inline Sync(buffer : IBuffer<'T>,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
+        RaytracingCommand.SyncBufferCmd(buffer.Buffer, srcAccess, dstAccess)
+
+    static member inline Sync(texture : ITextureRange, layout : TextureLayout,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
+        RaytracingCommand.SyncTextureCmd(texture, layout, srcAccess, dstAccess)
+
+    static member inline Sync(texture : IBackendTexture, layout : TextureLayout,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
+        RaytracingCommand.SyncTextureCmd(texture.[texture.Format.Aspect, *, *], layout, srcAccess, dstAccess)
+
+    static member inline TransformLayout(texture : IBackendTexture, srcLayout : TextureLayout, dstLayout : TextureLayout) =
+        RaytracingCommand.TransformLayoutCmd(texture.[texture.Format.Aspect, *, *], srcLayout, dstLayout)
+
+    static member inline TransformLayout(texture : ITextureRange, srcLayout : TextureLayout, dstLayout : TextureLayout) =
+        RaytracingCommand.TransformLayoutCmd(texture, srcLayout, dstLayout)
+
+    static member inline TraceRaysToTexture(texture : IBackendTexture,
+                                            [<Optional; DefaultParameterValue(TextureLayout.ShaderRead)>] srcLayout : TextureLayout,
+                                            [<Optional; DefaultParameterValue(TextureLayout.ShaderRead)>] dstLayout : TextureLayout) =
+        [ RaytracingCommand.TransformLayout(texture, srcLayout, TextureLayout.ShaderWrite)
+          RaytracingCommand.TraceRays texture.Size
+          RaytracingCommand.TransformLayout(texture, TextureLayout.ShaderWrite, dstLayout) ]
 
 
 [<Extension>]
 type RaytracingTaskExtensions() =
 
+    /// Updates the resources of the task without running it.
     [<Extension>]
-    static member Update(this : IRaytracingTask) =
-        this.Update(AdaptiveToken.Top, RenderToken.Empty)
+    static member inline Update(task : IRaytracingTask) =
+        task.Update(AdaptiveToken.Top, RenderToken.Empty)
 
+    /// Updates the resources of the task without running it.
     [<Extension>]
-    static member Update(this : IRaytracingTask, token : AdaptiveToken) =
-        this.Update(token, RenderToken.Empty)
+    static member inline Update(task : IRaytracingTask, token : AdaptiveToken) =
+        task.Update(token, RenderToken.Empty)
 
+    /// Updates and runs the task.
     [<Extension>]
-    static member Run(this : IRaytracingTask) =
-        this.Run(AdaptiveToken.Top, RenderToken.Empty)
+    static member inline Run(task : IRaytracingTask) =
+        task.Run(AdaptiveToken.Top, RenderToken.Empty)
 
+    /// Updates and runs the task.
     [<Extension>]
-    static member Run(this : IRaytracingTask, token : AdaptiveToken) =
-        this.Run(token, RenderToken.Empty)
+    static member inline Run(task : IRaytracingTask, token : AdaptiveToken) =
+        task.Run(token, RenderToken.Empty)
 
 [<Extension>]
 type RaytracingRuntimeExtensions() =
 
+    /// Compiles a raytracing task for the given pipeline and commands.
     [<Extension>]
-    static member CompileTrace(this : IRaytracingRuntime, pipeline: RaytracingPipelineState, commands: aval<RaytracingCommand list>) =
-        this.CompileTrace(pipeline, commands |> AList.ofAVal)
+    static member inline CompileTrace(runtime : IRaytracingRuntime, pipeline : RaytracingPipelineState, commands : aval<#seq<RaytracingCommand>>) =
+        runtime.CompileTrace(pipeline, commands |> AList.ofAVal)
 
+    /// Compiles a raytracing task for the given pipeline and commands.
     [<Extension>]
-    static member CompileTrace(this : IRaytracingRuntime, pipeline: RaytracingPipelineState, commands: List<RaytracingCommand>) =
-        this.CompileTrace(pipeline, commands |> AList.ofList)
+    static member inline CompileTrace(runtime : IRaytracingRuntime, pipeline : RaytracingPipelineState, commands : seq<RaytracingCommand>) =
+        runtime.CompileTrace(pipeline, commands |> AList.ofSeq)
 
+    /// <summary>
+    /// Compiles a raytracing task that dispatches rays based on the size of the given texture.
+    /// The layout of the texture is transformed from <paramref name="srcLayout"/> to TextureLayout.ShaderWrite before the dispatch.
+    /// After the dispatch the layout is transformed to <paramref name="dstLayout"/>.
+    /// </summary>
     [<Extension>]
-    static member CompileTraceToTexture(this : IRaytracingRuntime, pipeline: RaytracingPipelineState, target: aval<IBackendTexture>) =
-        let commands = target |> AVal.map RaytracingCommand.TraceRaysToTexture
-        this.CompileTrace(pipeline, commands |> AList.ofAVal)
+    static member inline CompileTraceToTexture(runtime : IRaytracingRuntime, pipeline : RaytracingPipelineState, target : aval<#IBackendTexture>,
+                                               [<Optional; DefaultParameterValue(TextureLayout.ShaderRead)>] srcLayout : TextureLayout,
+                                               [<Optional; DefaultParameterValue(TextureLayout.ShaderRead)>] dstLayout : TextureLayout) =
+        let commands = target |> AVal.map (fun t -> RaytracingCommand.TraceRaysToTexture(t, srcLayout, dstLayout))
+        runtime.CompileTrace(pipeline, commands)
 
+    /// <summary>
+    /// Compiles a raytracing task that dispatches rays based on the size of the given texture.
+    /// The layout of the texture is transformed from <paramref name="srcLayout"/> to TextureLayout.ShaderWrite before the dispatch.
+    /// After the dispatch the layout is transformed to <paramref name="dstLayout"/>.
+    /// </summary>
     [<Extension>]
-    static member CompileTraceToTexture(this : IRaytracingRuntime, pipeline: RaytracingPipelineState, target: IBackendTexture) =
-        let commands = target |> RaytracingCommand.TraceRaysToTexture
-        this.CompileTrace(pipeline, commands |> AList.ofList)
+    static member inline CompileTraceToTexture(runtime : IRaytracingRuntime, pipeline : RaytracingPipelineState, target : IBackendTexture,
+                                               [<Optional; DefaultParameterValue(TextureLayout.ShaderRead)>] srcLayout : TextureLayout,
+                                               [<Optional; DefaultParameterValue(TextureLayout.ShaderRead)>] dstLayout : TextureLayout) =
+        let commands = RaytracingCommand.TraceRaysToTexture(target, srcLayout, dstLayout)
+        runtime.CompileTrace(pipeline, commands)

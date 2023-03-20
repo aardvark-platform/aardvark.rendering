@@ -1232,12 +1232,17 @@ type ContextImageExtensions private() =
 
 
 [<AutoOpen>]
-module private ImageRanges =
+module internal ImageRanges =
 
     module ImageSubresource =
         let ofTextureSubResource (src : ITextureSubResource) =
             let srcImage = src.Texture |> unbox<Image>
             srcImage.[src.Aspect, src.Level, src.Slice]
+
+    module ImageSubresourceRange =
+        let ofTextureRange (src : ITextureRange) =
+            let srcImage = src.Texture |> unbox<Image>
+            srcImage.[src.Aspect, src.Levels.Min .. src.Levels.Max, src.Slices.Min .. src.Slices.Max]
 
     module ImageSubresourceLayers =
         let ofFramebufferOutput (src : IFramebufferOutput) =

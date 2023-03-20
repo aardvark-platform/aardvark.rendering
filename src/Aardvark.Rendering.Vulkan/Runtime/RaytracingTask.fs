@@ -17,96 +17,126 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 
 [<AutoOpen>]
-module private ``Trace Command Extensions`` =
+module private RaytracingTaskInternals =
+    open System.Collections
+    open System.Collections.Generic
 
-    type Command with
+    type private CommandList(pShaderBindingTable : nativeptr<ShaderBindingTableHandle>) =
+        let cmds = List<Command>()
+        let pRaygenAddress : nativeptr<VkStridedDeviceAddressRegionKHR> = NativePtr.cast pShaderBindingTable
+        let pMissAddress = pRaygenAddress |> NativePtr.step 1
+        let pHitAddress = pRaygenAddress |> NativePtr.step 2
+        let pCallableAddress = pRaygenAddress |> NativePtr.step 3
 
-        static member BindRaytracingPipeline(pPipeline : nativeptr<VkPipeline>, pDescriptorSets : nativeptr<DescriptorSetBinding>) =
-            { new Command() with
-                member x.Compatible = QueueFlags.Compute
-                member x.Enqueue cmd =
-                    let descriptorSets = NativePtr.toByRef pDescriptorSets
+        member x.Clear() = cmds.Clear()
 
-                    cmd.AppendCommand()
-                    VkRaw.vkCmdBindPipeline(cmd.Handle, VkPipelineBindPoint.RayTracingKhr, pPipeline.Value)
+        member x.BindPipeline(pPipeline : nativeptr<VkPipeline>) =
+            cmds.Add (
+                { new Command() with
+                    member x.Compatible = QueueFlags.Compute
+                    member x.Enqueue cmd =
+                        cmd.AppendCommand()
+                        VkRaw.vkCmdBindPipeline(cmd.Handle, VkPipelineBindPoint.RayTracingKhr, pPipeline.Value)
 
-                    cmd.AppendCommand()
-                    VkRaw.vkCmdBindDescriptorSets(
-                        cmd.Handle, VkPipelineBindPoint.RayTracingKhr, descriptorSets.Layout,
-                        uint32 descriptorSets.FirstIndex, uint32 descriptorSets.Count, descriptorSets.Sets,
-                        0u, NativePtr.zero
-                    )
+                        []
+                }
+            )
 
-                    []
-            }
+        member x.BindDescriptorSets(pDescriptorSets : nativeptr<DescriptorSetBinding>) =
+            cmds.Add (
+                { new Command() with
+                    member x.Compatible = QueueFlags.Compute
+                    member x.Enqueue cmd =
+                        let descriptorSets = NativePtr.toByRef pDescriptorSets
 
-        static member TraceRays(pShaderBindingTable : nativeptr<ShaderBindingTableHandle>, width : uint32, height : uint32, depth : uint32) =
-            { new Command() with
-                member x.Compatible = QueueFlags.Compute
-                member x.Enqueue cmd =
-                    cmd.AppendCommand()
+                        cmd.AppendCommand()
+                        VkRaw.vkCmdBindDescriptorSets(
+                            cmd.Handle, VkPipelineBindPoint.RayTracingKhr, descriptorSets.Layout,
+                            uint32 descriptorSets.FirstIndex, uint32 descriptorSets.Count, descriptorSets.Sets,
+                            0u, NativePtr.zero
+                        )
 
-                    let pRaygenAddress : nativeptr<VkStridedDeviceAddressRegionKHR> = NativePtr.cast pShaderBindingTable
-                    let pMissAddress = pRaygenAddress |> NativePtr.step 1
-                    let pHitAddress = pRaygenAddress |> NativePtr.step 2
-                    let pCallableAddress = pRaygenAddress |> NativePtr.step 3
-                    VkRaw.vkCmdTraceRaysKHR(cmd.Handle, pRaygenAddress, pMissAddress, pHitAddress, pCallableAddress, width, height, depth)
+                        []
+                }
+            )
 
-                    []
-            }
+        member x.TraceRays(count : V3i) =
+            cmds.Add (
+                { new Command() with
+                    member x.Compatible = QueueFlags.Compute
+                    member x.Enqueue cmd =
+                        cmd.AppendCommand()
 
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module RaytracingCommand =
+                        VkRaw.vkCmdTraceRaysKHR(
+                            cmd.Handle, pRaygenAddress, pMissAddress, pHitAddress, pCallableAddress,
+                            uint32 count.X, uint32 count.Y, uint32 count.Z
+                        )
 
-        let toCommand (pShaderBindingTable : nativeptr<ShaderBindingTableHandle>) = function
-            | RaytracingCommand.TraceRaysCmd(size) ->
-                Command.TraceRays(pShaderBindingTable, uint32 size.X, uint32 size.Y, uint32 size.Z)
+                        []
+                }
+            )
 
-            | RaytracingCommand.SyncBufferCmd(buffer, src, dst) ->
+        member x.Sync(buffer : Buffer, srcAccess : ResourceAccess, dstAccess : ResourceAccess) =
+            cmds.Add <| Command.Sync(buffer, VkAccessFlags.ofResourceAccess srcAccess, VkAccessFlags.ofResourceAccess dstAccess)
+
+        member x.Sync(image : ImageSubresourceRange, layout : TextureLayout, srcAccess : ResourceAccess, dstAccess : ResourceAccess) =
+            let layout = VkImageLayout.ofTextureLayout layout
+            let srcAccess = VkAccessFlags.ofResourceAccess srcAccess
+            let dstAccess = VkAccessFlags.ofResourceAccess dstAccess
+            cmds.Add <| Command.Sync(image, layout, srcAccess, dstAccess)
+
+        member x.TransformLayout(image : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
+            if source <> target then
+                cmds.Add <| Command.TransformLayout(image, source, target)
+
+        member x.Enqueue(cmd : RaytracingCommand) =
+            match cmd with
+            | RaytracingCommand.TraceRaysCmd count ->
+                x.TraceRays(count)
+
+            | RaytracingCommand.SyncBufferCmd (buffer, srcAccess, dstAccess) ->
                 let buffer = unbox<Buffer> buffer
-                Command.Sync(buffer, VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
+                x.Sync(buffer, srcAccess, dstAccess)
 
-            | RaytracingCommand.SyncTextureCmd(texture, src, dst) ->
-                let image = unbox<Image> texture
-                Command.Sync(image.[TextureAspect.Color], image.Layout, VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
-
-            | RaytracingCommand.TransformLayoutCmd(texture, src, dst) ->
-                let image = unbox<Image> texture
-                let aspect = VkFormat.toAspect image.Format
-                let levels = Range1i(0, image.MipMapLevels - 1)
-                let slices = Range1i(0, image.Layers - 1)
-
-                Command.TransformLayout(
-                    image.[unbox (int aspect), levels.Min .. levels.Max, slices.Min .. slices.Max],
-                    VkImageLayout.ofTextureLayout src, VkImageLayout.ofTextureLayout dst
+            | RaytracingCommand.SyncTextureCmd (range, layout, srcAccess, dstAccess) ->
+                x.Sync(
+                    ImageSubresourceRange.ofTextureRange range,
+                    layout, srcAccess, dstAccess
                 )
 
+            | RaytracingCommand.TransformLayoutCmd (range, srcLayout, dstLayout) ->
+                x.TransformLayout(
+                    ImageSubresourceRange.ofTextureRange range,
+                    VkImageLayout.ofTextureLayout srcLayout, VkImageLayout.ofTextureLayout dstLayout
+                )
 
-[<AutoOpen>]
-module private RaytracingTaskInternals =
+        interface IEnumerable with
+            member x.GetEnumerator() = cmds.GetEnumerator()
+
+        interface IEnumerable<Command> with
+            member x.GetEnumerator() = cmds.GetEnumerator()
 
     type CompiledCommand(manager : ResourceManager, resources : ResourceLocationSet, pipelineState : RaytracingPipelineState, input : alist<RaytracingCommand>) =
         let reader = input.GetReader()
-        let mutable compiled = [||]
-
         let preparedPipeline = manager.PrepareRaytracingPipeline(pipelineState)
 
         do for r in preparedPipeline.Resources do
             resources.Add(r)
 
-        member x.Commands = compiled
+        let compiled = CommandList preparedPipeline.ShaderBindingTable.Pointer
+
+        member x.Commands = compiled :> seq<_>
 
         member x.Update(token : AdaptiveToken) =
             let deltas = reader.GetChanges(token)
 
             if deltas.Count > 0 then
-                let commands = reader.State.AsArray
+                compiled.Clear()
+                compiled.BindPipeline preparedPipeline.Pipeline.Pointer
+                compiled.BindDescriptorSets preparedPipeline.DescriptorSets.Pointer
 
-                Array.Resize(&compiled, commands.Length + 1)
-                compiled.[0] <- Command.BindRaytracingPipeline(preparedPipeline.Pipeline.Pointer, preparedPipeline.DescriptorSets.Pointer)
-
-                for i = 0 to commands.Length - 1 do
-                    compiled.[i + 1] <- commands.[i] |> RaytracingCommand.toCommand preparedPipeline.ShaderBindingTable.Pointer
+                for cmd in reader.State do
+                    compiled.Enqueue cmd
 
                 true
             else
@@ -165,10 +195,8 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
                 inner.Begin CommandBufferUsage.None
 
-                inner.enqueue {
-                    for cmd in compiled.Commands do
-                        do! cmd
-                }
+                for cmd in compiled.Commands do
+                    inner.Enqueue cmd
 
                 inner.End()
         )
@@ -190,9 +218,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
             for q in vulkanQueries do
                 q.Begin cmd
 
-            cmd.enqueue {
-                do! Command.Execute inner
-            }
+            cmd.Enqueue <| Command.Execute inner
 
             for q in vulkanQueries do
                 q.End cmd
