@@ -64,7 +64,7 @@ type internal Resource<'Handle, 'View when 'View : unmanaged>(kind : ResourceKin
             t.Commit()
             t.Dispose()
 
-    let id = newId()
+    let id = ResourceId.New()
 
     abstract member Create : AdaptiveToken * RenderToken * Option<'Handle> -> 'Handle
     abstract member Destroy : 'Handle -> unit
