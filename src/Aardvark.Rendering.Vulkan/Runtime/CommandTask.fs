@@ -704,7 +704,9 @@ module private RuntimeCommands =
     type PreparedCommand() =
         inherit AdaptiveObject()
 
-        let id = newId()
+        static let mutable currentId = 0
+
+        let id = Interlocked.Increment(&currentId)
         let stream = new VKVM.CommandStream()
 
         let mutable prev : Option<PreparedCommand> = None
@@ -744,7 +746,6 @@ module private RuntimeCommands =
 
         default x.GroupKey = [id :> obj]
 
-        member x.Id = id
         member x.Stream = check(); stream
 
         member x.Update(t : AdaptiveToken) =
