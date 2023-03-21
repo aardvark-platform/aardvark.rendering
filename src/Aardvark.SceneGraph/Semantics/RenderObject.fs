@@ -39,7 +39,7 @@ module RasterizerState =
     let ofScope (scope : Ag.Scope) =
         {
             CullMode           = scope.CullMode
-            FrontFace          = scope.FrontFace
+            FrontFacing        = scope.FrontFacing
             FillMode           = scope.FillMode
             Multisample        = scope.Multisample
             ConservativeRaster = scope.ConservativeRaster

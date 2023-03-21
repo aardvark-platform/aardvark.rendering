@@ -222,9 +222,16 @@ type SceneGraphExtensions =
     static member CullMode(sg : ISg, mode : CullMode) = sg |> Sg.cullMode' mode
 
     [<Extension>]
-    static member FrontFace(sg : ISg, order : aval<WindingOrder>) = sg |> Sg.frontFace order
+    static member FrontFacing(sg : ISg, order : aval<WindingOrder>) = sg |> Sg.frontFacing order
     [<Extension>]
-    static member FrontFace(sg : ISg, order : WindingOrder) = sg |> Sg.frontFace' order
+    static member FrontFacing(sg : ISg, order : WindingOrder) = sg |> Sg.frontFacing' order
+
+    [<Extension>]
+    [<Obsolete("Use frontFacing with reversed winding order instead. See: https://github.com/aardvark-platform/aardvark.rendering/issues/101")>]
+    static member FrontFace(sg : ISg, order : aval<WindingOrder>) = sg |> Sg.frontFacing (order |> AVal.mapNonAdaptive WindingOrder.reverse)
+    [<Extension>]
+    [<Obsolete("Use frontFacing with reversed winding order instead. See: https://github.com/aardvark-platform/aardvark.rendering/issues/101")>]
+    static member FrontFace(sg : ISg, order : WindingOrder) = sg |> Sg.frontFacing' (order |> WindingOrder.reverse)
 
     [<Extension>]
     static member FillMode(sg : ISg, mode : aval<FillMode>) = sg |> Sg.fillMode mode

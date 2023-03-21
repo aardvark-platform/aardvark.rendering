@@ -73,17 +73,17 @@ module Translations =
 
     let toGLCullMode (f : CullMode) =
         match f with
-            | CullMode.None -> 0// glDisable(GL_CULL_FACE) / glCullFace will not be set and
-            | CullMode.Front -> Face.Back |> int
-            | CullMode.Back -> Face.Front |> int
-            | CullMode.FrontAndBack-> Face.FrontAndBack |> int
-            | _ -> failwithf "unknown comparison %A" f
+        | CullMode.None         -> 0
+        | CullMode.Front        -> Face.Front |> int
+        | CullMode.Back         -> Face.Back |> int
+        | CullMode.FrontAndBack -> Face.FrontAndBack |> int
+        | _ -> failwithf "unknown cull mode %A" f
 
     let toGLFrontFace (f : Aardvark.Rendering.WindingOrder) =
         match f with
-            | Aardvark.Rendering.WindingOrder.Clockwise -> WindingOrder.CW |> int
-            | Aardvark.Rendering.WindingOrder.CounterClockwise -> WindingOrder.CCW |> int
-            | _ -> failwithf "unknown winding order %A" f
+        | Aardvark.Rendering.WindingOrder.Clockwise        -> WindingOrder.CW |> int
+        | Aardvark.Rendering.WindingOrder.CounterClockwise -> WindingOrder.CCW |> int
+        | _ -> failwithf "unknown winding order %A" f
 
     let toGLCompareFunction (f : ComparisonFunction) =
         match f with

@@ -63,16 +63,20 @@ type StencilState =
 type RasterizerState =
     {
         CullMode            : aval<CullMode>
-        FrontFace           : aval<WindingOrder>
+        FrontFacing         : aval<WindingOrder>
         FillMode            : aval<FillMode>
         Multisample         : aval<bool>
         ConservativeRaster  : aval<bool>
     }
 
+    [<Obsolete("Use FrontFacing with reversed winding order instead. See: https://github.com/aardvark-platform/aardvark.rendering/issues/101")>]
+    member x.FrontFace =
+        raise <| NotSupportedException("Use FrontFacing with reversed winding order instead. See: https://github.com/aardvark-platform/aardvark.rendering/issues/101")
+
     static member Default =
         {
             CullMode            = AVal.constant CullMode.None
-            FrontFace           = AVal.constant WindingOrder.Clockwise
+            FrontFacing         = AVal.constant WindingOrder.CounterClockwise
             FillMode            = AVal.constant FillMode.Fill
             Multisample         = AVal.constant true
             ConservativeRaster  = AVal.constant false

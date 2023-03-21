@@ -5,7 +5,6 @@ open Aardvark.Base
 
 open Aardvark.Base.Ag
 open Aardvark.Rendering
-open System.Collections.Generic
 open System.Runtime.CompilerServices
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
@@ -645,11 +644,22 @@ module SgFSharp =
 
 
         /// Sets the winding order of front faces.
-        let frontFace (order : aval<WindingOrder>) (sg: ISg) =
-            Sg.FrontFaceApplicator(order, sg) :> ISg
+        let frontFacing (order : aval<WindingOrder>) (sg : ISg) =
+            Sg.FrontFacingApplicator(order, sg) :> ISg
 
         /// Sets the winding order of front faces.
-        let frontFace' order = frontFace (AVal.constant order)
+        let frontFacing' order = frontFacing (AVal.constant order)
+
+
+        /// Sets the winding order of front faces.
+        [<Obsolete("Use frontFacing with reversed winding order instead. See: https://github.com/aardvark-platform/aardvark.rendering/issues/101")>]
+        let frontFace (order : aval<WindingOrder>) =
+            frontFacing (order |> AVal.mapNonAdaptive WindingOrder.reverse)
+
+        /// Sets the winding order of front faces.
+        [<Obsolete("Use frontFacing with reversed winding order instead. See: https://github.com/aardvark-platform/aardvark.rendering/issues/101")>]
+        let frontFace' (order : WindingOrder) =
+            frontFacing' (WindingOrder.reverse order)
 
 
         /// Sets the fill mode.

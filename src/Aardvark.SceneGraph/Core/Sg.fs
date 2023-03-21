@@ -323,12 +323,12 @@ module Sg =
 
         new(value : aval<CullMode>, child : ISg) = CullModeApplicator(value, AVal.constant child)
 
-    type FrontFaceApplicator(winding : aval<WindingOrder>, child : aval<ISg>) =
+    type FrontFacingApplicator(winding : aval<WindingOrder>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.WindingOrder = winding
 
-        new(winding : aval<WindingOrder>, child : ISg) = FrontFaceApplicator(winding, AVal.constant child)
+        new(winding : aval<WindingOrder>, child : ISg) = FrontFacingApplicator(winding, AVal.constant child)
 
     type FillModeApplicator(mode : aval<FillMode>, child : aval<ISg>) =
         inherit AbstractApplicator(child)

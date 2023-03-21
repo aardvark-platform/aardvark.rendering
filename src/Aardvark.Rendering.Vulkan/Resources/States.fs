@@ -163,10 +163,12 @@ module RasterizerState =
             CullMode.None, VkCullModeFlags.None
         ]
 
+    // Vulkan NDC space is right-handed while Aardvark generally assumes OpenGL's left-handed NDC space
+    // So we have to flip the winding order here (also in Vulkan we render upside down)
     let private toVkFrontFace =
         LookupTable.lookupTable [
-            WindingOrder.Clockwise, VkFrontFace.Clockwise
-            WindingOrder.CounterClockwise, VkFrontFace.CounterClockwise
+            WindingOrder.Clockwise, VkFrontFace.CounterClockwise
+            WindingOrder.CounterClockwise, VkFrontFace.Clockwise
         ]
 
    

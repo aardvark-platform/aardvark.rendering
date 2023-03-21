@@ -57,7 +57,7 @@ let testCompile() =
         let ro = RenderObject()
         ro.DrawCalls        <- Direct(AVal.constant [ callInfo ])
         ro.Surface          <- Surface.Backend (surface :> ISurface)
-        ro.RasterizerState  <- { RasterizerState.Default with FrontFace = AVal.constant WindingOrder.CounterClockwise }
+        ro.RasterizerState  <- { RasterizerState.Default with FrontFacing = AVal.constant WindingOrder.CounterClockwise }
         ro.VertexAttributes <- attributes
         ro.Uniforms         <- uniforms V3d.Zero
         ro

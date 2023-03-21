@@ -521,7 +521,7 @@ module LevelOfDetail =
                 DepthState      = DepthState.Default
                 BlendState      = BlendState.Default
                 StencilState    = StencilState.Default
-                RasterizerState = { RasterizerState.Default with FrontFace = AVal.constant WindingOrder.CounterClockwise }
+                RasterizerState = { RasterizerState.Default with FrontFacing = AVal.constant WindingOrder.Clockwise }
 
                 GlobalUniforms      = 
                     UniformProvider.ofList [

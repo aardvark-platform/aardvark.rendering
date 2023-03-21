@@ -82,29 +82,29 @@ module Culling =
 
         let private renderToRedWithCulling (cull : CullMode) (frontFace : WindingOrder) =
             Sg.cullMode' cull
-            >> Sg.frontFace' frontFace
+            >> Sg.frontFacing' frontFace
             >> renderToRed
 
         let backFaceCullingFrontFaceCCW : IRuntime -> unit =
             FullscreenQuad.ccw
-            |> renderToRedWithCulling CullMode.Back WindingOrder.Clockwise
+            |> renderToRedWithCulling CullMode.Back WindingOrder.CounterClockwise
 
         let backFaceCullingFrontFaceCW : IRuntime -> unit =
             FullscreenQuad.cw
-            |> renderToRedWithCulling CullMode.Back WindingOrder.CounterClockwise
+            |> renderToRedWithCulling CullMode.Back WindingOrder.Clockwise
 
         let frontFaceCullingFrontFaceCCW : IRuntime -> unit =
             FullscreenQuad.cw
-            |> renderToRedWithCulling CullMode.Front WindingOrder.Clockwise
+            |> renderToRedWithCulling CullMode.Front WindingOrder.CounterClockwise
 
         let frontFaceCullingFrontFaceCW : IRuntime -> unit =
             FullscreenQuad.ccw
-            |> renderToRedWithCulling CullMode.Front WindingOrder.CounterClockwise
+            |> renderToRedWithCulling CullMode.Front WindingOrder.Clockwise
 
         let shaderFrontFacing : IRuntime -> unit =
             FullscreenQuad.ccw
             |> Sg.cullMode' CullMode.Back
-            |> Sg.frontFace' WindingOrder.Clockwise
+            |> Sg.frontFacing' WindingOrder.CounterClockwise
             |> Sg.effect [Effect.frontFacingRed]
             |> renderToPix (
                 PixImage.isColor [| 255uy; 0uy; 0uy |]

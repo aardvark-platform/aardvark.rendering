@@ -344,7 +344,7 @@ module PreparedPipelineState =
         let stencilMaskBack = x.CreateStencilMask(rj.StencilState.WriteMaskBack)
 
         let cullMode = x.CreateCullMode rj.RasterizerState.CullMode
-        let frontFace = x.CreateFrontFace rj.RasterizerState.FrontFace
+        let frontFace = x.CreateFrontFace rj.RasterizerState.FrontFacing
         let polygonMode = x.CreatePolygonMode rj.RasterizerState.FillMode
         let multisample = x.CreateFlag rj.RasterizerState.Multisample
         let conservativeRaster = x.CreateFlag rj.RasterizerState.ConservativeRaster
@@ -415,7 +415,7 @@ module PreparedPipelineState =
         let stencilMaskBack = x.CreateStencilMask(rj.StencilState.WriteMaskBack)
 
         let cullMode = x.CreateCullMode rj.RasterizerState.CullMode
-        let frontFace = x.CreateFrontFace rj.RasterizerState.FrontFace
+        let frontFace = x.CreateFrontFace rj.RasterizerState.FrontFacing
         let polygonMode = x.CreatePolygonMode rj.RasterizerState.FillMode
         let multisample = x.CreateFlag rj.RasterizerState.Multisample
         let conservativeRaster = x.CreateFlag rj.RasterizerState.ConservativeRaster

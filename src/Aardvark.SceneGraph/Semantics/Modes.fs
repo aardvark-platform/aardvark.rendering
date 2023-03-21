@@ -32,7 +32,7 @@ module ModeSemantics =
 
         // Rasterizer
         member x.CullMode                   : aval<CullMode>                = x?CullMode
-        member x.FrontFace                  : aval<WindingOrder>            = x?FrontFace
+        member x.FrontFacing                : aval<WindingOrder>            = x?FrontFacing
         member x.FillMode                   : aval<FillMode>                = x?FillMode
         member x.Multisample                : aval<bool>                    = x?Multisample
         member x.ConservativeRaster         : aval<bool>                    = x?ConservativeRaster
@@ -55,7 +55,7 @@ module ModeSemantics =
         let stencilWriteMaskBack     (s : Ag.Scope) = s.StencilWriteMaskBack
 
         let cullMode                 (s : Ag.Scope) = s.CullMode
-        let frontFace                (s : Ag.Scope) = s.FrontFace
+        let frontFacing              (s : Ag.Scope) = s.FrontFacing
         let fillMode                 (s : Ag.Scope) = s.FillMode
         let multisample              (s : Ag.Scope) = s.Multisample
         let convervativeRaster       (s : Ag.Scope) = s.ConservativeRaster
@@ -124,9 +124,9 @@ module ModeSemantics =
         member x.CullMode(a : Sg.CullModeApplicator, scope : Ag.Scope) =
             a.Child?CullMode <- a.Mode
 
-        member x.FrontFace(r : Root<ISg>, scope : Ag.Scope) = r.Child?FrontFace <- RasterizerState.Default.FrontFace
-        member x.FrontFace(a : Sg.FrontFaceApplicator, scope : Ag.Scope) =
-            a.Child?FrontFace <- a.WindingOrder
+        member x.FrontFacing(r : Root<ISg>, scope : Ag.Scope) = r.Child?FrontFacing <- RasterizerState.Default.FrontFacing
+        member x.FrontFacing(a : Sg.FrontFacingApplicator, scope : Ag.Scope) =
+            a.Child?FrontFacing <- a.WindingOrder
 
         member x.FillMode(r : Root<ISg>, scope : Ag.Scope) = r.Child?FillMode <- RasterizerState.Default.FillMode
         member x.FillMode(a : Sg.FillModeApplicator, scope : Ag.Scope) =
