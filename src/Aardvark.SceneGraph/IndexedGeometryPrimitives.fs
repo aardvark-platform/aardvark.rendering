@@ -274,7 +274,7 @@ module IndexedGeometryPrimitives =
                 |]
 
             let idx =
-                [|0; 1; 2; 0; 2; 3; 4; 5; 6; 4; 6; 7; 8; 9; 10; 8; 10; 11; 12; 13; 14; 12; 14; 15; 16; 17; 18; 16; 18; 19; 20; 21; 22; 20; 22; 23|]
+                [| 0; 2; 1; 0; 3; 2; 4; 6; 5; 4; 7; 6; 8; 10; 9; 8; 11; 10; 12; 14; 13; 12; 15; 14; 16; 17; 18; 16; 18; 19; 20; 21; 22; 20; 22; 23 |]
                 
             IndexedGeometry ( 
                 IndexedGeometryMode.TriangleList,
@@ -361,11 +361,11 @@ module IndexedGeometryPrimitives =
                 let sides = 
                     [
                         (box.OOO, box.OOI, box.OII, box.OIO), -V3d.IOO, col
-                        (box.IOO, box.IOI, box.III, box.IIO),  V3d.IOO, col
+                        (box.IIO, box.III, box.IOI, box.IOO),  V3d.IOO, col
                         (box.OOO, box.IOO, box.IOI, box.OOI), -V3d.OIO, col
-                        (box.OIO, box.IIO, box.III, box.OII),  V3d.OIO, col
+                        (box.OII, box.III, box.IIO, box.OIO),  V3d.OIO, col
                         (box.OOO, box.OIO, box.IIO, box.IOO), -V3d.OOI, col
-                        (box.OOI, box.OII, box.III, box.IOI),  V3d.OOI, col
+                        (box.IOI, box.III, box.OII, box.OOI),  V3d.OOI, col
                     ]
                 match mode with
                 | Quad.Impl.Quadranglemode.Solid ->
@@ -392,7 +392,7 @@ module IndexedGeometryPrimitives =
                         Triangle3d(p0,p2,p1)
                         Triangle3d(p0,p3,p2)
                         Triangle3d(p0,p1,p3)
-                        Triangle3d(p1,p3,p2)
+                        Triangle3d(p1,p2,p3)
                     ]
 
                 match mode with
@@ -437,9 +437,9 @@ module IndexedGeometryPrimitives =
                 let indices =  List<int>()
                 // indices bottom
                 for i in 0.. horizontalSegments-1 do
-                    indices.Add(1 + (i + 1) % horizontalSegments)
-                    indices.Add(1 + i)
                     indices.Add(0)
+                    indices.Add(1 + i)
+                    indices.Add(1 + (i + 1) % horizontalSegments)
 
                 // indices rings
                 for i in 0.. verticalSegments - 2 do
@@ -450,14 +450,14 @@ module IndexedGeometryPrimitives =
                         let tl = bl + horizontalSegments
                         let tr = br + horizontalSegments
                     
-                        indices.AddRange [bl; br; tl]
-                        indices.AddRange [br; tr; tl]
+                        indices.AddRange [tl; br; bl]
+                        indices.AddRange [tl; tr; br]
 
                 // indices top
                 for i in 0 .. horizontalSegments-1 do
-                    indices.Add(vertexCount - 2 - (i + 1) % horizontalSegments)
-                    indices.Add(vertexCount - 2 - i)
                     indices.Add(vertexCount - 1)
+                    indices.Add(vertexCount - 2 - i)
+                    indices.Add(vertexCount - 2 - (i + 1) % horizontalSegments)
             
                 indices
 
