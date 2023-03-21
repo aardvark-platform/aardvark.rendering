@@ -64,62 +64,6 @@ module SgFSharp =
                     bufferCache.Add(m, r)
                     r
 
-        // Utilities for interleaved vertex attributes
-        module internal Interleaved =
-            open System.Reflection
-            open Microsoft.FSharp.NativeInterop
-
-            let arrayCache = ConditionalWeakTable<Array, int * float32[]>()
-
-            type Converter() =
-
-                static let toFloat32 (i : 'a) : float32 =
-                    let mutable i = i
-                    NativePtr.read (&&i |> NativePtr.toNativeInt |> NativePtr.ofNativeInt)
-
-                static let accessors =
-                    Dict.ofList [
-                        typeof<int8>,    (1, (fun (v : int8)    -> [|toFloat32 (int32 v)|]) :> obj)
-                        typeof<uint8>,   (1, (fun (v : uint8)   -> [|toFloat32 (uint32 v)|]) :> obj)
-                        typeof<int16>,   (1, (fun (v : int16)   -> [|toFloat32 (int32 v)|]) :> obj)
-                        typeof<uint16>,  (1, (fun (v : uint16)  -> [|toFloat32 (uint32 v)|]) :> obj)
-                        typeof<int32>,   (1, (fun (v : int32)   -> [|toFloat32 v|]) :> obj)
-                        typeof<uint32>,  (1, (fun (v : uint32)  -> [|toFloat32 v|]) :> obj)
-
-                        typeof<float>,   (1, (fun (v : float) -> [|float32 v|]) :> obj)
-                        typeof<V2d>,     (2, (fun (v : V2d) -> [|float32 v.X; float32 v.Y|]) :> obj)
-                        typeof<V3d>,     (3, (fun (v : V3d) -> [|float32 v.X; float32 v.Y; float32 v.Z|]) :> obj)
-                        typeof<V4d>,     (4, (fun (v : V4d) -> [|float32 v.X; float32 v.Y; float32 v.Z; float32 v.W|]) :> obj)
-
-                        typeof<float32>, (1, (fun (v : float32) -> [|v|]) :> obj)
-                        typeof<V2f>,     (2, (fun (v : V2f) -> [|v.X; v.Y|]) :> obj)
-                        typeof<V3f>,     (3, (fun (v : V3f) -> [|v.X; v.Y; v.Z|]) :> obj)
-                        typeof<V4f>,     (4, (fun (v : V4f) -> [|v.X; v.Y; v.Z; v.W|]) :> obj)
-
-                        typeof<C3f>,     (3, (fun (c : C3f) -> [|c.R; c.G; c.B|]) :> obj)
-                        typeof<C4f>,     (4, (fun (c : C4f) -> [|c.R; c.G; c.B; c.A|]) :> obj)
-                        typeof<C3b>,     (3, (fun (v : C3b) -> let c = v.ToC3f() in [|c.R; c.G; c.B|]) :> obj)
-                        typeof<C4b>,     (4, (fun (v : C4b) -> let c = v.ToC4f() in [|c.R; c.G; c.B; c.A|]) :> obj)
-                    ]
-
-                static member GetDimension (t : Type) =
-                    match accessors.TryGetValue t with
-                        | (true, (d, arr)) -> d
-                        | _ -> failwithf "unsupported attribute type: %A" t.FullName
-
-            let toFloatArrayMeth = typeof<Converter>.GetMethod("ToFloatArray", BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
-
-            let toFloatArray (arr : Array) =
-                match arrayCache.TryGetValue arr with
-                | (true, r) -> r
-                | _ ->
-                    let t = arr.GetType().GetElementType()
-                    let mi = toFloatArrayMeth.MakeGenericMethod [|t|]
-                    let arr = mi.Invoke(null, [|arr|]) |> unbox<float32[]>
-                    let r = Converter.GetDimension(t), arr
-                    arrayCache.Add(arr, r)
-                    r
-
     module Sg =
         open SgFSharpHelpers
 
@@ -938,62 +882,6 @@ module SgFSharp =
 
             let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call, g.Mode)) :> ISg
             if not (isNull index) then
-                Sg.VertexIndexApplicator(BufferView.ofArray index, sg) :> ISg
-            else
-                sg
-
-        /// Creates a draw call from the given indexed geometry, using an interleaved buffer
-        /// for the vertex attributes.
-        let ofIndexedGeometryInterleaved (attributes : list<Symbol>) (g : IndexedGeometry) =
-            let arrays =
-                attributes |> List.choose (fun att ->
-                    match g.IndexedAttributes.TryGetValue att with
-                        | (true, v) ->
-                            let (dim, arr) = Interleaved.toFloatArray v
-                            Some (att, v.GetType().GetElementType(), dim, arr)
-                        | _ -> None
-                )
-
-            let count = arrays |> List.map (fun (_,_,dim,arr) -> arr.Length / dim) |> List.min
-            let vertexSize = arrays |> List.map (fun (_,_,d,_) -> d) |> List.sum
-
-            let views = SymbolDict()
-            let target = Array.zeroCreate (count * vertexSize)
-            let buffer = ~~(ArrayBuffer target :> IBuffer)
-            let mutable current = 0
-            for vi in 0..count-1 do
-                for (sem, t, size, a) in arrays do
-                    let mutable start = size * vi
-                    for c in 0..size-1 do
-                        target.[current] <- a.[start]
-                        current <- current + 1
-                        start <- start + 1
-
-            let mutable offset = 0
-            for (sem, t, size, a) in arrays do
-                let v = BufferView(buffer, t, offset * sizeof<float32>, vertexSize * sizeof<float32>)
-                views.[sem] <- v
-                offset <- offset + size
-
-
-
-            let index, faceVertexCount =
-                if g.IsIndexed then
-                    g.IndexArray, g.IndexArray.Length
-                else
-                    null, count
-
-            let call =
-                DrawCallInfo(
-                    FaceVertexCount = faceVertexCount,
-                    FirstIndex = 0,
-                    InstanceCount = 1,
-                    FirstInstance = 0,
-                    BaseVertex = 0
-                )
-
-            let sg = Sg.VertexAttributeApplicator(views, Sg.RenderNode(call,g.Mode)) :> ISg
-            if index <> null then
                 Sg.VertexIndexApplicator(BufferView.ofArray index, sg) :> ISg
             else
                 sg
