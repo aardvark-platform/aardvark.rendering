@@ -5,6 +5,7 @@ open System.Runtime.CompilerServices
 open Aardvark.Base
 
 /// Token for gathering and querying statistics about the rendering process.
+/// It is mutable for construction/mutation in C# code
 [<CLIMutable>]
 type RenderToken =
     {
@@ -52,14 +53,34 @@ type RenderToken =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RenderToken =
 
-    /// Adds the given query to the given render token.
-    let withQuery (query : IQuery) (token : RenderToken) =
-        let queries =
-            match token.Query with
-            | :? Queries as q -> q |> Queries.add query
-            | _ -> Queries.ofList [token.Query; query]
+    let private (|EmptyQuery|MultiQuery|SingleQuery|) (query : IQuery) = 
+        match query with
+        | :? Queries as tq -> if tq.AsList.IsEmpty then EmptyQuery else MultiQuery tq.AsList
+        | _ -> SingleQuery query
 
-        { token with Query = queries }
+    /// Adds the given query to the given render token.
+    let withQuery (query : IQuery) (token : RenderToken) : RenderToken =
+        match (token.Query, query) with
+        | (_, EmptyQuery) -> token
+        | (EmptyQuery, _) -> { token with Query = query } 
+        | (MultiQuery a, SingleQuery b) -> { token with Query = Queries.ofList (b :: a) } 
+        | (SingleQuery a, MultiQuery b) -> { token with Query = Queries.ofList (a :: b) } 
+        | (MultiQuery a, MultiQuery b) -> { token with Query = Queries.ofList (a @ b) }
+        | (SingleQuery a, SingleQuery b) -> { token with Query = Queries.ofList [a; b]  }
+
+module DisposableHelper =
+    
+    [<Struct>]
+    type QueryUseDisposable =
+
+        val Query : IQuery
+
+        interface IDisposable with
+            member x.Dispose() = x.Query.End()
+
+        new(query : IQuery) =
+            query.Begin()
+            { Query = query }
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -68,11 +89,8 @@ type RenderTokenExtensions private() =
     /// Begins the queries of the token and returns an IDisposable that
     /// ends the queries when disposed.
     [<Extension>]
-    static member inline Use(this : RenderToken) =
-        this.Query.Begin()
-
-        { new IDisposable with
-            member x.Dispose() = this.Query.End() }
+    static member inline Use(this : RenderToken) : DisposableHelper.QueryUseDisposable =
+        new DisposableHelper.QueryUseDisposable(this.Query)
 
     /// Begins the queries of the token, evaluates the given function, and
     /// finally ends the queries.
@@ -89,42 +107,42 @@ type RenderTokenExtensions private() =
 
     [<Extension>]
     static member InPlaceResourceUpdate(this : RenderToken, kind : ResourceKind) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.InPlaceResourceUpdate(kind)
-        )
+        match this.Statistics with
+        | Some stats -> stats.InPlaceResourceUpdate(kind)
+        | _ -> ()
 
     [<Extension>]
     static member ReplacedResource(this : RenderToken, kind : ResourceKind) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.ReplacedResource(kind)
-        )
+        match this.Statistics with
+        | Some stats -> stats.ReplacedResource(kind)
+        | _ -> ()
 
     [<Extension>]
     static member CreatedResource(this : RenderToken, kind : ResourceKind) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.CreatedResource(kind)
-        )
+        match this.Statistics with
+        | Some stats -> stats.CreatedResource(kind)
+        | _ -> ()
 
     [<Extension>]
     static member AddInstructions(this : RenderToken, total : int, active : int) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.AddInstructions(total, active)
-        )
+        match this.Statistics with
+        | Some stats -> stats.AddInstructions(total, active)
+        | _ -> ()
 
     [<Extension>]
     static member AddDrawCalls(this : RenderToken, count : int, effective : int) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.AddDrawCalls(count, effective)
-        )
+        match this.Statistics with
+        | Some stats -> stats.AddDrawCalls(count, effective)
+        | _ -> ()
 
     [<Extension>]
     static member AddSubTask(this : RenderToken, sorting : MicroTime, update : MicroTime) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.AddSubTask(sorting, update)
-        )
+        match this.Statistics with
+        | Some stats -> stats.AddSubTask(sorting, update)
+        | _ -> ()
 
     [<Extension>]
     static member RenderObjectDeltas(this : RenderToken, added : int, removed : int) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.RenderObjectDeltas(added, removed)
-        )
+        match this.Statistics with
+        | Some stats -> stats.RenderObjectDeltas(added, removed)
+        | _ -> ()

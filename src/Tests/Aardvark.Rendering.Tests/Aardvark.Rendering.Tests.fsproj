@@ -58,6 +58,7 @@
     <Compile Include="Tests\Other\SgTest.fs" />
     <Compile Include="Tests\Other\CompactSetTests.fs" />
     <Compile Include="Tests\Other\AdaptiveResourceTest.fs" />
+    <Compile Include="Tests\Other\StatsBench.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>

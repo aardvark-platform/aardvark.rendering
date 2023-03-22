@@ -57,7 +57,7 @@ module RenderTasks =
                 GL.Check "could reset viewport"
 
     [<AbstractClass>]
-    type AbstractOpenGlRenderTask(manager : ResourceManager, signature : IFramebufferSignature, shareTextures : bool, shareBuffers : bool) =
+    type AbstractOpenGlRenderTask(manager : ResourceManager, signature : IFramebufferSignature, shareTextures : bool, shareBuffers : bool) as this =
         inherit AbstractRenderTask()
 
         let ctx = manager.Context
@@ -82,7 +82,7 @@ module RenderTasks =
                 usedTextureSlots = RefRef CountingHashSet.empty
                 usedUniformBufferSlots = RefRef CountingHashSet.empty
                 structuralChange = structureChanged
-                task = RenderTask.empty
+                task = this
                 tags = Map.empty
             }
 
@@ -104,7 +104,7 @@ module RenderTasks =
         abstract member Release2 : unit -> unit
 
         member x.Context = ctx
-        member x.Scope = { scope with task = x }
+        member x.Scope = scope
         member x.RenderTaskLock = renderTaskLock
         member x.ResourceManager = manager
 

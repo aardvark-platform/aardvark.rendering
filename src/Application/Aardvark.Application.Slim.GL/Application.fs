@@ -202,22 +202,23 @@ module private OpenGL =
             override this.Dispose() = 
                 ()
             override this.Run(task : IRenderTask, query : IQuery)  = 
-                using (runtime.Context.RenderingLock ctx) (fun _ ->
-                    let output = OutputDescription.ofFramebuffer defaultFramebuffer
+                use __ = runtime.Context.RenderingLock ctx
 
-                    GL.ColorMask(true, true, true, true)
-                    GL.DepthMask(true)
-                    GL.Viewport(0, 0, size.X, size.Y)
-                    GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                    GL.ClearDepth(1.0)
-                    GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                let output = OutputDescription.ofFramebuffer defaultFramebuffer
 
-                    let rt = RenderToken.Empty |> RenderToken.withQuery query
-                    task.Run(AdaptiveToken.Top, rt, output)
+                GL.ColorMask(true, true, true, true)
+                GL.DepthMask(true)
+                GL.Viewport(0, 0, size.X, size.Y)
+                GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                GL.ClearDepth(1.0)
+                GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
-                    glfw.SwapBuffers(win)
-                    true
-                )
+                let rt = { RenderToken.Empty with Query = query}
+                task.Run(AdaptiveToken.Top, rt, output)
+
+                glfw.SwapBuffers(win)
+                true
+
             override this.Size = 
                 size
         }

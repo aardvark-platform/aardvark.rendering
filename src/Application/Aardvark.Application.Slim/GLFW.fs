@@ -691,7 +691,10 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
 
         for w in ws do w.IsVisible <- true
 
-        while existingWindows.Count > 0 do
+        let mutable we = existingWindows.GetEnumerator()
+        let mutable wv = visibleWindows.GetEnumerator()
+
+        while we.MoveNext() do // exit when there are no windows
             if wait then glfw.WaitEventsTimeout(0.01)
             else glfw.PollEvents()
 
@@ -700,13 +703,18 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
                 try action()
                 with _ -> ()
 
-            for e in existingWindows do
-                e.Update()
+            we.Current.Update()
+            while we.MoveNext() do
+                we.Current.Update()
 
             wait <- true
-            for w in visibleWindows do
-                let v = w.Redraw()
+
+            while wv.MoveNext() do
+                let v = wv.Current.Redraw()
                 if v then wait <- false
+
+            we.Reset();
+            wv.Reset();
 
     new(runtime, swap) = Application(runtime, swap, false)
 
@@ -728,8 +736,10 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     let mutable icon : option<PixImageMipMap> = None
     let mutable lastMousePosition = V2d.Zero
     let mutable enableVSync = enableVSync
-    let mutable vsync = enableVSync
+    let mutable vsync = not enableVSync
     let mutable showFrameTime = true
+
+    let transaction = new Transaction() // reusable transaction for update and redraw -> looks like they are not used concurrently
 
     do app.AddExistingWindow this
 
@@ -1027,10 +1037,12 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         
         let mutable unique = 0
         let update() =
-            transact (fun () ->
+            useTransaction transaction (fun () -> // fun alloc all the time :/
                 let uid = Interlocked.Increment &unique
                 state |> HashMap.map (fun _ v -> v, uid) |> connected.Update
             )
+            transaction.Commit()
+            transaction.Dispose()
 
         let callback =
             glfw.SetJoystickCallback(GlfwCallbacks.JoystickCallback(fun id c ->
@@ -1550,8 +1562,13 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 requiresRedraw <- false
                 if vsync <> enableVSync then
                     vsync <- enableVSync
+                    let oldCurr = glfw.GetCurrentContext()
+                    if oldCurr <> win then
+                        glfw.MakeContextCurrent(win)
                     if enableVSync then glfw.SwapInterval(1)
                     else glfw.SwapInterval(0)
+                    if oldCurr <> win then
+                        glfw.MakeContextCurrent(oldCurr)
 
                 let queries =
                     if measureGpuTime then
@@ -1585,7 +1602,11 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 renderContinuous || renderTask.OutOfDate || requiresRedraw
             finally 
                 afterRender.Trigger()  
-                transact time.MarkOutdated  
+                useTransaction transaction (fun () ->  // alloc ? 
+                        time.MarkOutdated()
+                    )
+                transaction.Commit()
+                transaction.Dispose()
 
                 let gpuTime =
                     if measureGpuTime then

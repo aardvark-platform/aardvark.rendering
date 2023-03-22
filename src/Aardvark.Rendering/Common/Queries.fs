@@ -61,6 +61,9 @@ type Queries(queries : list<IQuery>) =
     /// Returns the queries as an array.
     member x.AsArray = queries |> Array.ofList
 
+    /// Returns true if there are no queries
+    member x.IsEmpty = queries.IsEmpty
+
     interface IQuery with
 
         member x.Reset() = x.Reset()
@@ -121,3 +124,4 @@ module Queries =
     /// Iterates the queries.
     let iter (queries : Queries) (f : IQuery -> unit) =
         queries.ForEach(f)
+
