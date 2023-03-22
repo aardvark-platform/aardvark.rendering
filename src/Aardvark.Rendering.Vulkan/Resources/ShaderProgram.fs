@@ -293,8 +293,11 @@ module ShaderProgram =
         let layout = PipelineLayout.ofProgramInterface inputLayout iface layers perLayer device
         new ShaderProgram(device, shaders, layout, code, iface)
 
+    let ofGLSL (code : FShade.GLSL.GLSLShader) (device : Device) =
+        ofGLSLInteral code.iface None code.code 1 Set.empty device
 
-    type private EffectCacheKey =
+
+    type internal EffectCacheKey =
         {
             effect : FShade.Effect
             layout : FramebufferLayout
@@ -305,11 +308,6 @@ module ShaderProgram =
     let private effectCache = Symbol.Create "effectCache"
     let private moduleCache = Symbol.Create "moduleCache"
 
-    let ofGLSL (code : FShade.GLSL.GLSLShader) (device : Device) =
-        ofGLSLInteral code.iface None code.code 1 Set.empty device
-
-    let internal pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
-
     type internal ShaderProgramData =
         {
             shader   : GLSLShader
@@ -317,6 +315,24 @@ module ShaderProgram =
             layers   : int
             perLayer : Set<string>
         }
+
+    module internal FileCacheName =
+        let private pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+
+        let private getHash (value : obj) =
+            let hash = pickler.ComputeHash value
+            hash.Hash |> Guid |> string
+
+        let ofEffectKey (key : EffectCacheKey) =
+            let colors = key.layout.ColorAttachments |> Map.map (fun _ att -> string att.Name)
+            let depth = key.layout.DepthStencilAttachment
+            if key.layout.LayerCount > 1 then
+                getHash (key.effect.Id, key.topology, colors, depth, key.layout.LayerCount, key.layout.PerLayerUniforms)
+            else
+                getHash (key.effect.Id, colors, depth)
+
+        let ofString (value : string) =
+            getHash value
 
     module internal ShaderProgramData =
 
@@ -475,10 +491,6 @@ module ShaderProgram =
         with _ ->
             None
 
-    let internal hashFileName (value : obj) : string =
-        let hash = pickler.ComputeHash value
-        hash.Hash |> Guid |> string
-
     let private tryRead (inputLayout : Option<EffectInputLayout>) (file : string)  (device : Device) : Option<ShaderProgram> =
         if File.Exists file then
             Report.Begin(4, "[Vulkan] loading shader {0}", Path.GetFileName file)
@@ -520,8 +532,7 @@ module ShaderProgram =
         device.GetCached(moduleCache, hash, fun hash ->
             match device.ShaderCachePath with
             | Some shaderCachePath ->
-                let fileName = hashFileName hash
-
+                let fileName = FileCacheName.ofString hash
                 let cacheFile = Path.Combine(shaderCachePath, fileName + ".module")
                 match tryRead inputLayout cacheFile device with
                 | Some p -> p
@@ -545,15 +556,10 @@ module ShaderProgram =
         device.GetCached(effectCache, key, fun key ->
             match device.ShaderCachePath with
             | Some shaderCachePath ->
-                let fileName = 
-                    let colors = key.layout.ColorAttachments |> Map.map (fun _ att -> att.Name.ToString())
-                    let depth = key.layout.DepthStencilAttachment
-                    if key.layout.LayerCount > 1 then
-                        hashFileName (key.effect.Id, key.topology, colors, depth, key.layout.LayerCount, key.layout.PerLayerUniforms)
-                    else
-                        hashFileName (key.effect.Id, colors, depth)
+                let cacheFile =
+                    let name = FileCacheName.ofEffectKey key
+                    Path.Combine(shaderCachePath, name + ".effect")
 
-                let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
                 match tryRead None cacheFile device with
                 | Some p ->
                     if device.DebugConfig.VerifyShaderCacheIntegrity then
