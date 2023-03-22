@@ -190,38 +190,9 @@ module Frustum =
 
     let projTrafo {left = l; right = r; top = t; bottom = b; near = n; far = f; isOrtho = isOrtho } : Trafo3d =
         if isOrtho then
-            Trafo3d(
-                M44d(
-                    2.0 / (r - l),               0.0,               0.0,      (r + l) / (l - r),
-                              0.0,     2.0 / (t - b),               0.0,      (t + b) / (b - t),
-                              0.0,               0.0,      2.0 / (n - f),     (f + n) / (n - f),
-                              0.0,               0.0,               0.0,      1.0
-                ),
-
-                M44d(
-                    (r - l) / 2.0,               0.0,               0.0,      (r + l) / 2.0,
-                              0.0,     (t - b) / 2.0,               0.0,      (t + b) / 2.0,
-                              0.0,               0.0,     (n - f) / 2.0,     -(f + n) / 2.0,
-                              0.0,               0.0,               0.0,      1.0
-
-                )
-            )
+            Trafo3d.OrthoProjectionOpenGl(l, r, b, t, n, f)
         else
-            Trafo3d(
-                M44d(
-                    (2.0 * n) / (r - l),                     0.0,         (r + l) / (r - l),                        0.0,
-                                    0.0,     (2.0 * n) / (t - b),         (t + b) / (t - b),                        0.0,
-                                    0.0,                     0.0,         (f + n) / (n - f),    (2.0 * f * n) / (n - f),
-                                    0.0,                     0.0,                      -1.0,                        0.0
-                    ),
-
-                M44d(
-                    (r - l) / (2.0 * n),                     0.0,                       0.0,        (r + l) / (2.0 * n),
-                                    0.0,     (t - b) / (2.0 * n),                       0.0,        (t + b) / (2.0 * n),
-                                    0.0,                     0.0,                       0.0,                       -1.0,
-                                    0.0,                     0.0,   (n - f) / (2.0 * f * n),     (f + n) / (2.0 * f * n)
-                    )
-            )
+            Trafo3d.PerspectiveProjectionOpenGl(l, r, b, t, n, f)
 
     [<Obsolete("use projTrafo instead (Frustum tracks whether isOrtho now)")>]
     let orthoTrafo (f : Frustum) : Trafo3d =
