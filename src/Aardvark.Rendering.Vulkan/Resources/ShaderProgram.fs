@@ -1,24 +1,58 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open FSharp.Data.Adaptive
 
-#nowarn "9"
-// #nowarn "51"
-#nowarn "8989"
+module internal FShadeConfig =
+    open FShade.GLSL
+
+    let backend =
+        let extensions =
+            Set.ofList [
+                "GL_ARB_tessellation_shader"
+                "GL_ARB_separate_shader_objects"
+                "GL_ARB_shading_language_420pack"
+            ]
+
+        Backend.Create {
+            version                 = GLSLVersion(4,5,0)
+            enabledExtensions       = extensions
+            createUniformBuffers    = true
+            bindingMode             = BindingMode.Global
+            createDescriptorSets    = true
+            stepDescriptorSets      = false
+            createInputLocations    = true
+            createPerStageUniforms  = false
+            reverseMatrixLogic      = true
+            createOutputLocations   = true
+            createPassingLocations  = true
+            depthWriteMode          = true
+            useInOut                = true
+        }
+
+    /// The target depth range passed to FShade.
+    let depthRange =
+        match RuntimeConfig.DepthRange with
+        | DepthRange.ZeroToOne ->
+            // Depth values produced by shaders are already expected to be in the native Vulkan [0, 1]
+            // range. No conversion required, so tell FShade to convert from [-1, 1] to [-1, 1].
+            Range1d(-1.0, 1.0)
+
+        | DepthRange.MinusOneToOne ->
+            // Depth values are not in the valid Vulkan range, so tell FShade to do the conversion.
+            Range1d(0.0, 1.0)
+
+        | r -> failf "unknown depth range %A" r
+
 
 module private FShadeAdapter =
     open FShade
     open FShade.GLSL
-    open Aardvark.Base.MultimethodTest
-
 
     let private toGeometryFlags (d : GLSLShaderDecoration) =
         match d with
@@ -327,9 +361,9 @@ module ShaderProgram =
             let colors = key.layout.ColorAttachments |> Map.map (fun _ att -> string att.Name)
             let depth = key.layout.DepthStencilAttachment
             if key.layout.LayerCount > 1 then
-                getHash (key.effect.Id, key.topology, colors, depth, key.layout.LayerCount, key.layout.PerLayerUniforms)
+                getHash (key.effect.Id, key.topology, colors, depth, key.layout.LayerCount, key.layout.PerLayerUniforms, FShadeConfig.depthRange)
             else
-                getHash (key.effect.Id, colors, depth)
+                getHash (key.effect.Id, colors, depth, FShadeConfig.depthRange)
 
         let ofString (value : string) =
             getHash value
@@ -524,8 +558,8 @@ module ShaderProgram =
         let compile() =
             let glsl =
                 module_
-                |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
-                |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
+                |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
 
             ofGLSLInteral glsl.iface inputLayout glsl.code 1 Set.empty device
 
@@ -564,9 +598,9 @@ module ShaderProgram =
                 | Some p ->
                     if device.DebugConfig.VerifyShaderCacheIntegrity then
                         let glsl = 
-                            key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
-                            |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
-                            |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                            key.layout.Link(key.effect, key.deviceCount, FShadeConfig.depthRange, false, key.topology)
+                            |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
+                            |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
 
                         let temp = ofGLSL glsl device
                         let real = toByteArray p
@@ -585,9 +619,9 @@ module ShaderProgram =
 
                 | None ->
                     let glsl = 
-                        key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
-                        |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
-                        |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                        key.layout.Link(key.effect, key.deviceCount, FShadeConfig.depthRange, false, key.topology)
+                        |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
+                        |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
 
                     let res = ofGLSL glsl device
                     write cacheFile res
@@ -595,9 +629,9 @@ module ShaderProgram =
 
             | None ->
                 let glsl = 
-                    key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
-                    |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
-                    |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                    key.layout.Link(key.effect, key.deviceCount, FShadeConfig.depthRange, false, key.topology)
+                    |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
+                    |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
 
                 ofGLSL glsl device
         )

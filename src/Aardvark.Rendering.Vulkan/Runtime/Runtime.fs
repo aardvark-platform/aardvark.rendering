@@ -549,7 +549,7 @@ type Runtime(device : Device) as this =
 
         member x.OnDispose = onDispose.Publish
         member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-            signature.Link(effect, Range1d(0.0, 1.0), false, topology)
+            signature.Link(effect, FShadeConfig.depthRange, false, topology)
 
         member x.ResourceManager = failf "not implemented"
 

@@ -1909,11 +1909,7 @@ type ResourceManager(device : Device) =
         dynamicProgramCache.GetOrCreate(
             [pass.Layout :> obj; compile :> obj],
             fun cache key ->
-                let effectConfig =
-                    pass.EffectConfig(
-                        PipelineInfo.fshadeConfig.depthRange,
-                        PipelineInfo.fshadeConfig.flipHandedness
-                    )
+                let effectConfig = pass.EffectConfig(FShadeConfig.depthRange, false)
 
                 let _, module_ = compile effectConfig
                 use initialProgram = device.CreateShaderProgram(AVal.force module_)

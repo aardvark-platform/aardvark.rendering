@@ -4,7 +4,16 @@ open Aardvark.Rendering
 
 module RuntimeConfig =
 
+    /// <summary>
+    /// Specifies the expected depth range of normalized device coordinates.
+    /// If this is not the native Vulkan range of [0, 1], shaders will be automatically adjusted to
+    /// map from [-1, 1] to [0, 1].
+    /// </summary>
+    let mutable DepthRange = DepthRange.MinusOneToOne
+
+    /// <summary>
     /// Indicates if descriptors should not be created with the update-after-bind flag.
+    /// </summary>
     let mutable SuppressUpdateAfterBind = false
 
 

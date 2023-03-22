@@ -25,35 +25,35 @@ type PipelineInfo =
     }
 
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module PipelineInfo =
-    open FShade
-    open FShade.Imperative
+//[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+//module PipelineInfo =
+//    open FShade
+//    open FShade.Imperative
 
-    let fshadeBackend =
-        FShade.GLSL.Backend.Create {
-            version                 = FShade.GLSL.GLSLVersion(4,5,0)
-            enabledExtensions       = Set.ofList [ "GL_ARB_tessellation_shader"; "GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack" ]
-            createUniformBuffers    = true
-            bindingMode             = GLSL.BindingMode.Global
-            createDescriptorSets    = true
-            stepDescriptorSets      = false
-            createInputLocations    = true
-            createPerStageUniforms  = false
-            reverseMatrixLogic      = true
-            createOutputLocations   = true
-            createPassingLocations  = true
-            depthWriteMode          = true
-            useInOut                = true
-        }
+//    let fshadeBackend =
+//        FShade.GLSL.Backend.Create {
+//            version                 = FShade.GLSL.GLSLVersion(4,5,0)
+//            enabledExtensions       = Set.ofList [ "GL_ARB_tessellation_shader"; "GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack" ]
+//            createUniformBuffers    = true
+//            bindingMode             = GLSL.BindingMode.Global
+//            createDescriptorSets    = true
+//            stepDescriptorSets      = false
+//            createInputLocations    = true
+//            createPerStageUniforms  = false
+//            reverseMatrixLogic      = true
+//            createOutputLocations   = true
+//            createPassingLocations  = true
+//            depthWriteMode          = true
+//            useInOut                = true
+//        }
 
-    let fshadeConfig =
-        {
-            depthRange = Range1d(0.0, 1.0)
-            flipHandedness = false
-            outputs = Map.empty
-            lastStage = ShaderStage.Fragment
-        }
+//    let fshadeConfig =
+//        {
+//            depthRange = Range1d(0.0, 1.0)
+//            flipHandedness = false
+//            outputs = Map.empty
+//            lastStage = ShaderStage.Fragment
+//        }
            
     //module ShaderType =
     //    open Aardvark.Base.TypeInfo.Patterns
