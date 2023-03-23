@@ -94,8 +94,8 @@ module RenderTask =
 
 
     /// Runs a render task for the given adaptive size and returns a map containing the textures specified as output.
-    /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
-    let renderSemanticsWithClear (output : Set<Symbol>) (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
+    /// The resulting framebuffer is cleared according to the given adaptive clear values before the render task is executed.
+    let renderSemanticsWithAdaptiveClear (output : Set<Symbol>) (size : aval<V2i>) (clearValues : aval<ClearValues>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
         let attachments = signature.GetSemantics()
@@ -105,14 +105,24 @@ module RenderTask =
         output |> Seq.map (fun k -> k, getResult k res) |> Map.ofSeq
 
     /// Runs a render task for the given adaptive size and returns a map containing the textures specified as output.
+    /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
+    let renderSemanticsWithClear (output : Set<Symbol>) (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
+        task |> renderSemanticsWithAdaptiveClear output size (AVal.constant clearValues)
+
+    /// Runs a render task for the given adaptive size and returns a map containing the textures specified as output.
     let renderSemantics (output : Set<Symbol>) (size : aval<V2i>) (task : IRenderTask) =
         task |> renderSemanticsWithClear output size defaultClearValues
 
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors as texture.
+    /// The resulting framebuffer is cleared according to the given adaptive clear values before the render task is executed.
+    let renderToColorWithAdaptiveClear (size : aval<V2i>) (clearValues : aval<ClearValues>) (task : IRenderTask) =
+        task |> renderSemanticsWithAdaptiveClear (Set.singleton DefaultSemantic.Colors) size clearValues |> Map.find DefaultSemantic.Colors
+
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors as texture.
     /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
     let renderToColorWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
-        task |> renderSemanticsWithClear (Set.singleton DefaultSemantic.Colors) size clearValues |> Map.find DefaultSemantic.Colors
+        task |> renderToColorWithAdaptiveClear size (AVal.constant clearValues)
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors as texture.
     let renderToColor (size : aval<V2i>) (task : IRenderTask) =
@@ -120,9 +130,14 @@ module RenderTask =
 
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.DepthStencil as texture.
+    /// The resulting framebuffer is cleared according to the given clear adaptive values before the render task is executed.
+    let renderToDepthWithAdaptiveClear (size : aval<V2i>) (clearValues : aval<ClearValues>) (task : IRenderTask) =
+        task |> renderSemanticsWithAdaptiveClear (Set.singleton DefaultSemantic.DepthStencil) size clearValues |> Map.find DefaultSemantic.DepthStencil
+
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.DepthStencil as texture.
     /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
     let renderToDepthWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
-        task |> renderSemanticsWithClear (Set.singleton DefaultSemantic.DepthStencil) size clearValues |> Map.find DefaultSemantic.DepthStencil
+        task |> renderToDepthWithAdaptiveClear size (AVal.constant clearValues)
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.DepthStencil as texture.
     let renderToDepth (size : aval<V2i>) (task : IRenderTask) =
@@ -130,10 +145,15 @@ module RenderTask =
 
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors and DefaultSemantic.DepthStencil as textures.
+    /// The resulting framebuffer is cleared according to the given adaptive clear values before the render task is executed.
+    let renderToColorAndDepthWithAdaptiveClear (size : aval<V2i>) (clearValues : aval<ClearValues>) (task : IRenderTask) =
+        let map = task |> renderSemanticsWithAdaptiveClear (Set.ofList [DefaultSemantic.DepthStencil; DefaultSemantic.Colors]) size clearValues
+        (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.DepthStencil map)
+
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors and DefaultSemantic.DepthStencil as textures.
     /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
     let renderToColorAndDepthWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
-        let map = task |> renderSemanticsWithClear (Set.ofList [DefaultSemantic.DepthStencil; DefaultSemantic.Colors]) size clearValues
-        (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.DepthStencil map)
+        task |> renderToColorAndDepthWithAdaptiveClear size (AVal.constant clearValues)
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors and DefaultSemantic.DepthStencil as textures.
     let renderToColorAndDepth (size : aval<V2i>) (task : IRenderTask) =
