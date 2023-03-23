@@ -3,6 +3,7 @@
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Rendering
+open System
 open System.Threading
 open System.Threading.Tasks
 open Silk.NET.GLFW
@@ -356,8 +357,19 @@ type WindowConfig =
         opengl : bool
         physicalSize : bool
         samples : int
-    }    
+    }
 
+    static member Default =
+        { WindowConfig.title = "Aardvark rocks \\o/"
+          WindowConfig.width = 1024
+          WindowConfig.height = 768
+          WindowConfig.resizable = true
+          WindowConfig.focus = true
+          WindowConfig.vsync = true
+          WindowConfig.opengl = true
+          WindowConfig.physicalSize = false
+          WindowConfig.transparent = false
+          WindowConfig.samples = 1 }
 
 module IconLoader = 
     
@@ -544,17 +556,17 @@ type IWindowInterop =
     abstract WindowHints : WindowConfig * Glfw -> unit
 
 
-type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, hideCocoaMenuBar : bool) =
+type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, hideCocoaMenuBar : bool) =
     [<System.ThreadStatic; DefaultValue>]
     static val mutable private IsMainThread_ : bool
 
     let glfw = Glfw.GetApi()
-    do 
+    do
         if hideCocoaMenuBar then
             Log.line "hiding cocoa menubar"
             glfw.InitHint(Silk.NET.GLFW.InitHint.CocoaMenubar, false) // glfwInitHint(GLFW_COCOA_MENUBAR, GLFW_FALSE);
-        
-        if not (glfw.Init()) then  
+
+        if not (glfw.Init()) then
             failwith "GLFW init failed"
 
         interop.Boot glfw
@@ -564,10 +576,11 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
 
     let existingWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
     let visibleWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
-    do Application.IsMainThread_ <- true
+    do Instance.IsMainThread_ <- true
 
     let aardvarkIcon = IconLoader.getIcon()
-                
+
+    new(runtime, swap) = new Instance(runtime, swap, false)
 
     member x.Runtime = runtime
 
@@ -590,10 +603,10 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
 
     member x.Glfw = glfw
 
-    member x.IsMainThread = Application.IsMainThread_
+    member x.IsMainThread = Instance.IsMainThread_
 
     member x.Post(action : unit -> unit) =
-        if Application.IsMainThread_ then
+        if Instance.IsMainThread_ then
             try action()
             with _ -> ()            
         else        
@@ -601,7 +614,7 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
             glfw.PostEmptyEvent()
 
     member x.StartTask<'r>(action : unit -> 'r) : Task<'r> =
-        if Application.IsMainThread_ then
+        if Instance.IsMainThread_ then
             try
                 let v = action()
                 Task.FromResult v
@@ -620,7 +633,7 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
             tcs.Task           
 
     member x.Invoke<'r>(action : unit -> 'r) : 'r =
-        if Application.IsMainThread_ then
+        if Instance.IsMainThread_ then
             action()
         else                
             let l = obj()
@@ -716,12 +729,16 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
             we.Reset();
             wv.Reset();
 
-    new(runtime, swap) = Application(runtime, swap, false)
+    member x.Dispose() =
+        glfw.Terminate()
 
-and Window(app : Application, win : nativeptr<WindowHandle>, title : string, enableVSync : bool, surface : IWindowSurface, samples : int, retina : bool) as this =
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, enableVSync : bool, surface : IWindowSurface, samples : int, retina : bool) as this =
     static let keyNameCache = System.Collections.Concurrent.ConcurrentDictionary<Keys * int, string>()
 
-    let glfw = app.Glfw
+    let glfw = instance.Glfw
 
     let contentScale() =
         if retina then
@@ -741,7 +758,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
 
     let transaction = new Transaction() // reusable transaction for update and redraw -> looks like they are not used concurrently
 
-    do app.AddExistingWindow this
+    do instance.AddExistingWindow this
 
     let getWindowState() =
         let vis = glfw.GetWindowAttrib(win, WindowAttributeGetter.Visible)
@@ -888,7 +905,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         glfw.SetWindowCloseCallback(win, GlfwCallbacks.WindowCloseCallback(fun w ->
             closeEvt.Trigger()
             glfw.HideWindow(win)
-            app.RemoveExistingWindow this
+            instance.RemoveExistingWindow this
         ))
 
     let _focusCallback =
@@ -1211,7 +1228,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
             )
             glfw.PostEmptyEvent()
 
-    member x.Runtime = app.Runtime
+    member x.Runtime = instance.Runtime
     member x.Samples = samples
     member x.Sizes = currentSize :> aval<_>
     member x.Time = time
@@ -1252,8 +1269,8 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     member x.Dispose() =
         if not isDisposed then
             isDisposed <- true
-            app.RemoveExistingWindow x
-            app.Post (fun () ->
+            instance.RemoveExistingWindow x
+            instance.Post (fun () ->
                 swapchain |> Option.iter Disposable.dispose
                 swapchain <- None
 
@@ -1391,7 +1408,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
             | Resize -> resize.Trigger(getResizeEvent())
 
     member x.Invoke<'r>(action : unit -> 'r) : 'r =
-        app.Invoke(action)
+        instance.Invoke(action)
 
 
     member x.IsVisible 
@@ -1400,10 +1417,10 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         and set v =
             x.Invoke (fun () ->
                 if v then 
-                    app.AddVisibleWindow x
+                    instance.AddVisibleWindow x
                     glfw.ShowWindow(win)
                 else
-                    app.RemoveVisibleWindow x
+                    instance.RemoveVisibleWindow x
                     glfw.HideWindow(win)
             )
 
@@ -1522,7 +1539,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     member x.Close() =
         x.Invoke(fun () ->
             glfw.HideWindow(win)
-            app.RemoveExistingWindow x
+            instance.RemoveExistingWindow x
         )
 
     member x.VSync
@@ -1573,7 +1590,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 let queries : IQuery list =
                     if measureGpuTime then
                         let query =
-                            gpuQuery |> Option.defaultWith app.Runtime.CreateTimeQuery
+                            gpuQuery |> Option.defaultWith instance.Runtime.CreateTimeQuery
 
                         gpuQuery <- Some query
                         [ query ]
@@ -1625,5 +1642,4 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         updateGamepads()
 
     member x.Run() =
-        app.Run x          
-
+        instance.Run x          

@@ -1,18 +1,16 @@
 namespace Aardvark.Application.Slim
 
 open FSharp.Data.Adaptive
-open System.Reflection
 open Aardvark.Base
 open Silk.NET.GLFW
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
-open Aardvark.Base
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Application
 open Aardvark.Glfw
+open System.Runtime.InteropServices
 
 #nowarn "9"
-
 
 module private Vulkan =
     let getSupportedSamples (runtime : Runtime) =
@@ -97,16 +95,18 @@ module private Vulkan =
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.NoApi)
         }
 
-type VulkanApplication(userExt : list<string>, debug : IDebugConfig, hideCocoaMenuBar : bool) =
-    static let surfaceExtensions = 
+type VulkanApplication private (app : HeadlessVulkanApplication, hideCocoaMenuBar : bool) =
+    inherit Application(app.Runtime, Vulkan.interop, hideCocoaMenuBar)
+
+    static let surfaceExtensions =
         let all = Instance.GlobalExtensions
         all
         |> Array.choose (fun e ->
             match e.name with
-            | "VK_KHR_surface" 
+            | "VK_KHR_surface"
             | "VK_KHR_swapchain"
             | "VK_MVK_moltenvk"
-            | "VK_EXT_swapchain_colorspace" ->  
+            | "VK_EXT_swapchain_colorspace" ->
                 Some e.name
             | _ ->
                 if e.name.EndsWith "_surface" then Some e.name
@@ -120,39 +120,24 @@ type VulkanApplication(userExt : list<string>, debug : IDebugConfig, hideCocoaMe
         for u in user do r <- Set.add u r
         r |> Set.toList
 
+    new(userExt : list<string>, debug : IDebugConfig,
+        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
+        let app = new HeadlessVulkanApplication(debug, getExtensions userExt, (fun _ -> []))
+        new VulkanApplication(app, hideCocoaMenuBar)
 
-    let app = new HeadlessVulkanApplication(debug, getExtensions userExt, (fun _ -> []))
-    let glfw = Application(app.Runtime, Vulkan.interop, hideCocoaMenuBar)
+    new(userExt : list<string>,
+        [<Optional; DefaultParameterValue(false)>] debug : bool,
+        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
+        new VulkanApplication(userExt, DebugLevel.ofBool debug, hideCocoaMenuBar)
 
-    let windowConfig =
-        {
-            WindowConfig.title = "Aardvark rocks \\o/"
-            WindowConfig.width = 1024
-            WindowConfig.height = 768
-            WindowConfig.resizable = true
-            WindowConfig.focus = true
-            WindowConfig.vsync = true
-            WindowConfig.opengl = true
-            WindowConfig.physicalSize = false
-            WindowConfig.transparent = false
-            WindowConfig.samples = 1
-        }
+    new(debug : IDebugConfig,
+        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
+        new VulkanApplication([], debug, hideCocoaMenuBar)
 
-    new(userExt : list<string>, debug : IDebugConfig) =
-        new VulkanApplication(userExt, debug, false)
-    
-    new(userExt : list<string>, debug : bool) =
-        new VulkanApplication(userExt, DebugLevel.ofBool debug)
+    new([<Optional; DefaultParameterValue(false)>] debug : bool,
+        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
+        new VulkanApplication([], debug, hideCocoaMenuBar)
 
-    new(debug : IDebugConfig) =
-        new VulkanApplication([], debug)
-    
-    new(debug : bool) =
-        new VulkanApplication([], debug)
-    
-    new() =
-        new VulkanApplication([], DebugLevel.None)
-    
     static member SetDeviceChooser(chooser : PhysicalDevice[] -> int) =
         Aardvark.Rendering.Vulkan.CustomDeviceChooser.Register(fun ds ->
             let ds = Seq.toArray ds
@@ -161,39 +146,15 @@ type VulkanApplication(userExt : list<string>, debug : IDebugConfig, hideCocoaMe
 
     member x.Runtime = app.Runtime
 
-    member x.Dispose() =
-        // first dispose runtime in order to properly dispose resources..
+    member x.Initialize(ctrl : IRenderControl, samples : int) =
+        failwithf "unknown control type: %A" ctrl
+
+    override x.Destroy() =
         app.Dispose()
 
-    member x.Initialize(ctrl : IRenderControl, samples : int) = 
-        failwithf "unknown control type: %A" ctrl
-        
-
-    member x.CreateGameWindow(?samples : int, ?physicalSize : bool) =
-        let samples = defaultArg samples 1
-        let w = glfw.CreateWindow { windowConfig with samples = samples; physicalSize = defaultArg physicalSize false }
-
-        w.KeyDown.Add (fun e ->
-            match e.Key with
-            | Keys.R when e.Ctrl && e.Shift ->
-                w.RenderAsFastAsPossible <- not w.RenderAsFastAsPossible
-                Log.line "[Window] RenderAsFastAsPossible: %A" w.RenderAsFastAsPossible
-            | Keys.V when e.Ctrl && e.Shift ->
-                w.VSync <- not w.VSync
-                Log.line "[Window] VSync: %A" w.VSync
-            | Keys.G when e.Ctrl && e.Shift ->
-                w.MeasureGpuTime <- not w.MeasureGpuTime
-                Log.line "[Window] MeasureGpuTime: %A" w.MeasureGpuTime
-            | Keys.Enter when e.Ctrl && e.Shift ->
-                w.Fullcreen <- not w.Fullcreen
-                Log.line "[Window] Fullcreen: %A" w.Fullcreen
-            | _ ->
-                ()
-        )
-
-        w
+    override x.CreateGameWindow(config : WindowConfig) =
+        base.CreateGameWindow { config with opengl = false }
 
     interface IApplication with
         member x.Initialize(ctrl : IRenderControl, samples : int) = x.Initialize(ctrl, samples)
         member x.Runtime = x.Runtime :> IRuntime
-        member x.Dispose() = x.Dispose()       

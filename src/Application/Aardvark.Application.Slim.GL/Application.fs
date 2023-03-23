@@ -10,7 +10,6 @@ open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Base
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Application
 open Aardvark.Glfw
@@ -330,44 +329,27 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintInt.Samples, if cfg.samples = 1 then 0 else cfg.samples)
         }
 
-type OpenGlApplication(forceNvidia : bool, debug : IDebugConfig, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) =
-    do if forceNvidia then
-        if RuntimeInformation.IsOSPlatform OSPlatform.Windows then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
-        else ()
-       // hs, 01-02.2021, this should NOT be necessary in slim. 
-       //OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
-       
-    let runtime = new Runtime(debug)
-    let glfw = Application(runtime, OpenGL.interop, hideCocoaMenuBar)
-    
-    let windowConfig =
-        {
-            WindowConfig.title = "Aardvark rocks \\o/"
-            WindowConfig.width = 1024
-            WindowConfig.height = 768
-            WindowConfig.resizable = true
-            WindowConfig.focus = true
-            WindowConfig.vsync = true
-            WindowConfig.opengl = true
-            WindowConfig.physicalSize = false
-            WindowConfig.transparent = false
-            WindowConfig.samples = 1
-        }
-        
+type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) as this =
+    inherit Application(runtime, OpenGL.interop, hideCocoaMenuBar)
+
     let createContext() =
-        let w = glfw.CreateWindow windowConfig
+        let w = this.Instance.CreateWindow WindowConfig.Default
         let h = w.Surface.Handle :?> Aardvark.Rendering.GL.ContextHandle
-        glfw.RemoveExistingWindow w
+        this.Instance.RemoveExistingWindow w
         h
 
-    let ctx = new Context(runtime, fun () -> glfw.Invoke createContext)
+    let ctx = new Context(runtime, fun () -> this.Instance.Invoke createContext)
 
     do ctx.ShaderCachePath <- shaderCachePath
        runtime.Initialize(ctx)
 
-    new(forceNvidia : bool, debug : IDebugConfig, shaderCachePath : Option<string>) =
-        new OpenGlApplication(forceNvidia, debug, shaderCachePath, false)
- 
+    new(forceNvidia : bool, debug : IDebugConfig, shaderCachePath : Option<string>,
+        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
+        if forceNvidia && RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+            DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
+
+        new OpenGlApplication(new Runtime(debug), shaderCachePath, hideCocoaMenuBar)
+
     new(forceNvidia : bool, debug : bool, shaderCachePath : Option<string>) =
         new OpenGlApplication(forceNvidia, DebugLevel.ofBool debug, shaderCachePath)
 
@@ -382,38 +364,16 @@ type OpenGlApplication(forceNvidia : bool, debug : IDebugConfig, shaderCachePath
     member x.Context = ctx
     member x.Runtime = runtime
 
-    member x.Dispose() =
+    member x.Initialize(ctrl : IRenderControl, samples : int) = 
+        failwithf "unknown control type: %A" ctrl
+
+    override x.Destroy() =
         // first dispose runtime in order to properly dispose resources..
         runtime.Dispose()
         ctx.Dispose()
 
-    member x.Initialize(ctrl : IRenderControl, samples : int) = 
-        failwithf "unknown control type: %A" ctrl
-        
-
-    member x.CreateGameWindow(?samples : int, ?physicalSize : bool) =
-        let samples = defaultArg samples 1
-        let w = glfw.CreateWindow { windowConfig with samples = samples; physicalSize = defaultArg physicalSize false }
-
-        w.KeyDown.Add (fun e ->
-            match e.Key with
-            | Keys.R when e.Ctrl && e.Shift ->
-                w.RenderAsFastAsPossible <- not w.RenderAsFastAsPossible
-                Log.line "[Window] RenderAsFastAsPossible: %A" w.RenderAsFastAsPossible
-            | Keys.V when e.Ctrl && e.Shift ->
-                w.VSync <- not w.VSync
-                Log.line "[Window] VSync: %A" w.VSync
-            | Keys.G when e.Ctrl && e.Shift ->
-                w.MeasureGpuTime <- not w.MeasureGpuTime
-                Log.line "[Window] MeasureGpuTime: %A" w.MeasureGpuTime
-            | Keys.Enter when e.Ctrl && e.Shift ->
-                w.Fullcreen <- not w.Fullcreen
-                Log.line "[Window] Fullcreen: %A" w.Fullcreen
-            | _ ->
-                ()
-        )
-
-        w
+    override x.CreateGameWindow(config : WindowConfig) =
+        base.CreateGameWindow { config with opengl = true }
 
     interface IApplication with
         member x.Initialize(ctrl : IRenderControl, samples : int) = x.Initialize(ctrl, samples)

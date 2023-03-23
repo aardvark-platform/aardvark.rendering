@@ -24,7 +24,6 @@
     <Compile Include="IMessageLoop.fs" />
     <Compile Include="IRenderControl.fs" />
     <Compile Include="IApplication.fs" />
-    <Compile Include="Camera.fs" />
     <Compile Include="ModExtensions.fs" />
     <Compile Include="DefaultCameraController.fs" />
     <Compile Include="Screenshots.fs" />
