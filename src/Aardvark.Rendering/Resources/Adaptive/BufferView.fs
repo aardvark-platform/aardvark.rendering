@@ -5,36 +5,58 @@ open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open Aardvark.Base
 
-type BufferView(b : aval<IBuffer>, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
+type BufferView(buffer : aval<IBuffer>, elementType : Type,
+                [<Optional; DefaultParameterValue(0)>] offset : int,
+                [<Optional; DefaultParameterValue(0)>] stride : int,
+                [<Optional; DefaultParameterValue(true)>] normalized : bool) =
     let singleValue =
-        match b with
+        match buffer with
         | :? ISingleValueBuffer as nb -> Some nb.Value
         | _ -> None
 
-    member x.Buffer = b
+    member x.Buffer = buffer
     member x.ElementType = elementType
     member x.Stride = stride
     member x.Offset = offset
     member x.SingleValue = singleValue
     member x.IsSingleValue = Option.isSome singleValue
 
-    new(b : aval<IBackendBuffer>, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
-        BufferView(AdaptiveResource.cast<IBuffer> b, elementType, offset, stride)
+    /// Indicates whether integer values represent normalized fixed-point values.
+    /// Only has an effect if the element type is integral and the buffer view is used for an floating-point based attribute.
+    member x.Normalized = normalized
 
-    new(b : IBuffer, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
-        BufferView(AVal.constant b, elementType, offset, stride)
+    new(buffer : ISingleValueBuffer,
+        [<Optional; DefaultParameterValue(0)>] offset : int,
+        [<Optional; DefaultParameterValue(0)>] stride : int,
+        [<Optional; DefaultParameterValue(true)>] normalized : bool) =
+        BufferView(buffer, buffer.Value.ContentType, offset, stride, normalized)
 
-    new(arr : System.Array, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
+    new(buffer : aval<IBackendBuffer>, elementType : Type,
+        [<Optional; DefaultParameterValue(0)>] offset : int,
+        [<Optional; DefaultParameterValue(0)>] stride : int,
+        [<Optional; DefaultParameterValue(true)>] normalized : bool) =
+        BufferView(AdaptiveResource.cast<IBuffer> buffer, elementType, offset, stride, normalized)
+
+    new(buffer : IBuffer, elementType : Type,
+        [<Optional; DefaultParameterValue(0)>] offset : int,
+        [<Optional; DefaultParameterValue(0)>] stride : int,
+        [<Optional; DefaultParameterValue(true)>] normalized : bool) =
+        BufferView(AVal.constant buffer, elementType, offset, stride, normalized)
+
+    new(arr : System.Array,
+        [<Optional; DefaultParameterValue(0)>] offset : int,
+        [<Optional; DefaultParameterValue(0)>] stride : int,
+        [<Optional; DefaultParameterValue(true)>] normalized : bool) =
         let t = arr.GetType().GetElementType()
-        BufferView(ArrayBuffer arr, t, offset, stride)
+        BufferView(ArrayBuffer arr, t, offset, stride, normalized)
 
     override x.GetHashCode() =
-        HashCode.Combine(b.GetHashCode(), elementType.GetHashCode(), offset.GetHashCode(), stride.GetHashCode())
+        HashCode.Combine(buffer.GetHashCode(), elementType.GetHashCode(), offset.GetHashCode(), stride.GetHashCode(), normalized.GetHashCode())
 
     override x.Equals o =
         match o with
         | :? BufferView as o ->
-            o.Buffer = b && o.ElementType = elementType && o.Offset = offset && o.Stride = stride
+            o.Buffer = buffer && o.ElementType = elementType && o.Offset = offset && o.Stride = stride && o.Normalized = normalized
         | _ -> false
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

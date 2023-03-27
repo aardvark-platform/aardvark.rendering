@@ -133,7 +133,7 @@ module VertexInputState =
     let ofTypes (types : Map<Symbol, bool * Type>) =
         types |> Map.map (fun name (perInstance, typ) ->
             let format =
-                VkFormat.tryGetAttributeFormat typ typ
+                VkFormat.tryGetAttributeFormat typ typ true
                 |> Option.defaultWith (fun _ ->
                     failf "cannot determine appropriate format for attribute '%A' (expected type = %A)" name typ
                 )

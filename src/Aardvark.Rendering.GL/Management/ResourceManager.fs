@@ -84,7 +84,7 @@ type AdaptiveAttributeBuffer =
     {
         Type        : Type
         Frequency   : AttributeFrequency
-        Normalized  : bool
+        Format      : VertexAttributeFormat
         Stride      : int
         Offset      : int
         Resource    : IResource<Buffer>
@@ -93,7 +93,7 @@ type AdaptiveAttributeBuffer =
     member inline x.GetValue(t : AdaptiveToken, rt : RenderToken) =
         { Type = x.Type
           Frequency = x.Frequency
-          Normalized = x.Normalized
+          Format = x.Format
           Stride = x.Stride
           Offset = x.Offset
           Buffer = x.Resource.Handle.GetValue(t, rt) }
@@ -103,7 +103,7 @@ type AdaptiveAttributeBuffer =
 
 [<RequireQualifiedAccess>]
 type AdaptiveAttribute =
-    | Value  of value: IAdaptiveValue * normalized : bool
+    | Value  of value: IAdaptiveValue * format : VertexAttributeFormat
     | Buffer of buffer: AdaptiveAttributeBuffer
 
     member x.ElementType =
@@ -113,9 +113,9 @@ type AdaptiveAttribute =
 
     member inline x.GetValue(t : AdaptiveToken, rt : RenderToken) =
         match x with
-        | AdaptiveAttribute.Value (aval, norm) ->
+        | AdaptiveAttribute.Value (aval, format) ->
             let value = aval.GetValueUntyped t
-            Attribute.Value (value, norm)
+            Attribute.Value (value, format)
 
         | AdaptiveAttribute.Buffer buffer ->
             Attribute.Buffer <| buffer.GetValue(t, rt)

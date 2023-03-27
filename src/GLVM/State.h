@@ -94,12 +94,19 @@ struct VertexAttribValue
 	double W;
 };
 
+enum class VertexAttribFormat
+{
+	Default = 0,
+	Normalized = 1,
+	Scaled = 2
+};
+
 typedef struct {
 	uint32_t 			Index;
 	int					Size;
 	int					Divisor;
 	GLenum				Type;
-	int					Normalized;
+	VertexAttribFormat	Format;
 	int					Stride;
 	int					Offset;
 	int					Buffer;
@@ -109,7 +116,7 @@ typedef struct {
 	VertexAttribValue   Value;
 	uint32_t			Index;
 	GLenum				Type;
-	int					Normalized;
+	VertexAttribFormat	Format;
 } VertexValueBinding;
 
 typedef struct {

@@ -110,7 +110,6 @@ module PointerContextExtensions =
 
                         match att.Type with
                         | MatrixOf(s, AttributePointerType t) ->
-                            let normalized = if att.Normalized then 1 else 0
                             let rowSize = vertexAttribPointerTypeSize t * s.X
 
                             let stride =
@@ -118,7 +117,7 @@ module PointerContextExtensions =
                                 else att.Stride
 
                             for r in 0 .. s.Y - 1 do
-                                let ptr = VertexBufferBinding(uint32 (index + r), s.X, divisor, t, normalized, stride, att.Offset + r * rowSize, buffer.Handle)
+                                let ptr = VertexBufferBinding(uint32 (index + r), s.X, divisor, t, att.Format, stride, att.Offset + r * rowSize, buffer.Handle)
                                 buffers.Add ptr
 
                         | ColorOf(d, Byte) ->
@@ -127,22 +126,27 @@ module PointerContextExtensions =
                                 failf "cannot use %A for vertex or instance attribute buffers. Try any other color type instead." att.Type
 
                             // Only works if normalized = true, i.e. only can be used for floating point attributes
-                            if not att.Normalized then
-                                failf "%A vertex or instance attribute buffers can only be used for floating point attributes." att.Type
+                            if att.Format <> VertexAttributeFormat.Normalized then
+                                failf "%A vertex or instance attribute buffers can only be used for normalized floating point attributes." att.Type
 
                             // See: https://registry.khronos.org/OpenGL-Refpages/gl4/html/glVertexAttribPointer.xhtml
-                            let ptr = VertexBufferBinding(uint32 index, int All.Bgra, divisor, VertexAttribPointerType.UnsignedByte, 1, att.Stride, att.Offset, buffer.Handle)
+                            let ptr =
+                                VertexBufferBinding(
+                                    uint32 index, int All.Bgra, divisor,
+                                    VertexAttribPointerType.UnsignedByte, VertexAttributeFormat.Normalized,
+                                    att.Stride, att.Offset, buffer.Handle
+                                )
+
                             buffers.Add ptr
 
                         | AttributePointer (d, t) when d.Y = 1 ->
-                            let normalized = if att.Normalized then 1 else 0
-                            let ptr = VertexBufferBinding(uint32 index, d.X, divisor, t, normalized, att.Stride, att.Offset, buffer.Handle)
+                            let ptr = VertexBufferBinding(uint32 index, d.X, divisor, t, att.Format, att.Stride, att.Offset, buffer.Handle)
                             buffers.Add ptr
 
                         | _ ->
                             failf "cannot use %A buffer as vertex or instance attribute buffer" att.Type
 
-                    | Attribute.Value (value, norm) ->
+                    | Attribute.Value (value, format) ->
                         let typ = value.GetType()
 
                         let dim, attributeType =
@@ -164,7 +168,7 @@ module PointerContextExtensions =
 
                             for r = 0 to dim.Y - 1 do
                                 let pBinding = NativePtr.stackalloc<VertexValueBinding> 1
-                                NativePtr.write pBinding <| VertexValueBinding(uint32 (index + r), attributeType, norm)
+                                NativePtr.write pBinding <| VertexValueBinding(uint32 (index + r), attributeType, format)
 
                                 Buffer.MemoryCopy(pSrc, NativePtr.toNativeInt pBinding, 32UL, rowSize)
                                 pSrc <- pSrc + nativeint rowSize

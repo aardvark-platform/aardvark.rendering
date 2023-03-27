@@ -1328,10 +1328,41 @@ module VkFormat =
                 VkFormat.R16g16b16a16Uint, VkFormat.R16g16b16a16Unorm
             ]
 
-        fun (bgr : bool) (normalized : bool) (dimension : int) (baseType : Type) ->
+        let scaledLookup =
+            LookupTable.lookupTable' [
+                VkFormat.R8Sint,           VkFormat.R8Sscaled
+                VkFormat.R8g8Sint,         VkFormat.R8g8Sscaled
+                VkFormat.R8g8b8Sint,       VkFormat.R8g8b8Sscaled
+                VkFormat.R8g8b8a8Sint,     VkFormat.R8g8b8a8Sscaled
+
+                VkFormat.R8Uint,           VkFormat.R8Uscaled
+                VkFormat.R8g8Uint,         VkFormat.R8g8Uscaled
+                VkFormat.R8g8b8Uint,       VkFormat.R8g8b8Uscaled
+                VkFormat.B8g8r8Uint,       VkFormat.B8g8r8Uscaled
+                VkFormat.R8g8b8a8Uint,     VkFormat.R8g8b8a8Uscaled
+                VkFormat.B8g8r8a8Uint,     VkFormat.B8g8r8a8Uscaled
+
+                VkFormat.R16Sint,          VkFormat.R16Sscaled
+                VkFormat.R16g16Sint,       VkFormat.R16g16Sscaled
+                VkFormat.R16g16b16Sint,    VkFormat.R16g16b16Sscaled
+                VkFormat.R16g16b16a16Sint, VkFormat.R16g16b16a16Sscaled
+
+                VkFormat.R16Uint,          VkFormat.R16Uscaled
+                VkFormat.R16g16Uint,       VkFormat.R16g16Uscaled
+                VkFormat.R16g16b16Uint,    VkFormat.R16g16b16Uscaled
+                VkFormat.R16g16b16a16Uint, VkFormat.R16g16b16a16Uscaled
+            ]
+
+        fun (bgr : bool) (normalized : bool option) (dimension : int) (baseType : Type) ->
             lookup (baseType, dimension)
             |> Option.bind (fun f ->
-                f bgr |> if normalized then normLookup else Some
+                let rep =
+                    match normalized with
+                    | Some true -> normLookup
+                    | Some false -> scaledLookup
+                    | _ -> Some
+
+                f bgr |> rep
             )
 
     let private (|Attribute|_|) (t : Type) =
@@ -1346,13 +1377,13 @@ module VkFormat =
         | ColorOf(_, Byte) -> true
         | _ -> false
 
-    let tryGetAttributeFormat (expectedType : Type) (inputType : Type) =
+    let tryGetAttributeFormat (expectedType : Type) (inputType : Type) (normalized : bool) =
         match inputType, expectedType with
-        | ColorOf(dim, (Integral as bt)), Attribute(_, (Float32 | Float64)) ->
-            bt |> tryOfBaseType (isBgr inputType) true dim
+        | Attribute(dim, (Integral as bt)), Attribute(_, (Float32 | Float64)) ->
+            bt |> tryOfBaseType (isBgr inputType) (Some normalized) dim
 
-        | Attribute(dim, btIn), Attribute(_, btEx) when Marshal.SizeOf btIn = Marshal.SizeOf btEx ->
-            btEx |> tryOfBaseType (isBgr inputType) false dim
+        | Attribute(dim, btIn), Attribute(_, btEx) when btIn = btEx ->
+            btEx |> tryOfBaseType (isBgr inputType) None dim
 
         | _ ->
             None

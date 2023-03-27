@@ -1617,7 +1617,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                                         Type = GLSLType.toType param.paramType
                                         Buffer = ib
                                         Frequency = AttributeFrequency.PerInstances 1
-                                        Normalized = false
+                                        Format = VertexAttributeFormat.Default
                                         Stride = GLSLType.sizeof param.paramType
                                         Offset = 0
                                     }
@@ -1625,18 +1625,18 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                                 | None ->   
                                     match MapExt.tryFind param.paramSemantic vb.Buffers with
                                     | Some (vb, typ) ->
-                                        let norm = if typ = typeof<C4b> then true else false
+                                        let format = if typ = typeof<C4b> then VertexAttributeFormat.Normalized else VertexAttributeFormat.Default
                                         param.paramLocation, Attribute.Buffer {
                                             Type = typ
                                             Buffer = vb
                                             Frequency = AttributeFrequency.PerVertex
-                                            Normalized = norm
+                                            Format = format
                                             Stride = Marshal.SizeOf typ
                                             Offset = 0
                                         }
 
                                     | None ->
-                                        param.paramLocation, Attribute.Value (V4f.Zero, false)
+                                        param.paramLocation, Attribute.Value (V4f.Zero, VertexAttributeFormat.Default)
                         )
                         |> List.toArray
 

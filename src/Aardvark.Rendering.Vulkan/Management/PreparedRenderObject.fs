@@ -306,7 +306,7 @@ type DevicePreparedRenderObjectExtensions private() =
                     | _ -> 1
 
                 let format =
-                    VkFormat.tryGetAttributeFormat expectedType view.ElementType
+                    VkFormat.tryGetAttributeFormat expectedType view.ElementType view.Normalized
                     |> Option.defaultWith (fun _ ->
                         failf "cannot use %A elements for attribute '%A' expecting %A elements" view.ElementType semantic expectedType
                     )

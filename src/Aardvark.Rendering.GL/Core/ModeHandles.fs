@@ -132,19 +132,31 @@ type DepthBiasInfo =
 //        new(p) = { Pointer = p }
 //    end
 
+/// Describes how vertex attribute data is interpreted.
+type VertexAttributeFormat =
+
+    /// Data is loaded directly.
+    | Default = 0
+
+    /// Integer data is loaded as normalized fixed-point values.
+    | Normalized = 1
+
+    /// Integer data is converted to float32.
+    | Scaled = 2
+
 [<StructLayout(LayoutKind.Sequential)>]
 type VertexBufferBinding =
     struct
-        val mutable public Index       : uint32 
+        val mutable public Index       : uint32
         val mutable public Size        : int
         val mutable public Divisor     : int
         val mutable public Type        : VertexAttribPointerType
-        val mutable public Normalized  : int
+        val mutable public Format      : VertexAttributeFormat
         val mutable public Stride      : int
         val mutable public Offset      : int
         val mutable public Buffer      : int
 
-        new(i,s,d,t,n,st,o,b) = { Index = i; Size = s; Divisor = d; Type = t; Normalized = n; Stride = st; Offset = o; Buffer = b }
+        new(i,s,d,t,f,st,o,b) = { Index = i; Size = s; Divisor = d; Type = t; Format = f; Stride = st; Offset = o; Buffer = b }
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -156,10 +168,10 @@ type VertexValueBinding =
         val private W : uint64
         val public Index : uint32
         val public Type : VertexAttribType
-        val public Normalized : int
+        val public Format : VertexAttributeFormat
 
-        new (i, t, n) =
-            { X = 0UL; Y = 0UL; Z = 0UL; W = 0UL; Index = i; Type = t; Normalized = if n then 1 else 0 }
+        new (i, t, f) =
+            { X = 0UL; Y = 0UL; Z = 0UL; W = 0UL; Index = i; Type = t; Format = f }
     end
 
 [<StructLayout(LayoutKind.Sequential)>]

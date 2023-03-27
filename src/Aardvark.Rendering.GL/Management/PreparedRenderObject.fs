@@ -948,15 +948,20 @@ module PreparedObjectInfo =
                         if printDoubleAttributeWarning then
                             (expectedType, view.ElementType) ||> validateDoubleAttribute v.paramName
 
-                        // Treat color types as normalized if accessed as floating point
-                        let normalized =
+                        // Treat integral values as normalized or scaled if accessed as floating point
+                        let format =
                             match view.ElementType, expectedType with
-                            | ColorOf(_, _), AttributeType (Float32 | Float64) -> true
-                            | _ -> false
+                            | AttributeType Integral, AttributeType (Float32 | Float64) ->
+                                if view.Normalized then
+                                    VertexAttributeFormat.Normalized
+                                else
+                                    VertexAttributeFormat.Scaled
+                            | _ ->
+                                VertexAttributeFormat.Default
 
                         match view.Buffer with
                         | :? ISingleValueBuffer as b ->
-                            AdaptiveAttribute.Value (b.Value, normalized)
+                            AdaptiveAttribute.Value (b.Value, format)
 
                         | _ ->
                             let resource = x.CreateBuffer view.Buffer
@@ -964,7 +969,7 @@ module PreparedObjectInfo =
                             let buffer = {
                                 Type = view.ElementType
                                 Frequency = frequency
-                                Normalized = normalized
+                                Format = format
                                 Stride = view.Stride
                                 Offset = view.Offset
                                 Resource = resource

@@ -40,7 +40,7 @@ type AttributeBuffer =
         /// by the driver implementation. For details see:
         /// https://www.opengl.org/sdk/docs/man/html/glVertexAttribPointer.xhtml
         /// </summary>
-        Normalized : bool
+        Format : VertexAttributeFormat
 
         /// <summary>
         /// specifies a byte-offset between consecutive values
@@ -62,5 +62,5 @@ type AttributeBuffer =
 
 [<RequireQualifiedAccess>]
 type Attribute =
-    | Value  of value: obj * normalized: bool
+    | Value  of value: obj * format: VertexAttributeFormat
     | Buffer of buffer: AttributeBuffer

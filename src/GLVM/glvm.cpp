@@ -118,6 +118,13 @@ DllExport(void) vmInit()
 	glVertexAttrib4fv = (PFNGLVERTEXATTRIB4FVPROC)getProc("glVertexAttrib4fv");
 	glVertexAttrib4dv = (PFNGLVERTEXATTRIB4DVPROC)getProc("glVertexAttrib4dv");
 
+	glVertexAttrib4sv = (PFNGLVERTEXATTRIB4SVPROC)getProc("glVertexAttrib4sv");
+	glVertexAttrib4iv = (PFNGLVERTEXATTRIB4IVPROC)getProc("glVertexAttrib4iv");
+	glVertexAttrib4bv = (PFNGLVERTEXATTRIB4BVPROC)getProc("glVertexAttrib4bv");
+	glVertexAttrib4usv = (PFNGLVERTEXATTRIB4USVPROC)getProc("glVertexAttrib4usv");
+	glVertexAttrib4uiv = (PFNGLVERTEXATTRIB4UIVPROC)getProc("glVertexAttrib4uiv");
+	glVertexAttrib4ubv = (PFNGLVERTEXATTRIB4UBVPROC)getProc("glVertexAttrib4ubv");
+
 	glVertexAttribI4sv = (PFNGLVERTEXATTRIBI4SVPROC)getProc("glVertexAttribI4sv");
 	glVertexAttribI4iv = (PFNGLVERTEXATTRIBI4IVPROC)getProc("glVertexAttribI4iv");
 	glVertexAttribI4bv = (PFNGLVERTEXATTRIBI4BVPROC)getProc("glVertexAttribI4bv");
@@ -1273,7 +1280,7 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 				{
 					case GL_FLOAT:
 					case GL_DOUBLE:
-						glVertexAttribPointer(b.Index, b.Size, b.Type, b.Normalized, b.Stride, (void*)(size_t)b.Offset);
+						glVertexAttribPointer(b.Index, b.Size, b.Type, 0, b.Stride, (void*)(size_t)b.Offset);
 						break;
 
 					case GL_BYTE:
@@ -1282,8 +1289,15 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 					case GL_UNSIGNED_SHORT:
 					case GL_INT:
 					case GL_UNSIGNED_INT:
-						if (b.Normalized == 1) glVertexAttribPointer(b.Index, b.Size, b.Type, 1, b.Stride, (void*)(size_t)b.Offset);
-						else glVertexAttribIPointer(b.Index, b.Size, b.Type, b.Stride, (void*)(size_t)b.Offset);
+						if (b.Format == VertexAttribFormat::Default)
+						{
+							glVertexAttribIPointer(b.Index, b.Size, b.Type, b.Stride, (void*)(size_t)b.Offset);
+						}
+						else
+						{
+							auto norm = (b.Format == VertexAttribFormat::Normalized);
+							glVertexAttribPointer(b.Index, b.Size, b.Type, norm, b.Stride, (void*)(size_t)b.Offset);
+						}
 						break;
 
 					default:
@@ -1320,33 +1334,39 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 					break;
 
 				case GL_BYTE:
-					if (b.Normalized == 1) glVertexAttrib4Nbv(b.Index, (GLbyte*)&b.Value);
-					else glVertexAttribI4bv(b.Index, (GLbyte*)&b.Value);
+					if (b.Format == VertexAttribFormat::Default) glVertexAttribI4bv(b.Index, (GLbyte*)&b.Value);
+					else if (b.Format == VertexAttribFormat::Normalized) glVertexAttrib4Nbv(b.Index, (GLbyte*)&b.Value);
+					else glVertexAttrib4bv(b.Index, (GLbyte*)&b.Value);
 					break;
 
 				case GL_UNSIGNED_BYTE:
-					if (b.Normalized == 1) glVertexAttrib4Nubv(b.Index, (GLubyte*)&b.Value);
-					else glVertexAttribI4ubv(b.Index, (GLubyte*)&b.Value);
+					if (b.Format == VertexAttribFormat::Default) glVertexAttribI4ubv(b.Index, (GLubyte*)&b.Value);
+					else if (b.Format == VertexAttribFormat::Normalized) glVertexAttrib4Nubv(b.Index, (GLubyte*)&b.Value);
+					else glVertexAttrib4ubv(b.Index, (GLubyte*)&b.Value);
 					break;
 
 				case GL_SHORT:
-					if (b.Normalized == 1) glVertexAttrib4Nsv(b.Index, (GLshort*)&b.Value);
-					else glVertexAttribI4sv(b.Index, (GLshort*)&b.Value);
+					if (b.Format == VertexAttribFormat::Default) glVertexAttribI4sv(b.Index, (GLshort*)&b.Value);
+					else if (b.Format == VertexAttribFormat::Normalized) glVertexAttrib4Nsv(b.Index, (GLshort*)&b.Value);
+					else glVertexAttrib4sv(b.Index, (GLshort*)&b.Value);
 					break;
 
 				case GL_UNSIGNED_SHORT:
-					if (b.Normalized == 1) glVertexAttrib4Nusv(b.Index, (GLushort*)&b.Value);
-					else glVertexAttribI4usv(b.Index, (GLushort*)&b.Value);
+					if (b.Format == VertexAttribFormat::Default) glVertexAttribI4usv(b.Index, (GLushort*)&b.Value);
+					else if (b.Format == VertexAttribFormat::Normalized) glVertexAttrib4Nusv(b.Index, (GLushort*)&b.Value);
+					else glVertexAttrib4usv(b.Index, (GLushort*)&b.Value);
 					break;
 
 				case GL_INT:
-					if (b.Normalized == 1) glVertexAttrib4Niv(b.Index, (GLint*)&b.Value);
-					else glVertexAttribI4iv(b.Index, (GLint*)&b.Value);
+					if (b.Format == VertexAttribFormat::Default) glVertexAttribI4iv(b.Index, (GLint*)&b.Value);
+					else if (b.Format == VertexAttribFormat::Normalized) glVertexAttrib4Niv(b.Index, (GLint*)&b.Value);
+					else glVertexAttrib4iv(b.Index, (GLint*)&b.Value);
 					break;
 
 				case GL_UNSIGNED_INT:
-					if (b.Normalized == 1) glVertexAttrib4Nuiv(b.Index, (GLuint*)&b.Value);
-					else glVertexAttribI4uiv(b.Index, (GLuint*)&b.Value);
+					if (b.Format == VertexAttribFormat::Default) glVertexAttribI4uiv(b.Index, (GLuint*)&b.Value);
+					else if (b.Format == VertexAttribFormat::Normalized) glVertexAttrib4Nuiv(b.Index, (GLuint*)&b.Value);
+					else glVertexAttrib4uiv(b.Index, (GLuint*)&b.Value);
 					break;
 
 				default:
