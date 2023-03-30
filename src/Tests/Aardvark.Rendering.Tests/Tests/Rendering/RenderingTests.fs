@@ -12,6 +12,7 @@ module ``Rendering Tests`` =
         FramebufferSignature.tests
         IntegerAttachments.tests
         Samplers.tests
+        Uniforms.tests
     ]
 
     [<Tests>]

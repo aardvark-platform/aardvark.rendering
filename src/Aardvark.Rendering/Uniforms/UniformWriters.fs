@@ -13,6 +13,7 @@ open FShade.GLSL
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module GLSLType =
+    open PrimitiveValueConverter.Interop
 
     let toType =
         LookupTable.lookupTable [
@@ -55,14 +56,14 @@ module GLSLType =
             Mat(3,4,Int(true,32)), typeof<M34i>
             Mat(4,4,Int(true,32)), typeof<M44i>
 
-            Mat(2,2,Float(32)), typeof<M22f>
-            Mat(2,3,Float(32)), typeof<M23f>
+            Mat(2,2,Float(32)), typeof<M24f> // Matrix rows need to be padded to 4 elements according to std140
+            Mat(2,3,Float(32)), typeof<M24f>
             Mat(3,3,Float(32)), typeof<M34f>
             Mat(3,4,Float(32)), typeof<M34f>
             Mat(4,4,Float(32)), typeof<M44f>
 
-            Mat(2,2,Float(64)), typeof<M22f>
-            Mat(2,3,Float(64)), typeof<M23f>
+            Mat(2,2,Float(64)), typeof<M24f>
+            Mat(2,3,Float(64)), typeof<M24f>
             Mat(3,3,Float(64)), typeof<M34f>
             Mat(3,4,Float(64)), typeof<M34f>
             Mat(4,4,Float(64)), typeof<M44f>

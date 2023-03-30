@@ -53,6 +53,7 @@ module ShaderPath =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderParameterType =
+    open PrimitiveValueConverter.Interop
 
     let inline vector (componentType : ShaderParameterType) (dimension : int) = 
         Vector(componentType, dimension)
@@ -196,11 +197,12 @@ module ShaderParameterType =
             V3ui,       typeof<C3ui>
             V4ui,       typeof<C4ui>
 
-            M22f,       typeof<M22f>
-            M23f,       typeof<M23f>
+            M22f,       typeof<M24f>
+            M23f,       typeof<M24f>
             M33f,       typeof<M34f>
             M34f,       typeof<M34f>
             M44f,       typeof<M44f>
+
             M22d,       typeof<M22d>
             M23d,       typeof<M23d>
             M33d,       typeof<M33d>

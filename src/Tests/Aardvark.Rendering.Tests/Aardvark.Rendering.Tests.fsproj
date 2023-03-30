@@ -59,6 +59,7 @@
     <Compile Include="Tests\Rendering\Signatures.fs" />
     <Compile Include="Tests\Rendering\Samplers.fs" />
     <Compile Include="Tests\Rendering\IntegerAttachments.fs" />
+    <Compile Include="Tests\Rendering\Uniforms.fs" />
     <Compile Include="Tests\Rendering\RenderingTests.fs" />
     <Compile Include="Tests\Compute\Images.fs" />
     <Compile Include="Tests\Compute\Buffers.fs" />
