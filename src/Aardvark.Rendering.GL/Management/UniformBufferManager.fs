@@ -77,16 +77,15 @@ type UniformBufferManager(ctx : Context) =
             key,
             fun () ->
                 let writers =
-                    (block.ubFields, values) ||> List.map2 (fun f v ->
+                    (block.ubFields, values) ||> List.map2 (fun target value ->
                         let writer =
                             try
-                                let typ = ShaderParameterType.ofGLSLType f.ufType
-                                typ |> ShaderParameterWriter.adaptive v
+                                value.ContentType |> UniformWriters.getWriter target.ufOffset target.ufType
                             with
                             | :? PrimitiveValueConverter.InvalidConversionException as exn ->
-                                failf "cannot convert uniform '%s' from %A to %A" f.ufName exn.Source exn.Target
+                                failf "cannot convert uniform '%s' from %A to %A" target.ufName exn.Source exn.Target
 
-                        nativeint f.ufOffset, writer
+                        value, writer
                     )
 
                 let mutable block = Unchecked.defaultof<_>
@@ -113,7 +112,8 @@ type UniformBufferManager(ctx : Context) =
 
                                     UniformBufferView(block.Memory.Value, block.Offset, nativeint block.Size)
 
-                        for (offset,w) in writers do w.Write(token, store + offset)
+                        for (value, writer) in writers do
+                            writer.Write(token, value, store)
 
                         GL.Dispatch.NamedBufferSubData(handle.Buffer.Handle, handle.Offset, handle.Size, store)
                         GL.Check "could not upload uniform buffer"

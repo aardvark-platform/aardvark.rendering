@@ -391,6 +391,8 @@ type IAdptiveWriterExtensions private() =
     static member Write(this : IAdaptiveWriter, target : nativeint) =
         this.Write(AdaptiveToken.Top, target)
 
+// Note: Formerly used by the GL backend to write uniforms
+// Switched to UniformWriters (use by Vulkan backend) which seems newer and supports offsets.
 module ShaderParameterWriter =
     open System.Reflection
     open System.Runtime.InteropServices
