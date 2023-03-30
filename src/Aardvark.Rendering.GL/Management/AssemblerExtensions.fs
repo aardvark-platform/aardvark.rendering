@@ -1285,24 +1285,6 @@ module GLAssemblerExtensions =
             x.GetQueryObject(temp, GetQueryObjectParam.QueryResult, result)
             x.DeleteQueries(1, temp)
 
-        member x.BindUniformLocation(l : int, loc : IResource<UniformLocation, nativeint>) : unit =
-            let loc = loc.Handle.GetValue()
-
-            match loc.Type with
-                | Vector(Float, 1) | Float      -> x.Uniform1fv(l, 1, loc.Data)
-                | Vector(Int, 1) | Int          -> x.Uniform1iv(l, 1, loc.Data)
-                | Vector(Float, 2)              -> x.Uniform2fv(l, 1, loc.Data)
-                | Vector(Int, 2)                -> x.Uniform2iv(l, 1, loc.Data)
-                | Vector(Float, 3)              -> x.Uniform3fv(l, 1, loc.Data)
-                | Vector(Int, 3)                -> x.Uniform3iv(l, 1, loc.Data)
-                | Vector(Float, 4)              -> x.Uniform4fv(l, 1, loc.Data)
-                | Vector(Int, 4)                -> x.Uniform4iv(l, 1, loc.Data)
-                | Matrix(Float, 2, 2, true)     -> x.UniformMatrix2fv(l, 1, 0, loc.Data)
-                | Matrix(Float, 3, 3, true)     -> x.UniformMatrix3fv(l, 1, 0, loc.Data)
-                | Matrix(Float, 4, 4, true)     -> x.UniformMatrix4fv(l, 1, 0, loc.Data)
-                | _                             -> failwithf "no uniform-setter for: %A" loc
-
-
         member this.Copy(src : nativeptr<'a>, dst : nativeptr<'a>) =
             this.Copy(src, dst, 1)
 

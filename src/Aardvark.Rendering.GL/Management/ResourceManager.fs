@@ -168,7 +168,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let programHandleCache      = ResourceCache<Program, int>(None, renderTaskLock)
     let samplerCache            = derivedCache (fun m -> m.SamplerCache)
     let vertexInputCache        = derivedCache (fun m -> m.VertexInputCache)
-    let uniformLocationCache    = derivedCache (fun m -> m.UniformLocationCache)
     let isActiveCache           = derivedCache (fun m -> m.IsActiveCache)
     let beginModeCache          = derivedCache (fun m -> m.BeginModeCache)
     let drawCallInfoCache       = derivedCache (fun m -> m.DrawCallInfoCache)
@@ -219,7 +218,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.IndirectBufferCache      : ResourceCache<GLIndirectBuffer, IndirectDrawArgs>        = indirectBufferCache
     member private x.SamplerCache             : ResourceCache<Sampler, int>                              = samplerCache
     member private x.VertexInputCache         : ResourceCache<VertexInputBindingHandle, int>             = vertexInputCache
-    member private x.UniformLocationCache     : ResourceCache<UniformLocation, nativeint>                = uniformLocationCache
     member private x.IsActiveCache            : ResourceCache<bool, int>                                 = isActiveCache
     member private x.BeginModeCache           : ResourceCache<GLBeginMode, GLBeginMode>                  = beginModeCache
     member private x.DrawCallInfoCache        : ResourceCache<DrawCallInfoList, DrawCallInfoList>        = drawCallInfoCache
@@ -646,42 +644,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 }
         )
 
-    member x.CreateUniformLocation(scope : Ag.Scope, u : IUniformProvider, uniform : ShaderParameter) =
-        let name = ShaderPath.name uniform.Path
-        let sem = Symbol.Create name
-        match u.TryGetUniform (scope, sem) with
-            | Some v ->
-                uniformLocationCache.GetOrCreate(
-                    [v :> obj],
-                    fun () ->
-                        let inputs = Map.ofList [sem, v :> IAdaptiveObject]
-                        let writer = ShaderParameterWriter.adaptive v uniform.Type
-
-                        { new Resource<UniformLocation, nativeint>(ResourceKind.UniformLocation) with
-                            
-                            member x.View h = h.Data
-
-                            member x.GetInfo h =
-                                h.Size |> Mem |> ResourceInfo
-
-                            member x.Create(token, rt, old) =
-                                let handle =
-                                    match old with 
-                                        | Some o -> o
-                                        | None -> ctx.CreateUniformLocation(ShaderParameterType.sizeof uniform.Type, uniform.Type)
-                                
-                                writer.Write(token, handle.Data)
-                                handle
-
-                            member x.Destroy h =
-                                ctx.Delete h
-                        }        
-                )
-                
-
-            | None ->
-                failwithf "[GL] could not get uniform: %A" uniform
-     
     member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, uniforms : IUniformProvider) =
         uniformBufferManager.CreateUniformBuffer(layout, scope, uniforms)
  
