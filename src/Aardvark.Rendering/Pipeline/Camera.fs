@@ -190,9 +190,9 @@ module Frustum =
 
     let projTrafo {left = l; right = r; top = t; bottom = b; near = n; far = f; isOrtho = isOrtho } : Trafo3d =
         if isOrtho then
-            Trafo3d.OrthoProjectionOpenGl(l, r, b, t, n, f)
+            Trafo3d.OrthoProjectionGL(l, r, b, t, n, f)
         else
-            Trafo3d.PerspectiveProjectionOpenGl(l, r, b, t, n, f)
+            Trafo3d.PerspectiveProjectionGL(l, r, b, t, n, f)
 
     [<Obsolete("use projTrafo instead (Frustum tracks whether isOrtho now)")>]
     let orthoTrafo (f : Frustum) : Trafo3d =

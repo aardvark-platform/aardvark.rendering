@@ -40,7 +40,6 @@
     <Compile Include="Utilities\SymbolConverter.fs" />
     <Compile Include="Utilities\ShaderCodeReporting.fs" />
     <Compile Include="Utilities\MultiDict.fs" />
-    <Compile Include="Utilities\TypeInfo.fs" />
     <Compile Include="Resources\Buffers\ExternalMemory.fs" />
     <Compile Include="Resources\Buffers\Buffers.fs" />
     <Compile Include="Resources\Buffers\BufferSlicing.fs" />

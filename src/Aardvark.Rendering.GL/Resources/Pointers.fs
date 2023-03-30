@@ -4,7 +4,6 @@ open System
 open Aardvark.Base
 open Aardvark.Base.TypeInfo
 open Aardvark.Rendering
-open Aardvark.Rendering.TypeInfoExtensions.TypeInfo
 open Microsoft.FSharp.NativeInterop
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
