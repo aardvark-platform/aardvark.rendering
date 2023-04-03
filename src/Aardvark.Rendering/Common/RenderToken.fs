@@ -65,7 +65,6 @@ module RenderTokenInternals =
                 for q in x.Queries do q.End()
 
         new(queries : IQuery list) =
-            for q in queries do q.Begin()
             { Queries = queries }
 
 
@@ -76,6 +75,7 @@ type RenderTokenExtensions private() =
     /// ends the queries when disposed.
     [<Extension>]
     static member inline Use(this : RenderToken) : RenderTokenInternals.QueryUseDisposable =
+        for q in this.Queries do q.Begin()
         new RenderTokenInternals.QueryUseDisposable(this.Queries)
 
     [<Extension>]
