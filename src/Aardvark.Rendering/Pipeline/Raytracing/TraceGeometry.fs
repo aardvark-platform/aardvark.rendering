@@ -3,6 +3,9 @@
 open Aardvark.Base
 open Aardvark.Rendering
 
+open System
+open System.Runtime.InteropServices
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AABBsData =
 
@@ -14,6 +17,14 @@ module AABBsData =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VertexData =
 
+    let ofArray (data : Array) =
+        let buffer = ArrayBuffer data
+
+        { Buffer = buffer :> IBuffer
+          Count  = uint32 data.Length
+          Offset = 0UL
+          Stride = uint64 <| Marshal.SizeOf buffer.ElementType }
+
     let map (mapping : 'T -> 'U) (data : VertexData<'T>) =
         { Buffer = mapping data.Buffer
           Count  = data.Count
@@ -22,9 +33,23 @@ module VertexData =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndexData =
+    open TypeInfo
+
+    let ofArray (data : Array) =
+        let buffer = ArrayBuffer data
+
+        let indexType =
+            match buffer.ElementType with
+            | Int16 | UInt16 -> IndexType.UInt16
+            | Int32 | UInt32 -> IndexType.UInt32
+            | t -> failwithf "Unsupported index type '%A'" t
+
+        { Type   = indexType
+          Buffer = buffer :> IBuffer
+          Offset = 0UL}
 
     let map (mapping : 'T -> 'U) (data : IndexData<'T>) =
-        { Type = data.Type
+        { Type   = data.Type
           Buffer = mapping data.Buffer
           Offset = data.Offset }
 
@@ -72,40 +97,20 @@ module TriangleMesh =
 
         let indices =
             if geometry.IsIndexed then
-                let typ =
-                    let t = geometry.IndexArray.GetType().GetElementType()
-
-                    if t = typeof<uint16> || t = typeof<int16> then IndexType.UInt16
-                    elif t = typeof<uint32> || t = typeof<int32> then IndexType.UInt32
-                    else failwithf "[TraceGeometry] Unsupported index type %A" t
-
-                Some (geometry.IndexArray, typ)
+                Some geometry.IndexArray
             else
                 None
 
         let primitives =
             match indices with
-            | Some (arr, _) -> arr.Length / 3
+            | Some arr -> arr.Length / 3
             | _ -> vertices.Length / 3
 
-        let vertexData =
-            { Buffer = ArrayBuffer(vertices) :> IBuffer
-              Count = uint32 vertices.Length
-              Offset = 0UL
-              Stride = uint64 sizeof<V3f> }
-
-        let indexData =
-            indices |> Option.map (fun (arr, t) ->
-                { Type = t
-                  Buffer = ArrayBuffer(arr) :> IBuffer
-                  Offset = 0UL }
-            )
-
-        { Vertices = vertexData
-          Indices = indexData
-          Transform = Trafo3d.Identity
+        { Vertices   = VertexData.ofArray vertices
+          Indices    = indices |> Option.map IndexData.ofArray
+          Transform  = Trafo3d.Identity
           Primitives = uint32 primitives
-          Flags = GeometryFlags.None }
+          Flags      = GeometryFlags.None }
 
     let transform (trafo : Trafo3d) (m : TriangleMesh) =
         { m with Transform = trafo }
