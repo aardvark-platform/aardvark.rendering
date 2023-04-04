@@ -96,7 +96,7 @@ module Effect =
 
         let missSky (input : RayMissInput) =
             let top = V3d(0.25, 0.5, 1.0)
-            let bottom = V3d C3d.Lavender
+            let bottom = V3d C3d.SlateGray
 
             miss {
                 let color =
@@ -299,10 +299,15 @@ let main argv =
 
     let rnd = RandomSystem()
 
-    use app = new VulkanApplication(debug = true)
-    let runtime = app.Runtime :> IRuntime
+    use win =
+        window {
+            display Display.Mono
+            samples 8
+            backend Backend.Vulkan
+            debug true
+        }
 
-    use win = app.CreateGameWindow(samples = 1)
+    let runtime = win.Runtime
 
     let cameraView =
         let initialView = CameraView.LookAt(V3d.One * 10.0, V3d.Zero, V3d.OOI)
@@ -317,9 +322,6 @@ let main argv =
             Frustum.perspective 60.0 0.1 150.0 (float s.X / float s.Y)
             |> Frustum.projTrafo
         )
-
-    let traceTexture =
-        runtime.CreateTexture2D(win.Sizes, TextureFormat.Rgba32f)
 
     use geometryPool =
         let signature =
@@ -465,7 +467,6 @@ let main argv =
     let uniforms =
         uniformMap {
             buffer  DefaultSemantic.TraceGeometryBuffer geometryInfos
-            texture "OutputBuffer"                      traceTexture
             value   "RecursionDepth"                    4
             value   "ViewTrafo"                         viewTrafo
             value   "ProjTrafo"                         projTrafo
@@ -541,26 +542,15 @@ let main argv =
             MaxRecursionDepth = AVal.constant 2048
         }
 
-    use traceTask = runtime.CompileTraceToTexture(pipeline, traceTexture)
+    let traceOutput =
+        runtime.TraceTo2D(win.Sizes, TextureFormat.Rgba8, "OutputBuffer", pipeline)
 
-    use fullscreenTask =
-        let sg =
-            Sg.fullScreenQuad
-            |> Sg.diffuseTexture traceTexture
-            |> Sg.shader {
-                do! DefaultSurfaces.diffuseTexture
-            }
-
-        RenderTask.ofList [
-            runtime.CompileClear(win.FramebufferSignature, C4f.PaleGreen)
-            runtime.CompileRender(win.FramebufferSignature, sg)
-        ]
-
-    use renderTask =
-        RenderTask.custom (fun (t, rt, fbo) ->
-            traceTask.Run(t, rt)
-            fullscreenTask.Run(t, rt, fbo)
-        )
+    let sg =
+        Sg.fullScreenQuad
+        |> Sg.diffuseTexture traceOutput
+        |> Sg.shader {
+            do! DefaultSurfaces.diffuseTexture
+        }
 
     win.Keyboard.KeyDown(Keys.Enter).Values.Add(fun _ ->
         transact (fun () ->
@@ -578,7 +568,7 @@ let main argv =
         )
     )
 
-    win.RenderTask <- renderTask
-    win.Run()
+    win.Scene <- sg
+    win.Run(preventDisposal = true)
 
     0

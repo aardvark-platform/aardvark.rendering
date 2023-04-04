@@ -19,6 +19,7 @@ type IRaytracingTask =
 
 and IRaytracingRuntime =
     inherit IAccelerationStructureRuntime
+    inherit ITextureRuntime
 
     /// Returns whether the runtime supports raytracing.
     abstract member SupportsRaytracing : bool
@@ -114,27 +115,3 @@ type RaytracingRuntimeExtensions() =
     [<Extension>]
     static member inline CompileTrace(runtime : IRaytracingRuntime, pipeline : RaytracingPipelineState, commands : seq<RaytracingCommand>) =
         runtime.CompileTrace(pipeline, commands |> AList.ofSeq)
-
-    /// <summary>
-    /// Compiles a raytracing task that dispatches rays based on the size of the given texture.
-    /// The layout of the texture is transformed from <paramref name="srcLayout"/> to TextureLayout.ShaderWrite before the dispatch.
-    /// After the dispatch the layout is transformed to <paramref name="dstLayout"/>.
-    /// </summary>
-    [<Extension>]
-    static member inline CompileTraceToTexture(runtime : IRaytracingRuntime, pipeline : RaytracingPipelineState, target : aval<#IBackendTexture>,
-                                               [<Optional; DefaultParameterValue(TextureLayout.ShaderRead)>] srcLayout : TextureLayout,
-                                               [<Optional; DefaultParameterValue(TextureLayout.ShaderRead)>] dstLayout : TextureLayout) =
-        let commands = target |> AVal.map (fun t -> RaytracingCommand.TraceRaysToTexture(t, srcLayout, dstLayout))
-        runtime.CompileTrace(pipeline, commands)
-
-    /// <summary>
-    /// Compiles a raytracing task that dispatches rays based on the size of the given texture.
-    /// The layout of the texture is transformed from <paramref name="srcLayout"/> to TextureLayout.ShaderWrite before the dispatch.
-    /// After the dispatch the layout is transformed to <paramref name="dstLayout"/>.
-    /// </summary>
-    [<Extension>]
-    static member inline CompileTraceToTexture(runtime : IRaytracingRuntime, pipeline : RaytracingPipelineState, target : IBackendTexture,
-                                               [<Optional; DefaultParameterValue(TextureLayout.ShaderRead)>] srcLayout : TextureLayout,
-                                               [<Optional; DefaultParameterValue(TextureLayout.ShaderRead)>] dstLayout : TextureLayout) =
-        let commands = RaytracingCommand.TraceRaysToTexture(target, srcLayout, dstLayout)
-        runtime.CompileTrace(pipeline, commands)
