@@ -133,24 +133,11 @@ type PreparedPipelineState =
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
- 
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PreparedPipelineState =
-
-    let private (|NullUniform|_|) (value : IAdaptiveValue option) =
-        match value with
-        | Some value when Object.ReferenceEquals(value, null) ->
-            Some ()
-        | _ ->
-            None
-
-    let private (|CastUniformResource|_|) (value : IAdaptiveValue option) =
-        match value with
-        | Some value when typeof<'T>.IsAssignableFrom value.ContentType ->
-            Some (AdaptiveResource.cast<'T> value)
-        | _ ->
-            None
+    open Uniforms.Patterns
 
     type ResourceManager with
         member x.CreateUniformBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =

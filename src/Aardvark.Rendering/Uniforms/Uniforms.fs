@@ -35,6 +35,23 @@ module TrafoOperators =
 module Uniforms =
     open TrafoOperators
 
+    module Patterns =
+        open System
+
+        let (|NullUniform|_|) (value : IAdaptiveValue option) =
+            match value with
+            | Some value when Object.ReferenceEquals(value, null) ->
+                Some ()
+            | _ ->
+                None
+
+        let (|CastUniformResource|_|) (value : IAdaptiveValue option) =
+            match value with
+            | Some value when typeof<'T>.IsAssignableFrom value.ContentType ->
+                Some (AdaptiveResource.cast<'T> value)
+            | _ ->
+                None
+
     [<AutoOpen>]
     module private Helpers =
         exception NotFoundException of string

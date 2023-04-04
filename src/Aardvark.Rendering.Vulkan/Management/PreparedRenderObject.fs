@@ -95,23 +95,10 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
 
 open Aardvark.Rendering.Vulkan.Resources
 open System.Threading.Tasks
+open Uniforms.Patterns
 
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
-
-    static let (|NullUniform|_|) (value : IAdaptiveValue option) =
-        match value with
-        | Some value when Object.ReferenceEquals(value, null) ->
-            Some ()
-        | _ ->
-            None
-
-    static let (|CastUniformResource|_|) (value : IAdaptiveValue option) =
-        match value with
-        | Some value when typeof<'T>.IsAssignableFrom value.ContentType ->
-            Some (AdaptiveResource.cast<'T> value)
-        | _ ->
-            None
 
     static let createSamplerState (this : ResourceManager) (name : Symbol) (uniforms : IUniformProvider) (state : FShade.SamplerState)  =
         match uniforms.TryGetUniform(Ag.Scope.Root, DefaultSemantic.SamplerStateModifier) with
