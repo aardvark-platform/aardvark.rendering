@@ -864,6 +864,7 @@ type PreparedObjectInfo =
 module PreparedObjectInfo =
     open FShade
     open TypeInfo
+    open PrimitiveValueConverter.Interop.Types.Patterns
 
     [<AutoOpen>]
     module private Utilities =

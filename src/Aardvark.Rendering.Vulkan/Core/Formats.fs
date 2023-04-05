@@ -1,10 +1,10 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
 open TypeInfo
+open PrimitiveValueConverter.Interop.Types.Patterns
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkFormat =
