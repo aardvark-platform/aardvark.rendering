@@ -131,6 +131,23 @@ module TraceInstanceFSharp =
         static member inline hitGroup (group : Symbol) =
             TraceInstance.hitGroups [group]
 
+        /// Sets hit groups for the given trace instance.
+        static member inline hitGroups (hitConfig : aval<string list>) =
+            fun (inst : TraceInstance) -> { inst with HitGroups = hitConfig |> AVal.map (List.map Sym.ofString) }
+
+        /// Sets hit groups for the given trace instance.
+        static member inline hitGroups (hitConfig : string list) =
+            TraceInstance.hitGroups ~~hitConfig
+
+        /// Sets a hit group for the given trace instance with a single geometry.
+        static member inline hitGroup (group : aval<string>) =
+            let groups = group |> AVal.map List.singleton
+            TraceInstance.hitGroups groups
+
+        /// Sets a hit group for the given trace instance with a single geometry.
+        static member inline hitGroup (group : string) =
+            TraceInstance.hitGroups [group]
+
         /// Sets the transform for the given trace instance.
         static member inline transform (trafo : aval<Trafo3d>) =
             fun (inst : TraceInstance) -> { inst with Transform = trafo }

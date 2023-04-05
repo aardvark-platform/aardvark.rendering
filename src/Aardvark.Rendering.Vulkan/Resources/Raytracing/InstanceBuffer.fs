@@ -23,7 +23,8 @@ module internal InstanceBuffer =
                             VkGeometryInstanceFlagsKHR.None
 
                     | _ ->
-                        VkGeometryInstanceFlagsKHR.TriangleFacingCullDisableBit
+                        VkGeometryInstanceFlagsKHR.TriangleFacingCullDisableBit |||
+                        VkGeometryInstanceFlagsKHR.TriangleFrontCounterclockwiseBit
                 )
 
             let g =
