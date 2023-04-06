@@ -490,7 +490,10 @@ type GlfwGamepad() =
             | 3 -> vr.Y <- float -v
             | 4 -> vrt <- float v * 0.5 + 0.5
             | 5 -> vlt <- float v * 0.5 + 0.5
-            | _ -> Log.warn "bad axis %d: %.3f" i v
+            | _ -> 
+                // this one is triggered by some devices such as 3D mouses...
+                //Log.warn "bad axis %d: %.3f" i v
+                ()
 
         let vl = 
             if Vec.length vl > 0.1 then vl
