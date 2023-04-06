@@ -232,8 +232,8 @@ let main argv =
     Aardvark.Init()
 
     // uncomment/comment to switch between the backends
-    use app = new VulkanApplication()
-    //use app = new OpenGlApplication()
+    use app = new VulkanApplication(DebugLevel.Normal)
+    //use app = new OpenGlApplication(DebugLevel.Normal)
     let runtime = app.Runtime :> IRuntime
 
     // create a game window

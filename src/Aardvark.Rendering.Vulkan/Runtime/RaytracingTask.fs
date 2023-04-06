@@ -193,7 +193,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
                     Log.line "[Raytracing] recompile commands: %s" cause
 
-                inner.Begin CommandBufferUsage.None
+                inner.Begin(CommandBufferUsage.None, true)
 
                 for cmd in compiled.Commands do
                     inner.Enqueue cmd

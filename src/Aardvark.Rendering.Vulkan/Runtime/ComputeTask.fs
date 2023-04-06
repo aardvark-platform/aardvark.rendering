@@ -545,7 +545,7 @@ module internal ComputeTaskInternals =
                     empty
                 else
                     let inner = getSecondaryCommandBuffer()
-                    inner.Begin CommandBufferUsage.None
+                    inner.Begin(CommandBufferUsage.None, true)
                     inner.AppendCommand()
                     stream.Run(inner.Handle)
                     inner.End()
