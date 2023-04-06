@@ -48,9 +48,9 @@ module Culling =
             let hitFrontFacingRed (input : RayHitInput<V3f>) =
                 closestHit {
                     return
-                        match int input.hit.kind with
-                        | HitKind.FrontFacingTriangle -> V3f(1, 0, 0)
-                        | HitKind.BackFacingTriangle -> V3f(0, 1, 0)
+                        match input.hit.kind with
+                        | RayHitKind.FrontFacingTriangle -> V3f(1, 0, 0)
+                        | RayHitKind.BackFacingTriangle -> V3f(0, 1, 0)
                         | _ -> V3f.One
                 }
 
@@ -75,8 +75,8 @@ module Culling =
             raytracingEffect {
                 raygen (Shader.Raytracing.raygenMain flags)
                 miss Shader.Raytracing.missMain
-                hitgroup ("Main", hitgroupMain)
-                hitgroup ("FrontFacing", hitgroupFrontFacing)
+                hitgroup "Main" hitgroupMain
+                hitgroup "FrontFacing" hitgroupFrontFacing
             }
 
     module FullscreenQuad =

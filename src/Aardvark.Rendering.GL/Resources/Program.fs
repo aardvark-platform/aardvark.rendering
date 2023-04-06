@@ -121,6 +121,7 @@ module ProgramExtensions =
                         createInputLocations = locations
                         createPerStageUniforms = false
                         reverseMatrixLogic = true
+                        reverseTessellationWinding = false
                         createOutputLocations = locations
                         createPassingLocations = locations
                         depthWriteMode = conservativeDepth
@@ -859,14 +860,14 @@ module ProgramExtensions =
                     let layoutHash = inputLayout.ComputeHash()
 
                     let iface =
-                        match x.TryCompileProgram(initial.hash + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with
+                        match x.TryCompileProgram(initial.Hash + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with
                         | Success prog -> prog.Interface
                         | Error e ->
                             failwithf "[GL] shader compiler returned errors: %s" e
 
                     let changeableProgram =
                         b |> AVal.map (fun m ->
-                            match x.TryCompileProgram(m.hash + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
+                            match x.TryCompileProgram(m.Hash + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
                             | Success p -> p
                             | Error e ->
                                 Log.error "[GL] shader compiler returned errors: %A" e

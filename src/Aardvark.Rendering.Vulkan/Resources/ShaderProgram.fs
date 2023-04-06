@@ -20,19 +20,20 @@ module internal FShadeConfig =
             ]
 
         Backend.Create {
-            version                 = GLSLVersion(4,5,0)
-            enabledExtensions       = extensions
-            createUniformBuffers    = true
-            bindingMode             = BindingMode.Global
-            createDescriptorSets    = true
-            stepDescriptorSets      = false
-            createInputLocations    = true
-            createPerStageUniforms  = false
-            reverseMatrixLogic      = true
-            createOutputLocations   = true
-            createPassingLocations  = true
-            depthWriteMode          = true
-            useInOut                = true
+            version                     = GLSLVersion(4,5,0)
+            enabledExtensions           = extensions
+            createUniformBuffers        = true
+            bindingMode                 = BindingMode.Global
+            createDescriptorSets        = true
+            stepDescriptorSets          = false
+            createInputLocations        = true
+            createPerStageUniforms      = false
+            reverseMatrixLogic          = true
+            reverseTessellationWinding  = true
+            createOutputLocations       = true
+            createPassingLocations      = true
+            depthWriteMode              = true
+            useInOut                    = true
         }
 
     /// The target depth range passed to FShade.
@@ -551,7 +552,7 @@ module ShaderProgram =
         let hash = module_.ComputeHash()
 
         let inputLayout =
-            match module_.userData with
+            match module_.UserData with
             | :? (obj * EffectInputLayout) as (_, layout) -> Some layout
             | _ -> None
 

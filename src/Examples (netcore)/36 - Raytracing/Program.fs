@@ -287,10 +287,10 @@ module Effect =
         raytracingEffect {
             raygen rgenMain
             miss missSky
-            miss (MissShader.Shadow, missShadow)
-            hitgroup (HitGroup.Model, hitGroupModel)
-            hitgroup (HitGroup.Floor, hitGroupFloor)
-            hitgroup (HitGroup.Sphere, hitGroupSphere)
+            miss MissShader.Shadow missShadow
+            hitgroup HitGroup.Model hitGroupModel
+            hitgroup HitGroup.Floor hitGroupFloor
+            hitgroup HitGroup.Sphere hitGroupSphere
         }
 
 [<EntryPoint>]
