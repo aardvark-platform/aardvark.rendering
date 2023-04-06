@@ -199,6 +199,8 @@ module Sg =
 [<EntryPoint>]
 let main argv =
 
+    StreamingTest.test()
+
     Aardvark.Init()
 
     use win =

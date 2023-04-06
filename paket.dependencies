@@ -20,6 +20,7 @@ nuget Aardvark.Base.Runtime              ~> 5.2.19
 nuget Aardvark.Base.Essentials           ~> 5.2.19
 nuget Aardvark.Geometry                  ~> 5.2.19
 nuget Aardvark.Base.Tensors              ~> 5.2.19
+nuget Aardvark.PixImage.DevIL            ~> 5.2.19
 
 nuget Aardvark.Assembler                 ~> 0.0.6
 
@@ -44,6 +45,8 @@ nuget Silk.NET.GLFW                      = 2.15.0
 nuget Silk.NET.Core                      = 2.15.0
 
 nuget SharpZipLib                        ~> 1.4.1
+
+nuget Aardvark.PixImage.Pfim             ~> 0.9.1
 
 group Test
 framework: net6.0
