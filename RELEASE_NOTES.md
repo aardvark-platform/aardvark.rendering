@@ -1,3 +1,6 @@
+### 5.4.0-prerelease0001
+- Initial prerelease for 5.4
+
 ### 5.3.6
 - Opc: more robust patchhierarchy caching: https://github.com/pro3d-space/PRo3D/issues/283
 
