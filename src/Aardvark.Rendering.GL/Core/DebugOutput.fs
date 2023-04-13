@@ -42,7 +42,8 @@ module private IGraphicsContextDebugExtensions =
 module private DebugOutputInternals =
     type GLDebugMessageCallbackDel = delegate of callback : nativeint * userData : nativeint -> unit
 
-    let debugCallback (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity)
+    let debugCallback (debugErrors : System.Collections.Generic.List<string>)
+                      (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity)
                       (length : int) (message : nativeint) (userParam : nativeint) =
         let message = Marshal.PtrToStringAnsi(message, length)
 
@@ -56,6 +57,7 @@ module private DebugOutputInternals =
             | _ -> Report.Warn("[GL:{0}] {1}", userParam, message)
 
         | DebugSeverity.DebugSeverityHigh ->
+            lock debugErrors (fun _ -> debugErrors.Add message)
             Report.Error("[GL:{0}] {1}", userParam, message)
 
         | _ ->
@@ -68,7 +70,11 @@ type internal DebugOutputMode =
 
 type internal DebugOutput =
     { Mode     : DebugOutputMode
-      Callback : PinnedDelegate }
+      Callback : PinnedDelegate
+      Errors   : System.Collections.Generic.List<string> }
+
+    member x.GetErrors() =
+        lock x.Errors (fun _ -> x.Errors.ToArray())
 
     member x.Dispose() = x.Callback.Dispose()
 
@@ -111,8 +117,10 @@ module internal DebugOutput =
             // Setup callback
             Report.BeginTimed(4, "[GL] setting up debug callback")
 
+            let errors = System.Collections.Generic.List<string>()
+
             let glDebugMessageCallback = Marshal.GetDelegateForFunctionPointer(ptr, typeof<GLDebugMessageCallbackDel>) |> unbox<GLDebugMessageCallbackDel>
-            let callback = Marshal.PinDelegate <| DebugProc debugCallback
+            let callback = Marshal.PinDelegate <| DebugProc (debugCallback errors)
             glDebugMessageCallback.Invoke(callback.Pointer, ctx.Context.Handle)
 
             Report.End(4) |> ignore
@@ -124,7 +132,7 @@ module internal DebugOutput =
 
             Report.End(4) |> ignore
 
-            Some { Mode = DebugOutputMode.Disabled; Callback = callback }
+            Some { Mode = DebugOutputMode.Disabled; Callback = callback; Errors = errors }
 
         | _ ->
             None

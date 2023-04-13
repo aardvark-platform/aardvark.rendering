@@ -178,6 +178,12 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                     debugOutput
         )
 
+    /// Returns all errors reported by the debug output.
+    member x.GetDebugErrors() =
+        match debugOutput with
+        | Some dbg -> dbg.GetErrors()
+        | _ -> [||]
+
     member x.Dispose() =
         debugOutput |> Option.iter (fun dbg -> dbg.Dispose())
 

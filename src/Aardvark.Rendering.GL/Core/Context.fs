@@ -406,6 +406,10 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             Log.warn "[GL] Internal format queries not supported, assuming mipmap generation is supported"
             MipmapGenerationSupport.Full
 
+    /// Returns all errors reported by the debug output on the resource context handles.
+    member x.GetDebugErrors() =
+        resourceContexts |> Array.collect (fun h -> h.GetDebugErrors())
+
     /// <summary>
     /// releases all resources created by the context
     /// </summary>

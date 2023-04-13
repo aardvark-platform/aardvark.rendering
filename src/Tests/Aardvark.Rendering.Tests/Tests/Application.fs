@@ -44,11 +44,23 @@ module TestApplication =
                 if err <> ErrorCode.NoError then
                     failwithf "OpenGL returned error: %A" err
 
+            let checkForDebugErrors() =
+                let failed, errors =
+                    let br = Environment.NewLine + Environment.NewLine
+                    let msgs = ctx.GetDebugErrors()
+
+                    msgs.Length > 0,
+                    msgs |> String.concat br |> (+) br
+
+                if failed then
+                    failwithf "OpenGL debug output reported errors: %s" errors
+
             new TestApplication(
                 runtime,
                 { new IDisposable with
                     member x.Dispose() =
                         runtime.Dispose()
+                        checkForDebugErrors()
                         checkForErrors()
                         ctx.Dispose()
                 }
