@@ -211,8 +211,12 @@ type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : li
     member private x.EagerDestroy() =
         if Monitor.TryEnter x then
             try
-                handle |> Option.iter (snd >> desc.idestroy)
-                handle <- None
+                // This is executed at the end of the transaction that marked the object.
+                // At this point, we may already have updated (i.e. OutOfDate = false).
+                // In that case we would be destroying the new handle.
+                if x.OutOfDate then
+                    handle |> Option.iter (snd >> desc.idestroy)
+                    handle <- None
             finally
                 Monitor.Exit x
 
@@ -695,7 +699,7 @@ module Resources =
 
 
     type ImageSamplerArrayResource(owner : IResourceCache, key : list<obj>, count : int,
-                                   empty : IResourceLocation<ImageSampler>, input : amap<int, IResourceLocation<ImageSampler>>) =
+                                   empty : IResourceLocation<ImageSampler>, input : amap<int, IResourceLocation<ImageSampler>>) as this =
         inherit AbstractResourceLocation<ImageSamplerArray>(owner, key)
 
         static let zeroHandle = { version = -1; handle = Unchecked.defaultof<_> }
@@ -726,6 +730,7 @@ module Resources =
         let remove (i : int) (r : IResourceLocation<_>) =
             if indices |> MultiDict.remove r i then
                 r.Release()
+                r.Outputs.Remove this |> ignore
                 pending.Remove r |> ignore
 
         // Adds a resource to the given index

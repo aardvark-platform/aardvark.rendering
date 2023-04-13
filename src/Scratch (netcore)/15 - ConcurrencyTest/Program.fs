@@ -127,7 +127,7 @@ let main argv =
                 do! DefaultSurfaces.simpleLighting
 
             }
-            |> Sg.diffuseTexture texture
+
     let template =
         template.RenderObjects(Ag.Scope.Root).Content |> AVal.force |> HashSet.toList |> List.head |> unbox<RenderObject>
     let cam = viewTrafo |> AVal.map (fun v -> v.Backward.TransformPosProj V3d.Zero)
