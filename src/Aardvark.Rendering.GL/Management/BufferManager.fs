@@ -50,8 +50,8 @@ type internal BufferManager(ctx : Context) =
             if newShared = b then
                 b :> Buffer
             else
-                newShared.Acquire()
                 b.Release()
+                newShared.Acquire()
                 newShared :> Buffer
         | _ ->
             if b.Handle = 0 then

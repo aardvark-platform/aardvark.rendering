@@ -57,8 +57,8 @@ type internal TextureManager(ctx : Context) =
             if newShared = texture then
                 texture :> Texture
             else
-                newShared.Acquire()
                 texture.Release()
+                newShared.Acquire()
                 newShared :> Texture
         | _ ->
             if texture.Handle <> 0 then
