@@ -32,19 +32,27 @@ type Runtime(device : Device) as this =
     member x.Device = device
     member x.ResourceManager = manager
 
-    member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
+    member x.DeviceCount = device.PhysicalDevices.Length
 
-    member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
-        new SparseTextureImplemetation.DoubleBufferedSparseImage<'a>(
+    member x.DebugConfig = debug
+
+    member x.CreateStreamingTexture (mipMaps : bool) : IStreamingTexture =
+        raise <| NotImplementedException()
+
+    member x.CreateSparseTexture<'T when 'T : unmanaged> (size : V3i, levels : int, slices : int, dimension : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'T> =
+        new SparseTextureImplemetation.DoubleBufferedSparseImage<'T>(
             device,
             size, levels, slices,
-            dim, format,
+            dimension, format,
             VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit,
             brickSize,
             maxMemory
         ) :> ISparseTexture<_>
 
-    member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) =
+    member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>,
+                             [<Optional; DefaultParameterValue(0)>] level : int,
+                             [<Optional; DefaultParameterValue(0)>] slice : int,
+                             [<Optional; DefaultParameterValue(V2i())>] offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
@@ -53,7 +61,10 @@ type Runtime(device : Device) as this =
         let image = unbox<Image> t
         device.DownloadStencil(image.[TextureAspect.Stencil, level, slice], target, offset)
 
-    member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) =
+    member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>,
+                           [<Optional; DefaultParameterValue(0)>] level : int,
+                           [<Optional; DefaultParameterValue(0)>] slice : int,
+                           [<Optional; DefaultParameterValue(V2i())>] offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
@@ -77,7 +88,9 @@ type Runtime(device : Device) as this =
 
     member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
                                         depthStencilAttachment : Option<TextureFormat>,
-                                        samples : int, layers : int, perLayerUniforms : seq<string>) =
+                                        [<Optional; DefaultParameterValue(1)>] samples : int,
+                                        [<Optional; DefaultParameterValue(1)>] layers : int,
+                                        [<Optional; DefaultParameterValue(null : seq<string>)>] perLayerUniforms : seq<string>) =
         ResourceValidation.Framebuffers.validateSignatureParams colorAttachments depthStencilAttachment samples layers
 
         let perLayerUniforms =
@@ -317,8 +330,9 @@ type Runtime(device : Device) as this =
 
 
     // upload
-    member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>,
-                                            format : Col.Format, offset : V3i, size : V3i) =
+    member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format,
+                                            [<Optional; DefaultParameterValue(V3i())>] offset : V3i,
+                                            [<Optional; DefaultParameterValue(V3i())>] size : V3i) =
         let size =
             if size = V3i.Zero then
                 V3i source.Size
@@ -333,8 +347,9 @@ type Runtime(device : Device) as this =
         device.UploadLevel(image, source, format, offset, size)
 
     // download
-    member x.Download<'T when 'T : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'T>,
-                                              format : Col.Format, offset : V3i, size : V3i) =
+    member x.Download<'T when 'T : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'T>, format : Col.Format,
+                                              [<Optional; DefaultParameterValue(V3i())>] offset : V3i,
+                                              [<Optional; DefaultParameterValue(V3i())>] size : V3i) =
         let size =
             if size = V3i.Zero then
                 V3i target.Size
@@ -375,6 +390,30 @@ type Runtime(device : Device) as this =
             do! Command.TransformLayout(src.Image, srcLayout)
             do! Command.TransformLayout(dst.Image, dstLayout)
         }
+
+    member x.Copy(src : IFramebuffer, dst : IFramebuffer) =
+        let src = src :?> Framebuffer
+        let dst = dst :?> Framebuffer
+        device.perform {
+            for (KeyValue(name, srcView)) in src.Attachments do
+                match dst.Attachments.TryGetValue name with
+                | (true, dstView) ->
+                    let ap = if name = DefaultSemantic.DepthStencil then TextureAspect.DepthStencil else TextureAspect.Color
+                    let lSrc = srcView.Image.Layout
+                    let lDst = dstView.Image.Layout
+                    do! Command.TransformLayout(srcView.Image, VkImageLayout.TransferSrcOptimal)
+                    do! Command.TransformLayout(dstView.Image, VkImageLayout.TransferDstOptimal)
+                    do! Command.Blit(srcView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, dstView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, VkFilter.Nearest)
+                    do! Command.TransformLayout(srcView.Image, lSrc)
+                    do! Command.TransformLayout(dstView.Image, lDst)
+                | _ ->
+                    ()
+        }
+
+    member x.ReadPixels(src : IFramebuffer, sem : Symbol, offset : V2i, size : V2i) =
+        let src = src :?> Framebuffer
+        let att = src.Attachments.[sem].Image :> IBackendTexture
+        x.Download(att, 0, 0, Box2i(offset, offset + size))
 
     // Clear
     member x.Clear(fbo : IFramebuffer, values : ClearValues) : unit =
@@ -432,6 +471,19 @@ type Runtime(device : Device) as this =
             device.perform {
                 do! command
             }
+
+    // Compute
+    member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
+
+    member x.CreateComputeShader(shader : FShade.ComputeShader) =
+        ComputeProgram.ofFShade shader device :> IComputeShader
+
+    member x.NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) : IComputeInputBinding =
+        let program = unbox<ComputeProgram> shader
+        manager.CreateComputeInputBinding(program, inputs)
+
+    member x.CompileCompute (commands : alist<ComputeCommand>) =
+        new ComputeTask(manager, commands) :> IComputeTask
 
     // Queries
     member x.CreateTimeQuery() =
@@ -493,48 +545,21 @@ type Runtime(device : Device) as this =
 
         new RaytracingTask(manager, pipeline, commands) :> IRaytracingTask
 
-            
     interface IRuntime with
-        member x.Copy(src : IFramebuffer, dst : IFramebuffer) =
-            let src = src :?> Framebuffer
-            let dst = dst :?> Framebuffer
-            device.perform {
-                for (KeyValue(name, srcView)) in src.Attachments do
-                    match dst.Attachments.TryGetValue name with
-                    | (true, dstView) ->
-                        let ap = if name = DefaultSemantic.DepthStencil then TextureAspect.DepthStencil else TextureAspect.Color
-                        let lSrc = srcView.Image.Layout
-                        let lDst = dstView.Image.Layout
-                        do! Command.TransformLayout(srcView.Image, VkImageLayout.TransferSrcOptimal)
-                        do! Command.TransformLayout(dstView.Image, VkImageLayout.TransferDstOptimal)
-                        do! Command.Blit(srcView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, dstView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, VkFilter.Nearest)
-                        do! Command.TransformLayout(srcView.Image, lSrc)
-                        do! Command.TransformLayout(dstView.Image, lDst)
-                    | _ ->
-                        ()
-            }
-            
-        member x.ReadPixels(src : IFramebuffer, sem : Symbol, offset : V2i, size : V2i) =
-            let src = src :?> Framebuffer
-            let att = src.Attachments.[sem].Image :> IBackendTexture
-            x.Download(att, 0, 0, Box2i(offset, offset + size))
+        member x.DebugConfig = x.DebugConfig
 
+        member x.DeviceCount = x.DeviceCount
 
-        member x.DebugConfig = debug
-
-        member x.DeviceCount = device.PhysicalDevices.Length
-
-        member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
+        member x.MaxLocalSize = x.MaxLocalSize
 
         member x.CreateComputeShader(shader : FShade.ComputeShader) =
-            ComputeProgram.ofFShade shader device :> IComputeShader
+            x.CreateComputeShader shader
 
         member x.NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
-            let program = unbox<ComputeProgram> shader
-            manager.CreateComputeInputBinding(program, inputs)
+            x.NewInputBinding(shader, inputs)
 
         member x.CompileCompute (commands : alist<ComputeCommand>) =
-            new ComputeTask(manager, commands) :> IComputeTask
+            x.CompileCompute commands
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource,
                                                 source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
@@ -546,6 +571,12 @@ type Runtime(device : Device) as this =
 
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
+
+        member x.Copy(src : IFramebuffer, dst : IFramebuffer) =
+            x.Copy(src, dst)
+
+        member x.ReadPixels(src : IFramebuffer, sem : Symbol, offset : V2i, size : V2i) =
+            x.ReadPixels(src, sem, offset, size)
 
         member x.OnDispose = onDispose.Publish
         member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
@@ -645,3 +676,6 @@ type Runtime(device : Device) as this =
         member x.ShaderCachePath
             with get() = x.ShaderCachePath
             and set(value) = x.ShaderCachePath <- value
+
+        member x.CreateLodRenderer(config, data) : IPreparedRenderObject =
+            raise <| NotImplementedException()

@@ -25,6 +25,10 @@ type Runtime(debug : IDebugConfig) =
 
     member x.DebugConfig = debug
 
+    member x.ShaderCachePath
+        with get() = ctx.ShaderCachePath
+        and set(value) = ctx.ShaderCachePath <- value
+
     member x.Initialize(context : Context) =
         if ctx <> null then
             Log.warn "Runtime already initialized"
@@ -79,195 +83,24 @@ type Runtime(debug : IDebugConfig) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    interface ILodRuntime with
-
-        member x.CreateLodRenderer(config : LodRendererConfig, data : aset<LodTreeInstance>) =
-
-            let preparedState = PreparedPipelineState.ofPipelineState config.fbo x.ResourceManager config.surface config.state
-
-            //let info : LodRenderingInfo =
-            //    {
-            //        LodRenderingInfo.quality = quality
-            //        LodRenderingInfo.maxQuality = maxQuality
-            //        LodRenderingInfo.renderBounds = renderBounds
-            //    }
-
-            new LodRenderer(ctx, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
-
     interface IRuntime with
 
         member x.DeviceCount = 1
         member x.DebugConfig = x.DebugConfig
 
-        member x.Copy(src : IFramebuffer, dst : IFramebuffer) =
-            use __ = ctx.ResourceLock
-            let src = src :?> Framebuffer
-            let dst = dst :?> Framebuffer
-            
-            if src.Handle <> dst.Handle then
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, src.Handle)
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, dst.Handle)
-            
-            
-                if dst.Handle = 0 then
-                    let att = src.Signature.ColorAttachments |> Map.tryFindKey (fun k v -> v.Name = DefaultSemantic.Colors)
-                    let mutable flags = ClearBufferMask.None
-                    match att with
-                    | Some colorIndex ->
-                        GL.ReadBuffer(unbox<ReadBufferMode> (int ReadBufferMode.ColorAttachment0 + colorIndex))
-                        GL.DrawBuffer(DrawBufferMode.BackLeft)
-                        flags <- ClearBufferMask.ColorBufferBit
-                    | None -> 
-                        ()
-                        
-                    GL.BlitFramebuffer(
-                        0, 0, src.Size.X, src.Size.Y,
-                        0, 0, dst.Size.X, dst.Size.Y,
-                        flags ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit,
-                        BlitFramebufferFilter.Nearest
-                    )
-                elif src.Handle = 0 then
-                    let att = dst.Signature.ColorAttachments |> Map.tryFindKey (fun k v -> v.Name = DefaultSemantic.Colors)
-                    let mutable flags = ClearBufferMask.None
-                    match att with
-                    | Some colorIndex ->
-                        GL.ReadBuffer(ReadBufferMode.BackLeft)
-                        GL.DrawBuffer(unbox<DrawBufferMode> (int DrawBufferMode.ColorAttachment0 + colorIndex))
-                        flags <- ClearBufferMask.ColorBufferBit
-                    | None -> 
-                        ()
-                        
-                    GL.BlitFramebuffer(
-                        0, 0, src.Size.X, src.Size.Y,
-                        0, 0, dst.Size.X, dst.Size.Y,
-                        flags ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit,
-                        BlitFramebufferFilter.Nearest
-                    )
-                else
-                    let mutable copyDepth =
-                        if Option.isSome src.Signature.DepthStencilAttachment && Option.isSome dst.Signature.DepthStencilAttachment then
-                            ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit
-                        else
-                            ClearBufferMask.None
+        member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
+            x.Upload(texture, source, format, offset, size)
 
-                    for (dstIndex, dstAtt) in Map.toSeq dst.Signature.ColorAttachments do
-                        let srcIndex = src.Signature.ColorAttachments |> Map.tryFindKey (fun k v -> v.Name = dstAtt.Name)
-                        match srcIndex with
-                        | Some srcIndex ->
-                            GL.ReadBuffer(unbox<ReadBufferMode> (int ReadBufferMode.ColorAttachment0 + srcIndex))
-                            GL.DrawBuffer(unbox<DrawBufferMode> (int DrawBufferMode.ColorAttachment0 + dstIndex))
-                            GL.BlitFramebuffer(
-                                0, 0, src.Size.X, src.Size.Y,
-                                0, 0, dst.Size.X, dst.Size.Y,
-                                ClearBufferMask.ColorBufferBit ||| copyDepth,
-                                BlitFramebufferFilter.Nearest
-                            )
-                            copyDepth <- ClearBufferMask.None
-                        | None ->
-                            ()
-                    if copyDepth <> ClearBufferMask.None then
-                        GL.BlitFramebuffer(
-                            0, 0, src.Size.X, src.Size.Y,
-                            0, 0, dst.Size.X, dst.Size.Y,
-                            copyDepth,
-                            BlitFramebufferFilter.Nearest
-                        )
-                    
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
-                       
-        member x.ReadPixels(src : IFramebuffer, sem : Symbol, offset : V2i, size : V2i) = 
-            use __ = ctx.ResourceLock
-            let src = src :?> Framebuffer
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, src.Handle)
-            
-            let format = 
-                if src.Handle <> 0 then
-                    let (KeyValue(slot, signature)) = src.Signature.Layout.ColorAttachments |> Seq.find (fun (KeyValue(id, att)) -> att.Name = sem)
-                    GL.ReadBuffer(unbox (int ReadBufferMode.ColorAttachment0 + slot))
-                    signature.Format
-                else
-                    if sem <> DefaultSemantic.Colors then failwith "bad"
-                    GL.ReadBuffer(ReadBufferMode.BackLeft)
-                    TextureFormat.Rgba8
-                
-            GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
-            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
-            
+        member x.Download<'T when 'T : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
+            x.Download(texture, target, format, offset, size)
 
-            let (pfmt, ptype) = TextureFormat.toFormatAndType format
-            let cfmt = TextureFormat.toDownloadFormat format
-            let res = PixImage.Create(cfmt, int64 size.X, int64 size.Y)
-            let gc = GCHandle.Alloc(res.Array, GCHandleType.Pinned)
-            try
+        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
+            x.Copy(src, srcOffset, dst, dstOffset, size)
 
-                GL.ReadPixels(offset.X, src.Size.Y - size.Y - offset.Y, size.X, size.Y, pfmt, ptype, gc.AddrOfPinnedObject())
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
-                
-                res.Transformed(ImageTrafo.MirrorY)
-            finally
-                gc.Free()
+        member x.OnDispose = x.OnDispose
 
-        member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) : unit =
-            let size =
-                if size = V3i.Zero then
-                    V3i source.Size
-                else
-                    size
-
-            let level = texture.Level
-            let slice = texture.Slice
-            let dst = texture.Texture |> unbox<Texture>
-
-            dst |> ResourceValidation.Textures.validateLevel level
-            dst |> ResourceValidation.Textures.validateSlice slice
-            dst |> ResourceValidation.Textures.validateUploadWindow level offset size
-            ctx.Upload(dst, level, slice, offset, size, source, format)
-
-        member x.Download<'T when 'T : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) : unit =
-            let size =
-                if size = V3i.Zero then
-                    V3i target.Size
-                else
-                    size
-
-            let level = texture.Level
-            let slice = texture.Slice
-            let src = texture.Texture |> unbox<Texture>
-
-            src |> ResourceValidation.Textures.validateLevel level
-            src |> ResourceValidation.Textures.validateSlice slice
-            src |> ResourceValidation.Textures.validateWindow level offset size
-            ctx.Download(src, level, slice, offset, size, target, format)
-
-        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
-
-            let args (offset : V3i) (t : IFramebufferOutput) =
-                match t with
-                | :? Renderbuffer as rb ->
-                    rb |> ResourceValidation.Textures.validateWindow 0 offset size
-                    Image.Renderbuffer rb, 0, Range1i(0)
-
-                | :? ITextureLevel as tl ->
-                    tl.Texture |> ResourceValidation.Textures.validateSlices tl.Slices.Min (tl.Slices.Size + 1)
-                    tl.Texture |> ResourceValidation.Textures.validateLevels tl.Level 1
-                    tl.Texture |> ResourceValidation.Textures.validateWindow tl.Level offset size
-                    Image.Texture (unbox tl.Texture), tl.Level, tl.Slices
-
-                | _ ->
-                    failwithf "[GL] invalid FramebufferOutput: %A" t
-
-            let srcImage, srcLevel, srcSlices = args srcOffset src
-            let dstImage, dstLevel, dstSlices = args dstOffset dst
-
-            (srcImage.Samples, dstImage.Samples) ||> ResourceValidation.Textures.validateSamplesForCopy' srcImage.Dimension
-
-            ctx.Copy(srcImage, srcLevel, srcSlices, srcOffset, dstImage, dstLevel, dstSlices, dstOffset, size)
-
-        member x.OnDispose = onDispose.Publish
-
-        member x.AssembleModule (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-            signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
+        member x.AssembleModule (effect, signature, topology) =
+            x.AssembleModule(effect, signature, topology)
 
         member x.ResourceManager = manager :> IResourceManager
 
@@ -313,187 +146,56 @@ type Runtime(debug : IDebugConfig) =
 
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
 
-        member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
-            failwith "not implemented"
-
+        member x.CreateSparseTexture<'T when 'T : unmanaged> (size : V3i, levels : int, slices : int, dimension : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'T> =
+            raise <| NotImplementedException()
 
         member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
             x.CreateFramebuffer(signature, bindings) :> _
 
-
         member x.CreateRenderbuffer(size : V2i, format : TextureFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
 
+        member x.Copy(src : IFramebuffer, dst : IFramebuffer) =
+            x.Copy(src, dst)
+
+        member x.ReadPixels(src : IFramebuffer, sem : Symbol, offset : V2i, size : V2i) =
+            x.ReadPixels(src, sem, offset, size)
+
+        member x.Clear(fbo : IFramebuffer, values : ClearValues) =
+            x.Clear(fbo, values)
+
+        member x.Clear(texture : IBackendTexture, values : ClearValues) =
+            x.Clear(texture, values)
+
+        member x.CreateTextureView(texture, levels, slices, isArray) =
+            x.CreateTextureView(texture, levels, slices, isArray)
 
         member x.CreateGeometryPool(types : Map<Symbol, Type>) =
             x.CreateGeometryPool(types)
 
         member x.MaxLocalSize =
-            ctx.MaxComputeWorkGroupSize
+            x.MaxLocalSize
 
-        member x.CreateComputeShader (shader : FShade.ComputeShader) =
-            ctx.CompileKernel shader :> IComputeShader
+        member x.CreateComputeShader(shader) =
+            x.CreateComputeShader(shader)
 
-        member x.NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
-            let program = unbox<ComputeProgram> shader
-            ComputeInputBinding(manager, program, inputs) :> IComputeInputBinding
+        member x.NewInputBinding(shader, inputs) =
+            x.NewInputBinding(shader, inputs)
 
-        member x.CompileCompute (commands : alist<ComputeCommand>) =
-            new ComputeTask(manager, commands, debug.DebugComputeTasks) :> IComputeTask
-
-        member x.Clear(fbo : IFramebuffer, values : ClearValues) =
-            use __ = ctx.ResourceLock
-
-            let old = GL.GetInteger(GetPName.DrawFramebufferBinding)
-
-            let fbo = fbo |> unbox<Framebuffer>
-            let handle = fbo.Handle
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, handle)
-            GL.Check "could not bind framebuffer"
-
-            let drawBuffers = DrawBuffers.ofSignature fbo.Signature
-            GL.DrawBuffers(drawBuffers.Length, drawBuffers);
-
-            // assume user has not messed with gl state -> omit resetting color/depth/stencil mask
-
-            // omit check if farmebuffer signature actually contains depth/stencil
-            let mutable combinedClearMask = ClearBufferMask.None
-            match values.Depth with
-            | Some d -> GL.ClearDepth(float d)
-                        combinedClearMask <- combinedClearMask ||| ClearBufferMask.DepthBufferBit
-            | None -> ()
-
-            match values.Stencil with
-            | Some s -> GL.ClearStencil(int s)
-                        combinedClearMask <- combinedClearMask ||| ClearBufferMask.StencilBufferBit
-            | None -> ()
-
-            if fbo.Signature.ColorAttachments.Count = 1 then
-                let _, att = fbo.Signature.ColorAttachments |> Map.toList |> List.head
-
-                match values.[att.Name] with
-                | Some c ->
-                    if att.Format.IsIntegerFormat then
-                        // clear depth stencil if requested
-                        if combinedClearMask <> ClearBufferMask.None then
-                            GL.Clear(combinedClearMask)
-
-                        // clear color layer individually
-                        GL.ClearBuffer(ClearBuffer.Color, 0, c.Integer.ToArray())
-
-                    else
-                        GL.ClearColor(c.Float.X, c.Float.Y, c.Float.Z, c.Float.W)
-                        GL.Clear(ClearBufferMask.ColorBufferBit ||| combinedClearMask)
-
-                | None -> failwith "invalid target name"
-            else
-                // clear depth stencil if requested
-                if combinedClearMask <> ClearBufferMask.None then
-                    GL.Clear(combinedClearMask)
-
-                // clear each color layer individually
-                for KeyValue(i, att) in fbo.Signature.ColorAttachments do
-                    match values.[att.Name] with
-                    | Some c ->
-                        if att.Format.IsIntegerFormat then
-                            GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
-                        else
-                            GL.ClearBuffer(ClearBuffer.Color, i, c.Float.ToArray())
-                        GL.Check "could not clear buffer"
-                    | None -> ()
-
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old);
-            GL.Check "could not unbind framebuffer"
-
-        member x.Clear(texture : IBackendTexture, values : ClearValues) =
-            use __ = ctx.ResourceLock
-
-            let fbo = GL.GenFramebuffer()
-            GL.Check "could not create framebuffer"
-
-            let old = GL.GetInteger(GetPName.DrawFramebufferBinding)
-
-            try
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo)
-                GL.Check "could not bind framebuffer"
-
-                let binding =
-                    match texture.Format.Aspect with
-                    | TextureAspect.Depth        -> FramebufferAttachment.DepthAttachment
-                    | TextureAspect.Stencil      -> FramebufferAttachment.StencilAttachment
-                    | TextureAspect.DepthStencil -> FramebufferAttachment.DepthStencilAttachment
-                    | _                          -> FramebufferAttachment.ColorAttachment0
-
-                GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, binding, texture.Handle |> unbox<int>, 0)
-                GL.Check "could not attach framebuffer texture"
-
-                if binding <> FramebufferAttachment.ColorAttachment0 then
-                    let mask =
-                        let depthMask =
-                            match values.Depth with
-                            | Some value when texture.Format.HasDepth ->
-                                GL.ClearDepth(float value)
-                                ClearBufferMask.DepthBufferBit
-
-                            | _ ->
-                                ClearBufferMask.None
-
-                        let stencilMask =
-                            match values.Stencil with
-                            | Some value when texture.Format.HasStencil ->
-                                GL.ClearStencil(int value)
-                                ClearBufferMask.StencilBufferBit
-
-                            | _ ->
-                                ClearBufferMask.None
-
-                        depthMask ||| stencilMask
-
-                    if mask <> ClearBufferMask.None then
-                        GL.Clear(mask)
-                else
-                    match values.[DefaultSemantic.Colors] with
-                    | Some color ->
-                        GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
-                        if texture.Format.IsIntegerFormat then
-                            GL.ClearBuffer(ClearBuffer.Color, 0, color.Integer.ToArray())
-                        else
-                            GL.ClearBuffer(ClearBuffer.Color, 0, color.Float.ToArray())
-
-                    | _ ->
-                        ()
-
-                GL.Check "could not clear buffer"
-
-            finally
-                GL.DeleteFramebuffer(fbo)
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old)
-                GL.Check "could not delete or unbind framebuffer"
-
-        member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
-            ctx.CreateTextureView(unbox<Texture> texture, levels, slices, isArray) :> IBackendTexture
+        member x.CompileCompute (commands) =
+            x.CompileCompute commands
 
         member x.CreateTimeQuery() =
-            new TimeQuery(ctx) :> ITimeQuery
+            x.CreateTimeQuery()
 
         member x.CreateOcclusionQuery(precise) =
-            new OcclusionQuery(ctx, precise) :> IOcclusionQuery
+            x.CreateOcclusionQuery(precise)
 
         member x.CreatePipelineQuery(statistics) =
-            use __ = ctx.ResourceLock
-
-            if GL.ARB_pipeline_statistics_query then
-                new PipelineQuery(ctx, Set.ofSeq statistics) :> IPipelineQuery
-            else
-                new GeometryQuery(ctx) :> IPipelineQuery
+            x.CreatePipelineQuery(statistics)
 
         member x.SupportedPipelineStatistics =
-            use __ = ctx.ResourceLock
-
-            if GL.ARB_pipeline_statistics_query then
-                PipelineStatistics.All
-            else
-                Set.singleton ClippingInputPrimitives
+            x.SupportedPipelineStatistics
 
         member x.SupportsRaytracing =
             false
@@ -511,8 +213,11 @@ type Runtime(debug : IDebugConfig) =
             failwith "GL backend does not support raytracing"
 
         member x.ShaderCachePath
-            with get() = ctx.ShaderCachePath
-            and set(value) = ctx.ShaderCachePath <- value
+            with get() = x.ShaderCachePath
+            and set(value) = x.ShaderCachePath <- value
+
+        member x.CreateLodRenderer(config, data) =
+            x.CreateLodRenderer(config, data)
 
 
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
@@ -537,6 +242,66 @@ type Runtime(debug : IDebugConfig) =
             let size = min srcSize dstSize
 
             ctx.Copy(src, srcLevel, srcSlices, V3i.Zero, dst, dstLevel, dstSlices, V3i.Zero, size)
+
+    member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format,
+                                            [<Optional; DefaultParameterValue(V3i())>] offset : V3i,
+                                            [<Optional; DefaultParameterValue(V3i())>] size : V3i) : unit =
+        let size =
+            if size = V3i.Zero then
+                V3i source.Size
+            else
+                size
+
+        let level = texture.Level
+        let slice = texture.Slice
+        let dst = texture.Texture |> unbox<Texture>
+
+        dst |> ResourceValidation.Textures.validateLevel level
+        dst |> ResourceValidation.Textures.validateSlice slice
+        dst |> ResourceValidation.Textures.validateUploadWindow level offset size
+        ctx.Upload(dst, level, slice, offset, size, source, format)
+
+    member x.Download<'T when 'T : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'T>, format : Col.Format,
+                                              [<Optional; DefaultParameterValue(V3i())>] offset : V3i,
+                                              [<Optional; DefaultParameterValue(V3i())>] size : V3i) : unit =
+        let size =
+            if size = V3i.Zero then
+                V3i target.Size
+            else
+                size
+
+        let level = texture.Level
+        let slice = texture.Slice
+        let src = texture.Texture |> unbox<Texture>
+
+        src |> ResourceValidation.Textures.validateLevel level
+        src |> ResourceValidation.Textures.validateSlice slice
+        src |> ResourceValidation.Textures.validateWindow level offset size
+        ctx.Download(src, level, slice, offset, size, target, format)
+
+    member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
+
+        let args (offset : V3i) (t : IFramebufferOutput) =
+            match t with
+            | :? Renderbuffer as rb ->
+                rb |> ResourceValidation.Textures.validateWindow 0 offset size
+                Image.Renderbuffer rb, 0, Range1i(0)
+
+            | :? ITextureLevel as tl ->
+                tl.Texture |> ResourceValidation.Textures.validateSlices tl.Slices.Min (tl.Slices.Size + 1)
+                tl.Texture |> ResourceValidation.Textures.validateLevels tl.Level 1
+                tl.Texture |> ResourceValidation.Textures.validateWindow tl.Level offset size
+                Image.Texture (unbox tl.Texture), tl.Level, tl.Slices
+
+            | _ ->
+                failwithf "[GL] invalid FramebufferOutput: %A" t
+
+        let srcImage, srcLevel, srcSlices = args srcOffset src
+        let dstImage, dstLevel, dstSlices = args dstOffset dst
+
+        (srcImage.Samples, dstImage.Samples) ||> ResourceValidation.Textures.validateSamplesForCopy' srcImage.Dimension
+
+        ctx.Copy(srcImage, srcLevel, srcSlices, srcOffset, dstImage, dstLevel, dstSlices, dstOffset, size)
 
     member x.CreateBuffer(size : nativeint, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
         size |> ResourceValidation.Buffers.validateSize
@@ -572,7 +337,9 @@ type Runtime(debug : IDebugConfig) =
 
     member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
                                         depthStencilAttachment : Option<TextureFormat>,
-                                        samples : int, layers : int, perLayerUniforms : seq<string>) =
+                                        [<Optional; DefaultParameterValue(1)>] samples : int,
+                                        [<Optional; DefaultParameterValue(1)>] layers : int,
+                                        [<Optional; DefaultParameterValue(null : seq<string>)>] perLayerUniforms : seq<string>) =
         ResourceValidation.Framebuffers.validateSignatureParams colorAttachments depthStencilAttachment samples layers
 
         let perLayerUniforms =
@@ -614,6 +381,11 @@ type Runtime(debug : IDebugConfig) =
     member x.CreateStreamingTexture(mipMaps : bool) =
         ctx.CreateStreamingTexture(mipMaps) :> IStreamingTexture
 
+    member x.OnDispose = onDispose.Publish
+
+    member x.AssembleModule (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
+        signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
+
     member x.ResourceManager = manager
 
     member x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>) =
@@ -630,7 +402,8 @@ type Runtime(debug : IDebugConfig) =
     member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =
         new RenderTasks.ClearTask(x, ctx, signature, values) :> IRenderTask
 
-    member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i, trafo : ImageTrafo) =
+    member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i,
+                                 [<Optional; DefaultParameterValue(ImageTrafo.Identity)>] trafo : ImageTrafo) =
         Operators.using ctx.ResourceLock (fun _ ->
             let oldRead = GL.GetInteger(GetPName.ReadFramebufferBinding)
             let oldDraw = GL.GetInteger(GetPName.DrawFramebufferBinding)
@@ -715,7 +488,8 @@ type Runtime(debug : IDebugConfig) =
             GL.Check "error cleanup"
         )
 
-    member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture, trafo : ImageTrafo) =
+    member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture,
+                                 [<Optional; DefaultParameterValue(ImageTrafo.Identity)>] trafo : ImageTrafo) =
         x.ResolveMultisamples(ms, V2i.Zero, ss, V2i.Zero, 0, ms.Size.XY, trafo)
 
     member x.GenerateMipMaps(t : IBackendTexture) =
@@ -740,14 +514,20 @@ type Runtime(debug : IDebugConfig) =
         | _ ->
             failwithf "[GL] unsupported texture: %A" t
 
-    member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) =
+    member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>,
+                             [<Optional; DefaultParameterValue(0)>] level : int,
+                             [<Optional; DefaultParameterValue(0)>] slice : int,
+                             [<Optional; DefaultParameterValue(V2i())>] offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
         t |> ResourceValidation.Textures.validateStencilFormat
         ctx.DownloadStencil(unbox<Texture> t, level, slice, offset, target)
 
-    member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) =
+    member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>,
+                           [<Optional; DefaultParameterValue(0)>] level : int,
+                           [<Optional; DefaultParameterValue(0)>] slice : int,
+                           [<Optional; DefaultParameterValue(V2i())>] offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
@@ -779,10 +559,299 @@ type Runtime(debug : IDebugConfig) =
         ResourceValidation.Textures.validateCreationParamsArray dim size levels samples count
         ctx.CreateTexture(size, dim, format, count, levels, samples)
 
-
-    member x.CreateRenderbuffer(size : V2i, format : TextureFormat, samples : int) : Renderbuffer =
+    member x.CreateRenderbuffer(size : V2i, format : TextureFormat,
+                                [<Optional; DefaultParameterValue(1)>] samples : int) : Renderbuffer =
         if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")
         ctx.CreateRenderbuffer(size, format, samples)
 
+    member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
+        ctx.CreateTextureView(unbox<Texture> texture, levels, slices, isArray) :> IBackendTexture
+
+    member x.Copy(src : IFramebuffer, dst : IFramebuffer) =
+        use __ = ctx.ResourceLock
+        let src = src :?> Framebuffer
+        let dst = dst :?> Framebuffer
+
+        if src.Handle <> dst.Handle then
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, src.Handle)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, dst.Handle)
+
+
+            if dst.Handle = 0 then
+                let att = src.Signature.ColorAttachments |> Map.tryFindKey (fun k v -> v.Name = DefaultSemantic.Colors)
+                let mutable flags = ClearBufferMask.None
+                match att with
+                | Some colorIndex ->
+                    GL.ReadBuffer(unbox<ReadBufferMode> (int ReadBufferMode.ColorAttachment0 + colorIndex))
+                    GL.DrawBuffer(DrawBufferMode.BackLeft)
+                    flags <- ClearBufferMask.ColorBufferBit
+                | None ->
+                    ()
+
+                GL.BlitFramebuffer(
+                    0, 0, src.Size.X, src.Size.Y,
+                    0, 0, dst.Size.X, dst.Size.Y,
+                    flags ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit,
+                    BlitFramebufferFilter.Nearest
+                )
+            elif src.Handle = 0 then
+                let att = dst.Signature.ColorAttachments |> Map.tryFindKey (fun k v -> v.Name = DefaultSemantic.Colors)
+                let mutable flags = ClearBufferMask.None
+                match att with
+                | Some colorIndex ->
+                    GL.ReadBuffer(ReadBufferMode.BackLeft)
+                    GL.DrawBuffer(unbox<DrawBufferMode> (int DrawBufferMode.ColorAttachment0 + colorIndex))
+                    flags <- ClearBufferMask.ColorBufferBit
+                | None ->
+                    ()
+
+                GL.BlitFramebuffer(
+                    0, 0, src.Size.X, src.Size.Y,
+                    0, 0, dst.Size.X, dst.Size.Y,
+                    flags ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit,
+                    BlitFramebufferFilter.Nearest
+                )
+            else
+                let mutable copyDepth =
+                    if Option.isSome src.Signature.DepthStencilAttachment && Option.isSome dst.Signature.DepthStencilAttachment then
+                        ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit
+                    else
+                        ClearBufferMask.None
+
+                for (dstIndex, dstAtt) in Map.toSeq dst.Signature.ColorAttachments do
+                    let srcIndex = src.Signature.ColorAttachments |> Map.tryFindKey (fun k v -> v.Name = dstAtt.Name)
+                    match srcIndex with
+                    | Some srcIndex ->
+                        GL.ReadBuffer(unbox<ReadBufferMode> (int ReadBufferMode.ColorAttachment0 + srcIndex))
+                        GL.DrawBuffer(unbox<DrawBufferMode> (int DrawBufferMode.ColorAttachment0 + dstIndex))
+                        GL.BlitFramebuffer(
+                            0, 0, src.Size.X, src.Size.Y,
+                            0, 0, dst.Size.X, dst.Size.Y,
+                            ClearBufferMask.ColorBufferBit ||| copyDepth,
+                            BlitFramebufferFilter.Nearest
+                        )
+                        copyDepth <- ClearBufferMask.None
+                    | None ->
+                        ()
+                if copyDepth <> ClearBufferMask.None then
+                    GL.BlitFramebuffer(
+                        0, 0, src.Size.X, src.Size.Y,
+                        0, 0, dst.Size.X, dst.Size.Y,
+                        copyDepth,
+                        BlitFramebufferFilter.Nearest
+                    )
+
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+
+    member x.ReadPixels(src : IFramebuffer, sem : Symbol, offset : V2i, size : V2i) =
+        use __ = ctx.ResourceLock
+        let src = src :?> Framebuffer
+        GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, src.Handle)
+
+        let format =
+            if src.Handle <> 0 then
+                let (KeyValue(slot, signature)) = src.Signature.Layout.ColorAttachments |> Seq.find (fun (KeyValue(id, att)) -> att.Name = sem)
+                GL.ReadBuffer(unbox (int ReadBufferMode.ColorAttachment0 + slot))
+                signature.Format
+            else
+                if sem <> DefaultSemantic.Colors then failwith "bad"
+                GL.ReadBuffer(ReadBufferMode.BackLeft)
+                TextureFormat.Rgba8
+
+        GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
+        GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+
+
+        let (pfmt, ptype) = TextureFormat.toFormatAndType format
+        let cfmt = TextureFormat.toDownloadFormat format
+        let res = PixImage.Create(cfmt, int64 size.X, int64 size.Y)
+        let gc = GCHandle.Alloc(res.Array, GCHandleType.Pinned)
+        try
+
+            GL.ReadPixels(offset.X, src.Size.Y - size.Y - offset.Y, size.X, size.Y, pfmt, ptype, gc.AddrOfPinnedObject())
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+
+            res.Transformed(ImageTrafo.MirrorY)
+        finally
+            gc.Free()
+
+    member x.Clear(fbo : IFramebuffer, values : ClearValues) =
+        use __ = ctx.ResourceLock
+
+        let old = GL.GetInteger(GetPName.DrawFramebufferBinding)
+
+        let fbo = fbo |> unbox<Framebuffer>
+        let handle = fbo.Handle
+        GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, handle)
+        GL.Check "could not bind framebuffer"
+
+        let drawBuffers = DrawBuffers.ofSignature fbo.Signature
+        GL.DrawBuffers(drawBuffers.Length, drawBuffers);
+
+        // assume user has not messed with gl state -> omit resetting color/depth/stencil mask
+
+        // omit check if farmebuffer signature actually contains depth/stencil
+        let mutable combinedClearMask = ClearBufferMask.None
+        match values.Depth with
+        | Some d -> GL.ClearDepth(float d)
+                    combinedClearMask <- combinedClearMask ||| ClearBufferMask.DepthBufferBit
+        | None -> ()
+
+        match values.Stencil with
+        | Some s -> GL.ClearStencil(int s)
+                    combinedClearMask <- combinedClearMask ||| ClearBufferMask.StencilBufferBit
+        | None -> ()
+
+        if fbo.Signature.ColorAttachments.Count = 1 then
+            let _, att = fbo.Signature.ColorAttachments |> Map.toList |> List.head
+
+            match values.[att.Name] with
+            | Some c ->
+                if att.Format.IsIntegerFormat then
+                    // clear depth stencil if requested
+                    if combinedClearMask <> ClearBufferMask.None then
+                        GL.Clear(combinedClearMask)
+
+                    // clear color layer individually
+                    GL.ClearBuffer(ClearBuffer.Color, 0, c.Integer.ToArray())
+
+                else
+                    GL.ClearColor(c.Float.X, c.Float.Y, c.Float.Z, c.Float.W)
+                    GL.Clear(ClearBufferMask.ColorBufferBit ||| combinedClearMask)
+
+            | None -> failwith "invalid target name"
+        else
+            // clear depth stencil if requested
+            if combinedClearMask <> ClearBufferMask.None then
+                GL.Clear(combinedClearMask)
+
+            // clear each color layer individually
+            for KeyValue(i, att) in fbo.Signature.ColorAttachments do
+                match values.[att.Name] with
+                | Some c ->
+                    if att.Format.IsIntegerFormat then
+                        GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
+                    else
+                        GL.ClearBuffer(ClearBuffer.Color, i, c.Float.ToArray())
+                    GL.Check "could not clear buffer"
+                | None -> ()
+
+        GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old);
+        GL.Check "could not unbind framebuffer"
+
+    member x.Clear(texture : IBackendTexture, values : ClearValues) =
+        use __ = ctx.ResourceLock
+
+        let fbo = GL.GenFramebuffer()
+        GL.Check "could not create framebuffer"
+
+        let old = GL.GetInteger(GetPName.DrawFramebufferBinding)
+
+        try
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo)
+            GL.Check "could not bind framebuffer"
+
+            let binding =
+                match texture.Format.Aspect with
+                | TextureAspect.Depth        -> FramebufferAttachment.DepthAttachment
+                | TextureAspect.Stencil      -> FramebufferAttachment.StencilAttachment
+                | TextureAspect.DepthStencil -> FramebufferAttachment.DepthStencilAttachment
+                | _                          -> FramebufferAttachment.ColorAttachment0
+
+            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, binding, texture.Handle |> unbox<int>, 0)
+            GL.Check "could not attach framebuffer texture"
+
+            if binding <> FramebufferAttachment.ColorAttachment0 then
+                let mask =
+                    let depthMask =
+                        match values.Depth with
+                        | Some value when texture.Format.HasDepth ->
+                            GL.ClearDepth(float value)
+                            ClearBufferMask.DepthBufferBit
+
+                        | _ ->
+                            ClearBufferMask.None
+
+                    let stencilMask =
+                        match values.Stencil with
+                        | Some value when texture.Format.HasStencil ->
+                            GL.ClearStencil(int value)
+                            ClearBufferMask.StencilBufferBit
+
+                        | _ ->
+                            ClearBufferMask.None
+
+                    depthMask ||| stencilMask
+
+                if mask <> ClearBufferMask.None then
+                    GL.Clear(mask)
+            else
+                match values.[DefaultSemantic.Colors] with
+                | Some color ->
+                    GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
+                    if texture.Format.IsIntegerFormat then
+                        GL.ClearBuffer(ClearBuffer.Color, 0, color.Integer.ToArray())
+                    else
+                        GL.ClearBuffer(ClearBuffer.Color, 0, color.Float.ToArray())
+
+                | _ ->
+                    ()
+
+            GL.Check "could not clear buffer"
+
+        finally
+            GL.DeleteFramebuffer(fbo)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old)
+            GL.Check "could not delete or unbind framebuffer"
+
+    member x.MaxLocalSize =
+        ctx.MaxComputeWorkGroupSize
+
+    member x.CreateComputeShader (shader : FShade.ComputeShader) =
+        ctx.CompileKernel shader :> IComputeShader
+
+    member x.NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
+        let program = unbox<ComputeProgram> shader
+        ComputeInputBinding(manager, program, inputs) :> IComputeInputBinding
+
+    member x.CompileCompute (commands : alist<ComputeCommand>) =
+        new ComputeTask(manager, commands, debug.DebugComputeTasks) :> IComputeTask
+
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =
         new SparseBufferGeometryPool(ctx, types) :> IGeometryPool
+
+    member x.CreateTimeQuery() =
+        new TimeQuery(ctx) :> ITimeQuery
+
+    member x.CreateOcclusionQuery([<Optional; DefaultParameterValue(true)>] precise : bool) =
+        new OcclusionQuery(ctx, precise) :> IOcclusionQuery
+
+    member x.CreatePipelineQuery(statistics : seq<PipelineStatistics>) =
+        use __ = ctx.ResourceLock
+
+        if GL.ARB_pipeline_statistics_query then
+            new PipelineQuery(ctx, Set.ofSeq statistics) :> IPipelineQuery
+        else
+            new GeometryQuery(ctx) :> IPipelineQuery
+
+    member x.SupportedPipelineStatistics =
+        use __ = ctx.ResourceLock
+
+        if GL.ARB_pipeline_statistics_query then
+            PipelineStatistics.All
+        else
+            Set.singleton ClippingInputPrimitives
+
+    member x.CreateLodRenderer(config : LodRendererConfig, data : aset<LodTreeInstance>) =
+
+        let preparedState = PreparedPipelineState.ofPipelineState config.fbo x.ResourceManager config.surface config.state
+
+        //let info : LodRenderingInfo =
+        //    {
+        //        LodRenderingInfo.quality = quality
+        //        LodRenderingInfo.maxQuality = maxQuality
+        //        LodRenderingInfo.renderBounds = renderBounds
+        //    }
+
+        new LodRenderer(ctx, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject

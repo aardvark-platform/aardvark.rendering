@@ -142,7 +142,9 @@ and ITextureRuntime =
 
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
 
-    abstract member CreateSparseTexture<'a when 'a : unmanaged> : size : V3i * levels : int * slices : int * dim : TextureDimension * format : Col.Format * brickSize : V3i * maxMemory : int64 -> ISparseTexture<'a>
+    abstract member CreateSparseTexture<'T when 'T : unmanaged> : size : V3i * levels : int * slices : int *
+                                                                  dimension : TextureDimension * format : Col.Format *
+                                                                  brickSize : V3i * maxMemory : int64 -> ISparseTexture<'T>
 
     abstract member GenerateMipMaps : IBackendTexture -> unit
 

@@ -67,6 +67,7 @@ and IRuntime =
     inherit IComputeRuntime
     inherit IQueryRuntime
     inherit IRaytracingRuntime
+    inherit ILodRuntime
 
     abstract member DebugConfig : IDebugConfig
 

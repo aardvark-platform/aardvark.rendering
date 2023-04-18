@@ -60,7 +60,6 @@ and IFramebufferRuntime =
     ///<param name="signature">The signature of the framebuffer to create.</param>
     ///<param name="attachments">The attachments. Attachments with name DefaultSemantic.DepthStencil are used as depth-stencil attachment.</param>
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
-    
 
     abstract member Copy : src : IFramebuffer * dst : IFramebuffer -> unit
 
