@@ -113,7 +113,10 @@ module internal ImageCopyImplementation =
             let slices = min srcSize.Z dstSize.Z
 
             let filter =
-                if linear then BlitFramebufferFilter.Linear else BlitFramebufferFilter.Nearest
+                if not linear || src.Format.IsIntegerFormat || src.Format.HasDepth || src.Format.HasStencil then
+                    BlitFramebufferFilter.Nearest
+                else
+                    BlitFramebufferFilter.Linear
 
             Framebuffer.temporary FramebufferTarget.DrawFramebuffer (fun _ ->
                 Image.readLayers src srcLevel srcOffset.Z slices (fun srcSlice ->
@@ -129,7 +132,7 @@ module internal ImageCopyImplementation =
                         dstOffset.X + dstSize.X, dstOffset.Y + dstSize.Y,
                         mask, filter
                     )
-                    GL.Check "could blit framebuffer"
+                    GL.Check "could not blit framebuffer"
                 )
             )
 

@@ -18,9 +18,12 @@ open Microsoft.FSharp.NativeInterop
 module ``Image Format Extensions`` =
 
     module internal VkFormat =
-        let supportsLinearFiltering (device : Device) (format : VkFormat) =
-            let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
-            features.HasFlag VkFormatFeatureFlags.SampledImageFilterLinearBit
+        let supportsLinearBlit (device : Device) (format : VkFormat) =
+            if VkFormat.hasDepth format || VkFormat.hasStencil format then
+                false
+            else
+                let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
+                features.HasFlag VkFormatFeatureFlags.SampledImageFilterLinearBit
 
         let supportsMipmapGeneration (device : Device) (format : VkFormat) =
             let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
@@ -611,7 +614,12 @@ module ``Image Command Extensions`` =
                     Command.ResolveMultisamples(src, src.Image.Layout, dst, dst.Image.Layout).Enqueue(cmd)
             }
 
-        static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcRange : Box3i, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstRange : Box3i, filter : VkFilter) =
+        static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcRange : Box3i,
+                           dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstRange : Box3i, filter : VkFilter,
+                           [<Optional; DefaultParameterValue(true)>] inclusiveRanges : bool) =
+            if src.Image.Samples > 1 || dst.Image.Samples > 1 then
+                failf "cannot blit from or to multisampled images"
+
             { new Command() with
                 member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
@@ -633,8 +641,8 @@ module ``Image Command Extensions`` =
 
                         Box3i(min, max)
 
-                    let srcRange = extend srcRange
-                    let dstRange = extend dstRange
+                    let srcRange = if inclusiveRanges then extend srcRange else srcRange
+                    let dstRange = if inclusiveRanges then extend dstRange else dstRange
 
                     srcOffsets.[0] <- VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z)
                     srcOffsets.[1] <- VkOffset3D(srcRange.Max.X, srcRange.Max.Y, srcRange.Max.Z)
@@ -643,6 +651,12 @@ module ``Image Command Extensions`` =
                     dstOffsets.[0] <- VkOffset3D(dstRange.Min.X, dstRange.Min.Y, dstRange.Min.Z)
                     dstOffsets.[1] <- VkOffset3D(dstRange.Max.X, dstRange.Max.Y, dstRange.Max.Z)
 
+                    let filter =
+                        match filter with
+                        | VkFilter.Linear when VkFormat.supportsLinearBlit src.Image.Device src.Image.Format ->
+                            VkFilter.Linear
+                        | _ ->
+                            VkFilter.Nearest
 
                     let blit =
                         VkImageBlit(
@@ -660,11 +674,22 @@ module ``Image Command Extensions`` =
                     [src.Image; dst.Image]
             }
 
-        static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstRange : Box3i, filter : VkFilter) =
-            Command.Blit(src, srcLayout, Box3i(V3i.Zero, src.Size - V3i.III), dst, dstLayout, dstRange, filter)
+        static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout,
+                           dst : ImageSubresourceLayers, dstLayout : VkImageLayout,
+                           dstRange : Box3i, filter : VkFilter,
+                           [<Optional; DefaultParameterValue(true)>] inclusiveRange : bool) =
+            Command.Blit(
+                src, srcLayout, Box3i(V3i.Zero, src.Size - (if inclusiveRange then V3i.III else V3i.Zero)),
+                dst, dstLayout, dstRange, filter, inclusiveRange
+            )
 
-        static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcRange : Box3i, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, filter : VkFilter) =
-            Command.Blit(src, srcLayout, srcRange, dst, dstLayout, Box3i(V3i.Zero, dst.Size - V3i.III), filter)
+        static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcRange : Box3i,
+                           dst : ImageSubresourceLayers, dstLayout : VkImageLayout, filter : VkFilter,
+                           [<Optional; DefaultParameterValue(true)>] inclusiveRange : bool) =
+            Command.Blit(
+                src, srcLayout, srcRange,
+                dst, dstLayout, Box3i(V3i.Zero, dst.Size - (if inclusiveRange then V3i.III else V3i.Zero)), filter
+            )
 
         static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, filter : VkFilter) =
             Command.Blit(src, srcLayout, Box3i(V3i.Zero, src.Size - V3i.III), dst, dstLayout, Box3i(V3i.Zero, dst.Size - V3i.III), filter)
@@ -692,7 +717,7 @@ module ``Image Command Extensions`` =
                     raise <| NotSupportedException($"[Vk] Format {img.Image.Format} does not support mipmap generation.")
 
                 let filter =
-                    if VkFormat.supportsLinearFiltering img.Image.Device img.Image.Format then
+                    if VkFormat.supportsLinearBlit img.Image.Device img.Image.Format then
                         VkFilter.Linear
                     else
                         Log.warn "[Vk] Format %A does not support linear filtering, using nearest filtering for mipmap generation" img.Image.Format
@@ -1198,6 +1223,77 @@ module Image =
 
             image.AddReference()
             image
+
+    let copy (src : Image) (srcBaseSlice : int) (srcBaseLevel : int)
+             (dst : Image) (dstBaseSlice : int) (dstBaseLevel : int)
+             (slices : int) (levels : int) =
+        let srcLayout = src.Layout
+        let dstLayout = dst.Layout
+
+        let aspect =
+            let src = src.TextureFormat.Aspect
+            let dst = dst.TextureFormat.Aspect
+            src &&& dst
+
+        src.Device.perform {
+            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal)
+            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal)
+            if src.Samples = dst.Samples then
+                do! Command.Copy(
+                    src.[aspect, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
+                    dst.[aspect, dstBaseLevel .. dstBaseLevel + levels - 1, dstBaseSlice .. dstBaseSlice + slices - 1]
+                )
+            else
+                for l in 0 .. levels - 1 do
+                    let srcLevel = srcBaseLevel + l
+                    let dstLevel = dstBaseLevel + l
+                    do! Command.ResolveMultisamples(
+                        src.[aspect, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
+                        dst.[aspect, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
+                    )
+
+            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, srcLayout)
+            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, dstLayout)
+        }
+
+    let blit (src : ImageSubresourceLayers) (srcRegion : Box3i)
+             (dst : ImageSubresourceLayers) (dstRegion : Box3i) =
+        let srcLayout = src.Image.Layout
+        let dstLayout = dst.Image.Layout
+
+        let srcSize = srcRegion.Size
+        let srcOffset =
+            if src.Image.IsCubeOr2D then
+                V3i(srcRegion.Min.X, src.Size.Y - (srcRegion.Min.Y + srcSize.Y), srcRegion.Min.Z)
+            else
+                srcRegion.Min
+
+        let dstSize = dstRegion.Size
+        let dstOffset =
+            if dst.Image.IsCubeOr2D then
+                V3i(dstRegion.Min.X, dst.Size.Y - (dstRegion.Min.Y + dstSize.Y), dstRegion.Min.Z)
+            else
+                dstRegion.Min
+
+        src.Image.Device.perform {
+            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, srcLayout, VkImageLayout.TransferSrcOptimal)
+            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, dstLayout, VkImageLayout.TransferDstOptimal)
+
+            if srcRegion.IsValid && srcSize = dstSize then
+                if src.Image.Samples = dst.Image.Samples then
+                    do! Command.Copy(src, srcOffset, dst, dstOffset, srcSize)
+                else
+                    do! Command.ResolveMultisamples(src, srcOffset, dst, dstOffset, srcSize)
+            else
+                do! Command.Blit(
+                    src, VkImageLayout.TransferSrcOptimal, Box3i.FromMinAndSize(srcOffset, srcSize),
+                    dst, VkImageLayout.TransferDstOptimal, Box3i.FromMinAndSize(dstOffset, dstSize),
+                    VkFilter.Linear, inclusiveRanges = false
+                )
+
+            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal, srcLayout)
+            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal, dstLayout)
+        }
 
 
 [<AbstractClass; Sealed; Extension>]

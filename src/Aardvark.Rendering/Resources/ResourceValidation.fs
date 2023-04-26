@@ -156,6 +156,20 @@ module ResourceValidation =
             let dstSamples = getSamples dst
             validateSamplesForCopy' (getDimension src) srcSamples dstSamples
 
+        /// Raises an ArgumentException if the blit region (may have negative size) for the given texture is invalid.
+        let inline validateBlitRegion (level : int) (region : Box3i) (texture : ^Texture) =
+            let dimension = getDimension texture
+            let size = getSize level texture
+
+            let min = min region.Min region.Max
+            let max = max region.Min region.Max
+
+            if Vec.anyEqual region.Size 0 then
+                Utils.failf dimension "blit region may not have a size of zero (is %A)" region
+
+            if Vec.anySmaller min 0 || Vec.anyGreater max size then
+                Utils.failf dimension "blit region out-of-bounds (region = %A, size = %A)" region size
+
         /// Raises an ArgumentException if the window for the given texture is invalid.
         let inline validateWindow (level : int) (offset : V3i) (windowSize : V3i) (texture : ^Texture) =
             let dimension = getDimension texture

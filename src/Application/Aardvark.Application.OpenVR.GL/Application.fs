@@ -213,8 +213,8 @@ type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
                 GL.Sync()
 
                 if samples > 1 then
-                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 0], V2i.Zero, fTex, V2i.Zero, 0, cTex.Size.XY, ImageTrafo.Identity)
-                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 1], V2i.Zero, fTex, V2i(cTex.Size.X, 0), 0, cTex.Size.XY, ImageTrafo.Identity)
+                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 0], fTex, V2i.Zero, V2i.Zero, cTex.Size.XY)
+                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 1], fTex, V2i.Zero, V2i(cTex.Size.X, 0), cTex.Size.XY)
                 else
                     failwith "not implemented"
                     //runtime.Copy(cTex.[TextureAspect.Color, 0, *], fTex.[TextureAspect.Color, 0, *])

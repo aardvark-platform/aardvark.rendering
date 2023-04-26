@@ -207,6 +207,9 @@ module PixData =
 
             result
 
+        let transformed (trafo : ImageTrafo) (img : PixImage<'T>) =
+            img.Transformed(trafo).AsPixImage<'T>()
+
         let private desktopPath =
             Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop)
 

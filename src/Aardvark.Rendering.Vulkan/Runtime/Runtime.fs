@@ -288,47 +288,6 @@ type Runtime(device : Device) as this =
         let dst = unbox<Buffer> dst
         Buffer.copy src srcOffset dst dstOffset sizeInBytes
 
-    member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
-        src |> ResourceValidation.Textures.validateSlices srcBaseSlice slices
-        src |> ResourceValidation.Textures.validateLevels srcBaseLevel levels
-        dst |> ResourceValidation.Textures.validateSlices dstBaseSlice slices
-        dst |> ResourceValidation.Textures.validateLevels dstBaseLevel levels
-        (src, dst) ||> ResourceValidation.Textures.validateSizes srcBaseLevel dstBaseLevel
-        (src, dst) ||> ResourceValidation.Textures.validateSamplesForCopy
-
-        let src = unbox<Image> src
-        let dst = unbox<Image> dst
-
-        let srcLayout = src.Layout
-        let dstLayout = dst.Layout
-
-        let aspect =
-            let src = (src :> IBackendTexture).Format.Aspect
-            let dst = (dst :> IBackendTexture).Format.Aspect
-            src &&& dst
-
-        device.perform {
-            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal)
-            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal)
-            if src.Samples = dst.Samples then
-                do! Command.Copy(
-                        src.[aspect, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
-                        dst.[aspect, dstBaseLevel .. dstBaseLevel + levels - 1, dstBaseSlice .. dstBaseSlice + slices - 1]
-                    )
-            else
-                for l in 0 .. levels - 1 do
-                    let srcLevel = srcBaseLevel + l
-                    let dstLevel = dstBaseLevel + l
-                    do! Command.ResolveMultisamples(
-                            src.[aspect, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
-                            dst.[aspect, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
-                        )
-
-            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, srcLayout)
-            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, dstLayout)
-        }
-
-
     // upload
     member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format,
                                             [<Optional; DefaultParameterValue(V3i())>] offset : V3i,
@@ -364,32 +323,34 @@ type Runtime(device : Device) as this =
         device.DownloadLevel(image, target, format, offset, size)
 
     // copy
-    member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
+    member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
+        src |> ResourceValidation.Textures.validateSlices srcBaseSlice slices
+        src |> ResourceValidation.Textures.validateLevels srcBaseLevel levels
+        dst |> ResourceValidation.Textures.validateSlices dstBaseSlice slices
+        dst |> ResourceValidation.Textures.validateLevels dstBaseLevel levels
+        (src, dst) ||> ResourceValidation.Textures.validateSizes srcBaseLevel dstBaseLevel
+        (src, dst) ||> ResourceValidation.Textures.validateSamplesForCopy
+
+        Image.copy
+            (unbox<Image> src) srcBaseSlice srcBaseLevel
+            (unbox<Image> dst) dstBaseSlice dstBaseLevel
+            slices levels
+
+    member x.Blit(src : IFramebufferOutput, srcRegion : Box3i, dst : IFramebufferOutput, dstRegion : Box3i) =
+
+        let validate (region : Box3i) (i : ImageSubresourceLayers) =
+            let t = i.Image :> IBackendTexture
+            t |> ResourceValidation.Textures.validateSlices i.BaseSlice i.SliceCount
+            t |> ResourceValidation.Textures.validateLevels i.Level 1
+            t |> ResourceValidation.Textures.validateBlitRegion i.Level region
+
         let src = ImageSubresourceLayers.ofFramebufferOutput src
         let dst = ImageSubresourceLayers.ofFramebufferOutput dst
+        src |> validate srcRegion
+        dst |> validate dstRegion
+        (src.Image.Samples, dst.Image.Samples) ||> ResourceValidation.Textures.validateSamplesForCopy' src.Image.Dimension
 
-        let srcOffset =
-            if src.Image.IsCubeOr2D then
-                V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
-            else
-                srcOffset
-
-        let dstOffset =
-            if dst.Image.IsCubeOr2D then
-                V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
-            else
-                dstOffset
-
-        let srcLayout = src.Image.Layout
-        let dstLayout = dst.Image.Layout
-
-        device.perform {
-            do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
-            do! Command.TransformLayout(dst.Image, VkImageLayout.TransferDstOptimal)
-            do! Command.Copy(src, srcOffset, dst, dstOffset, size)
-            do! Command.TransformLayout(src.Image, srcLayout)
-            do! Command.TransformLayout(dst.Image, dstLayout)
-        }
+        Image.blit src srcRegion dst dstRegion
 
     member x.Copy(src : IFramebuffer, dst : IFramebuffer) =
         let src = src :?> Framebuffer
@@ -569,8 +530,11 @@ type Runtime(device : Device) as this =
                                                   target : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
             x.Download(texture, target, format, offset, size)
 
-        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
-            x.Copy(src, srcOffset, dst, dstOffset, size)
+        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
+            x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
+
+        member x.Blit(src : IFramebufferOutput, srcRegion : Box3i, dst : IFramebufferOutput, dstRegion : Box3i) =
+            x.Blit(src, srcRegion, dst, dstRegion)
 
         member x.Copy(src : IFramebuffer, dst : IFramebuffer) =
             x.Copy(src, dst)
@@ -595,7 +559,6 @@ type Runtime(device : Device) as this =
         member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) =
             x.DownloadStencil(t, target, level, slice, offset)
 
-        member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)
         member x.CompileRender (signature, set) = x.CompileRender(signature, set)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
@@ -609,7 +572,6 @@ type Runtime(device : Device) as this =
 
         member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
             x.CreateSparseTexture<'a>(size, levels, slices, dim, format, brickSize, maxMemory)
-        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
 
         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
 

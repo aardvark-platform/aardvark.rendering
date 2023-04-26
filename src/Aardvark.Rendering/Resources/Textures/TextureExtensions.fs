@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering
 
+open System
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Aardvark.Base
@@ -498,37 +499,285 @@ type ITextureRuntimeExtensions private() =
 
 
     // ================================================================================================================
+    // Blit
+    // ================================================================================================================
+
+    ///<summary>
+    /// Copies a region from a framebuffer output to a region of another, performing any scaling if required.
+    /// If the extent of any dimension is positive in the source region and negative in the target region (or vice versa), the contents are mirrored in that dimension.
+    ///</summary>
+    ///<param name="runtime">The runtime.</param>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="srcRegion">The region to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    ///<param name="dstRegion">The region to copy to.</param>
+    [<Extension>]
+    static member inline Blit(runtime : ITextureRuntime, src : IFramebufferOutput, srcRegion : Box2i, dst : IFramebufferOutput, dstRegion : Box2i) =
+        runtime.Blit(
+            src, Box3i(srcRegion.Min.XYO, srcRegion.Max.XYI),
+            dst, Box3i(dstRegion.Min.XYO, dstRegion.Max.XYI)
+        )
+
+    ///<summary>
+    /// Copies a region from a framebuffer output to a region of another, performing any scaling if required.
+    /// If the extent of any dimension is positive in the source region and negative in the target region (or vice versa), the contents are mirrored in that dimension.
+    ///</summary>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="srcRegion">The region to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    ///<param name="dstRegion">The region to copy to.</param>
+    [<Extension>]
+    static member inline BlitTo(src : IFramebufferOutput, dst : IFramebufferOutput, srcRegion : Box3i, dstRegion : Box3i) =
+        src.Runtime.Blit(src, srcRegion, dst, dstRegion)
+
+    ///<summary>
+    /// Copies a region from a framebuffer output to a region of another, performing any scaling if required.
+    /// If the extent of any dimension is positive in the source region and negative in the target region (or vice versa), the contents are mirrored in that dimension.
+    ///</summary>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="srcRegion">The region to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    ///<param name="dstRegion">The region to copy to.</param>
+    [<Extension>]
+    static member inline BlitTo(src : IFramebufferOutput, dst : IFramebufferOutput, srcRegion : Box2i, dstRegion : Box2i) =
+        src.Runtime.Blit(src, srcRegion, dst, dstRegion)
+
+    ///<summary>
+    /// Copies a region from a framebuffer output to a region of another, performing any scaling if required.
+    /// If the extent of any dimension is positive in the source region and negative in the target region (or vice versa), the contents are mirrored in that dimension.
+    ///</summary>
+    ///<param name="runtime">The runtime.</param>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="srcRegion">The region to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    ///<param name="dstRegion">The region to copy to.</param>
+    [<Extension>]
+    static member inline Blit(runtime : ITextureRuntime, src : IBackendTexture, srcRegion : Box3i, dst : IBackendTexture, dstRegion : Box3i) =
+        runtime.Blit(src.[src.Format.Aspect, 0], srcRegion, dst.[dst.Format.Aspect, 0], dstRegion)
+
+    ///<summary>
+    /// Copies a region from a texture to a region of another, performing any scaling if required.
+    /// If the extent of any dimension is positive in the source region and negative in the target region (or vice versa), the contents are mirrored in that dimension.
+    ///</summary>
+    ///<param name="runtime">The runtime.</param>
+    ///<param name="src">The texture to copy from.</param>
+    ///<param name="srcRegion">The region to copy from.</param>
+    ///<param name="dst">The texture to copy to.</param>
+    ///<param name="dstRegion">The region to copy to.</param>
+    [<Extension>]
+    static member inline Blit(runtime : ITextureRuntime, src : IBackendTexture, srcRegion : Box2i, dst : IBackendTexture, dstRegion : Box2i) =
+        runtime.Blit(
+            src, Box3i(srcRegion.Min.XYO, srcRegion.Max.XYI),
+            dst, Box3i(dstRegion.Min.XYO, dstRegion.Max.XYI)
+        )
+
+    ///<summary>
+    /// Copies a region from a texture to a region of another, performing any scaling if required.
+    /// If the extent of any dimension is positive in the source region and negative in the target region (or vice versa), the contents are mirrored in that dimension.
+    ///</summary>
+    ///<param name="src">The texture to copy from.</param>
+    ///<param name="srcRegion">The region to copy from.</param>
+    ///<param name="dst">The texture to copy to.</param>
+    ///<param name="dstRegion">The region to copy to.</param>
+    [<Extension>]
+    static member inline BlitTo(src : IBackendTexture, dst : IBackendTexture, srcRegion : Box3i, dstRegion : Box3i) =
+        src.Runtime.Blit(src, srcRegion, dst, dstRegion)
+
+    ///<summary>
+    /// Copies a region from a texture to a region of another, performing any scaling if required.
+    /// If the extent of any dimension is positive in the source region and negative in the target region (or vice versa), the contents are mirrored in that dimension.
+    ///</summary>
+    ///<param name="src">The texture to copy from.</param>
+    ///<param name="srcRegion">The region to copy from.</param>
+    ///<param name="dst">The texture to copy to.</param>
+    ///<param name="dstRegion">The region to copy to.</param>
+    [<Extension>]
+    static member inline BlitTo(src : IBackendTexture, dst : IBackendTexture, srcRegion : Box2i, dstRegion : Box2i) =
+        src.Runtime.Blit(src, srcRegion, dst, dstRegion)
+
+
+    // ================================================================================================================
+    // Copies via blit
+    // ================================================================================================================
+
+    ///<summary>Copies data from a framebuffer output to another.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="srcOffset">The minimum coordinate to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    ///<param name="dstOffset">The minimum coordinate to copy to.</param>
+    ///<param name="size">The size of the buffer region to copy.</param>
+    [<Extension>]
+    static member inline Copy(this : ITextureRuntime, src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
+        this.Blit(src, Box3i.FromMinAndSize(srcOffset, size), dst, Box3i.FromMinAndSize(dstOffset, size))
+
+    ///<summary>Copies data from texture to another.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="src">The texture to copy from.</param>
+    ///<param name="srcOffset">The minimum coordinate to copy from.</param>
+    ///<param name="dst">The texture to copy to.</param>
+    ///<param name="dstOffset">The minimum coordinate to copy to.</param>
+    ///<param name="size">The size of the texture region to copy.</param>
+    [<Extension>]
+    static member inline Copy(this : ITextureRuntime, src : IBackendTexture, srcOffset : V3i, dst : IBackendTexture, dstOffset : V3i, size : V3i) =
+        this.Blit(src, Box3i.FromMinAndSize(srcOffset, size), dst, Box3i.FromMinAndSize(dstOffset, size))
+
+    ///<summary>Copies data from a framebuffer output to another.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="srcOffset">The minimum coordinate to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    ///<param name="dstOffset">The minimum coordinate to copy to.</param>
+    ///<param name="size">The size of the buffer region to copy.</param>
+    [<Extension>]
+    static member inline Copy(this : ITextureRuntime, src : IFramebufferOutput, srcOffset : V2i, dst : IFramebufferOutput, dstOffset : V2i, size : V2i) =
+        this.Copy(src, V3i(srcOffset, 0), dst, V3i(dstOffset, 0), V3i(size, 1))
+
+    ///<summary>Copies data from texture to another.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="src">The texture to copy from.</param>
+    ///<param name="srcOffset">The minimum coordinate to copy from.</param>
+    ///<param name="dst">The texture to copy to.</param>
+    ///<param name="dstOffset">The minimum coordinate to copy to.</param>
+    ///<param name="size">The size of the texture region to copy.</param>
+    [<Extension>]
+    static member inline Copy(this : ITextureRuntime, src : IBackendTexture, srcOffset : V2i, dst : IBackendTexture, dstOffset : V2i, size : V2i) =
+        this.Copy(src, V3i(srcOffset, 0), dst, V3i(dstOffset, 0), V3i(size, 1))
+
+    ///<summary>Copies data from a framebuffer output to another.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    ///<param name="size">The size of the buffer region to copy.</param>
+    [<Extension>]
+    static member inline Copy(this : ITextureRuntime, src : IFramebufferOutput, dst : IFramebufferOutput, size : V3i) =
+        this.Copy(src, V3i.Zero, dst, V3i.Zero, size)
+
+    ///<summary>Copies data from texture to another.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="src">The texture to copy from.</param>
+    ///<param name="dst">The texture to copy to.</param>
+    ///<param name="size">The size of the texture region to copy.</param>
+    [<Extension>]
+    static member inline Copy(this : ITextureRuntime, src : IBackendTexture, dst : IBackendTexture, size : V3i) =
+        this.Copy(src, V3i.Zero, dst, V3i.Zero, size)
+
+    ///<summary>Copies data from a framebuffer output to another.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    ///<param name="size">The size of the buffer region to copy.</param>
+    [<Extension>]
+    static member inline Copy(this : ITextureRuntime, src : IFramebufferOutput, dst : IFramebufferOutput, size : V2i) =
+        this.Copy(src, V3i.Zero, dst, V3i.Zero, V3i(size, 1))
+
+    ///<summary>Copies data from texture to another.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="src">The texture to copy from.</param>
+    ///<param name="dst">The texture to copy to.</param>
+    ///<param name="size">The size of the texture region to copy.</param>
+    [<Extension>]
+    static member inline Copy(this : ITextureRuntime, src : IBackendTexture, dst : IBackendTexture, size : V2i) =
+        this.Copy(src, V3i.Zero, dst, V3i.Zero, V3i(size, 1))
+
+    ///<summary>Copies a framebuffer output to another.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    [<Extension>]
+    static member inline Copy(this : ITextureRuntime, src : IFramebufferOutput, dst : IFramebufferOutput) =
+        let size =
+            match src with
+            | :? ITextureLevel as l -> l.Size
+            | _ -> V3i(src.Size, 1)
+
+        this.Copy(src, V3i.Zero, dst, V3i.Zero, size)
+
+    ///<summary>Copies a framebuffer output to another.</summary>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    [<Extension>]
+    static member inline CopyTo(src : IFramebufferOutput, dst : IFramebufferOutput) =
+        src.Runtime.Copy(src, dst)
+
+
+    // ================================================================================================================
     // Copies
     // ================================================================================================================
 
+    ///<summary>Copies a texture to another.</summary>
+    ///<param name="runtime">The runtime.</param>
+    ///<param name="src">The texture to copy from.</param>
+    ///<param name="dst">The texture to copy to.</param>
     [<Extension>]
-    static member Copy(this : ITextureRuntime, src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V2i) =
-        this.Copy(src, srcOffset, dst, dstOffset, V3i(size, 1))
+    static member inline Copy(runtime : ITextureRuntime, src : IBackendTexture, dst : IBackendTexture) =
+        let slices = min src.Slices dst.Slices
+        let levels = min src.MipMapLevels dst.MipMapLevels
+        runtime.Copy(src, 0, 0, dst, 0, 0, slices, levels)
 
+    ///<summary>Copies a texture to another.</summary>
+    ///<param name="src">The texture to copy from.</param>
+    ///<param name="dst">The texture to copy to.</param>
     [<Extension>]
-    static member Copy(this : ITextureRuntime, src : IFramebufferOutput, srcOffset : V2i, dst : IFramebufferOutput, dstOffset : V2i, size : V2i) =
-        this.Copy(src, V3i(srcOffset, 0), dst, V3i(dstOffset, 0), V3i(size, 1))
-
-    [<Extension>]
-    static member Copy(this : ITextureRuntime, src : IFramebufferOutput, dst : IFramebufferOutput, size : V3i) =
-        this.Copy(src, V3i.Zero, dst, V3i.Zero, size)
-
-    [<Extension>]
-    static member Copy(this : ITextureRuntime, src : IFramebufferOutput, dst : IFramebufferOutput, size : V2i) =
-        this.Copy(src, V3i.Zero, dst, V3i.Zero, V3i(size, 1))
-
-    [<Extension>]
-    static member Copy(this : ITextureRuntime, src : IFramebufferOutput, dst : IFramebufferOutput) =
-        let size =
-            match src with
-                | :? ITextureLevel as l -> l.Size
-                | _ -> V3i(src.Size, 1)
-
-        this.Copy(src, V3i.Zero, dst, V3i.Zero, size)
-
-    [<Extension>]
-    static member CopyTo(src : IFramebufferOutput, dst : IFramebufferOutput) =
+    static member inline CopyTo(src : IBackendTexture, dst : IBackendTexture) =
         src.Runtime.Copy(src, dst)
+
+
+    // ================================================================================================================
+    // Resolve
+    // ================================================================================================================
+
+    ///<summary>Resolves a framebuffer output.</summary>
+    ///<param name="runtime">The runtime.</param>
+    ///<param name="src">The framebuffer output to resolve.</param>
+    ///<param name="dst">The framebuffer output to copy the data into.</param>
+    ///<param name="srcOffset">The minimum cooridnate to copy from. Default is V2i.Zero.</param>
+    ///<param name="dstOffset">The minimum coordinate to update. Default is V2i.Zero.</param>
+    ///<param name="size">The size of the buffer region to copy and update or V2i.Zero for the remaining region starting at the source offset. Default is V2i.Zero.</param>
+    [<Extension>]
+    static member ResolveMultisamples(runtime : ITextureRuntime, src : IFramebufferOutput, dst : IFramebufferOutput,
+                                      [<Optional; DefaultParameterValue(V2i())>] srcOffset : V2i,
+                                      [<Optional; DefaultParameterValue(V2i())>] dstOffset : V2i,
+                                      [<Optional; DefaultParameterValue(V2i())>] size : V2i) =
+        let size =
+            if size = V2i.Zero then src.Size - srcOffset
+            else size
+
+        runtime.Blit(
+            src, Box3i.FromMinAndSize(srcOffset.XYO, size.XYI),
+            dst, Box3i.FromMinAndSize(dstOffset.XYO, size.XYI)
+        )
+
+    ///<summary>Resolves a framebuffer output.</summary>
+    ///<param name="runtime">The runtime.</param>
+    ///<param name="src">The framebuffer output to resolve.</param>
+    ///<param name="dst">The texture to copy the data into.</param>
+    ///<param name="srcOffset">The minimum cooridnate to copy from. Default is V2i.Zero.</param>
+    ///<param name="dstOffset">The minimum coordinate to update. Default is V2i.Zero.</param>
+    ///<param name="size">The size of the buffer region to copy and update or V2i.Zero for the remaining region starting at the source offset. Default is V2i.Zero.</param>
+    [<Extension>]
+    static member ResolveMultisamples(runtime : ITextureRuntime, src : IFramebufferOutput, dst : IBackendTexture,
+                                      [<Optional; DefaultParameterValue(V2i())>] srcOffset : V2i,
+                                      [<Optional; DefaultParameterValue(V2i())>] dstOffset : V2i,
+                                      [<Optional; DefaultParameterValue(V2i())>] size : V2i) =
+        runtime.ResolveMultisamples(src, dst.[dst.Format.Aspect, 0], srcOffset, dstOffset, size)
+
+    // Note: Blitting multisampled data in GL requires the source and target region dimensions to be identical.
+    // NVIDIA only seems to care about the absolute dimensions, so mirroring is possible. May not be supported on other hardware / systems.
+    // For Vulkan mirroring and resolving is just not possible.
+    [<Extension; Obsolete("Use overload without image transformation.")>]
+    static member ResolveMultisamples(runtime : ITextureRuntime, src : IFramebufferOutput, dst : IBackendTexture, trafo : ImageTrafo) =
+        let size = min src.Size dst.Size.XY
+
+        let srcRegion = Box2i.FromMinAndSize(V2i.Zero, size)
+        let dstRegion =
+            match trafo with
+            | ImageTrafo.Identity -> srcRegion
+            | ImageTrafo.MirrorX -> Box2i(V2i(srcRegion.Max.X, srcRegion.Min.Y), V2i(srcRegion.Min.X, srcRegion.Max.Y))
+            | ImageTrafo.MirrorY -> Box2i(V2i(srcRegion.Min.X, srcRegion.Max.Y), V2i(srcRegion.Max.X, srcRegion.Min.Y))
+            | _ -> raise <| ArgumentException("Transformation must be MirrorX, MirrorY, or Identity.")
+
+        runtime.Blit(src, srcRegion, dst.[dst.Format.Aspect, 0], dstRegion)
 
 
 [<AbstractClass; Sealed; Extension>]

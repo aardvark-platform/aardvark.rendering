@@ -8,6 +8,8 @@ open Aardvark.SceneGraph
 open FSharp.Data.Adaptive
 open Expecto
 
+#nowarn "44"
+
 module TextureCopy =
 
     module Cases =
@@ -358,92 +360,169 @@ module TextureCopy =
                 )
 
             let format = TextureFormat.ofPixFormat data.[0].[0].PixFormat TextureParams.empty
-            let src = runtime.CreateTexture2DArray(size, format, levels = levels, count = count)
-            let dst = runtime.CreateTexture2DArray(size, format, levels = levels, count = count)
+            use src = runtime.CreateTexture2DArray(size, format, levels = levels, count = count)
+            use dst = runtime.CreateTexture2DArray(size, format, levels = levels, count = count)
 
-            try
-                data |> Array.iteri (fun index mipmaps ->
-                    mipmaps |> Array.iteri (fun level img ->
-                        src.Upload(img, level, index)
-                    )
+            data |> Array.iteri (fun index mipmaps ->
+                mipmaps |> Array.iteri (fun level img ->
+                    src.Upload(img, level, index)
                 )
+            )
 
-                runtime.Copy(src, 2, 1, dst, 2, 1, 3, 3)
+            runtime.Copy(src, 2, 1, dst, 2, 1, 3, 3)
 
-                for i in 2 .. 4 do
-                    for l in 1 .. 3 do
-                        let result = runtime.Download(dst, level = l, slice = i).AsPixImage<uint16>()
-                        let levelSize = size / (1 <<< l)
+            for i in 2 .. 4 do
+                for l in 1 .. 3 do
+                    let result = runtime.Download(dst, level = l, slice = i).AsPixImage<uint16>()
+                    let levelSize = size / (1 <<< l)
 
-                        Expect.equal result.Size levelSize "Texture size inconsistent"
-                        PixImage.compare V2i.Zero data.[i].[l] result
+                    Expect.equal result.Size levelSize "Texture size inconsistent"
+                    PixImage.compare V2i.Zero data.[i].[l] result
 
-            finally
-                runtime.DeleteTexture(src)
-                runtime.DeleteTexture(dst)
+        let private renderToMultisampled (runtime : IRuntime) (format : TextureFormat) (samples : int) (data : PixImage)
+                                         (f : IBackendTexture -> 'U) =
+            use signature = runtime.CreateFramebufferSignature([DefaultSemantic.Colors, format], samples)
+
+            let sampler =
+                Some { SamplerState.Default with Filter = TextureFilter.MinMagPoint }
+
+            use attachment = runtime.CreateTexture2D(data.Size, format, samples = samples)
+            use framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, attachment.GetOutputView()])
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.diffuseTexture' (data |> PixImage.toTexture false)
+                |> Sg.samplerState' DefaultSemantic.DiffuseColorTexture sampler
+                |> Sg.shader {
+                    do! DefaultSurfaces.diffuseTexture
+                }
+                |> Sg.compile runtime signature
+
+            task.Run(RenderToken.Empty, framebuffer)
+            f attachment
+
+        let texture2DResolveMultisamples (runtime : IRuntime) =
+            let data = PixImage.random8ui <| V2i(256)
+            let offset = V2i(177, 201)
+
+            renderToMultisampled runtime TextureFormat.Rgba8 8 data (fun src ->
+                use dst = runtime.CreateTexture2D(src.Size.XY, TextureFormat.Rgba8, samples = 1)
+
+                runtime.ResolveMultisamples(src.GetOutputView(), dst, srcOffset = offset)
+
+                let expected = data |> PixImage.cropped (Box2i.FromMinAndSize(offset, data.Size - offset))
+                let result = runtime.Download(dst, region = Box2i.FromSize(expected.Size)).AsPixImage<uint8>()
+
+                PixImage.compare V2i.Zero expected result
+            )
+
+        let texture2DResolveMultisamplesWithTrafo (trafo : ImageTrafo) (runtime : IRuntime) =
+            let data = PixImage.random8ui <| V2i(256)
+
+            renderToMultisampled runtime TextureFormat.Rgba8 8 data (fun src ->
+                use dst = runtime.CreateTexture2D(src.Size.XY, TextureFormat.Rgba8, samples = 1)
+
+                runtime.ResolveMultisamples(src.GetOutputView(), dst, trafo = trafo)
+                let result = runtime.Download(dst).AsPixImage<uint8>()
+                let expected = data.Transformed(trafo).AsPixImage<uint8>()
+
+                PixImage.compare V2i.Zero expected result
+            )
 
         let texture2DMultisampled (resolve : bool) (runtime : IRuntime) =
             let data = PixImage.random32f <| V2i(256)
             let size = data.Size
             let samples = 8
 
-            let signature = runtime.CreateFramebufferSignature([DefaultSemantic.Colors, TextureFormat.Rgba32f], samples)
-            let src = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, levels = 1, samples = samples)
-            let dst = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, levels = 1, samples = if resolve then 1 else samples)
-            let framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, src.GetOutputView()])
-
-            let sampler =
-                Some { SamplerState.Default with Filter = TextureFilter.MinMagPoint }
-
-            try
-                use task =
-                    Sg.fullScreenQuad
-                    |> Sg.diffuseTexture' (data |> PixImage.toTexture false)
-                    |> Sg.samplerState' DefaultSemantic.DiffuseColorTexture sampler
-                    |> Sg.shader {
-                        do! DefaultSurfaces.diffuseTexture
-                    }
-                    |> Sg.compile runtime signature
-
-                task.Run(RenderToken.Empty, framebuffer)
+            renderToMultisampled runtime TextureFormat.Rgba32f samples data (fun src ->
+                use dst = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, levels = 1, samples = if resolve then 1 else samples)
 
                 runtime.Copy(src, 0, 0, dst, 0, 0, 1, 1)
                 let result = runtime.Download(dst).AsPixImage<float32>()
 
                 Expect.equal result.Size size "Texture size inconsistent"
                 PixImage.compare V2i.Zero data result
+            )
 
-            finally
-                framebuffer.Dispose()
-                runtime.DeleteTexture(src)
-                runtime.DeleteTexture(dst)
-                signature.Dispose()
+        let texture2DBlitMultisampled (runtime : IRuntime) =
+            let data = PixImage.random32f <| V2i(256)
+            let size = data.Size
+            let samples = 8
 
+            renderToMultisampled runtime TextureFormat.Rgba32f samples data (fun src ->
+                use dst = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, samples = samples)
+
+                src.BlitTo(dst, Box2i.FromSize size, Box2i.FromSize size)
+                let result = runtime.Download(dst).AsPixImage<float32>()
+
+                Expect.equal result.Size size "Texture size inconsistent"
+                PixImage.compare V2i.Zero data result
+            )
+
+        let texture2DBlitWithMirrorAndScale (targetRmse : float) (scale : V2i) (runtime : IRuntime) =
+            let data = PixImage.random8ui <| V2i(256)
+            data.GetChannel(Col.Channel.Alpha).Set(255uy) |> ignore
+
+            let size = data.Size
+            let srcRegion = Box2i.FromMinAndSize(V2i(31, 15), V2i(55, 33))
+            let dstRegion = Box2i.FromMinAndSize(V2i(244, 233), srcRegion.Size * -scale)
+
+            use src = runtime.PrepareTexture(PixTexture2d data)
+            use dst = runtime.CreateTexture2D(size, TextureFormat.Rgba8)
+
+            src.BlitTo(dst, srcRegion, dstRegion)
+
+            let result =
+                runtime.Download(dst).AsPixImage<uint8>()
+                |> PixImage.cropped (Box2i(dstRegion.Max, dstRegion.Min))
+
+            let expected =
+                data
+                |> PixImage.cropped srcRegion
+                |> PixImage.transformed ImageTrafo.MirrorX
+                |> PixImage.transformed ImageTrafo.MirrorY
+                |> PixImage.resized -dstRegion.Size
+
+            Expect.equal result.Size expected.Size "Texture size inconsistent"
+
+            let rmse = PixImage.rootMeanSquaredError expected result
+            Expect.isLessThanOrEqual rmse targetRmse "Bad root-mean-square error"
+
+        let texture2DBlitDepthWithScale (scale : V2i) (runtime : IRuntime) =
+            let clear = clear { depth 0.67 }
+            let format = TextureFormat.DepthComponent16
+            let size = V2i(256)
+            let srcRegion = Box2i.FromMinAndSize(V2i(31, 22), V2i(55, 66))
+            let dstRegion = Box2i.FromMinAndSize(V2i(244, 233), srcRegion.Size * -scale)
+
+            renderQuadToDepthStencil runtime format 1 clear size (fun src ->
+                use dst = runtime.CreateTexture2D(size, format)
+
+                let srcResult = src.DownloadDepth()
+                Expect.validDepthResult srcResult Accuracy.low size 0.5 0.67
+
+                src.BlitTo(dst, srcRegion, dstRegion)
+
+                let dstResult = dst.DownloadDepth(region = Box2i(dstRegion.Max, dstRegion.Min))
+                Expect.validDepthResult dstResult Accuracy.low -dstRegion.Size 0.5 0.67
+            )
 
         let texture2DMultisampledDepth (runtime : IRuntime) =
-            let clear =
-                clear {
-                    depth 0.67
-                }
-
-            let size = V2i(256)
+            let clear = clear { depth 0.67 }
             let format = TextureFormat.DepthComponent16
+            let size = V2i(256)
             let samples = 8
 
             renderQuadToDepthStencil runtime format samples clear size (fun src ->
-                let dst = runtime.CreateTexture2D(size, format, samples = samples)
+                use dst = runtime.CreateTexture2D(size, format, samples = samples)
 
-                try
-                    let srcResult = resolveAndDownloadDepth src
-                    Expect.validDepthResult srcResult Accuracy.low size 0.5 0.67
+                let srcResult = resolveAndDownloadDepth src
+                Expect.validDepthResult srcResult Accuracy.low size 0.5 0.67
 
-                    runtime.Copy(src, 0, 0, dst, 0, 0, 1, 1)
+                runtime.Copy(src, 0, 0, dst, 0, 0, 1, 1)
 
-                    let dstResult = resolveAndDownloadDepth dst
-                    Expect.validDepthResult dstResult Accuracy.low size 0.5 0.67
-
-                finally
-                    runtime.DeleteTexture dst
+                let dstResult = resolveAndDownloadDepth dst
+                Expect.validDepthResult dstResult Accuracy.low size 0.5 0.67
             )
 
         let texture2DMultisampledDepthSubwindow (runtime : IRuntime) =
@@ -572,10 +651,24 @@ module TextureCopy =
                 "1D to Cube",                       Cases.texture1DToCube
 
             "2D array mipmapped",               Cases.texture2DArrayMipmapped
+
+            "2D blit with mirror",              Cases.texture2DBlitWithMirrorAndScale 0.0 (V2i(1))
+            "2D blit with mirror and scale",    Cases.texture2DBlitWithMirrorAndScale 13.0 (V2i(2, 1))
+            "2D blit multisampled",             Cases.texture2DBlitMultisampled
+            "2D blit depth scale",              Cases.texture2DBlitDepthWithScale (V2i(2, 2))
+
             "2D multisampled",                  Cases.texture2DMultisampled false
             "2D multisampled with resolve",     Cases.texture2DMultisampled true
             "2D multisampled depth",            Cases.texture2DMultisampledDepth
             "2D multisampled depth subwindow",  Cases.texture2DMultisampledDepthSubwindow
+
+            "2D resolve multisamples",          Cases.texture2DResolveMultisamples
+
+            // Only supported by GL and probably only NVIDIA?
+            if backend <> Backend.Vulkan then
+                "2D resolve multisamples mirror X", Cases.texture2DResolveMultisamplesWithTrafo ImageTrafo.MirrorX
+                "2D resolve multisamples mirror Y", Cases.texture2DResolveMultisamplesWithTrafo ImageTrafo.MirrorY
+
             "Cube mipmapped",                   Cases.textureCubeMipmapped
             "Cube array mipmapped",             Cases.textureCubeArrayMipmapped
         ]

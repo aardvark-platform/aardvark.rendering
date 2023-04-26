@@ -94,8 +94,6 @@ type Runtime(debug : IDebugConfig) =
         member x.Download<'T when 'T : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
             x.Download(texture, target, format, offset, size)
 
-        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
-            x.Copy(src, srcOffset, dst, dstOffset, size)
 
         member x.OnDispose = x.OnDispose
 
@@ -121,7 +119,6 @@ type Runtime(debug : IDebugConfig) =
         member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) =
             x.DownloadDepth(t, target, level, slice, offset)
 
-        member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
         member x.CompileRender (signature, set : aset<IRenderObject>) = x.CompileRender(signature, set)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
@@ -136,6 +133,9 @@ type Runtime(debug : IDebugConfig) =
             raise <| NotImplementedException()
 
         member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
+
+        member x.Blit(src, srcRegion, dst, dstRegion) = x.Blit(src, srcRegion, dst, dstRegion)
+
         member x.PrepareSurface (signature, s : ISurface) : IBackendSurface = x.PrepareSurface(signature, s)
 
         member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj)
@@ -243,6 +243,44 @@ type Runtime(debug : IDebugConfig) =
 
             ctx.Copy(src, srcLevel, srcSlices, V3i.Zero, dst, dstLevel, dstSlices, V3i.Zero, size)
 
+    member x.Blit(src : IFramebufferOutput, srcRegion : Box3i, dst : IFramebufferOutput, dstRegion : Box3i) =
+
+        let args (region : Box3i) (t : IFramebufferOutput) =
+            match t with
+            | :? Renderbuffer as rb ->
+                rb |> ResourceValidation.Textures.validateBlitRegion 0 region
+                Image.Renderbuffer rb, 0, Range1i(0)
+
+            | :? ITextureLevel as tl ->
+                tl.Texture |> ResourceValidation.Textures.validateSlices tl.Slices.Min (tl.Slices.Size + 1)
+                tl.Texture |> ResourceValidation.Textures.validateLevels tl.Level 1
+                tl.Texture |> ResourceValidation.Textures.validateBlitRegion tl.Level region
+                Image.Texture (unbox tl.Texture), tl.Level, tl.Slices
+
+            | _ ->
+                failf "invalid framebuffer output: %A" t
+
+        let srcImage, srcLevel, srcSlices = args srcRegion src
+        let dstImage, dstLevel, dstSlices = args dstRegion dst
+
+        (srcImage.Samples, dstImage.Samples) ||> ResourceValidation.Textures.validateSamplesForCopy' srcImage.Dimension
+
+        if srcRegion.IsValid && srcRegion.Size = dstRegion.Size then
+            ctx.Copy(
+                srcImage, srcLevel, srcSlices, srcRegion.Min,
+                dstImage, dstLevel, dstSlices, dstRegion.Min,
+                srcRegion.Size
+            )
+        else
+            if (srcImage.Samples > 1 || dstImage.Samples > 1) && abs srcRegion.Size <> abs dstRegion.Size then
+                failf "blitting from or to multisampled buffers is only supported if the source and target region dimensions match"
+
+            ctx.Blit(
+                srcImage, srcLevel, srcSlices, srcRegion.Min, srcRegion.Size,
+                dstImage, dstLevel, dstSlices, dstRegion.Min, dstRegion.Size,
+                true
+            )
+
     member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format,
                                             [<Optional; DefaultParameterValue(V3i())>] offset : V3i,
                                             [<Optional; DefaultParameterValue(V3i())>] size : V3i) : unit =
@@ -278,30 +316,6 @@ type Runtime(debug : IDebugConfig) =
         src |> ResourceValidation.Textures.validateSlice slice
         src |> ResourceValidation.Textures.validateWindow level offset size
         ctx.Download(src, level, slice, offset, size, target, format)
-
-    member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
-
-        let args (offset : V3i) (t : IFramebufferOutput) =
-            match t with
-            | :? Renderbuffer as rb ->
-                rb |> ResourceValidation.Textures.validateWindow 0 offset size
-                Image.Renderbuffer rb, 0, Range1i(0)
-
-            | :? ITextureLevel as tl ->
-                tl.Texture |> ResourceValidation.Textures.validateSlices tl.Slices.Min (tl.Slices.Size + 1)
-                tl.Texture |> ResourceValidation.Textures.validateLevels tl.Level 1
-                tl.Texture |> ResourceValidation.Textures.validateWindow tl.Level offset size
-                Image.Texture (unbox tl.Texture), tl.Level, tl.Slices
-
-            | _ ->
-                failwithf "[GL] invalid FramebufferOutput: %A" t
-
-        let srcImage, srcLevel, srcSlices = args srcOffset src
-        let dstImage, dstLevel, dstSlices = args dstOffset dst
-
-        (srcImage.Samples, dstImage.Samples) ||> ResourceValidation.Textures.validateSamplesForCopy' srcImage.Dimension
-
-        ctx.Copy(srcImage, srcLevel, srcSlices, srcOffset, dstImage, dstLevel, dstSlices, dstOffset, size)
 
     member x.CreateBuffer(size : nativeint, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
         size |> ResourceValidation.Buffers.validateSize
@@ -401,96 +415,6 @@ type Runtime(debug : IDebugConfig) =
 
     member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =
         new RenderTasks.ClearTask(x, ctx, signature, values) :> IRenderTask
-
-    member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i,
-                                 [<Optional; DefaultParameterValue(ImageTrafo.Identity)>] trafo : ImageTrafo) =
-        Operators.using ctx.ResourceLock (fun _ ->
-            let oldRead = GL.GetInteger(GetPName.ReadFramebufferBinding)
-            let oldDraw = GL.GetInteger(GetPName.DrawFramebufferBinding)
-
-            let targetTex = ss |> unbox<Texture>
-            let readFbo = GL.GenFramebuffer()
-            let drawFbo = GL.GenFramebuffer()
-
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,readFbo)
-            GL.Check "could not bind read framebuffer"
-            let mutable srcAtt = FramebufferAttachment.ColorAttachment0
-
-            match ms with
-            | :? Renderbuffer as ms ->
-                if TextureFormat.hasDepth ms.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
-                GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, srcAtt, RenderbufferTarget.Renderbuffer, ms.Handle)
-                GL.Check "could not set read framebuffer texture"
-
-            | :? ITextureLevel as ms ->
-                let baseSlice = ms.Slices.Min
-                let slices = 1 + ms.Slices.Max - baseSlice
-                let tex = ms.Texture |> unbox<Texture>
-
-                if slices <> 1 then failwith "layer sub-ranges not supported atm."
-
-                if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
-                if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
-                    GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.Level, baseSlice)
-                    GL.Check "could not set read framebuffer texture"
-                else
-                    // NOTE: allow to resolve/copy singlesample textures as well
-                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
-                    GL.Check "could not set read framebuffer texture"
-
-            | _ ->
-                failwithf "[GL] cannot resolve %A" ms
-
-            // NOTE: binding src texture with multiple slices using FramebufferTexture(..) and dst as FramebufferTexture(..) only blits first slice
-            // TODO: maybe multilayer copy works using FramebufferTexture2D with TextureTarget.TextureArray
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,drawFbo)
-            GL.Check "could not bind write framebuffer"
-            if targetTex.IsArray || targetTex.Dimension = TextureDimension.TextureCube then
-                GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, srcAtt, targetTex.Handle, 0, dstLayer)
-                GL.Check "could not set write framebuffer texture"
-            else
-                GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, srcAtt, targetTex.Handle, 0)
-                GL.Check "could not set write framebuffer texture"
-
-
-            let mutable src = Box2i.FromMinAndSize(srcOffset, size)
-            let mutable dst = Box2i.FromMinAndSize(dstOffset, size)
-
-            match trafo with
-                | ImageTrafo.Identity -> ()
-                | ImageTrafo.MirrorY ->
-                    dst.Min.Y <- dst.Max.Y - 1
-                    dst.Max.Y <- -1
-                | ImageTrafo.MirrorX ->
-                    dst.Min.X <- dst.Max.X - 1
-                    dst.Max.X <- -1
-                | _ ->
-                    failwith "unsupported image trafo"
-
-            let mask =
-                if srcAtt = FramebufferAttachment.DepthStencilAttachment then
-                    ClearBufferMask.DepthBufferBit
-                else
-                    GL.ReadBuffer(ReadBufferMode.ColorAttachment0)
-                    GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
-                    ClearBufferMask.ColorBufferBit
-
-            GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, mask, BlitFramebufferFilter.Nearest)
-            GL.Check "could not blit framebuffer"
-
-            GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, srcAtt, 0, 0)
-            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, srcAtt, 0, 0)
-
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, oldRead)
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, oldDraw)
-            GL.DeleteFramebuffer readFbo
-            GL.DeleteFramebuffer drawFbo
-            GL.Check "error cleanup"
-        )
-
-    member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture,
-                                 [<Optional; DefaultParameterValue(ImageTrafo.Identity)>] trafo : ImageTrafo) =
-        x.ResolveMultisamples(ms, V2i.Zero, ss, V2i.Zero, 0, ms.Size.XY, trafo)
 
     member x.GenerateMipMaps(t : IBackendTexture) =
         match t with

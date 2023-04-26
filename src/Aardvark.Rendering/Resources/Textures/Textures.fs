@@ -122,15 +122,33 @@ and ITextureRuntime =
     ///<exception cref="ArgumentException">if the combination of parameters is invalid.</exception>
     abstract member CreateTextureArray : size : V3i * dimension : TextureDimension * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
 
-    abstract member PrepareTexture : ITexture -> IBackendTexture
+    ///<summary>Prepares a texture by uploading the data to the device.</summary>
+    ///<param name="texture">The texture to prepare.</param>
+    abstract member PrepareTexture : texture : ITexture -> IBackendTexture
 
+    ///<summary>Copies multiple levels and slices from a texture to another.</summary>
+    ///<param name="src">The texture to copy from.</param>
+    ///<param name="srcBaseSlice">The first slice to copy from.</param>
+    ///<param name="srcBaseLevel">The first level to copy from.</param>
+    ///<param name="dst">The texture to copy to.</param>
+    ///<param name="dstBaseSlice">The first slice to copy to.</param>
+    ///<param name="dstBaseLevel">The first level to copy to.</param>
+    ///<param name="slices">The number of slices to copy.</param>
+    ///<param name="levels">The number of mip levels to copy.</param>
     abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int *
                            dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int *
                            slices : int * levels : int -> unit
 
-    abstract member Copy : src : IFramebufferOutput * srcOffset : V3i *
-                           dst : IFramebufferOutput * dstOffset : V3i *
-                           size : V3i -> unit
+    ///<summary>
+    /// Copies a region from a framebuffer output to a region of another, performing any scaling if required.
+    /// If the extent of any dimension is positive in the source region and negative in the target region (or vice versa), the contents are mirrored in that dimension.
+    ///</summary>
+    ///<param name="src">The framebuffer output to copy from.</param>
+    ///<param name="srcRegion">The region to copy from.</param>
+    ///<param name="dst">The framebuffer output to copy to.</param>
+    ///<param name="dstRegion">The region to copy to.</param>
+    abstract member Blit : src : IFramebufferOutput * srcRegion : Box3i *
+                           dst : IFramebufferOutput * dstRegion : Box3i -> unit
 
     ///<summary>Creates a renderbuffer.</summary>
     ///<param name="size">The size of the renderbuffer.</param>
@@ -147,13 +165,6 @@ and ITextureRuntime =
                                                                   brickSize : V3i * maxMemory : int64 -> ISparseTexture<'T>
 
     abstract member GenerateMipMaps : IBackendTexture -> unit
-
-    ///<summary>Resolves a framebuffer output.</summary>
-    ///<param name="src">The framebuffer output to resolve.</param>
-    ///<param name="dst">The texture to copy the data into. Must not be multisampled.</param>
-    ///<param name="trafo">The transformation to apply to the image data. Default is identity.</param>
-    abstract member ResolveMultisamples : src : IFramebufferOutput * dst : IBackendTexture *
-                                          [<Optional; DefaultParameterValue(ImageTrafo.Identity)>] trafo : ImageTrafo -> unit
 
     ///<summary>Downloads data from the given texture sub resource to a NativeTensor4.</summary>
     ///<param name="texture">The texture to download.</param>
