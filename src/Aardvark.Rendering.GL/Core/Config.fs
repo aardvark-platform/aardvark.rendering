@@ -93,6 +93,14 @@ module RuntimeConfig =
     /// </summary>
     let mutable PreferHostSideTextureCompression = true
 
+    /// <summary>
+    /// Determines whether resources of render and compute tasks are allowed to be accessed
+    /// concurrently. If set to false, the update and execution of tasks is made mutual exclusive
+    /// by using a global lock. This may mitigate potential race conditions on shared resources but
+    /// completely disables concurrent execution of tasks.
+    /// </summary>
+    let mutable AllowConcurrentResourceAccess = false
+
 
 /// Reporting modes for OpenGL errors.
 type ErrorFlagCheck =

@@ -595,7 +595,7 @@ module internal ComputeTaskInternals =
         let update (token : AdaptiveToken) (renderToken : RenderToken) (action : unit -> 'T) =
             use __ = renderToken.Use()
 
-            lock AbstractRenderTask.ResourcesInUse (fun _ ->
+            GlobalResourceLock.using (fun _ ->
                 use __ = ctx.ResourceLock
 
                 resources.Update(token, renderToken)

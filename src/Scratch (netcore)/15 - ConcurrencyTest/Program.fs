@@ -25,11 +25,14 @@ let main argv =
     let addRemoveTest   = true  // OK
     let textureTest     = true  // OK
     let jitterFrames    = false // OK
+    let concurrentTask  = true  // FAIL (GL needs the global lock, Vk reference counting needs some work)
+
+    GL.RuntimeConfig.AllowConcurrentResourceAccess <- false
 
     Aardvark.Init()
 
     use app = new VulkanApplication(DebugLevel.Normal)
-    //use app = new OpenGlApplication()
+    //use app = new OpenGlApplication(DebugLevel.Normal)
     use win = app.CreateGameWindow(1)
 
     let signature = win.FramebufferSignature
@@ -232,17 +235,6 @@ let main argv =
         let trafo = Trafo3d.Translation(rnd.NextDouble()*10.0,rnd.NextDouble()*10.0,rnd.NextDouble()*10.0)
         addThing trafo
 
-    let threads =
-        [
-            startThread "cameraThread" cameraMovement
-
-            if textureTest then
-                startThread "textureThread" updateTexture
-
-            if addRemoveTest then
-                startThread "addRemoveThread" addThings
-        ]
-
     let sg =
         // create a red box with a simple shader
         Sg.box (AVal.constant color) (AVal.constant box)
@@ -261,6 +253,28 @@ let main argv =
         RenderTask.ofList [
             if jitterFrames then RenderTask.custom (fun (a,rt,ot) -> Thread.Sleep(rnd.Next(0,200))) else RenderTask.empty
             win.Runtime.CompileRender(signature,sg)
+        ]
+
+    use otherTask =
+        win.Runtime.CompileRender(signature, sg)
+
+    let updateResources() =
+        Thread.Sleep 2000
+        while running do
+            otherTask.Update()
+
+    let threads =
+        [
+            startThread "cameraThread" cameraMovement
+
+            if concurrentTask then
+                startThread "resourceUpdateThread" updateResources
+
+            if textureTest then
+                startThread "textureThread" updateTexture
+
+            if addRemoveTest then
+                startThread "addRemoveThread" addThings
         ]
 
     win.RenderTask <- task

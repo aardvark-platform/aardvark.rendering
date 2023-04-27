@@ -19,7 +19,7 @@ open FShade
 module RenderTasks =
 
     module private FramebufferSignature =
-        
+
         let validateCompability (fbo : IFramebuffer) (signature : IFramebufferSignature) =
             if not <| signature.IsAssignableTo fbo then
                 failwithf "[GL] render task signature is not compatible with the framebuffer signature\ntask signature:\n%A\n\nframebuffer signature:\n%A" signature.Layout fbo.Signature.Layout
@@ -27,7 +27,7 @@ module RenderTasks =
     module private Framebuffer =
 
         let draw (signature : IFramebufferSignature) (fbo : Framebuffer) (viewport : Box2i) (f : unit -> 'T) =
-            
+
             let oldVp = Array.create 4 0
             let mutable oldFbo = 0
             GL.GetInteger(GetPName.Viewport, oldVp)
@@ -120,7 +120,7 @@ module RenderTasks =
             manager.Dispose()
 
         override x.PerformUpdate(token, renderToken) =
-            lock AbstractRenderTask.ResourcesInUse (fun _ ->
+            GlobalResourceLock.using (fun _ ->
                 use __ = ctx.ResourceLock
 
                 x.ProcessDeltas(token, renderToken)
@@ -132,7 +132,7 @@ module RenderTasks =
             )
 
         override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
-            lock AbstractRenderTask.ResourcesInUse (fun _ ->
+            GlobalResourceLock.using (fun _ ->
                 let fbo = desc.framebuffer // TODO: fix outputdesc
                 signature |> FramebufferSignature.validateCompability fbo
 

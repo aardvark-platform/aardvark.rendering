@@ -14,6 +14,17 @@ open Aardvark.Base.Runtime
 open FShade.GLSL
 open System.Threading
 
+// NOTE: Hacky solution for concurrency issues.
+// This lock is used for all OpenGL render tasks, basically preventing any concurrency.
+// The Vulkan backend has finer grained control over resource ownership.
+module internal GlobalResourceLock =
+
+    let private lockObj = obj()
+
+    let using (action : unit -> 'T) =
+        if RuntimeConfig.AllowConcurrentResourceAccess then action()
+        else lock lockObj action
+
 type TextureBindingSlot =
     | ArrayBinding of IResource<TextureArrayBinding, TextureArrayBinding>
     | SingleBinding of IResource<Texture, TextureBinding> * IResource<Sampler, int>
@@ -772,7 +783,7 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass, renderObject : Rend
         for r in x.Resources do r.Update(token, rt)
 
     member x.Dispose() =
-        lock AbstractRenderTask.ResourcesInUse (fun _ -> 
+        GlobalResourceLock.using (fun _ -> 
             if Interlocked.Decrement(&refCount) = 0 then
                 lock x (fun () ->
                     let token = try Some ctx.ResourceLock with :? ObjectDisposedException -> None
@@ -819,7 +830,7 @@ type PreparedObjectInfo =
     }
 
     member x.Dispose() =
-        lock AbstractRenderTask.ResourcesInUse (fun _ ->
+        GlobalResourceLock.using (fun _ ->
             if x.oIsActive.IsDisposed then failwith "double free"
             x.oBeginMode.Dispose()
 

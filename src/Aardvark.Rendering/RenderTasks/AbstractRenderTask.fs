@@ -11,8 +11,6 @@ type AbstractRenderTask() =
 
     let id = RenderTaskId.New()
 
-    static let resourcesInUse = obj()
-
     static let runtimeUniforms =
         Map.ofList [
             "ViewportSize", fun (o : OutputDescription) -> o.viewport.Size + V2i.II
@@ -55,11 +53,6 @@ type AbstractRenderTask() =
         let copy = RenderObject ro
         copy.Uniforms <- hookProvider ro.Uniforms
         copy
-
-    // NOTE: Hacky solution for concurrency issues.
-    // This is lock is used for all OpenGL render tasks, basically preventing any concurrency.
-    // The Vulkan backend has finer grained control over resource ownership, and does not use this lock.
-    static member ResourcesInUse = resourcesInUse
 
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
