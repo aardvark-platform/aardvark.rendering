@@ -364,10 +364,6 @@ module TextureFormat =
             TextureFormat.Srgb8Alpha8, TextureFormat.CompressedSrgbAlphaS3tcDxt5
         ]
 
-    [<Obsolete>]
-    let isFilterable (fmt : TextureFormat) =
-        not (isIntegerFormat fmt || isCompressed fmt)
-
     let toDownloadFormat =
         LookupTable.lookupTable [
             TextureFormat.R8, PixFormat.ByteGray
@@ -664,9 +660,6 @@ module TextureFormatExtensions =
         member x.Aspect = TextureFormat.toAspect x
         member x.PixelSizeInBits = TextureFormat.pixelSizeInBits x
         member x.PixelSizeInBytes = TextureFormat.pixelSizeInBytes x
-
-        [<Obsolete>]
-        member x.IsFilterable = not (x.IsIntegerFormat || x.IsCompressed)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PixFormat =

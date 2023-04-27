@@ -194,10 +194,6 @@ module Frustum =
         else
             Trafo3d.PerspectiveProjectionGL(l, r, b, t, n, f)
 
-    [<Obsolete("use projTrafo instead (Frustum tracks whether isOrtho now)")>]
-    let orthoTrafo (f : Frustum) : Trafo3d =
-        projTrafo f
-
     let private isTrafoOrtho (t : Trafo3d) =
         t.Forward.M30.IsTiny() && t.Forward.M31.IsTiny() && t.Forward.M32.IsTiny()
 
@@ -288,10 +284,6 @@ module Frustum =
 
             { frustum with left = l; right = r; top = t; bottom = b }
 
-
-    [<Obsolete("use projTrafo instead")>]
-    let toTrafo f : Trafo3d = projTrafo f
-
     let horizontalFieldOfViewInDegrees { left = l; right = r; near = near } =
         let l,r = atan2 l near, atan2 r near
         Conversion.DegreesFromRadians(-l + r)
@@ -302,10 +294,6 @@ module Frustum =
     let inline right  (f : Frustum) = f.right
     let inline bottom (f : Frustum) = f.bottom
     let inline top    (f : Frustum) = f.top
-
-
-    [<Obsolete("use pickRayDirection instead")>]
-    let unproject { near = n } (xyOnPlane : V2d) = Ray3d(V3d.Zero, V3d(xyOnPlane, -n))
 
     let pickRayDirection (pp : PixelPosition) (f : Frustum) =
         let n = pp.NormalizedPosition

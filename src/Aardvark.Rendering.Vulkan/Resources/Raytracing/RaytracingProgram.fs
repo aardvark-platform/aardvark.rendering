@@ -26,12 +26,6 @@ type RaytracingProgram (device : Device,
     member x.PipelineLayout = pipelineLayout
     member x.Shader = shader
 
-    [<Obsolete>]
-    member x.Glsl = shader.code
-
-    [<Obsolete("Use PipelineLayout")>]
-    member x.Layout = pipelineLayout
-
     override x.Destroy() =
         stages |> List.iter (
             ShaderGroup.iter (fun _ _ _ s -> s.Module.Dispose())
