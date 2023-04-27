@@ -224,39 +224,4 @@ module List =
                 Task.map2 prepend h t
 
     let rec filterT (mapping : 'a -> Task<bool>) (l : list<'a>) : Task<list<'a>> =
-        chooseT (fun v -> mapping v |> Task.map (function true -> Some v | _ -> None)) l 
-
-
-module Test =
-
-    let newTest() =
-        let tcs = TaskCompletionSource<int>()
-        let res = tcs.Task |> Task.bind (fun a -> printfn "sleep"; Task.Delay(1000) |> Task.lift |> Task.map (fun _ -> 2 * a))
-
-        let thread = 
-            Thread.create <| fun () ->
-                match Task.getResult res with
-                    | Completed v ->
-                        printfn "finished: %A" v
-                    | Cancelled ->
-                        printfn "cancelled"
-                    | Faulted e ->
-                        printfn "faulted: %A" e
-
-
-        tcs,thread
-
-    let run() =
-        let tcs,thread = newTest()
-        Thread.Sleep 1000
-        tcs.SetResult(10)
-
-        thread.Join()
-
-
-
-
-
-
-
-        
+        chooseT (fun v -> mapping v |> Task.map (function true -> Some v | _ -> None)) l
