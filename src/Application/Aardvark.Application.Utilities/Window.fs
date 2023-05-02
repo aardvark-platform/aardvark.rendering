@@ -318,6 +318,7 @@ module Utilities =
                         }
 
                     let font = FontSquirrel.Hack.Regular
+                    use __ = win.Runtime.ContextLock
                     win.Runtime.PrepareGlyphs(font, chars)
                     // Use NoBoundary to resolve issue with render passes, such the Cube not being visible when behind the text in the WriteBuffers example
                     let textCfg = TextConfig.create font C4b.White TextAlignment.Left false RenderStyle.NoBoundary

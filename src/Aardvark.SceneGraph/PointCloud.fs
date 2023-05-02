@@ -558,6 +558,7 @@ module PointCloudRenderObjectSemantics =
                 let load (ct : CancellationToken) (node : ILodDataNode) =
                     let geometry = Async.RunSynchronously(data.GetData(node), cancellationToken = ct)
 
+                    use __ = runtime.ContextLock
                     match geometry with
                         | Some g ->
                             let fvc = faceVertexCount g

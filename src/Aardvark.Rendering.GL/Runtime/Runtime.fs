@@ -23,6 +23,8 @@ type Runtime(debug : IDebugConfig) =
 
     member x.Context = ctx
 
+    member x.ContextLock = ctx.ResourceLock :> IDisposable
+
     member x.DebugConfig = debug
 
     member x.ShaderCachePath
@@ -87,6 +89,7 @@ type Runtime(debug : IDebugConfig) =
 
         member x.DeviceCount = 1
         member x.DebugConfig = x.DebugConfig
+        member x.ContextLock = x.ContextLock
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
             x.Upload(texture, source, format, offset, size)

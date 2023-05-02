@@ -1315,6 +1315,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
 
     let updateQuantization (q : Quantization) =
         if q != quality then
+            use __ = runtime.ContextLock
             quality <- q
             dctInput.["Quantization"] <- Quantization.toTable q
             dctInput.Flush()

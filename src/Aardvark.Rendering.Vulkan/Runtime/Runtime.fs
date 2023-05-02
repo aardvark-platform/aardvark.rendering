@@ -31,6 +31,7 @@ type Runtime(device : Device) as this =
 
     member x.Device = device
     member x.ResourceManager = manager
+    member x.ContextLock = device.Token :> IDisposable
 
     member x.DeviceCount = device.PhysicalDevices.Length
 
@@ -507,6 +508,8 @@ type Runtime(device : Device) as this =
         new RaytracingTask(manager, pipeline, commands) :> IRaytracingTask
 
     interface IRuntime with
+        member x.ContextLock = x.ContextLock
+
         member x.DebugConfig = x.DebugConfig
 
         member x.DeviceCount = x.DeviceCount

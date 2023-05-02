@@ -28,6 +28,7 @@ and IComputeInputBinding =
 and IComputeRuntime =
     inherit IBufferRuntime
     inherit ITextureRuntime
+    abstract member ContextLock : IDisposable
     abstract member MaxLocalSize : V3i
     abstract member CreateComputeShader : shader: FShade.ComputeShader -> IComputeShader
     abstract member NewInputBinding : shader: IComputeShader * inputs: IUniformProvider -> IComputeInputBinding
