@@ -1,3 +1,6 @@
+### 5.4.0-prerelease0003
+- Restored IComputeRuntime.ContextLock
+
 ### 5.4.0-prerelease0002
 - Added validation for sampler state translation
 - Added texture filter reduction
