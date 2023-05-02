@@ -1,3 +1,10 @@
+### 5.4.0-prerelease0002
+- Added validation for sampler state translation
+- Added texture filter reduction
+- Added Blit, reworked Copy and ResolveMultisamples
+- [GL] Added RuntimeConfig.AllowConcurrentResourceAccess
+- [Vulkan] Fixed issue with concurrent eager destroy
+
 ### 5.4.0-prerelease0001
 - Initial prerelease for 5.4
 
