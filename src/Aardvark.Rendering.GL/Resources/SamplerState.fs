@@ -1,16 +1,8 @@
 ﻿namespace Aardvark.Rendering.GL
 
-open System
 open System.Threading
-open System.Collections.Concurrent
-open System.Runtime.InteropServices
 open Aardvark.Base
-open OpenTK
-open OpenTK.Platform
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
-open Microsoft.FSharp.Quotations
-open Microsoft.FSharp.Linq
 open Aardvark.Rendering
 open Aardvark.Rendering.GL
 
@@ -34,7 +26,7 @@ type Sampler =
 
 [<AutoOpen>]
 module SamplerExtensions =
-    
+
     let private wrapModes =
         Dict.ofList [
             WrapMode.Wrap, TextureWrapMode.Repeat
@@ -78,8 +70,8 @@ module SamplerExtensions =
 
         let wrapMode m =
             match wrapModes.TryGetValue m with
-                | (true, r) -> int r
-                | _ -> int TextureWrapMode.Repeat //failwithf "unsupported WrapMode: %A"  m
+            | (true, r) -> int r
+            | _ -> failf "unsupported WrapMode: %A" m
 
         let minFilter f =
             f |> TextureFilter.toMinFilter |> int
@@ -89,8 +81,8 @@ module SamplerExtensions =
 
         let compareFunc f =
             match compareFuncs.TryGetValue f with
-                | (true, f) -> int f
-                | _ -> int All.Lequal //failwithf "unsupported comparison function: %A" f
+            | (true, f) -> int f
+            | _ -> failf "unsupported comparison function: %A" f
 
     open SamplerStateHelpers
 
@@ -106,7 +98,6 @@ module SamplerExtensions =
 
         GL.SamplerParameter(handle, SamplerParameterName.TextureWrapR, wrapMode d.AddressW)
         GL.Check "could not set TextureWrapR for sampler"
-
 
         GL.SamplerParameter(handle, SamplerParameterName.TextureLodBias, d.MipLodBias)
         GL.Check "could not set LodBias for sampler"

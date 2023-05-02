@@ -1,16 +1,13 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System
-open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-// #nowarn "51"
+
 [<AutoOpen>]
 module ``Sampler Extensions`` =
 
@@ -31,14 +28,18 @@ module ``Sampler Extensions`` =
 
     module VkSamplerAddressMode =
         let ofWrapMode =
-            LookupTable.lookupTable [
-                WrapMode.Border, VkSamplerAddressMode.ClampToBorder
-                WrapMode.Clamp, VkSamplerAddressMode.ClampToEdge
-                WrapMode.Mirror, VkSamplerAddressMode.MirroredRepeat
-                WrapMode.MirrorOnce, VkSamplerAddressMode.MirroredRepeat
-                WrapMode.Wrap, VkSamplerAddressMode.Repeat
+            let tryGetAddressMode =
+                LookupTable.lookupTable' [
+                    WrapMode.Border, VkSamplerAddressMode.ClampToBorder
+                    WrapMode.Clamp, VkSamplerAddressMode.ClampToEdge
+                    WrapMode.Mirror, VkSamplerAddressMode.MirroredRepeat
+                    WrapMode.Wrap, VkSamplerAddressMode.Repeat
+                ]
 
-            ]
+            fun m ->
+                match tryGetAddressMode m with
+                | Some it -> it
+                | _ -> failf "unsupported WrapMode: %A" m
 
     module VkCompareOp =
         let ofSamplerComparisonFunction =
