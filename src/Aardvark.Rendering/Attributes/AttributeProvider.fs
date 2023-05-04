@@ -6,6 +6,7 @@ open Aardvark.Base
 [<AllowNullLiteral>]
 type IAttributeProvider =
     inherit IDisposable
+    abstract member All : seq<Symbol * BufferView>
     abstract member TryGetAttribute : name : Symbol -> Option<BufferView>
 
 type AttributeProvider private() =
@@ -13,6 +14,7 @@ type AttributeProvider private() =
     static let empty =
         { new IAttributeProvider with
             member x.Dispose() = ()
+            member x.All = Seq.empty
             member x.TryGetAttribute _ = None
         }
 
@@ -21,6 +23,7 @@ type AttributeProvider private() =
     static member union (l : IAttributeProvider) (r : IAttributeProvider) =
         { new IAttributeProvider with
             member x.Dispose() = l.Dispose(); r.Dispose()
+            member x.All = Seq.append l.All r.All |> Seq.distinctBy fst
             member x.TryGetAttribute(name : Symbol) =
                 match l.TryGetAttribute(name) with
                 | Some m -> Some m
@@ -30,6 +33,7 @@ type AttributeProvider private() =
     static member onDispose (callback : unit -> unit) (a : IAttributeProvider) =
         { new IAttributeProvider with
             member x.Dispose() = callback(); a.Dispose()
+            member x.All = a.All
             member x.TryGetAttribute(name : Symbol) = a.TryGetAttribute name
         }
 
@@ -37,6 +41,7 @@ type AttributeProvider private() =
     static member ofSymDict (values : SymbolDict<BufferView>) =
         { new IAttributeProvider with
             member x.Dispose() = ()
+            member x.All = values |> SymDict.toSeq
             member x.TryGetAttribute(name : Symbol) =
                 match values.TryGetValue name with
                 | (true, v) -> Some v
@@ -46,6 +51,7 @@ type AttributeProvider private() =
     static member ofDict (values : Dict<Symbol, BufferView>) =
         { new IAttributeProvider with
             member x.Dispose() = ()
+            member x.All = values |> Dict.toSeq
             member x.TryGetAttribute(name : Symbol) =
                 match values.TryGetValue name with
                 | (true, v) -> Some v
@@ -55,6 +61,7 @@ type AttributeProvider private() =
     static member ofDictionary (values : System.Collections.Generic.Dictionary<Symbol, BufferView>) =
         { new IAttributeProvider with
             member x.Dispose() = ()
+            member x.All = values |> Seq.map (fun e -> e.Key, e.Value)
             member x.TryGetAttribute(name : Symbol) =
                 match values.TryGetValue name with
                 | (true, v) -> Some v
@@ -64,6 +71,7 @@ type AttributeProvider private() =
     static member ofMap (values : Map<Symbol, BufferView>) =
         { new IAttributeProvider with
             member x.Dispose() = ()
+            member x.All = values |> Map.toSeq
             member x.TryGetAttribute(name : Symbol) = Map.tryFind name values
         }
 

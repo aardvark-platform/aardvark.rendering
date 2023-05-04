@@ -69,6 +69,11 @@ module RenderTask =
             let tcView = BufferView(AVal.constant (texCoords :> IBuffer), typeof<V2f>)
 
             { new IAttributeProvider with
+                member x.All = 
+                    Seq.ofList [
+                        DefaultSemantic.Positions, pView
+                        DefaultSemantic.DiffuseColorCoordinates, tcView
+                    ]
                 member x.TryGetAttribute(name : Symbol) = 
                     if name = DefaultSemantic.Positions then Some pView
                     elif name = DefaultSemantic.DiffuseColorCoordinates then Some tcView

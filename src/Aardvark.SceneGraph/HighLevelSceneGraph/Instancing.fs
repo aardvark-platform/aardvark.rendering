@@ -229,6 +229,8 @@ module Instancing =
                                 match Map.tryFind (string sem) uniforms with
                                     | Some v -> Some v
                                     | _ -> o.InstanceAttributes.TryGetAttribute sem
+
+                            member x.All = Seq.empty
                         }
 
                     let vatt =
@@ -239,6 +241,8 @@ module Instancing =
                             member x.TryGetAttribute sem =
                                 if Map.containsKey (string sem) uniforms then None
                                 else o.VertexAttributes.TryGetAttribute sem
+
+                            member x.All = Seq.empty
                         }
 
                     let newUniforms =

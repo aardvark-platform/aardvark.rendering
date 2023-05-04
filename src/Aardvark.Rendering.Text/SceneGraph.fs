@@ -185,6 +185,7 @@ module Sg =
             let instanceAttributes =
                 let old = shapes.InstanceAttributes
                 { new IAttributeProvider with
+                    member x.All = old.All
                     member x.TryGetAttribute sem =
                         if sem = Path.Attributes.TrafoOffsetAndScale then trafos |> Some
                         elif sem = Path.Attributes.PathColor then colors |> Some
@@ -330,6 +331,7 @@ module Sg =
             let instanceAttributes =
                 let old = shapes.InstanceAttributes
                 { new IAttributeProvider with
+                    member x.All = old.All
                     member x.TryGetAttribute sem =
                         if sem = Path.Attributes.ShapeTrafoR0 then trafoR0 |> Some
                         elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> Some

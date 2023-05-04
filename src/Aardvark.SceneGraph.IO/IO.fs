@@ -92,6 +92,7 @@ module Loader =
         }
 
         interface IAttributeProvider with
+            member x.All = Seq.empty
             member x.TryGetAttribute(sem) =
                 match x.geometry.IndexedAttributes.TryGetValue sem with
                     | (true, arr) ->
