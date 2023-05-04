@@ -376,6 +376,18 @@ type IBufferRuntimeExtensions private() =
         buffer.Upload(data)
         buffer
 
+    [<Extension; Obsolete("Use Upload instead.")>]
+    static member Copy(this : IBufferRuntime, srcData : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+        this.Upload(srcData, dst, dstOffset, size)
+
+    [<Extension; Obsolete("Use Download instead.")>]
+    static member Copy(this : IBufferRuntime, srcBuffer : IBackendBuffer, srcOffset : nativeint, dstData : nativeint, size : nativeint) =
+        this.Download(srcBuffer, srcOffset, dstData, size)
+
+    [<Extension; Obsolete("Use DownloadAsync instead.")>]
+    static member CopyAsync(this : IBufferRuntime, srcBuffer : IBackendBuffer, srcOffset : nativeint, dstData : nativeint, size : nativeint) =
+        this.DownloadAsync(srcBuffer, srcOffset, dstData, size)
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =
