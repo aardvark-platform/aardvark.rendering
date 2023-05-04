@@ -224,6 +224,7 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
     static member internal Zero = zero
 
     member x.Runtime = runtime
+    member x.Signature = signature
     member x.Count = drawCalls.Count
 
     member internal x.Free(mdc : ManagedDrawCall) =

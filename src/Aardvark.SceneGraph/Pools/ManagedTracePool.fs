@@ -553,6 +553,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
         )
 
     member x.Runtime = runtime
+    member x.Signature = signature
     member x.Count = objects.Count
 
     member internal x.Free(obj : ManagedTraceObject) =
