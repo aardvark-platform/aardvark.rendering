@@ -32,6 +32,12 @@ let main argv =
 
     let sg = 
         instances |> ASet.map (fun inst -> 
+                                // what I think happens:
+                                // this creates a new RenderObject that then queries all its attributes
+                                // the sg looks like: Effect -> Trafo -> boxSg
+                                //  - new AgScopes will be created for each when querying the attributes
+                                //  - the scope of the static boxSg (Sg.VertexAttributeApplicator) -> will live forever
+                                //  - this has a strong reference to its parent which is the AgScope of the instance Sg.TrafoApplicator -> will also live forever
                                 boxSg
                                     |> Sg.trafo (inst |> AVal.map(fun x -> Trafo3d.Identity))
                                     |> Sg.effect [
