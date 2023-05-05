@@ -26,7 +26,7 @@ let main argv =
 
     let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
-    let boxSg = Sg.box' C4b.White Box3d.Unit
+    let boxSg = Sg.ofIndexedGeometry Primitives.unitBox
                 
     let instances = cset<aval<int[]>>()
 
