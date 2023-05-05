@@ -26,7 +26,7 @@ let main argv =
 
     let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
-    let boxSg = Sg.ofIndexedGeometry Primitives.unitBox
+    let boxSg = Sg.ofIndexedGeometry Primitives.unitBox // SOLUTION: never build static "geometry leafs" that are then instaciated with temporary objects -> move "Sg.ofIndexedGeometry" to Sg creation
                 
     let instances = cset<aval<int[]>>()
 
@@ -38,7 +38,7 @@ let main argv =
                                 //  - new AgScopes will be created for each when querying the attributes
                                 //  - the scope of the static boxSg (Sg.VertexAttributeApplicator) -> will live forever
                                 //  - this has a strong reference to its parent which is the AgScope of the instance Sg.TrafoApplicator -> will also live forever
-                                boxSg
+                                boxSg // SOLUTION: move "Sg.ofIndexedGeometry" to here
                                     |> Sg.trafo (inst |> AVal.map(fun x -> Trafo3d.Identity))
                                     |> Sg.effect [
                                             DefaultSurfaces.trafo                 |> toEffect
