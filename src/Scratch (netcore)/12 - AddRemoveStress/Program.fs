@@ -23,8 +23,8 @@ let main argv =
 
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to
     // properly dipose resources on shutdown...
-    use app = new VulkanApplication(true)
-    //use app = new OpenGlApplication()
+    //use app = new VulkanApplication(true)
+    use app = new OpenGlApplication()
     // SimpleRenderWindow is a System.Windows.Forms.Form which contains a render control
     // of course you can a custum form and add a control to it.
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
@@ -49,8 +49,7 @@ let main argv =
 
     // create a quad using low level primitives (IndexedGeometry is our base type for specifying
     // geometries using vertices etc)
-    let quadSg =
-        let quad =
+    let quad = // NOTE: building a static Sg here (Sg.ofIndexedGeometry) will leak all attribute queries when a new instance is created (see "22 - MemoryLeak")
             IndexedGeometry(
                 Mode = IndexedGeometryMode.TriangleList,
                 IndexArray = ([|0;1;2; 0;2;3|] :> System.Array),
@@ -61,9 +60,6 @@ let main argv =
                         DefaultSemantic.DiffuseColorCoordinates,    [| V2f.OO; V2f.IO; V2f.II; V2f.OI |] :> Array
                     ]
             )
-                
-        // create a scenegraph, given a IndexedGeometry instance...
-        quad |> Sg.ofIndexedGeometry
 
 
     let should = AVal.init false
@@ -72,7 +68,7 @@ let main argv =
     let gouh = 
         should |> AVal.map (fun should -> 
             if should then 
-               quadSg
+               quad |> Sg.ofIndexedGeometry // NOTE: building unique Sg here to avoid memory leaks (see "22 - MemoryLeak")
                     // here we use fshade to construct a shader: https://github.com/aardvark-platform/aardvark.docs/wiki/FShadeOverview
                     |> Sg.effect [
                             DefaultSurfaces.trafo                 |> toEffect
