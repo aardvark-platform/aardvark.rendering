@@ -218,6 +218,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "01 - Hello Wpf", "Examples 
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "22 - MemoryLeak", "Scratch (netcore)\22 - MemoryLeak\22 - MemoryLeak.fsproj", "{6DFA9CC5-3C57-44FC-A989-F1DC5097C2DB}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "23 - NativeMemoryLeak", "Scratch (netcore)\23 - NativeMemoryLeak\23 - NativeMemoryLeak.fsproj", "{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -600,6 +602,10 @@ Global
 		{6DFA9CC5-3C57-44FC-A989-F1DC5097C2DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6DFA9CC5-3C57-44FC-A989-F1DC5097C2DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6DFA9CC5-3C57-44FC-A989-F1DC5097C2DB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -689,6 +695,7 @@ Global
 		{D362070A-E74D-47D5-A029-12E1987DC4A2} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{159213C5-ECA5-48B6-BDCF-D75BAE733E80} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{6DFA9CC5-3C57-44FC-A989-F1DC5097C2DB} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
