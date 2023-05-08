@@ -272,7 +272,7 @@ type SceneGraphExtensions =
     static member Uniform(sg : ISg, uniforms : IUniformProvider) : ISg = Sg.UniformApplicator(uniforms, sg) :> ISg
 
     [<Extension>]
-    static member Uniform(sg : ISg, uniforms : SymbolDict<IAdaptiveValue>) : ISg = Sg.UniformApplicator(UniformProvider.ofSymDict uniforms, sg) :> ISg
+    static member Uniform(sg : ISg, uniforms : SymbolDict<IAdaptiveValue>) : ISg = Sg.UniformApplicator(UniformProvider.ofDict uniforms, sg) :> ISg
 
     [<Extension>]
     static member VertexIndices(sg : ISg, indices : BufferView) : ISg = Sg.VertexIndexApplicator(indices, sg) :> ISg

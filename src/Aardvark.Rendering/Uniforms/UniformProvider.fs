@@ -28,7 +28,7 @@ type UniformProvider private() =
                 | None -> r.TryGetUniform(scope, name)
         }
 
-    static member ofSymDict (values : SymbolDict<IAdaptiveValue>) =
+    static member ofDict (values : SymbolDict<IAdaptiveValue>) =
         { new IUniformProvider with
             member x.Dispose() = ()
             member x.TryGetUniform(scope : Ag.Scope, name : Symbol) =
@@ -46,7 +46,7 @@ type UniformProvider private() =
                 | _ -> None
         }
 
-    static member ofDictionary (values : System.Collections.Generic.Dictionary<Symbol, IAdaptiveValue>) =
+    static member ofDict (values : System.Collections.Generic.Dictionary<Symbol, IAdaptiveValue>) =
         { new IUniformProvider with
             member x.Dispose() = ()
             member x.TryGetUniform(scope : Ag.Scope, name : Symbol) =
@@ -71,17 +71,17 @@ type UniformProvider private() =
     static member ofDict (values : Dict<string, IAdaptiveValue>) =
         let d = SymbolDict<IAdaptiveValue>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- v
-        UniformProvider.ofSymDict d
+        UniformProvider.ofDict d
 
-    static member ofDictionary (values : System.Collections.Generic.Dictionary<string, IAdaptiveValue>) =
+    static member ofDict (values : System.Collections.Generic.Dictionary<string, IAdaptiveValue>) =
         let d = SymbolDict<IAdaptiveValue>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- v
-        UniformProvider.ofSymDict d
+        UniformProvider.ofDict d
 
     static member ofMap (values : Map<string, IAdaptiveValue>) =
         let d = SymbolDict<IAdaptiveValue>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- v
-        UniformProvider.ofSymDict d
+        UniformProvider.ofDict d
 
     static member ofList (values : list<string * IAdaptiveValue>) =
         UniformProvider.ofSeq values
@@ -89,4 +89,4 @@ type UniformProvider private() =
     static member ofSeq (values : seq<string * IAdaptiveValue>) =
         let d = SymbolDict<IAdaptiveValue>()
         for (k,v) in values do d.[Symbol.Create k] <- v
-        UniformProvider.ofSymDict d
+        UniformProvider.ofDict d
