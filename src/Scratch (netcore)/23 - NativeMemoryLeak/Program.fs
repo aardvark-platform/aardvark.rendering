@@ -56,6 +56,7 @@ let main argv =
 
             if performUpdates then
 
+                // NOTE: Leak fixed in Aardvark.Assembler 0.0.8 
                 let cnt = r.Next(100) // fast leak ~5mb/s
                 //let cnt = 100 // very slow leak
 
