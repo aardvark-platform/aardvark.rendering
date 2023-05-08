@@ -24,7 +24,7 @@ module internal VkComponentMappingExtensions =
                 Col.Format.BW, VkComponentMapping(c0, c0, c0, one)
                 Col.Format.Gray, VkComponentMapping(c0, c0, c0, one)
                 Col.Format.GrayAlpha, VkComponentMapping(c0, c0, c0, c1)
-                Col.Format.NormalUV, VkComponentMapping(c0, c1, zero, one)
+                Col.Format.RG, VkComponentMapping(c0, c1, zero, one)
                 Col.Format.RGB, VkComponentMapping(c0, c1, c2, one)
                 Col.Format.RGBA, VkComponentMapping(c0, c1, c2, c3)
                 Col.Format.RGBP, VkComponentMapping(c0, c1, c2, c3)

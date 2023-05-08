@@ -537,7 +537,7 @@ module VkFormat =
 
     let toColFormat =
         let r = Col.Format.Gray
-        let rg = Col.Format.NormalUV
+        let rg = Col.Format.RG
         let rgb = Col.Format.RGB
         let rgba = Col.Format.RGBA
         let bgr = Col.Format.BGR

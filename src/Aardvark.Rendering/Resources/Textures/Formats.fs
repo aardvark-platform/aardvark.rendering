@@ -218,32 +218,32 @@ module TextureFormat =
             PixFormat.UShortGray ,  (fun _ -> TextureFormat.R16)
 
             PixFormat(typeof<float16>, Col.Format.Gray)     , (fun _ -> TextureFormat.R16f)
-            PixFormat(typeof<float16>, Col.Format.NormalUV) , (fun _ -> TextureFormat.Rg16f)
+            PixFormat(typeof<float16>, Col.Format.RG)       , (fun _ -> TextureFormat.Rg16f)
             PixFormat(typeof<float16>, Col.Format.RGB)      , (fun _ -> TextureFormat.Rgb16f)
             PixFormat(typeof<float16>, Col.Format.RGBA)     , (fun _ -> TextureFormat.Rgba16f)
 
             PixFormat(typeof<float32>, Col.Format.Gray)     , (fun _ -> TextureFormat.R32f)
-            PixFormat(typeof<float32>, Col.Format.NormalUV) , (fun _ -> TextureFormat.Rg32f)
+            PixFormat(typeof<float32>, Col.Format.RG)       , (fun _ -> TextureFormat.Rg32f)
             PixFormat(typeof<float32>, Col.Format.RGB)      , (fun _ -> TextureFormat.Rgb32f)
             PixFormat(typeof<float32>, Col.Format.RGBA)     , (fun _ -> TextureFormat.Rgba32f)
 
             PixFormat(typeof<int8>, Col.Format.Gray)        , (fun _ -> TextureFormat.R8Snorm)
-            PixFormat(typeof<int8>, Col.Format.NormalUV)    , (fun _ -> TextureFormat.Rg8Snorm)
+            PixFormat(typeof<int8>, Col.Format.RG)          , (fun _ -> TextureFormat.Rg8Snorm)
             PixFormat(typeof<int8>, Col.Format.RGB)         , (fun _ -> TextureFormat.Rgb8Snorm)
             PixFormat(typeof<int8>, Col.Format.RGBA)        , (fun _ -> TextureFormat.Rgba8Snorm)
 
             PixFormat(typeof<int16>, Col.Format.Gray)       , (fun _ -> TextureFormat.R16Snorm)
-            PixFormat(typeof<int16>, Col.Format.NormalUV)   , (fun _ -> TextureFormat.Rg16Snorm)
+            PixFormat(typeof<int16>, Col.Format.RG)         , (fun _ -> TextureFormat.Rg16Snorm)
             PixFormat(typeof<int16>, Col.Format.RGB)        , (fun _ -> TextureFormat.Rgb16Snorm)
             PixFormat(typeof<int16>, Col.Format.RGBA)       , (fun _ -> TextureFormat.Rgba16Snorm)
 
             PixFormat(typeof<int32>, Col.Format.Gray)       , (fun _ -> TextureFormat.R32i)
-            PixFormat(typeof<int32>, Col.Format.NormalUV)   , (fun _ -> TextureFormat.Rg32i)
+            PixFormat(typeof<int32>, Col.Format.RG)         , (fun _ -> TextureFormat.Rg32i)
             PixFormat(typeof<int32>, Col.Format.RGB)        , (fun _ -> TextureFormat.Rgb32i)
             PixFormat(typeof<int32>, Col.Format.RGBA)       , (fun _ -> TextureFormat.Rgba32i)
 
             PixFormat(typeof<uint32>, Col.Format.Gray)      , (fun _ -> TextureFormat.R32ui)
-            PixFormat(typeof<uint32>, Col.Format.NormalUV)  , (fun _ -> TextureFormat.Rg32ui)
+            PixFormat(typeof<uint32>, Col.Format.RG)        , (fun _ -> TextureFormat.Rg32ui)
             PixFormat(typeof<uint32>, Col.Format.RGB)       , (fun _ -> TextureFormat.Rgb32ui)
             PixFormat(typeof<uint32>, Col.Format.RGBA)      , (fun _ -> TextureFormat.Rgba32ui)
         ]
@@ -384,52 +384,52 @@ module TextureFormat =
             TextureFormat.Rgb16, PixFormat.UShortRGB
 
             TextureFormat.R16f, PixFormat(typeof<float16>, Col.Format.Gray)
-            TextureFormat.Rg16f, PixFormat(typeof<float16>, Col.Format.NormalUV)
+            TextureFormat.Rg16f, PixFormat(typeof<float16>, Col.Format.RG)
             TextureFormat.Rgb16f, PixFormat(typeof<float16>, Col.Format.RGB)
             TextureFormat.Rgba16f, PixFormat(typeof<float16>, Col.Format.RGBA)
 
             TextureFormat.R32f, PixFormat(typeof<float32>, Col.Format.Gray)
-            TextureFormat.Rg32f, PixFormat(typeof<float32>, Col.Format.NormalUV)
+            TextureFormat.Rg32f, PixFormat(typeof<float32>, Col.Format.RG)
             TextureFormat.Rgb32f, PixFormat(typeof<float32>, Col.Format.RGB)
             TextureFormat.Rgba32f, PixFormat(typeof<float32>, Col.Format.RGBA)
 
             TextureFormat.R8Snorm, PixFormat(typeof<int8>, Col.Format.Gray)
-            TextureFormat.Rg8Snorm, PixFormat(typeof<int8>, Col.Format.NormalUV)
+            TextureFormat.Rg8Snorm, PixFormat(typeof<int8>, Col.Format.RG)
             TextureFormat.Rgb8Snorm, PixFormat(typeof<int8>, Col.Format.RGB)
             TextureFormat.Rgba8Snorm, PixFormat(typeof<int8>, Col.Format.RGBA)
 
             TextureFormat.R16Snorm, PixFormat(typeof<int16>, Col.Format.Gray)
-            TextureFormat.Rg16Snorm, PixFormat(typeof<int16>, Col.Format.NormalUV)
+            TextureFormat.Rg16Snorm, PixFormat(typeof<int16>, Col.Format.RG)
             TextureFormat.Rgb16Snorm, PixFormat(typeof<int16>, Col.Format.RGB)
             TextureFormat.Rgba16Snorm, PixFormat(typeof<int16>, Col.Format.RGBA)
 
             TextureFormat.R8i, PixFormat(typeof<int8>, Col.Format.Gray)
-            TextureFormat.Rg8i, PixFormat(typeof<int8>, Col.Format.NormalUV)
+            TextureFormat.Rg8i, PixFormat(typeof<int8>, Col.Format.RG)
             TextureFormat.Rgb8i, PixFormat(typeof<int8>, Col.Format.RGB)
             TextureFormat.Rgba8i, PixFormat(typeof<int8>, Col.Format.RGBA)
 
             TextureFormat.R8ui, PixFormat(typeof<uint8>, Col.Format.Gray)
-            TextureFormat.Rg8ui, PixFormat(typeof<uint8>, Col.Format.NormalUV)
+            TextureFormat.Rg8ui, PixFormat(typeof<uint8>, Col.Format.RG)
             TextureFormat.Rgb8ui, PixFormat(typeof<uint8>, Col.Format.RGB)
             TextureFormat.Rgba8ui, PixFormat(typeof<uint8>, Col.Format.RGBA)
 
             TextureFormat.R16i, PixFormat(typeof<int16>, Col.Format.Gray)
-            TextureFormat.Rg16i, PixFormat(typeof<int16>, Col.Format.NormalUV)
+            TextureFormat.Rg16i, PixFormat(typeof<int16>, Col.Format.RG)
             TextureFormat.Rgb16i, PixFormat(typeof<int16>, Col.Format.RGB)
             TextureFormat.Rgba16i, PixFormat(typeof<int16>, Col.Format.RGBA)
 
             TextureFormat.R16ui, PixFormat(typeof<uint16>, Col.Format.Gray)
-            TextureFormat.Rg16ui, PixFormat(typeof<uint16>, Col.Format.NormalUV)
+            TextureFormat.Rg16ui, PixFormat(typeof<uint16>, Col.Format.RG)
             TextureFormat.Rgb16ui, PixFormat(typeof<uint16>, Col.Format.RGB)
             TextureFormat.Rgba16ui, PixFormat(typeof<uint16>, Col.Format.RGBA)
 
             TextureFormat.R32i, PixFormat(typeof<int>, Col.Format.Gray)
-            TextureFormat.Rg32i, PixFormat(typeof<int>, Col.Format.NormalUV)
+            TextureFormat.Rg32i, PixFormat(typeof<int>, Col.Format.RG)
             TextureFormat.Rgb32i, PixFormat(typeof<int>, Col.Format.RGB)
             TextureFormat.Rgba32i, PixFormat(typeof<int>, Col.Format.RGBA)
 
             TextureFormat.R32ui, PixFormat(typeof<uint32>, Col.Format.Gray)
-            TextureFormat.Rg32ui, PixFormat(typeof<uint32>, Col.Format.NormalUV)
+            TextureFormat.Rg32ui, PixFormat(typeof<uint32>, Col.Format.RG)
             TextureFormat.Rgb32ui, PixFormat(typeof<uint32>, Col.Format.RGB)
             TextureFormat.Rgba32ui, PixFormat(typeof<uint32>, Col.Format.RGBA)
 
@@ -474,24 +474,24 @@ module TextureFormat =
             TextureFormat.Rgba16,                         Col.Format.RGBA
             TextureFormat.R8,                             Col.Format.Gray
             TextureFormat.R16,                            Col.Format.Gray
-            TextureFormat.Rg8,                            Col.Format.NormalUV
-            TextureFormat.Rg16,                           Col.Format.NormalUV
+            TextureFormat.Rg8,                            Col.Format.RG
+            TextureFormat.Rg16,                           Col.Format.RG
             TextureFormat.R16f,                           Col.Format.Gray
             TextureFormat.R32f,                           Col.Format.Gray
-            TextureFormat.Rg16f,                          Col.Format.NormalUV
-            TextureFormat.Rg32f,                          Col.Format.NormalUV
+            TextureFormat.Rg16f,                          Col.Format.RG
+            TextureFormat.Rg32f,                          Col.Format.RG
             TextureFormat.R8i,                            Col.Format.Gray
             TextureFormat.R8ui,                           Col.Format.Gray
             TextureFormat.R16i,                           Col.Format.Gray
             TextureFormat.R16ui,                          Col.Format.Gray
             TextureFormat.R32i,                           Col.Format.Gray
             TextureFormat.R32ui,                          Col.Format.Gray
-            TextureFormat.Rg8i,                           Col.Format.NormalUV
-            TextureFormat.Rg8ui,                          Col.Format.NormalUV
-            TextureFormat.Rg16i,                          Col.Format.NormalUV
-            TextureFormat.Rg16ui,                         Col.Format.NormalUV
-            TextureFormat.Rg32i,                          Col.Format.NormalUV
-            TextureFormat.Rg32ui,                         Col.Format.NormalUV
+            TextureFormat.Rg8i,                           Col.Format.RG
+            TextureFormat.Rg8ui,                          Col.Format.RG
+            TextureFormat.Rg16i,                          Col.Format.RG
+            TextureFormat.Rg16ui,                         Col.Format.RG
+            TextureFormat.Rg32i,                          Col.Format.RG
+            TextureFormat.Rg32ui,                         Col.Format.RG
             TextureFormat.Rgba32f,                        Col.Format.RGBA
             TextureFormat.Rgb32f,                         Col.Format.RGB
             TextureFormat.Rgba16f,                        Col.Format.RGBA
@@ -513,11 +513,11 @@ module TextureFormat =
             TextureFormat.Rgba8i,                         Col.Format.RGBA
             TextureFormat.Rgb8i,                          Col.Format.RGB
             TextureFormat.R8Snorm,                        Col.Format.Gray
-            TextureFormat.Rg8Snorm,                       Col.Format.NormalUV
+            TextureFormat.Rg8Snorm,                       Col.Format.RG
             TextureFormat.Rgb8Snorm,                      Col.Format.RGB
             TextureFormat.Rgba8Snorm,                     Col.Format.RGBA
             TextureFormat.R16Snorm,                       Col.Format.Gray
-            TextureFormat.Rg16Snorm,                      Col.Format.NormalUV
+            TextureFormat.Rg16Snorm,                      Col.Format.RG
             TextureFormat.Rgb16Snorm,                     Col.Format.RGB
             TextureFormat.Rgba16Snorm,                    Col.Format.RGBA
             TextureFormat.Rgb10A2ui,                      Col.Format.RGBA
@@ -538,8 +538,8 @@ module TextureFormat =
             TextureFormat.CompressedSrgbAlphaS3tcDxt5,    Col.Format.RGBA
             TextureFormat.CompressedRedRgtc1,             Col.Format.Gray
             TextureFormat.CompressedSignedRedRgtc1,       Col.Format.Gray
-            TextureFormat.CompressedRgRgtc2,              Col.Format.NormalUV
-            TextureFormat.CompressedSignedRgRgtc2,        Col.Format.NormalUV
+            TextureFormat.CompressedRgRgtc2,              Col.Format.RG
+            TextureFormat.CompressedSignedRgRgtc2,        Col.Format.RG
             TextureFormat.CompressedRgbaBptcUnorm,        Col.Format.RGBA
             TextureFormat.CompressedSrgbAlphaBptcUnorm,   Col.Format.RGBA
             TextureFormat.CompressedRgbBptcSignedFloat,   Col.Format.RGB
