@@ -1613,9 +1613,13 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
 
                 let gpuTime =
                     if measureGpuTime then
-                        gpuQuery
-                        |> Option.bind (fun q -> q.TryGetResult true)
-                        |> Option.defaultValue MicroTime.Zero
+                        match gpuQuery with 
+                        | Some q -> match (q.TryGetResult true) with
+                                    | Some t -> q.Dispose()
+                                                gpuQuery <- None
+                                                t
+                                    | _ -> MicroTime.Zero
+                        | _ -> MicroTime.Zero
                     else
                         MicroTime.Zero
 
