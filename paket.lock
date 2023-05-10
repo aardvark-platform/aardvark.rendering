@@ -5,7 +5,7 @@ NUGET
     Aardium (2.0.9)
       FSharp.Core (>= 4.7)
       FSys (>= 0.0.1 < 0.1)
-    Aardvark.Assembler (0.0.7)
+    Aardvark.Assembler (0.0.8)
       Aardvark.Base (>= 5.2.7 < 5.3)
       Aardvark.Base.Runtime (>= 5.2.7 < 5.3)
       FSharp.Core (>= 5.0)

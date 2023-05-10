@@ -21,7 +21,7 @@ nuget Aardvark.Base.Essentials           ~> 5.2.23
 nuget Aardvark.Geometry                  ~> 5.2.23
 nuget Aardvark.Base.Tensors              ~> 5.2.23
 
-nuget Aardvark.Assembler                 ~> 0.0.6
+nuget Aardvark.Assembler                 ~> 0.0.8
 
 nuget FShade.Core                        ~> 5.4.0-prerelease0004
 nuget FShade                             ~> 5.4.0-prerelease0004

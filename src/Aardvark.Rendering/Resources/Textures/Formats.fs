@@ -218,7 +218,7 @@ module TextureFormat =
             PixFormat.UShortGray ,  (fun _ -> TextureFormat.R16)
 
             PixFormat(typeof<float16>, Col.Format.Gray)     , (fun _ -> TextureFormat.R16f)
-            PixFormat(typeof<float16>, Col.Format.RG) ,       (fun _ -> TextureFormat.Rg16f)
+            PixFormat(typeof<float16>, Col.Format.RG)       , (fun _ -> TextureFormat.Rg16f)
             PixFormat(typeof<float16>, Col.Format.RGB)      , (fun _ -> TextureFormat.Rgb16f)
             PixFormat(typeof<float16>, Col.Format.RGBA)     , (fun _ -> TextureFormat.Rgba16f)
 

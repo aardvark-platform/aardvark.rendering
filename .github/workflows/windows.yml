@@ -17,8 +17,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Copy global.json
-      run: cp ./.github/global.json .
     - name: Install Dotnet
       uses: actions/setup-dotnet@v3
       with:
