@@ -106,17 +106,21 @@ module PipelineLayout =
             let stages =
                 match inputLayout with
                 | Some layout ->
-                    let uniform =
+                    let stages =
                         layout.Uniforms
                         |> MapExt.tryFind name
+                        |> Option.map (fun u -> [u.Stages])
                         |> Option.defaultWith (fun _ ->
-                            layout.Uniforms |> MapExt.pick (fun _ u ->
-                                if u.Buffer = Some name then Some u
+                            layout.Uniforms
+                            |> MapExt.toList
+                            |> List.choose (fun (_, u) ->
+                                if u.Buffer = Some name then Some u.Stages
                                 else None
                             )
                         )
+                        |> Set.unionMany
 
-                    (VkShaderStageFlags.None, uniform.Stages)
+                    (VkShaderStageFlags.None, stages)
                     ||> Set.fold (fun accum stage ->
                         accum ||| (VkShaderStageFlags.ofShaderStage (ShaderStage.ofFShade stage))
                     )

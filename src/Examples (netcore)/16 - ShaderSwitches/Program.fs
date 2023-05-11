@@ -5,23 +5,7 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open FShade
 
-// This example illustrates how to render a simple triangle using aardvark.
-
-module Sg =
-
-    let changeableSurface (compile : EffectConfig -> EffectInputLayout * aval<FShade.Imperative.Module>) (sg : ISg) =
-        Sg.SurfaceApplicator(Surface.FShade compile, sg) :> ISg
-
-    let effectPool (active : aval<int>) (effects : Effect[]) (sg : ISg) =
-        let compile (cfg : EffectConfig) =
-            let modules1 = effects |> Array.map (Effect.toModule cfg)
-            let layout = EffectInputLayout.ofModules modules1
-            let modules = modules1 |> Array.map (EffectInputLayout.apply layout)
-            let current = active |> AVal.map (fun i -> modules.[i % modules.Length])
-            layout, current
-
-        changeableSurface compile sg
-
+// This example illustrates how to use dynamic shaders.
 
 [<EntryPoint>]
 let main argv =
@@ -80,7 +64,7 @@ let main argv =
     let sg =
         Sg.box' C4b.Green Box3d.Unit
             |> Sg.diffuseTexture DefaultTextures.checkerboard
-            |> Sg.effectPool activeShader effects
+            |> Sg.effectPool effects activeShader
 
     // show the scene in a simple window
     win.Scene <- sg
