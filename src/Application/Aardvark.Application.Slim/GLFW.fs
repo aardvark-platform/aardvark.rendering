@@ -694,10 +694,7 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
 
         for w in ws do w.IsVisible <- true
 
-        let mutable we = existingWindows.GetEnumerator()
-        let mutable wv = visibleWindows.GetEnumerator()
-
-        while we.MoveNext() do // exit when there are no windows
+        while existingWindows.Count > 0 do
             if wait then glfw.WaitEventsTimeout(0.01)
             else glfw.PollEvents()
 
@@ -706,18 +703,13 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
                 try action()
                 with _ -> ()
 
-            we.Current.Update()
-            while we.MoveNext() do
-                we.Current.Update()
+            for e in existingWindows do
+                e.Update()
 
             wait <- true
-
-            while wv.MoveNext() do
-                let v = wv.Current.Redraw()
+            for w in visibleWindows do
+                let v = w.Redraw()
                 if v then wait <- false
-
-            we.Reset();
-            wv.Reset();
 
     new(runtime, swap) = Application(runtime, swap, false)
 
