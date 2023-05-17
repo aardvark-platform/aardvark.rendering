@@ -1,125 +1,221 @@
 ﻿namespace Aardvark.Rendering.GL
 
+open System
+open System.Threading
+open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 
-type QueryHandle(handle : int) =
-    inherit AbstractQueryHandle<int, uint64>(handle)
+[<RequireQualifiedAccess>]
+type internal QueryStatus =
+    | Inactive
+    | Pending
+    | Available
+    | Completed of result: int64
 
-    new() =
-        let h = GL.GenQuery()
-        GL.Check "failed to generate query"
-        new QueryHandle(h)
+type internal QueryHandle(target : QueryTarget) =
+    let mutable status = QueryStatus.Inactive
 
-    override x.GetValues(h : int) =
-        let mutable value = 0L
+    let handle = GL.GenQuery()
+    do GL.Check "failed to generate query"
 
-        GL.GetQueryObject(h, GetQueryObjectParam.QueryResult, &value)
-        GL.Check "could not retrieve query result"
+    member x.IsActive =
+        status <> QueryStatus.Inactive
 
-        uint64 value
+    member x.Reset() =
+        status <- QueryStatus.Inactive
 
-    override x.TryGetValues(h : int) =
-        let mutable value = 0L
+    member x.HasResult() =
+        match status with
+        | QueryStatus.Inactive ->
+            false
 
-        GL.GetQueryObject(h, GetQueryObjectParam.QueryResultAvailable, &value)
-        GL.Check "could not retrieve query status"
+        | QueryStatus.Available | QueryStatus.Completed _ ->
+            true
 
-        if value > 0L then
-            GL.GetQueryObject(h, GetQueryObjectParam.QueryResult, &value)
-            GL.Check "could not retrieve query result"
+        | QueryStatus.Pending ->
+            let mutable available = 0L
+            GL.GetQueryObject(handle, GetQueryObjectParam.QueryResultAvailable, &available)
+            GL.Check "could not retrieve query status"
 
-            Some (uint64 value)
-        else
-            None
+            if available > 0L then
+                status <- QueryStatus.Available
+                true
+            else
+                false
 
-    override x.DeleteHandle(h : int) =
-        GL.DeleteQuery(h)
+    member x.GetResult(reset : bool) =
+        let result =
+            match status with
+            | QueryStatus.Completed result ->
+                result
+
+            | QueryStatus.Pending | QueryStatus.Available ->
+                let mutable result = 0L
+                GL.GetQueryObject(handle, GetQueryObjectParam.QueryResult, &result)
+                GL.Check "could not retrieve query result"
+                status <- QueryStatus.Completed result
+                result
+
+            | QueryStatus.Inactive ->
+                raise <| InvalidOperationException($"Cannot get result of an inactive query (target = {target}).")
+
+        if reset then
+            status <- QueryStatus.Inactive
+
+        result
+
+    member x.Timestamp() =
+        assert (target = QueryTarget.Timestamp)
+        status <- QueryStatus.Pending
+        GL.QueryCounter(handle, QueryCounterTarget.Timestamp)
+        GL.Check "failed to write timestamp"
+
+    member x.Begin() =
+        status <- QueryStatus.Inactive
+        GL.BeginQuery(target, handle)
+        GL.Check "could not begin query"
+
+    member x.End() =
+        status <- QueryStatus.Pending
+        GL.EndQuery(target)
+        GL.Check "could not end query"
+
+    member x.Dispose() =
+        GL.DeleteQuery handle
         GL.Check "failed to delete query"
 
-
-type InternalQuery(ctx : Context, count : int) =
-    inherit MultiQuery<QueryHandle, uint64>()
-
-    // The handle of the context the query is being used on
-    let mutable owner = ValueNone
-
-    /// Gets the GL handles of the queries.
-    member x.NativeHandles =
-        if not x.IsActive then
-            owner <- ctx.CurrentContextHandle
-            x.Handles.AddRange <| Seq.init count (fun _ -> new QueryHandle())
-
-        x.Handles |> Seq.map (fun x -> x.Native) |> Seq.toArray
-
-    /// Gets the results of the queries.
-    override x.GetResults() =
-        use __ = ctx.RenderingLock owner.Value
-        base.GetResults()
-
-    /// Tries to get the results of the queries.
-    override x.TryGetResults() =
-        use __ = ctx.RenderingLock owner.Value
-        base.TryGetResults()
-
-    override x.Dispose() =
-        use __ = ctx.RenderingLock owner.Value
-        base.Dispose()
-
-
-[<RequireQualifiedAccess>]
-type QueryType =
-    | Single of target : QueryTarget * count : int
-    | Multiple of targets : Set<QueryTarget>
-
-    with
-
-    /// Targets of this query type.
-    member x.Targets =
-        match x with
-        | Single (t, _) -> Set.singleton t
-        | Multiple t -> t
-
-    /// Total number of required query handles.
-    member x.Count =
-        match x with
-        | Single (_, n) -> n
-        | Multiple t -> t.Count
-
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 [<AbstractClass>]
-type Query(ctx : Context, typ : QueryType) =
-    inherit ConcurrentQuery<InternalQuery, uint64>()
+type internal Query<'Parameter, 'Result>(context : Context, targets : QueryTarget[]) =
+    let mutable owner = ValueNone
+    let mutable handles : QueryHandle[] = null
 
-    /// Creates a query for a single target
-    new(ctx : Context, target : QueryTarget, queryCount : int) =
-        new Query(ctx, QueryType.Single (target, queryCount))
+    // The current level of the queue, i.e. of the nested Begin-End pairs.
+    // Only the most outer calls are relevant here.
+    let mutable currentLevel = 0
 
-    override x.CreateQuery() =
-        new InternalQuery (ctx, typ.Count)
+    let isActive() =
+        if handles = null then false
+        else handles |> Array.forall (fun h -> h.IsActive)
 
-    override x.BeginQuery(query : InternalQuery) =
-        let handles = query.NativeHandles
-        let mutable idx = 0
+    new (context : Context, target : QueryTarget) =
+        new Query<_, _>(context, [| target |])
 
-        for target in typ.Targets do
-            GL.BeginQuery(target, handles.[idx])
-            GL.Check "could not begin query"
+    abstract member Compute : 'Parameter * int64[] -> 'Result
 
-            inc &idx
+    abstract member BeginQuery : QueryHandle[] -> unit
+    default x.BeginQuery(handles) =
+        for h in handles do h.Begin()
 
-        assert (idx = typ.Count)
+    abstract member EndQuery : QueryHandle[] -> unit
+    default x.EndQuery(handles) =
+        for h in handles do h.End()
 
-    override x.EndQuery(_ : InternalQuery) =
-        for target in typ.Targets do
-            GL.EndQuery(target)
-            GL.Check "could not end query"
+    // Query objects can only be used on the context that created them.
+    // Makes the context that owns the handles (if there are any) current.
+    // Leaves the lock of the query temporarily to avoid deadlocks.
+    member private x.MakeOwnerCurrent() : IDisposable =
+        assert (Monitor.IsEntered x)
+
+        match owner with
+        | ValueSome ctx when owner <> context.CurrentContextHandle ->
+            Monitor.Exit x
+            try
+                context.RenderingLock ctx
+            finally
+                Monitor.Enter x
+
+        | _ ->
+            Disposable.empty
+
+    member x.HasResult() =
+        lock x (fun _ ->
+            if handles = null then
+                false
+            else
+                use __ = x.MakeOwnerCurrent()
+                handles |> Array.forall (fun h -> h.HasResult())
+        )
+
+    member x.TryGetResult(parameter : 'Parameter, [<Optional; DefaultParameterValue(false)>] reset : bool) =
+        lock x (fun _ ->
+            if handles = null then
+                None
+            else
+                use __ = x.MakeOwnerCurrent()
+
+                if handles |> Array.forall (fun h -> h.HasResult()) then
+                    let results = handles |> Array.map (fun h -> h.GetResult(reset))
+                    Some <| x.Compute(parameter, results)
+                else
+                    None
+        )
+
+    member x.GetResult(parameter : 'Parameter, [<Optional; DefaultParameterValue(false)>] reset : bool) =
+        lock x (fun _ ->
+            // Query is not active yet (i.e. Begin / End has not been called)
+            // Block until it is actually safe to retrieve the results from the query objects.
+            if not <| isActive() then
+                Monitor.Wait x |> ignore
+
+            use __ = x.MakeOwnerCurrent()
+            let results = handles |> Array.map (fun h -> h.GetResult(reset))
+            x.Compute(parameter, results)
+        )
+
+    member x.Reset() =
+        lock x (fun _ ->
+            if handles <> null then
+                for h in handles do h.Reset()
+        )
+
+    member x.Begin() =
+        Monitor.Enter x
+        assert (currentLevel >= 0)
+        inc &currentLevel
+
+        if currentLevel = 1 then
+            if handles = null then
+                owner <- context.CurrentContextHandle
+                handles <- targets |> Array.map (fun t -> new QueryHandle(t))
+
+            use __ = x.MakeOwnerCurrent()
+            x.BeginQuery handles
+
+    member x.End() =
+        assert (Monitor.IsEntered x)
+        dec &currentLevel
+
+        if currentLevel = 0 then
+            use __ = x.MakeOwnerCurrent()
+            x.EndQuery handles
+
+            // Notify potentially waiting threads that the query is pending now.
+            Monitor.PulseAll x
+
+        assert (currentLevel >= 0)
+        Monitor.Exit x
+
+    member x.Dispose() =
+        lock x (fun _ ->
+            if handles <> null then
+                use __ = x.MakeOwnerCurrent()
+                for h in handles do h.Dispose()
+
+            handles <- null
+        )
 
     interface IQuery with
-
         member x.Reset() = x.Reset()
-
         member x.Begin() = x.Begin()
-
         member x.End() = x.End()
+
+    interface IQuery<'Parameter, 'Result> with
+        member x.HasResult() = x.HasResult()
+        member x.TryGetResult(parameter, reset) = x.TryGetResult(parameter, reset)
+        member x.GetResult(parameter, reset) = x.GetResult(parameter, reset)
+        member x.Dispose() = x.Dispose()

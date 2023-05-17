@@ -23,17 +23,20 @@ module private ``Pipeline Query Helpers`` =
         ]
 
     // Returns the index of the statistic in the query result buffer
-    let getFlagIndex (f : PipelineStatistics) (flags : Set<PipelineStatistics>) =
-        flags |> Seq.sortBy base2GLTarget |> Seq.tryFindIndex ((=) f)
+    let getFlagIndex (f : PipelineStatistics) (flags : PipelineStatistics[]) =
+        flags |> Array.tryFindIndex ((=) f)
 
-type PipelineQuery(ctx : Context, enabledStatistics : Set<PipelineStatistics>) =
-    inherit Query(ctx, enabledStatistics |> Set.map base2GLTarget |> QueryType.Multiple)
+type internal PipelineQuery(ctx : Context, enabledStatistics : PipelineStatistics[]) =
+    inherit Query<seq<PipelineStatistics>, Map<PipelineStatistics, uint64>>(ctx, enabledStatistics |> Array.map base2GLTarget)
 
-    let compute (statistics : seq<PipelineStatistics>) (data : uint64[]) =
+    new (ctx : Context, enabledStatistics : Set<PipelineStatistics>) =
+        new PipelineQuery(ctx, Set.toArray enabledStatistics)
+
+    override x.Compute(statistics : seq<PipelineStatistics>, data : int64[]) =
         statistics |> Seq.map (fun s ->
             let value =
                 match enabledStatistics |> getFlagIndex s with
-                | Some i -> data.[i]
+                | Some i -> uint64 data.[i]
                 | None -> 0UL
 
             s, value
@@ -41,14 +44,4 @@ type PipelineQuery(ctx : Context, enabledStatistics : Set<PipelineStatistics>) =
         |> Map.ofSeq
 
     interface IPipelineQuery with
-        member x.HasResult() =
-            x.TryGetResults(false) |> Option.isSome
-
-        member x.GetResult(statistics : seq<PipelineStatistics>, reset : bool) =
-            x.GetResults(reset) |> compute statistics
-
-        member x.TryGetResult(statistics : seq<PipelineStatistics>, reset : bool) =
-            x.TryGetResults(reset) |> Option.map (compute statistics)
-
-        member x.Statistics =
-            enabledStatistics
+        member x.Statistics = Set.ofArray enabledStatistics

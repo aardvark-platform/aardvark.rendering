@@ -257,7 +257,7 @@ let main argv =
     // occlusion queries return how many samples passed the fragement tests.
     // an occlusion query can be precise (default) or approximate.
     // in the latter case, the result may be used to determine if anything was rendered.
-    // this might be more effient than using a precise occlusion query.
+    // this might be more efficient than using a precise occlusion query.
     use occlusionQuery =
         runtime.CreateOcclusionQuery(precise = true)
 
@@ -274,20 +274,20 @@ let main argv =
     use timeQuery =
         runtime.CreateTimeQuery()
 
-    // queries are used by passing them to Run() of a render or compute task.
+    // queries are used by passing them to Run() of a render, compute, or raytracing task.
     // here we use RenderTask.custom to run the scene task manually.
     use task =
         RenderTask.custom (fun (_, rt, o) ->
-            // IRenderTask.Run() takes a RenderToken as parameter, which includes a list of IQuery objects.
-            let rt = { rt with Queries = [ timeQuery; pipelineQuery; occlusionQuery ] }
+            // pass the queries to the tasks by adding them to the queries in the render token.
+            // the input render token may already contain queries (e.g. the window
+            // system passes a time query to compute the GPU usage and shows it in the title bar)
+            let rt = { rt with Queries = rt.Queries @ [ timeQuery; pipelineQuery; occlusionQuery ] }
 
             // IQuery.Begin and End are used to denote the scope in which the queries
             // are used. If we are only interested in the statistics of a single render task, these calls can be omitted.
             rt.Queries.Begin()
 
-            // pass the queries to the render task by adding them to the queries in the render token.
-            // the input render token may already contain queries (e.g. the window
-            // system passes a time query to compute the GPU usage and shows it in the title bar)
+            // IRenderTask.Run() takes a RenderToken as parameter, which includes our IQuery objects.
             sceneTask.Run(rt, o)
 
             // queries can also be passed to compute tasks via render tokens.
