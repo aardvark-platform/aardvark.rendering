@@ -137,6 +137,42 @@ module Samplers =
             finally
                 buffer.Release()
 
+        let sampleDepthStencil (runtime : IRuntime) =
+            let size = V2i(256)
+
+            let clear =
+                clear {
+                    depth 0.95
+                    stencil 1
+                }
+
+            renderQuadToDepthStencil runtime TextureFormat.Depth24Stencil8 1 clear size (fun texture ->
+                use signature =
+                    runtime.CreateFramebufferSignature([
+                        DefaultSemantic.Colors, TextureFormat.R32f
+                    ])
+
+                // Sample depth / stencil with a regular floating point signature.
+                // For GL the texture parameter GL_DEPTH_STENCIL_TEXTURE_MODE decides whether depth or stencil is accessed (depth is default)
+                // In Vulkan we create an image view with depth aspect.
+                use task =
+                    Sg.fullScreenQuad
+                    |> Sg.diffuseTexture' texture
+                    |> Sg.shader {
+                        do! DefaultSurfaces.diffuseTexture
+                    }
+                    |> Sg.compile runtime signature
+
+                let output = task |> RenderTask.renderToColor (AVal.constant size)
+                output.Acquire()
+
+                try
+                    let result = output.GetValue().Download().AsPixImage<float32>().Matrix
+                    Expect.validDepthResult result Accuracy.medium size 0.5 0.95
+                finally
+                    output.Release()
+            )
+
     let tests (backend : Backend) =
         [
             "2D rgba8i", Cases.sample2Drgba8i 1
@@ -150,5 +186,7 @@ module Samplers =
             "2D rgba32ui multisampled", Cases.sample2Drgba32ui 2
 
             "2D grayscale", Cases.sample2DGrayscale
+
+            "2D depth / stencil", Cases.sampleDepthStencil
         ]
         |> prepareCases backend "Samplers"

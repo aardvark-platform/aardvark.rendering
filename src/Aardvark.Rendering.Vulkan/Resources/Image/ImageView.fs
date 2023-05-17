@@ -135,7 +135,7 @@ module ImageView =
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
-        let aspect = VkFormat.toAspect img.Format
+        let aspect = VkFormat.toShaderAspect img.Format
 
         let isResolved, img = 
             if samplerType.isMS then
@@ -200,7 +200,7 @@ module ImageView =
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
-        let aspect = VkFormat.toAspect img.Format
+        let aspect = VkFormat.toShaderAspect img.Format
 
         let isResolved, img = 
             if imageType.isMS then

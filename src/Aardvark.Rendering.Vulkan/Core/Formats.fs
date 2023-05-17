@@ -532,6 +532,14 @@ module VkFormat =
         elif stencilFormats.Contains fmt then VkImageAspectFlags.StencilBit
         else VkImageAspectFlags.ColorBit
 
+    // Same as toAspect but returns only the depth aspect for depth / stencil formats.
+    // An image view for a depth / stencil image used in shaders (e.g. sampler) can only either have depth or stencil aspect but not both.
+    let toShaderAspect (fmt : VkFormat) =
+        if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit
+        elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit
+        elif stencilFormats.Contains fmt then VkImageAspectFlags.StencilBit
+        else VkImageAspectFlags.ColorBit
+
     let toColFormat =
         let r = Col.Format.Gray
         let rg = Col.Format.RG
