@@ -139,10 +139,10 @@ module RenderTasks =
                 use __ = ctx.ResourceLock
                 GL.Check "[RenderTask.Run] Entry"
 
-                if currentContext.Value <> ctx.CurrentContextHandle.Value then
-                    let intCtx = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
+                if currentContext.Value <> ContextHandle.Current.Value then
+                    let intCtx = ContextHandle.Current.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
                     NativePtr.write contextHandle intCtx.Context.Handle
-                    transact (fun () -> currentContext.Value <- ctx.CurrentContextHandle.Value)
+                    transact (fun () -> currentContext.Value <- ContextHandle.Current.Value)
 
                 let fbo =
                     match fbo with

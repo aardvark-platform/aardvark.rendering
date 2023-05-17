@@ -9,68 +9,60 @@ open Aardvark.Rendering
 
 [<Struct>] // TODO ref struct?
 type RenderingLockDisposable =
-    
-    val mutable handle : ValueOption<ContextHandle>
-    val mutable restore : ValueOption<ContextHandle>
-    val mutable current : ThreadLocal<ValueOption<ContextHandle>>
-    
+    val mutable private handle : ValueOption<ContextHandle>
+    val mutable private restore : ValueOption<ContextHandle>
+
     member x.Handle
         with get() = x.handle
 
     member x.Dispose() =
-        if not (isNull x.current) then // check if nop disposable
-            match x.handle with 
-            | ValueSome h -> h.ReleaseCurrent()
-                             x.handle <- ValueNone
-            | _ -> ()
+        match x.handle with
+        | ValueSome h ->
+            h.ReleaseCurrent()
+            x.handle <- ValueNone
 
-            match x.restore with
-            | ValueSome h -> h.MakeCurrent()
-                             x.current.Value <- ValueSome h
-                             x.restore <- ValueNone
-            | _ -> x.current.Value <- ValueNone
+        | _ -> ()
+
+        match x.restore with
+        | ValueSome h ->
+            h.MakeCurrent()
+            x.restore <- ValueNone
+
+        | _ -> ()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    new (handle : ValueOption<ContextHandle>, restore : ValueOption<ContextHandle>, current : ThreadLocal<ValueOption<ContextHandle>>) =
-        {
-            handle = handle
-            restore = restore
-            current = current
-        }
+    new (handle : ValueOption<ContextHandle>, restore : ValueOption<ContextHandle>) =
+        { handle = handle
+          restore = restore }
 
 
 [<Struct>]
 type ResourceLockDisposable =
-    
-    val mutable handle : ValueOption<ContextHandle>
-    val mutable bag : ConcurrentBag<ContextHandle>
-    val mutable bagCount : SemaphoreSlim
-    val mutable current : ThreadLocal<ValueOption<ContextHandle>>
-    
+    val mutable private handle : ValueOption<ContextHandle>
+    val mutable private bag : ConcurrentBag<ContextHandle>
+    val mutable private bagCount : SemaphoreSlim
+
     member x.Handle
         with get() = x.handle
 
     member x.Dispose() =
-        match x.handle with 
-        | ValueSome h -> h.ReleaseCurrent()
-                         x.bag.Add(h)
-                         x.bagCount.Release() |> ignore
-                         x.current.Value <- ValueNone
-        | _ -> ()
+        match x.handle with
+        | ValueSome h ->
+            h.ReleaseCurrent()
+            x.bag.Add(h)
+            x.bagCount.Release() |> ignore
 
+        | _ -> ()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    new (handle : ValueOption<ContextHandle>, bag : ConcurrentBag<ContextHandle>, bagCount : SemaphoreSlim, current : ThreadLocal<ValueOption<ContextHandle>>) =
-        {
-            handle = handle
-            bag = bag
-            bagCount = bagCount
-            current = current
-        }
+    new (handle : ValueOption<ContextHandle>, bag : ConcurrentBag<ContextHandle>, bagCount : SemaphoreSlim) =
+        { handle = handle
+          bag = bag
+          bagCount = bagCount }
 
 
 type MemoryUsage() =
@@ -201,8 +193,6 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     let bag = ConcurrentBag(resourceContexts)
     let bagCount = new SemaphoreSlim(resourceContextCount)
 
-    let currentHandle = new ThreadLocal<ValueOption<ContextHandle>>(fun () -> ValueNone)
-
     let shaderCache = ShaderCache()
 
     let mutable driverInfo : Option<Driver> = None
@@ -250,8 +240,9 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     member x.MemoryUsage = memoryUsage
 
+    [<Obsolete("Use ContextHandle.Current instead.")>]
     member x.CurrentContextHandle
-        with get() = currentHandle.Value
+        with get() = ContextHandle.Current
 
     member x.Runtime = runtime
 
@@ -294,40 +285,33 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     member x.RenderingLock(handle : ContextHandle) : RenderingLockDisposable =
 
         // ensure that lock is "re-entrant"
-        match currentHandle.Value with
-            | ValueSome current ->
+        match ContextHandle.Current with
+        | ValueSome current ->
 
-                if current = handle then
-                    // if the current token uses the same context as requested
-                    // we don't need to perform any operations here since
-                    // the outer token will take care of everything
-                    new RenderingLockDisposable()
+            if current = handle then
+                // if the current token uses the same context as requested
+                // we don't need to perform any operations here since
+                // the outer token will take care of everything
+                new RenderingLockDisposable()
 
-                else
-                    // if the current token is using a different context
-                    // simply release it before obtaining the new token
-                    // and obtain it again after releasing this one.
-
-                    current.ReleaseCurrent()
-                    handle.MakeCurrent()
-                    currentHandle.Value <- ValueSome handle
-
-                    // no release: handle.ReleaseCurrent, current.MakeCurrent(), reset currentHandle
-                    new RenderingLockDisposable(ValueSome handle, ValueSome current, currentHandle)
-  
-
-
-            | ValueNone ->
-                // if there is no current token we must create a new
-                // one obtaining/releasing the desired context.
-
+            else
+                // if the current token is using a different context
+                // simply release it before obtaining the new token
+                // and obtain it again after releasing this one.
+                current.ReleaseCurrent()
                 handle.MakeCurrent()
-                currentHandle.Value <- ValueSome handle
 
-                // no release: handle.ReleaseCurrent, reset currentHandle ot None
-                new RenderingLockDisposable(ValueSome handle, ValueNone, currentHandle)
-                    
-                    
+                // no release: handle.ReleaseCurrent, current.MakeCurrent(), reset currentHandle
+                new RenderingLockDisposable(ValueSome handle, ValueSome current)
+
+        | ValueNone ->
+            // if there is no current token we must create a new
+            // one obtaining/releasing the desired context.
+            handle.MakeCurrent()
+
+            // no release: handle.ReleaseCurrent, reset currentHandle ot None
+            new RenderingLockDisposable(ValueSome handle, ValueNone)
+
     /// <summary>
     /// makes one of the underlying context current on the calling thread
     /// and returns a disposable for releasing it again
@@ -335,37 +319,31 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     member x.ResourceLock : ResourceLockDisposable =
 
         // ensure that lock is "re-entrant"
-        match currentHandle.Value with
-            | ValueSome _ ->
-                // if the calling thread already posesses the token
-                // simply return a dummy disposable and do no perform any operation
-                new ResourceLockDisposable()
+        match ContextHandle.Current with
+        | ValueSome _ ->
+            // if the calling thread already posesses the token
+            // simply return a dummy disposable and do no perform any operation
+            new ResourceLockDisposable()
 
-            | ValueNone -> 
-                // create a token for the obtained context
+        | ValueNone ->
+            // wait until there is at least one context in the bag
+            bagCount.Wait()
 
-                // wait until there is at least one context in the bag
-                bagCount.Wait()
+            // take one context from the bag. Since the bagCount should be in
+            // sync with the bag's actual count the exception should never
+            // be reached.
+            let handle =
+                match bag.TryTake() with
+                | (true, handle) -> handle
+                | _ -> failwith "could not dequeue resource-context"
 
-                // take one context from the bag. Since the bagCount should be in
-                // sync with the bag's actual count the exception should never
-                // be reached.
-                let handle = 
-                    match bag.TryTake() with
-                        | (true, handle) -> handle
-                        | _ -> failwith "could not dequeue resource-context"
+            // make the obtained handle current
+            handle.MakeCurrent()
+            GL.GetError() |> ignore
+            GL.Check("Error while making current.")
 
-                // make the obtained handle current
-                handle.MakeCurrent()
-                GL.GetError() |> ignore
-
-                GL.Check("Error while making current.")
-
-                // store the token as current
-                currentHandle.Value <- ValueSome handle
-                
-                // no release: put resource context back in bag and reset current to None
-                new ResourceLockDisposable(ValueSome handle, bag, bagCount, currentHandle)
+            // no release: put resource context back in bag and reset current to None
+            new ResourceLockDisposable(ValueSome handle, bag, bagCount)
 
 
     /// <summary>

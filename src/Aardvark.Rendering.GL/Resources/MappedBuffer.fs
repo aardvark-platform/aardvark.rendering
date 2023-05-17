@@ -120,7 +120,7 @@ module ManagedBufferImplementation =
             )
 
         member x.WaitGPU() =
-            let mine = ctx.CurrentContextHandle.Value
+            let mine = ContextHandle.Current.Value
             lock x (fun () ->
                 for (_,f) in store do f.WaitGPU(mine) |> ignore
             )
@@ -354,7 +354,6 @@ module ManagedBufferImplementation =
         let pageRef : Page[] = Array.init (totalSize / pageSize |> int) (fun pi -> Page(handle, nativeint pi * pageSize, pageSize, committedSize))
 
         member internal x.Commitment(offset : nativeint, size : nativeint, c : bool) =
-            let ctx = ctx.CurrentContextHandle.Value
             let lastByte = offset + size - 1n
             let firstPage = offset / pageSize |> int
             let lastPage = lastByte / pageSize |> int
@@ -364,8 +363,6 @@ module ManagedBufferImplementation =
 
 
         member internal x.Commitment(ptrs : list<Management.Block<unit>>, elementSize : nativeint, c : bool) =
-            let ctx = ctx.CurrentContextHandle.Value
-            
             for ptr in ptrs do
                 let offset = ptr.Offset * elementSize
                 let size = ptr.Size * elementSize

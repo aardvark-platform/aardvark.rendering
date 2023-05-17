@@ -122,7 +122,7 @@ type internal Query<'Parameter, 'Result>(context : Context, targets : QueryTarge
         assert (Monitor.IsEntered x)
 
         match owner with
-        | ValueSome ctx when owner <> context.CurrentContextHandle ->
+        | ValueSome ctx when owner <> ContextHandle.Current ->
             Monitor.Exit x
             try
                 context.RenderingLock ctx
@@ -180,7 +180,7 @@ type internal Query<'Parameter, 'Result>(context : Context, targets : QueryTarge
 
         if currentLevel = 1 then
             if handles = null then
-                owner <- context.CurrentContextHandle
+                owner <- ContextHandle.Current
                 handles <- targets |> Array.map (fun t -> new QueryHandle(t))
 
             use __ = x.MakeOwnerCurrent()

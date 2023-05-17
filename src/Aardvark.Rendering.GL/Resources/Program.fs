@@ -705,7 +705,7 @@ module ProgramExtensions =
                 // -> possible that resource context have been created differently
                 // -> use driver information from actual context
                 let driver =
-                    match context.CurrentContextHandle with
+                    match ContextHandle.Current with
                     | ValueSome handle -> handle.Driver
                     | _ ->
                         Log.warn "[GL] No context current, using information of primary context to determine shader cache file name"

@@ -60,7 +60,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                 | ValueSome ctx when ctx.IsCurrent -> curr
                 | _ -> ValueNone
 
-        and set v = current.Value <- v
+        and private set v = current.Value <- v
         
     [<CLIEvent>]
     static member ContextError = contextError.Publish

@@ -35,7 +35,7 @@ module ComputeTest =
             GL.GetInteger(unbox (int All.MaxComputeWorkGroupInvocations), &workGroupInvocations)
 
 
-            let c = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
+            let c = ContextHandle.Current.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
             let ptr = c.GetAddress "glDispatchComputeGroupSizeARB"
             if ptr <> 0n then
                 hasDynamicCompute <- true
