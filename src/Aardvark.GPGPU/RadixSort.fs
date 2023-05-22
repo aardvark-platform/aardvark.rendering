@@ -392,9 +392,9 @@ type RadixSort(runtime : IRuntime) =
         let mutable outputKeys = keyCache :> IBufferVector<_>
         let mutable outputValues = valueCache :> IBufferVector<_>
 
-        use radixSumInput = runtime.NewInputBinding radixSum
-        use radixPrefixSumInput = runtime.NewInputBinding radixPrefixSum
-        use radixAddOffsetsAndShuffleInput = runtime.NewInputBinding radixAddOffsetsAndShuffle
+        use radixSumInput = runtime.CreateInputBinding radixSum
+        use radixPrefixSumInput = runtime.CreateInputBinding radixPrefixSum
+        use radixAddOffsetsAndShuffleInput = runtime.CreateInputBinding radixAddOffsetsAndShuffle
 
         let mutable shift = 0
         radixSumInput.["elements"] <- cnt
@@ -504,9 +504,9 @@ type RadixSort(runtime : IRuntime) =
         let mutable inputKeys = input
         let mutable outputKeys = keyCache :> IBufferVector<_>
 
-        use radixSumInput = runtime.NewInputBinding radixSum
-        use radixPrefixSumInput = runtime.NewInputBinding radixPrefixSum
-        use radixAddOffsetsAndShuffleInput = runtime.NewInputBinding radixAddOffsetsAndShuffleKeysOnly
+        use radixSumInput = runtime.CreateInputBinding radixSum
+        use radixPrefixSumInput = runtime.CreateInputBinding radixPrefixSum
+        use radixAddOffsetsAndShuffleInput = runtime.CreateInputBinding radixAddOffsetsAndShuffleKeysOnly
 
         let mutable shift = 0
         radixSumInput.["elements"] <- cnt

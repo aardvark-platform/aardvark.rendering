@@ -440,7 +440,7 @@ type Runtime(device : Device) as this =
     member x.CreateComputeShader(shader : FShade.ComputeShader) =
         ComputeProgram.ofFShade shader device :> IComputeShader
 
-    member x.NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) : IComputeInputBinding =
+    member x.CreateInputBinding(shader : IComputeShader, inputs : IUniformProvider) : IComputeInputBinding =
         let program = unbox<ComputeProgram> shader
         manager.CreateComputeInputBinding(program, inputs)
 
@@ -519,8 +519,8 @@ type Runtime(device : Device) as this =
         member x.CreateComputeShader(shader : FShade.ComputeShader) =
             x.CreateComputeShader shader
 
-        member x.NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
-            x.NewInputBinding(shader, inputs)
+        member x.CreateInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
+            x.CreateInputBinding(shader, inputs)
 
         member x.CompileCompute (commands : alist<ComputeCommand>) =
             x.CompileCompute commands

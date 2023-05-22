@@ -228,7 +228,7 @@ module CSTest =
         let dst = runtime.CreateTexture2D(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1)
 
         let sh = runtime.CreateComputeShader Shader.write
-        let ip = runtime.NewInputBinding sh
+        let ip = runtime.CreateInputBinding sh
         ip.["img"] <- dst.[TextureAspect.Color, 0, 0]
         ip.Flush()
 

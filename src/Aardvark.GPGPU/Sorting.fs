@@ -255,7 +255,7 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
         parent.Runtime.CompileCompute [
 
             // initialize the permutation-buffer
-            let binding = runtime.NewInputBinding parent.InitPerm
+            let binding = runtime.CreateInputBinding parent.InitPerm
             binding.["perm"] <- permBuffer
             binding.["N"] <- elements
             binding.Flush()
@@ -275,7 +275,7 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
             yield ComputeCommand.Sync permBuffer.Buffer
 
             // start the initial k/j loop
-            let binding = runtime.NewInputBinding parent.StepKJ
+            let binding = runtime.CreateInputBinding parent.StepKJ
             binding.["maxK"] <- maxK
             binding.["xs"] <- dummy
             binding.["perm"] <- permBuffer
@@ -301,7 +301,7 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
 
 
                     // start the single-step
-                    let binding = runtime.NewInputBinding parent.Simple
+                    let binding = runtime.CreateInputBinding parent.Simple
                     let groupSizeP = (j <<< 1) - 1
                     binding.["j"] <- j
                     binding.["jMask"] <- (~~~(j - 1))
@@ -322,7 +322,7 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
                 yield ComputeCommand.Sync permBuffer.Buffer
 
                 // start the j loop 
-                let binding = runtime.NewInputBinding parent.StepJ
+                let binding = runtime.CreateInputBinding parent.StepJ
                 let groupSizeP = (j <<< 1) - 1
                 binding.["j"] <- j
                 binding.["isFirst"] <- isFirst

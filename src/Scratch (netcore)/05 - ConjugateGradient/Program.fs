@@ -345,7 +345,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
         let shader = runtime.CreateComputeShader (ConjugateGradientShaders.polynomial2d<'f, 'v> call rreal.toV4)
 
         fun (inputs : Map<string, ITextureSubResource>) (dst : ITextureSubResource) ->
-            use input = runtime.NewInputBinding shader
+            use input = runtime.CreateInputBinding shader
 
             input.["res"] <- dst
 
@@ -367,7 +367,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
 
 
     member x.NegativeDerivative(h : float, inputs : Map<string, ITextureSubResource>, dst : ITextureSubResource) =
-        use input = runtime.NewInputBinding negativeDerivative
+        use input = runtime.CreateInputBinding negativeDerivative
         input.["res"] <- dst
         input.["h"] <- real.fromFloat h
 
@@ -386,7 +386,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
         ]
 
     member x.Derivative(h : float, inputs : Map<string, ITextureSubResource>, dst : ITextureSubResource) =
-        use input = runtime.NewInputBinding derivative
+        use input = runtime.CreateInputBinding derivative
         input.["res"] <- dst
         input.["h"] <- real.fromFloat h
 
@@ -405,7 +405,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
         ]
 
     member x.SecondMulD(h : float, inputs : Map<string, ITextureSubResource>, d : ITextureSubResource, dst : ITextureSubResource) =
-        use input = runtime.NewInputBinding secondMulD
+        use input = runtime.CreateInputBinding secondMulD
         input.["res"] <- dst
         input.["h"] <- real.fromFloat h
 
@@ -432,7 +432,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
         let size = x.Size.XY
         let n = size.X * size.Y
         
-        use __ = runtime.NewInputBinding secondMulD
+        use __ = runtime.CreateInputBinding secondMulD
 
         let mutable i = 0
         let mutable j = 0
@@ -710,7 +710,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         computeResiduals0 |> Map.iter (fun e computeResidual0 ->
             match Map.tryFind e dst with
                 | Some dst ->
-                    use input = runtime.NewInputBinding computeResidual0
+                    use input = runtime.CreateInputBinding computeResidual0
                     input.["res"] <- dst
                     input.["h"] <- real.fromFloat h
 
@@ -735,7 +735,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         computeResiduals |> Map.iter (fun e computeResidual ->
             match Map.tryFind e dst with
                 | Some dst ->
-                    use input = runtime.NewInputBinding computeResidual
+                    use input = runtime.CreateInputBinding computeResidual
                     input.["res"] <- dst
                     input.["h"] <- real.fromFloat h
                     
@@ -761,7 +761,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         computeResidualsForB |> Map.iter (fun e computeResidual ->
             match Map.tryFind e dst with
                 | Some dst ->
-                    use input = runtime.NewInputBinding computeResidual
+                    use input = runtime.CreateInputBinding computeResidual
                     input.["res"] <- dst
                     input.["h"] <- real.fromFloat h
                     
@@ -791,13 +791,13 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
 
 
     member x.Restrict(src : ITextureSubResource, srcWeight : ITextureSubResource, dst : ITextureSubResource, dstWeight : ITextureSubResource, temp : ITextureSubResource) =
-        use mulInput = runtime.NewInputBinding mul
+        use mulInput = runtime.CreateInputBinding mul
         mulInput.["l"] <- src
         mulInput.["r"] <- srcWeight
         mulInput.["dst"] <- temp
         mulInput.Flush()
 
-        use input = runtime.NewInputBinding restrictWeight
+        use input = runtime.CreateInputBinding restrictWeight
         input.["src"] <- src
         input.["weight"] <- srcWeight
         input.["weightTimesSrc"] <- temp
@@ -817,7 +817,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         ]
 
     member x.Restrict(src : ITextureSubResource, dst : ITextureSubResource, factor : float) =
-        use input = runtime.NewInputBinding restrict
+        use input = runtime.CreateInputBinding restrict
         input.["src"] <- src
         input.["dst"] <- dst
         input.["factor"] <- factor
@@ -830,7 +830,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         ]
 
     member x.Interpolate(src : ITextureSubResource, dst : ITextureSubResource, factor : float) =
-        use input = runtime.NewInputBinding interpolate
+        use input = runtime.CreateInputBinding interpolate
         input.["src"] <- src
         input.["dst"] <- dst
         input.["factor"] <- V4d.IIII * factor
@@ -843,7 +843,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         ]
 
     member x.Divergence(src : ITextureSubResource, dst : ITextureSubResource) =
-        use input = runtime.NewInputBinding divergence
+        use input = runtime.CreateInputBinding divergence
         input.["src"] <- src
         input.["dst"] <- dst
         input.Flush()
@@ -1024,7 +1024,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
     member x.Tools = cg.Tools
 
     member this.Solve(inputs : Map<string, ITextureSubResource>, sum : ITextureSubResource, cfg : MultigridConfig) =
-        use __ = runtime.NewInputBinding restrict
+        use __ = runtime.CreateInputBinding restrict
 
         let size = sum.Size
         let levels = 1 + int(Fun.Floor(Fun.Log2 (max sum.Size.X sum.Size.Y)))

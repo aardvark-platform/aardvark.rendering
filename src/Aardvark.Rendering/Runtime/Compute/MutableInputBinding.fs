@@ -129,5 +129,9 @@ type IComputeRuntimeMutableInputBindingExtensions private() =
     /// Creates a mutable input binding for the given shader.
     /// For backwards-compatible only, new code should create input bindings from an IUniformProvider.
     [<Extension>]
-    static member NewInputBinding(_runtime : IComputeRuntime, shader : IComputeShader) =
+    static member CreateInputBinding(_runtime : IComputeRuntime, shader : IComputeShader) =
         new MutableComputeInputBinding(shader)
+
+    [<Extension; Obsolete("Use CreateInputBinding instead.")>]
+    static member NewInputBinding(_runtime : IComputeRuntime, shader : IComputeShader) =
+        _runtime.CreateInputBinding(shader)

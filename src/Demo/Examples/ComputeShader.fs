@@ -332,7 +332,7 @@ module ComputeShader =
         par.CompileMap(<@ fun i e -> if e < 10 then 1 else 0 @>, input, bits).Run()
         let scanned = par.Scan(<@ (+) @>, bits, bitsum)
         let targetWriteShader = runtime.CreateComputeShader Shaders.toTarget
-        let targetWrite = runtime.NewInputBinding targetWriteShader
+        let targetWrite = runtime.CreateInputBinding targetWriteShader
         targetWrite.["src"] <- input
         targetWrite.["n"] <- input.Count
         targetWrite.["bits"] <- bits
@@ -466,14 +466,14 @@ module ComputeShader =
         )
 
         
-        let updateInputs = runtime.NewInputBinding update
+        let updateInputs = runtime.CreateInputBinding update
         updateInputs.["pos"] <- positions
         updateInputs.["acc"] <- accelerations
         updateInputs.["masses"] <- masses
         updateInputs.["n"] <- particeCount
         updateInputs.Flush()
 
-        let stepInputs = runtime.NewInputBinding step
+        let stepInputs = runtime.CreateInputBinding step
         stepInputs.["pos"] <- positions
         stepInputs.["vel"] <- velocities
         stepInputs.["acc"] <- accelerations

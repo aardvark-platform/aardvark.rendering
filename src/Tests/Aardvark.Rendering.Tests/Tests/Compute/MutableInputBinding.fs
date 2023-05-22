@@ -37,7 +37,7 @@ module MutableInputBinding =
 
         let private flushTest'<'T when 'T : equality> (isBuffer : bool) (value1 : obj) (test1 : obj) (value2 : obj) (test2 : obj) (runtime : IRuntime) =
             use shader = createDummyShader (if isBuffer then ["test"] else []) runtime
-            use inputs = runtime.NewInputBinding(shader)
+            use inputs = runtime.CreateInputBinding(shader)
 
             inputs.["test"] <- value1
 
@@ -65,7 +65,7 @@ module MutableInputBinding =
 
         let typeSafety (runtime : IRuntime) =
             use shader = createDummyShader [] runtime
-            use inputs = runtime.NewInputBinding(shader)
+            use inputs = runtime.CreateInputBinding(shader)
 
             inputs.["test"] <- 54
             Expect.equal (inputs.TryGetValue("test").Value.ContentType) typeof<int32> "Unexpected aval content type"

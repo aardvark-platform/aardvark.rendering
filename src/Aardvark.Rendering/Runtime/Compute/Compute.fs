@@ -31,7 +31,7 @@ and IComputeRuntime =
     abstract member ContextLock : IDisposable
     abstract member MaxLocalSize : V3i
     abstract member CreateComputeShader : shader: FShade.ComputeShader -> IComputeShader
-    abstract member NewInputBinding : shader: IComputeShader * inputs: IUniformProvider -> IComputeInputBinding
+    abstract member CreateInputBinding : shader: IComputeShader * inputs: IUniformProvider -> IComputeInputBinding
     abstract member CompileCompute : commands: alist<ComputeCommand> -> IComputeTask
 
 and [<RequireQualifiedAccess>]

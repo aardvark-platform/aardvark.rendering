@@ -1304,7 +1304,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
     let scan = parent.Scan(codewordCountView, codewordCountView)
 
     let dctInput =
-        let i = runtime.NewInputBinding parent.DctShader
+        let i = runtime.CreateInputBinding parent.DctShader
         i.["size"] <- alignedSize
         i.["ImageSize"] <- size
         i.["target"] <- dctBuffer
@@ -1329,7 +1329,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
 
         
     let codewordInput = 
-        let i = runtime.NewInputBinding parent.CodewordShader
+        let i = runtime.CreateInputBinding parent.CodewordShader
         i.["data"] <- dctBuffer
         i.["codewords"] <- codewordBuffer
         i.["DCLum"] <- encoder.dcLuminance.table
@@ -1340,7 +1340,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         i
         
     let assembleInput =
-        let i = runtime.NewInputBinding parent.AssembleShader
+        let i = runtime.CreateInputBinding parent.AssembleShader
         i.["codewords"] <- codewordBuffer
         i.["target"] <- outputBuffer
         i.["codewordCount"] <- int codewordBuffer.Count

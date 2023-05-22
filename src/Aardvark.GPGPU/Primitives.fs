@@ -657,7 +657,7 @@ type private Map<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : ICompu
     let map    = runtime.CreateComputeShader (Kernels.map map)
 
     let build (src : IBufferVector<'a>) (dst : IBufferVector<'b>) =
-        let args = runtime.NewInputBinding(map)
+        let args = runtime.CreateInputBinding(map)
         
         args.["src"] <- src.Buffer
         args.["SrcOffset"] <- src.Origin
@@ -713,7 +713,7 @@ type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<
     let rec build (args : HashSet<MutableComputeInputBinding>) (input : IBufferVector<'a>) (output : IBufferVector<'a>) =
         let cnt = int input.Count
         if cnt > 1 then
-            let args0 = runtime.NewInputBinding(scan)
+            let args0 = runtime.CreateInputBinding(scan)
 
             args0.["inputOffset"] <- input.Origin |> int
             args0.["inputDelta"] <- input.Delta |> int
@@ -738,7 +738,7 @@ type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<
             if oSums.Count > 0 then
                 let inner = build args oSums oSums
 
-                let args1 = runtime.NewInputBinding fixup
+                let args1 = runtime.CreateInputBinding fixup
                 args1.["inputData"] <- oSums.Buffer
                 args1.["inputOffset"] <- oSums.Origin |> int
                 args1.["inputDelta"] <- oSums.Delta |> int
@@ -798,7 +798,7 @@ type private Reduce<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Exp
     let rec build (args : HashSet<System.IDisposable>) (input : IBufferVector<'a>) (target : 'a[]) =
         let cnt = int input.Count
         if cnt > 1 then
-            let args0 = runtime.NewInputBinding(reduce)
+            let args0 = runtime.CreateInputBinding(reduce)
             
             let groupCount = ceilDiv (int input.Count) Kernels.scanSize
             let temp = runtime.CreateBuffer<'a>(groupCount)
@@ -876,7 +876,7 @@ type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : 
     let rec build (args : HashSet<System.IDisposable>) (input : IBufferVector<'b>) (target : 'b[]) =
         let cnt = int input.Count
         if cnt > 1 then
-            let args0 = runtime.NewInputBinding(reduce)
+            let args0 = runtime.CreateInputBinding(reduce)
             
             let groupCount = ceilDiv (int input.Count) Kernels.scanSize
             let temp = runtime.CreateBuffer<'b>(groupCount)
@@ -914,7 +914,7 @@ type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : 
     
     let buildTop (args : HashSet<System.IDisposable>) (input : IBufferVector<'a>) (target : 'b[]) =
         let cnt = int input.Count
-        let args0 = runtime.NewInputBinding(mapReduce)
+        let args0 = runtime.CreateInputBinding(mapReduce)
             
         let groupCount = ceilDiv (int input.Count) Kernels.scanSize
         let temp = runtime.CreateBuffer<'b>(groupCount)
@@ -992,7 +992,7 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
     let rec build (args : HashSet<System.IDisposable>) (input : IBufferVector<'b>) (target : 'b[]) =
         let cnt = int input.Count
         if cnt > 1 then
-            let args0 = runtime.NewInputBinding(reduce)
+            let args0 = runtime.CreateInputBinding(reduce)
             
             let groupCount = ceilDiv (int input.Count) Kernels.scanSize
             let temp = runtime.CreateBuffer<'b>(groupCount)
@@ -1038,7 +1038,7 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
 
         match dimensions with
         | 2 -> 
-            let args0 = runtime.NewInputBinding(mapReduce2d)
+            let args0 = runtime.CreateInputBinding(mapReduce2d)
             
             let size = input.Size.XY
             let groupCount = ceilDiv2 size Kernels.imageScanSize2d
@@ -1069,7 +1069,7 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
             else
                 cmd
         | 3 ->
-            let args0 = runtime.NewInputBinding(mapReduce3d)
+            let args0 = runtime.CreateInputBinding(mapReduce3d)
             
             let size = input.Size
             let groupCount = ceilDiv3 size Kernels.imageScanSize3d
@@ -1230,7 +1230,7 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
     let scanBlocks (args : HashSet<MutableComputeInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
         let scan = scan(imgDim).Value
 
-        let input = runtime.NewInputBinding(scan)
+        let input = runtime.CreateInputBinding(scan)
         input.["inOutImage"] <- image
         input.["dimension"] <- dim
         input.["Offset"] <- range.offset
@@ -1258,7 +1258,7 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
 
         let innerRange = next range
 
-        let args1 = runtime.NewInputBinding fixup
+        let args1 = runtime.CreateInputBinding fixup
         args1.["inOutImage"] <- image
         args1.["dimension"] <- dim
         args1.["inputOffset"] <- innerRange.offset
@@ -1312,7 +1312,7 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
 
         let scanTexture = scanTexture(imageDim).Value
 
-        let xInput = runtime.NewInputBinding(scanTexture)
+        let xInput = runtime.CreateInputBinding(scanTexture)
         xInput.["inputTexture"] <- input.Texture
         xInput.["inOutImage"] <- output
         xInput.["dimension"] <- 0

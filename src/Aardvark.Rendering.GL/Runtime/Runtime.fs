@@ -182,8 +182,8 @@ type Runtime(debug : IDebugConfig) =
         member x.CreateComputeShader(shader) =
             x.CreateComputeShader(shader)
 
-        member x.NewInputBinding(shader, inputs) =
-            x.NewInputBinding(shader, inputs)
+        member x.CreateInputBinding(shader, inputs) =
+            x.CreateInputBinding(shader, inputs)
 
         member x.CompileCompute (commands) =
             x.CompileCompute commands
@@ -738,7 +738,7 @@ type Runtime(debug : IDebugConfig) =
     member x.CreateComputeShader (shader : FShade.ComputeShader) =
         ctx.CompileKernel shader :> IComputeShader
 
-    member x.NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
+    member x.CreateInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
         let program = unbox<ComputeProgram> shader
         ComputeInputBinding(manager, program, inputs) :> IComputeInputBinding
 

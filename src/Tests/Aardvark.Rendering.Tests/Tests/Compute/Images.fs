@@ -58,7 +58,7 @@ module ComputeImages =
             use dst = runtime.CreateTexture2D(size, format)
             src.Upload pix
 
-            use input = runtime.NewInputBinding(shader)
+            use input = runtime.CreateInputBinding(shader)
             input.["src"] <- src.GetOutputView()
             input.["dst"] <- dst.GetOutputView()
             input.Flush()

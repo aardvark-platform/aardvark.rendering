@@ -374,7 +374,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
         else
             let resCnt = ceilDiv v.Count TensorToolShaders.foldSize
             use res = runtime.CreateBuffer<'a>(resCnt)
-            use input = runtime.NewInputBinding shader
+            use input = runtime.CreateInputBinding shader
             input.["arr"] <- v
             input.["cnt"] <- v.Count
             input.["result"] <- res
@@ -399,7 +399,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
             let resCnt = ceilDiv2 size (V2i(16,16))
             
             use res = runtime.CreateBuffer<'a>(resCnt.X * resCnt.Y)
-            use input = runtime.NewInputBinding shader
+            use input = runtime.CreateInputBinding shader
             input.["l"] <- v
             input.["result"] <- res
             input.Flush()
@@ -442,7 +442,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
             let resCnt = ceilDiv cnt TensorToolShaders.foldSize
             
             use res = runtime.CreateBuffer<'a>(resCnt)
-            use input = runtime.NewInputBinding dot1d
+            use input = runtime.CreateInputBinding dot1d
             input.["l"] <- l
             input.["r"] <- r
             input.["cnt"] <- l.Count
@@ -476,7 +476,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
     member x.MultiplyAdd(src : IBuffer<'a>, srcFactor : 'a, dst : IBuffer<'a>, dstFactor : 'a) =
         let cnt = min src.Count dst.Count
         if cnt > 0 then
-            use input = runtime.NewInputBinding mad1d
+            use input = runtime.CreateInputBinding mad1d
             input.["src"] <- src
             input.["cnt"] <- cnt
             input.["dst"] <- dst
@@ -494,7 +494,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
         let size = V2i(min src.Size.X dst.Size.X, min src.Size.Y dst.Size.Y)
         if size.AllGreaterOrEqual 1 then
             let mad2d = mad2d dst.Texture.Format
-            use input = runtime.NewInputBinding mad2d
+            use input = runtime.CreateInputBinding mad2d
             input.["src"] <- src
             input.["srcFactor"] <- srcFactor
             input.["dst"] <- dst
@@ -511,7 +511,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
         let size = dst.Size.XY
         if size.AllGreaterOrEqual 1 then
             let set2d = set2d dst.Texture.Format
-            use input = runtime.NewInputBinding set2d
+            use input = runtime.CreateInputBinding set2d
             input.["dst"] <- dst
             input.["value"] <- value
             input.Flush()
@@ -538,7 +538,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
             let resCnt = ceilDiv2 size (V2i(16,16))
             
             use res = runtime.CreateBuffer<'a>(resCnt.X * resCnt.Y)
-            use input = runtime.NewInputBinding dot2d
+            use input = runtime.CreateInputBinding dot2d
             input.["l"] <- l
             input.["r"] <- r
             input.["result"] <- res

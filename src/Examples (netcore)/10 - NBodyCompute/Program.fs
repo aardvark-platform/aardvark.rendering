@@ -154,14 +154,14 @@ let main argv =
     ) |> ignore
     
     
-    let updateInputs = runtime.NewInputBinding update
+    let updateInputs = runtime.CreateInputBinding update
     updateInputs.["pos"] <- positions
     updateInputs.["acc"] <- accelerations
     updateInputs.["masses"] <- masses
     updateInputs.["n"] <- particeCount
     updateInputs.Flush()
     
-    let stepInputs = runtime.NewInputBinding step
+    let stepInputs = runtime.CreateInputBinding step
     stepInputs.["pos"] <- positions
     stepInputs.["vel"] <- velocities
     stepInputs.["acc"] <- accelerations

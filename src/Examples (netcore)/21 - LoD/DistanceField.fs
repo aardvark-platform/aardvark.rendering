@@ -178,19 +178,19 @@ let computeDistanceGPU (pi : PixImage<byte>) =
     let dt = runtime.CreateTexture2D(pi.Size,TextureFormat.Rgba32f,1,1)
 
     let toBinary = runtime.CreateComputeShader(Shaders.toBinary)
-    use toBinaryInput = runtime.NewInputBinding(toBinary)
+    use toBinaryInput = runtime.CreateInputBinding(toBinary)
     toBinaryInput.["i"] <- input
     toBinaryInput.["b"] <- b
     toBinaryInput.Flush()
 
     let phase1 = runtime.CreateComputeShader(Shaders.phase1)
-    let phase1Input = runtime.NewInputBinding(phase1)
+    let phase1Input = runtime.CreateInputBinding(phase1)
     phase1Input.["b"] <- b
     phase1Input.["g"] <- g
     phase1Input.Flush()
 
     let phase2 = runtime.CreateComputeShader(Shaders.phase2)
-    let phase2Input = runtime.NewInputBinding(phase2)
+    let phase2Input = runtime.CreateInputBinding(phase2)
     phase2Input.["g"] <- g
     phase2Input.["s"] <- s
     phase2Input.["t"] <- t

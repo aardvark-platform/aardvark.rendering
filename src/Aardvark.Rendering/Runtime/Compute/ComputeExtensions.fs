@@ -72,8 +72,16 @@ type IComputeRuntimeExtensions private() =
 type IComputeShaderExtensions private() =
 
     [<Extension>]
+    static member CreateInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
+        shader.Runtime.CreateInputBinding(shader, inputs)
+
+    [<Extension; Obsolete("Use CreateInputBinding instead.")>]
+    static member NewInputBinding(_runtime : IComputeRuntime, shader : IComputeShader, inputs : IUniformProvider) =
+        _runtime.CreateInputBinding(shader, inputs)
+
+    [<Extension; Obsolete("Use CreateInputBinding instead.")>]
     static member NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
-        shader.Runtime.NewInputBinding(shader, inputs)
+        shader.Runtime.CreateInputBinding(shader, inputs)
 
     [<Extension>]
     static member Invoke(shader : IComputeShader, groupCount : V3i, input : IComputeInputBinding, renderToken : RenderToken) =
@@ -111,7 +119,7 @@ module ``InputBinding Builder`` =
         inherit UniformMapBuilder()
 
         member x.Run(map : UniformMap) =
-            shader.NewInputBinding map
+            shader.CreateInputBinding map
 
     type IComputeShader with
         member x.inputBinding = InputBindingBuilder x

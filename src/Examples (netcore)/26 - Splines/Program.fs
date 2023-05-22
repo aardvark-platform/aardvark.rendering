@@ -234,7 +234,7 @@ module Sg =
                 let size = size.GetValue t
                 let threshold = threshold.GetValue t
 
-                use ip = runtime.NewInputBinding prepare
+                use ip = runtime.CreateInputBinding prepare
                 ip.["cpIn"] <- cps
                 ip.["div"] <- div
                 ip.["ts"] <- ts
@@ -274,7 +274,7 @@ module Sg =
                         
 
                 //let evalulate (scannedDiv : int[]) (scannedCount : int) (ts : V2f[]) (cps : V4f[]) (lines : V4f[])
-                use ip = runtime.NewInputBinding evaluate
+                use ip = runtime.CreateInputBinding evaluate
                 ip.["scannedDiv"] <- div
                 ip.["scannedCount"] <- cnt
                 ip.["ts"] <- ts

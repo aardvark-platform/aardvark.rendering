@@ -46,7 +46,7 @@ let parallelFilter<'a when 'a : unmanaged> (par : ParallelPrimitives) (arr : 'a[
 
     // compile our custom resolve-shader and setup its inputs
     let resolveShader = runtime.CreateComputeShader Shader.resolve
-    use resolveInputs = runtime.NewInputBinding resolveShader
+    use resolveInputs = runtime.CreateInputBinding resolveShader
     resolveInputs.["src"] <- input
     resolveInputs.["n"] <- input.Count
     resolveInputs.["targets"] <- bits
