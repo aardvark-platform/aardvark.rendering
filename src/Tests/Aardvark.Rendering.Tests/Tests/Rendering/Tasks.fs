@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Tests.Rendering
 
+open System
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
@@ -60,8 +61,58 @@ module RenderTasks =
             finally
                 output.Release()
 
+        let occlusionQuery (contextSwitch : bool) (runtime : IRuntime) =
+            let size = V2i(256)
+
+            use query = runtime.CreateOcclusionQuery()
+
+            use __ : IDisposable =
+                match runtime with
+                | :? GL.Runtime as gl when contextSwitch ->
+                    let context = gl.Context.CreateContext()
+
+                    try
+                        context.MakeCurrent()
+                        query.Begin()
+                        query.End()
+                        context
+                    finally
+                        context.ReleaseCurrent()
+
+                | _ ->
+                    Disposable.empty
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                ])
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.shader {
+                    do! DefaultSurfaces.constantColor C4f.White
+                }
+                |> Sg.compile runtime signature
+
+            let output = task |> RenderTask.renderToColor (AVal.constant <| size)
+            output.Acquire()
+
+            try
+                let _ = output.GetValue(AdaptiveToken.Top, { RenderToken.Empty with Queries = [query] })
+                let samples = query.GetResult()
+
+                Expect.isGreaterThan samples 0UL "Non-positive sample count"
+                Expect.equal samples (uint64 (size.X * size.Y)) "Unexpected sample count"
+            finally
+                output.Release()
+
     let tests (backend : Backend) =
         [
             "Update", Cases.update
+
+            "Occlusion query", Cases.occlusionQuery false
+
+            if backend = Backend.GL then
+                "Occlusion query with context switch", Cases.occlusionQuery true
         ]
         |> prepareCases backend "Render tasks"

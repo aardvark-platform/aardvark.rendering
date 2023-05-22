@@ -1623,7 +1623,7 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
                 let gpuTime =
                     if measureGpuTime then
                         gpuQuery
-                        |> Option.bind (fun q -> q.TryGetResult true)
+                        |> Option.bind (fun q -> q.TryGetResult false)
                         |> Option.defaultValue MicroTime.Zero
                     else
                         MicroTime.Zero
