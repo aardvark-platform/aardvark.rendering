@@ -113,9 +113,6 @@
     <Compile Include="Runtime\Lod\LodRuntime.fs" />
     <Compile Include="Runtime\Query\QueryTypes.fs" />
     <Compile Include="Runtime\Query\QueryRuntime.fs" />
-    <Compile Include="Runtime\Query\QueryHandle.fs" />
-    <Compile Include="Runtime\Query\MultiQuery.fs" />
-    <Compile Include="Runtime\Query\ConcurrentQuery.fs" />
     <Compile Include="Runtime\Compute\Compute.fs" />
     <Compile Include="Runtime\Compute\ComputeExtensions.fs" />
     <Compile Include="Runtime\Compute\MutableInputBinding.fs" />

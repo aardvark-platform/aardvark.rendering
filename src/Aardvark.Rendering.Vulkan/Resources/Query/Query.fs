@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
+open System.Threading
 open System.Collections.Generic
 open System.Runtime.InteropServices
 open Aardvark.Base
@@ -44,30 +45,49 @@ type QueryType =
 
 /// Type to store cached pool results.
 type PoolHandle(pool : QueryPool, valuesPerQuery : int) =
-    inherit AbstractQueryHandle<QueryPool, uint64[]>(pool)
+    let mutable cached = None
 
-    new(device : Device, typ : VkQueryType, flags : VkQueryPipelineStatisticFlags, valuesPerQuery : int, queryCount : int) =
-        let pool = device |> QueryPool.create typ flags queryCount
-        new PoolHandle(pool, valuesPerQuery)
+    new(device : Device, typ : QueryType, queryCount : int) =
+        let pool = device |> QueryPool.create typ.Native typ.Flags queryCount
+        new PoolHandle(pool, typ.ValuesPerQuery)
 
-    override x.GetValues(pool : QueryPool) =
-        pool |> QueryPool.getValues valuesPerQuery
+    member x.Native = pool
 
-    override x.TryGetValues(pool : QueryPool) =
-        pool |> QueryPool.tryGetValues valuesPerQuery
+    member x.Reset() =
+        cached <- None
 
-    override x.DeleteHandle(pool : QueryPool) =
+    member x.GetResult() =
+        match cached with
+        | Some result -> result
+        | _ ->
+            let result = pool |> QueryPool.getValues valuesPerQuery
+            cached <- Some result
+            result
+
+    member x.TryGetResult() =
+        if cached = None then
+            cached <- pool |> QueryPool.tryGetValues valuesPerQuery
+
+        cached
+
+    member x.Dispose() =
         pool |> QueryPool.delete
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 
 /// Inner query that can consist of multiple query pools.
-type InternalQuery(device : Device, typ : VkQueryType, flags : VkQueryPipelineStatisticFlags, valuesPerQuery : int, queryCount : int) =
-    inherit MultiQuery<PoolHandle, uint64[]>()
+type InternalQuery(device : Device, typ : QueryType, queryCount : int) =
+    let mutable refCount = 0
 
     // All allocated query pools
     let pools = List<PoolHandle>()
 
-    // Pools that are available to be used.
+    // Pools that are currently active
+    let activePools = List<PoolHandle>()
+
+    // Pools that are available to be used
     let availablePools = Queue<PoolHandle>()
 
     // Currently recording pool
@@ -75,7 +95,7 @@ type InternalQuery(device : Device, typ : VkQueryType, flags : VkQueryPipelineSt
 
     // Creates a new pool
     let newPool() =
-        let h = new PoolHandle(device, typ, flags, valuesPerQuery, queryCount)
+        let h = new PoolHandle(device, typ, queryCount)
         pools.Add h
         h
 
@@ -89,42 +109,89 @@ type InternalQuery(device : Device, typ : VkQueryType, flags : VkQueryPipelineSt
     // Allocate single pool in advance
     do availablePools.Enqueue <| newPool()
 
+    /// Indicates whether the query is currently in use (i.e. reference counter is greater than zero).
+    member x.IsUsed =
+        refCount > 0
+
+    /// Increments the reference count.
+    member x.Acquire() =
+        inc &refCount
+
+    /// Decrements the reference count.
+    member x.Release() =
+        dec &refCount
+
+    /// Indicates whether the query is active.
+    member x.IsActive =
+        activePools.Count > 0
+
     /// Begins the query and returns the pool.
     member x.Begin() =
         match recordingPool with
         | None ->
             let p = nextPool()
-            x.Handles.Add p
             recordingPool <- Some p
             p
         | _ ->
-            failwith "Active pool detected. End() has to be called first!"
+            failf "Recording pool detected. End() has to be called first!"
 
     /// Ends the query and returns the used pool.
     member x.End() =
         match recordingPool with
         | Some p ->
             recordingPool <- None
+            activePools.Add p
             p
-        | _ -> failwith "No active pool. Begin() has to be called first!"
+        | _ ->
+            failf "No recording pool. Begin() has to be called first!"
 
     /// Resets the query.
-    override x.Reset() =
-        // Make all pools available again
+    member x.Reset() =
+        activePools.Clear()
         availablePools.Clear()
-        pools |> Seq.iter (fun p -> p.Reset(); availablePools.Enqueue p)
 
-        // Reset handles
-        base.Reset()
+        for p in pools do
+            p.Reset()
+            availablePools.Enqueue p
+
+    /// Blocks to retrieve the query results.
+    member x.GetResults() =
+        activePools |> Seq.map (fun h -> h.GetResult()) |> Seq.toArray
+
+    /// Retrieves the query results if available.
+    member x.TryGetResults() =
+        let r = activePools |> Seq.choose (fun h -> h.TryGetResult()) |> Seq.toArray
+
+        if r.Length < activePools.Count then
+            None
+        else
+            Some r
 
     /// Deletes all pools.
-    override x.Dispose() =
-        pools |> Seq.iter (fun x -> x.Dispose())
+    member x.Dispose() =
+        for p in pools do p.Dispose()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 
 [<AbstractClass>]
 type Query(device : Device, typ : QueryType, queryCount : int) =
-    inherit ConcurrentQuery<InternalQuery, uint64[]>()
+
+    // List of all queries that have been allocated.
+    let queries = List<InternalQuery>()
+
+    // The currently active query
+    let mutable activeQuery : InternalQuery option = None
+
+    // The current level of the queue, i.e. of the nested Begin-End pairs
+    let mutable currentLevel = 0
+
+    // Returns whether the query is active.
+    let isActive() =
+        activeQuery
+        |> Option.map (fun q -> q.IsActive)
+        |> Option.defaultValue false
 
     /// Resets the given query pool.
     abstract member Reset : CommandBuffer * QueryPool -> unit
@@ -141,19 +208,118 @@ type Query(device : Device, typ : QueryType, queryCount : int) =
     default x.End (cmd : CommandBuffer, pool : QueryPool) =
         cmd.Enqueue <| Command.EndQuery(pool, 0)
 
+    // Creates or gets a query that is currently unused.
+    member private x.GetQuery() =
+        let reused = queries |> Seq.tryFind (fun q -> not q.IsUsed)
+
+        match reused with
+        | Some q ->
+            q.Reset()
+            q
+
+        | _ ->
+            let q = new InternalQuery (device, typ, queryCount)
+            queries.Add q
+            q
+
+    /// If there is an active query, increments the ref counter, releases the global lock,
+    /// calls the function on the query, and finally decrements the ref counter.
+    /// Otherwise returns None.
+    member private x.TryUseActiveQuery(reset : bool, f : InternalQuery -> 'T) =
+        let query =
+            lock x (fun _ ->
+                if isActive() then
+                    let q = activeQuery.Value
+                    q.Acquire()
+
+                    if reset then
+                        activeQuery <- None
+
+                    Some q
+
+                else
+                    None
+            )
+
+        try
+            query |> Option.map f
+        finally
+            lock x (fun _ -> query |> Option.iter (fun q -> q.Release()))
+
+    /// Waits until there is an active query, increments the ref counter, releases the global lock,
+    /// calls the function on the query, and finally decrements the ref counter.
+    member private x.UseActiveQuery(reset : bool, f : InternalQuery -> 'T) =
+        let query =
+            lock x (fun _ ->
+                while not (isActive()) do
+                    Monitor.Wait x |> ignore
+
+                let q = activeQuery.Value
+                q.Acquire()
+
+                if reset then
+                    activeQuery <- None
+
+                q
+            )
+
+        try
+            f query
+        finally
+            lock x query.Release
+
+    /// Resets the query.
+    member x.Reset() =
+        lock x (fun _ -> activeQuery <- None)
+
     /// Begins the query.
     member x.Begin (cmd : CommandBuffer) =
-        let pool = x.ActiveQuery.Value.Begin()
+        let pool = activeQuery.Value.Begin()
         x.Reset(cmd, pool.Native)
         x.Begin(cmd, pool.Native)
 
     /// Ends the query.
     member x.End (cmd : CommandBuffer) =
-        let pool = x.ActiveQuery.Value.End()
+        let pool = activeQuery.Value.End()
         x.End(cmd, pool.Native)
 
-    override x.CreateQuery() =
-        new InternalQuery (device, typ.Native, typ.Flags, typ.ValuesPerQuery, queryCount)
+    /// Locks the query and resets it.
+    member x.Begin() =
+        Monitor.Enter x
+        inc &currentLevel
+
+        // Just entered the top-level begin-end pair -> reset
+        if currentLevel = 1 then
+            activeQuery <- Some <| x.GetQuery()
+
+    /// Unlocks the query.
+    member x.End() =
+        dec &currentLevel
+
+        // We just left the top-level begin-end pair
+        // Notify other threads to try query results again.
+        if currentLevel = 0 && isActive() then
+            Monitor.PulseAll x
+
+        Monitor.Exit x
+
+    /// Trys to get the result from the queries.
+    member x.TryGetResults(reset : bool) =
+        x.TryUseActiveQuery(reset, fun query ->
+            query.TryGetResults()
+        ) |> Option.bind id
+
+    /// Blocks until the result of every query is available.
+    member x.GetResults(reset : bool) =
+        x.UseActiveQuery(reset, fun query ->
+            query.GetResults()
+        )
+
+    /// Deletes the queries.
+    member x.Dispose() =
+        lock x (fun _ ->
+            for q in queries do q.Dispose()
+        )
 
     interface IVulkanQuery with
 
