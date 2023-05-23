@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering
 
 open System
-open System.Threading
 open Aardvark.Base
 open FSharp.Data.Adaptive
 
@@ -18,7 +17,7 @@ type AbstractRenderTask() =
 
     let mutable frameId = 0UL
 
-    let mutable disposed = 0
+    let mutable isDisposed = false
 
     let runtimeValueCache = Dict.empty
     let currentOutput = AVal.init { framebuffer = Unchecked.defaultof<_>; viewport = Box2i(V2i.OO, V2i.II) }
@@ -62,12 +61,18 @@ type AbstractRenderTask() =
     abstract member Use : (unit -> 'a) -> 'a
 
     member x.Dispose() =
-        if Interlocked.Exchange(&disposed, 1) = 0 then
-            x.Release()
+        lock x (fun _ ->
+            if not isDisposed then
+                isDisposed <- true
+                x.Release()
+        )
 
     member x.FrameId = frameId
     member x.Run(token : AdaptiveToken, renderToken : RenderToken, out : OutputDescription) =
         x.EvaluateAlways token (fun token ->
+            if isDisposed then
+                raise <| ObjectDisposedException(null, "Cannot run a disposed render task.")
+
             use __ = renderToken.Use()
 
             x.OutOfDate <- true
@@ -85,6 +90,9 @@ type AbstractRenderTask() =
 
     member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
         x.EvaluateAlways token (fun token ->
+            if isDisposed then
+                raise <| ObjectDisposedException(null, "Cannot update a disposed render task.")
+
             use __ = renderToken.Use()
 
             if x.OutOfDate then
