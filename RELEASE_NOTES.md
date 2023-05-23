@@ -1,3 +1,13 @@
+### 5.4.0-prerelease0004
+- Renamed NewInputBinding to CreateInputBinding
+- Reverted renaming of provider ofDict methods
+- Restored IAttributeProvider.All
+- Added Signature property to ManagedPool and ManagedTracePool
+- Added obsolete extensions for renamed buffer copy methods
+- [GL] Removed duplicate context tracking
+- [Vulkan] Fixed aspect for depth / stencil samplers
+- [Vulkan] Fixed shader stage computation for dynamic effects
+
 ### 5.4.0-prerelease0003
 - Restored IComputeRuntime.ContextLock
 
