@@ -1353,21 +1353,19 @@ type UniqueTree(id : Guid, root : Option<UniqueTree>, parent : Option<ILodTreeNo
         member x.Acquire() = inner.Acquire()
         member x.Release() = inner.Release()
 
-type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipelineState, config : LodRendererConfig, roots : aset<LodTreeInstance>)  =
-    inherit PreparedCommand(ctx, config.pass)
-    
+type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : aset<LodTreeInstance>) =
+    inherit PreparedCommand(manager.Context, config.pass)
+
     static let scheduler = new LimitedConcurrencyLevelTaskScheduler(ThreadPriority.BelowNormal, Environment.ProcessorCount)// max 2 (Environment.ProcessorCount - 3))
-            
+
     static let startTask (ct : CancellationToken) (f : unit -> 'a) =
         Task.Factory.StartNew(Func<'a>(f), ct, TaskCreationOptions.None, scheduler)
-                
-    let signature = state.pProgramInterface
 
     let timeWatch = System.Diagnostics.Stopwatch.StartNew()
     let time() = timeWatch.MicroTime
-        
-    let pool = GeometryPool.Get ctx
-        
+
+    let pool = GeometryPool.Get manager.Context
+
 
     let reader =
         let roots = roots |> ASet.map (fun r -> { r with root = UniqueTree(Guid.NewGuid(), None, None, r.root) :> ILodTreeNode })
@@ -1473,15 +1471,18 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
             )
         )
 
-    let contents =
-        state.pProgramInterface.storageBuffers |> MapExt.toSeq |> Seq.choose (fun (name, buffer) ->
-            if state.pStorageBuffers |> Array.exists (fun struct (id, _) -> id = buffer.ssbBinding) then
-                None
-            else
-                let typ = GLSLType.toType buffer.ssbType
-                let conv = PrimitiveValueConverter.convert typ
-                    
-                let content =
+    let state =
+        let iface, program = manager.CreateSurface(config.fbo, config.surface, config.state.Mode)
+        use __ = program
+
+        let buffers =
+            iface.storageBuffers |> MapExt.map (fun name buffer ->
+                match config.state.GlobalUniforms.TryGetUniform(Ag.Scope.Root, Sym.ofString name) with
+                | Some buffer -> buffer
+                | _ ->
+                    let typ = GLSLType.toType buffer.ssbType
+                    let conv = PrimitiveValueConverter.convert typ
+
                     AVal.custom (fun t ->
                         let ids = rootIds.GetValue t
                         if HashMap.isEmpty ids then
@@ -1499,17 +1500,15 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             )
                             ArrayBuffer data :> IBuffer
                     )
-                Some (buffer.ssbBinding, content)
-        )
-        |> Map.ofSeq
-            
-    let storageBuffers =
-        contents |> Map.map (fun _ content ->
-            let b = manager.CreateBuffer(content)
-            b.AddRef()
-            b.Update(AdaptiveToken.Top, RenderToken.Empty)
-            b
-        )
+            )
+            |> UniformProvider.ofMap
+
+        let state =
+            { config.state with GlobalUniforms = UniformProvider.union config.state.GlobalUniforms buffers }
+
+        PreparedPipelineState.ofPipelineState config.fbo manager config.surface state
+
+    let signature = state.pProgramInterface
 
     let activeBuffer =
         let data = 
@@ -1745,13 +1744,9 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         sync()
             
     let inner =
-        { new DrawPool(ctx, config.alphaToCoverage, true, pRenderBounds, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, config.pass) with
+        { new DrawPool(manager.Context, config.alphaToCoverage, true, pRenderBounds, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, config.pass) with
             override x.Evaluate(token : AdaptiveToken, iface : GLSLProgramInterface) =
                 evaluate x token iface
-
-            override x.BeforeRender(stream : ICommandStream) =
-                for (slot, b) in Map.toSeq storageBuffers do 
-                    stream.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, slot, b.Pointer)
         }
 
         
@@ -2173,7 +2168,6 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         Seq.concat [ 
             Seq.singleton (activeBuffer :> IResource)
             Seq.singleton (modelViewProjBuffer :> IResource)
-            (storageBuffers |> Map.toSeq |> Seq.map snd |> Seq.cast) 
             (inner.Resources :> seq<_>)
         ]
 
@@ -2187,7 +2181,6 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         for slot in cache.Values do pool.Free slot
         cache.Clear()
         renderDelta := AtomicQueue.empty
-        storageBuffers |> Map.toSeq |> Seq.iter (fun (_,b) -> b.Dispose())
         activeBuffer.Dispose()
 
     override x.EntryState = inner.EntryState

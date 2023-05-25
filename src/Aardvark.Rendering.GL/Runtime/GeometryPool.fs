@@ -892,6 +892,9 @@ module GeometryPoolData =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
+    type GetIndexedPName with
+        static member ShaderStorageBufferBinding = unbox<GetIndexedPName> 37075
+
     type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : nativeptr<int>, signature : IFramebufferSignature, bounds : bool, active : nativeptr<int>, modelViewProjs : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
         static let es = nativeint sizeof<DrawCallInfo>
         static let bs = nativeint sizeof<CullingShader.CullingInfo>
@@ -941,7 +944,7 @@ module GeometryPoolData =
         let oldUB = NativePtr.allocArray [| 0 |]
         let oldUBOffset = NativePtr.allocArray [| 0n |]
         let oldUBSize = NativePtr.allocArray [| 0n |]
-        let oldSBB = NativePtr.allocArray [| 0; 0; 0 |]
+        let oldSBB = NativePtr.allocArray [| 0; 0; 0; 0|]
 
         do let es = if bounds then es + bs else es
            Interlocked.Add(&totalMemory.contents, int64 (es * nativeint capacity)) |> ignore
@@ -1171,6 +1174,10 @@ module GeometryPoolData =
                 s.Get(GetIndexedPName.UniformBufferBinding, ubBinding, oldUB)
                 s.Get(GetIndexedPName.UniformBufferStart, ubBinding, oldUBOffset)
                 s.Get(GetIndexedPName.UniformBufferSize, ubBinding, oldUBSize)
+                s.Get(GetIndexedPName.ShaderStorageBufferBinding, infoSlot, oldSBB)
+                s.Get(GetIndexedPName.ShaderStorageBufferBinding, boundSlot, NativePtr.add oldSBB 1)
+                s.Get(GetIndexedPName.ShaderStorageBufferBinding, activeSlot, NativePtr.add oldSBB 2)
+                s.Get(GetIndexedPName.ShaderStorageBufferBinding, viewProjSlot, NativePtr.add oldSBB 3)
 
                 s.UseProgram(culling.Handle)
                 s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, infoSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 0n))
@@ -1179,7 +1186,7 @@ module GeometryPoolData =
                 s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, viewProjSlot, modelViewProjs)
                 s.BindBufferBase(BufferRangeTarget.UniformBuffer, ubBinding, ub.Handle)
                 s.DispatchCompute computeSize
-                
+
                 s.Conditional(renderBounds, fun s ->
                     let pCnt : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 8n)
                     let pInstanceCnt : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt pCall + 4n)
@@ -1191,10 +1198,13 @@ module GeometryPoolData =
                 )
 
                 s.UseProgram(oldProgram)
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, infoSlot, oldSBB)
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boundSlot, NativePtr.add oldSBB 1)
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, activeSlot, NativePtr.add oldSBB 2)
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, viewProjSlot, NativePtr.add oldSBB 3)
                 s.BindBufferRange(BufferRangeTarget.UniformBuffer, ubBinding, oldUB, oldUBOffset, oldUBSize)
                 s.MemoryBarrier(MemoryBarrierFlags.CommandBarrierBit)
 
-            
             let h = NativePtr.read indirectHandle
             if h.Count > 0 then
                 before(s)

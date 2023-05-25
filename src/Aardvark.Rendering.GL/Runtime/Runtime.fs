@@ -771,14 +771,4 @@ type Runtime(debug : IDebugConfig) =
             Set.singleton ClippingInputPrimitives
 
     member x.CreateLodRenderer(config : LodRendererConfig, data : aset<LodTreeInstance>) =
-
-        let preparedState = PreparedPipelineState.ofPipelineState config.fbo x.ResourceManager config.surface config.state
-
-        //let info : LodRenderingInfo =
-        //    {
-        //        LodRenderingInfo.quality = quality
-        //        LodRenderingInfo.maxQuality = maxQuality
-        //        LodRenderingInfo.renderBounds = renderBounds
-        //    }
-
-        new LodRenderer(ctx, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
+        new LodRenderer(x.ResourceManager, config, data) :> IPreparedRenderObject
