@@ -17,9 +17,9 @@ open System.Threading
 // NOTE: Hacky solution for concurrency issues.
 // This lock is used for all OpenGL render tasks, basically preventing any concurrency.
 // The Vulkan backend has finer grained control over resource ownership.
-module internal GlobalResourceLock =
+module GlobalResourceLock =
 
-    let private lockObj = obj()
+    let lockObj = obj()
 
     let using (action : unit -> 'T) =
         if RuntimeConfig.AllowConcurrentResourceAccess then action()
