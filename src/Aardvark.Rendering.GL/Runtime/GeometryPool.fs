@@ -941,58 +941,66 @@ module GeometryPoolData =
         let oldUB = NativePtr.allocArray [| 0 |]
         let oldUBOffset = NativePtr.allocArray [| 0n |]
         let oldUBSize = NativePtr.allocArray [| 0n |]
+        let oldSBB = NativePtr.allocArray [| 0; 0; 0 |]
 
         do let es = if bounds then es + bs else es
            Interlocked.Add(&totalMemory.contents, int64 (es * nativeint capacity)) |> ignore
 
-        let culling =
-            if bounds then 
-                cullingCache.GetOrAdd(ctx, fun ctx ->
-                    let cs = ComputeShader.ofFunction (V3i(1024, 1024, 1024)) CullingShader.culling
-                    let shader = ctx.CompileKernel cs
-                    shader 
-                )
-            else
-                Unchecked.defaultof<ComputeProgram>
+        let mutable culling = Unchecked.defaultof<ComputeProgram>
+        let mutable infoSlot = 0
+        let mutable boundSlot = 0
+        let mutable activeSlot = 0
+        let mutable viewProjSlot = 0
+        let mutable ubBinding = 0
+        let mutable countOffset = 0n
 
-        let boxShader =
-            if bounds then
-                boundCache.GetOrAdd(ctx, fun ctx ->
-                    let effect =
-                        FShade.Effect.compose [
-                            Effect.ofFunction CullingShader.renderBounds
-                            Effect.ofFunction (DefaultSurfaces.constantColor C4f.Red)
-                        ]
+        let mutable boxShader = Unchecked.defaultof<Program>
+        let mutable boxBoundSlot = 0
+        let mutable boxViewProjSlot = 0
 
-                    let shader =
-                        lazy (
-                            let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
-                            effect
-                            |> Effect.toModule cfg
-                            |> ModuleCompiler.compileGLSL ctx.FShadeBackend
-                        )
+        do if bounds then
+            culling <- cullingCache.GetOrAdd(ctx, fun ctx ->
+                let cs = ComputeShader.ofFunction (V3i(1024, 1024, 1024)) CullingShader.culling
+                let shader = ctx.CompileKernel cs
+                shader
+            )
 
-                    match ctx.TryCompileProgram(effect.Id, signature, shader) with
-                    | Success v -> v
-                    | Error e -> failwith e
-                )
-            else
-                Unchecked.defaultof<Program>
+            infoSlot <- culling.Interface.storageBuffers.["infos"].ssbBinding
+            boundSlot <- culling.Interface.storageBuffers.["bounds"].ssbBinding
+            activeSlot <- culling.Interface.storageBuffers.["isActive"].ssbBinding
+            viewProjSlot <- culling.Interface.storageBuffers.["viewProjs"].ssbBinding
 
+            let uniformBlock = culling.Interface.uniformBuffers |> MapExt.toList |> List.map snd |> List.head
+            ubBinding <- uniformBlock.ubBinding
 
+            let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
+            countOffset <- nativeint countField.ufOffset
 
-        let infoSlot = culling.Interface.storageBuffers.["infos"].ssbBinding
-        let boundSlot = culling.Interface.storageBuffers.["bounds"].ssbBinding
-        let activeSlot = culling.Interface.storageBuffers.["isActive"].ssbBinding
-        let viewProjSlot = culling.Interface.storageBuffers.["viewProjs"].ssbBinding
-        let uniformBlock = culling.Interface.uniformBuffers |> MapExt.toList |> List.map snd |> List.head
-        let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
-             
-        let boxBoundSlot = boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "Bounds" then Some b.ssbBinding else None)
-        let boxViewProjSlot = boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "ViewProjs" then Some b.ssbBinding else None)
+            boxShader <- boundCache.GetOrAdd(ctx, fun ctx ->
+                let effect =
+                    FShade.Effect.compose [
+                        Effect.ofFunction CullingShader.renderBounds
+                        Effect.ofFunction (DefaultSurfaces.constantColor C4f.Red)
+                    ]
+
+                let shader =
+                    lazy (
+                        let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
+                        effect
+                        |> Effect.toModule cfg
+                        |> ModuleCompiler.compileGLSL ctx.FShadeBackend
+                    )
+
+                match ctx.TryCompileProgram(effect.Id, signature, shader) with
+                | Success v -> v
+                | Error e -> failwith e
+            )
+
+            boxBoundSlot <- boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "Bounds" then Some b.ssbBinding else None)
+            boxViewProjSlot <- boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "ViewProjs" then Some b.ssbBinding else None)
 
         let boxMode = NativePtr.allocArray [| GLBeginMode(int BeginMode.Lines, 2) |]
-        
+
         let pCall =
             NativePtr.allocArray [|
                 DrawCallInfo(
@@ -1157,19 +1165,19 @@ module GeometryPoolData =
 
             if bounds then
                 //s.NamedBufferSubData(ub.Handle, nativeint viewProjField.ufOffset, 64n, NativePtr.toNativeInt mvp)
-                s.NamedBufferSubData(ub.Handle, nativeint countField.ufOffset, 4n, NativePtr.toNativeInt bufferHandles + 8n)
+                s.NamedBufferSubData(ub.Handle, countOffset, 4n, NativePtr.toNativeInt bufferHandles + 8n)
 
                 s.Get(GetPName.CurrentProgram, oldProgram)
-                s.Get(GetIndexedPName.UniformBufferBinding, uniformBlock.ubBinding, oldUB)
-                s.Get(GetIndexedPName.UniformBufferStart, uniformBlock.ubBinding, oldUBOffset)
-                s.Get(GetIndexedPName.UniformBufferSize, uniformBlock.ubBinding, oldUBSize)
+                s.Get(GetIndexedPName.UniformBufferBinding, ubBinding, oldUB)
+                s.Get(GetIndexedPName.UniformBufferStart, ubBinding, oldUBOffset)
+                s.Get(GetIndexedPName.UniformBufferSize, ubBinding, oldUBSize)
 
                 s.UseProgram(culling.Handle)
                 s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, infoSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 0n))
                 s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boundSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 4n))
                 s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, activeSlot, active)
                 s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, viewProjSlot, modelViewProjs)
-                s.BindBufferBase(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, ub.Handle)
+                s.BindBufferBase(BufferRangeTarget.UniformBuffer, ubBinding, ub.Handle)
                 s.DispatchCompute computeSize
                 
                 s.Conditional(renderBounds, fun s ->
@@ -1183,7 +1191,7 @@ module GeometryPoolData =
                 )
 
                 s.UseProgram(oldProgram)
-                s.BindBufferRange(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, oldUB, oldUBOffset, oldUBSize)
+                s.BindBufferRange(BufferRangeTarget.UniformBuffer, ubBinding, oldUB, oldUBOffset, oldUBSize)
                 s.MemoryBarrier(MemoryBarrierFlags.CommandBarrierBit)
 
             
@@ -1216,6 +1224,8 @@ module GeometryPoolData =
             NativePtr.free mem
             ctx.Delete buffer
             if bounds then
+                culling.Dispose()
+                boxShader.Dispose()
                 NativePtr.free bmem
                 ctx.Delete bbuffer
             capacity <- 0
@@ -1223,11 +1233,17 @@ module GeometryPoolData =
             buffer <- new Buffer(ctx, 0n, 0)
             dirty.Clear()
             count <- 0
+
             NativePtr.free indirectHandle
             NativePtr.free computeSize
             NativePtr.free boxMode
             NativePtr.free pCall
             NativePtr.free boxDraw
+            NativePtr.free oldProgram
+            NativePtr.free oldUB
+            NativePtr.free oldUBOffset
+            NativePtr.free oldUBSize
+            NativePtr.free oldSBB
 
             drawIndices.Clear()
 
