@@ -1,3 +1,13 @@
+### 5.3.7
+- Various optimizations
+- Added RenderTask.renderTo variants with adaptive clear values
+- Fixed RenderPass.before to respect given order
+- [AbstractRenderTask] Make Dispose mutually exclusive with Update and Run
+- [GL] Fixed ObjectDisposedException related to invalid epilogue prev pointer
+- [GLFW] Fixed vsync initialization
+- [GLFW] Disabled unknown joystick axis warning
+- [Vulkan] Fixed issue with pipeline statistics being wrongfully selected
+
 ### 5.3.6
 - Opc: more robust patchhierarchy caching: https://github.com/pro3d-space/PRo3D/issues/283
 
