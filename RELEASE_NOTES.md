@@ -1,3 +1,6 @@
+### 5.4.0
+- https://github.com/aardvark-platform/aardvark.docs/wiki/Aardvark-Rendering-5.4-changelog
+
 ### 5.4.0-prerelease0004
 - Renamed NewInputBinding to CreateInputBinding
 - Reverted renaming of provider ofDict methods
