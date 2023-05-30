@@ -1518,7 +1518,7 @@ module rec Command =
                 | Some f -> f.Next <- Some epilog
                 | None -> ()
             | ValueNone ->
-                ()
+                epilog.Prev <- None
 
 
         override x.Free(info : CompilerInfo) =
