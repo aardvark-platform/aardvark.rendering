@@ -1536,7 +1536,7 @@ module rec ChangeableProgram =
             with get() =
                 if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
                 prev
-            and private set p =
+            and set p =
                 if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
                 prev <- p
 
