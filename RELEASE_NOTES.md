@@ -1,3 +1,6 @@
+### 5.4.1
+- Fixed net6.0 target for WinForms and WPF
+
 ### 5.4.0
 - https://github.com/aardvark-platform/aardvark.docs/wiki/Aardvark-Rendering-5.4-changelog
 
