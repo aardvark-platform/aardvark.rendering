@@ -28,7 +28,7 @@ The aardvark rendering engine was the vital spark which finally led to the compl
  - Aardvark does not understand light, shadows or particular material workflows as in most game engines. Instead, the codebase provides a *rich set of tools* to customize those features to fit the needs.
  - For application and UI programming we recommend to climb the abstraction ladder up towards [aardvark.media](https://github.com/aardvark-platform/aardvark.media) which provides easy-to-use ELM style API to both UI and high-performance computer graphics.
  
-We are constantly looking for cool contributions ideas etc! Meet us on [gitter](https://gitter.im/aardvark-platform/Lobby)
+We are constantly looking for cool contributions ideas etc! Meet us on [Discord](https://discord.gg/UyecnhM)
 
 To list some, the most important [packages found on nuget](https://www.nuget.org/packages?q=aardvark.Rendering.*) are:
 - Aardvark.Rendering	
