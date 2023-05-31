@@ -245,6 +245,8 @@ module ProgramExtensions =
             | Success shader ->
                 Success [shader]
             | Error err ->
+                let numberdLines = ShaderCodeReporting.withLineNumbers code
+                Report.Line("Failed to compile compute shader:\n{0}", numberdLines)
                 Error err
 
         let tryCompileShaders (withFragment : bool) (code : string) (x : Context) =
