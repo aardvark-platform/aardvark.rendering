@@ -11,7 +11,7 @@ module private ErrorUtilities =
 
     let inline failf fmt =
         Printf.kprintf (fun str ->
-            Log.error "[GL] %s" str
+            Report.Error $"[GL] {str}"
             failwith ("[GL] " + str)
         ) fmt
 

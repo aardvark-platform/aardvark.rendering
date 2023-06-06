@@ -143,28 +143,24 @@ module ProgramExtensions =
         | ShaderStage.Geometry -> ShaderType.GeometryShader
         | ShaderStage.Fragment -> ShaderType.FragmentShader
         | ShaderStage.Compute -> ShaderType.ComputeShader
-        | _ -> failwithf "unknown shader-stage: %A" stage
+        | _ -> failf "unknown shader-stage: %A" stage
+
+    let private nl = Environment.NewLine
 
     let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
     let private addPreprocessorDefine (define : string) (code : string) =
-        let replaced = ref false
-        let def = sprintf "#define %s\r\n" define
-        let layout = "" //"layout(row_major) uniform;\r\n"
+        let mutable replaced = false
+        let def = $"#define {define}{nl}"
 
         let newCode =
             versionRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->
                 let v = m.Groups.["version"].Value
-                replaced := true
-                match Int32.TryParse v with
-                | (true, vers) when vers > 120 ->
-                    sprintf "#version %s\r\n%s%s" v def layout
-                | _ ->
-                    sprintf "#version %s\r\n%s" v def
+                replaced <- true
+                $"#version {v}{nl}{def}"
             ))
 
-        if !replaced then newCode
+        if replaced then newCode
         else def + newCode
-
 
     let private outputSuffixes = ["{0}"; "{0}Out"; "{0}Frag"; "Pixel{0}"; "{0}Pixel"; "{0}Fragment"]
     let private geometryOutputSuffixes = ["{0}"; "{0}Out"; "{0}Geometry"; "{0}TessControl"; "{0}TessEval"; "Geometry{0}"; "TessControl{0}"; "TessEval{0}"]
@@ -198,56 +194,55 @@ module ProgramExtensions =
                     if m.Success then
                         match m.Groups.["top"].Value with
                         | "points" ->
-                            [IndexedGeometryMode.PointList] |> Set.ofList |> Some
+                            [IndexedGeometryMode.PointList] |> Set.ofList |> Some |> Success
 
                         | "lines" ->
-                            [IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
+                            [IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some |> Success
 
                         | "lines_adjacency" ->
-                            [IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
+                            [IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some |> Success
 
                         | "triangles"  ->
-                            [IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some
+                            [IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some |> Success
 
                         | "triangles_adjacency" ->
-                            [IndexedGeometryMode.TriangleAdjacencyList] |> Set.ofList |> Some
+                            [IndexedGeometryMode.TriangleAdjacencyList] |> Set.ofList |> Some |> Success
 
                         | v ->
-                            failwithf "unknown geometry shader input topology: %A" v
+                            Error $"unknown geometry shader input topology: {v}"
                     else
-                        failwith "could not determine geometry shader input topology"
+                        Error "could not determine geometry shader input topology"
 
                 | _ ->
-                    None
+                    Success None
 
-            if status = 1 then
+            match topologies with
+            | Success topologies when status = 1 ->
                 Success {
                     Context = x
                     Handle = handle
                     Stage = stage
                     SupportedModes = topologies
                 }
-            else
+
+            | Success _ ->
                 let log =
-                    if String.IsNullOrEmpty log then "ERROR: shader did not compile but log was empty"
-                    else log
+                    if String.IsNullOrEmpty log then $"shader did not compile but error log was empty{nl}"
+                    else ShaderCodeReporting.normalizeLineEndings log
 
                 Error log
 
+            | Error err ->
+                Error (err + nl)
+
         let tryCompileCompute (code : string) (x : Context) =
             use __ = x.ResourceLock
-
-            if x.Runtime.PrintShaderCode then
-                let numberedLines = ShaderCodeReporting.withLineNumbers code
-                Report.Line("Compiling shader:\n{0}", numberedLines)
 
             match tryCompileShader ShaderStage.Compute code "main" x with
             | Success shader ->
                 Success [shader]
             | Error err ->
-                let numberdLines = ShaderCodeReporting.withLineNumbers code
-                Report.Line("Failed to compile compute shader:\n{0}", numberdLines)
-                Error err
+                Error $"failed to compile compute program{nl}{nl}{err}"
 
         let tryCompileShaders (withFragment : bool) (code : string) (x : Context) =
             let vs = code.Contains "#ifdef Vertex"
@@ -271,10 +266,6 @@ module ProgramExtensions =
                                 .Replace("out vec4 Colors3Out", "out vec4 ColorsOut")
                        else code
 
-            if x.Runtime.PrintShaderCode then
-                let numberedLines = ShaderCodeReporting.withLineNumbers code
-                Report.Line("Compiling shader:\n{0}", numberedLines)
-
             Operators.using x.ResourceLock (fun _ ->
                 let results =
                     stages |> List.map (fun (def, entry, stage) ->
@@ -282,17 +273,14 @@ module ProgramExtensions =
                         stage, tryCompileShader stage codeWithDefine entry x
                     )
 
-                let errors = results |> List.choose (fun (stage,r) -> match r with | Error e -> Some(stage,e) | _ -> None)
+                let errors = results |> List.choose (fun (stage, r) -> match r with | Error e -> Some(stage, e) | _ -> None)
+
                 if List.isEmpty errors then
                     let shaders = results |> List.choose (function (_,Success r) -> Some r | _ -> None)
                     Success shaders
                 else
-                    let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
-                    let numberedLines = ShaderCodeReporting.withLineNumbers codeWithDefine
-                    Report.Line("Failed to compile shader:\n{0}", numberedLines)
-                    let err = errors |> List.map (fun (stage, e) -> sprintf "%A:\r\n%s" stage (String.indent 1 e)) |> String.concat "\r\n\r\n"
-                    Error err
-
+                    let err = errors |> List.map (fun (stage, e) -> $"{stage}:{nl}{e}") |> String.concat nl
+                    Error $"failed to compile program{nl}{nl}{err}"
             )
 
         let setFragDataLocations (fboSignature : Map<string, int>) (handle : int) (x : Context) =
@@ -316,7 +304,7 @@ module ProgramExtensions =
 
                         { attributeIndex = location; size = 1; name = outputName; semantic = name; attributeType = ActiveAttribType.FloatVec4 }
                     | None ->
-                        failwithf "could not get desired program-output: %A" name
+                        failf "could not get desired program-output: %A" name
                 )
             )
 
@@ -329,7 +317,7 @@ module ProgramExtensions =
             GL.Check "could not get program log"
 
             if status = 1 then
-                let outputs = findOutputs handle x
+                let _outputs = findOutputs handle x
 
                 // after modifying the frag-locations the program needs to be linked again
                 GL.LinkProgram(handle)
@@ -374,21 +362,18 @@ module ProgramExtensions =
 
                     with
                     | e ->
-                             let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
-                             let numberedLines = ShaderCodeReporting.withLineNumbers codeWithDefine
-                             Report.Line("Failed to build shader interface of:\n{0}", numberedLines)
-                             reraise()
+                        Error $"failed to build shader interface: {e.Message}{nl}"
                 else
                     let log =
-                        if String.IsNullOrEmpty log then "ERROR: program could not be linked but log was empty"
-                        else log
+                        if String.IsNullOrEmpty log then $"program could not be linked but error log was empty{nl}"
+                        else ShaderCodeReporting.normalizeLineEndings log
 
                     Error log
 
             else
                 let log =
-                    if String.IsNullOrEmpty log then "ERROR: program could not be linked but log was empty"
-                    else log
+                    if String.IsNullOrEmpty log then $"program could not be linked but error log was empty{nl}"
+                    else ShaderCodeReporting.normalizeLineEndings log
 
                 Error log
 
@@ -460,22 +445,44 @@ module ProgramExtensions =
                     Success program
 
                 | Error err ->
-                    let numberedLines = ShaderCodeReporting.withLineNumbers code
-                    Report.Line("Failed to link shader:\n{0}", numberedLines)
-                    Error err
+                    Error $"failed to link program{nl}{nl}{err}"
             with
             | exn ->
                 GL.DeleteProgram handle
                 Error exn.Message
 
-        let tryCompileCode (context : Context) (framebufferSignature : Map<string, int>) (code : string) =
-            match context |> ShaderCompiler.tryCompileShaders true code with
-            | Success shaders ->
-                let findOutputs = ShaderCompiler.setFragDataLocations framebufferSignature
-                shaders |> tryLink context findOutputs code
+        let private printCode (message : string) (withDefine : bool) (code : string) =
+            let code = if withDefine then addPreprocessorDefine "__SHADER_STAGE__" code else code
+            let numberedLines = ShaderCodeReporting.withLineNumbers code
+            Report.Line $"{message}:{nl}{numberedLines}"
 
-            | Error err ->
-                Error err
+        let private tryCompileInternal (context : Context) (printCode : string -> unit) (tryCompile : unit -> Error<Program>) =
+            if context.Runtime.PrintShaderCode then
+                printCode "Compiling shader"
+
+            let result = tryCompile()
+
+            match result with
+            | Error _ when not context.Runtime.PrintShaderCode ->
+                printCode "Failed to compile shader"
+            | _ ->
+                ()
+
+            result
+
+        let tryCompileCode (context : Context) (framebufferSignature : Map<string, int>) (code : string) =
+            let printCode message =
+                code |> printCode message true
+
+            tryCompileInternal context printCode (fun _ ->
+                match context |> ShaderCompiler.tryCompileShaders true code with
+                | Success shaders ->
+                    let findOutputs = ShaderCompiler.setFragDataLocations framebufferSignature
+                    shaders |> tryLink context findOutputs code
+
+                | Error err ->
+                    Error err
+            )
 
         let tryCompile (context : Context) (framebufferSignature : Map<string, int>) (shader : FShade.GLSL.GLSLShader) =
             match shader.code |> tryCompileCode context framebufferSignature with
@@ -488,12 +495,17 @@ module ProgramExtensions =
                 Error e
 
         let tryCompileComputeCode (context : Context) (code : string) =
-            match context |> ShaderCompiler.tryCompileCompute code with
-            | Success shaders ->
-                shaders |> tryLink context (fun _ _ -> []) code
+            let printCode message =
+                code |> printCode message false
 
-            | Error err ->
-                Error err
+            tryCompileInternal context printCode (fun _ ->
+                match context |> ShaderCompiler.tryCompileCompute code with
+                | Success shaders ->
+                    shaders |> tryLink context (fun _ _ -> []) code
+
+                | Error err ->
+                    Error err
+            )
 
         let tryCompileCompute (context : Context) (iface : FShade.GLSL.GLSLProgramInterface) (code : string)  =
             match code |> tryCompileComputeCode context with
@@ -766,7 +778,7 @@ module ProgramExtensions =
             match x.TryCompileProgramCode(fboSignature, code) with
             | Success p -> p
             | Error e ->
-                failwithf "[GL] shader compiler returned errors: %s" e
+                failf "shader compiler returned errors: %s" e
 
         member x.Delete(p : Program) =
             p.Dispose()
@@ -865,15 +877,14 @@ module ProgramExtensions =
                         match x.TryCompileProgram(initial.Hash + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with
                         | Success prog -> prog.Interface
                         | Error e ->
-                            failwithf "[GL] shader compiler returned errors: %s" e
+                            failf "shader compiler returned errors: %s" e
 
                     let changeableProgram =
                         b |> AVal.map (fun m ->
                             match x.TryCompileProgram(m.Hash + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
                             | Success p -> p
                             | Error e ->
-                                Log.error "[GL] shader compiler returned errors: %A" e
-                                failwithf "[GL] shader compiler returned errors: %A" e
+                                failf "shader compiler returned errors: %s" e
                         )
 
                     Success (iface, changeableProgram)
@@ -893,5 +904,4 @@ module ProgramExtensions =
             match x.TryCreateProgram(signature, surface, topology) with
             | Success t -> t
             | Error e ->
-                Log.error "[GL] shader compiler returned errors: %A" e
-                failwithf "[GL] shader compiler returned errors: %A" e
+                failf "shader compiler returned errors: %s" e

@@ -66,7 +66,7 @@ module ComputeProgramExtensions =
                                     }
                             shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL be
                         else
-                            failwithf "[GL] Compute shader not supported: GLSL version = %A" x.Driver.glsl
+                            failf "compute shader not supported: GLSL version = %A" x.Driver.glsl
 
                     let adjust (s : GLSL.GLSLSampler) =
                         let textures =
@@ -90,7 +90,7 @@ module ComputeProgramExtensions =
 
             let localSize =
                 if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
-                else failwith "[GL] compute shader has no local size"
+                else failf "compute shader has no local size"
 
             x.TryCompileKernel(shader.csId, codeAndInterface, localSize)
 
@@ -99,8 +99,7 @@ module ComputeProgramExtensions =
             | Success kernel ->
                 kernel
             | Error err ->
-                Log.error "%s" err
-                failwith err
+                failf "shader compiler returned errors: %s" err
 
         member x.Delete(program : ComputeProgram) =
             program.Dispose()
