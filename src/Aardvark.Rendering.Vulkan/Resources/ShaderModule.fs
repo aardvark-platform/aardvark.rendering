@@ -29,6 +29,8 @@ type ShaderModule =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderModule =
 
+    let private nl = System.Environment.NewLine
+
     let internal glslangStage = function
         | FShade.ShaderSlot.Vertex ->         GLSLang.ShaderStage.Vertex
         | FShade.ShaderSlot.TessControl ->    GLSLang.ShaderStage.TessControl
@@ -70,9 +72,13 @@ module ShaderModule =
             let handle = device |> createRaw binary
             let result = new ShaderModule(device, handle, slot, binary)
             result
+
         | None, err ->
-            Log.error "[Vulkan] %A shader compilation failed: %A" slot err
-            failf "%A shader compilation failed: %A" slot err
+            if not device.DebugConfig.PrintShaderCode then
+                ShaderCodeReporting.logLines "Failed to compile shader" info.code
+
+            let err = ShaderCodeReporting.normalizeLineEndings err
+            failf $"{slot} shader compilation failed:{nl}{nl}{err}"
 
     let ofGLSL (slot : FShade.ShaderSlot) (info : FShade.GLSL.GLSLShader) (device : Device) =
         ofGLSLWithTarget GLSLang.Target.SPIRV_1_0 slot info device

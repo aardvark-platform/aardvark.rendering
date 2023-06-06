@@ -297,32 +297,13 @@ module ShaderProgram =
             versionRx.Replace(code, "#version 450 core")
 
         if device.DebugConfig.PrintShaderCode then
-            ShaderCodeReporting.logLines code
-
-        let logs = System.Collections.Generic.Dictionary<FShade.ShaderSlot, string>()
-
-        let binaries =
-            iface.shaders.Slots
-            |> MapExt.toArray
-            |> Array.map (fun (slot, shader) ->
-                let entry = shader.shaderEntry
-                let define = slot.Conditional
-                let stage = ShaderModule.glslangStage slot
-
-                match GLSLang.GLSLang.tryCompile stage entry [define] code with
-                | Some binary, log ->
-                    let binary = GLSLang.GLSLang.optimizeDefault binary
-                    logs.[slot] <- log
-                    slot, binary
-                | None, err ->
-                    Log.error "[Vulkan] %A shader compilation failed: %A" slot err
-                    failf "%A shader compilation failed: %A" slot err
-            )
+            code |> ShaderCodeReporting.logLines "Compiling shader"
 
         let shaders =
-            binaries
-            |> Array.map (fun (slot, binary) ->
-                device.CreateShaderModule(slot, binary)
+            iface.shaders.Slots
+            |> MapExt.toArray
+            |> Array.map (fun (slot, _) ->
+                device |> ShaderModule.ofGLSL slot { code = code; iface = iface }
             )
 
         let layout = PipelineLayout.ofProgramInterface inputLayout iface layers perLayer device

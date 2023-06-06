@@ -453,8 +453,7 @@ module ProgramExtensions =
 
         let private printCode (message : string) (withDefine : bool) (code : string) =
             let code = if withDefine then addPreprocessorDefine "__SHADER_STAGE__" code else code
-            let numberedLines = ShaderCodeReporting.withLineNumbers code
-            Report.Line $"{message}:{nl}{numberedLines}"
+            ShaderCodeReporting.logLines message code
 
         let private tryCompileInternal (context : Context) (printCode : string -> unit) (tryCompile : unit -> Error<Program>) =
             if context.Runtime.PrintShaderCode then

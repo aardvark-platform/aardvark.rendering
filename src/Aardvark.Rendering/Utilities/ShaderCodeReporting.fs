@@ -17,12 +17,16 @@ module ShaderCodeReporting =
         let lines = str.Split([| Environment.NewLine |], StringSplitOptions.None)
         let lineColumns = 1 + int (Fun.Log10 lines.Length)
 
-        lines |> Array.mapi (fun i str ->
+        lines
+        |> Array.indexed
+        |> Array.filter (fun (i, str) -> (i > 0 && i < lines.Length - 1) || not <| String.IsNullOrWhiteSpace str)
+        |> Array.map (fun (i, str) ->
             let n = (string (i + 1)).PadLeft lineColumns
-            $"{n}: {str}"
+            $"    {n}: {str}"
         )
         |> String.concat Environment.NewLine
 
-    let logLines (code : string) =
-        let lines = withLineNumbers code
-        Report.Line lines
+    let logLines (message : string) (code : string) =
+        let nl = Environment.NewLine
+        let numberedLines = withLineNumbers code
+        Report.Line $"{message}:{nl}{nl}{numberedLines}{nl}"

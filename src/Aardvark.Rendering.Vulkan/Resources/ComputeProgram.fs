@@ -175,7 +175,7 @@ module ComputeProgram =
         let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
 
         if device.DebugConfig.PrintShaderCode then
-            ShaderCodeReporting.logLines glsl.code
+            glsl.code |> ShaderCodeReporting.logLines "Compiling shader"
 
         let module_ = ShaderModule.ofGLSL FShade.ShaderSlot.Compute glsl device
         module_ |> ofModule glsl shader.csLocalSize
