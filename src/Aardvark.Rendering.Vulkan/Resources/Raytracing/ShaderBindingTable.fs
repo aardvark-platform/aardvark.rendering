@@ -274,11 +274,15 @@ module private ShaderBindingSubtable =
         VkBufferUsageFlags.ShaderDeviceAddressBitKhr
 
     let tryUpdate (data : SubtableData<'T>) (table : ShaderBindingSubtable<'T>) =
-        if data.TotalSize > int table.Size then
+        if data.Count = 0 then
+            true
+
+        elif data.TotalSize > int table.Size then
             false
 
-        elif data.Count = 0 then
-            true
+        // Shrink if too large
+        elif int table.Size > 2 * data.Handles.SizeAligned * Fun.NextPowerOfTwo data.Count then
+            false
 
         else
             table.Indices <- data.Lookup
@@ -293,8 +297,8 @@ module private ShaderBindingSubtable =
                     Marshal.Copy(data.Handles.Data, e * data.Handles.Size, src + offset, data.Handles.Size)
                     offset <- offset + nativeint data.Handles.SizeAligned
 
-                let nb = NativeMemoryBuffer(src, nativeint data.TotalSize)
-                table |> Buffer.tryUpdate nb
+                table |> Buffer.updateWriter (fun dst -> Marshal.Copy(src, dst, nativeint data.TotalSize))
+                true
 
             finally
                 NativePtr.free pSrc
@@ -312,7 +316,8 @@ module private ShaderBindingSubtable =
         table
 
     let create (device : Device) (data : SubtableData<'T>) =
-        data |> createWithCount device data.Count
+        let count = int <| Fun.NextPowerOfTwo data.Count
+        data |> createWithCount device count
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -338,8 +343,7 @@ module ShaderBindingTable =
                 table
             else
                 recreated <- true
-                let count = int <| Fun.NextPowerOfTwo data.Count
-                ShaderBindingSubtable.createWithCount device count data
+                ShaderBindingSubtable.create device data
 
         let raygenTable   = table.RaygenTable   |> updateOrRecreate tableData.RaygenData
         let missTable     = table.MissTable     |> updateOrRecreate tableData.MissData
