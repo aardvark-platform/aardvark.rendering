@@ -56,6 +56,9 @@ type SceneGraphExtensions =
     static member Surface(sg : ISg, surface : IBackendSurface) = Sg.SurfaceApplicator(Surface.Backend surface, sg) :> ISg
 
     [<Extension>]
+    static member Surface(sg : ISg, effect : FShade.Effect) = Sg.SurfaceApplicator(Surface.FShadeSimple effect, sg) :> ISg
+
+    [<Extension>]
     static member Surface(sg : ISg, [<ParamArray>] effects : FShade.Effect[]) = Sg.SurfaceApplicator(Surface.FShadeSimple (FShade.Effect.compose effects), sg) :> ISg
 
     [<Extension>]
