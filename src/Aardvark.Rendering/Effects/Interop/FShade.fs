@@ -503,12 +503,37 @@ module FShadeInterop =
     let inline toEffect a = Effect.ofFunction a
 
     module Surface =
-        let effectPool (effects : FShade.Effect[]) (active : aval<int>) =
-            let compile (cfg : FShade.EffectConfig) =
-                let modules1 = effects |> Array.map (FShade.Effect.toModule cfg)
-                let layout = FShade.EffectInputLayout.ofModules modules1
-                let modules = modules1 |> Array.map (FShade.EffectInputLayout.apply layout)
-                let current = active |> AVal.map (fun i -> modules.[i % modules.Length])
+        let effectPool (effects : Effect[]) (active : aval<int>) =
+            let compile (cfg : EffectConfig) =
+                let layout, modules =
+                    let modules = effects |> Array.map (Effect.toModule cfg)
+                    let layout = EffectInputLayout.ofModules modules
+                    layout, modules |> Array.map (EffectInputLayout.apply layout)
+
+                let current =
+                    if EffectDebugger.isAttached then
+                        let hooked =
+                            effects |> Array.mapi (fun i e ->
+                                match EffectDebugger.register e with
+                                | Some (:? aval<Effect> as e) ->
+                                    e |> AVal.map (fun e ->
+                                        try
+                                            let m = e |> Effect.toModule cfg |> EffectInputLayout.apply layout
+                                            m.Entries |> ignore // Evaluate lazy entries here to trigger potential exceptions
+                                            m
+                                        with exn ->
+                                            Log.error "%s" exn.Message
+                                            modules.[i]
+                                    )
+
+                                | _ ->
+                                    AVal.constant modules.[i]
+                            )
+
+                        active |> AVal.bind (fun i -> hooked.[i % hooked.Length])
+                    else
+                        active |> AVal.map (fun i -> modules.[i % modules.Length])
+
                 layout, current
 
             Surface.FShade compile
