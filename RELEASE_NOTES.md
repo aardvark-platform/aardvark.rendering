@@ -1,3 +1,8 @@
+### 5.4.2
+- [Vulkan] Fixed issue in SBT update
+- [Sg] Added C# Surface overload
+- Improved shade compile error reporting and code printing
+
 ### 5.4.1
 - Fixed net6.0 target for WinForms and WPF
 
