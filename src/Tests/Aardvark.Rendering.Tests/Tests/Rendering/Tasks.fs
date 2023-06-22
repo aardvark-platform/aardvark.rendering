@@ -106,6 +106,57 @@ module RenderTasks =
             finally
                 output.Release()
 
+        let orderedCommandsUpdate (runtime : IRuntime) =
+            use signature =
+                runtime.CreateFramebufferSignature [
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                ]
+
+            let color = AVal.init C4b.Red
+
+            let single =
+                color |> AVal.map (fun c ->
+                    Sg.fullScreenQuad
+                    |> Sg.shader {
+                        do! DefaultSurfaces.constantColor (C4f c)
+                    }
+                )
+                |> Sg.dynamic
+
+            let commands = clist( [single] )
+
+            use task =
+                Sg.execute (
+                    RenderCommand.Ordered(commands : alist<ISg>)
+                )
+                |> Sg.compile runtime signature
+
+            let output = task |> RenderTask.renderToColor (AVal.constant <| V2i 256)
+            output.Acquire()
+
+            let check() =
+                let result = output.GetValue().Download().AsPixImage<uint8>()
+                let expected = if commands.IsEmpty then [| 0uy; 0uy; 0uy |] else (color.Value.ToArray())
+                result |> PixImage.isColor expected
+
+            try
+                check()
+
+                transact (fun _ -> color.Value <- C4b.Blue)
+                check()
+
+                transact (fun _ -> commands.Clear())
+                check()
+
+                transact (fun _ -> color.Value <- C4b.Green)
+                check()
+
+                transact (fun _ -> commands.Add single |> ignore)
+                check()
+
+            finally
+                output.Release()
+
     let tests (backend : Backend) =
         [
             "Update", Cases.update
@@ -114,5 +165,7 @@ module RenderTasks =
 
             if backend = Backend.GL then
                 "Occlusion query with context switch", Cases.occlusionQuery true
+
+            "Ordered commands update", Cases.orderedCommandsUpdate
         ]
         |> prepareCases backend "Render tasks"
