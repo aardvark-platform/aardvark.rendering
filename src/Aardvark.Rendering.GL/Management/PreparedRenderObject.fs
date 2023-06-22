@@ -1570,11 +1570,15 @@ module rec Command =
         let reader = o.GetReader()
 
         let mutable state : IndexList<ProgramFragment * Command> = IndexList.empty
-        let mutable dirty = System.Collections.Generic.HashSet<Command>()
 
-        override x.InputChangedObject(t : obj, i : IAdaptiveObject) =
-            match i with
-            | :? Command as c -> lock dirty (fun () -> dirty.Add c |> ignore)
+        let dirty = LockedSet<Command>()
+
+        let isValid (cmd : Command) =
+            state |> IndexList.exists (fun _ -> snd >> (=) cmd)
+
+        override x.InputChangedObject(_ : obj, input : IAdaptiveObject) =
+            match input with
+            | :? Command as cmd -> dirty.Add cmd |> ignore
             | _ -> ()
 
         override x.PerformUpdate(token : AdaptiveToken, program : FragmentProgram, info : CompilerInfo) =
@@ -1586,56 +1590,60 @@ module rec Command =
                 | Set cmd ->
                     cmd.Update(token, info)
 
-                    let fragment = 
+                    let fragment =
                         match s with
                         | Some (fragment, old) ->
                             old.Free info
-                            lock dirty (fun () -> dirty.Remove old |> ignore)
+                            old.Outputs.Remove x |> ignore
+                            dirty.Remove old |> ignore
+
                             fragment.Mutate(fun s p ->
                                 s.Call(cmd.Program.Value, p)
                             )
                             fragment
 
                         | None ->
-                            let fragment = 
+                            let fragment =
                                 program.NewFragment (fun s p ->
                                     s.Call(cmd.Program.Value, p)
                                 )
+
                             match r with
                             | Some (_, (r, _)) -> fragment.Next <- Some r
                             | None -> fragment.Next <- None
-                            
+
                             match l with
                             | Some (_, (lf,_)) -> lf.Next <- Some fragment
                             | None -> program.First <- Some fragment
-                            
-                            
-                            
+
                             fragment
 
                     state <- IndexList.set i (fragment, cmd) state
-                    
+
                 | Remove ->
                     match s with
                     | Some (oldFragment, oldCmd) ->
                         oldCmd.Free info
+                        oldCmd.Outputs.Remove x |> ignore
+                        dirty.Remove oldCmd |> ignore
                         oldFragment.Dispose()
-                        lock dirty (fun () -> dirty.Remove oldCmd |> ignore)
+
                     | None ->
                         ()
 
                     state <- IndexList.remove i state
 
-
-            let mine = 
-                lock dirty (fun () ->
-                    let d = Seq.toArray dirty
-                    dirty.Clear()
-                    d
-                )
-
-            for m in mine do 
-                m.Update(token, info)
+            // Update all dirty commands
+            // Note: In concurrent situations, the dirty set may contain already removed commands.
+            // We have to check if the dirty command is actually still valid before updating it.
+            //
+            // Example with threads A and B:
+            // A: Commits transaction, invokes InputChangedObject(_, cmd)
+            // B: Removes and frees cmd
+            // A: Adds cmd to dirty set
+            // B: Retrieves cmd from dirty set and updates it -> fail
+            for cmd in dirty.GetAndClear() do
+                if isValid cmd then cmd.Update(token, info)
 
         override x.Free(info : CompilerInfo) =
             for (f, cmd) in state do
@@ -1644,7 +1652,6 @@ module rec Command =
 
             state <- IndexList.empty
             dirty.Clear()
-            ()
 
     type ClearCommand(signature : IFramebufferSignature, values : aval<ClearValues>) =
         inherit Command()
