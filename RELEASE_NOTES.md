@@ -1,3 +1,6 @@
+### 5.3.8
+- [GL] Fixed update issues with OrderedCommand
+
 ### 5.3.7
 - Various optimizations
 - Added RenderTask.renderTo variants with adaptive clear values
