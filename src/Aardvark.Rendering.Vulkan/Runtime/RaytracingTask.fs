@@ -10,6 +10,7 @@ open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
 open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
 open Aardvark.Rendering.Vulkan.KHRBufferDeviceAddress
 open Aardvark.Rendering.Raytracing
+open FShade
 
 open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
@@ -116,14 +117,16 @@ module private RaytracingTaskInternals =
         interface IEnumerable<Command> with
             member x.GetEnumerator() = cmds.GetEnumerator()
 
-    type CompiledCommand(manager : ResourceManager, resources : ResourceLocationSet, pipelineState : RaytracingPipelineState, input : alist<RaytracingCommand>) =
+    type CompiledCommand(manager : ResourceManager, resources : ResourceLocationSet, pipeline : RaytracingPipelineState, input : alist<RaytracingCommand>) =
         let reader = input.GetReader()
-        let preparedPipeline = manager.PrepareRaytracingPipeline(pipelineState)
+        let preparedPipeline = manager.PrepareRaytracingPipeline(pipeline)
 
         do for r in preparedPipeline.Resources do
             resources.Add(r)
 
         let compiled = CommandList preparedPipeline.ShaderBindingTable.Pointer
+
+        member x.Effect = pipeline.Effect
 
         member x.Commands = compiled :> seq<_>
 
@@ -170,11 +173,24 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
     let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
     let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
+    let effect =
+        pipeline.Effect
+        |> ShaderDebugger.tryRegisterRaytracingEffect
+        |> Option.defaultWith (fun _ -> AVal.constant pipeline.Effect)
+
     let resources = ResourceLocationSet()
-    let compiled = new CompiledCommand(manager, resources, pipeline, commands)
+    let mutable compiled = new CompiledCommand(manager, resources, pipeline, commands)
 
     let updateCommandResources (t : AdaptiveToken) (rt : RenderToken) =
         use tt = getDeviceToken()
+
+        let effect = effect.GetValue t
+
+        if effect <> compiled.Effect then
+            let pipeline = { pipeline with Effect = effect }
+            let recompiled = new CompiledCommand(manager, resources, pipeline, commands)
+            compiled.Dispose()
+            compiled <- recompiled
 
         resources.Use(t, rt, fun resourcesChanged ->
             let commandChanged =

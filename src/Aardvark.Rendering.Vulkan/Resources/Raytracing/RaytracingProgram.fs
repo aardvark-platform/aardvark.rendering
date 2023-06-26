@@ -2,7 +2,6 @@
 
 #nowarn "9"
 
-open System
 open System.IO
 open System.Runtime.CompilerServices
 
@@ -34,6 +33,10 @@ type RaytracingProgram (device : Device,
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RaytracingProgram =
+    open System.Collections.Generic
+
+    type private ShaderSlot = FShade.ShaderSlot
+    type private HitGroupSlot = (struct (Symbol * Symbol))
 
     module private ShaderSlot =
         let ofStage (name : Option<Symbol>) (ray : Option<Symbol>) (stage : ShaderStage) =
@@ -53,29 +56,60 @@ module RaytracingProgram =
         new RaytracingProgram(device, pipelineLayout, layout, stages, shader)
 
     let private compileEffect (device : Device) (effect : FShade.RaytracingEffect) =
-        let toGeneralGroups (map : Map<Symbol, FShade.Shader>) =
-            map |> Map.toList |> List.map (fun (n, s) ->
-                ShaderGroup.General { Name = Some n; Stage = ShaderStage.ofFShade s.shaderStage; Value = s}
-            )
+        let general = List<GeneralShader<_>>()
+        let hitGroups = Dictionary<HitGroupSlot, HitGroup<_>>()
 
-        let hitGroups =
-            effect.HitGroups |> Map.toList |> List.collect (fun (n, g) ->
-                g.PerRayType |> Map.toList |> List.map (fun (rayType, entry) ->
-                    ShaderGroup.HitGroup {
-                        Name = n;
-                        RayType = rayType;
-                        AnyHit = entry.AnyHit;
-                        ClosestHit = entry.ClosestHit;
-                        Intersection = entry.Intersection
-                    }
-                )
-            )
+        let getHitGroup ((name, ray) as slot : HitGroupSlot) =
+            match hitGroups.TryGetValue slot with
+            | (true, group) -> group
+            | _ ->
+                { Name         = name
+                  RayType      = ray
+                  AnyHit       = None
+                  ClosestHit   = None
+                  Intersection = None }
+
+        for KeyValue(slot, shader) in effect.Shaders do
+            if slot.Stage <> shader.Stage then
+                failf "Shader in slot %A has stage %A" slot.Stage shader.Stage
+
+            match slot with
+            | ShaderSlot.RayGeneration ->
+                general.Add <| {
+                    Name  = None
+                    Stage = ShaderStage.RayGeneration
+                    Value = shader
+                }
+
+            | ShaderSlot.Miss name | ShaderSlot.Callable name ->
+                general.Add <| {
+                    Name  = Some name
+                    Stage = ShaderStage.ofFShade slot.Stage
+                    Value = shader
+                }
+
+            | ShaderSlot.AnyHit (name, ray) ->
+                let k = struct (name, ray)
+                let g = getHitGroup k
+                hitGroups.[k] <- { g with AnyHit = Some shader }
+
+            | ShaderSlot.ClosestHit (name, ray) ->
+                let k = struct (name, ray)
+                let g = getHitGroup k
+                hitGroups.[k] <- { g with ClosestHit = Some shader }
+
+            | ShaderSlot.Intersection (name, ray) ->
+                let k = struct (name, ray)
+                let g = getHitGroup k
+                hitGroups.[k] <- { g with Intersection = Some shader }
+
+            | _ ->
+                failf "Invalid shader with slot %A" slot
 
         let groups =
-            [ yield ShaderGroup.General { Name = None; Stage = ShaderStage.RayGeneration; Value = effect.RayGenerationShader }
-              yield! effect.MissShaders |> toGeneralGroups
-              yield! effect.CallableShaders |> toGeneralGroups
-              yield! hitGroups ]
+            let g = general |> Seq.toList |> List.map ShaderGroup.General
+            let h = hitGroups.Values |> Seq.toList |> List.map ShaderGroup.HitGroup
+            g @ h
 
         let glsl =
             effect |> FShade.RaytracingEffect.toModule |> FShade.Backends.ModuleCompiler.compileGLSLRaytracing
