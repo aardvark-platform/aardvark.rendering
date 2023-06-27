@@ -17,14 +17,14 @@ open System.Runtime.InteropServices
 module internal ComputeTaskInternals =
     open PreparedPipelineState
 
-    type ComputeInputBinding(manager : ResourceManager, program : ComputeProgram, inputs : IUniformProvider) =
+    type ComputeInputBinding(manager : ResourceManager, shader : IComputeShader, inputs : IUniformProvider) =
 
         // The ResourceManager already provides reference counting, but immediately adds a reference
         // and allocates resources for some reason. We don't want that here (no IDisposable), so we have to do our own
         // reference counting on top of all that.
         let mutable refCount = 0
 
-        let slots = manager.GetInterfaceSlots program.Interface
+        let slots = manager.GetInterfaceSlots shader.Interface
         let mutable uniformBuffers = Array.empty
         let mutable storageBuffers = Array.empty
         let mutable textureBindings = Array.empty
@@ -96,7 +96,7 @@ module internal ComputeTaskInternals =
             )
 
         interface IComputeInputBinding with
-            member x.Shader = program
+            member x.Shader = shader
 
     [<AutoOpen>]
     module private ResourceInputSetExtensions =
@@ -349,10 +349,8 @@ module internal ComputeTaskInternals =
                 state {
                     match cmd with
                     | ComputeCommand.BindCmd shader ->
-                        let program = unbox<ComputeProgram> shader
-
                         do! CompilerState.assemble (fun _ s ->
-                            s.UseProgram program.Handle
+                            s.UseProgram shader.Handle
                         )
 
                     | ComputeCommand.SetInputCmd input ->
@@ -505,6 +503,7 @@ module internal ComputeTaskInternals =
             let reader = input.GetReader()
             let inputs = Dict<Index, ComputeInputBinding>()
             let nested = Dict<Index, IComputeTask>()
+            let hooked = ReferenceCountingSet()
             let mutable commands = IndexList<ComputeCommand>.Empty
             let mutable compiled : CompiledCommand list = []
 
@@ -517,8 +516,7 @@ module internal ComputeTaskInternals =
                             input
 
                         | :? MutableComputeInputBinding as binding ->
-                            let program = unbox<ComputeProgram> binding.Shader
-                            ComputeInputBinding(manager, program, binding)
+                            ComputeInputBinding(manager, binding.Shader, binding)
 
                         | _ ->
                             failf "unknown input binding type %A" (input.GetType())
@@ -528,6 +526,10 @@ module internal ComputeTaskInternals =
                     inputs.[index] <- input
 
                     ComputeCommand.SetInputCmd input
+
+                | ComputeCommand.BindCmd (:? HookedComputeProgram as p) ->
+                    hooked.Add p |> ignore
+                    command
 
                 | ComputeCommand.ExecuteCmd other ->
                     nested.[index] <- other
@@ -542,6 +544,14 @@ module internal ComputeTaskInternals =
                     match nested.TryRemove(index) with
                     | (true, other) -> other.Outputs.Remove owner |> ignore
                     | _ -> ()
+
+                match commands.TryGet index with
+                | Some (ComputeCommand.BindCmd (:? HookedComputeProgram as p)) ->
+                    if hooked.Remove p then
+                        p.Outputs.Remove owner |> ignore
+
+                | _ ->
+                    ()
 
             member x.Commands = compiled
 
@@ -567,9 +577,15 @@ module internal ComputeTaskInternals =
                     input.Release()
                     resources.Remove input
 
+                // Update all hooked compute programs
+                let mutable changed = deltas.Count > 0
+
+                for p in hooked do
+                    if p.Update token then changed <- true
+
                 // Compile updated command list
-                if deltas.Count > 0 then
-                    compiled |> List.iter (fun cmd -> cmd.Dispose())
+                if changed then
+                    for cmd in compiled do cmd.Dispose()
                     compiled <- commands |> ComputeCommand.compile debug
 
             member x.Dispose() =
@@ -581,6 +597,11 @@ module internal ComputeTaskInternals =
                 for KeyValue(_, task) in nested do
                     task.Outputs.Remove owner |> ignore
                 nested.Clear()
+
+                hooked.Clear()
+                commands <- IndexList.empty
+                for cmd in compiled do cmd.Dispose()
+                compiled <- []
 
             interface IDisposable with
                 member x.Dispose() = x.Dispose()

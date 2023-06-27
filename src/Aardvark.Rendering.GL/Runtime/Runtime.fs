@@ -736,11 +736,10 @@ type Runtime(debug : IDebugConfig) =
         ctx.MaxComputeWorkGroupSize
 
     member x.CreateComputeShader (shader : FShade.ComputeShader) =
-        ctx.CompileKernel shader :> IComputeShader
+        ctx.CreateComputeShader shader
 
     member x.CreateInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
-        let program = unbox<ComputeProgram> shader
-        ComputeInputBinding(manager, program, inputs) :> IComputeInputBinding
+        ComputeInputBinding(manager, shader, inputs) :> IComputeInputBinding
 
     member x.CompileCompute (commands : alist<ComputeCommand>) =
         new ComputeTask(manager, commands, debug.DebugComputeTasks) :> IComputeTask

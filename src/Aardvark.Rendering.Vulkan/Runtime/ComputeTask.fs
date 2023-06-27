@@ -483,6 +483,7 @@ module internal ComputeTaskInternals =
                     task.Outputs.Remove owner |> ignore
                 nested.Clear()
 
+                hooked.Clear()
                 commands <- IndexList.empty
                 for c in compiled.Commands do c.Dispose()
                 compiled <- CompilerState.empty

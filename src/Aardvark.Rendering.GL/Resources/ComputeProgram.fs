@@ -84,9 +84,8 @@ module ComputeProgramExtensions =
                         { s with samplerTextures = textures }
 
                     let iface = { glsl.iface with samplers = glsl.iface.samplers |> MapExt.map (constF adjust) }
-                    
                     (glsl.code, iface)
-                )                
+                )
 
             let localSize =
                 if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
@@ -103,3 +102,87 @@ module ComputeProgramExtensions =
 
         member x.Delete(program : ComputeProgram) =
             program.Dispose()
+
+
+[<AutoOpen>]
+module internal ComputeProgramDebugExtensions =
+    open FShade
+    open FShade.GLSL
+    open FSharp.Data.Adaptive
+
+    type HookedComputeProgram(context : Context, input : aval<ComputeShader>) as this =
+        inherit AdaptiveObject()
+
+        let mutable layout = Unchecked.defaultof<GLSLProgramInterface>
+        let mutable current : ValueOption<ComputeShader * ComputeProgram> = ValueNone
+
+        let map f =
+            match current with
+            | ValueSome (_, p) -> f p
+            | _ -> failf "HookedComputeProgram has invalid state"
+
+        do this.Update AdaptiveToken.Top |> ignore
+
+        member x.Handle = map (fun p -> p.Handle)
+        member x.GroupSize = map (fun p -> p.LocalSize)
+
+        // Note: This is not thread safe, since multiple
+        // compute tasks may use the same program concurrently.
+        // This disposes the old program, while it may still be in use.
+        member x.Update(token : AdaptiveToken) : bool =
+            x.EvaluateIfNeeded token false (fun token ->
+                let shader = input.GetValue token
+
+                match current with
+                | ValueNone ->
+                    let program = context.CompileKernel shader
+                    layout <- program.Interface
+                    current <- ValueSome (shader, program)
+                    true
+
+                | ValueSome (s, p) when s <> shader ->
+                    let program = context.CompileKernel shader
+
+                    if program.Interface <> layout then
+                        Log.warn "[GL] Interface of compute shader has changed, ignoring..."
+                        program.Dispose()
+                        false
+                    else
+                        current <- ValueSome (shader, program)
+                        p.Dispose()
+                        true
+
+                | _ ->
+                    false
+            )
+
+        member x.Dispose() =
+            match current with
+            | ValueSome (_, p) ->
+                p.Dispose()
+                current <- ValueNone
+
+            | _ -> ()
+
+        interface IComputeShader with
+            member x.Runtime = context.Runtime
+            member x.LocalSize = x.GroupSize
+            member x.Interface = layout
+            member x.Dispose() = x.Dispose()
+
+
+    type IComputeShader with
+        member inline x.Handle =
+            match x with
+            | :? ComputeProgram as p       -> p.Handle
+            | :? HookedComputeProgram as p -> p.Handle
+            | _ -> failf $"Invalid compute shader type {x.GetType()}"
+
+    type Context with
+        member x.CreateComputeShader(shader : FShade.ComputeShader) : IComputeShader =
+            match ShaderDebugger.tryRegisterComputeShader shader with
+            | Some hooked ->
+                new HookedComputeProgram(x, hooked)
+
+            | _ ->
+                x.CompileKernel shader
