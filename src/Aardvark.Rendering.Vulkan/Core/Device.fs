@@ -962,7 +962,7 @@ and [<AbstractClass>] Resource =
         member x.Dispose() =
             let refs = Interlocked.Decrement(&x.refCount)
             if refs < 0 then
-                Log.warn "[Vulkan] Resource has negative reference count"
+                Log.warn $"[Vulkan] Resource {x} has negative reference count ({refs})"
             elif refs = 0 then
                 x.Destroy()
 

@@ -16,8 +16,7 @@ type ComputeProgram =
         val public Shader : GLSLShader
 
         override x.Destroy() =
-            let device = x.Device
-            VkRaw.vkDestroyPipeline(device.Handle, x.Pipeline, NativePtr.zero)
+            VkRaw.vkDestroyPipeline(x.Device.Handle, x.Pipeline, NativePtr.zero)
             x.PipelineLayout.Dispose()
             x.ShaderModule.Dispose()
 
@@ -215,3 +214,104 @@ module ComputeProgram =
     let ofFunction (f : 'a -> 'b) (device : Device) =
         let shader = FShade.ComputeShader.ofFunction device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize f
         ofFShade shader device
+
+
+[<AutoOpen>]
+module internal ComputeProgramDebugExtensions =
+    open FSharp.Data.Adaptive
+
+    type HookedComputeProgram(device : Device, input : aval<ComputeShader>) as this =
+        inherit AdaptiveObject()
+
+        let mutable current : ValueOption<ComputeShader * ComputeProgram * PipelineLayout> = ValueNone
+
+        let map f =
+            match current with
+            | ValueSome (_, p, l) -> f (struct(p, l))
+            | _ -> failf "HookedComputeProgram has invalid state"
+
+        do this.Update AdaptiveToken.Top |> ignore
+
+        member x.Interface =
+            map (fun struct(p, _) -> p.Shader.iface)
+
+        member x.GroupSize =
+            map (fun struct(p, _) -> p.GroupSize)
+
+        member x.Pipeline =
+            map (fun struct(p, _) -> p.Pipeline)
+
+        member x.PipelineLayout =
+            map (fun struct(_, l) -> l)
+
+        // Note: This is not thread safe, since multiple
+        // compute tasks may use the same program concurrently.
+        // This disposes the old program, while it may still be in use.
+        member x.Update(token : AdaptiveToken) : bool =
+            x.EvaluateIfNeeded token false (fun token ->
+                let shader = input.GetValue token
+
+                match current with
+                | ValueNone ->
+                    let program = ComputeProgram.ofFShade shader device
+
+                    // The pipeline layout is static.
+                    // Make sure it does not get disposed when the program changes.
+                    program.PipelineLayout.AddReference()
+                    current <- ValueSome (shader, program, program.PipelineLayout)
+
+                    true
+
+                | ValueSome (s, p, l) when s <> shader ->
+                    let program = ComputeProgram.ofFShade shader device
+
+                    if program.PipelineLayout.PipelineInfo <> l.PipelineInfo then
+                        Log.warn "[Vulkan] Pipeline layout of compute shader has changed, ignoring..."
+                        program.Dispose()
+                        false
+
+                    else
+                        current <- ValueSome (shader, program, l)
+                        p.Dispose()
+                        true
+                | _ ->
+                    false
+            )
+
+        member x.Dispose() =
+            match current with
+            | ValueSome (_, p, l) ->
+                p.Dispose()
+                l.Dispose()
+                current <- ValueNone
+
+            | _ -> ()
+
+        interface IComputeShader with
+            member x.Runtime = device.Runtime
+            member x.LocalSize = x.GroupSize
+            member x.Interface = x.Interface
+            member x.Dispose() = x.Dispose()
+
+
+    type IComputeShader with
+        member inline x.Pipeline =
+            match x with
+            | :? ComputeProgram as p       -> p.Pipeline
+            | :? HookedComputeProgram as p -> p.Pipeline
+            | _ -> failf $"Invalid compute shader type {x.GetType()}"
+
+        member inline x.PipelineLayout =
+            match x with
+            | :? ComputeProgram as p       -> p.PipelineLayout
+            | :? HookedComputeProgram as p -> p.PipelineLayout
+            | _ -> failf $"Invalid compute shader type {x.GetType()}"
+
+    type Device with
+        member x.CreateComputeShader(shader : FShade.ComputeShader) : IComputeShader =
+            match ShaderDebugger.tryRegisterComputeShader shader with
+            | Some hooked ->
+                new HookedComputeProgram(x, hooked)
+
+            | _ ->
+                ComputeProgram.ofFShade shader x

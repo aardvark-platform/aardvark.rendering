@@ -438,11 +438,10 @@ type Runtime(device : Device) as this =
     member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
 
     member x.CreateComputeShader(shader : FShade.ComputeShader) =
-        ComputeProgram.ofFShade shader device :> IComputeShader
+        device.CreateComputeShader shader
 
     member x.CreateInputBinding(shader : IComputeShader, inputs : IUniformProvider) : IComputeInputBinding =
-        let program = unbox<ComputeProgram> shader
-        manager.CreateComputeInputBinding(program, inputs)
+        manager.CreateComputeInputBinding(shader, inputs)
 
     member x.CompileCompute (commands : alist<ComputeCommand>) =
         new ComputeTask(manager, commands) :> IComputeTask

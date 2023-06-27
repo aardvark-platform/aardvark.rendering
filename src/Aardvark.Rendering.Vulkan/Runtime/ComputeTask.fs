@@ -12,23 +12,23 @@ module internal ComputeTaskInternals =
 
     type ComputeInputBinding =
         {
-            Program : ComputeProgram
+            Shader  : IComputeShader
             Binding : INativeResourceLocation<DescriptorSetBinding>
         }
 
         interface IComputeInputBinding with
-            member x.Shader = x.Program
+            member x.Shader = x.Shader
 
     type ResourceManager with
 
-        member x.CreateComputeInputBinding(program : ComputeProgram, inputs : IUniformProvider) =
+        member x.CreateComputeInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
             let provider = UniformProvider.computeInputs inputs
 
             let binding =
-                let sets = x.CreateDescriptorSets(program.PipelineLayout, provider)
-                x.CreateDescriptorSetBinding(VkPipelineBindPoint.Compute, program.PipelineLayout, sets)
+                let sets = x.CreateDescriptorSets(shader.PipelineLayout, provider)
+                x.CreateDescriptorSetBinding(VkPipelineBindPoint.Compute, shader.PipelineLayout, sets)
 
-            { Program = program
+            { Shader  = shader
               Binding = binding }
 
 
@@ -249,9 +249,8 @@ module internal ComputeTaskInternals =
                 state {
                     match cmd with
                     | ComputeCommand.BindCmd shader ->
-                        let program = unbox<ComputeProgram> shader
                         let! stream = CompilerState.stream
-                        stream.BindPipeline(VkPipelineBindPoint.Compute, program.Pipeline) |> ignore
+                        stream.BindPipeline(VkPipelineBindPoint.Compute, shader.Pipeline) |> ignore
 
                     | ComputeCommand.SetInputCmd input ->
                         let input = unbox<ComputeInputBinding> input
@@ -388,6 +387,7 @@ module internal ComputeTaskInternals =
             let reader = input.GetReader()
             let inputs = Dict<Index, ComputeInputBinding>()
             let nested = Dict<Index, IComputeTask>()
+            let hooked = ReferenceCountingSet()
             let mutable commands = IndexList<ComputeCommand>.Empty
             let mutable compiled = CompilerState.empty
 
@@ -400,8 +400,7 @@ module internal ComputeTaskInternals =
                             input
 
                         | :? MutableComputeInputBinding as binding ->
-                            let program = unbox<ComputeProgram> binding.Shader
-                            manager.CreateComputeInputBinding(program, binding)
+                            manager.CreateComputeInputBinding(binding.Shader, binding)
 
                         | _ ->
                             failf "unknown input binding type %A" (input.GetType())
@@ -410,6 +409,10 @@ module internal ComputeTaskInternals =
                     inputs.[index] <- input
 
                     ComputeCommand.SetInputCmd input
+
+                | ComputeCommand.BindCmd (:? HookedComputeProgram as p) ->
+                    hooked.Add p |> ignore
+                    command
 
                 | ComputeCommand.ExecuteCmd other ->
                     nested.[index] <- other
@@ -424,6 +427,14 @@ module internal ComputeTaskInternals =
                     match nested.TryRemove(index) with
                     | (true, other) -> other.Outputs.Remove owner |> ignore
                     | _ -> ()
+
+                match commands.TryGet index with
+                | Some (ComputeCommand.BindCmd (:? HookedComputeProgram as p)) ->
+                    if hooked.Remove p then
+                        p.Outputs.Remove owner |> ignore
+
+                | _ ->
+                    ()
 
             member x.State =
                 compiled
@@ -449,9 +460,15 @@ module internal ComputeTaskInternals =
                 for input in removedInputs do
                     resources.Remove input.Binding
 
+                // Update all hooked compute programs
+                let mutable changed = deltas.Count > 0
+
+                for p in hooked do
+                    if p.Update token then changed <- true
+
                 // Compile updated command list
-                if deltas.Count > 0 then
-                    compiled.Commands |> List.iter (fun c -> c.Dispose())
+                if changed then
+                    for c in compiled.Commands do c.Dispose()
                     compiled <- ComputeCommand.compile queueFlags commands
                     true
                 else
@@ -467,7 +484,7 @@ module internal ComputeTaskInternals =
                 nested.Clear()
 
                 commands <- IndexList.empty
-                compiled.Commands |> List.iter (fun c -> c.Dispose())
+                for c in compiled.Commands do c.Dispose()
                 compiled <- CompilerState.empty
 
             interface IDisposable with
