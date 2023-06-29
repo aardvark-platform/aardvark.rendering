@@ -68,7 +68,7 @@ type ResourceInputSet() =
             )
 
         if needsUpdate then
-            Log.warn "adding outdated resource: %A" r.Kind
+            Report.Line(3, $"adding outdated resource: {r.Kind}")
             x.EvaluateAlways AdaptiveToken.Top (fun token ->
                 updateDirty token RenderToken.Empty
             )
