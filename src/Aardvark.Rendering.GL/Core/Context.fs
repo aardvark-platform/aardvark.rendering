@@ -350,8 +350,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     /// Returns the number of samples supported by the given target and format.
     /// </summary>
     member internal x.GetFormatSamples(target : ImageTarget, format : TextureFormat) =
-        if GL.ARB_internalformat_query then
-            formatSampleCounts.GetOrCreate((target, format), fun _ ->
+        formatSampleCounts.GetOrCreate((target, format), fun _ ->
+            if GL.ARB_internalformat_query then
                 let format = TextureFormat.toSizedInternalFormat format
 
                 let count = GL.Dispatch.GetInternalformat(target, format, InternalFormatParameter.NumSampleCounts)
@@ -364,25 +364,25 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
                     Set.ofArray buffer
                 else
                     Set.empty
-            )
-        else
-            Log.warn "[GL] Internal format queries not supported, assuming all sample counts are supported"
-            Set.ofList [1; 2; 4; 8; 16; 32; 64]
+            else
+                Log.warn "[GL] Internal format queries not supported, assuming all sample counts are supported (target = %A, format = %A)" target format
+                Set.ofList [1; 2; 4; 8; 16; 32; 64]
+        )
 
     /// <summary>
     /// Returns the mipmap generation support for the given target and format.
     /// </summary>
     member internal x.GetFormatMipmapGeneration(target : ImageTarget, format : TextureFormat) =
-        if GL.ARB_internalformat_query2 then
-            mipmapGenerationSupport.GetOrCreate((target, format), fun _ ->
+        mipmapGenerationSupport.GetOrCreate((target, format), fun _ ->
+            if GL.ARB_internalformat_query2 then
                 let support = GL.Dispatch.GetInternalformatMipmapGenerationSupport(target, TextureFormat.toSizedInternalFormat format)
                 GL.Check "could not query mipmap generation support"
 
                 support
-            )
-        else
-            Log.warn "[GL] Internal format queries not supported, assuming mipmap generation is supported"
-            MipmapGenerationSupport.Full
+            else
+                Log.warn "[GL] Internal format queries not supported, assuming mipmap generation is supported (target = %A, format = %A)" target format
+                MipmapGenerationSupport.Full
+        )
 
     /// Returns all errors reported by the debug output on the resource context handles.
     member x.GetDebugErrors() =

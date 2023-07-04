@@ -1100,7 +1100,10 @@ module private RuntimeCommands =
             )
 
         let cache = Dict<IRenderObject, PreparedCommand>()
-        let dirty = HashSet<PreparedCommand>()
+        let dirty = LockedSet<PreparedCommand>()
+
+        let isValid (cmd : PreparedCommand) =
+            cache |> Seq.exists (fun (KeyValue(_, c)) -> c = cmd)
 
         let compile (o : IRenderObject) =
             match o with
@@ -1117,28 +1120,30 @@ module private RuntimeCommands =
             cache.[o] <- cmd
 
         let remove (o : IRenderObject) =
-            match cache.TryRemove(o) with
+            match cache.TryRemove o with
             | (true, cmd) ->
                 // unlink stuff (remove from trie)
                 let bucket = getBucket o.RenderPass
                 bucket.Remove(cmd) |> ignore
 
-                lock dirty (fun () -> dirty.Remove cmd |> ignore)
+                dirty.Remove cmd |> ignore
+                cmd.Outputs.Clear()
                 cmd.Dispose()
             | _ ->
                 ()
 
         override x.InputChangedObject(_, i) =
             match i with
-            | :? PreparedCommand as c ->
-                // should be unreachable
-                lock dirty (fun () -> dirty.Add c |> ignore)
+            | :? PreparedCommand as cmd ->
+                dirty.Add cmd |> ignore
             | _ ->
                 ()
 
         override x.Free() =
             // release all RenderObjectCommands
-            for cmd in cache.Values do cmd.Dispose()
+            for KeyValue(_, cmd) in cache do
+                cmd.Dispose()
+                cmd.Outputs.Clear()
 
             // clear all caches
             cache.Clear()
@@ -1157,8 +1162,8 @@ module private RuntimeCommands =
             deltas |> HashSetDelta.iter (insert token) (remove)
 
             // get and update the dirty PreparedCommands (can be non-empty due to CommandNode)
-            let dirty = lock dirty (fun () -> consume dirty)
-            for d in dirty do d.Update(token)
+            for cmd in dirty.GetAndClear() do
+                if isValid cmd then cmd.Update token
 
             for (KeyValue(_,b)) in trie do
                 b.Update token
@@ -1273,64 +1278,68 @@ module private RuntimeCommands =
 
         let first = new VKVM.CommandStream()
         let cache = SortedDictionaryExt<Index, PreparedCommand>(compare)
-        let dirty = HashSet<PreparedCommand>()
+        let dirty = LockedSet<PreparedCommand>()
+
+        let isValid (cmd : PreparedCommand) =
+            cache |> Seq.exists (fun (KeyValue(_, c)) -> c = cmd)
 
         let destroy (cmd : PreparedCommand) =
-            lock dirty (fun () -> dirty.Remove cmd |> ignore)
+            dirty.Remove cmd |> ignore
+            cmd.Outputs.Clear()
 
             match cmd.Prev with
-                | Some p -> p.Next <- cmd.Next
-                | None -> first.Next <- cmd.Next |> Option.map (fun c -> c.Stream)
+            | Some p -> p.Next <- cmd.Next
+            | None -> first.Next <- cmd.Next |> Option.map (fun c -> c.Stream)
 
             match cmd.Next with
-                | Some n -> n.Prev <- cmd.Prev
-                | None -> ()
+            | Some n -> n.Prev <- cmd.Prev
+            | None -> ()
 
             cmd.Dispose()
 
         let set (token : AdaptiveToken) (index : Index) (v : RuntimeCommand) =
             cache |> SortedDictionary.setWithNeighbours index (fun l s r ->
-                    
+
                 // TODO: move causes destroy/prepare
                 match s with
-                    | Some cmd -> destroy cmd
-                    | None -> ()
+                | Some cmd -> destroy cmd
+                | None -> ()
 
                 let cmd = compiler.Compile v
                 cmd.Update(token)
 
                 match l with
-                    | Some(_,l) -> 
-                        l.Next <- Some cmd
-                        cmd.Prev <- Some l
-                    | None -> 
-                        first.Next <- Some cmd.Stream
-                        cmd.Prev <- None
+                | Some(_,l) ->
+                    l.Next <- Some cmd
+                    cmd.Prev <- Some l
+                | None ->
+                    first.Next <- Some cmd.Stream
+                    cmd.Prev <- None
 
                 match r with
-                    | Some(_,r) -> 
-                        cmd.Next <- Some r
-                        r.Prev <- Some cmd
-                    | None -> 
-                        cmd.Next <- None
+                | Some(_,r) ->
+                    cmd.Next <- Some r
+                    r.Prev <- Some cmd
+                | None ->
+                    cmd.Next <- None
 
                 cmd
             ) |> ignore
-                
+
         let remove (index : Index) =
             match cache.TryGetValue index with
-                | (true, cmd) ->
-                    cache.Remove index |> ignore
-                    destroy cmd
-                | _ ->
-                    ()
+            | (true, cmd) ->
+                cache.Remove index |> ignore
+                destroy cmd
+            | _ ->
+                ()
 
         override x.InputChangedObject(_,i) =
             match i with
-                | :? PreparedCommand as c ->
-                    lock dirty (fun () -> dirty.Add c |> ignore)
-                | _ ->
-                    ()
+            | :? PreparedCommand as c ->
+                dirty.Add c |> ignore
+            | _ ->
+                ()
 
         override x.Compile(token, stream) =
             let deltas = reader.GetChanges token
@@ -1340,8 +1349,8 @@ module private RuntimeCommands =
             deltas |> IndexListDelta.iter (set token) (remove)
 
             // update all dirty inner commands
-            let dirty = lock dirty (fun () -> consume dirty)
-            for d in dirty do d.Update(token)
+            for cmd in dirty.GetAndClear() do
+                if isValid cmd then cmd.Update token
 
             // refill the top-level stream
             stream.Clear()
@@ -1349,7 +1358,11 @@ module private RuntimeCommands =
 
         override x.Free() =
             reader <- Unchecked.defaultof<_>
-            cache |> Seq.iter (fun (KeyValue(_,v)) -> v.Dispose())
+
+            for KeyValue(_, cmd) in cache do
+                cmd.Outputs.Clear()
+                cmd.Dispose()
+
             cache.Clear()
             dirty.Clear()
             first.Dispose()
