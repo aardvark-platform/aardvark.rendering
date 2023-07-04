@@ -116,6 +116,38 @@ module internal ComputeProgramDebugExtensions =
         let mutable layout = Unchecked.defaultof<GLSLProgramInterface>
         let mutable current : ValueOption<ComputeShader * ComputeProgram> = ValueNone
 
+        let validateLayout (next : GLSLProgramInterface) =
+            let mutable isValid = true
+
+            let isUniformBufferCompatible (o : GLSLUniformBuffer) (n : GLSLUniformBuffer) =
+                o.ubSet = n.ubSet &&
+                o.ubBinding = n.ubBinding &&
+                o.ubSize >= n.ubSize &&
+                o.ubFields.Length >= n.ubFields.Length &&
+                List.take n.ubFields.Length o.ubFields = n.ubFields
+
+            let check (description : string) (isCompatible : 'V -> 'V -> bool) (old : MapExt<'K, 'V>) (next : MapExt<'K, 'V>) =
+                for KeyValue(name, nv) in next do
+                    match old |> MapExt.tryFind name with
+                    | Some ov when not <| isCompatible ov nv ->
+                        let nl = Environment.NewLine
+                        Log.warn $"[GL] {description} '{name}'{nl}{nl}{nv}{nl}{nl}is incompatible with original interface{nl}{nl}{ov}{nl}"
+                        isValid <- false
+
+                    | None ->
+                        Log.warn $"[GL] {description} '{name}' not found in original interface"
+                        isValid <- false
+
+                    | _ ->
+                        ()
+
+            (layout.images, next.images) ||> check "Image" (=)
+            (layout.samplers, next.samplers) ||> check "Sampler" (=)
+            (layout.storageBuffers, next.storageBuffers) ||> check "Storage buffer" (=)
+            (layout.uniformBuffers, next.uniformBuffers) ||> check "Uniform buffer" isUniformBufferCompatible
+
+            isValid
+
         let map f =
             match current with
             | ValueSome (_, p) -> f p
@@ -142,9 +174,9 @@ module internal ComputeProgramDebugExtensions =
 
                 | ValueSome (s, p) when s <> shader ->
                     let program = context.CompileKernel shader
-
-                    if program.Interface <> layout then
-                        Log.warn "[GL] Interface of compute shader has changed, ignoring..."
+ 
+                    if not <| validateLayout program.Interface then
+                        Log.warn "[GL] Interface of compute shader has changed and is incompatible with original interface, ignoring..."
                         program.Dispose()
                         false
                     else
