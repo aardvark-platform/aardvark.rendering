@@ -45,7 +45,7 @@ module Shader =
 
     // since we need special extension feature not provided by fshade we simply import the functionality (standard approach)
     [<GLSLIntrinsic("gl_DrawIDARB",requiredExtensions=[|"GL_ARB_shader_draw_parameters"|])>]
-    let drawId () : int = raise <| FShade.Imperative.FShadeOnlyInShaderCodeException "drawId"
+    let drawId () : int = onlyInShaderCode "drawId"
 
     // define some typed accessors for uniforms/storage buffers.
     type UniformScope with

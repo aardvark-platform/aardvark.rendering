@@ -81,7 +81,7 @@ type Runtime(device : Device) as this =
         new CommandTask(manager, unbox renderPass, cmd)
 
     member x.CompileRender (renderPass : IFramebufferSignature, set : aset<IRenderObject>) =
-        let set = EffectDebugger.Hook set
+        let set = ShaderDebugger.hookRenderObjects set
         new CommandTask(manager, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
 
     member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =

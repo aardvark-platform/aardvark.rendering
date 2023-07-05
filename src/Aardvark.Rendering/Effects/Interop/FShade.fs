@@ -511,12 +511,12 @@ module FShadeInterop =
                     layout, modules |> Array.map (EffectInputLayout.apply layout)
 
                 let current =
-                    if EffectDebugger.isAttached then
+                    if ShaderDebugger.isInitialized() then
                         let hooked =
                             effects |> Array.mapi (fun i e ->
-                                match EffectDebugger.register e with
-                                | Some (:? aval<Effect> as e) ->
-                                    e |> AVal.map (fun e ->
+                                match ShaderDebugger.tryRegisterEffect e with
+                                | Some hooked ->
+                                    hooked |> AVal.map (fun e ->
                                         try
                                             let m = e |> Effect.toModule cfg |> EffectInputLayout.apply layout
                                             m.Entries |> ignore // Evaluate lazy entries here to trigger potential exceptions

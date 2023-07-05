@@ -1897,9 +1897,6 @@ type ResourceManager(device : Device) =
     member x.CreateShaderProgram(signature : RenderPass, data : FShade.Effect, top : IndexedGeometryMode) =
         let program = device.CreateShaderProgram(signature, data, top)
 
-        if FShade.EffectDebugger.isAttached then
-            FShade.EffectDebugger.saveCode data program.Surface
-
         let resource =
             { new AbstractResourceLocation<ShaderProgram>(dummyCache, []) with
                 override x.Create () = ()

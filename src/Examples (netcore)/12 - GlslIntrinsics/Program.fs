@@ -7,11 +7,11 @@ open Aardvark.Application
 // This example illustrates how to render a simple triangle using aardvark.
 
 module Shader =
-    open FShade 
+    open FShade
 
     [<ReflectedDefinition>]
     [<GLSLIntrinsic("gl_FrontFacing")>]
-    let frontFace () : bool = raise <| FShade.Imperative.FShadeOnlyInShaderCodeException "frontFace"
+    let frontFace () : bool = onlyInShaderCode "frontFace"
 
     let test (v : Effects.Vertex) =
         fragment {

@@ -137,7 +137,7 @@
     <Compile Include="RenderTasks\BeforeAfterRenderTask.fs" />
     <Compile Include="RenderTasks\RenderToExtensions.fs" />
     <Compile Include="RenderTasks\RenderTask.fs" />
-    <Compile Include="Effects\Interop\EffectDebugger.fs" />
+    <Compile Include="Effects\Interop\ShaderDebugger.fs" />
     <Compile Include="Effects\Interop\ShaderInterface.fs" />
     <Compile Include="Effects\Interop\FShade.fs" />
     <Compile Include="Effects\Default\Impl\Vertex.fs" />

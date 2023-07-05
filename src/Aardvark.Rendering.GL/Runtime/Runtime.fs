@@ -406,7 +406,7 @@ type Runtime(debug : IDebugConfig) =
     member x.ResourceManager = manager
 
     member x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>) =
-        let set = EffectDebugger.Hook set
+        let set = ShaderDebugger.hookRenderObjects set
 
         if RuntimeConfig.UseNewRenderTask then
             new RenderTasks.NewRenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
