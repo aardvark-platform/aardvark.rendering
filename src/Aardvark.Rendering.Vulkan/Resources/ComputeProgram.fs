@@ -218,12 +218,43 @@ module ComputeProgram =
 
 [<AutoOpen>]
 module internal ComputeProgramDebugExtensions =
+    open System
     open FSharp.Data.Adaptive
 
     type HookedComputeProgram(device : Device, input : aval<ComputeShader>) as this =
         inherit AdaptiveObject()
 
         let mutable current : ValueOption<ComputeShader * ComputeProgram * PipelineLayout> = ValueNone
+
+        let validateLayout (layout : PipelineInfo) (next : PipelineInfo) =
+            let mutable isValid = true
+
+            let isUniformBufferCompatible (o : GLSLUniformBuffer) (n : GLSLUniformBuffer) =
+                o.ubSet = n.ubSet &&
+                o.ubBinding = n.ubBinding &&
+                o.ubSize >= n.ubSize &&
+                o.ubFields.Length >= n.ubFields.Length &&
+                List.take n.ubFields.Length o.ubFields = n.ubFields
+
+            let check (description : string) (getName : 'V -> string) (isCompatible : 'V -> 'V -> bool) (old : 'V list) (next : 'V list) =
+                if old.Length <> next.Length then
+                    Log.warn $"[Vulkan] {description} count has changed from {old.Length} to {next.Length}"
+                    isValid <- false
+                else
+                    (old, next) ||> List.iter2 (fun ov nv ->
+                        if not <| isCompatible ov nv then
+                            let nl = Environment.NewLine
+                            let name = getName nv
+                            Log.warn $"[Vulkan] {description} '{name}'{nl}{nl}{nv}{nl}{nl}is incompatible with original interface{nl}{nl}{ov}{nl}"
+                            isValid <- false
+                    )
+
+            (layout.pImages, next.pImages) ||> check "Image" (fun i -> i.imageName) (=)
+            (layout.pTextures, next.pTextures) ||> check "Sampler" (fun s -> s.samplerName) (=)
+            (layout.pStorageBlocks, next.pStorageBlocks) ||> check "Storage buffer" (fun b -> b.ssbName) (=)
+            (layout.pUniformBlocks, next.pUniformBlocks) ||> check "Uniform buffer" (fun b -> b.ubName) isUniformBufferCompatible
+
+            isValid
 
         let map f =
             match current with
@@ -265,8 +296,8 @@ module internal ComputeProgramDebugExtensions =
                 | ValueSome (s, p, l) when s <> shader ->
                     let program = ComputeProgram.ofFShade shader device
 
-                    if program.PipelineLayout.PipelineInfo <> l.PipelineInfo then
-                        Log.warn "[Vulkan] Pipeline layout of compute shader has changed, ignoring..."
+                    if not <| validateLayout l.PipelineInfo program.PipelineLayout.PipelineInfo then
+                        Log.warn "[Vulkan] Pipeline layout of compute shader has changed and is incompatible with original layout, ignoring..."
                         program.Dispose()
                         false
 
