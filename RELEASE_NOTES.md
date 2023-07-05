@@ -1,3 +1,10 @@
+### 5.4.3
+- Updated to FShade 5.5
+- Added support for debugging raytracing effects and compute shaders with the FShade ShaderDebugger
+- Fixed issues with dirty sets in OrderedCommand (GL / Vulkan)
+- [GL] Increased verbosity level of outdated resource warning
+- [GL] Improved warning about missing internal format query support 
+
 ### 5.4.2
 - [Vulkan] Fixed issue in SBT update
 - [Sg] Added C# Surface overload
