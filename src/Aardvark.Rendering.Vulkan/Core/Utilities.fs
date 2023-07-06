@@ -143,7 +143,7 @@ module private Utilities =
 
     let inline failf fmt = 
         Printf.kprintf (fun str -> 
-            Report.Error $"[Vulkan] {str}"
+            Log.error $"[Vulkan] {str}"
             failwith ("[Vulkan] " + str)
         ) fmt
 
