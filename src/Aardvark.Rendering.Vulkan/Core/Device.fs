@@ -519,12 +519,16 @@ and DeviceCache<'a, 'b when 'b :> CachedResource>(device : Device, name : Symbol
 
     member x.Invoke(value : 'a, create : 'a -> 'b) : 'b =
         lock store (fun () ->
-            let create (value : 'a) =
-                let res = create value
-                res.Cache <- Some name
-                back.[res] <- value
-                res
-            let res = store.GetOrCreate(value, Func<'a, 'b>(create))
+            let res =
+                match store.TryGetValue value with
+                | (true, r) -> r
+                | _ ->
+                    let r = create value
+                    r.Cache <- Some name
+                    back.[r] <- value
+                    store.[value] <- r
+                    r
+
             res.AddReference()
             res
         )

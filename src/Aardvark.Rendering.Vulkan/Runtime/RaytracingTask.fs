@@ -180,17 +180,23 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
     let resources = ResourceLocationSet()
     let mutable compiled = new CompiledCommand(manager, resources, pipeline, commands)
+    let mutable currentEffect = compiled.Effect
 
     let updateCommandResources (t : AdaptiveToken) (rt : RenderToken) =
         use tt = getDeviceToken()
 
         let effect = effect.GetValue t
 
-        if effect <> compiled.Effect then
-            let pipeline = { pipeline with Effect = effect }
-            let recompiled = new CompiledCommand(manager, resources, pipeline, commands)
-            compiled.Dispose()
-            compiled <- recompiled
+        if effect <> currentEffect then
+            currentEffect <- effect
+
+            try
+                let pipeline = { pipeline with Effect = effect }
+                let recompiled = new CompiledCommand(manager, resources, pipeline, commands)
+                compiled.Dispose()
+                compiled <- recompiled
+            with _ ->
+                Log.warn "[Vulkan] Failed to update raytracing effect"
 
         resources.Use(t, rt, fun resourcesChanged ->
             let commandChanged =
