@@ -399,14 +399,14 @@ module RenderTasks =
     type NewRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, debug : bool) as this =
         inherit AbstractOpenGlRenderTask(man, fboSignature)
 
-        let rec hook (r : IRenderObject) =
+        let rec hook (r : IRenderObject) : IRenderObject =
             match r with
-                | :? RenderObject as o -> this.HookRenderObject o :> IRenderObject
-                | :? MultiRenderObject as o -> MultiRenderObject(o.Children |> List.map hook) :> IRenderObject
-                | _ -> r
+            | :? HookedRenderObject as o -> HookedRenderObject.map this.HookRenderObject o
+            | :? RenderObject as o -> this.HookRenderObject o
+            | :? MultiRenderObject as o -> MultiRenderObject(o.Children |> List.map hook)
+            | _ -> r
 
         let mainCommand = Command.ofRenderObjects fboSignature this.ResourceManager debug (ASet.map hook objects)
-
         
         override x.Use(action : unit -> 'a) = action()
 
@@ -447,11 +447,12 @@ module RenderTasks =
             ro.AddCleanup(fun () -> for r in all do self.Resources.Remove r)
             ro
             
-        let rec hook (r : IRenderObject) =
+        let rec hook (r : IRenderObject) : IRenderObject =
             match r with
-                | :? RenderObject as o -> this.HookRenderObject o :> IRenderObject
-                | :? MultiRenderObject as o -> MultiRenderObject(o.Children |> List.map hook) :> IRenderObject
-                | _ -> r
+            | :? HookedRenderObject as o -> HookedRenderObject.map this.HookRenderObject o
+            | :? RenderObject as o -> this.HookRenderObject o
+            | :? MultiRenderObject as o -> MultiRenderObject(o.Children |> List.map hook)
+            | _ -> r
 
         let preparedObjects = objects |> ASet.map (hook >> PreparedCommand.ofRenderObject fboSignature this.ResourceManager >> add this)
         let preparedObjectReader = preparedObjects.GetReader()

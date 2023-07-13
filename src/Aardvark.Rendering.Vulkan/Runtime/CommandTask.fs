@@ -787,9 +787,10 @@ module private RuntimeCommands =
                     AVal.constant Box3d.Unit
             )
 
-        static let rec hook (task : AbstractRenderTask) (o : IRenderObject) =
+        static let rec hook (task : AbstractRenderTask) (o : IRenderObject) : IRenderObject =
             match o with
-            | :? RenderObject as o -> task.HookRenderObject(o) :> IRenderObject
+            | :? HookedRenderObject as o -> HookedRenderObject.map task.HookRenderObject o
+            | :? RenderObject as o -> task.HookRenderObject o
             | :? MultiRenderObject as o -> o.Children |> List.map (hook task) |> MultiRenderObject :> IRenderObject
             | o -> o
 

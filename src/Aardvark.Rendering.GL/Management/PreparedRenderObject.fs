@@ -3,6 +3,7 @@
 #nowarn "9"
 
 open System
+open System.Collections.Generic
 open FSharp.Data.Adaptive
 open Aardvark.Base
 
@@ -150,14 +151,30 @@ type PreparedPipelineState =
 module PreparedPipelineState =
     open Uniforms.Patterns
 
+    // Utilities for keeping track of resources, so they can be disposed if an exception is raised at some point.
+    // Useful when using the shader debugger, where an exception in ofRenderObject does not necessarily lead to program termination.
+    [<AutoOpen>]
+    module internal ResourceUtilities =
+
+        let inline addResource (resources : List<IDisposable>) (resource : #IDisposable) =
+            if resources <> null then resources.Add resource |> ignore
+            resource
+
+        let inline removeResource (resources : List<IDisposable>) (resource : IDisposable) =
+            if resources <> null then resources.Remove resource |> ignore
+
     type ResourceManager with
-        member x.CreateUniformBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
+        member x.CreateUniformBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope, resources : List<IDisposable>) =
             iface.uniformBuffers
             |> Array.map (fun (_, block) ->
-                struct (block.ubBinding, x.CreateUniformBuffer(scope, block, uniforms))
+                let buffer = x.CreateUniformBuffer(scope, block, uniforms)
+                struct (block.ubBinding, buffer |> addResource resources)
             )
 
-        member x.CreateStorageBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
+        member inline x.CreateUniformBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
+            x.CreateUniformBuffers(iface, uniforms, scope, null)
+
+        member x.CreateStorageBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope, resources : List<IDisposable>) =
             iface.storageBuffers |> Array.map (fun (_, block) ->
                 let bufferName = Sym.ofString block.ssbName
 
@@ -178,10 +195,13 @@ module PreparedPipelineState =
                     | _ ->
                         failf "could not find storage buffer '%A'" bufferName
 
-                struct (block.ssbBinding, buffer)
+                struct (block.ssbBinding, buffer |> addResource resources)
             )
 
-        member x.CreateTextureBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
+        member inline x.CreateStorageBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
+            x.CreateStorageBuffers(iface, uniforms, scope, null)
+
+        member x.CreateTextureBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope, resources : List<IDisposable>) =
             let samplerModifier =
                 match uniforms.TryGetUniform(scope, DefaultSemantic.SamplerStateModifier) with
                 | Some (:? aval<Symbol -> SamplerState -> SamplerState> as mode) ->
@@ -235,7 +255,7 @@ module PreparedPipelineState =
                             let sampler = createSampler textureName samplerState
                             let textureArray = x.CreateTextureArray(sam.samplerCount, textureArray, sam.samplerType)
                             let arrayBinding = x.CreateTextureBinding(slotRange, textureArray, sampler)
-                            Some <| ArrayBinding arrayBinding
+                            Some <| ArrayBinding (arrayBinding |> addResource resources)
 
                         | Some t ->
                             failf "invalid type '%A' for texture array '%A' (expected ITexture[])" t.ContentType textureName
@@ -253,8 +273,8 @@ module PreparedPipelineState =
                         // Plain single texture with sampler state
                         | [textureName, samplerState] ->
                             let textureName = Symbol.Create textureName
-                            let texture = createTexture textureName sam.samplerType
-                            let sampler = createSampler textureName samplerState
+                            let texture = createTexture textureName sam.samplerType |> addResource resources
+                            let sampler = createSampler textureName samplerState |> addResource resources
                             SingleBinding (texture, sampler)
 
                         // Multiple textures with individual sampler states
@@ -263,8 +283,8 @@ module PreparedPipelineState =
                                 descriptions
                                 |> List.map (fun (textureName, samplerState) ->
                                     let textureName = Symbol.Create textureName
-                                    let texture = createTexture textureName sam.samplerType
-                                    let sampler = createSampler textureName samplerState
+                                    let texture = createTexture textureName sam.samplerType |> addResource resources
+                                    let sampler = createSampler textureName samplerState |> addResource resources
                                     texture, sampler
                                 )
                                 |> List.toArray
@@ -274,15 +294,20 @@ module PreparedPipelineState =
                             // fix texture ref-count
                             for (t, s) in textures do
                                 t.RemoveRef()
+                                t |> removeResource resources
                                 s.RemoveRef()
+                                s |> removeResource resources
 
-                            ArrayBinding binding
+                            ArrayBinding (binding |> addResource resources)
                     )
 
                 struct (slotRange, binding)
             )
 
-        member x.CreateImageBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
+        member x.CreateTextureBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
+            x.CreateTextureBindings(iface, uniforms, scope, null)
+
+        member x.CreateImageBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope, resources : List<IDisposable>) =
             iface.images
             |> Array.map (fun (_, image) ->
                 let binding =
@@ -304,151 +329,166 @@ module PreparedPipelineState =
                     | None ->
                         failf "could not find storage image '%A'" imageName
 
-                struct (image.imageBinding, binding)
+                struct (image.imageBinding, binding |> addResource resources)
             )
+
+        member inline x.CreateImageBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
+            x.CreateImageBindings(iface, uniforms, scope, null)
 
     let ofRenderObject (fboSignature : IFramebufferSignature) (x : ResourceManager) (rj : RenderObject) =
         // use a context token to avoid making context current/uncurrent repeatedly
-        use token = x.Context.ResourceLock
-        
-        let iface, program = x.CreateSurface(fboSignature, rj.Surface, rj.Mode)
-        let slots = x.GetInterfaceSlots(iface)
+        use __ = x.Context.ResourceLock
+        let resources = List<IDisposable>(capacity = 32)
 
-        GL.Check "[Prepare] Create Surface"
-        
-        // create all UniformBuffers requested by the program
-        let uniformBuffers = x.CreateUniformBuffers(slots, rj.Uniforms, rj.AttributeScope)
+        try
+            let iface, program = x.CreateSurface(fboSignature, rj.Surface, rj.Mode)
+            resources.Add program
 
-        GL.Check "[Prepare] Uniform Buffers"
+            let slots = x.GetInterfaceSlots(iface)
+            GL.Check "[Prepare] Create Surface"
 
-        let storageBuffers = x.CreateStorageBuffers(slots, rj.Uniforms, rj.AttributeScope)
-                
-        let textureBindings = x.CreateTextureBindings(slots, rj.Uniforms, rj.AttributeScope)
+            // create all UniformBuffers requested by the program
+            let uniformBuffers = x.CreateUniformBuffers(slots, rj.Uniforms, rj.AttributeScope, resources)
+            GL.Check "[Prepare] Uniform Buffers"
 
-        GL.Check "[Prepare] Textures"
-        
-        let blendColor = x.CreateColor rj.BlendState.ConstantColor
-        let blendModes = x.CreateBlendModes(fboSignature, rj.BlendState.Mode, rj.BlendState.AttachmentMode)
-        let colorMasks = x.CreateColorMasks(fboSignature, rj.BlendState.ColorWriteMask, rj.BlendState.AttachmentWriteMask)
+            let storageBuffers = x.CreateStorageBuffers(slots, rj.Uniforms, rj.AttributeScope, resources)
+            GL.Check "[Prepare] Storage Buffers"
 
-        let depthTest = x.CreateDepthTest rj.DepthState.Test
-        let depthBias = x.CreateDepthBias rj.DepthState.Bias
-        let depthMask = x.CreateFlag rj.DepthState.WriteMask
-        let depthClamp = x.CreateFlag rj.DepthState.Clamp
+            let textureBindings = x.CreateTextureBindings(slots, rj.Uniforms, rj.AttributeScope, resources)
+            GL.Check "[Prepare] Textures"
 
-        let stencilModeFront = x.CreateStencilMode(rj.StencilState.ModeFront)
-        let stencilModeBack = x.CreateStencilMode(rj.StencilState.ModeBack)
-        let stencilMaskFront = x.CreateStencilMask(rj.StencilState.WriteMaskFront)
-        let stencilMaskBack = x.CreateStencilMask(rj.StencilState.WriteMaskBack)
+            let blendColor = x.CreateColor rj.BlendState.ConstantColor |> addResource resources
+            let blendModes = x.CreateBlendModes(fboSignature, rj.BlendState.Mode, rj.BlendState.AttachmentMode) |> addResource resources
+            let colorMasks = x.CreateColorMasks(fboSignature, rj.BlendState.ColorWriteMask, rj.BlendState.AttachmentWriteMask) |> addResource resources
 
-        let cullMode = x.CreateCullMode rj.RasterizerState.CullMode
-        let frontFace = x.CreateFrontFace rj.RasterizerState.FrontFacing
-        let polygonMode = x.CreatePolygonMode rj.RasterizerState.FillMode
-        let multisample = x.CreateFlag rj.RasterizerState.Multisample
-        let conservativeRaster = x.CreateFlag rj.RasterizerState.ConservativeRaster
+            let depthTest = x.CreateDepthTest rj.DepthState.Test |> addResource resources
+            let depthBias = x.CreateDepthBias rj.DepthState.Bias |> addResource resources
+            let depthMask = x.CreateFlag rj.DepthState.WriteMask |> addResource resources
+            let depthClamp = x.CreateFlag rj.DepthState.Clamp |> addResource resources
 
-        {
-            pUniformProvider = rj.Uniforms
-            pContext = x.Context
-            pFramebufferSignature = fboSignature
-            pProgram = program
-            pProgramInterface = iface
-            pStorageBuffers = storageBuffers
-            pUniformBuffers = uniformBuffers
-            pTextureBindings = textureBindings
+            let stencilModeFront = x.CreateStencilMode(rj.StencilState.ModeFront) |> addResource resources
+            let stencilModeBack = x.CreateStencilMode(rj.StencilState.ModeBack) |> addResource resources
+            let stencilMaskFront = x.CreateStencilMask(rj.StencilState.WriteMaskFront) |> addResource resources
+            let stencilMaskBack = x.CreateStencilMask(rj.StencilState.WriteMaskBack) |> addResource resources
 
-            pBlendColor = blendColor
-            pBlendModes = blendModes
-            pColorMasks = colorMasks
+            let cullMode = x.CreateCullMode rj.RasterizerState.CullMode |> addResource resources
+            let frontFace = x.CreateFrontFace rj.RasterizerState.FrontFacing |> addResource resources
+            let polygonMode = x.CreatePolygonMode rj.RasterizerState.FillMode |> addResource resources
+            let multisample = x.CreateFlag rj.RasterizerState.Multisample |> addResource resources
+            let conservativeRaster = x.CreateFlag rj.RasterizerState.ConservativeRaster |> addResource resources
 
-            pDepthTest = depthTest
-            pDepthBias = depthBias
-            pDepthMask = depthMask
-            pDepthClamp = depthClamp
+            {
+                pUniformProvider = rj.Uniforms
+                pContext = x.Context
+                pFramebufferSignature = fboSignature
+                pProgram = program
+                pProgramInterface = iface
+                pStorageBuffers = storageBuffers
+                pUniformBuffers = uniformBuffers
+                pTextureBindings = textureBindings
 
-            pStencilModeFront = stencilModeFront
-            pStencilModeBack = stencilModeBack
-            pStencilMaskFront = stencilMaskFront
-            pStencilMaskBack = stencilMaskBack
+                pBlendColor = blendColor
+                pBlendModes = blendModes
+                pColorMasks = colorMasks
 
-            pCullMode = cullMode
-            pFrontFace = frontFace
-            pPolygonMode = polygonMode
-            pMultisample = multisample
-            pConservativeRaster = conservativeRaster
-        }
+                pDepthTest = depthTest
+                pDepthBias = depthBias
+                pDepthMask = depthMask
+                pDepthClamp = depthClamp
+
+                pStencilModeFront = stencilModeFront
+                pStencilModeBack = stencilModeBack
+                pStencilMaskFront = stencilMaskFront
+                pStencilMaskBack = stencilMaskBack
+
+                pCullMode = cullMode
+                pFrontFace = frontFace
+                pPolygonMode = polygonMode
+                pMultisample = multisample
+                pConservativeRaster = conservativeRaster
+            }
+
+        with _ ->
+            for r in resources do r.Dispose()
+            reraise()
 
     let ofPipelineState (fboSignature : IFramebufferSignature) (x : ResourceManager) (surface : Surface) (rj : PipelineState) =
         // use a context token to avoid making context current/uncurrent repeatedly
-        use token = x.Context.ResourceLock
-        
-        let iface, program = x.CreateSurface(fboSignature, surface, rj.Mode)
-        let slots = x.GetInterfaceSlots(iface)
+        use __ = x.Context.ResourceLock
+        let resources = List<IDisposable>(capacity = 32)
 
-        GL.Check "[Prepare] Create Surface"
-        
-        // create all UniformBuffers requested by the program
-        let uniformBuffers = x.CreateUniformBuffers(slots, rj.GlobalUniforms, Ag.Scope.Root)
+        try
+            let iface, program = x.CreateSurface(fboSignature, surface, rj.Mode)
+            resources.Add program
 
-        GL.Check "[Prepare] Uniform Buffers"
+            let slots = x.GetInterfaceSlots(iface)
+            GL.Check "[Prepare] Create Surface"
 
-        let storageBuffers = x.CreateStorageBuffers(slots, rj.GlobalUniforms, Ag.Scope.Root)
+            // create all UniformBuffers requested by the program
+            let uniformBuffers = x.CreateUniformBuffers(slots, rj.GlobalUniforms, Ag.Scope.Root, resources)
+            GL.Check "[Prepare] Uniform Buffers"
 
-        let textureBindings = x.CreateTextureBindings(slots, rj.GlobalUniforms, Ag.Scope.Root)
+            let storageBuffers = x.CreateStorageBuffers(slots, rj.GlobalUniforms, Ag.Scope.Root, resources)
+            GL.Check "[Prepare] Storage Buffers"
 
-        GL.Check "[Prepare] Textures"
-        
-        let blendColor = x.CreateColor rj.BlendState.ConstantColor
-        let blendModes = x.CreateBlendModes(fboSignature, rj.BlendState.Mode, rj.BlendState.AttachmentMode)
-        let colorMasks = x.CreateColorMasks(fboSignature, rj.BlendState.ColorWriteMask, rj.BlendState.AttachmentWriteMask)
+            let textureBindings = x.CreateTextureBindings(slots, rj.GlobalUniforms, Ag.Scope.Root, resources)
+            GL.Check "[Prepare] Textures"
 
-        let depthTest= x.CreateDepthTest rj.DepthState.Test
-        let depthBias = x.CreateDepthBias rj.DepthState.Bias
-        let depthMask = x.CreateFlag rj.DepthState.WriteMask
-        let depthClamp = x.CreateFlag rj.DepthState.Clamp
+            let blendColor = x.CreateColor rj.BlendState.ConstantColor |> addResource resources
+            let blendModes = x.CreateBlendModes(fboSignature, rj.BlendState.Mode, rj.BlendState.AttachmentMode) |> addResource resources
+            let colorMasks = x.CreateColorMasks(fboSignature, rj.BlendState.ColorWriteMask, rj.BlendState.AttachmentWriteMask) |> addResource resources
 
-        let stencilModeFront = x.CreateStencilMode(rj.StencilState.ModeFront)
-        let stencilModeBack = x.CreateStencilMode(rj.StencilState.ModeBack)
-        let stencilMaskFront = x.CreateStencilMask(rj.StencilState.WriteMaskFront)
-        let stencilMaskBack = x.CreateStencilMask(rj.StencilState.WriteMaskBack)
+            let depthTest= x.CreateDepthTest rj.DepthState.Test |> addResource resources
+            let depthBias = x.CreateDepthBias rj.DepthState.Bias |> addResource resources
+            let depthMask = x.CreateFlag rj.DepthState.WriteMask |> addResource resources
+            let depthClamp = x.CreateFlag rj.DepthState.Clamp |> addResource resources
 
-        let cullMode = x.CreateCullMode rj.RasterizerState.CullMode
-        let frontFace = x.CreateFrontFace rj.RasterizerState.FrontFacing
-        let polygonMode = x.CreatePolygonMode rj.RasterizerState.FillMode
-        let multisample = x.CreateFlag rj.RasterizerState.Multisample
-        let conservativeRaster = x.CreateFlag rj.RasterizerState.ConservativeRaster
+            let stencilModeFront = x.CreateStencilMode(rj.StencilState.ModeFront) |> addResource resources
+            let stencilModeBack = x.CreateStencilMode(rj.StencilState.ModeBack) |> addResource resources
+            let stencilMaskFront = x.CreateStencilMask(rj.StencilState.WriteMaskFront) |> addResource resources
+            let stencilMaskBack = x.CreateStencilMask(rj.StencilState.WriteMaskBack) |> addResource resources
 
-        {
-            pUniformProvider = rj.GlobalUniforms
-            pContext = x.Context
-            pFramebufferSignature = fboSignature
-            pProgram = program
-            pProgramInterface = iface
-            pStorageBuffers = storageBuffers
-            pUniformBuffers = uniformBuffers
-            pTextureBindings = textureBindings
+            let cullMode = x.CreateCullMode rj.RasterizerState.CullMode |> addResource resources
+            let frontFace = x.CreateFrontFace rj.RasterizerState.FrontFacing |> addResource resources
+            let polygonMode = x.CreatePolygonMode rj.RasterizerState.FillMode |> addResource resources
+            let multisample = x.CreateFlag rj.RasterizerState.Multisample |> addResource resources
+            let conservativeRaster = x.CreateFlag rj.RasterizerState.ConservativeRaster |> addResource resources
 
-            pBlendColor = blendColor
-            pBlendModes = blendModes
-            pColorMasks = colorMasks
+            {
+                pUniformProvider = rj.GlobalUniforms
+                pContext = x.Context
+                pFramebufferSignature = fboSignature
+                pProgram = program
+                pProgramInterface = iface
+                pStorageBuffers = storageBuffers
+                pUniformBuffers = uniformBuffers
+                pTextureBindings = textureBindings
 
-            pDepthTest = depthTest
-            pDepthBias = depthBias
-            pDepthMask = depthMask
-            pDepthClamp = depthClamp
+                pBlendColor = blendColor
+                pBlendModes = blendModes
+                pColorMasks = colorMasks
 
-            pStencilModeFront = stencilModeFront
-            pStencilModeBack = stencilModeBack
-            pStencilMaskFront = stencilMaskFront
-            pStencilMaskBack = stencilMaskBack
+                pDepthTest = depthTest
+                pDepthBias = depthBias
+                pDepthMask = depthMask
+                pDepthClamp = depthClamp
 
-            pCullMode = cullMode
-            pFrontFace = frontFace
-            pPolygonMode = polygonMode
-            pMultisample = multisample
-            pConservativeRaster = conservativeRaster
-        }
-  
+                pStencilModeFront = stencilModeFront
+                pStencilModeBack = stencilModeBack
+                pStencilMaskFront = stencilMaskFront
+                pStencilMaskBack = stencilMaskBack
+
+                pCullMode = cullMode
+                pFrontFace = frontFace
+                pPolygonMode = polygonMode
+                pMultisample = multisample
+                pConservativeRaster = conservativeRaster
+            }
+
+        with _ ->
+            for r in resources do r.Dispose()
+            reraise()
+
 
 type NativeStats =
     struct
@@ -826,7 +866,7 @@ type PreparedObjectInfo =
         oIsActive : IResource<bool, int>
         oDrawCallInfos : IResource<DrawCallInfoList, DrawCallInfoList>
         oIndirectBuffer : Option<IResource<GLIndirectBuffer, IndirectDrawArgs>>
-        oVertexInputBinding : IResource<VertexInputBindingHandle, int>  
+        oVertexInputBinding : IResource<VertexInputBindingHandle, int>
     }
 
     member x.Dispose() =
@@ -872,10 +912,14 @@ type PreparedObjectInfo =
             yield x.oVertexInputBinding :> _
         }
 
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
 module PreparedObjectInfo =
     open FShade
     open TypeInfo
     open PrimitiveValueConverter.Interop.Types.Patterns
+    open PreparedPipelineState
 
     [<AutoOpen>]
     module private Utilities =
@@ -925,121 +969,129 @@ module PreparedObjectInfo =
 
         // use a context token to avoid making context current/uncurrent repeatedly
         use __ = x.Context.ResourceLock
+        let resources = List<IDisposable>(capacity = 8)
 
-        let activation = rj.Activate()
+        try
+            let activation = rj.Activate()
+            resources.Add activation
 
-        // create all requested vertex-/instance-inputs
-        let attributeBindings =
-            iface.inputs
-            |> List.choose (fun v ->
-                if v.paramLocation >= 0 then
-                    let expectedType = getExpectedType v.paramType
+            // create all requested vertex-/instance-inputs
+            let attributeBindings =
+                iface.inputs
+                |> List.choose (fun v ->
+                    if v.paramLocation >= 0 then
+                        let expectedType = getExpectedType v.paramType
 
-                    let attribute =
-                        let view, frequency =
-                            match rj.TryGetAttribute(Symbol.Create v.paramName) with
-                            | Some (view, perInstance) ->
-                                view, (if perInstance then AttributeFrequency.PerInstances 1 else AttributeFrequency.PerVertex)
+                        let attribute =
+                            let view, frequency =
+                                match rj.TryGetAttribute(Symbol.Create v.paramName) with
+                                | Some (view, perInstance) ->
+                                    view, (if perInstance then AttributeFrequency.PerInstances 1 else AttributeFrequency.PerVertex)
+                                | _ ->
+                                    failf "could not get attribute '%s'" v.paramName
+
+                            // Check if we got double data even though we don't need it
+                            if printDoubleAttributeWarning then
+                                (expectedType, view.ElementType) ||> validateDoubleAttribute v.paramName
+
+                            // Treat integral values as normalized or scaled if accessed as floating point
+                            let format =
+                                match view.ElementType, expectedType with
+                                | AttributeType Integral, AttributeType (Float32 | Float64) ->
+                                    if view.Normalized then
+                                        VertexAttributeFormat.Normalized
+                                    else
+                                        VertexAttributeFormat.Scaled
+                                | _ ->
+                                    VertexAttributeFormat.Default
+
+                            match view.Buffer with
+                            | :? ISingleValueBuffer as b ->
+                                AdaptiveAttribute.Value (b.Value, format)
+
                             | _ ->
-                                failf "could not get attribute '%s'" v.paramName
+                                let resource = x.CreateBuffer view.Buffer |> addResource resources
 
-                        // Check if we got double data even though we don't need it
-                        if printDoubleAttributeWarning then
-                            (expectedType, view.ElementType) ||> validateDoubleAttribute v.paramName
+                                let buffer = {
+                                    Type = view.ElementType
+                                    Frequency = frequency
+                                    Format = format
+                                    Stride = view.Stride
+                                    Offset = view.Offset
+                                    Resource = resource
+                                }
 
-                        // Treat integral values as normalized or scaled if accessed as floating point
-                        let format =
-                            match view.ElementType, expectedType with
-                            | AttributeType Integral, AttributeType (Float32 | Float64) ->
-                                if view.Normalized then
-                                    VertexAttributeFormat.Normalized
-                                else
-                                    VertexAttributeFormat.Scaled
-                            | _ ->
-                                VertexAttributeFormat.Default
-
-                        match view.Buffer with
-                        | :? ISingleValueBuffer as b ->
-                            AdaptiveAttribute.Value (b.Value, format)
-
-                        | _ ->
-                            let resource = x.CreateBuffer view.Buffer
-
-                            let buffer = {
-                                Type = view.ElementType
-                                Frequency = frequency
-                                Format = format
-                                Stride = view.Stride
-                                Offset = view.Offset
-                                Resource = resource
-                            }
-
-                            AdaptiveAttribute.Buffer buffer
+                                AdaptiveAttribute.Buffer buffer
 
 
-                    Some (v.paramLocation, attribute)
-                else
+                        Some (v.paramLocation, attribute)
+                    else
+                        None
+                )
+                |> List.toArray
+
+            let attributeBuffers =
+                attributeBindings |> Array.choose (fun (_, attr) ->
+                    match attr with
+                    | AdaptiveAttribute.Buffer b -> Some b.Resource
+                    | _ -> None
+                )
+
+            GL.Check "[Prepare] Buffers"
+
+            // create the index buffer (if present)
+            let index =
+                match rj.Indices with
+                | Some view ->
+                    Some {
+                        IndexType = getIndexType view.ElementType
+                        Buffer    = x.CreateBuffer view.Buffer |> addResource resources
+                    }
+
+                | None -> None
+
+            GL.Check "[Prepare] Indices"
+
+            let indirect =
+                match rj.DrawCalls with
+                | Indirect indir ->
+                    let buffer = x.CreateIndirectBuffer(Option.isSome rj.Indices, indir) |> addResource resources
+                    Some buffer
+
+                | _ ->
                     None
-            )
-            |> List.toArray
 
-        let attributeBuffers =
-            attributeBindings |> Array.choose (fun (_, attr) ->
-                match attr with
-                | AdaptiveAttribute.Buffer b -> Some b.Resource
-                | _ -> None
-            )
+            GL.Check "[Prepare] Indirect Buffer"
 
-        GL.Check "[Prepare] Buffers"
+            // create the VertexArrayObject
+            let vibh = x.CreateVertexInputBinding(attributeBindings, index) |> addResource resources
+            GL.Check "[Prepare] VAO"
 
-        // create the index buffer (if present)
-        let index =
-            match rj.Indices with
-            | Some view ->
-                Some {
-                    IndexType = getIndexType view.ElementType
-                    Buffer    = x.CreateBuffer view.Buffer
-                }
+            let isActive = x.CreateIsActive rj.IsActive |> addResource resources
+            let beginMode = x.CreateBeginMode(program.Handle, rj.Mode) |> addResource resources
 
-            | None -> None
+            let drawCalls =
+                match rj.DrawCalls with
+                | Direct dir -> x.CreateDrawCallInfoList dir |> addResource resources
+                | _ -> Unchecked.defaultof<_>
 
-        GL.Check "[Prepare] Indices"
+            {
+                oContext = x.Context
+                oOriginal = rj
+                oActivation = activation
+                oFramebufferSignature = fboSignature
+                oAttributeBuffers = attributeBuffers
+                oIndexBinding = index
+                oIndirectBuffer = indirect
+                oVertexInputBinding = vibh
+                oIsActive = isActive
+                oBeginMode = beginMode
+                oDrawCallInfos = drawCalls
+            }
 
-        let indirect = match rj.DrawCalls with
-                       | Indirect indir -> x.CreateIndirectBuffer(Option.isSome rj.Indices, indir) |> Some
-                       | _ -> None
-
-        GL.Check "[Prepare] Indirect Buffer"
-
-        // create the VertexArrayObject
-        let vibh =
-            x.CreateVertexInputBinding(attributeBindings, index)
-
-        GL.Check "[Prepare] VAO"
-
-        let isActive = x.CreateIsActive rj.IsActive
-        let beginMode = x.CreateBeginMode(program.Handle, rj.Mode)
-        let drawCalls = match rj.DrawCalls with
-                        | Direct dir -> x.CreateDrawCallInfoList dir
-                        | _ -> Unchecked.defaultof<_>
-
-
-        // finally return the PreparedRenderObject
-        
-        {
-            oContext = x.Context
-            oOriginal = rj
-            oActivation = activation
-            oFramebufferSignature = fboSignature
-            oAttributeBuffers = attributeBuffers
-            oIndexBinding = index
-            oIndirectBuffer = indirect
-            oVertexInputBinding = vibh
-            oIsActive = isActive
-            oBeginMode = beginMode
-            oDrawCallInfos = drawCalls
-        }
-            
+        with _ ->
+            for r in resources do r.Dispose()
+            reraise()
 
 [<AutoOpen>]
 module PreparedObjectInfoAssembler =
@@ -1192,26 +1244,43 @@ type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : Rend
 
 
 module PreparedCommand =
+    open PreparedPipelineState
 
     let ofRenderObject (fboSignature : IFramebufferSignature) (x : ResourceManager) (o : IRenderObject) =
 
         let rec ofRenderObject (owned : bool) (fboSignature : IFramebufferSignature) (x : ResourceManager) (o : IRenderObject) =
             let pass = o.RenderPass
             match o with
+            | :? HookedRenderObject as o ->
+                try
+                    ofRenderObject owned fboSignature x o.Hooked
+                with _ ->
+                    if o.IsModified then
+                        Log.warn $"[GL] Failed to prepare hooked render object, falling back to original"
+                        ofRenderObject owned fboSignature x o.Original
+                    else
+                        reraise()
+
             | :? RenderObject as o ->
-                let state = PreparedPipelineState.ofRenderObject fboSignature x o
-                let info = PreparedObjectInfo.ofRenderObject fboSignature x state.pProgramInterface state.pProgram o
-                new PreparedObjectCommand(state, info, pass) :> PreparedCommand
+                let resources = List<IDisposable>(capacity = 2)
+
+                try
+                    let state = PreparedPipelineState.ofRenderObject fboSignature x o |> addResource resources
+                    let info = PreparedObjectInfo.ofRenderObject fboSignature x state.pProgramInterface state.pProgram o |> addResource resources
+                    new PreparedObjectCommand(state, info, pass) :> PreparedCommand
+                with _ ->
+                    for r in resources do r.Dispose()
+                    reraise()
 
             | :? MultiRenderObject as o ->
                 match o.Children with
-                    | [] -> 
-                        new NopCommand(x.Context, pass) :> PreparedCommand
-                    | [o] -> 
-                        ofRenderObject owned fboSignature x o
+                | [] ->
+                    new NopCommand(x.Context, pass) :> PreparedCommand
+                | [o] ->
+                    ofRenderObject owned fboSignature x o
 
-                    | l -> 
-                        new MultiCommand(x.Context, l |> List.map (ofRenderObject owned fboSignature x), pass) :> PreparedCommand
+                | l ->
+                    new MultiCommand(x.Context, l |> List.map (ofRenderObject owned fboSignature x), pass) :> PreparedCommand
 
             | :? PreparedCommand as cmd ->
                 if not owned then cmd.AddReference()
@@ -1223,7 +1292,7 @@ module PreparedCommand =
                     o.Prepare(r, fboSignature) |> ofRenderObject true fboSignature x
                 | _ ->
                     failwithf "expected ILodRuntime for object: %A" o
-            
+
             | :? CommandRenderObject when not RuntimeConfig.UseNewRenderTask ->
                 failwith "[GL] Render commands only supported with RuntimeConfig.UseNewRenderTask = true"
 

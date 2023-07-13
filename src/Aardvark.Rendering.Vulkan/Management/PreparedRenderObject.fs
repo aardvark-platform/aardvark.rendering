@@ -267,143 +267,149 @@ type DevicePreparedRenderObjectExtensions private() =
 
         let programLayout, program = this.CreateShaderProgram(renderPass, ro.Surface, ro.Mode)
 
-        let descriptorSets = createDescriptorSets this programLayout ro.Uniforms
+        try
+            let descriptorSets = createDescriptorSets this programLayout ro.Uniforms
 
-        let attributeBindings =
-            programLayout.PipelineInfo.pInputs
-            |> List.sortBy (fun p -> p.paramLocation)
-            |> List.map (fun p ->
-                let semantic = Sym.ofString p.paramSemantic
-                let expectedType = getExpectedType p.paramType
+            let attributeBindings =
+                programLayout.PipelineInfo.pInputs
+                |> List.sortBy (fun p -> p.paramLocation)
+                |> List.map (fun p ->
+                    let semantic = Sym.ofString p.paramSemantic
+                    let expectedType = getExpectedType p.paramType
 
-                let view, perInstance =
-                    match ro.TryGetAttribute semantic with
-                    | Some attr -> attr
-                    | _ -> failf "could not get attribute '%A'" semantic
+                    let view, perInstance =
+                        match ro.TryGetAttribute semantic with
+                        | Some attr -> attr
+                        | _ -> failf "could not get attribute '%A'" semantic
 
-                let buffer = this.CreateVertexBuffer view.Buffer
+                    let buffer = this.CreateVertexBuffer view.Buffer
 
-                let stride =
-                    if view.IsSingleValue then 0
-                    else view.Stride
+                    let stride =
+                        if view.IsSingleValue then 0
+                        else view.Stride
 
-                let rows =
-                    match view.ElementType with
-                    | MatrixOf(s, _) -> s.Y
-                    | _ -> 1
+                    let rows =
+                        match view.ElementType with
+                        | MatrixOf(s, _) -> s.Y
+                        | _ -> 1
 
-                let format =
-                    VkFormat.tryGetAttributeFormat expectedType view.ElementType view.Normalized
-                    |> Option.defaultWith (fun _ ->
-                        failf "cannot use %A elements for attribute '%A' expecting %A elements" view.ElementType semantic expectedType
-                    )
+                    let format =
+                        VkFormat.tryGetAttributeFormat expectedType view.ElementType view.Normalized
+                        |> Option.defaultWith (fun _ ->
+                            failf "cannot use %A elements for attribute '%A' expecting %A elements" view.ElementType semantic expectedType
+                        )
 
-                let formatFeatures = this.Device.PhysicalDevice.GetBufferFormatFeatures format
-                if not <| formatFeatures.HasFlag VkFormatFeatureFlags.VertexBufferBit then
-                    failf "format %A for attribute '%A' is not supported" format semantic
+                    let formatFeatures = this.Device.PhysicalDevice.GetBufferFormatFeatures format
+                    if not <| formatFeatures.HasFlag VkFormatFeatureFlags.VertexBufferBit then
+                        failf "format %A for attribute '%A' is not supported" format semantic
 
-                let inputDescription =
-                    VertexInputDescription.create perInstance view.IsSingleValue view.Offset stride rows format
+                    let inputDescription =
+                        VertexInputDescription.create perInstance view.IsSingleValue view.Offset stride rows format
 
-                {| Semantic    = semantic
-                   Buffer      = (buffer, int64 view.Offset)
-                   Description = inputDescription |}
-            )
+                    {| Semantic    = semantic
+                       Buffer      = (buffer, int64 view.Offset)
+                       Description = inputDescription |}
+                )
 
-        let attributeDescriptions =
-            attributeBindings
-            |> List.map (fun b -> b.Semantic, b.Description)
-            |> Map.ofSeq
+            let attributeDescriptions =
+                attributeBindings
+                |> List.map (fun b -> b.Semantic, b.Description)
+                |> Map.ofSeq
 
-        let inputAssembly = this.CreateInputAssemblyState(ro.Mode, program)
-        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, attributeDescriptions)
+            let inputAssembly = this.CreateInputAssemblyState(ro.Mode, program)
+            let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, attributeDescriptions)
 
-        let rasterizerState =
-            this.CreateRasterizerState(
-                ro.DepthState.Clamp, ro.DepthState.Bias,
-                ro.RasterizerState.CullMode, ro.RasterizerState.FrontFacing, ro.RasterizerState.FillMode,
-                ro.RasterizerState.ConservativeRaster
-            )
+            let rasterizerState =
+                this.CreateRasterizerState(
+                    ro.DepthState.Clamp, ro.DepthState.Bias,
+                    ro.RasterizerState.CullMode, ro.RasterizerState.FrontFacing, ro.RasterizerState.FillMode,
+                    ro.RasterizerState.ConservativeRaster
+                )
 
-        let colorBlendState =
-            this.CreateColorBlendState(
-                renderPass, ro.BlendState.ColorWriteMask, ro.BlendState.AttachmentWriteMask,
-                ro.BlendState.Mode, ro.BlendState.AttachmentMode, ro.BlendState.ConstantColor
-            )
+            let colorBlendState =
+                this.CreateColorBlendState(
+                    renderPass, ro.BlendState.ColorWriteMask, ro.BlendState.AttachmentWriteMask,
+                    ro.BlendState.Mode, ro.BlendState.AttachmentMode, ro.BlendState.ConstantColor
+                )
 
-        let depthStencilState =
-            this.CreateDepthStencilState(
-                ro.DepthState.Test, ro.DepthState.WriteMask,
-                ro.StencilState.ModeFront, ro.StencilState.WriteMaskFront,
-                ro.StencilState.ModeBack, ro.StencilState.WriteMaskBack
-            )
+            let depthStencilState =
+                this.CreateDepthStencilState(
+                    ro.DepthState.Test, ro.DepthState.WriteMask,
+                    ro.StencilState.ModeFront, ro.StencilState.WriteMaskFront,
+                    ro.StencilState.ModeBack, ro.StencilState.WriteMaskBack
+                )
 
-        let multisampleState =
-            this.CreateMultisampleState(renderPass, ro.RasterizerState.Multisample)
+            let multisampleState =
+                this.CreateMultisampleState(renderPass, ro.RasterizerState.Multisample)
 
-        let pipeline =
-            this.CreatePipeline(
+            let pipeline =
+                this.CreatePipeline(
+                    program,
+                    renderPass,
+                    inputState,
+                    inputAssembly,
+                    rasterizerState,
+                    colorBlendState,
+                    depthStencilState,
+                    multisampleState
+                )
+
+            resources.Add pipeline
+
+            let indexed = Option.isSome ro.Indices
+            let indexBufferBinding =
+                match ro.Indices with
+                | Some view ->
+                    let buffer = this.CreateIndexBuffer(view.Buffer)
+                    let res = this.CreateIndexBufferBinding(buffer, VkIndexType.ofType view.ElementType)
+                    resources.Add res
+                    Some res
+                | None ->
+                    None
+
+            let calls =
+                match ro.DrawCalls with
+                | Direct dir ->
+                    this.CreateDrawCall(indexed, dir)
+                | Indirect indir ->
+                    let indirect = this.CreateIndirectBuffer(indexed, indir)
+                    this.CreateDrawCall(indexed, indirect)
+
+            resources.Add calls
+
+            let bindings =
+                this.CreateVertexBufferBinding(attributeBindings |> List.map (fun b -> b.Buffer))
+
+            resources.Add bindings
+
+            let descriptorBindings =
+                this.CreateDescriptorSetBinding(VkPipelineBindPoint.Graphics, programLayout, descriptorSets)
+
+            resources.Add(descriptorBindings)
+
+            let isActive = this.CreateIsActive ro.IsActive
+            resources.Add isActive
+
+            //for r in resources do r.Acquire()
+
+            new PreparedRenderObject(
+                this.Device, ro,
+                CSharpList.toList resources,
                 program,
-                renderPass,
-                inputState,
-                inputAssembly,
-                rasterizerState,
-                colorBlendState,
-                depthStencilState,
-                multisampleState
+                programLayout,
+                pipeline,
+                indexBufferBinding,
+                descriptorBindings,
+                bindings,
+                calls,
+                isActive,
+                ro.Activate()
             )
 
-        resources.Add pipeline
-
-        let indexed = Option.isSome ro.Indices
-        let indexBufferBinding =
-            match ro.Indices with
-            | Some view ->
-                let buffer = this.CreateIndexBuffer(view.Buffer)
-                let res = this.CreateIndexBufferBinding(buffer, VkIndexType.ofType view.ElementType)
-                resources.Add res
-                Some res
-            | None ->
-                None
-
-        let calls =
-            match ro.DrawCalls with
-            | Direct dir ->
-                this.CreateDrawCall(indexed, dir)
-            | Indirect indir ->
-                let indirect = this.CreateIndirectBuffer(indexed, indir)
-                this.CreateDrawCall(indexed, indirect)
-
-        resources.Add calls
-
-        let bindings =
-            this.CreateVertexBufferBinding(attributeBindings |> List.map (fun b -> b.Buffer))
-
-        resources.Add bindings
-
-        let descriptorBindings =
-            this.CreateDescriptorSetBinding(VkPipelineBindPoint.Graphics, programLayout, descriptorSets)
-
-        resources.Add(descriptorBindings)
-
-        let isActive = this.CreateIsActive ro.IsActive
-        resources.Add isActive
-
-        //for r in resources do r.Acquire()
-
-        new PreparedRenderObject(
-            this.Device, ro,
-            CSharpList.toList resources,
-            program,
-            programLayout,
-            pipeline,
-            indexBufferBinding,
-            descriptorBindings,
-            bindings,
-            calls,
-            isActive,
-            ro.Activate()
-        )
+        with _ ->
+            // All resources except program are acquired lazily, see PreparedRenderObject.Dispose()
+            program.Release()
+            reraise()
 
     [<Extension>]
     static member CreateDescriptorSets (this : ResourceManager, layout : PipelineLayout, uniforms : IUniformProvider) =
@@ -485,25 +491,35 @@ type DevicePreparedRenderObjectExtensions private() =
     [<Extension>]
     static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) =
         match ro with
-            | :? RenderObject as ro ->
-                let res = prepareObject this renderPass (hook ro)
-                new PreparedMultiRenderObject([res])
+        | :? HookedRenderObject as ro ->
+            try
+                this.PrepareRenderObject(renderPass, ro.Hooked, hook)
+            with _ ->
+                if ro.IsModified then
+                    Log.warn $"[Vulkan] Failed to prepare hooked render object, falling back to original"
+                    this.PrepareRenderObject(renderPass, ro.Original, hook)
+                else
+                    reraise()
 
-            | :? MultiRenderObject as mo ->
-                let all = mo.Children |> List.collect (fun c -> DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, renderPass, c, hook).Children)
-                new PreparedMultiRenderObject(all)
+        | :? RenderObject as ro ->
+            let res = prepareObject this renderPass (hook ro)
+            new PreparedMultiRenderObject([res])
 
-            | :? PreparedRenderObject as o ->
-                o.AddReference()
-                new PreparedMultiRenderObject([o])
+        | :? MultiRenderObject as mo ->
+            let all = mo.Children |> List.collect (fun c -> this.PrepareRenderObject(renderPass, c, hook).Children)
+            new PreparedMultiRenderObject(all)
 
-            | :? PreparedMultiRenderObject as mo ->
-                for o in mo.Children do o.AddReference()
-                mo
+        | :? PreparedRenderObject as o ->
+            o.AddReference()
+            new PreparedMultiRenderObject([o])
 
-            | _ ->
-                failf "unsupported RenderObject-type: %A" ro
+        | :? PreparedMultiRenderObject as mo ->
+            for o in mo.Children do o.AddReference()
+            mo
+
+        | _ ->
+            failf "unsupported RenderObject-type: %A" ro
 
     [<Extension>]
     static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject) =
-        DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, renderPass, ro, id)
+        this.PrepareRenderObject(renderPass, ro, id)
