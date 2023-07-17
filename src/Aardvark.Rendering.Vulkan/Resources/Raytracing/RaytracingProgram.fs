@@ -112,7 +112,11 @@ module RaytracingProgram =
             g @ h
 
         let glsl =
-            effect |> FShade.RaytracingEffect.toModule |> FShade.Backends.ModuleCompiler.compileGLSLRaytracing
+            try
+                effect |> FShade.RaytracingEffect.toModule |> FShade.Backends.ModuleCompiler.compileGLSLRaytracing
+            with exn ->
+                Log.error "%s" exn.Message
+                reraise()
 
         if device.DebugConfig.PrintShaderCode then
             glsl.code |> ShaderCodeReporting.logLines "Compiling shader"

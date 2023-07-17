@@ -539,9 +539,13 @@ module ShaderProgram =
 
         let compile() =
             let glsl =
-                module_
-                |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
-                |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
+                try
+                    module_
+                    |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
+                    |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
+                with exn ->
+                    Log.error "%s" exn.Message
+                    reraise()
 
             ofGLSLInteral glsl.iface inputLayout glsl.code 1 Set.empty device
 
@@ -569,6 +573,18 @@ module ShaderProgram =
                 deviceCount = pass.Runtime.DeviceCount
             }
 
+        let compile() =
+            let glsl =
+                try
+                    key.layout.Link(key.effect, key.deviceCount, FShadeConfig.depthRange, false, key.topology)
+                    |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
+                    |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
+                with exn ->
+                    Log.error "%s" exn.Message
+                    reraise()
+
+            ofGLSL glsl device
+
         device.GetCached(effectCache, key, fun key ->
             match device.ShaderCachePath with
             | Some shaderCachePath ->
@@ -579,12 +595,7 @@ module ShaderProgram =
                 match tryRead None cacheFile device with
                 | Some p ->
                     if device.DebugConfig.VerifyShaderCacheIntegrity then
-                        let glsl = 
-                            key.layout.Link(key.effect, key.deviceCount, FShadeConfig.depthRange, false, key.topology)
-                            |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
-                            |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
-
-                        let temp = ofGLSL glsl device
+                        let temp = compile()
                         let real = toByteArray p
                         let should = toByteArray temp
                         temp.Destroy()
@@ -600,22 +611,12 @@ module ShaderProgram =
                     p
 
                 | None ->
-                    let glsl = 
-                        key.layout.Link(key.effect, key.deviceCount, FShadeConfig.depthRange, false, key.topology)
-                        |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
-                        |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
-
-                    let res = ofGLSL glsl device
+                    let res = compile()
                     write cacheFile res
                     res
 
             | None ->
-                let glsl = 
-                    key.layout.Link(key.effect, key.deviceCount, FShadeConfig.depthRange, false, key.topology)
-                    |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
-                    |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
-
-                ofGLSL glsl device
+                compile()
         )
 
 

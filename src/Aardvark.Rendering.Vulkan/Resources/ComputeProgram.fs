@@ -171,7 +171,12 @@ module ComputeProgram =
             Log.warn "[Vulkan] Failed to write to shader program file cache '%s': %s" file exn.Message
 
     let private ofFShadeInternal (shader : FShade.ComputeShader) (device : Device) =
-        let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
+        let glsl =
+            try
+                shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
+            with exn ->
+                Log.error "%s" exn.Message
+                reraise()
 
         if device.DebugConfig.PrintShaderCode then
             glsl.code |> ShaderCodeReporting.logLines "Compiling shader"

@@ -854,8 +854,12 @@ module ProgramExtensions =
                 x.ShaderCache.GetOrAdd(key, fun key ->
                     let glsl =
                         lazy (
-                            let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology)
-                            ModuleCompiler.compileGLSL x.FShadeBackend module_
+                            try
+                                let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology)
+                                ModuleCompiler.compileGLSL x.FShadeBackend module_
+                            with exn ->
+                                Log.error "%s" exn.Message
+                                reraise()
                         )
 
                     match x.TryCompileProgram(key.effect.Id, key.layout, glsl) with
@@ -872,15 +876,22 @@ module ProgramExtensions =
                     let initial = AVal.force b
                     let layoutHash = inputLayout.ComputeHash()
 
+                    let compile (m : Module) =
+                        try
+                            ModuleCompiler.compileGLSL x.FShadeBackend m
+                        with exn ->
+                            Log.error "%s" exn.Message
+                            reraise()
+
                     let iface =
-                        match x.TryCompileProgram(initial.Hash + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with
+                        match x.TryCompileProgram(initial.Hash + layoutHash, signature, lazy (compile initial)) with
                         | Success prog -> prog.Interface
                         | Error e ->
                             failf "shader compiler returned errors: %s" e
 
                     let changeableProgram =
                         b |> AVal.map (fun m ->
-                            match x.TryCompileProgram(m.Hash + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
+                            match x.TryCompileProgram(m.Hash + layoutHash, signature, lazy (compile m)) with
                             | Success p -> p
                             | Error e ->
                                 failf "shader compiler returned errors: %s" e

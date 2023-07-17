@@ -195,9 +195,8 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
                 let recompiled = new CompiledCommand(manager, resources, pipeline, commands)
                 compiled.Dispose()
                 compiled <- recompiled
-            with exn ->
-                let nl = Environment.NewLine
-                Log.warn $"[Vulkan] Failed to update raytracing effect:{nl}{nl}{exn.Message}"
+            with _ ->
+                Log.warn $"[Vulkan] Failed to update raytracing effect"
 
         resources.Use(t, rt, fun resourcesChanged ->
             let commandChanged =

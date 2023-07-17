@@ -49,24 +49,29 @@ module ComputeProgramExtensions =
         member x.TryCompileKernel (shader : FShade.ComputeShader) =
             let codeAndInterface =
                 lazy (
-                    let glsl =
+                    let backend =
                         if x.Driver.glsl >= Version(4,3,0) then
-                            shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL430
+                            glsl430
                         elif
                             x.Driver.extensions |> Set.contains "GL_ARB_compute_shader" &&
                             x.Driver.extensions |> Set.contains "GL_ARB_shading_language_420pack" &&
                             x.Driver.glsl >= Version(4,1,0) then
-                            let be =
-                                FShade.GLSL.Backend.Create
-                                    { glsl410.Config with
-                                        enabledExtensions =
-                                            glsl410.Config.enabledExtensions
-                                            |> Set.add "GL_ARB_compute_shader"
-                                            |> Set.add "GL_ARB_shading_language_420pack"
-                                    }
-                            shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL be
+                            FShade.GLSL.Backend.Create
+                                { glsl410.Config with
+                                    enabledExtensions =
+                                        glsl410.Config.enabledExtensions
+                                        |> Set.add "GL_ARB_compute_shader"
+                                        |> Set.add "GL_ARB_shading_language_420pack"
+                                }
                         else
                             failf "compute shader not supported: GLSL version = %A" x.Driver.glsl
+
+                    let glsl =
+                        try
+                            shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL backend
+                        with exn ->
+                            Log.error "%s" exn.Message
+                            reraise()
 
                     let adjust (s : GLSL.GLSLSampler) =
                         let textures =
