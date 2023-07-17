@@ -69,5 +69,6 @@ type internal BufferManager(ctx : Context) =
     static member TryUnwrap(data : IBuffer) =
         match data with
         | :? Buffer as b -> ValueSome b
+        | :? IBackendBuffer -> ValueNone
         | :? IBufferRange as r -> BufferManager.TryUnwrap r.Buffer
         | _ -> ValueNone
