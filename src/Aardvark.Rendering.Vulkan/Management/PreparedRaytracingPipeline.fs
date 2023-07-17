@@ -115,33 +115,39 @@ type DevicePreparedRaytracingPipelineExtensions private() =
         let resources = System.Collections.Generic.List<IResourceLocation>()
 
         let program = RaytracingProgram.ofEffect this.Device state.Effect
-        let pipeline = this.CreateRaytracingPipeline(program, state.MaxRecursionDepth)
-
         let hitConfigPool = new HitConfigPool(state.Scenes)
-        let shaderBindingTable = this.CreateShaderBindingTable(pipeline, hitConfigPool)
 
-        resources.Add(shaderBindingTable)
+        try
+            let pipeline = this.CreateRaytracingPipeline(program, state.MaxRecursionDepth)
+            let shaderBindingTable = this.CreateShaderBindingTable(pipeline, hitConfigPool)
 
-        let accelerationStructures =
-            state.Scenes |> Map.map (fun _ s ->
-                this.CreateAccelerationStructure(s.Instances, shaderBindingTable, s.Usage) :> IAdaptiveValue
+            resources.Add(shaderBindingTable)
+
+            let accelerationStructures =
+                state.Scenes |> Map.map (fun _ s ->
+                    this.CreateAccelerationStructure(s.Instances, shaderBindingTable, s.Usage) :> IAdaptiveValue
+                )
+                |> UniformProvider.ofMap
+
+            let uniforms =
+                UniformProvider.union state.Uniforms accelerationStructures
+
+            let descriptorSetBinding =
+                let sets = this.CreateDescriptorSets(program.PipelineLayout, uniforms)
+                this.CreateDescriptorSetBinding(VkPipelineBindPoint.RayTracingKhr, program.PipelineLayout, sets)
+
+            resources.Add(descriptorSetBinding)
+
+            new PreparedRaytracingPipeline(
+                this.Device, state,
+                CSharpList.toList resources,
+                program, pipeline,
+                descriptorSetBinding,
+                shaderBindingTable,
+                hitConfigPool
             )
-            |> UniformProvider.ofMap
 
-        let uniforms =
-            UniformProvider.union state.Uniforms accelerationStructures
-
-        let descriptorSetBinding =
-            let sets = this.CreateDescriptorSets(program.PipelineLayout, uniforms)
-            this.CreateDescriptorSetBinding(VkPipelineBindPoint.RayTracingKhr, program.PipelineLayout, sets)
-
-        resources.Add(descriptorSetBinding)
-
-        new PreparedRaytracingPipeline(
-            this.Device, state,
-            CSharpList.toList resources,
-            program, pipeline,
-            descriptorSetBinding,
-            shaderBindingTable,
-            hitConfigPool
-        )
+        with _ ->
+            program.Dispose()
+            hitConfigPool.Dispose()
+            reraise()
