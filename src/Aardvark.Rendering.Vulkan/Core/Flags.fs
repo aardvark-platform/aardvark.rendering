@@ -358,3 +358,18 @@ module internal VkSampleCountFlags =
             if flags.HasFlag VkSampleCountFlags.D32Bit then yield 32
             if flags.HasFlag VkSampleCountFlags.D64Bit then yield 64
         ]
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VkExternalMemoryHandleTypeFlags =
+    open System.Runtime.InteropServices
+    open Vulkan11
+
+    let private isWindows = RuntimeInformation.IsOSPlatform OSPlatform.Windows
+
+    /// Platform dependent opaque handle type.
+    /// OpaqueWin32Bit on Windows, OpaqueFdBit otherwise.
+    let OpaqueBit =
+        if isWindows then
+            VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
+        else
+            VkExternalMemoryHandleTypeFlags.OpaqueFdBit

@@ -128,7 +128,7 @@ type Image =
                     VkRaw.vkDestroyImage(x.Device.Handle, x.PeerHandles.[i], NativePtr.zero)
                     x.PeerHandles.[i] <- VkImage.Null
                 x.Memory.Dispose()
-                x.Handle <- VkImage.Null                                        
+                x.Handle <- VkImage.Null
 
         member x.Count =
             match x.Dimension with
@@ -1082,21 +1082,22 @@ module Image =
                     max
 
             native {
-                let! pExternalMemoryInfo = 
-                    VkExternalMemoryImageCreateInfo(
-                        VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
-                    )
+                let! pExternalMemoryInfo =
+                    VkExternalMemoryImageCreateInfo VkExternalMemoryHandleTypeFlags.OpaqueBit
 
                 let pNext =
                     if export <> ImageExportMode.None then
-                        if device.IsExtensionEnabled KHRExternalMemory.Name then
-                            NativePtr.toNativeInt pExternalMemoryInfo
+                        if device.IsExtensionEnabled ExternalMemory.Extension then
+                            if device.PhysicalDevice.GetImageExportable(fmt, typ, VkImageTiling.Optimal, usage, flags) then
+                                NativePtr.toNativeInt pExternalMemoryInfo
+                            else
+                                failf $"Cannot export {fmt} image with usage {usage}"
                         else
-                            raise <| NotSupportedException($"[Vulkan] Cannot export image memory because {KHRExternalMemory.Name} is not supported.")
+                            failf $"Cannot export image memory because {ExternalMemory.Extension} is not supported"
                     else
                         0n
 
-                let! pInfo = 
+                let! pInfo =
                     VkImageCreateInfo(
                         pNext,
                         flags,

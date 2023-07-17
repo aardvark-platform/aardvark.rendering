@@ -286,19 +286,20 @@ module Buffer =
         let device = memory.Device
 
         let externalMemoryInfo =
-            VkExternalMemoryBufferCreateInfo(
-                VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
-            )
+            VkExternalMemoryBufferCreateInfo VkExternalMemoryHandleTypeFlags.OpaqueBit
 
         use pExternalMemoryInfo = new VkStructChain()
         pExternalMemoryInfo.Add externalMemoryInfo |> ignore
 
         let pNext =
             if export then
-                if device.IsExtensionEnabled KHRExternalMemory.Name then
-                    pExternalMemoryInfo.Handle
+                if device.IsExtensionEnabled ExternalMemory.Extension then
+                    if memory.Device.PhysicalDevice.GetBufferExportable(VkBufferCreateFlags.None, flags) then
+                        pExternalMemoryInfo.Handle
+                    else
+                        failf $"Cannot export buffer with usage {flags}"
                 else
-                    raise <| NotSupportedException($"[Vulkan] Cannot export buffer memory because {KHRExternalMemory.Name} is not supported.")
+                    failf $"Cannot export buffer memory because {ExternalMemory.Extension} is not supported"
             else
                 0n
 
@@ -306,10 +307,10 @@ module Buffer =
             VkBufferCreateInfo(
                 pNext,
                 VkBufferCreateFlags.None,
-                uint64 size, 
+                uint64 size,
                 flags,
                 (if concurrent then device.AllSharingMode else VkSharingMode.Exclusive),
-                (if concurrent then device.AllQueueFamiliesCnt else 0u), 
+                (if concurrent then device.AllQueueFamiliesCnt else 0u),
                 (if concurrent then device.AllQueueFamiliesPtr else NativePtr.zero)
             )
 
@@ -321,8 +322,9 @@ module Buffer =
                     NativePtr.read pHandle
                 )
             )
+
         let reqs =
-            temporary (fun ptr ->   
+            temporary (fun ptr ->
                 VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
                 NativePtr.read ptr
             )

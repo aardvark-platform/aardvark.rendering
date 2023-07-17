@@ -18,16 +18,12 @@ open Vulkan11
 //// #nowarn "51"
 
 [<AutoOpen>]
-module private NativeMemoryHandles =
+module internal NativeMemoryHandles =
 
-    module Win32Handle =
+    module private Win32Handle =
         open KHRExternalMemoryWin32
 
-        let getMemoryHandle (hasExtension : string -> bool) (device : VkDevice) (memory : VkDeviceMemory) =
-
-            if not <| hasExtension KHRExternalMemoryWin32.Name then
-                failwith "[Vulkan] Cannot create external handle when KHRExternalMemoryWin32 extension is disabled"
-
+        let getMemoryHandle (device : VkDevice) (memory : VkDeviceMemory) =
             let handle =
                 native {
                     let! pHandle = 0n
@@ -41,18 +37,14 @@ module private NativeMemoryHandles =
 
             new Win32Handle(handle) :> IExternalMemoryHandle
 
-    module PosixHandle =
+    module private PosixHandle =
         open KHRExternalMemoryFd
 
-        let getMemoryHandle (hasExtension : string -> bool) (device : VkDevice) (memory : VkDeviceMemory) =
-
-            if not <| hasExtension KHRExternalMemoryFd.Name then
-                failwith "[Vulkan] Cannot create external handle when KHRExternalMemoryFd extension is disabled"
-
+        let getMemoryHandle (device : VkDevice) (memory : VkDeviceMemory) =
             let handle =
                 native {
                     let! pHandle = 0
-                    let! pInfo = VkMemoryGetFdInfoKHR(memory, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueFdBit)
+                    let! pInfo = VkMemoryGetFdInfoKHR(memory, VkExternalMemoryHandleTypeFlags.OpaqueFdBit)
 
                     VkRaw.vkGetMemoryFdKHR(device, pInfo, pHandle)
                         |> check "could not create shared handle"
@@ -61,6 +53,20 @@ module private NativeMemoryHandles =
                 }
 
             new PosixHandle(handle) :> IExternalMemoryHandle
+
+    module ExternalMemory =
+
+        let Extension =
+            if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                KHRExternalMemoryWin32.Name
+            else
+                KHRExternalMemoryFd.Name
+
+        let ofDeviceMemory (device : VkDevice) (memory : VkDeviceMemory) =
+            if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                Win32Handle.getMemoryHandle device memory
+            else
+                PosixHandle.getMemoryHandle device memory
 
 type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
     let available = Array.copy allFamilies
@@ -1923,7 +1929,6 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
     member x.Alloc(align : int64, size : int64, [<Optional; DefaultParameterValue(false)>] export : bool) = manager.Alloc(align, size, export)
     member x.Free(ptr : DevicePtr) = ptr.Dispose()
 
-
     member x.TryAllocRaw(size : int64, [<Optional; DefaultParameterValue(false)>] export : bool, [<Out>] ptr : byref<DeviceMemory>) =
         if size > maxAllocationSize then
             false
@@ -1931,10 +1936,9 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
             if heap.TryAdd size then
                 let mem =
                     native {
-                        
-                        let exportFlags = 
+                        let exportFlags =
                             if export then
-                                VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit ||| VkExternalMemoryHandleTypeFlags.OpaqueFdBit
+                                VkExternalMemoryHandleTypeFlags.OpaqueBit
                             else
                                 VkExternalMemoryHandleTypeFlags.None
 
@@ -1947,7 +1951,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                         let! exportInfo = VkExportMemoryAllocateInfo(exportFlags)
 
                         let! pFlagsInfo = VkMemoryAllocateFlagsInfo(NativePtr.toNativeInt exportInfo, allocFlags, 0u)
-                    
+
                         let! pInfo =
                             VkMemoryAllocateInfo(
                                 NativePtr.toNativeInt pFlagsInfo,
@@ -1964,14 +1968,14 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
 
                 let externalHandle : IExternalMemoryHandle =
                     if export then
-                        if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
-                            mem |> Win32Handle.getMemoryHandle device.IsExtensionEnabled device.Handle
+                        if device.IsExtensionEnabled ExternalMemory.Extension then
+                            mem |> ExternalMemory.ofDeviceMemory device.Handle
                         else
-                            mem |> PosixHandle.getMemoryHandle device.IsExtensionEnabled device.Handle
+                            failf "Cannot create external handle when %s extension is disabled" ExternalMemory.Extension
                     else
                         null
 
-                let hostPtr = 
+                let hostPtr =
                     if hostVisible then
                         temporary<nativeint, nativeint> (fun pPtr ->
                             VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.None, pPtr)
@@ -1980,7 +1984,6 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                         )
                     else
                         0n
-
 
                 ptr <- new DeviceMemory(x, mem, size, hostPtr, externalHandle)
                 true
@@ -1994,7 +1997,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
             match x.TryAllocRaw(size, export) with
                 | (true, ptr) -> ptr
                 | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
-            
+
     member x.TryAllocRaw(mem : Mem, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(mem.Bytes, false, &ptr)
     member x.TryAllocRaw(mem : VkDeviceSize, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(int64 mem, false, &ptr)
     member x.AllocRaw(mem : Mem) = x.AllocRaw(mem.Bytes)
