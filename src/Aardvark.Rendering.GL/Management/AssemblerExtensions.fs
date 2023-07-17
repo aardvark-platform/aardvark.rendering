@@ -1068,9 +1068,9 @@ module GLAssemblerExtensions =
             let err = GL.GetError()
             if err <> ErrorCode.NoError then
                 let sofar = Seq.take (i + 1) commands |> Seq.toArray
-                System.Diagnostics.Debugger.Break()
                 printfn "%A" sofar
                 Log.error "%A" err
+                System.Diagnostics.Debugger.Break()
 
         let afterDel =
             Marshal.PinDelegate(DebugCallbackDelegate(after))
