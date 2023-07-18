@@ -1,3 +1,10 @@
+### 5.4.4
+- Exceptions are caught and logged when updating shaders with the debugger
+- [GL] Fixed resource management issue with compute shaders and shader debugger, resulting in invalid operation errors
+- [GL] Fixed issue with preparing exported buffers
+- [GL] Print before debugger break in DebugCommandStream
+- [Vulkan] Fixed validation error related to memory export
+
 ### 5.4.3
 - Updated to FShade 5.5
 - Added support for debugging raytracing effects and compute shaders with the FShade ShaderDebugger
