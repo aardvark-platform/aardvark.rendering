@@ -226,12 +226,14 @@ module internal ComputeProgramDebugExtensions =
     open System
     open FSharp.Data.Adaptive
 
-    type HookedComputeProgram(device : Device, input : aval<ComputeShader>) as this =
+    type HookedComputeProgram(device : Device, input : aval<ComputeShader>) =
         inherit AdaptiveObject()
 
-        let mutable current : ValueOption<ComputeShader * ComputeProgram * PipelineLayout> = ValueNone
+        let mutable shader = input.GetValue()
+        let mutable program = ComputeProgram.ofFShade shader device
+        let layout = program.PipelineLayout
 
-        let validateLayout (layout : PipelineInfo) (next : PipelineInfo) =
+        let validateLayout (next : PipelineLayout) =
             let mutable isValid = true
 
             let isUniformBufferCompatible (o : GLSLUniformBuffer) (n : GLSLUniformBuffer) =
@@ -254,74 +256,51 @@ module internal ComputeProgramDebugExtensions =
                             isValid <- false
                     )
 
-            (layout.pImages, next.pImages) ||> check "Image" (fun i -> i.imageName) (=)
-            (layout.pTextures, next.pTextures) ||> check "Sampler" (fun s -> s.samplerName) (=)
-            (layout.pStorageBlocks, next.pStorageBlocks) ||> check "Storage buffer" (fun b -> b.ssbName) (=)
-            (layout.pUniformBlocks, next.pUniformBlocks) ||> check "Uniform buffer" (fun b -> b.ubName) isUniformBufferCompatible
+            let po, pn = layout.PipelineInfo, next.PipelineInfo
+            (po.pImages,        pn.pImages)        ||> check "Image" (fun i -> i.imageName) (=)
+            (po.pTextures,      pn.pTextures)      ||> check "Sampler" (fun s -> s.samplerName) (=)
+            (po.pStorageBlocks, pn.pStorageBlocks) ||> check "Storage buffer" (fun b -> b.ssbName) (=)
+            (po.pUniformBlocks, pn.pUniformBlocks) ||> check "Uniform buffer" (fun b -> b.ubName) isUniformBufferCompatible
 
             isValid
 
-        let map f =
-            match current with
-            | ValueSome (_, p, l) -> f (struct(p, l))
-            | _ -> failf "HookedComputeProgram has invalid state"
+        member x.Interface = program.Shader.iface
+        member x.GroupSize = program.GroupSize
+        member x.Pipeline = program.Pipeline
+        member x.PipelineLayout = layout
 
-        do this.Update AdaptiveToken.Top |> ignore
-
-        member x.Interface =
-            map (fun struct(p, _) -> p.Shader.iface)
-
-        member x.GroupSize =
-            map (fun struct(p, _) -> p.GroupSize)
-
-        member x.Pipeline =
-            map (fun struct(p, _) -> p.Pipeline)
-
-        member x.PipelineLayout =
-            map (fun struct(_, l) -> l)
-
-        // Note: This is not thread safe, since multiple
-        // compute tasks may use the same program concurrently.
-        // This disposes the old program, while it may still be in use.
         member x.Update(token : AdaptiveToken) : bool =
             x.EvaluateIfNeeded token false (fun token ->
-                let shader = input.GetValue token
+                let s = input.GetValue token
 
-                match current with
-                | ValueNone ->
-                    let program = ComputeProgram.ofFShade shader device
+                if s <> shader then
+                    let updated =
+                        try
+                            ValueSome <| ComputeProgram.ofFShade s device
+                        with _ ->
+                            ValueNone
 
-                    // The pipeline layout is static.
-                    // Make sure it does not get disposed when the program changes.
-                    program.PipelineLayout.AddReference()
-                    current <- ValueSome (shader, program, program.PipelineLayout)
-
-                    true
-
-                | ValueSome (s, p, l) when s <> shader ->
-                    let program = ComputeProgram.ofFShade shader device
-
-                    if not <| validateLayout l.PipelineInfo program.PipelineLayout.PipelineInfo then
-                        Log.warn "[Vulkan] Pipeline layout of compute shader has changed and is incompatible with original layout, ignoring..."
+                    match updated with
+                    | ValueSome p when validateLayout p.PipelineLayout ->
                         program.Dispose()
+                        program <- p
+                        shader <- s
+                        true
+
+                    | ValueSome p ->
+                        Log.warn "[Vulkan] Pipeline layout of compute shader has changed and is incompatible with original layout, ignoring..."
+                        p.Dispose()
                         false
 
-                    else
-                        current <- ValueSome (shader, program, l)
-                        p.Dispose()
-                        true
-                | _ ->
+                    | _ ->
+                        Log.warn "[Vulkan] Failed to update compute shader"
+                        false
+                else
                     false
             )
 
         member x.Dispose() =
-            match current with
-            | ValueSome (_, p, l) ->
-                p.Dispose()
-                l.Dispose()
-                current <- ValueNone
-
-            | _ -> ()
+            program.Dispose()
 
         interface IComputeShader with
             member x.Runtime = device.Runtime

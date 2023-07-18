@@ -115,11 +115,12 @@ module internal ComputeProgramDebugExtensions =
     open FShade.GLSL
     open FSharp.Data.Adaptive
 
-    type HookedComputeProgram(context : Context, input : aval<ComputeShader>) as this =
+    type HookedComputeProgram(context : Context, input : aval<ComputeShader>) =
         inherit AdaptiveObject()
 
-        let mutable layout = Unchecked.defaultof<GLSLProgramInterface>
-        let mutable current : ValueOption<ComputeShader * ComputeProgram> = ValueNone
+        let mutable shader = input.GetValue()
+        let mutable program = context.CompileKernel shader
+        let layout = program.Interface
 
         let validateLayout (next : GLSLProgramInterface) =
             let mutable isValid = true
@@ -146,66 +147,49 @@ module internal ComputeProgramDebugExtensions =
                     | _ ->
                         ()
 
-            (layout.images, next.images) ||> check "Image" (=)
-            (layout.samplers, next.samplers) ||> check "Sampler" (=)
+            (layout.images,         next.images)         ||> check "Image" (=)
+            (layout.samplers,       next.samplers)       ||> check "Sampler" (=)
             (layout.storageBuffers, next.storageBuffers) ||> check "Storage buffer" (=)
             (layout.uniformBuffers, next.uniformBuffers) ||> check "Uniform buffer" isUniformBufferCompatible
 
             isValid
 
-        let map f =
-            match current with
-            | ValueSome (_, p) -> f p
-            | _ -> failf "HookedComputeProgram has invalid state"
+        member x.Handle = program.Handle
+        member x.GroupSize = program.LocalSize
 
-        do this.Update AdaptiveToken.Top |> ignore
-
-        member x.Handle = map (fun p -> p.Handle)
-        member x.GroupSize = map (fun p -> p.LocalSize)
-
-        // Note: This is not thread safe, since multiple
-        // compute tasks may use the same program concurrently.
-        // This disposes the old program, while it may still be in use.
         member x.Update(token : AdaptiveToken) : bool =
             x.EvaluateIfNeeded token false (fun token ->
-                let shader = input.GetValue token
+                let s = input.GetValue token
 
-                match current with
-                | ValueNone ->
-                    let program = context.CompileKernel shader
-                    layout <- program.Interface
-                    current <- ValueSome (shader, program)
-                    true
+                if s <> shader then
+                    let updated =
+                        try
+                            ValueSome <| context.CompileKernel s
+                        with _ ->
+                            ValueNone
 
-                | ValueSome (s, p) when s <> shader ->
-                    let program = context.CompileKernel shader
- 
-                    if not <| validateLayout program.Interface then
-                        Log.warn "[GL] Interface of compute shader has changed and is incompatible with original interface, ignoring..."
-                        program.Dispose()
-                        false
-                    else
-                        current <- ValueSome (shader, program)
-                        p.Dispose()
+                    match updated with
+                    | ValueSome p when validateLayout p.Interface ->
+                        shader <- s
+                        program <- p
                         true
 
-                | _ ->
+                    | ValueSome _ ->
+                        Log.warn "[GL] Interface of compute shader has changed and is incompatible with original interface, ignoring..."
+                        false
+
+                    | _ ->
+                        Log.warn "[GL] Failed to update compute shader"
+                        false
+                else
                     false
             )
-
-        member x.Dispose() =
-            match current with
-            | ValueSome (_, p) ->
-                p.Dispose()
-                current <- ValueNone
-
-            | _ -> ()
 
         interface IComputeShader with
             member x.Runtime = context.Runtime
             member x.LocalSize = x.GroupSize
             member x.Interface = layout
-            member x.Dispose() = x.Dispose()
+            member x.Dispose() = ()
 
 
     type IComputeShader with
