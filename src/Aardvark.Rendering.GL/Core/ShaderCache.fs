@@ -1,14 +1,14 @@
 ﻿namespace Aardvark.Rendering.GL
 
+open Aardvark.Base
 open Aardvark.Rendering
-open FSharp.Data.Adaptive
+
+open System
 open System.Collections.Concurrent
-open System.Runtime.CompilerServices
 
 [<AutoOpen>]
 module internal ShaderCacheKeys =
     open FShade
-    open FShade.Imperative
 
     type CodeCacheKey =
         {
@@ -16,7 +16,7 @@ module internal ShaderCacheKeys =
             layout : FramebufferLayout
         }
 
-    type StaticShaderCacheKey =
+    type EffectCacheKey =
         {
             effect : Effect
             layout : FramebufferLayout
@@ -24,27 +24,39 @@ module internal ShaderCacheKeys =
             deviceCount : int
         }
 
-    type DynamicShaderCacheKey =
-        EffectConfig -> EffectInputLayout * aval<Module>
-
 type internal ShaderCache() =
+    let codeCache = ConcurrentDictionary<CodeCacheKey, Error<IBackendSurface>>()
+    let effectCache = ConcurrentDictionary<EffectCacheKey, Error<IBackendSurface>>()
 
-    let codeCache = ConcurrentDictionary<CodeCacheKey, obj>()
-    let staticShaderCache = ConcurrentDictionary<StaticShaderCacheKey, obj>()
-    let dynamicShaderCache = ConditionalWeakTable<DynamicShaderCacheKey, obj>()
+    static let box (value : Error<'T>) : Error<IBackendSurface> =
+        match value with
+        | Success v -> Success (v :> IBackendSurface)
+        | Error err -> Error err
 
-    member x.GetOrAdd(key : CodeCacheKey, create : CodeCacheKey -> 'T) =
-        codeCache.GetOrAdd(key, create >> box) |> unbox<'T>
+    static let unbox (value : Error<IBackendSurface>) : Error<'T> =
+        match value with
+        | Success v -> Success (unbox v)
+        | Error err -> Error err
 
-    member x.GetOrAdd(key : StaticShaderCacheKey, create : StaticShaderCacheKey -> 'T) =
-        staticShaderCache.GetOrAdd(key, create >> box) |> unbox<'T>
+    member x.GetOrAdd<'T when 'T :> IBackendSurface>(key : CodeCacheKey, create : CodeCacheKey -> Error<'T>) : Error<'T> =
+        codeCache.GetOrAdd(key, create >> box) |> unbox
 
-    member x.GetOrAdd(key : DynamicShaderCacheKey, create : DynamicShaderCacheKey -> 'T) =
-        lock dynamicShaderCache (fun _ ->
-            match dynamicShaderCache.TryGetValue key with
-            | (true, s) -> unbox<'T> s
-            | _ ->
-                let s = create key
-                dynamicShaderCache.Add(key, s :> obj)
-                s
+    member x.GetOrAdd<'T when 'T :> IBackendSurface>(key : EffectCacheKey, create : EffectCacheKey -> Error<'T>) : Error<'T> =
+        effectCache.GetOrAdd(key, create >> box) |> unbox
+
+    member x.Programs =
+        [ codeCache.Values; effectCache.Values ]
+        |> Seq.concat
+        |> Seq.choose (function
+            | Success p -> Some p
+            | _ -> None
         )
+        |> Seq.distinct
+
+    member x.Dispose() =
+        for p in x.Programs do p.Dispose()
+        codeCache.Clear()
+        effectCache.Clear()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()

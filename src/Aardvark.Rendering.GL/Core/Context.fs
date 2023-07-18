@@ -193,7 +193,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     let bag = ConcurrentBag(resourceContexts)
     let bagCount = new SemaphoreSlim(resourceContextCount)
 
-    let shaderCache = ShaderCache()
+    let shaderCache = new ShaderCache()
 
     let mutable driverInfo : Option<Driver> = None
 
@@ -393,18 +393,13 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     /// </summary>
     member x.Dispose() =
         try
-//            bagCount.Wait()
-//            let handle = 
-//                match bag.TryTake() with
-//                    | (true, handle) -> handle
-//                    | _ -> failwith "could not dequeue resource-context"
-//            handle.MakeCurrent()
-                
+            shaderCache.Dispose()
+
             for i in 0..resourceContextCount-1 do
                 let s = resourceContexts.[i]
                 ContextHandle.delete s
         with _ ->
             ()
-            
+
     interface IDisposable with
         member x.Dispose() = x.Dispose()
