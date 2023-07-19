@@ -4,7 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
-
+open System.IO
 
 module Skybox =
     type Marker = Marker
@@ -463,24 +463,8 @@ module SceneSg =
             scenes |> Seq.toList |> List.map (fun scene ->
                 let textures =
                     scene.ImageData |> HashMap.map (fun _ data ->
-                        try
-                            use ms = new System.IO.MemoryStream(data.Data)
-                            let img = PixImage.Load ms
-                            
-                            let img = 
-                                if HashSet.contains TextureSemantic.BaseColor data.Semantics && img.Format = Col.Format.Gray then
-                                    img.Visit {
-                                        new IPixImageVisitor<PixImage> with
-                                            member x.Visit(img : PixImage<'a>) =
-                                                img.ToFormat(Col.Format.RGBA) :> PixImage
-                                    }
-                                else
-                                    img
-                            
-                            
-                            PixTexture2d(PixImageMipMap [|img|], TextureParams.mipmapped) :> ITexture |> AVal.constant
-                        with e ->
-                            white
+                        let texture = StreamTexture(fun () -> new MemoryStream(data.Data))
+                        texture :> ITexture |> AVal.constant
                     )
          
                 let meshes =
