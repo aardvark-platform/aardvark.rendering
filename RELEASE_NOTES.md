@@ -1,3 +1,6 @@
+### 5.4.5
+- [GeometryPool] Fixed wrongly disposed shader caches
+
 ### 5.4.4
 - Exceptions are caught and logged when updating shaders with the debugger
 - [GL] Fixed resource management issue with compute shaders and shader debugger, resulting in invalid operation errors

@@ -1234,8 +1234,6 @@ module GeometryPoolData =
             NativePtr.free mem
             ctx.Delete buffer
             if bounds then
-                culling.Dispose()
-                boxShader.Dispose()
                 NativePtr.free bmem
                 ctx.Delete bbuffer
             capacity <- 0
