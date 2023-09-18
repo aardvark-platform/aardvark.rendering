@@ -1,3 +1,6 @@
+### 5.2.18
+- [GL] Handle and log exceptions when writing shader cache
+
 ### 5.2.17
 - Improved error handling of DDS parser
 - [Sg] Added delay
