@@ -444,7 +444,13 @@ module ``Pool Semantics`` =
     type PoolSem() =
         member x.RenderObjects(p : Sg.PoolNode, scope : Ag.Scope) : aset<IRenderObject> =
             let pool = p.Pool
-            let calls = p.Calls |> DrawCallBuffer.create pool.Runtime p.Storage
+
+            let calls =
+                scope.IsActive
+                |> ASet.bind (fun isActive ->
+                    if isActive then p.Calls else ASet.empty
+                )
+                |> DrawCallBuffer.create pool.Runtime p.Storage
 
             let mutable ro = Unchecked.defaultof<RenderObject>
 
