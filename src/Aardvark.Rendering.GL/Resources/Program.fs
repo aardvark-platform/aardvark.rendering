@@ -692,7 +692,12 @@ module ProgramExtensions =
                                                         code = code.code
                                                         modes = prog.SupportedModes
                                                     }
-                                                File.writeAllBytes file entry
+
+                                                try
+                                                    File.writeAllBytes file entry
+                                                with
+                                                | exn ->
+                                                    Log.warn "[GL] Failed to write to shader program file cache '%s': %s" file exn.Message
 
                                                 #if PICKLERTEST
                                                 let test = shaderPickler.UnPickle (File.readAllBytes file)
