@@ -593,14 +593,14 @@ module PointCloudRenderObjectSemantics =
                 load rasterize paramse dependencies
 
             let drawCallBuffer = 
-                let add (set : RangeSet) (v : LoadedGeometry) =
+                let add (set : RangeSet1i) (v : LoadedGeometry) =
                     let range = v.Range
-                    if range.IsValid then RangeSet.insert range set
+                    if range.IsValid then RangeSet1i.add range set
                     else set
 
-                let sub (set : RangeSet) (v : LoadedGeometry) =
+                let sub (set : RangeSet1i) (v : LoadedGeometry) =
                     let range = v.Range
-                    if range.IsValid then RangeSet.remove range set
+                    if range.IsValid then RangeSet1i.remove range set
                     else set
 
                 let call (r : Range1i) =
@@ -613,9 +613,9 @@ module PointCloudRenderObjectSemantics =
                     )
 
                 loadedGeometries 
-                    |> ASet.foldGroup add sub RangeSet.empty
+                    |> ASet.foldGroup add sub RangeSet1i.empty
                     |> AVal.map (fun ranges ->
-                        let calls = ranges |> RangeSet.toSeq |> Seq.map call |> Seq.toArray
+                        let calls = ranges |> Seq.map call |> Seq.toArray
                         IndirectBuffer.ofArray calls
                     )
 

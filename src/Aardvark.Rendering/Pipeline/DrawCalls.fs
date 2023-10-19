@@ -11,12 +11,12 @@ type DrawCallSet(collapseAdjacent : bool) =
     inherit AVal.AbstractVal<DrawCallInfo[]>()
 
     let all = System.Collections.Generic.HashSet<Range1i>()
-    let mutable ranges = RangeSet.empty
+    let mutable ranges = RangeSet1i.empty
 
     member x.AddUnsafe(r : Range1i) =
         lock x (fun () ->
             if all.Add r then
-                ranges <- RangeSet.insert r ranges
+                ranges <- RangeSet1i.add r ranges
                 true
             else
                 false
@@ -25,7 +25,7 @@ type DrawCallSet(collapseAdjacent : bool) =
     member x.RemoveUnsafe(r : Range1i) =
         lock x (fun () ->
             if all.Remove r then
-                ranges <- RangeSet.remove r ranges
+                ranges <- RangeSet1i.remove r ranges
                 true
             else
                 false
@@ -35,7 +35,7 @@ type DrawCallSet(collapseAdjacent : bool) =
         let result =
             lock x (fun () ->
                 if all.Add r then
-                    ranges <- RangeSet.insert r ranges
+                    ranges <- RangeSet1i.add r ranges
                     true
                 else
                     false
@@ -49,7 +49,7 @@ type DrawCallSet(collapseAdjacent : bool) =
         let result =
             lock x (fun () ->
                 if all.Remove r then
-                    ranges <- RangeSet.remove r ranges
+                    ranges <- RangeSet1i.remove r ranges
                     true
                 else
                     false
