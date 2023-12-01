@@ -454,11 +454,36 @@ module Sg =
             boundary.Surface <- Surface.FShadeSimple cache.BoundaryEffect
 
             let writeStencil =
-                StencilMode.simple StencilOperation.Replace StencilOperation.Zero StencilOperation.Keep ComparisonFunction.Always 1
+                {
+                    Pass        = StencilOperation.Zero
+                    Fail        = StencilOperation.Zero
+                    DepthFail   = StencilOperation.Replace
+                    Comparison  = ComparisonFunction.Always
+                    CompareMask = StencilMask.All
+                    Reference   = 255
+                }
+                //StencilMode.simple StencilOperation.Zero StencilOperation.Replace StencilOperation.Replace ComparisonFunction.Always 255
 
-            let readStencil =
-                StencilMode.simple StencilOperation.Keep StencilOperation.Keep StencilOperation.Keep ComparisonFunction.Equal 1
+            let incrementStencil : StencilMode =
+                {
+                    Pass        = StencilOperation.Increment
+                    Fail        = StencilOperation.Keep
+                    DepthFail   = StencilOperation.Keep
+                    Comparison  = ComparisonFunction.Greater
+                    CompareMask = StencilMask.All
+                    Reference   = 128
+                }
+                //StencilMode.simple StencilOperation.Decrement StencilOperation.Keep StencilOperation.Keep ComparisonFunction.Less 16
 
+            let readSten : StencilMode =
+                {
+                    Pass        = StencilOperation.Decrement
+                    Fail        = StencilOperation.Decrement
+                    DepthFail   = StencilOperation.Keep
+                    Comparison  = ComparisonFunction.Equal
+                    CompareMask = StencilMask(0x1Fu)
+                    Reference   = 1
+                }
             let writeColor =
                 if t.RenderBoundary then ColorMask.All
                 else ColorMask.None
@@ -471,32 +496,102 @@ module Sg =
 
             let style = content |> AVal.map(fun x -> x.renderStyle)
 
-            let depthTest =
-                style |> AVal.bind (function
-                    | RenderStyle.Normal -> AVal.constant DepthTest.None
-                    | _ -> scope.DepthTest
-                )
+            let depthTest = AVal.constant DepthTest.None
+                // style |> AVal.bind (function
+                //     | RenderStyle.Normal -> AVal.constant DepthTest.None
+                //     | _ -> scope.DepthTest
+                // )
 
             let stencilFront =
                 style |> AVal.bind (function
-                    | RenderStyle.Normal -> AVal.constant(readStencil)
+                    | RenderStyle.Normal -> AVal.constant(incrementStencil)
                     | _ -> scope.StencilModeFront
                 )
 
             let stencilBack =
                 style |> AVal.bind (function
-                    | RenderStyle.Normal -> AVal.constant(readStencil)
+                    | RenderStyle.Normal -> AVal.constant(incrementStencil)
                     | _ -> scope.StencilModeBack
                 )
 
+            let m : BlendMode =
+                {
+                    Enabled = true
+                    SourceAlphaFactor = BlendFactor.One
+                    DestinationAlphaFactor = BlendFactor.InvSourceAlpha
+                    AlphaOperation = BlendOperation.Add
+                    SourceColorFactor = BlendFactor.SourceAlpha
+                    DestinationColorFactor =  BlendFactor.InvSourceAlpha
+                    ColorOperation = BlendOperation.Add 
+                }
+            
             shapes.DepthState <- { shapes.DepthState with Test = depthTest }
             shapes.StencilState <- { shapes.StencilState with ModeFront = stencilFront; ModeBack = stencilBack }
+            shapes.BlendState <- { shapes.BlendState with  ColorWriteMask =  AVal.constant ColorMask.None }
+            
+            
+            
+            
+            let overlay = RenderObject.ofScope scope
+            let overlayCall =
+                DrawCallInfo(
+                    FirstIndex = drawCall.FirstIndex,
+                    FaceVertexCount = drawCall.FaceVertexCount,
+                    FirstInstance = 0,
+                    InstanceCount = 16,
+                    BaseVertex = 0
+                )
+            overlay.RenderPass <- pass
+            overlay.BlendState <- { overlay.BlendState with Mode = AVal.constant BlendMode.Blend }
+            overlay.VertexAttributes <- cache.VertexBuffers
+            overlay.DrawCalls <- Direct ([overlayCall] |> AVal.constant)
+            overlay.Mode <- IndexedGeometryMode.TriangleList
+            overlay.DepthState <- { overlay.DepthState with Test = AVal.constant DepthTest.None } 
+            overlay.Surface <- Surface.FShadeSimple (FShade.Effect.compose [toEffect DefaultSurfaces.trafo; toEffect (Path.Shader.overlay)])
+            overlay.StencilState <- { overlay.StencilState with ModeFront = AVal.constant readSten; ModeBack = AVal.constant readSten }
+            
+            let bounds = 
+                let e = t.BoundaryExtent
+                content |> AVal.map (fun s -> 
+                    let b = s.bounds
+                    let bounds = Box2d(b.Min.X - e.left, b.Min.Y - e.bottom, b.Max.X + e.right, b.Max.Y + e.top)
+                    bounds
+                )
 
+            overlay.Uniforms <-
+                let old = overlay.Uniforms
+                { new IUniformProvider with
+                    member x.TryGetUniform(scope, sem) =
+                        match string sem with
+                            | "ModelTrafo" -> 
+                                let scaleTrafo = 
+                                    bounds |> AVal.map (fun bounds -> 
+                                        if bounds.IsValid then
+                                            Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
+                                            Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
+                                        else
+                                            Trafo3d.Scale(0.0)
+                                    )
+
+                                match old.TryGetUniform(scope, sem) with
+                                    | Some (:? aval<Trafo3d> as m) ->
+                                        AVal.map2 (*) scaleTrafo m :> IAdaptiveValue |> Some
+                                    | _ ->
+                                        scaleTrafo :> IAdaptiveValue |> Some
+
+                            | _ -> old.TryGetUniform(scope, sem)
+
+                    member x.Dispose() =
+                        old.Dispose()
+                }
+            
+            
+            
             style |> AVal.map(fun s ->
                 match s with
                 | RenderStyle.Normal ->
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
-                    MultiRenderObject [boundary; shapes] :> IRenderObject
+                    MultiRenderObject [boundary; shapes; overlay] :> IRenderObject
 
                 | RenderStyle.NoBoundary ->
                     shapes.Surface <- Surface.FShadeSimple cache.Effect

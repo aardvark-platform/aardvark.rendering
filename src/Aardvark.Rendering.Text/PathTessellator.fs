@@ -222,6 +222,17 @@ module internal Tessellator =
 
             bvh
 
+        
+        let toBvhLineV (polys : array<Line2d*'a>) =
+            let mutable bvh = BvhTree2d.empty
+            
+            for line, value in polys do
+                let bb = line.BoundingBox2d.EnlargedBy(1E-8)
+                bvh <- BvhTree2d.add line bb value bvh
+
+            bvh
+
+        
         let containsPoint (bvh : BvhTree2d<int, Triangle2d>) (pt : V2d) =
             let b = Box2d.FromCenterAndSize(pt, V2d.II * 1E-5)
 
@@ -282,13 +293,61 @@ module internal Tessellator =
             |> HashMap.isEmpty
             |> not
 
-        let hasEdge (bvh : BvhTree2d<Line2d, Line2d>) (p0 : V2d) (p1 : V2d) =
+        let tryGetEdge (bvh : BvhTree2d<Line2d, 'a>) (p0 : V2d) (p1 : V2d) =
             let edge = Line2d(p0, p1)
             let b = edge.BoundingBox2d.EnlargedBy(1E-6)
 
             if Fun.ApproximateEquals(p0, p1, 1E-9) then
                 // has point
-                bvh.GetIntersecting(b, fun _ _ t -> 
+                bvh.GetIntersecting(b, fun t _ v -> 
+                    if (Fun.ApproximateEquals(t.P0, edge.P0, 1E-9) || Fun.ApproximateEquals(t.P1, edge.P1, 1E-9)) then 
+                        Some v
+                    else 
+                        None
+                )
+                |> Seq.tryHead
+                |> Option.map (fun (_,v) -> v)
+            else
+                bvh.GetIntersecting(b, fun t _ v -> 
+                    if (Fun.ApproximateEquals(t.P0, edge.P0, 1E-9) && Fun.ApproximateEquals(t.P1, edge.P1, 1E-9)) || 
+                       (Fun.ApproximateEquals(t.P1, edge.P0, 1E-9) && Fun.ApproximateEquals(t.P0, edge.P1, 1E-9)) then 
+                        Some v
+                    else 
+                        None
+                )
+                |> Seq.tryHead
+                |> Option.map (fun (_,v) -> v)
+         
+        let tryGetSegments (bvh : BvhTree2d<Line2d, PathSegment>) (pt : V2d)  =
+            let b = Box2d.FromCenterAndSize(pt, V2d.II * 1E-3)
+            
+            // has point
+            bvh.GetIntersecting(b, fun t _ v -> 
+                match v with
+                | Line (p0, p1) ->
+                    if Fun.ApproximateEquals(p0, pt, 1E-4) || Fun.ApproximateEquals(p1, pt, 1E-4) then
+                        Some v
+                    else
+                        None
+                | Bezier2(p0, p1, p2) ->
+                    if Fun.ApproximateEquals(p0, pt, 1E-4) || Fun.ApproximateEquals(p2, pt, 1E-4) then Some v
+                    else None
+                | Bezier3(p0, p1, p2, p3) ->
+                    if Fun.ApproximateEquals(p0, pt, 1E-4) || Fun.ApproximateEquals(p3, pt, 1E-4) then Some v
+                    else None
+                | Arc(p0, p1, _, _, _) ->
+                    if Fun.ApproximateEquals(p0, pt, 1E-4) || Fun.ApproximateEquals(p1, pt, 1E-4) then Some v
+                    else None
+            )
+            |> HashMap.toValueList
+                
+        let hasEdge (bvh : BvhTree2d<Line2d, 'a>) (p0 : V2d) (p1 : V2d) =
+            let edge = Line2d(p0, p1)
+            let b = edge.BoundingBox2d.EnlargedBy(1E-6)
+
+            if Fun.ApproximateEquals(p0, p1, 1E-9) then
+                // has point
+                bvh.GetIntersecting(b, fun t _ _ -> 
                     if (Fun.ApproximateEquals(t.P0, edge.P0, 1E-9) || Fun.ApproximateEquals(t.P1, edge.P1, 1E-9)) then 
                         Some t 
                     else 
@@ -297,7 +356,7 @@ module internal Tessellator =
                 |> HashMap.isEmpty
                 |> not
             else
-                bvh.GetIntersecting(b, fun _ _ t -> 
+                bvh.GetIntersecting(b, fun t _ _ -> 
                     if (Fun.ApproximateEquals(t.P0, edge.P0, 1E-9) && Fun.ApproximateEquals(t.P1, edge.P1, 1E-9)) || 
                        (Fun.ApproximateEquals(t.P1, edge.P0, 1E-9) && Fun.ApproximateEquals(t.P0, edge.P1, 1E-9)) then 
                         Some t 
@@ -638,8 +697,8 @@ module internal Tessellator =
         self, others
 
 
-    let toGeometry (rule : WindingRule) (bounds : Box2d) (inputPath : seq<PathSegment>) =
-        let trafo = 
+    let toGeometry (rule : WindingRule) (bounds : Box2d) (path : seq<PathSegment>) =
+        let trafo =
             let size = bounds.Size.Length
             let scale = 
                 if Fun.IsTiny size then 1.0
@@ -649,7 +708,7 @@ module internal Tessellator =
         
         let path =
             let trafo (pt : V2d) = trafo.Forward.TransformPos pt
-            inputPath |> Seq.map (PathSegment.transform trafo) |> Seq.toList
+            path |> Seq.map (PathSegment.transform trafo) |> Seq.toList
 
         let split (part : Part) =
             match part with
@@ -996,11 +1055,9 @@ module internal Tessellator =
             |> triangulate WindingRule.Positive
 
 
-        let toGlobal = trafo.Backward
-
         let mutable cnt = 0
-        let mutable positions : V3f[]   = Array.zeroCreate (if idx.Length > 1024 then Fun.NextPowerOfTwo idx.Length else 1024)
-        let mutable coords    : V4f[]   = Array.zeroCreate positions.Length
+        let mutable localPositions : V2d[] = Array.zeroCreate (if idx.Length > 1024 then Fun.NextPowerOfTwo idx.Length else 1024)
+        let mutable coords    : V4f[]   = Array.zeroCreate localPositions.Length
 
         for i = 0 to (idx.Length / 3) - 1 do
             let p0 = pos.[idx.[i * 3]]
@@ -1008,9 +1065,9 @@ module internal Tessellator =
             let p2 = pos.[idx.[i * 3 + 2]]
 
             if abs <| Triangle.WindingOrder(p0, p1, p2) > 1E-16 then
-                positions.[cnt] <- V2f(toGlobal.TransformPos p0).XYO
-                positions.[cnt + 1] <- V2f(toGlobal.TransformPos p1).XYO
-                positions.[cnt + 2] <- V2f(toGlobal.TransformPos p2).XYO
+                localPositions.[cnt] <- p0
+                localPositions.[cnt + 1] <- p1
+                localPositions.[cnt + 2] <- p2
                 cnt <- cnt + 3
 
         let inline add (p0 : V2d) (p1 : V2d) (p2 : V2d) (c0 : V4f) (c1 : V4f) (c2 : V4f) =
@@ -1018,117 +1075,280 @@ module internal Tessellator =
             let p0, p2, c0, c2 = if flip then p2, p0, c2, c0 else p0, p2, c0, c2
 
             let newCnt = cnt + 3
-            if newCnt > positions.Length then
-                System.Array.Resize(&positions, Fun.NextPowerOfTwo newCnt)
-                System.Array.Resize(&coords, positions.Length)
+            if newCnt > localPositions.Length then
+                System.Array.Resize(&localPositions, Fun.NextPowerOfTwo newCnt)
+                System.Array.Resize(&coords, localPositions.Length)
 
-            positions.[cnt] <- V2f(toGlobal.TransformPos p0).XYO
-            positions.[cnt + 1] <- V2f(toGlobal.TransformPos p1).XYO
-            positions.[cnt + 2] <- V2f(toGlobal.TransformPos p2).XYO
+            localPositions.[cnt] <- p0
+            localPositions.[cnt + 1] <- p1
+            localPositions.[cnt + 2] <- p2
 
             coords.[cnt] <- c0
             coords.[cnt + 1] <- c1
             coords.[cnt + 2] <- c2
 
             cnt <- cnt + 3
+          
 
         let edges = toBvhLine boundary
         // all polygonal parts not fully contained in the solid part need to be rendered.
         // since all polygonal parts are non-overlapping, convex and are connected to at least two boundary points
         // it should be sufficient to test whether or not their "center" point is covered by the solid part.
         let solid = toBvh (pos, idx)
-        for (extAngle,path) in parts do    
-            for s in path do
-                match s with
-                | PolygonalPart(s, _) ->
-                    let c = PathSegment.point 0.5 s
-                    let inside = containsPoint solid c
-                    if not inside then
-                        match s with
-                        | Line _ -> 
-                            ()
-
-                        | Bezier2(p0, p1, p2) ->
-                            if hasEdge edges p0 p2 || (hasEdge edges p0 p1 && hasEdge edges p1 p2) then
-                                if containsPoint nonCurved p1 then
-                                    add p0 p1 p2
-                                        (V4f(0,0,-1,2)) (V4f(-0.5, 0.0,-1.0, 2.0)) (V4f(-1,1,-1,2))
-                                else
-                                    add p0 p1 p2
-                                        (V4f(0,0,1,3)) (V4f(0.5, 0.0, 1.0,3.0)) (V4f(1,1,1,3))
-
-                        | Arc(p0, p2, alpha0, dAlpha, ellipse) ->   
-                            let uv2World = M33d.FromCols(V3d(ellipse.Axis0, 0.0), V3d(ellipse.Axis1, 0.0), V3d(ellipse.Center, 1.0))
-                            let world2UV = uv2World.Inverse
-                            let p1 = ellipse.GetControlPoint(alpha0, alpha0 + dAlpha)
-                            
-                            if hasEdge edges p0 p2 || (hasEdge edges p0 p1 && hasEdge edges p1 p2) then
-                                let c0 = world2UV.TransformPos p0
-                                let c1 = world2UV.TransformPos p1
-                                let c2 = world2UV.TransformPos p2
-
-                                if containsPoint nonCurved p1 then
-                                    add p0 p1 p2
-                                        (V4f(c0.X, c0.Y,-1.0, 4.0)) (V4f(c1.X, c1.Y,-1.0, 4.0)) (V4f(c2.X, c2.Y,-1.0,4.0))
-                                else
-                                    add p0 p1 p2
-                                        (V4f(c0.X, c0.Y,1.0, 5.0)) (V4f(c1.X, c1.Y,1.0, 5.0)) (V4f(c2.X, c2.Y,1.0,5.0))
-                    
-
-                        | Bezier3(p0, p1, p2, p3) ->
-                            match Coords.bezier3 p0 p1 p2 p3 with
-                            | Choice1Of2(k, c0, c1, c2, c3) ->
-                                
-                                let touching =  
-                                    hasEdge edges p0 p3 || (
-                                        let e01 = hasEdge edges p0 p1
-                                        let e12 = hasEdge edges p1 p2
-                                        let e23 = hasEdge edges p2 p3
-                                        (e01 && e12 && e23) || 
-                                        (e01 && hasEdge edges p1 p3) || 
-                                        (e23 && hasEdge edges p0 p2)
-                                    )
-
-                                if touching then
-                                    
-                                    let points  = [|p0;p1;p2;p3|]
-                                    let weights = [|c0;c1;c2;c3|]
-                                    let hull = Polygon2d(points).ComputeConvexHullIndexPolygon().Indices |> Seq.toArray 
-                                    
-                                    let ws = hull |> Array.map (fun i -> weights.[i])
-                                    let ps = hull |> Array.map (fun i -> points.[i])
-
-                                    //let pc, cc =
-                                    //    if Fun.ApproximateEquals(p0, p1, 1E-9) then p2, c2
-                                    //    else p1, c2
-
-                                    //let ccInside = cc.X*cc.X*cc.X - cc.Y*cc.Z < 0.0
-                                    //let pcInside = containsPoint nonCurved pc
-
-                                    let inline flip (v : V3d) = V3d(-v.XY, v.Z)
-                                    let ws = if extAngle > 0.0 then Array.map flip ws else ws
-
-                                    if hull.Length = 3 then
-                                        add ps.[0] ps.[1] ps.[2]
-                                            (V4f(ws.[0], float k)) (V4f(ws.[1], float k)) (V4f(ws.[2],float k))
-                                    else 
-                                        add ps.[0] ps.[1] ps.[3]
-                                            (V4f(ws.[0], float k)) (V4f(ws.[1], float k)) (V4f(ws.[3],float k))
-                                        add ps.[3] ps.[1] ps.[2]
-                                            (V4f(ws.[3], float k)) (V4f(ws.[1], float k)) (V4f(ws.[2],float k))
-                                 
+        
+        let partBoundaries = System.Collections.Generic.List()
+        let addBoundary (p0 : V2d) (p1 : V2d) (seg : PathSegment) =
+            partBoundaries.Add(Line2d(p0, p1), seg)
+        
+        if true then
+            for (extAngle,path) in parts do
+                for s in path do
+                    match s with
+                    | LinePart l ->
+                        addBoundary l.P0 l.P1 (PathSegment.LineSeg(l.P0, l.P1))
                         
-                            | _ -> 
-                                failwith "should have been subdivided"
+                    | PolygonalPart(s, _) ->
+                        let c = PathSegment.point 0.5 s
+                        let inside = containsPoint solid c
+                        if not inside then
+                            match s with
+                            | Line(p0, p1) ->
+                                addBoundary p0 p1 s
 
+                            | Bezier2(p0, p1, p2) ->
+                                if hasEdge edges p0 p2 || (hasEdge edges p0 p1 && hasEdge edges p1 p2) then
+                                    if containsPoint nonCurved p1 then
+                                        addBoundary p0 p2 s
+                                        add p0 p1 p2
+                                            (V4f(0,0,-1,2)) (V4f(-0.5, 0.0,-1.0, 2.0)) (V4f(-1,1,-1,2))
+                                    else
+                                        addBoundary p0 p1 s
+                                        addBoundary p1 p2 s
+                                        add p0 p1 p2
+                                            (V4f(0,0,1,3)) (V4f(0.5, 0.0, 1.0,3.0)) (V4f(1,1,1,3))
 
-                | _ ->
-                    ()
+                            | Arc(p0, p2, alpha0, dAlpha, ellipse) ->   
+                                let uv2World = M33d.FromCols(V3d(ellipse.Axis0, 0.0), V3d(ellipse.Axis1, 0.0), V3d(ellipse.Center, 1.0))
+                                let world2UV = uv2World.Inverse
+                                let p1 = ellipse.GetControlPoint(alpha0, alpha0 + dAlpha)
+                                
+                                if hasEdge edges p0 p2 || (hasEdge edges p0 p1 && hasEdge edges p1 p2) then
+                                    let c0 = world2UV.TransformPos p0
+                                    let c1 = world2UV.TransformPos p1
+                                    let c2 = world2UV.TransformPos p2
 
-        if cnt < positions.Length then
-            System.Array.Resize(&positions, cnt)
-            System.Array.Resize(&coords, cnt)
+                                    if containsPoint nonCurved p1 then
+                                        addBoundary p0 p2 s
+                                        add p0 p1 p2
+                                            (V4f(c0.X, c0.Y,-1.0, 4.0)) (V4f(c1.X, c1.Y,-1.0, 4.0)) (V4f(c2.X, c2.Y,-1.0,4.0))
+                                    else
+                                        addBoundary p0 p1 s
+                                        addBoundary p1 p2 s
+                                        add p0 p1 p2
+                                            (V4f(c0.X, c0.Y,1.0, 5.0)) (V4f(c1.X, c1.Y,1.0, 5.0)) (V4f(c2.X, c2.Y,1.0,5.0))
+                        
 
+                            | Bezier3(p0, p1, p2, p3) ->
+                                match Coords.bezier3 p0 p1 p2 p3 with
+                                | Choice1Of2(k, c0, c1, c2, c3) ->
+                                    
+                                    let touching =  
+                                        hasEdge edges p0 p3 || (
+                                            let e01 = hasEdge edges p0 p1
+                                            let e12 = hasEdge edges p1 p2
+                                            let e23 = hasEdge edges p2 p3
+                                            (e01 && e12 && e23) || 
+                                            (e01 && hasEdge edges p1 p3) || 
+                                            (e23 && hasEdge edges p0 p2)
+                                        )
+
+                                    if touching then
+                                        
+                                        let points  = [|p0;p1;p2;p3|]
+                                        let weights = [|c0;c1;c2;c3|]
+                                        let hull = Polygon2d(points).ComputeConvexHullIndexPolygon().Indices |> Seq.toArray 
+                                        
+                                        let ws = hull |> Array.map (fun i -> weights.[i])
+                                        let ps = hull |> Array.map (fun i -> points.[i])
+
+                                        //let pc, cc =
+                                        //    if Fun.ApproximateEquals(p0, p1, 1E-9) then p2, c2
+                                        //    else p1, c2
+
+                                        //let ccInside = cc.X*cc.X*cc.X - cc.Y*cc.Z < 0.0
+                                        //let pcInside = containsPoint nonCurved pc
+
+                                        let inline flip (v : V3d) = V3d(-v.XY, v.Z)
+                                        let ws = if extAngle > 0.0 then Array.map flip ws else ws
+
+                                        // TODO: boundary
+                                        if hull.Length = 3 then
+                                            add ps.[0] ps.[1] ps.[2]
+                                                (V4f(ws.[0], float k)) (V4f(ws.[1], float k)) (V4f(ws.[2],float k))
+                                        else 
+                                            add ps.[0] ps.[1] ps.[3]
+                                                (V4f(ws.[0], float k)) (V4f(ws.[1], float k)) (V4f(ws.[3],float k))
+                                            add ps.[3] ps.[1] ps.[2]
+                                                (V4f(ws.[3], float k)) (V4f(ws.[1], float k)) (V4f(ws.[2],float k))
+                                     
+                            
+                                | _ -> 
+                                    failwith "should have been subdivided"
+                        else
+                            match s with
+                            | Line(p0, p1) ->
+                                addBoundary p0 p1 s
+                            | _ ->
+                                ()
+
+                    | _ ->
+                        ()
+                
+            //
+            // do
+            //     let tess = LibTessDotNet.Double.Tess()
+            //     
+            //     let partBVH =
+            //         partBoundaries.ToArray()
+            //         |> toBvhLineV
+            //     
+            //     
+            //     let bb =
+            //         let bb = Box2d (Array.take cnt localPositions)
+            //         Box2d.FromCenterAndSize(bb.Center, bb.Size * 1.3)
+            //     tess.AddContour(System.Collections.Generic.List [|
+            //         ContourVertex(Vec3(X = float bb.Min.X, Y = float bb.Min.Y))
+            //         ContourVertex(Vec3(X = float bb.Max.X, Y = float bb.Min.Y))
+            //         ContourVertex(Vec3(X = float bb.Max.X, Y = float bb.Max.Y))
+            //         ContourVertex(Vec3(X = float bb.Min.X, Y = float bb.Max.Y))
+            //         ContourVertex(Vec3(X = float bb.Min.X, Y = float bb.Min.Y))
+            //     |], ContourOrientation.Original)
+            //     
+            //     for i in 0 .. 3 .. cnt - 3 do
+            //         let p0 = localPositions.[i]
+            //         let p1 = localPositions.[i+1]
+            //         let p2 = localPositions.[i+2]
+            //         tess.AddContour([|ContourVertex(Vec3(p2.X, p2.Y, 0.0), Data = i+2); ContourVertex(Vec3(p1.X, p1.Y, 0.0), Data = i+1); ContourVertex(Vec3(p0.X, p0.Y, 0.0), Data = i); ContourVertex(Vec3(p2.X, p2.Y, 0.0), Data = i+2)|], ContourOrientation.Original)
+            //     
+            //     tess.Tessellate(WindingRule.Positive, ElementType.Polygons, 3)
+            //     if not (isNull tess.Elements) then
+            //         for i in 0 .. 3 .. tess.Elements.Length - 3 do
+            //             let i0 = tess.Elements.[i]
+            //             let i1 = tess.Elements.[i+1]
+            //             let i2 = tess.Elements.[i+2]
+            //             let p0 =
+            //                 let v = tess.Vertices.[i0]
+            //                 if isNull v.Data then V2d(v.Position.X, v.Position.Y)
+            //                 else localPositions.[v.Data :?> int]
+            //             let p1 = 
+            //                 let v = tess.Vertices.[i1]
+            //                 if isNull v.Data then V2d(v.Position.X, v.Position.Y)
+            //                 else localPositions.[v.Data :?> int]
+            //             let p2 = 
+            //                 let v = tess.Vertices.[i2]
+            //                 if isNull v.Data then V2d(v.Position.X, v.Position.Y)
+            //                 else localPositions.[v.Data :?> int]
+            //           
+            //             
+            //             let c01 = tryGetEdge partBVH p0 p1
+            //             let c12 = tryGetEdge partBVH p1 p2
+            //             let c20 = tryGetEdge partBVH p2 p0
+            //             
+            //             let b0 = tryGetSegments partBVH p0
+            //             let b1 = tryGetSegments partBVH p1
+            //             let b2 = tryGetSegments partBVH p2
+            //             
+            //             match b0 with
+            //             | [a0; b0] ->
+            //                 match b1 with
+            //                 | [a1; b1] ->
+            //                     match b2 with
+            //                     | [a2; b2] ->
+            //                         let c = V4f(1, 0, 0, 3)
+            //                         add p0 p1 p2 c c c
+            //                     | _ ->
+            //                         let c = V4f(1, 0, 0, 2)
+            //                         add p0 p1 p2 c c c
+            //                 | _ ->
+            //                     match b2 with
+            //                     | [a2; b2] ->
+            //                         let c = V4f(1, 0, 0, 2)
+            //                         add p0 p1 p2 c c c
+            //                     | _ ->
+            //                         ()
+            //             | _ ->
+            //                 match b1 with
+            //                 | [a1; b1] ->
+            //                     match b2 with
+            //                     | [a2; b2] ->
+            //                         let c = V4f(1, 0, 0, 2)
+            //                         add p0 p1 p2 c c c
+            //                     | _ ->
+            //                         ()
+            //                 | _ ->
+            //                     ()
+            //                     
+            //                 
+            //             
+            //             
+            //      
+            //             
+            //             // if not fin then 
+            //             //     let c = (p0 + p1 + p2) / 3.0
+            //             //     add p0 p1 p2 V4f.IOOO V4f.IOOO V4f.IOOO
+            //             //
+            //             // if b0 && b1 then
+            //             //     match c01 with
+            //             //     | Some (Line(l0, l1)) ->
+            //             //         add p0 p1 c V4f.Zero V4f.Zero V4f.IOOO
+            //             //     | _ ->
+            //             //         // TODO
+            //             //         ()
+            //             //         
+            //             // if b1 && b2 then
+            //             //     match c12 with
+            //             //     | Some (Line(l0, l1)) ->
+            //             //         add p1 p2 c V4f.Zero V4f.Zero V4f.IOOO
+            //             //     | _ ->
+            //             //         // TODO
+            //             //         ()
+            //             //
+            //             // if b2 && b0 then
+            //             //     match c20 with
+            //             //     | Some (Line(l0, l1)) ->
+            //             //         add p2 p0 c V4f.Zero V4f.Zero V4f.IOOO
+            //             //     | _ ->
+            //             //         // TODO
+            //             //         ()
+            //             //
+            //             // if b0 && not b1 && not b2 then
+            //             //     add p0 p1 p2 V4f.Zero V4f.IOOO V4f.IOOO
+            //             //     
+            //             // if b1 && not b0 && not b2 then
+            //             //     add p0 p1 p2 V4f.IOOO V4f.Zero V4f.IOOO
+            //             //     
+            //             // if b2 && not b0 && not b1 then
+            //             //     add p0 p1 p2 V4f.IOOO V4f.IOOO V4f.Zero
+            //             //     
+            //             
+            //             //
+            //             // addDirect p0 p1 c cc0 cc1 V4f.Zero
+            //             // addDirect p1 p2 c cc1 cc2 V4f.Zero
+            //             // addDirect p2 p0 c cc2 cc0 V4f.Zero
+            //         // tess.Elements |> Array.map (fun i ->
+            //         //     let v = tess.Vertices.[i]
+            //         //     V3f(v.Position.X, v.Position.Y, 0.0)
+            //         // )
+            //
+        let positions, coords = 
+            let c = Array.zeroCreate<V4f> cnt
+            let p = Array.zeroCreate<V3f> cnt
+            for i in 0 .. cnt - 1 do
+                p.[i] <- V3f(V2f(trafo.Backward.TransformPos localPositions.[i]), 0.0f)
+                c.[i] <- coords.[i]
+            p, c
+
+        //let coords = positions |> Array.map (fun v -> V4f.Zero)
         IndexedGeometry(
             Mode = IndexedGeometryMode.TriangleList,
             IndexedAttributes =

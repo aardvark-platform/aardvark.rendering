@@ -43,6 +43,19 @@ module Shader =
             return V4d.IIII
         }
 
+    let sam =
+        sampler2d {
+            texture uniform?DiffuseColorTexture
+            addressU FShade.WrapMode.Wrap
+            addressV FShade.WrapMode.Wrap
+            filter Filter.MinMagPoint
+        }
+    
+    let nearest (v : Effects.Vertex) =
+        fragment {
+            return sam.SampleLevel(v.tc, 0.0)
+        }
+
 
 type CameraMode =
     | Orbit
@@ -383,8 +396,12 @@ let ellipseTest() =
 
     
     use app = new OpenGlApplication()
-    use win = app.CreateGameWindow(8)
-    let proj = win.Sizes |> AVal.map (fun s -> Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0))
+    use win = app.CreateGameWindow(1)
+    
+    let size = win.Sizes |> AVal.map (fun s -> s / 4)
+    
+    
+    let proj = size |> AVal.map (fun s -> Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0))
     
     let scale = cval 1.0
     let kind = cval 0
@@ -579,6 +596,19 @@ let ellipseTest() =
             do! DefaultSurfaces.pointSpriteFragment
         }
 
+    let final =
+        app.Runtime.CompileRender(win.FramebufferSignature, sg)
+        |> RenderTask.renderToColorWithClear size (clear {color C4f.Black; depth 1.0; stencil 0 })
+    
+    
+    let sg =
+        Sg.fullScreenQuad
+        |> Sg.shader {
+            do! Shader.nearest
+        }
+        |> Sg.diffuseTexture final
+    
+    
     win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
     win.Run()
 
@@ -850,7 +880,7 @@ let main argv =
     let label2 =
         //Sg.text f C4b.Green message
         Sg.markdown MarkdownConfig.light message
-            |> Sg.scale 0.1
+            |> Sg.scale 0.01
             |> Sg.billboard
             |> Sg.translate 5.0 0.0 0.0
 
@@ -865,12 +895,19 @@ let main argv =
 
 
 
+    let cfg : TextConfig =
+        {
+            font = f
+            color = C4b.White
+            align = TextAlignment.Left
+            flipViewDependent = true
+            renderStyle = RenderStyle.NoBoundary 
+        }
     let label3 =
-        Sg.text f C4b.White message
-        |> Sg.scale 0.1
+        Sg.textWithConfig cfg message
         |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, 0.2)))
             
-    let f = Aardvark.Rendering.Text.FontSquirrel.Leafy_glade.Regular
+    let f = Aardvark.Rendering.Text.FontSquirrel.Distant_Galaxy.Regular
     let label4 =
         Sg.text f C4b.White message
         |> Sg.scale 0.1
@@ -884,6 +921,7 @@ let main argv =
 
     let active = AVal.init true
 
+    let size = win.Sizes |> AVal.map (fun s -> s / 4)
     let sg = 
         active |> AVal.map (fun a ->
             if a then
@@ -891,9 +929,8 @@ let main argv =
                     //|> Sg.andAlso quad
                     //|> Sg.andAlso (Sg.shape (AVal.constant shape))
                     |> Sg.viewTrafo (cam |> AVal.map CameraView.viewTrafo)
-                    |> Sg.projTrafo (win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
+                    |> Sg.projTrafo (size |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
 
-                    |> Sg.projTrafo (win.Sizes |> AVal.map (fun s -> Trafo3d.Scale (1.0, float s.X / float s.Y, 1.0)))
                     |> Sg.fillMode mode
                     |> Sg.uniform "Antialias" aa
             else
@@ -960,37 +997,39 @@ let main argv =
         | _ -> ()
     )
 
+    
+    let s =
+        app.Runtime.CreateFramebufferSignature [
+            DefaultSemantic.Colors, TextureFormat.Rgba8
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+        ]
+    
+    let final, _ =
+        let sg =
+            Sg.ofList [
+                
+                Sg.farPlaneQuad
+                |> Sg.diffuseFileTexture "/Users/schorsch/Pictures/P8290054.JPG" true
+                |> Sg.shader {
+                    do! DefaultSurfaces.diffuseTexture
+                }
+                
+                sg |> Sg.uniform "ViewportSize" size
+            ]
+        app.Runtime.CompileRender(s, sg)
+        |> RenderTask.renderToColorAndDepthWithClear size (clear {color C4f.Black; depth 1.0; stencil 0 })
+    
+    
+    let sg =
+        Sg.fullScreenQuad
+        |> Sg.depthTest' DepthTest.None
+        |> Sg.shader {
+            do! DefaultSurfaces.diffuseTexture
+        }
+        |> Sg.diffuseTexture final
+    
 
-    let pos =
-        let rand = RandomSystem()
-        Array.init 1000 (ignore >> rand.UniformV3d >> V3f)
-
-    let trafo = win.Time |> AVal.map (fun t -> Trafo3d.RotationZ (float t.Ticks / float TimeSpan.TicksPerSecond))
-
-    let blasg = 
-        BlaNode(calls, IndexedGeometryMode.PointList)
-            |> Sg.vertexAttribute' DefaultSemantic.Positions pos
-            |> Sg.shader {
-                do! DefaultSurfaces.trafo
-                do! DefaultSurfaces.constantColor C4f.White
-            }
-            |> Sg.trafo trafo
-            |> Sg.viewTrafo (cam |> AVal.map CameraView.viewTrafo)
-            |> Sg.projTrafo (win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
-
-
-    let main = app.Runtime.CompileRender(win.FramebufferSignature, sg) //|> DefaultOverlays.withStatistics
-    //let clear = app.Runtime.CompileClear(win.FramebufferSignature, AVal.constant C4f.Black)
-
-    //win.Keyboard.Press.Values.Add (fun c ->
-    //    if c = '\b' then
-    //        if message.Value.Length > 0 then
-    //            transact (fun () -> message.Value <- message.Value.Substring(0, message.Value.Length - 1))
-    //    else
-    //        transact (fun () -> message.Value <- message.Value + string c)
-    //)
-
-    win.RenderTask <- main
+    win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
     win.Run()
     win.Dispose()
     0 

@@ -522,8 +522,9 @@ type ShapeCache(r : IRuntime) =
     let effect =
         FShade.Effect.compose [
             Path.Shader.pathVertex      |> toEffect
+            Path.Shader.pathVertexGS    |> toEffect
             //Path.Shader.pathTrafo       |> toEffect
-            Path.Shader.depthBiasVs     |> toEffect
+            //Path.Shader.depthBiasVs     |> toEffect
             Path.Shader.pathFragment    |> toEffect
         ]
         

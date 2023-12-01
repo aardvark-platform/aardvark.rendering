@@ -45,11 +45,12 @@ module Path =
         type Vertex =
             {
                 [<Position>] p : V4d
-                [<Interpolation(InterpolationMode.Sample); KLMKind>] klmKind : V4d
+                [<Interpolation(InterpolationMode.Centroid); KLMKind>] klmKind : V4d
                 [<ShapeTrafoR0>] tr0 : V4d
                 [<ShapeTrafoR1>] tr1 : V4d
                 [<PathColor>] color : V4d
-
+                [<InstanceId; Interpolation(InterpolationMode.Flat)>] iid : int
+                
                 [<SamplePosition>] samplePos : V2d
                 
                 [<DepthLayer>] layer : float
@@ -137,6 +138,87 @@ module Path =
                 }
             }
             
+        let offsets =
+            [|
+                V2d(0.7725118886316242, 0.7883251404963023)
+                V2d(0.2868388261436524, 0.2507721982510638)
+                V2d(0.7563800184247547, 0.25588371564343604)
+                V2d(0.22473087378023382, 0.7162724551399098)
+                V2d(0.4894844887720847, 0.9628606479378644)
+                V2d(0.07185988197120041, 0.010886328495570696)
+                V2d(0.5230029374367309, 0.5283938036989403)
+                V2d(0.9527946972009785, 0.506092367067542)
+                V2d(0.8256396153216994, 0.018310920557855437)
+                V2d(0.5106754013547861, 0.2133290956201137)
+                V2d(0.03461780820379934, 0.24064706484261567)
+                V2d(0.9911584825114134, 0.7897931075891483)
+                V2d(0.1922640348682304, 0.457478947949576)
+                V2d(0.4329221922079425, 0.7147760153877587)
+                V2d(0.27934121132194967, 0.9214674914765698)
+                V2d(0.7177230393526967, 0.5751597544811645)
+                //
+                // V2d(0.7986169484292236, 0.010608453386841687)
+                // V2d(0.2855507095172959, 0.4991263180765608)
+                // V2d(0.7983998610664692, 0.48954740181904977)
+                // V2d(0.2237664766378905, 0.9993042233065683)
+                // V2d(0.5409630963388372, 0.25379167037792605)
+                // V2d(0.011369496704124127, 0.7269507798346976)
+                // V2d(0.04010761926379225, 0.2825056476644877)
+                // V2d(0.5462796510887019, 0.7603523694022137)
+                // V2d(0.4887047716852594, 0.9994008409430492)
+                // V2d(0.28813772449412345, 0.7658774537418986)
+                // V2d(0.5151390474583393, 0.5274298305148808)
+                // V2d(0.27231129555639966, 0.24141392451682786)
+                // V2d(0.8011096906397096, 0.2430986036295334)
+                // V2d(0.7893492714704615, 0.7337433177993399)
+                // V2d(0.025093250244428655, 0.9998996553213046)
+                // V2d(0.07073406485377287, 0.5250728033828246)
+                // V2d(0.6607055189488857, 0.8964269900193832)
+                // V2d(0.6559404234110494, 0.6260828587940539)
+                // V2d(0.6705576298694615, 0.3820244057019344)
+                // V2d(0.18150034988536412, 0.3775386104292431)
+                // V2d(0.35767516303790425, 0.08954114526291013)
+                // V2d(0.09421346735430514, 0.8426167246766335)
+                // V2d(0.6446525181546917, 0.09845125522611653)
+                // V2d(0.9393073819794282, 0.15564939327185745)
+                // V2d(0.39043638239192247, 0.38928656502078984)
+                // V2d(0.9001069517175591, 0.8697130422737763)
+                // V2d(0.3861795369260955, 0.6279533839624495)
+                // V2d(0.9411079961940554, 0.40290209065863136)
+                // V2d(0.14596857573931055, 0.6595315261204832)
+                // V2d(0.36262511713227785, 0.9109534575956297)
+                // V2d(0.9227041934277488, 0.6156371518551891)
+                // V2d(0.08471160926459764, 0.13335171937458623)
+            |] |> Array.map (fun v -> (2.0 * v - V2d.II))
+            
+        let samplesOffsets : V2d[] =
+            Array.map (fun v -> v / 4.0) [|
+                V2d(1,1); V2d(-1,-3); V2d(-3,2); V2d(4,1);
+                V2d(-5,-2); V2d(2,5); V2d(5,3); V2d(3,-5);
+                V2d(-2,6); V2d(0,-7); V2d(-4,-6); V2d(-6,4);
+                V2d(-8,0); V2d(7,-4); V2d(6,7); V2d(-7,8)
+            |]
+
+            
+        let pathVertexGS (t : Triangle<Vertex>) =
+            triangle {
+                
+                let size = uniform.ViewportSize
+                
+                let cnt = 16
+                for i in 0 .. cnt - 1 do
+                    let o = 2.0 * offsets.[i] / V2d size
+                    
+                    
+                    yield { t.P0 with p = t.P0.p + V4d(o.X * t.P0.p.W, o.Y * t.P0.p.W, 0.0, 0.0); color = V4d(t.P0.color.XYZ, t.P0.color.W / float cnt) }
+                    yield { t.P1 with p = t.P1.p + V4d(o.X * t.P1.p.W, o.Y * t.P1.p.W, 0.0, 0.0); color = V4d(t.P1.color.XYZ, t.P1.color.W / float cnt) }
+                    yield { t.P2 with p = t.P2.p + V4d(o.X * t.P2.p.W, o.Y * t.P2.p.W, 0.0, 0.0); color = V4d(t.P2.color.XYZ, t.P2.color.W / float cnt) }
+                    restartStrip()
+                
+                
+            }
+            
+            
         let pathVertexBillboard (v : Vertex) =
             vertex {
                 let trafo = uniform.ModelViewTrafo
@@ -203,7 +285,7 @@ module Path =
 
         let pathFragment(v : Vertex) =
             fragment {
-                let kind = v.klmKind.W + 0.001 * v.samplePos.X
+                let kind = v.klmKind.W //+ 0.001 * v.samplePos.X
    
                 let mutable color = v.color
 
@@ -224,16 +306,45 @@ module Path =
                             discard()
 
                      elif kind > 5.5  then
+                        // bezier3
                         let ci = v.klmKind.XYZ
                         let f = ci.X * ci.X * ci.X - ci.Y * ci.Z
                         if f > 0.0 then
                             discard()
+                     
+                     else
+                         // solid
+                        if v.klmKind.X > 0 then
+                            let dx = ddx v.klmKind.X
+                            let dy = ddy v.klmKind.X
+                            
+                            let step = -v.klmKind.X * V2d(dy, dx) / (dx*dx + dy*dy) |> Vec.length
+                            if step < 10.0 then
+                                color <- lerp color V4d.IOOI (step / 10.0)
+                            // F = v.klmKind.X
+                            
+                            // F + a*dx + b*dy = 0
+                            // a^2 + b^2 = min
+                            
+                            // a = -(F+b*dy)/dx
+                            
+                            
+                            // (F+b*dy)^2/dx^2 + b^2 = min
+                            
+                            // (F+b*dy)^2 + dx^2*b^2 = min
+                            // 2*(F+b*dy)*dy + 2*dx^2*b = 0
+                            // 2*F*dy + 2*b*dy^2 + 2*b*dx^2 = 0
+                            // b = -F*dy / (dx^2 * dy^2)
+                            else
+                                discard()
                 else
-                    if kind > 1.5 && kind < 3.5 then
+                    if kind >= 1.5 && kind < 2.5 then
                         color <- V4d.IOOI
-                    elif kind > 3.5 && kind < 5.5 then
+                    if kind >= 2.5 && kind < 3.5 then
+                        color <- V4d.OOII
+                    elif kind >= 3.5 && kind < 5.5 then
                         color <- V4d.OIOI
-                    elif kind > 5.5  then
+                    elif kind >= 5.5  then
                         color <- V4d.OOII
 
                 return color
@@ -249,6 +360,12 @@ module Path =
             fragment {
                 return uniform.BoundaryColor
             }
+        let overlay (v : Vertex) =
+            fragment {
+                let alpha = float (v.iid + 1) / 16.0
+                return V4d(1.0, 1.0, 1.0, alpha)
+            }
+            
 
 
     let empty =

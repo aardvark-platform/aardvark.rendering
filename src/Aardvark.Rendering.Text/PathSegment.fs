@@ -1106,7 +1106,7 @@ module PathSegment =
     let derivative (t : float) (seg : PathSegment) =
         let t = clamp 0.0 1.0 t
         match seg with
-        | LineSeg(p1, p0) ->
+        | LineSeg(p0, p1) ->
             p1 - p0
 
         | ArcSeg(p0, p1, a0, da, e) ->
