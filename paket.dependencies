@@ -44,6 +44,7 @@ nuget Silk.NET.GLFW                      = 2.15.0
 nuget Silk.NET.Core                      = 2.15.0
 
 nuget SharpZipLib                        ~> 1.4.1
+nuget FuzzySharp                         ~> 2.0.2
 
 group Test
 framework: net6.0

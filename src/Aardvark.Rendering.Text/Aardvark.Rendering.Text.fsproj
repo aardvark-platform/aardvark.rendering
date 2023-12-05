@@ -21,6 +21,7 @@
     <Compile Include="BvhInternal.fs" />
     <Compile Include="PathTessellator.fs" />
     <Compile Include="Path.fs" />
+    <Compile Include="FontResolver.fs" />
     <Compile Include="Font.fs" />
     <Compile Include="GoogleFonts.fs" />
     <Compile Include="FontSquirrel.fs" />

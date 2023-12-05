@@ -113,6 +113,7 @@ NUGET
       System.Reflection.Emit.Lightweight (>= 4.3) - restriction: || (&& (== net471) (< net45)) (== net6.0) (== net6.0-windows7.0) (== netstandard2.0)
     FSys (0.0.1)
       FSharp.Core (>= 4.7)
+    FuzzySharp (2.0.2)
     GLSLangSharp (0.4.15)
       FSharp.Core (>= 5.0)
     Microsoft.Bcl.AsyncInterfaces (6.0) - restriction: || (== net471) (&& (== net6.0) (>= net461)) (&& (== net6.0) (< netcoreapp3.1)) (&& (== net6.0-windows7.0) (>= net461)) (&& (== net6.0-windows7.0) (< netcoreapp3.1)) (== netstandard2.0)
