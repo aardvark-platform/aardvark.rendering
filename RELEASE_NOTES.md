@@ -1,3 +1,8 @@
+### 5.4.6
+- [ContextHandles] GL.Enable(EnableCap.PointSprite)
+- [ManagedPool] Avoid evaluating draw call set if not active
+- Fix BlendMode.Blend source alpha factor
+
 ### 5.4.5
 - [GeometryPool] Fixed wrongly disposed shader caches
 

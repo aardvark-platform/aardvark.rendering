@@ -31,6 +31,7 @@ module ContextHandleGLExtensions =
     type GL with
         static member SetDefaultStates() =
             GL.Enable(EnableCap.TextureCubeMapSeamless)
+            GL.Enable(EnableCap.PointSprite)
             GL.Disable(EnableCap.PolygonSmooth)
             GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)
             if RuntimeConfig.DepthRange = DepthRange.ZeroToOne then
