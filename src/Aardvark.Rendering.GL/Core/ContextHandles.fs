@@ -31,12 +31,23 @@ module ContextHandleGLExtensions =
     type GL with
         static member SetDefaultStates() =
             GL.Enable(EnableCap.TextureCubeMapSeamless)
+            GL.Check "cannot enable GL_TEXTURE_CUBE_MAP_SEAMLESS"
+
+            // Note: This is supposed to be deprecated since OpenGL 3.2 and enabled by default.
+            // However, for some AMD drivers you still need to enable it even though it should not exist anymore.
             GL.Enable(EnableCap.PointSprite)
+            GL.GetError() |> ignore
+
             GL.Disable(EnableCap.PolygonSmooth)
+            GL.Check "cannot disable GL_POLYGON_SMOOTH"
+
             GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)
+            GL.Check "cannot set GL_FRAGMENT_SHADER_DERIVATIVE_HINT to GL_NICEST"
+
             if RuntimeConfig.DepthRange = DepthRange.ZeroToOne then
                 if GL.ARB_clip_control then
                     GL.ClipControl(ClipOrigin.LowerLeft, ClipDepthMode.ZeroToOne)
+                    GL.Check "failed to set depth range to [0, 1]"
                 else
                     failf "cannot set depth range to [0, 1] without GL_ARB_clip_control or OpenGL 4.5"
 

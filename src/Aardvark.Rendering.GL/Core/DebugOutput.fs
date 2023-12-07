@@ -21,10 +21,11 @@ module Error =
             if mode <> ErrorFlagCheck.Disabled then
                 let err = GL.GetError()
                 if err <> ErrorCode.NoError then
-                    Report.Error("{0}: {1}", err, str)
+                    let message = $"[GL] {str} ({err})"
+                    Report.Error(message)
 
                     if mode = ErrorFlagCheck.ThrowOnError then
-                        raise <| OpenGLException(err, sprintf "%A" str)
+                        raise <| OpenGLException(err, message)
 
 [<AutoOpen>]
 module private IGraphicsContextDebugExtensions =
