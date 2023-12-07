@@ -28,7 +28,7 @@ module private OpenGL =
     open FSharp.Data.Adaptive
 
     let mutable version = System.Version(3,3)
-    let mutable useNoError = false
+    let mutable supportsNoError = false
 
     let private tryCreateOffscreenWindow (version : Version) (useNoError : bool) (glfw : Glfw) =
         glfw.DefaultWindowHints()
@@ -50,13 +50,13 @@ module private OpenGL =
         else
             glfw.DestroyWindow w
             true
-            
-    let supportsNoError (version : Version) (glfw : Glfw) =
+
+    let queryNoErrorSupport (version : Version) (glfw : Glfw) =
         if tryCreateOffscreenWindow version true glfw then
             true
         else
             let error, _ = glfw.GetError()
-            Report.Line(2, "OpenGL does not support KHR_no_error: {0}", error)
+            Report.Line(2, $"OpenGL does not support KHR_no_error ({error})")
             false
 
     let initVersion (glfw : Glfw) =
@@ -90,7 +90,7 @@ module private OpenGL =
         match best with
         | Some b ->
             version <- b
-            useNoError <- glfw |> supportsNoError b
+            supportsNoError <- glfw |> queryNoErrorSupport b
         | None -> failwith "no compatible OpenGL version found"
 
     type MyWindowInfo(win : nativeptr<WindowHandle>) =
@@ -292,7 +292,10 @@ module private OpenGL =
                 ()
         }
 
-    let interop =
+    let interop (debug : DebugConfig) =
+        let disableErrorChecks =
+            debug.ErrorFlagCheck = ErrorFlagCheck.Disabled
+
         { new IWindowInterop with
             override __.Boot(glfw) =
                 initVersion glfw
@@ -307,7 +310,6 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintInt.DepthBits, 24)
                 glfw.WindowHint(WindowHintInt.StencilBits, 8)
 
-
                 let m = glfw.GetPrimaryMonitor()
                 let mode = glfw.GetVideoMode(m) |> NativePtr.read
                 glfw.WindowHint(WindowHintInt.RedBits, 8)
@@ -320,7 +322,7 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
                 glfw.WindowHint(WindowHintBool.DoubleBuffer, true)
                 glfw.WindowHint(WindowHintBool.OpenGLDebugContext, false)
-                if useNoError then glfw.WindowHint(WindowHintBool.ContextNoError, true)
+                glfw.WindowHint(WindowHintBool.ContextNoError, disableErrorChecks && supportsNoError)
                 glfw.WindowHint(WindowHintBool.SrgbCapable, false)
                 if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
                     glfw.WindowHint(WindowHintBool.CocoaRetinaFramebuffer, cfg.physicalSize)
@@ -330,7 +332,7 @@ module private OpenGL =
         }
 
 type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) as this =
-    inherit Application(runtime, OpenGL.interop, hideCocoaMenuBar)
+    inherit Application(runtime, OpenGL.interop runtime.DebugConfig, hideCocoaMenuBar)
 
     let createContext() =
         let w = this.Instance.CreateWindow WindowConfig.Default
