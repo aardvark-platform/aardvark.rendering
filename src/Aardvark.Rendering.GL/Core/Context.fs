@@ -201,6 +201,14 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     let mutable unpackAlignment : Option<int> = None
 
+    let mutable maxTextureSize : Option<V2i> = None
+
+    let mutable maxTextureSize3d : Option<V3i> = None
+
+    let mutable maxTextureSizeCube : Option<int> = None
+
+    let mutable maxTextureArrayLayers : Option<int> = None
+
     let mutable maxComputeWorkGroupSize : Option<V3i> = None
 
     let mutable maxComputeWorkGroupInvocations : Option<int> = None
@@ -257,6 +265,28 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     member x.UnpackAlignment =
         getOrQuery &unpackAlignment (fun _ ->
             GL.GetInteger(GetPName.UnpackAlignment)
+        )
+
+    member x.MaxTextureSize =
+        getOrQuery &maxTextureSize (fun _ ->
+            let s = GL.GetInteger(GetPName.MaxTextureSize)
+            V2i s
+        )
+
+    member x.MaxTextureSize3D =
+        getOrQuery &maxTextureSize3d (fun _ ->
+            let s = GL.GetInteger(GetPName.Max3DTextureSize)
+            V3i s
+        )
+
+    member x.MaxTextureSizeCube =
+        getOrQuery &maxTextureSizeCube (fun _ ->
+            GL.GetInteger(GetPName.MaxCubeMapTextureSize)
+        )
+
+    member x.MaxTextureArrayLayers =
+        getOrQuery &maxTextureArrayLayers (fun _ ->
+            GL.GetInteger(GetPName.MaxArrayTextureLayers)
         )
 
     member x.MaxComputeWorkGroupSize =
