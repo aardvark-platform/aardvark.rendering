@@ -209,6 +209,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     let mutable maxTextureArrayLayers : Option<int> = None
 
+    let mutable maxRenderbufferSize : Option<V2i> = None
+
     let mutable maxComputeWorkGroupSize : Option<V3i> = None
 
     let mutable maxComputeWorkGroupInvocations : Option<int> = None
@@ -287,6 +289,12 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     member x.MaxTextureArrayLayers =
         getOrQuery &maxTextureArrayLayers (fun _ ->
             GL.GetInteger(GetPName.MaxArrayTextureLayers)
+        )
+
+    member x.MaxRenderbufferSize =
+        getOrQuery &maxRenderbufferSize (fun _ ->
+            let s = GL.GetInteger(GetPName.MaxRenderbufferSize)
+            V2i s
         )
 
     member x.MaxComputeWorkGroupSize =
