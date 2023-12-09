@@ -12,20 +12,37 @@ open Aardvark.Rendering.GL
 module Error =
 
     exception OpenGLException of ec : ErrorCode * msg : string with
-        override x.Message = sprintf "%A: %s" x.ec x.msg
+        override x.Message = $"{x.msg} (Error: {x.ec})"
 
     type GL with
+        static member private Check(str, throwOnError) =
+            let err = GL.GetError()
+            if err <> ErrorCode.NoError then
+                let str = $"{str}"
+                let msg =
+                    if String.IsNullOrEmpty str then "An error occurred"
+                    else string (Char.ToUpper str.[0]) + str.Substring(1)
+
+                Report.Error($"[GL] {msg} (Error: {err})")
+
+                if throwOnError then
+                    raise <| OpenGLException(err, msg)
+
+        /// Gets the value of the GL error flag and logs it
+        /// with the given message string if it is not equal to GL_NO_ERROR.
+        /// Throws an exception after logging if DebugConfig.ErrorFlagCheck = ThrowOnError.
+        /// Does nothing if DebugConfig.ErrorFlagCheck = Disabled.
         static member Check str =
             let mode = GL.CheckErrors
 
             if mode <> ErrorFlagCheck.Disabled then
-                let err = GL.GetError()
-                if err <> ErrorCode.NoError then
-                    let message = $"[GL] {str} ({err})"
-                    Report.Error(message)
+                let throwOnError = (mode = ErrorFlagCheck.ThrowOnError)
+                GL.Check(str, throwOnError)
 
-                    if mode = ErrorFlagCheck.ThrowOnError then
-                        raise <| OpenGLException(err, message)
+        /// Gets the value of the GL error flag and throws an exception
+        /// with the given message string if it is not equal to GL_NO_ERROR.
+        static member Assert str =
+            GL.Check(str, true)
 
 [<AutoOpen>]
 module private IGraphicsContextDebugExtensions =

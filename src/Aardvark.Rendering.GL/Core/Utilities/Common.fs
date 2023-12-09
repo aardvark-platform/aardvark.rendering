@@ -11,8 +11,13 @@ module private ErrorUtilities =
 
     let inline failf fmt =
         Printf.kprintf (fun str ->
-            Report.Error $"[GL] {str}"
-            failwith ("[GL] " + str)
+            let str =
+                if String.IsNullOrEmpty str then "An error occurred"
+                else string (Char.ToUpper str.[0]) + str.Substring(1)
+
+            let msg = $"[GL] {str}"
+            Report.Error msg
+            failwith msg
         ) fmt
 
 [<AutoOpen>]
