@@ -32,16 +32,29 @@ module internal TextureResourceCounts =
         let updateTexture (ctx:Context) oldSize newSize =
             Interlocked.Add(&ctx.MemoryUsage.TextureMemory,newSize-oldSize) |> ignore
 
-        let inline texSizeInBytes (dimension : TextureDimension) (size : V3i) (format : TextureFormat) (samples : int) (levels : int) (count : int) =
-            let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
-            let mutable size = pixelCount * (int64 format.PixelSizeInBits) / 8L
-            let mutable temp = size
-            for _ in 1..levels-1 do
-                temp <- temp >>> 2
-                size <- size + temp
-            size <- size * (int64 count)
-            if dimension = TextureDimension.TextureCube then size * 6L
-            else size
+        /// Computes an estimate of the memory usage of a texture with the given parameters.
+        /// Assumes that per-pixel size in bits is a power of two, so for example RGB textures are layed out as RGBX.
+        let texSizeInBytes (dimension : TextureDimension) (size : V3i) (format : TextureFormat) (samples : int) (levels : int) (count : int) =
+            let count =
+                if dimension = TextureDimension.TextureCube then 6 * count
+                else count
+
+            let getLevelSizeInBytes : V3i -> int64 =
+                match format.CompressionMode with
+                | CompressionMode.None ->
+                    let bitsPerPixel = format.PixelSizeInBits |> Fun.NextPowerOfTwo |> max 8 |> int64
+                    fun size -> (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples) * (bitsPerPixel / 8L)
+
+                | mode ->
+                    fun size -> int64 <| CompressionMode.sizeInBytes size mode
+
+            let mutable layerSizeInBytes = 0L
+
+            for level = 0 to levels - 1 do
+                let levelSize = Fun.MipmapLevelSize(size, level)
+                layerSizeInBytes <- layerSizeInBytes + getLevelSizeInBytes levelSize
+
+            layerSizeInBytes * (int64 count)
 
 type Texture =
     class
