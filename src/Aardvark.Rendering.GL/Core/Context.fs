@@ -215,6 +215,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     let mutable maxComputeWorkGroupInvocations : Option<int> = None
 
+    let mutable numProgramBinaryFormats : Option<int> = None
+
     let mutable shaderCachePath : Option<string> = Some defaultShaderCachePath
 
     let formatSampleCounts = FastConcurrentDict()
@@ -309,6 +311,11 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     member x.MaxComputeWorkGroupInvocations =
         getOrQuery &maxComputeWorkGroupInvocations (fun _ ->
             GL.GetInteger(GetPName.MaxComputeWorkGroupInvocations)
+        )
+
+    member x.NumProgramBinaryFormats =
+        getOrQuery &numProgramBinaryFormats (fun _ ->
+            GL.GetInteger(GetPName.NumProgramBinaryFormats)
         )
 
     member internal x.ImportMemoryBlock(external : ExternalMemoryBlock) =

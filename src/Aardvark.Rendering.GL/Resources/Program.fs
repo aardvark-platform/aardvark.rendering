@@ -435,6 +435,10 @@ module ProgramExtensions =
             GL.Check "could not create program"
 
             try
+                if GL.ARB_get_program_binary then
+                    GL.ProgramParameter(handle, ProgramParameterName.ProgramBinaryRetrievableHint, 1)
+                    GL.Check "could not set program binary retrievable hint"
+
                 for s in shaders do
                     GL.AttachShader(handle, s.Handle)
                     GL.Check "could not attach shader to program"
@@ -634,29 +638,28 @@ module ProgramExtensions =
         module Program =
 
             let tryGetBinary (program : Program) =
-                if GL.ARB_get_program_binary then
-                    GL.GetError() |> ignore
+                if GL.ARB_get_program_binary && program.Context.NumProgramBinaryFormats > 0 then
+                    let length = GL.Dispatch.GetProgramBinaryLength program.Handle
+                    GL.Check "failed to get program binary length"
 
-                    let mutable length = 0
-                    GL.GetProgram(program.Handle, GetProgramParameterName.ProgramBinaryLength, &length)
+                    if length > 0 then
+                        let data, format = GL.Dispatch.GetProgramBinary(program.Handle, length)
+                        GL.Check "failed to get program binary"
 
-                    let err = GL.GetError()
-                    if err <> ErrorCode.NoError then
-                        Log.warn "[GL] Failed to query program binary length: %A" err
-                        None
-                    else
-                        let data : byte[] = Array.zeroCreate length
-                        let mutable format = Unchecked.defaultof<BinaryFormat>
-                        GL.GetProgramBinary(program.Handle, length, &length, &format, data)
-
-                        let err = GL.GetError()
-                        if err <> ErrorCode.NoError then
-                            Log.warn "[GL] Failed to retrieve program binary: %A" err
+                        if isNull data then
+                            Log.warn "[GL] Failed to retrieve program binary"
                             None
                         else
                             Some (format, data)
+                    else
+                        Log.warn "[GL] Program binary length is zero bytes"
+                        None
                 else
-                    Report.Line(4, "[GL] Cannot read shader cache because GL_ARB_get_program_binary is not supported")
+                    let reason =
+                        if GL.ARB_get_program_binary then "no binary formats are supported"
+                        else "GL_ARB_get_program_binary is not supported"
+
+                    Report.Line(4, $"[GL] Cannot read shader cache because {reason}")
                     None
 
             let ofShaderCacheEntry (context : Context) (fixBindings : bool) (entry : ShaderCacheEntry) =
