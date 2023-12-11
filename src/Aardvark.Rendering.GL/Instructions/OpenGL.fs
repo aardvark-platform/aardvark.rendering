@@ -380,45 +380,43 @@ module OpenGl =
     /// </summary>
     let getProcAddressInternal (name : string) =
         match System.Environment.OSVersion with
-            | Linux ->
-                if opengl32 = 0n then
-                    opengl32Lib <- DynamicLinker.loadLibrary "libGL.so.1"
-                    opengl32 <- opengl32Lib.Handle
+        | Linux ->
+            if opengl32 = 0n then
+                opengl32Lib <- DynamicLinker.loadLibrary "libGL.so.1"
+                opengl32 <- opengl32Lib.Handle
 
-                match GLX.GetProcAddress name with
-                    | 0n -> 0n
+            match GLX.GetProcAddress name with
+            | 0n -> 0n
+            | ptr -> ptr
+
+        | Mac ->
+            let ctx = OpenTK.Graphics.GraphicsContext.CurrentContext :?> OpenTK.Graphics.IGraphicsContextInternal
+            ctx.GetAddress name
+
+            (*if opengl32 = 0n then
+                let ctx : OpenTK.Graphics.IGraphicsContextInternal = failwith ""
+
+                ctx.GetAddress(name)
+
+                opengl32Lib <- DynamicLinker.loadLibrary "/System/Library/Frameworks/OpenGL.framework/Versions/A/Libraries/libGL.dylib"
+                opengl32 <- opengl32Lib.Handle
+
+            let handle = opengl32Lib.GetFunction(name).Handle
+            if handle <> 0n then Log.warn "could not get function ptr: %A" name
+            handle*)
+
+        | Windows ->
+            if opengl32 = 0n then
+                opengl32Lib <- DynamicLinker.loadLibrary "Opengl32.dll"
+                opengl32 <- opengl32Lib.Handle
+
+            match Wgl.GetDefaultProcAddress name with
+            | 0n -> match Wgl.GLGetProcAddress name with
+                    | 0n -> match Wgl.GetProcAddress(opengl32, name) with
+                            | 0n -> 0n
+                            | ptr -> ptr
                     | ptr -> ptr
-            | Mac ->
-
-                let ctx = OpenTK.Graphics.GraphicsContext.CurrentContext :?> OpenTK.Graphics.IGraphicsContextInternal
-
-                let handle = ctx.GetAddress name
-                if handle = 0n then printfn "could not grab: %s" name
-                handle
-                (*if opengl32 = 0n then
-                    let ctx : OpenTK.Graphics.IGraphicsContextInternal = failwith ""
-
-                    ctx.GetAddress(name)
-
-                    opengl32Lib <- DynamicLinker.loadLibrary "/System/Library/Frameworks/OpenGL.framework/Versions/A/Libraries/libGL.dylib"
-                    opengl32 <- opengl32Lib.Handle
-
-                let handle = opengl32Lib.GetFunction(name).Handle
-                if handle <> 0n then Log.warn "could not get function ptr: %A" name
-                handle*)
-
-            | Windows ->
-                if opengl32 = 0n then
-                    opengl32Lib <- DynamicLinker.loadLibrary "Opengl32.dll"
-                    opengl32 <- opengl32Lib.Handle
-
-                match Wgl.GetDefaultProcAddress name with
-                        | 0n -> match Wgl.GLGetProcAddress name with
-                                | 0n -> match Wgl.GetProcAddress(opengl32, name) with
-                                            | 0n -> 0n
-                                            | ptr -> ptr
-                                | ptr -> ptr
-                        | ptr -> ptr
+            | ptr -> ptr
 
 
     let rec getProcAddressProbing (suffixes : list<string>) (name : string) =
