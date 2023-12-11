@@ -345,15 +345,15 @@ module TextureCreationExtensions =
         // ================================================================================================================
 
         member internal x.SetDefaultTextureParams(target : TextureTarget, format : TextureFormat, mipMapLevels : int) =
-            // For gray scale textures, duplicate channel
-            if TextureFormat.toColFormat format = Col.Format.Gray then
-                GL.TexParameter(target, TextureParameterName.TextureSwizzleG, int PixelFormat.Red)
-                GL.TexParameter(target, TextureParameterName.TextureSwizzleB, int PixelFormat.Red)
-
             match target with
             | TextureTarget.Texture2DMultisample
             | TextureTarget.Texture2DMultisampleArray -> ()
             | _ ->
+                // For gray scale textures, duplicate channel
+                if TextureFormat.toColFormat format = Col.Format.Gray then
+                    GL.TexParameter(target, TextureParameterName.TextureSwizzleG, int PixelFormat.Red)
+                    GL.TexParameter(target, TextureParameterName.TextureSwizzleB, int PixelFormat.Red)
+
                 GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
                 GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
                 GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
