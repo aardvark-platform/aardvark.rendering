@@ -1,3 +1,7 @@
+### 5.4.10-prerelease0001
+- [Text] improved Font resolver for Windows and MacOS
+- [PathSegment] fixed several PathSegment tools and added a few new ones
+
 ### 5.4.6
 - [ContextHandles] GL.Enable(EnableCap.PointSprite)
 - [ManagedPool] Avoid evaluating draw call set if not active

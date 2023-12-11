@@ -4,6 +4,7 @@ on:
     branches:
       - master
       - v54
+      - font-rework
     paths:
       - RELEASE_NOTES.md 
       - .github/workflows/publish.yml

@@ -222,6 +222,16 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "22 - MemoryLeak", "Scratch 
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "23 - NativeMemoryLeak", "Scratch (netcore)\23 - NativeMemoryLeak\23 - NativeMemoryLeak.fsproj", "{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{5BFEB10C-50E5-41E1-95D4-74FDC12C5485}"
+	ProjectSection(SolutionItems) = preProject
+		..\global.json = ..\global.json
+		..\paket.dependencies = ..\paket.dependencies
+		..\paket.lock = ..\paket.lock
+		..\README.md = ..\README.md
+		..\RELEASE_NOTES.md = ..\RELEASE_NOTES.md
+		..\.github\workflows\publish.yml = ..\.github\workflows\publish.yml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
