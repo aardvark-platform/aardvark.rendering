@@ -61,6 +61,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
     static let contextError = new Event<ContextErrorEventHandler, ContextErrorEventArgs>()
 
     let l = obj()
+    let onDisposed = Event<unit>()
     let mutable debugOutput = None
     let mutable onMakeCurrent : ConcurrentHashSet<unit -> unit> = null
     let mutable driverInfo = None
@@ -76,6 +77,9 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         
     [<CLIEvent>]
     static member ContextError = contextError.Publish
+
+    [<CLIEvent>]
+    member x.OnDisposed = onDisposed.Publish
 
     member x.GetProcAddress(name : string) =
         (handle |> unbox<IGraphicsContextInternal>).GetAddress(name)
@@ -198,6 +202,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 
     member x.Dispose() =
         debugOutput |> Option.iter (fun dbg -> dbg.Dispose())
+        onDisposed.Trigger()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -215,9 +220,6 @@ module ContextHandle =
         if ctx.IsCurrent then
             ctx.ReleaseCurrent()
         ctx.Dispose()
-        //match windows.TryRemove ctx with
-        //    | (true, w) -> w.Dispose()
-        //    | _ -> ()
 
     /// <summary>
     /// checks whether the given context is current on the calling thread
@@ -236,8 +238,45 @@ module ContextHandle =
     let releaseCurrent (ctx : ContextHandle) = ctx.ReleaseCurrent()
 
 module ContextHandleOpenTK =
-    
-    let private windows = System.Collections.Concurrent.ConcurrentDictionary<ContextHandle, NativeWindow>()
+
+    // This is a workaround for closing the X11 display, since OpenTK leaks the display even when the
+    // window is disposed. This leads to problems when running multiple unit tests one after another.
+    // We currently use a custom version of OpenTK in which this issue isn't fixed yet.
+    // https://github.com/krauthaufen/OpenTKHack
+    // See: https://github.com/opentk/opentk/pull/773
+    module private X11 =
+        open OpenTK.Platform.X11
+        open System.Reflection
+
+        [<AutoOpen>]
+        module private Internals =
+            let asm = typeof<NativeWindow>.Assembly
+
+            let fiImplementation =
+                typeof<NativeWindow>.GetField("implementation", BindingFlags.NonPublic ||| BindingFlags.Instance)
+
+            let fiWindow =
+                let t = asm.GetType("OpenTK.Platform.X11.X11GLNative")
+                if isNull t then null
+                else t.GetField("window", BindingFlags.NonPublic ||| BindingFlags.Instance)
+
+            let fCloseDisplay =
+                let t = asm.GetType("OpenTK.Platform.X11.Functions")
+                if isNull t then null
+                else t.GetMethod("XCloseDisplay")
+
+        let closeDisplay (window : NativeWindow) =
+            if RuntimeInformation.IsOSPlatform OSPlatform.Linux then
+                try
+                    let x11GLNative = fiImplementation.GetValue(window)
+                    let window = unbox<X11WindowInfo> <| fiWindow.GetValue(x11GLNative)
+
+                    if window.Display <> 0n then
+                        fCloseDisplay.Invoke(null, [| window.Display |]) |> ignore
+                with exn ->
+                    Log.warn "[GL] Failed to close X11 display: %A" exn.Message
+            else
+                ()
 
     /// <summary>
     /// creates a new context using the default configuration
@@ -261,15 +300,14 @@ module ContextHandleOpenTK =
             | ValueNone -> context.MakeCurrent(null)
 
             window, context
-    
-        
+
+        let dispose() =
+            context.Dispose()
+            window.Dispose()
+            X11.closeDisplay window
+
         let handle = new ContextHandle(context, window.WindowInfo)
+        handle.OnDisposed.Add dispose
         handle.Initialize(debug, setDefaultStates = false)
 
-        // add the window to the windows-table to save it from being
-        // garbage collected.
-        if not <| windows.TryAdd(handle, window) then failwith "failed to add new context to live-set"
-    
         handle
-
-
