@@ -8,12 +8,15 @@ open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Rendering.GL
 open OpenTK.Graphics.OpenGL4
+open Aardvark.Application
 open Aardvark.Application.Slim
 
 open BenchmarkDotNet.Running;
 open BenchmarkDotNet.Configs
 open BenchmarkDotNet.Jobs
 open BenchmarkDotNet.Toolchains
+
+open Expecto
 
 let testCompile() =
     use runtime = new Runtime(DebugLevel.None)
@@ -242,10 +245,69 @@ module CSTest =
         dst.Download(img)
         img.SaveImageSharp @"C:\Users\Schorsch\Desktop\bla.png"
 
-
-
 [<EntryPoint>]
 let main argv =
+
+    let backendTests backend =
+        let bufferTests =
+            testBackend backend "Buffers" [
+                Buffer.BufferCopy.tests
+                Buffer.BufferUpload.tests
+                Buffer.BufferDownload.tests
+                Buffer.AttributeBuffer.tests
+            ]
+
+        let textureTests =
+            testBackend backend "Textures" [
+                Texture.TextureUpload.tests
+                Texture.TextureDownload.tests
+                Texture.TextureCreate.tests
+                Texture.TextureCopy.tests
+                Texture.TextureClear.tests
+            ]
+
+        let renderingTests =
+            testBackend backend "Rendering" [
+                Rendering.Culling.tests
+                Rendering.RenderTasks.tests
+                Rendering.FramebufferSignature.tests
+                Rendering.IntegerAttachments.tests
+                Rendering.Samplers.tests
+                Rendering.Uniforms.tests
+            ]
+
+        let computeTests =
+            testBackend backend "Compute" [
+                Rendering.ComputeImages.tests
+                Rendering.ComputeBuffers.tests
+                Rendering.ComputePrimitives.tests
+                Rendering.ComputeSorting.tests
+                Rendering.ComputeJpeg.tests
+                Rendering.MutableInputBinding.tests
+            ]
+        testList $"Tests ({backend})" [
+            bufferTests
+            textureTests
+            renderingTests
+            computeTests
+        ]
+
+    let otherTests =
+        testList "Other tests" [
+            ``SceneGraph Tests``.tests
+            ``CompactSet Tests``.tests
+            ``AdaptiveResource Tests``.tests
+        ]
+
+    let allTests =
+        testList "Tests" [
+            otherTests
+            backendTests Backend.GL
+            backendTests Backend.Vulkan
+        ]
+
+    runTestsWithCLIArgs [ CLIArguments.No_Spinner ] argv allTests
+
     //Aardvark.Init()
     //CSTest.run()
 
@@ -264,7 +326,7 @@ let main argv =
     //testDownloadSlice()
     //testCopySlice()
 
-    BenchmarkRunner.Run<StatsBench.StatsTest>() |> ignore
+    // BenchmarkRunner.Run<StatsBench.StatsTest>() |> ignore
 
 
     //testTextureCubeArray()
@@ -278,4 +340,4 @@ let main argv =
     //PerformanceTests.StartupPerformance.runConsole args
     //PerformanceTests.IsActiveFlagPerformance.run args
     //UseTest.bla()
-    0
+    // 0

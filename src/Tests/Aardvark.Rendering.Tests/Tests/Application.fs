@@ -59,9 +59,9 @@ module TestApplication =
                 runtime,
                 { new IDisposable with
                     member x.Dispose() =
-                        checkForDebugErrors()
                         checkForErrors()
                         runtime.Dispose()
+                        checkForDebugErrors()
                         toolkit.Dispose()
                 }
             )
@@ -70,6 +70,7 @@ module TestApplication =
         open Aardvark.Rendering.Vulkan
 
         let create (debug : IDebugConfig) =
+            CustomDeviceChooser.Register Seq.head
             let app = new HeadlessVulkanApplication(debug)
             let onExit =
                 { new IDisposable with
