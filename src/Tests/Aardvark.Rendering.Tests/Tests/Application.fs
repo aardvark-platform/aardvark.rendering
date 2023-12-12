@@ -30,7 +30,7 @@ module TestApplication =
             RuntimeConfig.UseNewRenderTask <- true
             RuntimeConfig.PreferHostSideTextureCompression <- true
 
-            Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative)) |> ignore
+            let toolkit = Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative))
 
             let runtime = new Runtime(debug)
             let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugConfig)
@@ -59,10 +59,10 @@ module TestApplication =
                 runtime,
                 { new IDisposable with
                     member x.Dispose() =
-                        runtime.Dispose()
                         checkForDebugErrors()
                         checkForErrors()
-                        ctx.Dispose()
+                        runtime.Dispose()
+                        toolkit.Dispose()
                 }
             )
 
