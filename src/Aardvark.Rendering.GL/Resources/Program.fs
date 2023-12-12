@@ -50,12 +50,21 @@ type Program =
     member x.WritesPointSize =
         FShade.GLSL.GLSLProgramInterface.usesPointSize x.Interface
 
-    member x.Dispose() =
+    // Deletes the program handle
+    // Called by the program cache of the Context
+    member x.Free() =
         using x.Context.ResourceLock (fun _ ->
             ResourceCounts.removeProgram x.Context
             GL.DeleteProgram(x.Handle)
             GL.Check "could not delete program"
         )
+
+    member x.Dispose() =
+        // Programs are kept alive in the cache of the Context
+        // Disposing them manually leads to issues because they are not removed
+        // from the cache. As a workaround we just do nothing when Dispose() is called.
+        // The real solution is to use reference counting like in the Vulkan backend (breaking change).
+        ()
 
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
@@ -765,6 +774,15 @@ module ProgramExtensions =
                 else
                     None
             )
+
+    [<AutoOpen>]
+    module internal ShaderCacheExtensions =
+        type ShaderCache with
+            member inline x.GetOrAdd(key : CodeCacheKey, create : CodeCacheKey -> Error<Program>) =
+                x.GetOrAdd(key, create, fun p -> p.Free())
+
+            member inline x.GetOrAdd(key : EffectCacheKey, create : EffectCacheKey -> Error<Program>) =
+                x.GetOrAdd(key, create, fun p -> p.Free())
 
     type Aardvark.Rendering.GL.Context with
 
