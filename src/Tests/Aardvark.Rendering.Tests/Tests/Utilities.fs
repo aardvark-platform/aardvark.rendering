@@ -230,6 +230,9 @@ module PixData =
         let isColor (color : 'T[]) (pi : PixImage<'T>) =
             isColorWithComparer Expect.equal color pi
 
+        let inline isColorWithDist (maxDist : int64) (color : 'T[]) (pi : PixImage<'T>) =
+            isColorWithComparer (fun x y -> Expect.isLessThanOrEqual (abs (int64 x - int64 y)) maxDist) color pi
+
         let isColor32f (accuracy : Accuracy) (color : float32[]) (pi : PixImage<float32>) =
             let comp a b = Expect.floatClose accuracy (float a) (float b)
             isColorWithComparer comp color pi
