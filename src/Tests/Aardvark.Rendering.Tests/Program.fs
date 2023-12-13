@@ -306,7 +306,74 @@ let main argv =
             backendTests Backend.Vulkan
         ]
 
-    runTestsWithCLIArgs [ CLIArguments.No_Spinner ] argv allTests
+    let runManuallyInMain = true
+
+    if runManuallyInMain then
+        let stopOnFail = false
+        let failed = ResizeArray<string>()
+        let skipped = ResizeArray<string>()
+        let mutable passed = 0
+
+        let tests = Test.toTestCodeList allTests
+        let count = tests.Length
+
+        let printSummary() =
+            let print fmt =
+                Printf.kprintf (fun str ->
+                    if failed.Count = 0 then Log.line "%s" str
+                    else Log.error "%s" str
+                ) fmt
+
+            Report.Line()
+            print $"Total: {count}, Passed: {passed}, Failed: {failed.Count}, Skipped: {skipped.Count}"
+
+            if failed.Count > 0 then
+                Report.Line()
+                print "Failed tests:"
+            for t in failed do
+                print "  %s" t
+
+            if skipped.Count > 0 then
+                Report.Line()
+                print "Skipped tests:"
+            for t in skipped do
+                print "  %s" t
+
+        let rec run (index : int) (tests : FlatTest list) =
+            match tests with
+            | t :: rem ->
+                let name = t.fullName "."
+                let mutable success = false
+
+                Report.Begin $"({index + 1} / {count}) {name}"
+
+                match t.test with
+                | Sync f ->
+                    try
+                        f()
+                        success <- true
+                        inc &passed
+                    with exn ->
+                        Log.error "%A" exn
+                        failed.Add name
+                | _ ->
+                    Log.error "Test not supported"
+                    skipped.Add name
+
+                Report.End(if success then " - passed" else " - failed") |> ignore
+
+                if success || not stopOnFail then
+                    run (index + 1) rem
+
+            | _ ->
+                ()
+
+        run 0 tests
+        printSummary()
+        0
+
+    else
+        runTestsWithCLIArgs [ CLIArguments.No_Spinner ] argv allTests
 
     //Aardvark.Init()
     //CSTest.run()
