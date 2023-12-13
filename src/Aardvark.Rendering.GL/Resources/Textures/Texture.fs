@@ -414,12 +414,13 @@ module TextureCreationExtensions =
                 if Vec.anyGreater size x.MaxTextureSize then
                     failf $"cannot create 2D texture with size {size} (maximum is {x.MaxTextureSize})"
 
+                let samples =
+                    if samples <= 1 then 1
+                    else Image.validateSampleCount x ImageTarget.Texture2DMultisample format samples
+
                 let target =
                     if samples = 1 then TextureTarget.Texture2D
                     else TextureTarget.Texture2DMultisample
-
-                let samples =
-                    Image.validateSampleCount x (unbox target) format samples
 
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
@@ -533,12 +534,13 @@ module TextureCreationExtensions =
                 if count > x.MaxTextureArrayLayers then
                     failf $"cannot create 2D array texture with {count} layers (maximum is {x.MaxTextureArrayLayers})"
 
+                let samples =
+                    if samples <= 1 then 1
+                    else Image.validateSampleCount x ImageTarget.Texture2DMultisampleArray format samples
+
                 let target =
                     if samples = 1 then TextureTarget.Texture2DArray
                     else TextureTarget.Texture2DMultisampleArray
-
-                let samples =
-                    Image.validateSampleCount x (unbox target) format samples
 
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
