@@ -259,8 +259,8 @@ module Frustum =
         (r - l) / (t - b)
 
     let withAspect (newAspect : float) ( { left = l; right = r; top = t; bottom = b } as f )  =
-        let factor = newAspect / aspect f
-        { f with right = factor * r; left  = factor * l }
+        let factor = aspect f / newAspect
+        { f with top = factor * t; bottom = factor * b }
 
     let withHorizontalFieldOfViewInDegrees (angleInDegrees : float) (frustum : Frustum) =
         if frustum.isOrtho then
