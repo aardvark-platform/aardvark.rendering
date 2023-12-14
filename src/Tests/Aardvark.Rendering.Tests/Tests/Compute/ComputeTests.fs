@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Rendering.Tests
 
 open Aardvark.Application
-open Aardvark.Rendering.Tests.Rendering
+open Aardvark.Rendering.Tests.Compute
 open Expecto
 
 module ``Compute Tests`` =

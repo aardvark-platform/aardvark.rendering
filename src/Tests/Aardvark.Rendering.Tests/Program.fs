@@ -26,6 +26,7 @@ let main argv =
         let renderingTests =
             testBackend backend "Rendering" [
                 Rendering.Culling.tests
+                Rendering.ColorMasks.tests
                 Rendering.RenderTasks.tests
                 Rendering.FramebufferSignature.tests
                 Rendering.IntegerAttachments.tests
@@ -35,13 +36,14 @@ let main argv =
 
         let computeTests =
             testBackend backend "Compute" [
-                Rendering.ComputeImages.tests
-                Rendering.ComputeBuffers.tests
-                Rendering.ComputePrimitives.tests
-                Rendering.ComputeSorting.tests
-                Rendering.ComputeJpeg.tests
-                Rendering.MutableInputBinding.tests
+                Compute.ComputeImages.tests
+                Compute.ComputeBuffers.tests
+                Compute.ComputePrimitives.tests
+                Compute.ComputeSorting.tests
+                Compute.ComputeJpeg.tests
+                Compute.MutableInputBinding.tests
             ]
+
         testList $"Tests ({backend})" [
             bufferTests
             textureTests
