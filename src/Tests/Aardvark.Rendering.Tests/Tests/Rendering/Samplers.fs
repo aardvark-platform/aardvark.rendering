@@ -20,11 +20,13 @@ module Samplers =
         let private diffuseIntSampler =
             intSampler2d {
                 texture uniform?DiffuseColorTexture
+                filter Filter.MinMagPoint
             }
 
         let private diffuseUIntSampler =
             uintSampler2d {
                 texture uniform?DiffuseColorTexture
+                filter Filter.MinMagPoint
             }
 
         let diffuseIntTexture (v : Vertex) =
