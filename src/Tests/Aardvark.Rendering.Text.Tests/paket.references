@@ -1,0 +1,10 @@
+Aardvark.Build
+
+group Test
+	FSharp.Core
+	Expecto
+	Expecto.FsCheck
+	Expecto.Hopac
+	BenchmarkDotNet
+	YoloDev.Expecto.TestSdk
+	Microsoft.NET.Test.Sdk

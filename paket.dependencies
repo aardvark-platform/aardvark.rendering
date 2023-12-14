@@ -58,4 +58,4 @@ nuget Expecto.FsCheck                    ~> 9.0.4
 nuget Expecto.Hopac                      ~> 9.0.4
 nuget BenchmarkDotNet                    ~> 0.13.1
 nuget YoloDev.Expecto.TestSdk            ~> 0.13.3
-nuget Microsoft.NET.Test.Sdk             ~> 17.5.0
+nuget Microsoft.NET.Test.Sdk             ~> 17.8.0

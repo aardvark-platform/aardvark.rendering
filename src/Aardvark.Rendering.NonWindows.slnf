@@ -80,6 +80,7 @@
       "Scratch (netcore)\\20 - ResourceSharing\\20 - ResourceSharing.fsproj",
       "Scratch (netcore)\\21 - DebugPrint\\21 - DebugPrint.fsproj",
       "Tests\\Aardvark.Rendering.Tests\\Aardvark.Rendering.Tests.fsproj",
+      "Tests\\Aardvark.Rendering.Text.Tests\\Aardvark.Rendering.Text.Tests.fsproj",
       "Tests\\CSharpInteropTest\\CSharpInteropTest.csproj"
     ]
   }
