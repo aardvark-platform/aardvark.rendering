@@ -1,3 +1,6 @@
+### 5.4.10-prerelease0002
+- [PathSegment] minor fixes
+
 ### 5.4.10-prerelease0001
 - [Text] improved Font resolver for Windows and MacOS
 - [PathSegment] fixed several PathSegment tools and added a few new ones
