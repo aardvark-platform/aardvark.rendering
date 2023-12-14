@@ -26,6 +26,7 @@ let main argv =
         let renderingTests =
             testBackend backend "Rendering" [
                 Rendering.Culling.tests
+                Rendering.Blending.tests
                 Rendering.ColorMasks.tests
                 Rendering.RenderTasks.tests
                 Rendering.FramebufferSignature.tests
