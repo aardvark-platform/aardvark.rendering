@@ -293,6 +293,71 @@ module ``Expecto Extensions`` =
             Expect.floatClose accuracy actual.Z expected.Z message
             Expect.floatClose accuracy actual.W expected.W message
 
+    // Utility to run Expecto tests synchronously in the current thread.
+    // Prints a summary at the end.
+    let runTestsSynchronously (stopOnFail : bool) (tests : Test) =
+        let failed = ResizeArray<string>()
+        let skipped = ResizeArray<string>()
+        let mutable passed = 0
+
+        let tests = Test.toTestCodeList tests
+        let count = tests.Length
+
+        let printSummary() =
+            let print fmt =
+                Printf.kprintf (fun str ->
+                    if failed.Count = 0 then Log.line "%s" str
+                    else Log.error "%s" str
+                ) fmt
+
+            Report.Line()
+            print $"Total: {count}, Passed: {passed}, Failed: {failed.Count}, Skipped: {skipped.Count}"
+
+            if failed.Count > 0 then
+                Report.Line()
+                print "Failed tests:"
+            for t in failed do
+                print "  %s" t
+
+            if skipped.Count > 0 then
+                Report.Line()
+                print "Skipped tests:"
+            for t in skipped do
+                print "  %s" t
+
+        let rec run (index : int) (tests : FlatTest list) =
+            match tests with
+            | t :: rem ->
+                let name = t.fullName "."
+                let mutable success = false
+
+                Report.Begin $"({index + 1} / {count}) {name}"
+
+                match t.test with
+                | Sync f ->
+                    try
+                        f()
+                        success <- true
+                        inc &passed
+                    with exn ->
+                        Log.error "%A" exn
+                        failed.Add name
+                | _ ->
+                    Log.error "Test not supported"
+                    skipped.Add name
+
+                Report.End(if success then " - passed" else " - failed") |> ignore
+
+                if success || not stopOnFail then
+                    run (index + 1) rem
+
+            | _ ->
+                ()
+
+        run 0 tests
+        printSummary()
+        if failed.Count = 0 then 0 else 1
+
 [<AutoOpen>]
 module ``RenderTo Utilities`` =
     open Aardvark.SceneGraph
