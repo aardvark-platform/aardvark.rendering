@@ -71,7 +71,8 @@ module ColorMasks =
 
             let r1, r2 =
                 let fbo = runtime.CreateFramebuffer(signature, ~~V2i(256))
-                let output = task |> RenderTask.renderTo fbo
+                let clear = ClearValues.ofColor V4f.Zero
+                let output = task |> RenderTask.renderToWithClear fbo clear
                 output.GetOutputTexture(Semantic.Output0), output.GetOutputTexture(Semantic.Output1)
 
             r1.Acquire(); r2.Acquire()
