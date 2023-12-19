@@ -401,7 +401,7 @@ type Runtime(debug : IDebugConfig) =
     member x.OnDispose = onDispose.Publish
 
     member x.AssembleModule (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-        signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
+        signature.Link(effect, Range1d(-1.0, 1.0), false, topology, not x.Context.SupportsLayeredEffects)
 
     member x.ResourceManager = manager
 

@@ -22,9 +22,9 @@ nuget Aardvark.Base.Tensors              ~> 5.2.27
 
 nuget Aardvark.Assembler                 ~> 0.0.8
 
-nuget FShade.Core                        ~> 5.5.2
-nuget FShade                             ~> 5.5.2
-nuget FShade.Debug                       ~> 5.5.2
+nuget FShade.Core                        ~> 5.5.3
+nuget FShade                             ~> 5.5.3
+nuget FShade.Debug                       ~> 5.5.3
 
 nuget Unofficial.OpenVR					 ~> 1.1.0
 nuget Unofficial.Typography              ~> 0.1.0

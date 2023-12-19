@@ -786,6 +786,12 @@ module ProgramExtensions =
 
     type Aardvark.Rendering.GL.Context with
 
+        /// Returns whether the inputs gl_Layer and gl_ViewportIndex can be used
+        /// in fragment shaders. If not a custom output / input must be used for
+        /// layered effects.
+        member internal x.SupportsLayeredEffects =
+            x.Driver.glsl >= Version(4, 3, 0)
+
         member x.TryGetProgramBinary(prog : Program) =
             use __ = prog.Context.ResourceLock
             Program.tryGetBinary prog
@@ -877,7 +883,7 @@ module ProgramExtensions =
                         let glsl =
                             lazy (
                                 try
-                                    let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology)
+                                    let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology, not x.SupportsLayeredEffects)
                                     ModuleCompiler.compileGLSL x.FShadeBackend module_
                                 with exn ->
                                     Log.error "%s" exn.Message
