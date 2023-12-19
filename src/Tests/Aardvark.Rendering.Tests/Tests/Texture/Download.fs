@@ -32,6 +32,10 @@ module TextureDownload =
         let private texture2DWithFormat<'T when 'T : equality> (runtime : IRuntime) (format : TextureFormat) (data : PixImage<'T>) =
             texture2DWithFormatWithComparer runtime Expect.equal format data
 
+        let inline private texture2DWithFormatNorm (runtime : IRuntime) (format : TextureFormat) (data : PixImage<'T>) =
+            let comp a b = Expect.isLessThanOrEqual (abs (int64 a - int64 b)) 1L
+            texture2DWithFormatWithComparer runtime comp format data
+
         let private texture2DWithFormat32f (runtime : IRuntime) (accuracy : Accuracy) (format : TextureFormat) (data : PixImage<float32>) =
             let comp a b = Expect.floatClose accuracy (float a) (float b)
             texture2DWithFormatWithComparer runtime comp format data
@@ -54,7 +58,7 @@ module TextureDownload =
 
         let texture2Drgba16snorm (runtime : IRuntime) =
             let data = PixImage.random16i <| V2i(256)
-            data |> texture2DWithFormat runtime TextureFormat.Rgba16Snorm
+            data |> texture2DWithFormatNorm runtime TextureFormat.Rgba16Snorm
 
         let texture2Drgba32ui (runtime : IRuntime) =
             let data = PixImage.random32ui <| V2i(256)

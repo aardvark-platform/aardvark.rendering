@@ -51,10 +51,10 @@ type Runtime(debug : IDebugConfig) =
 
                 // GL_CONTEXT_CORE_PROFILE_BIT 1
                 // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
-                let profileType = if driver.profileMask = 1 then " Core" elif driver.profileMask = 2 then " Compatibility" else ""
+                let profileType = if driver.profileMask = 1 then "Core" elif driver.profileMask = 2 then "Compatibility" else ""
 
-                Log.line "vendor:   %A" driver.vendor
-                Log.line "renderer: %A" driver.renderer
+                Log.line "vendor:   %s" driver.vendor
+                Log.line "renderer: %s" driver.renderer
                 Log.line "version:  OpenGL %A / GLSL %A %s" driver.version driver.glsl profileType
 
                 let major = driver.version.Major

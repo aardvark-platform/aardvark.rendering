@@ -201,9 +201,21 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     let mutable unpackAlignment : Option<int> = None
 
+    let mutable maxTextureSize : Option<V2i> = None
+
+    let mutable maxTextureSize3d : Option<V3i> = None
+
+    let mutable maxTextureSizeCube : Option<int> = None
+
+    let mutable maxTextureArrayLayers : Option<int> = None
+
+    let mutable maxRenderbufferSize : Option<V2i> = None
+
     let mutable maxComputeWorkGroupSize : Option<V3i> = None
 
     let mutable maxComputeWorkGroupInvocations : Option<int> = None
+
+    let mutable numProgramBinaryFormats : Option<int> = None
 
     let mutable shaderCachePath : Option<string> = Some defaultShaderCachePath
 
@@ -259,6 +271,34 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             GL.GetInteger(GetPName.UnpackAlignment)
         )
 
+    member x.MaxTextureSize =
+        getOrQuery &maxTextureSize (fun _ ->
+            let s = GL.GetInteger(GetPName.MaxTextureSize)
+            V2i s
+        )
+
+    member x.MaxTextureSize3D =
+        getOrQuery &maxTextureSize3d (fun _ ->
+            let s = GL.GetInteger(GetPName.Max3DTextureSize)
+            V3i s
+        )
+
+    member x.MaxTextureSizeCube =
+        getOrQuery &maxTextureSizeCube (fun _ ->
+            GL.GetInteger(GetPName.MaxCubeMapTextureSize)
+        )
+
+    member x.MaxTextureArrayLayers =
+        getOrQuery &maxTextureArrayLayers (fun _ ->
+            GL.GetInteger(GetPName.MaxArrayTextureLayers)
+        )
+
+    member x.MaxRenderbufferSize =
+        getOrQuery &maxRenderbufferSize (fun _ ->
+            let s = GL.GetInteger(GetPName.MaxRenderbufferSize)
+            V2i s
+        )
+
     member x.MaxComputeWorkGroupSize =
         getOrQuery &maxComputeWorkGroupSize (fun _ ->
             let mutable res = V3i.Zero
@@ -271,6 +311,11 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     member x.MaxComputeWorkGroupInvocations =
         getOrQuery &maxComputeWorkGroupInvocations (fun _ ->
             GL.GetInteger(GetPName.MaxComputeWorkGroupInvocations)
+        )
+
+    member x.NumProgramBinaryFormats =
+        getOrQuery &numProgramBinaryFormats (fun _ ->
+            GL.GetInteger(GetPName.NumProgramBinaryFormats)
         )
 
     member internal x.ImportMemoryBlock(external : ExternalMemoryBlock) =

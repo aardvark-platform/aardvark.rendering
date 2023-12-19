@@ -22,6 +22,7 @@ module ``Unit Test Utilities`` =
     let prepareCases (backend : Backend) (name : string) (cases : List<string * (IRuntime -> unit)>) =
         cases |> List.map (fun (name, test) ->
             testCase name (fun () -> TestApplication.createUse test backend)
+            |> testSequenced
         )
         |> testList name
 
@@ -32,5 +33,6 @@ module ``Unit Test Utilities`` =
                 Aardvark.Init()
                 test()
             )
+            |> testSequenced
         )
         |> testList name

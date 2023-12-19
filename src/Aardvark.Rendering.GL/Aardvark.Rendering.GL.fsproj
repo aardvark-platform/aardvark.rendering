@@ -56,8 +56,9 @@
     <Compile Include="Instructions\Translations.fs" />
     <Compile Include="Resources\PixelBuffer.fs" />
     <Compile Include="Resources\Textures\PixelTransfer.fs" />
-    <Compile Include="Resources\Textures\Renderbuffer.fs" />
     <Compile Include="Resources\Textures\Texture.fs" />
+    <Compile Include="Resources\Textures\Renderbuffer.fs" />
+    <Compile Include="Resources\Textures\Image.fs" />
     <Compile Include="Resources\Textures\TextureSharing.fs" />
     <Compile Include="Resources\Textures\TextureCopy.fs" />
     <Compile Include="Resources\Textures\TextureUpload.fs" />

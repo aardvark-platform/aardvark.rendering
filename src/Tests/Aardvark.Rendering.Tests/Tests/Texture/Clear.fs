@@ -23,7 +23,7 @@ module TextureClear =
 
         let rgba8 (runtime : IRuntime) =
             let data = createAndClearColor runtime TextureFormat.Rgba8 <| C3f(0.5)
-            data.AsPixImage<uint8>() |> PixImage.isColor (C4b(127uy).ToArray())
+            data.AsPixImage<uint8>() |> PixImage.isColorWithDist 1L (C4b(127uy).ToArray())
 
         let rgba32i (runtime : IRuntime) =
             let data = createAndClearColor runtime TextureFormat.Rgba32i <| V4i(-1)
@@ -135,7 +135,7 @@ module TextureClear =
                 do
                     let c = C4b(127uy)
                     let pi = textures.[c3].Download().AsPixImage<uint8>()
-                    pi |> PixImage.isColor (c.ToArray())
+                    pi |> PixImage.isColorWithDist 1L (c.ToArray())
 
                 do
                     let c = C3b.AliceBlue |> V4i

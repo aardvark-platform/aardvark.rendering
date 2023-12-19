@@ -56,6 +56,8 @@
     <Compile Include="Tests\Texture\TextureTests.fs" />
     <Compile Include="Tests\Rendering\Tasks.fs" />
     <Compile Include="Tests\Rendering\Culling.fs" />
+    <Compile Include="Tests\Rendering\ColorMasks.fs" />
+    <Compile Include="Tests\Rendering\Blending.fs" />
     <Compile Include="Tests\Rendering\Signatures.fs" />
     <Compile Include="Tests\Rendering\Samplers.fs" />
     <Compile Include="Tests\Rendering\IntegerAttachments.fs" />

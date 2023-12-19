@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Rendering.Tests.Rendering
+﻿namespace Aardvark.Rendering.Tests.Compute
 
 open Aardvark.Base
 open Aardvark.Rendering

@@ -101,7 +101,8 @@ module FramebufferSignature =
 
             let r1, r3 =
                 let fbo = runtime.CreateFramebuffer(signature, ~~V2i(256))
-                let output = task |> RenderTask.renderTo fbo
+                let clear = ClearValues.ofColor V4f.Zero
+                let output = task |> RenderTask.renderToWithClear fbo clear
                 output.GetOutputTexture(Semantic.Output1), output.GetOutputTexture(Semantic.Output3)
 
             r1.Acquire(); r3.Acquire()
@@ -141,7 +142,8 @@ module FramebufferSignature =
        
             let result =
                 let fbo = runtime.CreateFramebuffer(signature, ~~V2i(256))
-                let output = task |> RenderTask.renderTo fbo
+                let clear = ClearValues.ofColor V4f.Zero
+                let output = task |> RenderTask.renderToWithClear fbo clear
                 output.GetOutputTexture(Semantic.Output1)
 
             result.Acquire()
@@ -163,6 +165,9 @@ module FramebufferSignature =
                     3, { Name = Semantic.Output3; Format = TextureFormat.Rgba8 }
                     4, { Name = Semantic.Output4; Format = TextureFormat.Rgba8 }
                 ], Some TextureFormat.Depth24Stencil8)
+
+            use tclear =
+                runtime.CompileClear(signature, ClearValues.ofColor V4f.Zero)
 
             use t0sig =
                 runtime.CreateFramebufferSignature(Map.ofList [
@@ -221,7 +226,7 @@ module FramebufferSignature =
                 |> Sg.compile runtime t2sig
 
             use task =
-                RenderTask.ofList [t0; t1; t2]
+                RenderTask.ofList [tclear; t0; t1; t2]
 
             // Combining tasks with varying signatures leads to task with no signature
             Expect.equal task.FramebufferSignature None "Unexpected render task signature"
@@ -279,7 +284,8 @@ module FramebufferSignature =
        
             let result =
                 let fbo = runtime.CreateFramebuffer(signature, ~~V2i(256))
-                let output = task |> RenderTask.renderTo fbo
+                let clear = ClearValues.ofColor V4f.Zero
+                let output = task |> RenderTask.renderToWithClear fbo clear
                 output.GetOutputTexture(Semantic.Output1)
 
             result.Acquire()

@@ -55,32 +55,32 @@ type Renderbuffer =
 
         new (ctx : Context, handle : int, size : V2i, format : TextureFormat, samples : int, sizeInBytes : int64) =
             { Context = ctx; Handle = handle; Size = size; Format = format; Samples = samples; SizeInBytes = sizeInBytes }
+
+        new (ctx : Context, handle : int, size : V2i, format : TextureFormat, samples : int) =
+            let sizeInBytes = ResourceCounts.texSizeInBytes TextureDimension.Texture2D size.XYI format samples 1 1
+            new Renderbuffer(ctx, handle, size, format, samples, sizeInBytes)
     end
 
 
 [<AutoOpen>]
 module RenderbufferExtensions =
 
-    let private updateRenderbuffer (cxt : Context) (handle : int) (size : V2i) (format : TextureFormat) (samples : int) =
-        GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, handle)
-        GL.Check "could not bind renderbuffer"
+    let private updateRenderbuffer (ctx : Context) (handle : int) (size : V2i) (format : TextureFormat) (samples : int) =
+        if Vec.anyGreater size ctx.MaxRenderbufferSize then
+            failf $"cannot create renderbuffer with size {size} (maximum is {ctx.MaxRenderbufferSize})"
 
         let samples =
-            if samples > 1 then
-                let counts = cxt.GetFormatSamples(ImageTarget.Renderbuffer, format)
-                if counts.Contains samples then samples
-                else
-                    let max = Set.maxElement counts
-                    Log.warn "[GL] cannot create %A render buffer with %d samples (using %d instead)" format samples max
-                    max
-            else
-                1
+            Image.validateSampleCount ctx ImageTarget.Renderbuffer format samples
+
+        GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, handle)
+        GL.Check "could not bind renderbuffer"
 
         if samples > 1 then
             GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, samples, TextureFormat.toRenderbufferStorage format, size.X, size.Y)
         else
             GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, TextureFormat.toRenderbufferStorage format, size.X, size.Y)
-        GL.Check "could not set renderbuffer storage"
+
+        GL.Check $"failed to allocate renderbuffer storage (format = {format}, size = {size}, samples = {samples})"
 
         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
         GL.Check "could not unbind renderbuffer"
@@ -92,15 +92,14 @@ module RenderbufferExtensions =
             let samples = defaultArg samples 1
 
             using x.ResourceLock (fun _ ->
-
                 let handle = GL.GenRenderbuffer()
                 GL.Check "could not create renderbuffer"
 
                 let samples = updateRenderbuffer x handle size format samples
 
-                let sizeInBytes = (int64 size.X * int64 size.Y * int64 format.PixelSizeInBits) / 8L
-                ResourceCounts.addRenderbuffer x sizeInBytes
-                new Renderbuffer(x, handle, size, format, samples, sizeInBytes)
+                let rb = new Renderbuffer(x, handle, size, format, samples)
+                ResourceCounts.addRenderbuffer x rb.SizeInBytes
+                rb
             )
 
         member x.Update(r : Renderbuffer, size : V2i, format : TextureFormat, ?samples : int) =
@@ -109,7 +108,7 @@ module RenderbufferExtensions =
             if r.Size <> size || r.Format <> format || r.Samples <> samples then
                 using x.ResourceLock (fun _ ->
                     let samples = updateRenderbuffer x r.Handle size format samples
-                    let sizeInBytes = (int64 size.X * int64 size.Y * int64 format.PixelSizeInBits) / 8L
+                    let sizeInBytes = ResourceCounts.texSizeInBytes TextureDimension.Texture2D size.XYI format samples 1 1
 
                     ResourceCounts.resizeRenderbuffer x r.SizeInBytes sizeInBytes
                     r.SizeInBytes <- sizeInBytes

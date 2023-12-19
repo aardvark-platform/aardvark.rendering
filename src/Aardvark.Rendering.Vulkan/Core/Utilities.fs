@@ -10,6 +10,15 @@ open Aardvark.Rendering
 
 #nowarn "9"
 
+type VulkanException(error : VkResult, message : string, [<Optional; DefaultParameterValue(null : Exception)>] innerException : Exception) =
+    inherit Exception(message, innerException)
+
+    new(message : string, [<Optional; DefaultParameterValue(null : Exception)>] innerException : Exception) =
+        VulkanException(VkResult.ErrorUnknown, message, innerException)
+
+    member x.Error = error
+    override x.Message = $"{message} (Error: {error})"
+
 [<AutoOpen>]
 module private Utilities =
 
@@ -130,21 +139,26 @@ module private Utilities =
         }
 
     let check (str : string) (err : VkResult) =
-        if err <> VkResult.Success then 
-            Log.error "[Vulkan] %s (%A)" str err
-            failwithf "[Vulkan] %s (%A)" str err
+        if err <> VkResult.Success then
+            let msg =
+                if String.IsNullOrEmpty str then "An error occurred"
+                else string (Char.ToUpper str.[0]) + str.Substring(1)
+
+            Report.Error $"[Vulkan] {msg} (Error: {err})"
+            raise <| VulkanException(err, msg)
 
     let checkf (fmt : Printf.StringFormat<'a, VkResult -> unit>) =
-        Printf.kprintf (fun (str : string) (res : VkResult) ->
-            if res <> VkResult.Success then 
-                Log.error "[Vulkan] %s (%A)" str res
-                failwithf "[Vulkan] %s (%A)" str res
-        ) fmt
+        Printf.kprintf check fmt
 
     let inline failf fmt = 
-        Printf.kprintf (fun str -> 
-            Log.error $"[Vulkan] {str}"
-            failwith ("[Vulkan] " + str)
+        Printf.kprintf (fun str ->
+            let str =
+                if String.IsNullOrEmpty str then "An error occurred"
+                else string (Char.ToUpper str.[0]) + str.Substring(1)
+
+            let msg = $"[Vulkan] {str}"
+            Report.Error msg
+            failwith msg
         ) fmt
 
     module Map =

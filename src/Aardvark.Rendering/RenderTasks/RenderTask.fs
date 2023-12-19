@@ -96,8 +96,8 @@ module RenderTask =
     /// Runs a render task for the given adaptive size and returns a map containing the textures specified as output.
     /// The resulting framebuffer is cleared according to the given adaptive clear values before the render task is executed.
     let renderSemanticsWithAdaptiveClear (output : Set<Symbol>) (size : aval<V2i>) (clearValues : aval<ClearValues>) (task : IRenderTask) =
-        let runtime = task.Runtime.Value
-        let signature = task.FramebufferSignature.Value
+        let runtime = task.GetRuntime()
+        let signature = task.GetFramebufferSignature()
         let attachments = signature.GetSemantics()
 
         let fbo = runtime.CreateFramebuffer(signature, size, Set.difference attachments output)
@@ -188,8 +188,8 @@ module RenderTask =
     /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
     let renderSemanticsCubeMipWithClear (output : Set<Symbol>) (size : aval<int>) (clearValues : CubeMap<ClearValues>) (tasks : CubeMap<IRenderTask>) =
         let task = tasks.Data.[0]
-        let runtime = task.Runtime.Value
-        let signature = task.FramebufferSignature.Value
+        let runtime = task.GetRuntime()
+        let signature = task.GetFramebufferSignature()
 
         let fbo = runtime.CreateFramebufferCube(signature, size, tasks.Levels)
         let res = tasks.RenderTo(fbo, clearValues)

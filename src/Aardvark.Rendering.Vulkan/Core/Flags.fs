@@ -373,3 +373,10 @@ module VkExternalMemoryHandleTypeFlags =
             VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
         else
             VkExternalMemoryHandleTypeFlags.OpaqueFdBit
+
+[<AutoOpen>]
+module VkExternalMemoryPropertiesExtensions =
+    open Vulkan11
+
+    type VkExternalMemoryProperties with
+        member inline x.IsExportable = x.externalMemoryFeatures.HasFlag VkExternalMemoryFeatureFlags.ExportableBit
