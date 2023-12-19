@@ -1,3 +1,22 @@
+### 5.4.7
+- Fixed Frustum.withAspect and Frustum.withHorizontalFieldOfViewInDegrees
+- [GL] Fixed InvalidEnum error due to GL_POINT_SPRITE
+- [GL] Removed validation via proxy textures (resulted in errors on AMD with multisampled textures)
+- [GL] Removed swizzle for multisampled textures (not supported)
+- [GL] Added simple parameter device limit checks for textures and renderbuffers
+- [GL] Improved texture memory usage tracking
+- [GL] Made retrieval of program binaries more robust
+- [GL] Improved driver information and error formatting
+- [GL] Disabled Dispose() for Program
+- [GL] Fixed resource leaks in ContextHandleOpenTK.create
+- [GL] Fixed ComputeCommand.SetBufferCmd
+- [GL] Fixed issue with texture targets and multisampling
+- [Vulkan] Fixed swapchain creation if maxImages is zero
+- [Vulkan] Fixed issue with image format queries and external memory
+- [Vulkan] Improved error formatting
+- [GLFW] Use no error context only when indicated by debug config
+- Added IRenderTask.GetRuntime() and IRenderTask.GetFramebufferSignature()
+
 ### 5.4.6
 - [ContextHandles] GL.Enable(EnableCap.PointSprite)
 - [ManagedPool] Avoid evaluating draw call set if not active
