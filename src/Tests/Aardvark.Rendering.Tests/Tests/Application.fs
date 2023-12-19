@@ -92,9 +92,13 @@ module TestApplication =
                 app.Runtime, onExit
             )
 
+    let mutable private aardvarkInitialized = false
+
     let create' (debug : IDebugConfig) (backend : Backend) =
-        IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
-        Aardvark.Init()
+        if not aardvarkInitialized then
+            IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+            Aardvark.Init()
+            aardvarkInitialized <- true
 
         match backend with
         | Backend.GL -> GL.create debug
