@@ -660,31 +660,34 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice) =
         | VkImageTiling.Linear -> formatProperties.[fmt].linearTilingFeatures
         | _ -> formatProperties.[fmt].optimalTilingFeatures
 
-    member private x.GetImageProperties(format : VkFormat, typ : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags, flags : VkImageCreateFlags) =
-        let key = (format, typ, tiling, usage, flags)
+    member internal x.GetImageProperties(format : VkFormat, typ : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags,
+                                         flags : VkImageCreateFlags, external : VkExternalMemoryHandleTypeFlags) =
+        let key = (format, typ, tiling, usage, flags, external)
 
         imageFormatProperties.GetOrCreate(key, fun _ ->
             native {
                 let! pExternalImageFormatInfo =
-                    VkPhysicalDeviceExternalImageFormatInfo VkExternalMemoryHandleTypeFlags.OpaqueBit
+                    VkPhysicalDeviceExternalImageFormatInfo external
 
                 let! pImageFormatInfo =
-                    VkPhysicalDeviceImageFormatInfo2(
-                        NativePtr.toNativeInt pExternalImageFormatInfo,
-                        format, typ, tiling, usage, flags
-                    )
+                    let pNext =
+                        if external = VkExternalMemoryHandleTypeFlags.None then 0n
+                        else NativePtr.toNativeInt pExternalImageFormatInfo
+
+                    VkPhysicalDeviceImageFormatInfo2(pNext, format, typ, tiling, usage, flags)
 
                 let! pExternalImageFormatProperties =
                     VkExternalImageFormatProperties.Empty
 
                 let! pImageFormatProperties =
-                    VkImageFormatProperties2(
-                        NativePtr.toNativeInt pExternalImageFormatProperties,
-                        VkImageFormatProperties.Empty
-                    )
+                    let pNext =
+                        if external = VkExternalMemoryHandleTypeFlags.None then 0n
+                        else NativePtr.toNativeInt pExternalImageFormatProperties
+
+                    VkImageFormatProperties2(pNext, VkImageFormatProperties.Empty)
 
                 VkRaw.vkGetPhysicalDeviceImageFormatProperties2(x.Handle, pImageFormatInfo, pImageFormatProperties)
-                    |> check "could not query image format properties"
+                    |> check $"could not query image format properties (format = {format}, type = {typ}, tiling = {tiling}, usage = {usage}, flags = {flags}, external = {external})"
 
                 let imageFormatProperties = (!!pImageFormatProperties).imageFormatProperties
                 let externalMemoryProperties = (!!pExternalImageFormatProperties).externalMemoryProperties
@@ -693,11 +696,11 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice) =
         )
 
     member x.GetImageFormatProperties(format : VkFormat, typ : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags, flags : VkImageCreateFlags) =
-        fst <| x.GetImageProperties(format, typ, tiling, usage, flags)
+        fst <| x.GetImageProperties(format, typ, tiling, usage, flags, VkExternalMemoryHandleTypeFlags.None)
 
     member x.GetImageExportable(format : VkFormat, typ : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags, flags : VkImageCreateFlags) =
-        let _, externalMemoryProperties = x.GetImageProperties(format, typ, tiling, usage, flags)
-        externalMemoryProperties.externalMemoryFeatures.HasFlag VkExternalMemoryFeatureFlags.ExportableBit
+        let _, externalMemoryProperties = x.GetImageProperties(format, typ, tiling, usage, flags, VkExternalMemoryHandleTypeFlags.OpaqueBit)
+        externalMemoryProperties.IsExportable
 
     member x.GetBufferFormatFeatures(fmt : VkFormat) =
         formatProperties.[fmt].bufferFeatures
@@ -721,7 +724,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice) =
 
     member x.GetBufferExportable(flags : VkBufferCreateFlags, usage : VkBufferUsageFlags) =
         let properties = x.GetExternalBufferProperties(flags, usage)
-        properties.externalMemoryProperties.externalMemoryFeatures.HasFlag VkExternalMemoryFeatureFlags.ExportableBit
+        properties.externalMemoryProperties.IsExportable
 
     member x.AvailableLayers = availableLayers
     member x.GlobalExtensions : ExtensionInfo[] = globalExtensions
