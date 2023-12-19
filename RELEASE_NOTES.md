@@ -1,4 +1,7 @@
 ### 5.4.10-prerelease0003
+- [GL] added flag to disable multidraw (experimental)
+
+### 5.4.10-prerelease0003
 - [FontResolve] fixed null family name failure
 
 ### 5.4.10-prerelease0002

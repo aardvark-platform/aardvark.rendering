@@ -101,6 +101,8 @@ module RuntimeConfig =
     /// </summary>
     let mutable AllowConcurrentResourceAccess = false
 
+    let mutable AllowMultiDrawIndirect = false
+
 
 /// Reporting modes for OpenGL errors.
 type ErrorFlagCheck =
