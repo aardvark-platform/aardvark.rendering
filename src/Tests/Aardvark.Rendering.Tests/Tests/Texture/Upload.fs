@@ -153,14 +153,12 @@ module TextureUpload =
                 |> shader
                 |> Sg.compile runtime signature
 
+            // Render sampling the null texture.
+            // We can't check the result since null textures are uninitialized, just make sure there are no errors.
             let buffer = task |> RenderTask.renderToColor (AVal.init <| V2i(256))
             buffer.Acquire()
-
-            try
-                let result = buffer.GetValue().Download().AsPixImage<byte>().ToFormat(Col.Format.RGB)
-                PixImage.isColor [| 0uy; 0uy; 0uy |] result
-            finally
-                buffer.Release()
+            try buffer.GetValue() |> ignore
+            finally buffer.Release()
 
         let texture1DNull (runtime : IRuntime) =
             let diffuseSampler =
