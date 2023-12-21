@@ -665,20 +665,12 @@ module OpenGl =
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/html/glMultiDrawArraysIndirect.xhtml
         /// </summary>
-        let MultiDrawArraysIndirect = 
-            if RuntimeConfig.AllowMultiDrawIndirect then
-                getProcAddress "glMultiDrawArraysIndirect"
-            else 
-                0n
+        let MultiDrawArraysIndirect = getProcAddress "glMultiDrawArraysIndirect"
 
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/html/glMultiDrawElementsIndirect.xhtml
         /// </summary>
-        let MultiDrawElementsIndirect = 
-            if RuntimeConfig.AllowMultiDrawIndirect then
-                 getProcAddress "glMultiDrawElementsIndirect"
-            else
-                0n
+        let MultiDrawElementsIndirect = getProcAddress "glMultiDrawElementsIndirect"
 
 
         /// <summary>
