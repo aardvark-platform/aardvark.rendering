@@ -1,3 +1,6 @@
+### 5.4.10-prerelease0005
+- [Text] added option to disable sample shading
+
 ### 5.4.10-prerelease0004
 - [GL] added flag to disable multidraw (experimental)
 
