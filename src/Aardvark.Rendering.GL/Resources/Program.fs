@@ -50,12 +50,21 @@ type Program =
     member x.WritesPointSize =
         FShade.GLSL.GLSLProgramInterface.usesPointSize x.Interface
 
-    member x.Dispose() =
+    // Deletes the program handle
+    // Called by the program cache of the Context
+    member x.Free() =
         using x.Context.ResourceLock (fun _ ->
             ResourceCounts.removeProgram x.Context
             GL.DeleteProgram(x.Handle)
             GL.Check "could not delete program"
         )
+
+    member x.Dispose() =
+        // Programs are kept alive in the cache of the Context
+        // Disposing them manually leads to issues because they are not removed
+        // from the cache. As a workaround we just do nothing when Dispose() is called.
+        // The real solution is to use reference counting like in the Vulkan backend (breaking change).
+        ()
 
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
@@ -435,6 +444,10 @@ module ProgramExtensions =
             GL.Check "could not create program"
 
             try
+                if GL.ARB_get_program_binary then
+                    GL.ProgramParameter(handle, ProgramParameterName.ProgramBinaryRetrievableHint, 1)
+                    GL.Check "could not set program binary retrievable hint"
+
                 for s in shaders do
                     GL.AttachShader(handle, s.Handle)
                     GL.Check "could not attach shader to program"
@@ -634,29 +647,28 @@ module ProgramExtensions =
         module Program =
 
             let tryGetBinary (program : Program) =
-                if GL.ARB_get_program_binary then
-                    GL.GetError() |> ignore
+                if GL.ARB_get_program_binary && program.Context.NumProgramBinaryFormats > 0 then
+                    let length = GL.Dispatch.GetProgramBinaryLength program.Handle
+                    GL.Check "failed to get program binary length"
 
-                    let mutable length = 0
-                    GL.GetProgram(program.Handle, GetProgramParameterName.ProgramBinaryLength, &length)
+                    if length > 0 then
+                        let data, format = GL.Dispatch.GetProgramBinary(program.Handle, length)
+                        GL.Check "failed to get program binary"
 
-                    let err = GL.GetError()
-                    if err <> ErrorCode.NoError then
-                        Log.warn "[GL] Failed to query program binary length: %A" err
-                        None
-                    else
-                        let data : byte[] = Array.zeroCreate length
-                        let mutable format = Unchecked.defaultof<BinaryFormat>
-                        GL.GetProgramBinary(program.Handle, length, &length, &format, data)
-
-                        let err = GL.GetError()
-                        if err <> ErrorCode.NoError then
-                            Log.warn "[GL] Failed to retrieve program binary: %A" err
+                        if isNull data then
+                            Log.warn "[GL] Failed to retrieve program binary"
                             None
                         else
                             Some (format, data)
+                    else
+                        Log.warn "[GL] Program binary length is zero bytes"
+                        None
                 else
-                    Report.Line(4, "[GL] Cannot read shader cache because GL_ARB_get_program_binary is not supported")
+                    let reason =
+                        if GL.ARB_get_program_binary then "no binary formats are supported"
+                        else "GL_ARB_get_program_binary is not supported"
+
+                    Report.Line(4, $"[GL] Cannot read shader cache because {reason}")
                     None
 
             let ofShaderCacheEntry (context : Context) (fixBindings : bool) (entry : ShaderCacheEntry) =
@@ -763,7 +775,22 @@ module ProgramExtensions =
                     None
             )
 
+    [<AutoOpen>]
+    module internal ShaderCacheExtensions =
+        type ShaderCache with
+            member inline x.GetOrAdd(key : CodeCacheKey, create : CodeCacheKey -> Error<Program>) =
+                x.GetOrAdd(key, create, fun p -> p.Free())
+
+            member inline x.GetOrAdd(key : EffectCacheKey, create : EffectCacheKey -> Error<Program>) =
+                x.GetOrAdd(key, create, fun p -> p.Free())
+
     type Aardvark.Rendering.GL.Context with
+
+        /// Returns whether the inputs gl_Layer and gl_ViewportIndex can be used
+        /// in fragment shaders. If not a custom output / input must be used for
+        /// layered effects.
+        member internal x.SupportsLayeredEffects =
+            x.Driver.glsl >= Version(4, 3, 0)
 
         member x.TryGetProgramBinary(prog : Program) =
             use __ = prog.Context.ResourceLock
@@ -856,7 +883,7 @@ module ProgramExtensions =
                         let glsl =
                             lazy (
                                 try
-                                    let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology)
+                                    let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology, not x.SupportsLayeredEffects)
                                     ModuleCompiler.compileGLSL x.FShadeBackend module_
                                 with exn ->
                                     Log.error "%s" exn.Message

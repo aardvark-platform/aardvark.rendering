@@ -103,6 +103,7 @@ module VkImageAspectFlags =
 type ImageExportMode =
     | None
     | Export of preferArray: bool
+    member inline x.Enabled = x <> None
 
 type Image =
     class
@@ -1059,8 +1060,20 @@ module Image =
             let usage =
                 usage |> VkImageUsageFlags.filterSupported features
 
-            let properties =
-                device.PhysicalDevice.GetImageFormatProperties(fmt, typ, VkImageTiling.Optimal, usage, flags)
+            let properties, externalMemoryProperties =
+                let external =
+                    if export.Enabled then
+                        if not <| device.IsExtensionEnabled ExternalMemory.Extension then
+                            failf $"Cannot export image memory because {ExternalMemory.Extension} is not supported"
+
+                        VkExternalMemoryHandleTypeFlags.OpaqueBit
+                    else
+                        VkExternalMemoryHandleTypeFlags.None
+
+                device.PhysicalDevice.GetImageProperties(fmt, typ, VkImageTiling.Optimal, usage, flags, external)
+
+            if export.Enabled && not externalMemoryProperties.IsExportable then
+                failf $"Cannot export {fmt} image with usage {usage}"
 
             let maxExtent = V3l.OfExtent properties.maxExtent
 
@@ -1085,19 +1098,11 @@ module Image =
                 let! pExternalMemoryInfo =
                     VkExternalMemoryImageCreateInfo VkExternalMemoryHandleTypeFlags.OpaqueBit
 
-                let pNext =
-                    if export <> ImageExportMode.None then
-                        if device.IsExtensionEnabled ExternalMemory.Extension then
-                            if device.PhysicalDevice.GetImageExportable(fmt, typ, VkImageTiling.Optimal, usage, flags) then
-                                NativePtr.toNativeInt pExternalMemoryInfo
-                            else
-                                failf $"Cannot export {fmt} image with usage {usage}"
-                        else
-                            failf $"Cannot export image memory because {ExternalMemory.Extension} is not supported"
-                    else
-                        0n
-
                 let! pInfo =
+                    let pNext =
+                        if export.Enabled then NativePtr.toNativeInt pExternalMemoryInfo
+                        else 0n
+
                     VkImageCreateInfo(
                         pNext,
                         flags,

@@ -453,14 +453,14 @@ module internal ComputeTaskInternals =
                             if GL.ARB_direct_state_access then
                                 s.ClearNamedBufferSubData(
                                     buffer.Handle, PixelInternalFormat.R32ui,
-                                    range.Offset, range.SizeInBytes, PixelFormat.Red, PixelType.UnsignedInt,
+                                    range.Offset, range.SizeInBytes, PixelFormat.RedInteger, PixelType.UnsignedInt,
                                     pValue
                                 )
                             else
                                 s.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
                                 s.ClearBufferSubData(
                                     BufferTarget.CopyWriteBuffer, PixelInternalFormat.R32ui,
-                                    range.Offset, range.SizeInBytes, PixelFormat.Red, PixelType.UnsignedInt,
+                                    range.Offset, range.SizeInBytes, PixelFormat.RedInteger, PixelType.UnsignedInt,
                                     pValue
                                 )
                         )

@@ -259,30 +259,15 @@ module Frustum =
         (r - l) / (t - b)
 
     let withAspect (newAspect : float) ( { left = l; right = r; top = t; bottom = b } as f )  =
-        let factor = newAspect / aspect f
-        { f with right = factor * r; left  = factor * l }
+        let factor = aspect f / newAspect
+        { f with top = factor * t; bottom = factor * b }
 
     let withHorizontalFieldOfViewInDegrees (angleInDegrees : float) (frustum : Frustum) =
         if frustum.isOrtho then
             frustum
         else
-            let lt = atan2 frustum.left frustum.near
-            let rt = atan2 frustum.right frustum.near
-
-            let total = rt - lt
-            let f = angleInDegrees / total
-
-            let ll = lt * f
-            let rr = rt * f
-
-            let l = tan ll * frustum.near
-            let r = tan rr * frustum.near
-
-
-            let t = tan (atan2 frustum.top frustum.near * f) * frustum.near
-            let b = tan (atan2 frustum.bottom frustum.near * f) * frustum.near
-
-            { frustum with left = l; right = r; top = t; bottom = b }
+            let aspect = aspect frustum
+            perspective angleInDegrees frustum.near frustum.far aspect
 
     let horizontalFieldOfViewInDegrees { left = l; right = r; near = near } =
         let l,r = atan2 l near, atan2 r near

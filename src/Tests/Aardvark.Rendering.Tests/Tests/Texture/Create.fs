@@ -115,11 +115,99 @@ module TextureCreate =
             finally
                 runtime.DeleteTexture(t)
 
+        let memoryUsage (runtime : IRuntime) =
+            let runtime = unbox<GL.Runtime> runtime
+            let context = runtime.Context
+
+            let mutable count = 0
+            let mutable memory = 0L
+
+            let check() =
+                Expect.equal context.MemoryUsage.TextureCount count "unexpected texture count"
+                Expect.equal context.MemoryUsage.TextureMemory memory "unexpected memory usage"
+
+            // Simple 2D
+            let t1 = runtime.CreateTexture2D(V2i(512), TextureFormat.Rgba8, levels = 1)
+            count <- count + 1
+            memory <- memory + (512L * 512L * 4L)
+            check()
+
+            // Multisampled 2D
+            let t2 = runtime.CreateTexture2D(V2i(512), TextureFormat.R8, samples = 2)
+            count <- count + 1
+            memory <- memory + (512L * 512L * 2L)
+            check()
+
+            // Mipmapped 2D
+            let t3 = runtime.CreateTexture2D(V2i(512), TextureFormat.Rgba32f, levels = Fun.MipmapLevels 512)
+            count <- count + 1
+            for i = 1 to t3.MipMapLevels do
+                let size = v3l <| t3.GetSize(i - 1)
+                memory <- memory + (size.X * size.Y * 16L)
+            check()
+
+            // Simple 1D
+            let t4 = runtime.CreateTexture1D(123, TextureFormat.R32f)
+            count <- count + 1
+            memory <- memory + (123L * 4L)
+            check()
+
+            // Simple 3D
+            let t5 = runtime.CreateTexture3D(V3i(3, 12, 64), TextureFormat.Rgba8)
+            count <- count + 1
+            memory <- memory + (3L * 12L * 64L * 4L)
+            check()
+
+            // Cube
+            let t6 = runtime.CreateTextureCube(64, TextureFormat.Rgba8)
+            count <- count + 1
+            memory <- memory + (64L * 64L * 4L * 6L)
+            check()
+
+            // Cube array
+            let t7 = runtime.CreateTextureCubeArray(123, TextureFormat.Rgba8, levels = Fun.MipmapLevels 123, count = 7)
+            count <- count + 1
+            for _ = 1 to t7.Count * 6 do
+                for i = 1 to t7.MipMapLevels do
+                    let size = v3l <| t7.GetSize(i - 1)
+                    memory <- memory + (size.X * size.X * 4L)
+            check()
+
+            // Compressed
+            let t8 = runtime.PrepareTexture <| EmbeddedResource.getTexture TextureParams.mipmappedCompressed "data/bc1.dds"
+
+            let sizeInBytes =
+                let mode = t8.Format.CompressionMode
+
+                (0L, [0 .. t8.MipMapLevels - 1]) ||> List.fold (fun sizeInBytes level ->
+                    let size = Fun.MipmapLevelSize(t8.Size, level)
+                    sizeInBytes + (int64 <| CompressionMode.sizeInBytes size mode)
+                )
+
+            count <- count + 1
+            memory <- memory + sizeInBytes
+            check()
+
+            t1.Dispose()
+            t2.Dispose()
+            t3.Dispose()
+            t4.Dispose()
+            t5.Dispose()
+            t6.Dispose()
+            t7.Dispose()
+            t8.Dispose()
+            count <- 0
+            memory <- 0L
+            check()
+
     let tests (backend : Backend) =
         [
             "Non-positive arguments",        Cases.nonPositiveArguments
             "Invalid usage",                 Cases.invalidUsage
             "Valid usage",                   Cases.validUsage
             "Unsupported multisample count", Cases.unsupportedMultisamples
+
+            if backend = Backend.GL then
+                "Memory usage",              Cases.memoryUsage
         ]
         |> prepareCases backend "Create"

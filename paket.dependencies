@@ -1,12 +1,11 @@
 framework: auto-detect
 source https://api.nuget.org/v3/index.json
-source https://vrvis.myget.org/F/aardvark_public/api/v2
 
 storage: none
 
 nuget FSharp.Core                        >= 5.0.1 lowest_matching: true
 nuget Microsoft.NETFramework.ReferenceAssemblies >= 1.0.0 lowest_matching: true
-nuget Aardvark.Build                     ~> 1.0.18
+nuget Aardvark.Build                     ~> 1.0.21
 
 nuget FSharp.Data.Adaptive               ~> 1.2.13
 nuget CSharp.Data.Adaptive               ~> 1.2.13
@@ -23,9 +22,9 @@ nuget Aardvark.Base.Tensors              ~> 5.2.27
 
 nuget Aardvark.Assembler                 ~> 0.0.8
 
-nuget FShade.Core                        ~> 5.5.0
-nuget FShade                             ~> 5.5.0
-nuget FShade.Debug                       ~> 5.5.0
+nuget FShade.Core                        ~> 5.5.3
+nuget FShade                             ~> 5.5.3
+nuget FShade.Debug                       ~> 5.5.3
 
 nuget Unofficial.OpenVR					 ~> 1.1.0
 nuget Unofficial.Typography              ~> 0.1.0

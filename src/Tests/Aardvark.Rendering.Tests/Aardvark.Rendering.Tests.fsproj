@@ -56,6 +56,8 @@
     <Compile Include="Tests\Texture\TextureTests.fs" />
     <Compile Include="Tests\Rendering\Tasks.fs" />
     <Compile Include="Tests\Rendering\Culling.fs" />
+    <Compile Include="Tests\Rendering\ColorMasks.fs" />
+    <Compile Include="Tests\Rendering\Blending.fs" />
     <Compile Include="Tests\Rendering\Signatures.fs" />
     <Compile Include="Tests\Rendering\Samplers.fs" />
     <Compile Include="Tests\Rendering\IntegerAttachments.fs" />
@@ -68,6 +70,7 @@
     <Compile Include="Tests\Compute\Jpeg.fs" />
     <Compile Include="Tests\Compute\MutableInputBinding.fs" />
     <Compile Include="Tests\Compute\ComputeTests.fs" />
+    <Compile Include="Tests\Other\Camera.fs" />
     <Compile Include="Tests\Other\SgTest.fs" />
     <Compile Include="Tests\Other\CompactSetTests.fs" />
     <Compile Include="Tests\Other\AdaptiveResourceTest.fs" />

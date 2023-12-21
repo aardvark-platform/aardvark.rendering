@@ -437,8 +437,7 @@ module FShadeInterop =
                 flipHandedness = flip
             }
 
-
-        member x.Link(effect : Effect, deviceCount : int, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) =
+        member x.Link(effect : Effect, deviceCount : int, depthRange : Range1d, flip : bool, top : IndexedGeometryMode, useCustomSemantic : bool) =
             let outputs =
                 x.ColorAttachments
                 |> Map.toList
@@ -454,25 +453,37 @@ module FShadeInterop =
 
             if deviceCount > 1 then
                 if x.LayerCount > 1 then
+                    let semantic = Intrinsics.Layer
+                    let customSemantic = if useCustomSemantic then "GeometryInvocationId" else semantic
+
                     effect
-                        // TODO: other topologies????
-                        |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) top
-                        |> withDeviceIndex deviceCount
-                        |> Effect.toModule config
+                    // TODO: other topologies????
+                    |> Effect.toLayered semantic customSemantic x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) top
+                    |> withDeviceIndex deviceCount
+                    |> Effect.toModule config
                 else
+                    let semantic = Intrinsics.ViewportIndex
+                    let customSemantic = if useCustomSemantic then "GeometryInvocationId" else semantic
+
                     effect
-                        // TODO: other topologies????
-                        |> Effect.toMultiViewportEffect deviceCount Map.empty top
-                        |> withDeviceIndex deviceCount
-                        |> Effect.toModule config
+                    // TODO: other topologies????
+                    |> Effect.toLayered semantic customSemantic deviceCount Map.empty top
+                    |> withDeviceIndex deviceCount
+                    |> Effect.toModule config
             else
                 if x.LayerCount > 1 then
+                    let semantic = Intrinsics.Layer
+                    let customSemantic = if useCustomSemantic then "GeometryInvocationId" else semantic
+
                     effect
-                        // TODO: other topologies????
-                        |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) top
-                        |> Effect.toModule config
+                    // TODO: other topologies????
+                    |> Effect.toLayered semantic customSemantic x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) top
+                    |> Effect.toModule config
                 else
                     effect |> Effect.toModule config
+
+        member x.Link(effect : Effect, deviceCount : int, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) =
+            x.Link(effect, deviceCount, depthRange, flip, top, false)
 
     type IFramebufferSignature with
         member x.Layout : FramebufferLayout =
@@ -484,8 +495,14 @@ module FShadeInterop =
                 PerLayerUniforms = x.PerLayerUniforms
             }
 
-        member x.EffectConfig(depthRange : Range1d, flip : bool) = x.Layout.EffectConfig(depthRange, flip)
-        member x.Link(effect : Effect, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) = x.Layout.Link(effect, x.Runtime.DeviceCount, depthRange, flip, top)
+        member x.EffectConfig(depthRange : Range1d, flip : bool) =
+            x.Layout.EffectConfig(depthRange, flip)
+
+        member x.Link(effect : Effect, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) =
+            x.Layout.Link(effect, x.Runtime.DeviceCount, depthRange, flip, top, false)
+
+        member x.Link(effect : Effect, depthRange : Range1d, flip : bool, top : IndexedGeometryMode, useCustomSemantic : bool) =
+            x.Layout.Link(effect, x.Runtime.DeviceCount, depthRange, flip, top, useCustomSemantic)
 
 
     type FShadeSurface private(effect : FShadeEffect) =

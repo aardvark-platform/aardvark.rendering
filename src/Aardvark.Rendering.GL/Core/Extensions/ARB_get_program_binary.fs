@@ -23,3 +23,19 @@ module ARB_get_program_binary =
                 GL.GetProgramBinary(program, bufSize, &length, &binaryFormat, binary)
             else
                 failwith "glGetProgramBinary is not available."
+
+        static member GetProgramBinary(program : int, length : int) =
+            let data : byte[] = Array.zeroCreate length
+            let mutable format = Unchecked.defaultof<BinaryFormat>
+            let mutable returnedLength = length
+            GL.Dispatch.GetProgramBinary(program, length, &returnedLength, &format, data)
+
+            if returnedLength = length then
+                data, format
+            else
+                null, format
+
+        static member GetProgramBinaryLength(program : int) =
+            let mutable result = 0
+            GL.GetProgram(program, GetProgramParameterName.ProgramBinaryLength, &result)
+            result

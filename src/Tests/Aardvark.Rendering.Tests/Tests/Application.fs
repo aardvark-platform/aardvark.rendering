@@ -30,7 +30,7 @@ module TestApplication =
             RuntimeConfig.UseNewRenderTask <- true
             RuntimeConfig.PreferHostSideTextureCompression <- true
 
-            Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative)) |> ignore
+            let toolkit = Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative))
 
             let runtime = new Runtime(debug)
             let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugConfig)
@@ -59,10 +59,10 @@ module TestApplication =
                 runtime,
                 { new IDisposable with
                     member x.Dispose() =
+                        checkForErrors()
                         runtime.Dispose()
                         checkForDebugErrors()
-                        checkForErrors()
-                        ctx.Dispose()
+                        toolkit.Dispose()
                 }
             )
 
@@ -70,6 +70,7 @@ module TestApplication =
         open Aardvark.Rendering.Vulkan
 
         let create (debug : IDebugConfig) =
+            CustomDeviceChooser.Register Seq.head
             let app = new HeadlessVulkanApplication(debug)
             let onExit =
                 { new IDisposable with
@@ -91,9 +92,13 @@ module TestApplication =
                 app.Runtime, onExit
             )
 
+    let mutable private aardvarkInitialized = false
+
     let create' (debug : IDebugConfig) (backend : Backend) =
-        IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
-        Aardvark.Init()
+        if not aardvarkInitialized then
+            IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+            Aardvark.Init()
+            aardvarkInitialized <- true
 
         match backend with
         | Backend.GL -> GL.create debug

@@ -113,8 +113,8 @@ type RenderToExtensions private() =
     /// Renders the given task to the given framebuffer, after clearing it according to the given adaptive clear values.
     [<Extension>]
     static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>, clearValues : aval<ClearValues>) =
-        let runtime = this.Runtime.Value
-        let signature = this.FramebufferSignature.Value
+        let runtime = this.GetRuntime()
+        let signature = this.GetFramebufferSignature()
 
         let task =
             let mutable clear = Unchecked.defaultof<IRenderTask>
@@ -155,8 +155,8 @@ type RenderToExtensions private() =
     [<Extension>]
     static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : CubeMap<aval<ClearValues>>) =
         let task = this.Data.[0]
-        let runtime = task.Runtime.Value
-        let signature = task.FramebufferSignature.Value
+        let runtime = task.GetRuntime()
+        let signature = task.GetFramebufferSignature()
 
         let compiled =
             let cache = Dict<aval<ClearValues>, IRenderTask>()

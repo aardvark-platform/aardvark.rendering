@@ -135,7 +135,8 @@ type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits 
         modes |> Seq.maxBy presentModeScore
 
     override x.ChooseBufferCount(min, max) =
-        clamp min max buffers
+        if max = 0 then Fun.Max(min, buffers)
+        else clamp min max buffers
 
 type SwapchainDescription =
     {

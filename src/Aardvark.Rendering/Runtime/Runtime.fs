@@ -123,3 +123,15 @@ type RenderTaskRunExtensions() =
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription) =
         t.Run(AdaptiveToken.Top, token, fbo)
+
+    [<Extension>]
+    static member inline GetRuntime(t : IRenderTask) =
+        match t.Runtime with
+        | Some r -> r
+        | _ -> raise <| InvalidOperationException("Render task does not have a runtime.")
+
+    [<Extension>]
+    static member inline GetFramebufferSignature(t : IRenderTask) =
+        match t.FramebufferSignature with
+        | Some s -> s
+        | _ -> raise <| InvalidOperationException("Render task does not have a framebuffer signature.")

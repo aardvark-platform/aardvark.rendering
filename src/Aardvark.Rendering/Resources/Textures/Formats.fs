@@ -546,7 +546,7 @@ module TextureFormat =
         LookupTable.lookupTable [
             TextureFormat.Bgr8, 24
             TextureFormat.Bgra8, 32
-            TextureFormat.R3G3B2, 6
+            TextureFormat.R3G3B2, 8
             TextureFormat.Rgb4, 12
             TextureFormat.Rgb5, 15
             TextureFormat.Rgb8, 24
