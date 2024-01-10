@@ -9,7 +9,7 @@ open Aardvark.Rendering
 [<AutoOpen>]
 module private ErrorUtilities =
 
-    let inline failf fmt =
+    let inline failf' (exn : string -> exn) fmt =
         Printf.kprintf (fun str ->
             let str =
                 if String.IsNullOrEmpty str then "An error occurred"
@@ -17,8 +17,11 @@ module private ErrorUtilities =
 
             let msg = $"[GL] {str}"
             Report.Error msg
-            failwith msg
+            raise <| exn msg
         ) fmt
+
+    let inline failf fmt =
+        failf' Exception fmt
 
 [<AutoOpen>]
 module TypeSizeExtensions =
