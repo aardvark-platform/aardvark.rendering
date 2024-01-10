@@ -18,13 +18,33 @@ open System.Threading
 // NOTE: Hacky solution for concurrency issues.
 // This lock is used for all OpenGL render tasks, basically preventing any concurrency.
 // The Vulkan backend has finer grained control over resource ownership.
+// When acquiring this lock an OpenGL context should be current, otherwise deadlocks may occur when trying to acquire a resource context later!
 module GlobalResourceLock =
 
     let lockObj = obj()
 
+    [<Struct>]
+    type Disposable(lockTaken : bool) =
+        member x.Dispose() = if lockTaken then Monitor.Exit lockObj
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
     let using (action : unit -> 'T) =
         if RuntimeConfig.AllowConcurrentResourceAccess then action()
         else lock lockObj action
+
+    let inline lock() : Disposable =
+        let mutable lockTaken = false
+
+        try
+            if not RuntimeConfig.AllowConcurrentResourceAccess then
+                Monitor.Enter(lockObj, &lockTaken)
+
+            new Disposable(lockTaken)
+
+        with _ ->
+            if lockTaken then Monitor.Exit(lockObj)
+            reraise()
 
 type TextureBindingSlot =
     | ArrayBinding of IResource<TextureArrayBinding, TextureArrayBinding>
@@ -823,26 +843,18 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass, renderObject : Rend
         for r in x.Resources do r.Update(token, rt)
 
     member x.Dispose() =
-        GlobalResourceLock.using (fun _ -> 
-            if Interlocked.Decrement(&refCount) = 0 then
-                lock x (fun () ->
-                    let token = try Some ctx.ResourceLock with :? ObjectDisposedException -> None
-            
-                    match token with
-                    | Some token ->
-                        try
-                            cleanup |> List.iter (fun f -> f())
-                            x.Release()
-                            cleanup <- []
-                            resourceStats <- None
-                            resources <- None
-                        finally
-                            token.Dispose()
-                    | None ->
-                        //OpenGL died
-                        ()
-                )
-        )
+        if Interlocked.Decrement(&refCount) = 0 then
+            lock x (fun () ->
+                use contextLock = ctx.TryResourceLock
+
+                if contextLock.Success then
+                    use __ = GlobalResourceLock.lock()
+                    cleanup |> List.iter (fun f -> f())
+                    x.Release()
+                    cleanup <- []
+                    resourceStats <- None
+                    resources <- None
+            )
 
     interface IRenderObject with
         member x.AttributeScope = Ag.Scope.Root
@@ -870,27 +882,28 @@ type PreparedObjectInfo =
     }
 
     member x.Dispose() =
-        GlobalResourceLock.using (fun _ ->
-            if x.oIsActive.IsDisposed then failwith "double free"
-            x.oBeginMode.Dispose()
+        use __ = x.oContext.ResourceLock
+        use __ = GlobalResourceLock.lock()
 
-            for b in x.oAttributeBuffers do
-                b.Dispose()
+        if x.oIsActive.IsDisposed then failwith "double free"
+        x.oBeginMode.Dispose()
 
-            match x.oIndexBinding with
-            | Some b -> b.Dispose()
-            | _ -> ()
+        for b in x.oAttributeBuffers do
+            b.Dispose()
 
-            x.oIsActive.Dispose()
+        match x.oIndexBinding with
+        | Some b -> b.Dispose()
+        | _ -> ()
 
-            match x.oIndirectBuffer with
-            | Some i -> i.Dispose()
-            | None -> x.oDrawCallInfos.Dispose()
+        x.oIsActive.Dispose()
 
-            x.oVertexInputBinding.Dispose()
+        match x.oIndirectBuffer with
+        | Some i -> i.Dispose()
+        | None -> x.oDrawCallInfos.Dispose()
 
-            x.oActivation.Dispose()
-        )
+        x.oVertexInputBinding.Dispose()
+
+        x.oActivation.Dispose()
 
     member x.Resources =
         seq {

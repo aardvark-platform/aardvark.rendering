@@ -64,6 +64,14 @@ type ResourceLockDisposable =
           bag = bag
           bagCount = bagCount }
 
+[<Struct>]
+type ResourceLockDisposableOptional(inner : ResourceLockDisposable, success : bool) =
+    static let invalid = new ResourceLockDisposableOptional(new ResourceLockDisposable(), false)
+    static member Invalid = invalid
+    member x.Success = success
+    member x.Dispose() = inner.Dispose()
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 type MemoryUsage() =
     class
@@ -358,7 +366,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             new RenderingLockDisposable(ValueSome handle, ValueNone)
 
     /// <summary>
-    /// makes one of the underlying context current on the calling thread
+    /// Makes one of the underlying context current on the calling thread
     /// and returns a disposable for releasing it again
     /// </summary>
     member x.ResourceLock : ResourceLockDisposable =
@@ -390,6 +398,14 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             // no release: put resource context back in bag and reset current to None
             new ResourceLockDisposable(ValueSome handle, bag, bagCount)
 
+    /// <summary>
+    /// Tries to make one of the underlying context current on the calling thread
+    /// and returns a disposable for releasing it again. If the context was already disposed,
+    /// the Success member of the returned disposable returns false.
+    /// </summary>
+    member x.TryResourceLock : ResourceLockDisposableOptional =
+        try new ResourceLockDisposableOptional(x.ResourceLock, true)
+        with :? ObjectDisposedException -> ResourceLockDisposableOptional.Invalid
 
     /// <summary>
     /// Returns the number of samples supported by the given target and format.

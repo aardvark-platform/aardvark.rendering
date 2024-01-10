@@ -120,50 +120,49 @@ module RenderTasks =
             manager.Dispose()
 
         override x.PerformUpdate(token, renderToken) =
-            GlobalResourceLock.using (fun _ ->
-                use __ = ctx.ResourceLock
+            use __ = ctx.ResourceLock
+            use __ = GlobalResourceLock.lock()
 
-                x.ProcessDeltas(token, renderToken)
-                x.UpdateResources(token, renderToken)
+            x.ProcessDeltas(token, renderToken)
+            x.UpdateResources(token, renderToken)
 
-                renderTaskLock.Run (fun () ->
-                    x.Update(token, renderToken)
-                )
+            renderTaskLock.Run (fun () ->
+                x.Update(token, renderToken)
             )
 
         override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
-            GlobalResourceLock.using (fun _ ->
-                let fbo = desc.framebuffer // TODO: fix outputdesc
-                signature |> FramebufferSignature.validateCompability fbo
+            use __ = ctx.ResourceLock
+            use __ = GlobalResourceLock.lock()
 
-                use __ = ctx.ResourceLock
-                GL.Check "[RenderTask.Run] Entry"
+            GL.Check "[RenderTask.Run] Entry"
 
-                if currentContext.Value <> ContextHandle.Current.Value then
-                    let intCtx = ContextHandle.Current.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
-                    NativePtr.write contextHandle intCtx.Context.Handle
-                    transact (fun () -> currentContext.Value <- ContextHandle.Current.Value)
+            let fbo = desc.framebuffer // TODO: fix outputdesc
+            signature |> FramebufferSignature.validateCompability fbo
 
-                let fbo =
-                    match fbo with
-                        | :? Framebuffer as fbo -> fbo
-                        | _ -> failwithf "unsupported framebuffer: %A" fbo
+            if currentContext.Value <> ContextHandle.Current.Value then
+                let intCtx = ContextHandle.Current.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
+                NativePtr.write contextHandle intCtx.Context.Handle
+                transact (fun () -> currentContext.Value <- ContextHandle.Current.Value)
 
-                x.ProcessDeltas(token, renderToken)
-                x.UpdateResources(token, renderToken)
+            let fbo =
+                match fbo with
+                    | :? Framebuffer as fbo -> fbo
+                    | _ -> failwithf "unsupported framebuffer: %A" fbo
 
-                Framebuffer.draw signature fbo desc.viewport (fun _ ->
-                    renderTaskLock.Run (fun () ->
-                        beforeRender.Trigger()
-                        NativePtr.write runtimeStats V2i.Zero
+            x.ProcessDeltas(token, renderToken)
+            x.UpdateResources(token, renderToken)
 
-                        x.Perform(token, renderToken, fbo, desc)
-                        GL.Check "[RenderTask.Run] Perform"
+            Framebuffer.draw signature fbo desc.viewport (fun _ ->
+                renderTaskLock.Run (fun () ->
+                    beforeRender.Trigger()
+                    NativePtr.write runtimeStats V2i.Zero
 
-                        afterRender.Trigger()
-                        let rt = NativePtr.read runtimeStats
-                        renderToken.AddDrawCalls(rt.X, rt.Y)
-                    )
+                    x.Perform(token, renderToken, fbo, desc)
+                    GL.Check "[RenderTask.Run] Perform"
+
+                    afterRender.Trigger()
+                    let rt = NativePtr.read runtimeStats
+                    renderToken.AddDrawCalls(rt.X, rt.Y)
                 )
 
                 GL.BindVertexArray 0

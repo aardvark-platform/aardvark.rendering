@@ -615,15 +615,13 @@ module internal ComputeTaskInternals =
 
         let update (token : AdaptiveToken) (renderToken : RenderToken) (action : unit -> 'T) =
             use __ = renderToken.Use()
+            use __ = ctx.ResourceLock
+            use __ = GlobalResourceLock.lock()
 
-            GlobalResourceLock.using (fun _ ->
-                use __ = ctx.ResourceLock
+            resources.Update(token, renderToken)
+            compiler.Update(token)
 
-                resources.Update(token, renderToken)
-                compiler.Update(token)
-
-                action()
-            )
+            action()
 
         member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
             x.EvaluateIfNeeded token () (fun token ->
