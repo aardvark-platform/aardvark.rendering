@@ -1269,13 +1269,13 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
                 swapchain |> Option.iter Disposable.dispose
                 swapchain <- None
 
-                surface.Dispose()
-
                 renderTask.Dispose()
                 renderTask <- RenderTask.empty
 
                 gpuQuery |> Option.iter Disposable.dispose
                 gpuQuery <- None
+
+                surface.Dispose()
 
                 glfw.HideWindow(win)
                 glfw.DestroyWindow(win)

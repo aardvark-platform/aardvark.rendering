@@ -134,12 +134,14 @@ module private OpenGL =
             let m = t.GetMethod("LoadEntryPoints", BindingFlags.NonPublic ||| BindingFlags.Instance)
             let gl = OpenTK.Graphics.OpenGL.GL()
             m.Invoke(gl, null) |> ignore
-        
+
+        member x.Dispose() =
+            remContext.Invoke(null, [| x :> obj |]) |> ignore
+            win <- NativePtr.zero
+
         interface IGraphicsContext with
-            member x.Dispose(): unit = 
-                remContext.Invoke(null, [| x :> obj |]) |> ignore
-                win <- NativePtr.zero
-                ()
+            member x.Dispose() =
+                x.Dispose()
 
             member x.ErrorChecking
                 with get () = false
@@ -288,8 +290,9 @@ module private OpenGL =
                 handle :> obj
             override this.CreateSwapchain(size: V2i) = 
                 createSwapchain runtime signature handle glfw win size
-            override this.Dispose() = 
-                ()
+            override this.Dispose() =
+                signature.Dispose()
+                ctx.Dispose()
         }
 
     let interop (debug : DebugConfig) =
@@ -338,6 +341,7 @@ type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<stri
         let w = this.Instance.CreateWindow WindowConfig.Default
         let h = w.Surface.Handle :?> Aardvark.Rendering.GL.ContextHandle
         this.Instance.RemoveExistingWindow w
+        h.OnDisposed.Add w.Dispose
         h
 
     let ctx = new Context(runtime, fun () -> this.Instance.Invoke createContext)
