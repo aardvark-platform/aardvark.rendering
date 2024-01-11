@@ -31,7 +31,6 @@ type OpenGlApplication(forceNvidia : bool, debug : IDebugConfig, shaderCachePath
     member x.Runtime = runtime
     
     member x.Dispose() =
-        ctx.Dispose()
         runtime.Dispose()
 
     member x.Initialize(ctrl : IRenderControl, samples : int) = 
