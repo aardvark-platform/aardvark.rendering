@@ -224,8 +224,6 @@ module private OpenGL =
                 size
         }
 
-    let mutable private lastWindow = None
-
     let getFramebufferSamples() =
         if GL.getVersion() >= System.Version(4, 5) then
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
@@ -248,7 +246,6 @@ module private OpenGL =
         let old = glfw.GetCurrentContext()
         
         glfw.MakeContextCurrent(NativePtr.zero)
-        if Option.isNone lastWindow then lastWindow <- Some win
 
         let ctx =
             new MyGraphicsContext(glfw, win)

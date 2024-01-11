@@ -10,7 +10,6 @@ open Silk.NET.GLFW
 open System.Runtime.InteropServices
 open FSharp.Control
 open FSharp.Data.Adaptive
-open System.Runtime.InteropServices
 
 type private IGamepad = Aardvark.Application.IGamepad
 type private GamepadButton = Aardvark.Application.GamepadButton
@@ -231,7 +230,7 @@ module Translations =
 
 [<AutoOpen>]
 module MissingGlfwFunctions =
-    open System.Runtime.InteropServices
+    open System.Text
 
     type private GetWindowContentScaleDel = delegate of nativeptr<WindowHandle> * byref<float32> * byref<float32> -> unit
 
@@ -269,6 +268,19 @@ module MissingGlfwFunctions =
                     c <- NativePtr.read ptr
 
                 System.Text.Encoding.UTF8.GetString(l.ToArray())
+
+        member x.GetErrorMessage() =
+            let err, ptr = x.GetError()
+            let mutable msg = String.Empty
+
+            if err <> ErrorCode.NoError && not <| NativePtr.isNull ptr then
+                let mutable len = 0
+                while NativePtr.get ptr len <> 0uy do
+                    inc &len
+
+                msg <- Encoding.UTF8.GetString(ptr, len)
+
+            err, msg
 
 type WindowEvent =
     | Resize
@@ -683,7 +695,15 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
 
             let win = glfw.CreateWindow(cfg.width, cfg.height, cfg.title, NativePtr.zero, parent)
             if win = NativePtr.zero then
-                failwithf "GLFW could not create window: %A" (fst <| glfw.GetError())
+                let err, msg = glfw.GetErrorMessage()
+
+                let description =
+                    if String.IsNullOrWhiteSpace msg then "Could not create window"
+                    else msg
+
+                let msg = $"[GLFW] {description} (error: {err})"
+                Report.Error msg
+                failwith msg
 
             lastWindow <- Some win
             
