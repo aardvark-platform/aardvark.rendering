@@ -297,7 +297,7 @@ module ContextHandleOpenTK =
                 ()
 
     /// <summary>
-    /// creates a new context using the default configuration
+    /// Creates a new context using the default configuration.
     /// </summary>
     let create (debug : IDebugConfig) =
         let window, context =

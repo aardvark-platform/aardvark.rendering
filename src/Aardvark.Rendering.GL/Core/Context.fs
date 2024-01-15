@@ -186,20 +186,21 @@ type MemoryUsage() =
 [<AllowNullLiteral>]
 type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this =
 
-    static let defaultShaderCachePath = 
+    static let defaultShaderCachePath =
         Path.combine [
             CachingProperties.CacheDirectory
             "Shaders"
             "OpenGL"
         ]
 
-    let resourceContexts = Array.init RuntimeConfig.NumberOfResourceContexts (fun _ -> createContext())
-    let resourceContextCount = resourceContexts.Length
+    let resourceContexts =
+        let n = max 1 RuntimeConfig.NumberOfResourceContexts
+        Array.init n (ignore >> createContext)
 
     let memoryUsage = MemoryUsage()
 
     let bag = ConcurrentBag(resourceContexts)
-    let bagCount = new SemaphoreSlim(resourceContextCount)
+    let bagCount = new SemaphoreSlim(resourceContexts.Length)
 
     let shaderCache = new ShaderCache()
 
@@ -388,7 +389,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             let handle =
                 match bag.TryTake() with
                 | (true, handle) -> handle
-                | _ -> failwith "could not dequeue resource-context"
+                | _ -> failf "could not dequeue resource-context"
 
             // make the obtained handle current
             handle.MakeCurrent()
@@ -456,9 +457,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
         try
             shaderCache.Dispose()
 
-            for i in 0..resourceContextCount-1 do
-                let s = resourceContexts.[i]
-                ContextHandle.delete s
+            for c in resourceContexts do
+                ContextHandle.delete c
         with _ ->
             ()
 

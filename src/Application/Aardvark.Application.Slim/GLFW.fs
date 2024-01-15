@@ -586,7 +586,11 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
 
         interop.Boot glfw
 
-    let mutable lastWindow : nativeptr<WindowHandle> option = None
+    // For GL we need to specify a parent window to enable context sharing
+    // Simply use the one that was created first, assuming it is still valid and unused.
+    // Obviously this is not a safe assumption, but should at least be more reliable than
+    // using the last created one.
+    let mutable parentWindow : nativeptr<WindowHandle> option = None
     let queue = System.Collections.Concurrent.ConcurrentQueue<unit -> unit>()
 
     let existingWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
@@ -677,7 +681,7 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
                 glfw.MakeContextCurrent(NativePtr.zero)
 
             let parent =
-                lastWindow |> Option.defaultValue NativePtr.zero
+                parentWindow |> Option.defaultValue NativePtr.zero
 
             glfw.DefaultWindowHints()
 
@@ -705,7 +709,8 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
                 Report.Error msg
                 failwith msg
 
-            lastWindow <- Some win
+            if Option.isNone parentWindow then
+                parentWindow <- Some win
             
             let surface = interop.CreateSurface(runtime, cfg, glfw, win)
         

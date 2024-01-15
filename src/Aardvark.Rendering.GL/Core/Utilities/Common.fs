@@ -9,7 +9,7 @@ open Aardvark.Rendering
 [<AutoOpen>]
 module private ErrorUtilities =
 
-    let inline failf' (exn : string -> exn) fmt =
+    let inline failf' (exn : string -> #exn) fmt =
         Printf.kprintf (fun str ->
             let str =
                 if String.IsNullOrEmpty str then "An error occurred"
