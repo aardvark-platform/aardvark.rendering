@@ -12,7 +12,6 @@ module TextureCompression =
 
     open BenchmarkDotNet.Attributes
     open OpenTK.Graphics.OpenGL4
-    open Aardvark.Application
 
     type OnTheFlyCompression() =
         let mutable app = Unchecked.defaultof<TestApplication>
@@ -28,7 +27,7 @@ module TextureCompression =
 
         [<GlobalSetup>]
         member x.Setup() =
-            app <- TestApplication.create' DebugLevel.None Backend.GL
+            app <- TestApplication.create' DebugLevel.None (TestBackend.GL Framework.OpenTK)
 
             let size = V2i x.Size
             image <- PixImage<uint8>(Col.Format.RGBA, size)

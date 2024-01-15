@@ -70,7 +70,7 @@ module ``SceneGraph Tests`` =
 
 
     let private testOnActivation (countAfterPrepare : int) (countAfterDispose : int) (sgWithActivator : (ISg -> ISg) -> ISg) =
-        use app = TestApplication.create Backend.Vulkan
+        use app = TestApplication.create TestBackend.Vulkan
         let runtime = app.Runtime
 
         use signature =
@@ -119,7 +119,7 @@ module ``SceneGraph Tests`` =
 
     let delayModifySurface =
         test "Sg.Delay modify surface" {
-            use app = TestApplication.create Backend.Vulkan
+            use app = TestApplication.create TestBackend.Vulkan
             let runtime = app.Runtime
 
             use signature =
