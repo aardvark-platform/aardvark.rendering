@@ -104,25 +104,23 @@ module private OpenGL =
     
     [<AllowNullLiteral>]
     type MyGraphicsContext(glfw : Glfw, win : nativeptr<WindowHandle>) as this =
-        //[<System.ThreadStaticAttribute; DefaultValue>]
-        //static val mutable private CurrentContext : OpenTK.ContextHandle
-
         let mutable win = win
 
         static let addContext = typeof<GraphicsContext>.GetMethod("AddContext", BindingFlags.NonPublic ||| BindingFlags.Static)
         static let remContext = typeof<GraphicsContext>.GetMethod("RemoveContext", BindingFlags.NonPublic ||| BindingFlags.Static)
+        static let getCurrContext = typeof<GraphicsContext>.GetField("GetCurrentContext", BindingFlags.NonPublic ||| BindingFlags.Static)
 
         let handle = ContextHandle(NativePtr.toNativeInt win)
-        static let mutable inited = false
-        do 
-            if not inited then
-                inited <- true
-                let get = GraphicsContext.GetCurrentContextDelegate(fun () -> ContextHandle(NativePtr.toNativeInt (glfw.GetCurrentContext())))
-                let t = typeof<GraphicsContext>
-                let f = t.GetField("GetCurrentContext", BindingFlags.NonPublic ||| BindingFlags.Static)
-                f.SetValue(null, get)
 
-        do addContext.Invoke(null, [| this :> obj |]) |> ignore
+        static let mutable count = 0
+
+        do
+            if count = 0 then
+                let get = GraphicsContext.GetCurrentContextDelegate(fun () -> ContextHandle(NativePtr.toNativeInt (glfw.GetCurrentContext())))
+                getCurrContext.SetValue(null, get)
+
+            inc &count
+            addContext.Invoke(null, [| this :> obj |]) |> ignore
 
         member x.LoadAll(): unit = 
             let t = typeof<OpenTK.Graphics.OpenGL4.GL>
@@ -136,6 +134,10 @@ module private OpenGL =
             m.Invoke(gl, null) |> ignore
 
         member x.Dispose() =
+            dec &count
+            if count = 0 then
+                getCurrContext.SetValue(null, null)
+
             remContext.Invoke(null, [| x :> obj |]) |> ignore
             win <- NativePtr.zero
 
