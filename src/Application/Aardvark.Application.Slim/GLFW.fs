@@ -588,9 +588,11 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
 
     // For GL we need to specify a parent window to enable context sharing
     // Simply use the one that was created first, assuming it is still valid and unused.
-    // Obviously this is not a safe assumption, but should at least be more reliable than
-    // using the last created one.
+    // If GL.RuntimeConfig.RobustContextSharing is false, this will be a resource context which
+    // may not always be available. If the flag is true, this will be a hidden context that
+    // is guaranteed to be available.
     let mutable parentWindow : nativeptr<WindowHandle> option = None
+
     let queue = System.Collections.Concurrent.ConcurrentQueue<unit -> unit>()
 
     let existingWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()

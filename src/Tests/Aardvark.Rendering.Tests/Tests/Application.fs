@@ -42,7 +42,7 @@ module TestApplication =
             let toolkit = Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative))
 
             let runtime = new Runtime(debug)
-            let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugConfig)
+            let ctx = new Context(runtime, ContextHandleOpenTK.createWithParent runtime.DebugConfig)
 
             runtime.Initialize(ctx)
 
@@ -63,6 +63,7 @@ module TestApplication =
             Config.MajorVersion <- 4
             Config.MinorVersion <- 6
             RuntimeConfig.UseNewRenderTask <- true
+            RuntimeConfig.RobustContextSharing <- true
             RuntimeConfig.PreferHostSideTextureCompression <- true
 
             let app =

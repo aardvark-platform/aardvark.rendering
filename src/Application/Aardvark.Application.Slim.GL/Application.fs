@@ -273,15 +273,18 @@ module private OpenGL =
 
         if old <> NativePtr.zero then
             glfw.MakeContextCurrent old
-        
-        let signature =
-            runtime.CreateFramebufferSignature([
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
-            ], samples)
 
         let handle = new Aardvark.Rendering.GL.ContextHandle(ctx, info)
-        do handle.Initialize(runtime.DebugConfig, setDefaultStates = true)
+
+        let signature =
+            handle.Use (fun _ ->
+                handle.Initialize(runtime.DebugConfig, setDefaultStates = true)
+
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+                ], samples)
+            )
 
         { new IWindowSurface with
             override x.Signature = signature
@@ -336,14 +339,18 @@ module private OpenGL =
 type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) as this =
     inherit Application(runtime, OpenGL.interop runtime.DebugConfig, hideCocoaMenuBar)
 
-    let createContext() =
-        let w = this.Instance.CreateWindow WindowConfig.Default
-        let h = w.Surface.Handle :?> Aardvark.Rendering.GL.ContextHandle
-        this.Instance.RemoveExistingWindow w
-        h.OnDisposed.Add w.Dispose
-        h
+    // Note: We ignore the passed parent since we determine the parent context in the CreateWindow method.
+    // This is always the first created context and should therefore match the passed one anyway.
+    let createContext (_parent : Aardvark.Rendering.GL.ContextHandle option) =
+        this.Instance.Invoke (fun _ ->
+            let w = this.Instance.CreateWindow WindowConfig.Default
+            let h = w.Surface.Handle :?> Aardvark.Rendering.GL.ContextHandle
+            this.Instance.RemoveExistingWindow w
+            h.OnDisposed.Add w.Dispose
+            h
+        )
 
-    let ctx = new Context(runtime, fun () -> this.Instance.Invoke createContext)
+    let ctx = new Context(runtime, createContext)
 
     do ctx.ShaderCachePath <- shaderCachePath
        runtime.Initialize(ctx)

@@ -298,14 +298,22 @@ module ContextHandleOpenTK =
 
     /// <summary>
     /// Creates a new context using the default configuration.
+    /// The given context is used as parent for sharing. If parent is None, OpenTK chooses a context to use as parent.
     /// </summary>
-    let create (debug : IDebugConfig) =
+    let createWithParent (debug : IDebugConfig) (parent : ContextHandle option) =
         let window, context =
             let prev = ContextHandle.Current
 
             let mode = Graphics.GraphicsMode(ColorFormat(Config.BitsPerPixel), Config.DepthBits, Config.StencilBits, 1, ColorFormat.Empty, Config.Buffers, false)
             let window = new NativeWindow(16, 16, "background", GameWindowFlags.Default, mode, DisplayDevice.Default)
-            let context = new GraphicsContext(GraphicsMode.Default, window.WindowInfo, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
+
+            let context =
+                match parent with
+                | Some p ->
+                    new GraphicsContext(GraphicsMode.Default, window.WindowInfo, p.Handle, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
+                | _ ->
+                    new GraphicsContext(GraphicsMode.Default, window.WindowInfo, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
+
             context.MakeCurrent(window.WindowInfo)
             let ctx = context |> unbox<IGraphicsContextInternal>
             ctx.LoadAll()
@@ -329,3 +337,9 @@ module ContextHandleOpenTK =
         handle.Initialize(debug, setDefaultStates = false)
 
         handle
+
+    /// <summary>
+    /// Creates a new context using the default configuration.
+    /// </summary>
+    let create (debug : IDebugConfig) =
+        createWithParent debug None

@@ -184,7 +184,7 @@ type MemoryUsage() =
 /// multiple threads to submit GL calls concurrently.
 /// </summary>
 [<AllowNullLiteral>]
-type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this =
+type Context(runtime : IRuntime, createContext : ContextHandle option -> ContextHandle) as this =
 
     static let defaultShaderCachePath =
         Path.combine [
@@ -193,9 +193,15 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             "OpenGL"
         ]
 
+    // Hidden unused context for sharing.
+    // Note: If None is passed to createContext, it's up to the implementation how to choose the parent.
+    let parentContext =
+        if RuntimeConfig.RobustContextSharing then Some <| createContext None
+        else None
+
     let resourceContexts =
         let n = max 1 RuntimeConfig.NumberOfResourceContexts
-        Array.init n (ignore >> createContext)
+        Array.init n (fun _ -> createContext parentContext)
 
     let memoryUsage = MemoryUsage()
 
@@ -243,12 +249,16 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             value
         | Some v -> v
 
+    [<Obsolete("Use overload with createContext that accepts an optional parent context.")>]
+    new (runtime : IRuntime, createContext : unit -> ContextHandle) =
+        new Context(runtime, fun (_ : ContextHandle option) -> createContext())
+
     /// <summary>
     /// Creates custom OpenGl context. Usage:
     /// let customCtx = app.Context.CreateContext()
     /// use __ = app.Context.RenderingLock(customCtx)
     /// </summary>
-    member x.CreateContext() = createContext()
+    member x.CreateContext() = createContext parentContext
 
     member internal x.ShaderCache = shaderCache
 
@@ -459,6 +469,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
             for c in resourceContexts do
                 ContextHandle.delete c
+
+            parentContext |> Option.iter ContextHandle.delete
         with _ ->
             ()
 
