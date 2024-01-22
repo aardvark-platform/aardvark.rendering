@@ -1,3 +1,13 @@
+### 5.4.8
+- [GL] Fixed locking order of GlobalResourceLock and context locks to avoid potential deadlocks
+- [GL] Added workaround for layered rendering and GLSL < 430
+- [GL] Made context creation and sharing more robust (see RuntimeConfig.RobustContextSharing)
+- [GL] Improved disposal of ContextHandle
+- [GLVM / VKVM] Updated ARM64 binaries
+- [GLFW] Fixed context resource leaks
+- [GLFW] Reset GetCurrentContext on disposal
+- [WinForms / WPF] Removed double dispose of context
+
 ### 5.4.7
 - Fixed Frustum.withAspect and Frustum.withHorizontalFieldOfViewInDegrees
 - [GL] Fixed InvalidEnum error due to GL_POINT_SPRITE
