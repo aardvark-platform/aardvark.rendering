@@ -64,6 +64,14 @@ type ResourceLockDisposable =
           bag = bag
           bagCount = bagCount }
 
+[<Struct>]
+type ResourceLockDisposableOptional(inner : ResourceLockDisposable, success : bool) =
+    static let invalid = new ResourceLockDisposableOptional(new ResourceLockDisposable(), false)
+    static member Invalid = invalid
+    member x.Success = success
+    member x.Dispose() = inner.Dispose()
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 type MemoryUsage() =
     class
@@ -176,22 +184,29 @@ type MemoryUsage() =
 /// multiple threads to submit GL calls concurrently.
 /// </summary>
 [<AllowNullLiteral>]
-type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this =
+type Context(runtime : IRuntime, createContext : ContextHandle option -> ContextHandle) as this =
 
-    static let defaultShaderCachePath = 
+    static let defaultShaderCachePath =
         Path.combine [
             CachingProperties.CacheDirectory
             "Shaders"
             "OpenGL"
         ]
 
-    let resourceContexts = Array.init RuntimeConfig.NumberOfResourceContexts (fun _ -> createContext())
-    let resourceContextCount = resourceContexts.Length
+    // Hidden unused context for sharing.
+    // Note: If None is passed to createContext, it's up to the implementation how to choose the parent.
+    let parentContext =
+        if RuntimeConfig.RobustContextSharing then Some <| createContext None
+        else None
+
+    let resourceContexts =
+        let n = max 1 RuntimeConfig.NumberOfResourceContexts
+        Array.init n (fun _ -> createContext parentContext)
 
     let memoryUsage = MemoryUsage()
 
     let bag = ConcurrentBag(resourceContexts)
-    let bagCount = new SemaphoreSlim(resourceContextCount)
+    let bagCount = new SemaphoreSlim(resourceContexts.Length)
 
     let shaderCache = new ShaderCache()
 
@@ -234,12 +249,16 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             value
         | Some v -> v
 
+    [<Obsolete("Use overload with createContext that accepts an optional parent context.")>]
+    new (runtime : IRuntime, createContext : unit -> ContextHandle) =
+        new Context(runtime, fun (_ : ContextHandle option) -> createContext())
+
     /// <summary>
     /// Creates custom OpenGl context. Usage:
     /// let customCtx = app.Context.CreateContext()
     /// use __ = app.Context.RenderingLock(customCtx)
     /// </summary>
-    member x.CreateContext() = createContext()
+    member x.CreateContext() = createContext parentContext
 
     member internal x.ShaderCache = shaderCache
 
@@ -358,7 +377,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             new RenderingLockDisposable(ValueSome handle, ValueNone)
 
     /// <summary>
-    /// makes one of the underlying context current on the calling thread
+    /// Makes one of the underlying context current on the calling thread
     /// and returns a disposable for releasing it again
     /// </summary>
     member x.ResourceLock : ResourceLockDisposable =
@@ -380,7 +399,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             let handle =
                 match bag.TryTake() with
                 | (true, handle) -> handle
-                | _ -> failwith "could not dequeue resource-context"
+                | _ -> failf "could not dequeue resource-context"
 
             // make the obtained handle current
             handle.MakeCurrent()
@@ -390,6 +409,14 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             // no release: put resource context back in bag and reset current to None
             new ResourceLockDisposable(ValueSome handle, bag, bagCount)
 
+    /// <summary>
+    /// Tries to make one of the underlying context current on the calling thread
+    /// and returns a disposable for releasing it again. If the context was already disposed,
+    /// the Success member of the returned disposable returns false.
+    /// </summary>
+    member x.TryResourceLock : ResourceLockDisposableOptional =
+        try new ResourceLockDisposableOptional(x.ResourceLock, true)
+        with :? ObjectDisposedException -> ResourceLockDisposableOptional.Invalid
 
     /// <summary>
     /// Returns the number of samples supported by the given target and format.
@@ -440,9 +467,10 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
         try
             shaderCache.Dispose()
 
-            for i in 0..resourceContextCount-1 do
-                let s = resourceContexts.[i]
-                ContextHandle.delete s
+            for c in resourceContexts do
+                ContextHandle.delete c
+
+            parentContext |> Option.iter ContextHandle.delete
         with _ ->
             ()
 

@@ -62,19 +62,20 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 
     let l = obj()
     let onDisposed = Event<unit>()
+    let mutable isDisposed = false
     let mutable debugOutput = None
     let mutable onMakeCurrent : ConcurrentHashSet<unit -> unit> = null
     let mutable driverInfo = None
 
     static member Current
-        with get() = 
+        with get() =
             let curr = current.Value
             match current.Value with
-                | ValueSome ctx when ctx.IsCurrent -> curr
-                | _ -> ValueNone
+            | ValueSome ctx when ctx.IsCurrent -> curr
+            | _ -> ValueNone
 
         and private set v = current.Value <- v
-        
+
     [<CLIEvent>]
     static member ContextError = contextError.Publish
 
@@ -91,10 +92,10 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
     member x.Lock = l
 
     member x.WindowInfo = window
-    
+
     member x.Handle = handle
 
-    member x.Driver = 
+    member x.Driver =
         match driverInfo with
         | None ->
             let v = Driver.readInfo()
@@ -102,32 +103,37 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
             v
         | Some v -> v
 
+    member x.IsDisposed = isDisposed
+
     member x.IsCurrent =
         handle.IsCurrent
 
     member x.MakeCurrent() =
         Monitor.Enter l
 
+        if isDisposed then
+            failf' (fun msg -> ObjectDisposedException(null, msg)) "cannot use disposed ContextHandle"
+
         match ContextHandle.Current with
-            | ValueSome handle -> handle.ReleaseCurrent()
-            | _ -> ()
-        
+        | ValueSome handle -> handle.ReleaseCurrent()
+        | _ -> ()
+
         let mutable retry = true
         while retry do
             try
-                handle.MakeCurrent(window) // wglMakeCurrent 
+                handle.MakeCurrent(window) // wglMakeCurrent
                 retry <- false
-            with 
-            | :? OpenTK.Graphics.GraphicsContextException as ex -> 
-                    Log.line "context error triggered"
-                    let args = ContextErrorEventArgs(ex.Message)
-                    contextError.Trigger(x, args)
-                    retry <- args.Retry
-                    if retry then
-                        Log.line "application requested retry"
-                        Thread.Sleep 100
-                    else
-                        reraise()
+            with
+            | :? OpenTK.Graphics.GraphicsContextException as ex ->
+                Log.line "context error triggered"
+                let args = ContextErrorEventArgs(ex.Message)
+                contextError.Trigger(x, args)
+                retry <- args.Retry
+                if retry then
+                    Log.line "application requested retry"
+                    Thread.Sleep 100
+                else
+                    reraise()
 
         ContextHandle.Current <- ValueSome x
 
@@ -148,23 +154,23 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 
     member x.Use (action : unit -> 'a) =
         match ContextHandle.Current with
-            | ValueSome h ->
-                if h = x then 
-                    action()
-                else
-                    try
-                        h.ReleaseCurrent()
-                        x.MakeCurrent()
-                        action()
-                    finally
-                        x.ReleaseCurrent()
-                        h.MakeCurrent()
-            | ValueNone ->
+        | ValueSome h ->
+            if h = x then 
+                action()
+            else
                 try
+                    h.ReleaseCurrent()
                     x.MakeCurrent()
                     action()
                 finally
                     x.ReleaseCurrent()
+                    h.MakeCurrent()
+        | ValueNone ->
+            try
+                x.MakeCurrent()
+                action()
+            finally
+                x.ReleaseCurrent()
 
     /// Sets default API states and initializes the debug output if required.
     member x.Initialize (debug : IDebugConfig, [<Optional; DefaultParameterValue(true)>] setDefaultStates : bool) =
@@ -201,8 +207,20 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         | _ -> [||]
 
     member x.Dispose() =
-        debugOutput |> Option.iter (fun dbg -> dbg.Dispose())
-        onDisposed.Trigger()
+        let mutable lockTaken = false
+
+        try
+            Monitor.TryEnter(l, TimeSpan.FromSeconds 1.0, &lockTaken)
+
+            if lockTaken then
+                if not isDisposed then
+                    isDisposed <- true
+                    debugOutput |> Option.iter (fun dbg -> dbg.Dispose())
+                    onDisposed.Trigger()
+            else
+                Log.warn "[GL] ContextHandle.Dispose() timed out"
+        finally
+            if lockTaken then Monitor.Exit l
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -279,15 +297,23 @@ module ContextHandleOpenTK =
                 ()
 
     /// <summary>
-    /// creates a new context using the default configuration
+    /// Creates a new context using the default configuration.
+    /// The given context is used as parent for sharing. If parent is None, OpenTK chooses a context to use as parent.
     /// </summary>
-    let create (debug : IDebugConfig) =
+    let createWithParent (debug : IDebugConfig) (parent : ContextHandle option) =
         let window, context =
             let prev = ContextHandle.Current
 
             let mode = Graphics.GraphicsMode(ColorFormat(Config.BitsPerPixel), Config.DepthBits, Config.StencilBits, 1, ColorFormat.Empty, Config.Buffers, false)
             let window = new NativeWindow(16, 16, "background", GameWindowFlags.Default, mode, DisplayDevice.Default)
-            let context = new GraphicsContext(GraphicsMode.Default, window.WindowInfo, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
+
+            let context =
+                match parent with
+                | Some p ->
+                    new GraphicsContext(GraphicsMode.Default, window.WindowInfo, p.Handle, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
+                | _ ->
+                    new GraphicsContext(GraphicsMode.Default, window.WindowInfo, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
+
             context.MakeCurrent(window.WindowInfo)
             let ctx = context |> unbox<IGraphicsContextInternal>
             ctx.LoadAll()
@@ -311,3 +337,9 @@ module ContextHandleOpenTK =
         handle.Initialize(debug, setDefaultStates = false)
 
         handle
+
+    /// <summary>
+    /// Creates a new context using the default configuration.
+    /// </summary>
+    let create (debug : IDebugConfig) =
+        createWithParent debug None

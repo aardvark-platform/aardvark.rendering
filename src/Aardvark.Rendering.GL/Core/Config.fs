@@ -59,6 +59,16 @@ module RuntimeConfig =
     let mutable NumberOfResourceContexts = 2
 
     /// <summary>
+    /// Determines if context creation and sharing is robust to work properly in some edge cases.
+    /// When a context is created a parent context has to be provided to enable sharing. If that parent
+    /// context happens to be currently in use by another thread, context creation or sharing may fail.
+    /// If this flag is false, a resource context is used as parent without checking if it is actually available.
+    /// If true, an additional hidden context will be used as parent.
+    /// Default is true.
+    /// </summary>
+    let mutable RobustContextSharing = true
+
+    /// <summary>
     /// Specifies the expected depth range of normalized device coordinates.
     /// Setting a depth range of [0, 1] requires GL_ARB_clip_control or OpenGL 4.5.
     /// </summary>

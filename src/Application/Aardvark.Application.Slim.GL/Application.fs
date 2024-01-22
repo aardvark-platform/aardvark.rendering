@@ -104,25 +104,23 @@ module private OpenGL =
     
     [<AllowNullLiteral>]
     type MyGraphicsContext(glfw : Glfw, win : nativeptr<WindowHandle>) as this =
-        //[<System.ThreadStaticAttribute; DefaultValue>]
-        //static val mutable private CurrentContext : OpenTK.ContextHandle
-
         let mutable win = win
 
         static let addContext = typeof<GraphicsContext>.GetMethod("AddContext", BindingFlags.NonPublic ||| BindingFlags.Static)
         static let remContext = typeof<GraphicsContext>.GetMethod("RemoveContext", BindingFlags.NonPublic ||| BindingFlags.Static)
+        static let getCurrContext = typeof<GraphicsContext>.GetField("GetCurrentContext", BindingFlags.NonPublic ||| BindingFlags.Static)
 
         let handle = ContextHandle(NativePtr.toNativeInt win)
-        static let mutable inited = false
-        do 
-            if not inited then
-                inited <- true
-                let get = GraphicsContext.GetCurrentContextDelegate(fun () -> ContextHandle(NativePtr.toNativeInt (glfw.GetCurrentContext())))
-                let t = typeof<GraphicsContext>
-                let f = t.GetField("GetCurrentContext", BindingFlags.NonPublic ||| BindingFlags.Static)
-                f.SetValue(null, get)
 
-        do addContext.Invoke(null, [| this :> obj |]) |> ignore
+        static let mutable count = 0
+
+        do
+            if count = 0 then
+                let get = GraphicsContext.GetCurrentContextDelegate(fun () -> ContextHandle(NativePtr.toNativeInt (glfw.GetCurrentContext())))
+                getCurrContext.SetValue(null, get)
+
+            inc &count
+            addContext.Invoke(null, [| this :> obj |]) |> ignore
 
         member x.LoadAll(): unit = 
             let t = typeof<OpenTK.Graphics.OpenGL4.GL>
@@ -134,12 +132,18 @@ module private OpenGL =
             let m = t.GetMethod("LoadEntryPoints", BindingFlags.NonPublic ||| BindingFlags.Instance)
             let gl = OpenTK.Graphics.OpenGL.GL()
             m.Invoke(gl, null) |> ignore
-        
+
+        member x.Dispose() =
+            dec &count
+            if count = 0 then
+                getCurrContext.SetValue(null, null)
+
+            remContext.Invoke(null, [| x :> obj |]) |> ignore
+            win <- NativePtr.zero
+
         interface IGraphicsContext with
-            member x.Dispose(): unit = 
-                remContext.Invoke(null, [| x :> obj |]) |> ignore
-                win <- NativePtr.zero
-                ()
+            member x.Dispose() =
+                x.Dispose()
 
             member x.ErrorChecking
                 with get () = false
@@ -222,8 +226,6 @@ module private OpenGL =
                 size
         }
 
-    let mutable private lastWindow = None
-
     let getFramebufferSamples() =
         if GL.getVersion() >= System.Version(4, 5) then
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
@@ -246,7 +248,6 @@ module private OpenGL =
         let old = glfw.GetCurrentContext()
         
         glfw.MakeContextCurrent(NativePtr.zero)
-        if Option.isNone lastWindow then lastWindow <- Some win
 
         let ctx =
             new MyGraphicsContext(glfw, win)
@@ -272,15 +273,18 @@ module private OpenGL =
 
         if old <> NativePtr.zero then
             glfw.MakeContextCurrent old
-        
-        let signature =
-            runtime.CreateFramebufferSignature([
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
-            ], samples)
 
         let handle = new Aardvark.Rendering.GL.ContextHandle(ctx, info)
-        do handle.Initialize(runtime.DebugConfig, setDefaultStates = true)
+
+        let signature =
+            handle.Use (fun _ ->
+                handle.Initialize(runtime.DebugConfig, setDefaultStates = true)
+
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+                ], samples)
+            )
 
         { new IWindowSurface with
             override x.Signature = signature
@@ -288,8 +292,9 @@ module private OpenGL =
                 handle :> obj
             override this.CreateSwapchain(size: V2i) = 
                 createSwapchain runtime signature handle glfw win size
-            override this.Dispose() = 
-                ()
+            override this.Dispose() =
+                signature.Dispose()
+                ctx.Dispose()
         }
 
     let interop (debug : DebugConfig) =
@@ -334,13 +339,18 @@ module private OpenGL =
 type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) as this =
     inherit Application(runtime, OpenGL.interop runtime.DebugConfig, hideCocoaMenuBar)
 
-    let createContext() =
-        let w = this.Instance.CreateWindow WindowConfig.Default
-        let h = w.Surface.Handle :?> Aardvark.Rendering.GL.ContextHandle
-        this.Instance.RemoveExistingWindow w
-        h
+    // Note: We ignore the passed parent since we determine the parent context in the CreateWindow method.
+    // This is always the first created context and should therefore match the passed one anyway.
+    let createContext (_parent : Aardvark.Rendering.GL.ContextHandle option) =
+        this.Instance.Invoke (fun _ ->
+            let w = this.Instance.CreateWindow WindowConfig.Default
+            let h = w.Surface.Handle :?> Aardvark.Rendering.GL.ContextHandle
+            this.Instance.RemoveExistingWindow w
+            h.OnDisposed.Add w.Dispose
+            h
+        )
 
-    let ctx = new Context(runtime, fun () -> this.Instance.Invoke createContext)
+    let ctx = new Context(runtime, createContext)
 
     do ctx.ShaderCachePath <- shaderCachePath
        runtime.Initialize(ctx)

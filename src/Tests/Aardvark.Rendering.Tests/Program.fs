@@ -57,6 +57,7 @@ let main argv =
             ``SceneGraph Tests``.tests
             ``CompactSet Tests``.tests
             ``AdaptiveResource Tests``.tests
+            ``ContextCreation Tests``.tests
             ``Camera Tests``.tests
         ]
 
