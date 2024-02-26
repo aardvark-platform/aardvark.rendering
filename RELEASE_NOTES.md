@@ -1,3 +1,6 @@
+### 5.4.9-prerelease0001
+- [GL] experimental support for quad-buffer stereo(is back again?)
+
 ### 5.4.8
 - [GL] Fixed locking order of GlobalResourceLock and context locks to avoid potential deadlocks
 - [GL] Added workaround for layered rendering and GLSL < 430
