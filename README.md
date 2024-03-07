@@ -3,7 +3,7 @@
 ![Linux](https://github.com/aardvark-platform/aardvark.rendering/workflows/Linux/badge.svg)
 
 [![Discord](https://badgen.net/discord/online-members/UyecnhM)](https://discord.gg/UyecnhM)
-[![license](https://img.shields.io/github/license/aardvark-platform/aardvark.rendering.svg)](https://github.com/aardvark-platform/aardvark.rendering/blob/master/LICENSE)
+[![license](https://img.shields.io/github/license/aardvark-platform/aardvark.base.svg)](https://github.com/aardvark-platform/aardvark.rendering/blob/master/LICENSE)
 
 [The Aardvark Platform](https://aardvarkians.com/) |
 [Gallery](https://github.com/aardvark-platform/aardvark.docs/wiki/Gallery) | 
