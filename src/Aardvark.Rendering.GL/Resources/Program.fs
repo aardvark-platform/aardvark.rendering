@@ -640,14 +640,28 @@ module ProgramExtensions =
             use ms = new MemoryStream(data)
             deserialize ms
 
+    module private GLSLShader =
+        open System.IO
+
+        let pickle (shader : GLSLShader) =
+            use ms = new MemoryStream()
+            GLSLShader.serialize ms shader
+            ms.ToArray()
+
+        let unpickle (data : byte[]) =
+            use ms = new MemoryStream(data)
+            GLSLShader.deserialize ms
 
     [<AutoOpen>]
     module private Binary =
 
+        type Context with
+            member inline x.SupportsBinaryCache = GL.ARB_get_program_binary && x.NumProgramBinaryFormats > 0
+
         module Program =
 
             let tryGetBinary (program : Program) =
-                if GL.ARB_get_program_binary && program.Context.NumProgramBinaryFormats > 0 then
+                if program.Context.SupportsBinaryCache then
                     let length = GL.Dispatch.GetProgramBinaryLength program.Handle
                     GL.Check "failed to get program binary length"
 
@@ -707,12 +721,15 @@ module ProgramExtensions =
     module private FileCache =
         open System.IO
 
+        type Program with
+            member inline x.GLSLShader : GLSLShader = { code = x.Code; iface = x.Interface }
+
         module private Pickling =
 
             let tryGetByteArray (program : Program) =
                 program |> Program.tryGetBinary |> Option.map (fun (format, binary) ->
                     ShaderCacheEntry.pickle {
-                        shader  = { code = program.Code; iface = program.Interface }
+                        shader  = program.GLSLShader
                         hasTess = program.HasTessellation
                         format  = format
                         binary  = binary
@@ -724,7 +741,7 @@ module ProgramExtensions =
                 let entry = ShaderCacheEntry.unpickle data
                 Program.ofShaderCacheEntry context fixBindings entry
 
-        let private tryGetCacheFile (context : Context) (key : CodeCacheKey) =
+        let private tryGetCacheFile (extension : string) (context : Context) (key : CodeCacheKey) =
             context.ShaderCachePath |> Option.map (fun prefix ->
                 // NOTE: context.Diver represents information obtained by primary context
                 // -> possible that resource context have been created differently
@@ -746,34 +763,55 @@ module ProgramExtensions =
                     }
 
                 let hash = pickler.ComputeHash(key).Hash |> System.Guid
-                Path.combine [prefix; string hash + ".bin"]
+                Path.combine [prefix; string hash + "." + extension]
             )
 
         let write (key : CodeCacheKey) (program : Program) =
-            tryGetCacheFile program.Context key
+            let extension, getData =
+                if program.Context.SupportsBinaryCache then
+                    "bin", fun () -> Pickling.tryGetByteArray program
+                else
+                    "glsl", fun () -> Some <| GLSLShader.pickle program.GLSLShader
+
+            tryGetCacheFile extension program.Context key
             |> Option.iter (fun file ->
                 try
-                    let binary = Pickling.tryGetByteArray program
+                    let binary = getData()
                     binary |> Option.iter (File.writeAllBytesSafe file)
                 with
                 | exn ->
                     Log.warn "[GL] Failed to write to shader program file cache '%s': %s" file exn.Message
             )
 
-        let tryRead (context : Context) (fixBindings : bool) (key : CodeCacheKey) =
-            tryGetCacheFile context key
-            |> Option.bind (fun file ->
-                if File.Exists file then
-                    try
-                        let data = File.readAllBytes file
-                        Some <| Pickling.ofByteArray context fixBindings data
-                    with
-                    | exn ->
-                        Log.warn "[GL] Failed to read from shader program file cache '%s': %s" file exn.Message
-                        None
-                else
+        let private tryRead (unpickle : byte[] -> 'T) (file : string) : 'T option =
+            if File.Exists file then
+                Report.BeginTimed(4, $"[GL] Reading shader program file cache '%s{file}")
+
+                try
+                    let result = unpickle <| File.readAllBytes file
+                    Report.EndTimed(4, ": success") |> ignore
+                    Some result
+                with
+                | exn ->
+                    Report.EndTimed(4, ": failed") |> ignore
+                    Log.warn "[GL] Failed to read from shader program file cache '%s': %s" file exn.Message
                     None
-            )
+            else
+                None
+
+        let tryReadBinary (context : Context) (fixBindings : bool) (key : CodeCacheKey) =
+            if context.SupportsBinaryCache then
+                tryGetCacheFile "bin" context key
+                |> Option.bind (tryRead (Pickling.ofByteArray context fixBindings))
+            else
+                None
+
+        // GLSL only cache as fallback for platforms that do not support program binaries (e.g. MacOS)
+        let tryReadGLSL (context : Context) (key : CodeCacheKey) =
+            if context.SupportsBinaryCache then None
+            else
+                tryGetCacheFile "glsl" context key
+                |> Option.bind (tryRead GLSLShader.unpickle)
 
     [<AutoOpen>]
     module internal ShaderCacheExtensions =
@@ -827,12 +865,16 @@ module ProgramExtensions =
                 { id = id; layout = layout }
 
             x.ShaderCache.GetOrAdd(key, fun key ->
-                match key |> FileCache.tryRead x false with
+                match key |> FileCache.tryReadBinary x false with
                 | Some program ->
                     Success program
 
                 | _ ->
-                    let (code, iface) = codeAndInterface.Value
+                    let (code, iface) =
+                        match FileCache.tryReadGLSL x key with
+                        | Some shader -> shader.code, shader.iface
+                        | _ -> codeAndInterface.Value
+
                     match code |> ProgramCompiler.tryCompileCompute x iface with
                     | Success program ->
                         program |> FileCache.write key
@@ -850,12 +892,15 @@ module ProgramExtensions =
                 { id = id; layout = layout }
 
             x.ShaderCache.GetOrAdd(key, fun key ->
-                match key |> FileCache.tryRead x true with
+                match key |> FileCache.tryReadBinary x true with
                 | Some program ->
                     Success program
 
                 | _ ->
-                    let shader = shader.Value
+                    let shader =
+                        FileCache.tryReadGLSL x key
+                        |> Option.defaultWith (fun _ -> shader.Value)
+
                     let outputs = shader.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
 
                     match shader |> ProgramCompiler.tryCompile x outputs with
