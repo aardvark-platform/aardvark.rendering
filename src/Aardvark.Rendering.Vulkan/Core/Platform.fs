@@ -38,6 +38,8 @@ module Instance =
         let ShaderSubgroupVote              = EXTShaderSubgroupVote.Name
         let ShaderSubgroupBallot            = EXTShaderSubgroupBallot.Name
 
+        let ConservativeRasterization       = EXTConservativeRasterization.Name
+
         let Debug = [
             EXTDebugReport.Name
             EXTDebugUtils.Name

@@ -966,7 +966,8 @@ module Resources =
         inherit AbstractPointerResourceWithEquality<VkPipelineRasterizationStateCreateInfo>(owner, key)
 
         override x.Free(info : VkPipelineRasterizationStateCreateInfo) =
-            Marshal.FreeHGlobal info.pNext
+            if info.pNext <> 0n then
+                Marshal.FreeHGlobal info.pNext
 
         override x.Compute(user, token, renderToken) =
             let depthClamp = depthClamp.GetValue(user, token, renderToken)
@@ -977,18 +978,23 @@ module Resources =
             let conservativeRaster = conservativeRaster.GetValue(user, token, renderToken)
             let state = RasterizerState.create conservativeRaster depthClamp bias cull front fill
 
-            let conservativeRaster =
-                VkPipelineRasterizationConservativeStateCreateInfoEXT(
-                    VkPipelineRasterizationConservativeStateCreateFlagsEXT.None,
-                    (if conservativeRaster then VkConservativeRasterizationModeEXT.Overestimate else VkConservativeRasterizationModeEXT.Disabled),
-                    0.0f
-                )
+            let pConservativeRaster =
+                if conservativeRaster then
+                    let info =
+                        VkPipelineRasterizationConservativeStateCreateInfoEXT(
+                            VkPipelineRasterizationConservativeStateCreateFlagsEXT.None,
+                            VkConservativeRasterizationModeEXT.Overestimate,
+                            0.0f
+                        )
 
-            let pConservativeRaster = NativePtr.alloc<VkPipelineRasterizationConservativeStateCreateInfoEXT> 1
-            conservativeRaster |> NativePtr.write pConservativeRaster
+                    let ptr = NativePtr.alloc<VkPipelineRasterizationConservativeStateCreateInfoEXT> 1
+                    info |> NativePtr.write ptr
+                    NativePtr.toNativeInt ptr
+                else
+                    0n
 
             VkPipelineRasterizationStateCreateInfo(
-                NativePtr.toNativeInt pConservativeRaster,
+                pConservativeRaster,
                 VkPipelineRasterizationStateCreateFlags.None,
                 (if state.depthClampEnable then 1u else 0u),
                 (if state.rasterizerDiscardEnable then 1u else 0u),

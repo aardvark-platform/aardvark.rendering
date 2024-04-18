@@ -772,7 +772,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     member x.GetVertexAttribute(semantic : Symbol) =
         match x.TryGetVertexAttribute semantic with
         | Some attr -> attr
-        | None _ -> failf "could not find vertex attribute '%A'" semantic
+        | None -> failf "could not find vertex attribute '%A'" semantic
 
     member x.TryGetFaceAttribute(semantic : Symbol) =
         faceAttributeBuffers |> Map.tryFind semantic
@@ -781,7 +781,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     member x.GetFaceAttribute(semantic : Symbol) =
         match x.TryGetFaceAttribute semantic with
         | Some attr -> attr
-        | None _ -> failf "could not find face attribute '%A'" semantic
+        | None -> failf "could not find face attribute '%A'" semantic
 
     member x.TryGetGeometryAttribute(semantic : Symbol) =
         geometryAttributeBuffers |> Map.tryFind semantic
@@ -790,7 +790,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     member x.GetGeometryAttribute(semantic : Symbol) =
         match x.TryGetGeometryAttribute semantic with
         | Some attr -> attr
-        | None _ -> failf "could not find geometry attribute '%A'" semantic
+        | None -> failf "could not find geometry attribute '%A'" semantic
 
     member x.TryGetInstanceAttribute(semantic : Symbol) =
         instanceAttributeBuffers |> Map.tryFind semantic
@@ -799,7 +799,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     member x.GetInstanceAttribute(semantic : Symbol) =
         match x.TryGetInstanceAttribute semantic with
         | Some attr -> attr
-        | None _ -> failf "could not find instance attribute '%A'" semantic
+        | None -> failf "could not find instance attribute '%A'" semantic
 
     member x.Dispose() =
         lock x (fun _ ->
