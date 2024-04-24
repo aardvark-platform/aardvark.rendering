@@ -149,8 +149,9 @@ module TestApplication =
     let create (backend : TestBackend) =
         let config : IDebugConfig =
             if backend = TestBackend.Vulkan then
+                // Disable GPU-AV (producing sporadic false positives with Vulkan SDK 1.3.280)
                 { Vulkan.DebugConfig.Normal with
-                    ValidationLayer = Some Vulkan.ValidationLayerConfig.Full }
+                    ValidationLayer = Some { Vulkan.ValidationLayerConfig.Full with ShaderBasedValidation = Vulkan.ShaderValidation.Disabled } }
             else
                 { GL.DebugConfig.Normal with
                     DebugRenderTasks = true
