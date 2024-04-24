@@ -102,6 +102,7 @@ type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice>
             yield Instance.Extensions.ShaderSubgroupVote
             yield Instance.Extensions.ShaderSubgroupBallot
             yield Instance.Extensions.GetPhysicalDeviceProperties2
+            yield Instance.Extensions.ConservativeRasterization
 
             yield! Instance.Extensions.Raytracing
             yield! Instance.Extensions.Sharing

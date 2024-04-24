@@ -14,6 +14,7 @@ type HeadlessVulkanApplication(debug : IDebugConfig, instanceExtensions : list<s
             yield Instance.Extensions.ShaderSubgroupVote
             yield Instance.Extensions.ShaderSubgroupBallot
             yield Instance.Extensions.GetPhysicalDeviceProperties2
+            yield Instance.Extensions.ConservativeRasterization
 
             yield! Instance.Extensions.Raytracing
             yield! Instance.Extensions.Sharing
