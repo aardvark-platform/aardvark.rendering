@@ -12,7 +12,6 @@ open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Base
 open Microsoft.FSharp.NativeInterop
-open EXTDebugReport
 open EXTDebugUtils
 
 type MessageSeverity =
@@ -79,16 +78,6 @@ module private DebugReportHelpers =
                 MessageSeverity.Debug, VkDebugUtilsMessageSeverityFlagsEXT.VerboseBit
             ]
 
-
-    [<AutoOpen>]
-    module EnumExtensions =
-        type VkDebugReportFlagsEXT with
-            static member All =
-                VkDebugReportFlagsEXT.DebugBit |||
-                VkDebugReportFlagsEXT.ErrorBit |||
-                VkDebugReportFlagsEXT.InformationBit |||
-                VkDebugReportFlagsEXT.PerformanceWarningBit |||
-                VkDebugReportFlagsEXT.WarningBit
 
     type VkDebugUtilsMessengerCallbackEXTDelegate =
         delegate of VkDebugUtilsMessageSeverityFlagsEXT * VkDebugUtilsMessageTypeFlagsEXT * nativeptr<VkDebugUtilsMessengerCallbackDataEXT> * nativeint -> int

@@ -40,10 +40,7 @@ module Instance =
 
         let ConservativeRasterization       = EXTConservativeRasterization.Name
 
-        let Debug = [
-            EXTDebugReport.Name
-            EXTDebugUtils.Name
-        ]
+        let Debug                           = EXTDebugUtils.Name
 
         let Raytracing = [
                 KHRRayTracingPipeline.Name
@@ -156,9 +153,9 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
     let extensions =
         if debug.DebugReportEnabled || debug.ValidationLayerEnabled then
-            extensions @ Instance.Extensions.Debug
+            extensions @ [Instance.Extensions.Debug]
         else
-            extensions |> List.filter (fun e -> Instance.Extensions.Debug |> List.contains e |> not)
+            extensions |> List.filter ((<>) Instance.Extensions.Debug)
         |> List.distinct
 
     let layers =
@@ -170,9 +167,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
     let layers, instanceExtensions = filterLayersAndExtensions layers extensions
 
     let debugReportEnabled =
-        Instance.Extensions.Debug |> List.forall (fun e ->
-            instanceExtensions |> List.contains e
-        )
+        instanceExtensions |> List.contains Instance.Extensions.Debug
 
     let validationEnabled =
         layers |> List.contains Instance.Layers.Validation
