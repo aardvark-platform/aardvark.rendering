@@ -46,28 +46,42 @@ module internal FramebufferSignatureContextExtensions =
                                             perLayerUniforms : Set<string>) =
             use __ = x.ResourceLock
 
-            let maxSamples =
-                let counts = [
-                    if not colorAttachments.IsEmpty then
-                        GL.GetInteger(GetPName.MaxColorTextureSamples)
-
-                    if colorAttachments |> Map.exists (fun _ att -> att.Format.IsIntegerFormat) then
-                        GL.GetInteger(GetPName.MaxIntegerSamples)
-
-                    if depthStencilAttachment.IsSome then
-                        GL.GetInteger(GetPName.MaxDepthTextureSamples)
-                ]
-
-                if counts.IsEmpty then GL.GetInteger(GetPName.MaxFramebufferSamples)
-                else List.min counts
-
-            GL.Check "could not query maximum samples for framebuffer signature"
-
             let samples =
-                if samples > maxSamples then
-                    Log.warn "[GL] cannot create framebuffer signature with %d samples (using %d instead)" samples maxSamples
-                    maxSamples
+                if samples = 1 then samples
                 else
-                    samples
+                    let framebufferMaxSamples = max 1 x.MaxFramebufferSamples
+
+                    let get fmt =
+                        let rb = x.GetFormatSamples(ImageTarget.Renderbuffer, fmt)
+                        let tex = x.GetFormatSamples(ImageTarget.Texture2DMultisample, fmt)
+                        Set.union rb tex
+
+                    let counts =
+                        let all =
+                            Set.ofList [1; 2; 4; 8; 16; 32; 64]
+
+                        let color =
+                            colorAttachments
+                            |> Seq.map (_.Value.Format >> get)
+                            |> List.ofSeq
+
+                        let depthStencil =
+                            depthStencilAttachment
+                            |> Option.map get
+                            |> Option.toList
+
+                        all :: (color @ depthStencil)
+                        |> Set.intersectMany
+                        |> Set.filter ((>=) framebufferMaxSamples)
+
+                    if counts.Contains samples then samples
+                    else
+                        let fallback =
+                            counts
+                            |> Set.toList
+                            |> List.minBy ((-) samples >> abs)
+
+                        Log.warn "[GL] Cannot create framebuffer signature with %d samples (using %d instead)" samples fallback
+                        fallback
 
             new FramebufferSignature(x.Runtime, colorAttachments, depthStencilAttachment, samples, layers, perLayerUniforms)

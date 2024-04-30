@@ -232,6 +232,16 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     let mutable numProgramBinaryFormats : Option<int> = None
 
+    let mutable maxSamples : Option<int> = None
+
+    let mutable maxColorTextureSamples : Option<int> = None
+
+    let mutable maxIntegerSamples : Option<int> = None
+
+    let mutable maxDepthTextureSamples : Option<int> = None
+
+    let mutable maxFramebufferSamples : Option<int> = None
+
     let mutable shaderCachePath : Option<string> = Some defaultShaderCachePath
 
     let formatSampleCounts = FastConcurrentDict()
@@ -240,11 +250,12 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     let sharedMemoryManager = SharedMemoryManager(fun _ -> this.ResourceLock)
 
-    let getOrQuery (var : byref<'T option>) (query : unit -> 'T) =
+    let getOrQuery (description : string) (var : byref<'T option>) (query : unit -> 'T) =
         match var with
         | None ->
             use __ = this.ResourceLock
             let value = query()
+            GL.Check $"Failed to query {description}"
             var <- Some value
             value
         | Some v -> v
@@ -278,48 +289,48 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
     member x.Runtime = runtime
 
     member x.Driver =
-        getOrQuery &driverInfo Driver.readInfo
+        getOrQuery "driver info" &driverInfo Driver.readInfo
 
     member x.PackAlignment =
-        getOrQuery &packAlignment (fun _ ->
+        getOrQuery "pack alignment" &packAlignment (fun _ ->
             GL.GetInteger(GetPName.PackAlignment)
         )
 
     member x.UnpackAlignment =
-        getOrQuery &unpackAlignment (fun _ ->
+        getOrQuery "unpack alignment" &unpackAlignment (fun _ ->
             GL.GetInteger(GetPName.UnpackAlignment)
         )
 
     member x.MaxTextureSize =
-        getOrQuery &maxTextureSize (fun _ ->
+        getOrQuery "max texture size" &maxTextureSize (fun _ ->
             let s = GL.GetInteger(GetPName.MaxTextureSize)
             V2i s
         )
 
     member x.MaxTextureSize3D =
-        getOrQuery &maxTextureSize3d (fun _ ->
+        getOrQuery "max 3D texture size" &maxTextureSize3d (fun _ ->
             let s = GL.GetInteger(GetPName.Max3DTextureSize)
             V3i s
         )
 
     member x.MaxTextureSizeCube =
-        getOrQuery &maxTextureSizeCube (fun _ ->
+        getOrQuery "max cube texture size" &maxTextureSizeCube (fun _ ->
             GL.GetInteger(GetPName.MaxCubeMapTextureSize)
         )
 
     member x.MaxTextureArrayLayers =
-        getOrQuery &maxTextureArrayLayers (fun _ ->
+        getOrQuery "max texture array layers" &maxTextureArrayLayers (fun _ ->
             GL.GetInteger(GetPName.MaxArrayTextureLayers)
         )
 
     member x.MaxRenderbufferSize =
-        getOrQuery &maxRenderbufferSize (fun _ ->
+        getOrQuery "max renderbuffer size" &maxRenderbufferSize (fun _ ->
             let s = GL.GetInteger(GetPName.MaxRenderbufferSize)
             V2i s
         )
 
     member x.MaxComputeWorkGroupSize =
-        getOrQuery &maxComputeWorkGroupSize (fun _ ->
+        getOrQuery "max compute work group size" &maxComputeWorkGroupSize (fun _ ->
             let mutable res = V3i.Zero
             GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 0, &res.X)
             GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 1, &res.Y)
@@ -328,13 +339,38 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
         )
 
     member x.MaxComputeWorkGroupInvocations =
-        getOrQuery &maxComputeWorkGroupInvocations (fun _ ->
+        getOrQuery "max compute work group invocations" &maxComputeWorkGroupInvocations (fun _ ->
             GL.GetInteger(GetPName.MaxComputeWorkGroupInvocations)
         )
 
     member x.NumProgramBinaryFormats =
-        getOrQuery &numProgramBinaryFormats (fun _ ->
+        getOrQuery "number of program binary formats" &numProgramBinaryFormats (fun _ ->
             GL.GetInteger(GetPName.NumProgramBinaryFormats)
+        )
+
+    member x.MaxSamples =
+        getOrQuery "max samples" &maxSamples (fun _ ->
+            GL.GetInteger(GetPName.MaxSamples)
+        )
+
+    member x.MaxColorTextureSamples =
+        getOrQuery "max color texture samples" &maxColorTextureSamples (fun _ ->
+            GL.GetInteger(GetPName.MaxColorTextureSamples)
+        )
+
+    member x.MaxIntegerSamples =
+        getOrQuery "max integer samples" &maxIntegerSamples (fun _ ->
+            GL.GetInteger(GetPName.MaxIntegerSamples)
+        )
+
+    member x.MaxDepthTextureSamples =
+        getOrQuery "max depth texture samples" &maxDepthTextureSamples (fun _ ->
+            GL.GetInteger(GetPName.MaxDepthTextureSamples)
+        )
+
+    member x.MaxFramebufferSamples =
+        getOrQuery "max framebuffer samples" &maxFramebufferSamples (fun _ ->
+            GL.GetInteger(unbox<GetPName> 0x9318)
         )
 
     member internal x.ImportMemoryBlock(external : ExternalMemoryBlock) =
@@ -423,6 +459,29 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
     /// </summary>
     member internal x.GetFormatSamples(target : ImageTarget, format : TextureFormat) =
         formatSampleCounts.GetOrCreate((target, format), fun _ ->
+            let estimate() =
+                let maxSamples =
+                    [
+                        x.MaxSamples
+
+                        if format.IsColorRenderable then
+                            x.MaxColorTextureSamples
+
+                        if format.IsIntegerFormat then
+                            x.MaxIntegerSamples
+
+                        if format.HasDepth || format.HasStencil then
+                            x.MaxDepthTextureSamples
+                    ]
+                    |> List.min
+                    |> max 1
+
+                Report.Line(3, $"[GL] Internal format queries not supported, assuming up to {maxSamples} are supported (target = {target}, format = {format})")
+
+                [1; 2; 4; 8; 16; 32; 64]
+                |> List.filter ((>=) maxSamples)
+                |> Set.ofList
+
             if GL.ARB_internalformat_query then
                 let format = TextureFormat.toSizedInternalFormat format
 
@@ -433,12 +492,13 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
                     let buffer = GL.Dispatch.GetInternalformat(target, format, InternalFormatParameter.Samples, count)
                     GL.Check "could not query sample counts"
 
-                    Set.ofArray buffer
+                    buffer
+                    |> Set.ofArray
+                    |> Set.add 1
                 else
-                    Set.empty
+                    estimate()
             else
-                Log.warn "[GL] Internal format queries not supported, assuming all sample counts are supported (target = %A, format = %A)" target format
-                Set.ofList [1; 2; 4; 8; 16; 32; 64]
+                estimate()
         )
 
     /// <summary>

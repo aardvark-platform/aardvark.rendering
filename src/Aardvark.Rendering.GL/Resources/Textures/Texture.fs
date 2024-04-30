@@ -195,10 +195,9 @@ module internal TextureUtilitiesAndExtensions =
                     let fallback =
                         counts
                         |> Set.toList
-                        |> List.sortBy ((-) samples >> abs)
-                        |> List.head
+                        |> List.minBy ((-) samples >> abs)
 
-                    Log.warn "[GL] cannot create %A image with %d samples (using %d instead)" format samples fallback
+                    Log.warn "[GL] Cannot create %A image with %d samples (using %d instead)" format samples fallback
                     fallback
             else
                 1
