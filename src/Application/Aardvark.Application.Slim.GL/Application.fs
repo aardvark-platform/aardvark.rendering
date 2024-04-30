@@ -108,19 +108,10 @@ module private OpenGL =
 
         static let addContext = typeof<GraphicsContext>.GetMethod("AddContext", BindingFlags.NonPublic ||| BindingFlags.Static)
         static let remContext = typeof<GraphicsContext>.GetMethod("RemoveContext", BindingFlags.NonPublic ||| BindingFlags.Static)
-        static let getCurrContext = typeof<GraphicsContext>.GetField("GetCurrentContext", BindingFlags.NonPublic ||| BindingFlags.Static)
 
         let handle = ContextHandle(NativePtr.toNativeInt win)
 
-        static let mutable count = 0
-
-        do
-            if count = 0 then
-                let get = GraphicsContext.GetCurrentContextDelegate(fun () -> ContextHandle(NativePtr.toNativeInt (glfw.GetCurrentContext())))
-                getCurrContext.SetValue(null, get)
-
-            inc &count
-            addContext.Invoke(null, [| this :> obj |]) |> ignore
+        do addContext.Invoke(null, [| this :> obj |]) |> ignore
 
         member x.LoadAll(): unit = 
             let t = typeof<OpenTK.Graphics.OpenGL4.GL>
@@ -134,10 +125,6 @@ module private OpenGL =
             m.Invoke(gl, null) |> ignore
 
         member x.Dispose() =
-            dec &count
-            if count = 0 then
-                getCurrContext.SetValue(null, null)
-
             remContext.Invoke(null, [| x :> obj |]) |> ignore
             win <- NativePtr.zero
 
@@ -297,13 +284,34 @@ module private OpenGL =
                 ctx.Dispose()
         }
 
-    let interop (debug : DebugConfig) =
+    let getInterop (debug : DebugConfig) =
         let disableErrorChecks =
             debug.ErrorFlagCheck = ErrorFlagCheck.Disabled
+
+        let getCurrentContext = typeof<GraphicsContext>.GetField("GetCurrentContext", BindingFlags.NonPublic ||| BindingFlags.Static)
+        let mutable getCurrentContextDelegate = null
+
+        let install (glfw: Glfw) =
+            getCurrentContextDelegate <-
+                GraphicsContext.GetCurrentContextDelegate(
+                    fun () -> ContextHandle(NativePtr.toNativeInt <| glfw.GetCurrentContext())
+                )
+
+            if getCurrentContext.GetValue(null) <> null then
+                Log.warn "[GLFW] Overriding OpenTK GetCurrentContext"
+
+            getCurrentContext.SetValue(null, getCurrentContextDelegate)
+
+        let cleanup() =
+            if not <| isNull getCurrentContextDelegate then
+                if getCurrentContext.GetValue(null) = getCurrentContextDelegate then
+                    getCurrentContext.SetValue(null, null)
+                    getCurrentContextDelegate <- null
 
         { new IWindowInterop with
             override __.Boot(glfw) =
                 initVersion glfw
+                install glfw
 
             override __.CreateSurface(runtime : IRuntime, cfg: WindowConfig, glfw: Glfw, win: nativeptr<WindowHandle>) = 
                 createSurface (runtime :?> _) cfg glfw win
@@ -334,10 +342,13 @@ module private OpenGL =
 
                 glfw.WindowHint(WindowHintBool.ScaleToMonitor, true)
                 glfw.WindowHint(WindowHintInt.Samples, if cfg.samples = 1 then 0 else cfg.samples)
+
+          interface IDisposable with
+            member x.Dispose() = cleanup()
         }
 
 type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) as this =
-    inherit Application(runtime, OpenGL.interop runtime.DebugConfig, hideCocoaMenuBar)
+    inherit Application(runtime, OpenGL.getInterop runtime.DebugConfig, hideCocoaMenuBar)
 
     // Note: We ignore the passed parent since we determine the parent context in the CreateWindow method.
     // This is always the first created context and should therefore match the passed one anyway.

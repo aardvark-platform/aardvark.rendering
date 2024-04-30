@@ -62,7 +62,7 @@ module internal FramebufferSignatureContextExtensions =
 
                         let color =
                             colorAttachments
-                            |> Seq.map (_.Value.Format >> get)
+                            |> Seq.map (fun (KeyValue(_, att)) -> get att.Format)
                             |> List.ofSeq
 
                         let depthStencil =
