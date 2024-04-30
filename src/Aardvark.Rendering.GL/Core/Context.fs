@@ -531,8 +531,8 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
                 ContextHandle.delete c
 
             parentContext |> Option.iter ContextHandle.delete
-        with _ ->
-            ()
+        with exn ->
+            Log.error "[GL] Failed to dispose context: %A" exn
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
