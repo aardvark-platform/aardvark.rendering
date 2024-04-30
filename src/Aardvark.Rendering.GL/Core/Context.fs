@@ -210,6 +210,8 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     let shaderCache = new ShaderCache()
 
+    let mutable isDisposed = 0
+
     let mutable driverInfo : Option<Driver> = None
 
     let mutable packAlignment : Option<int> = None
@@ -287,6 +289,8 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
         with get() = ContextHandle.Current
 
     member x.Runtime = runtime
+
+    member x.IsDisposed = isDisposed = 1
 
     member x.Driver =
         getOrQuery "driver info" &driverInfo Driver.readInfo
@@ -524,15 +528,16 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
     /// releases all resources created by the context
     /// </summary>
     member x.Dispose() =
-        try
-            shaderCache.Dispose()
+        if Interlocked.Exchange(&isDisposed, 1) = 0 then
+            try
+                shaderCache.Dispose()
 
-            for c in resourceContexts do
-                ContextHandle.delete c
+                for c in resourceContexts do
+                    ContextHandle.delete c
 
-            parentContext |> Option.iter ContextHandle.delete
-        with exn ->
-            Log.error "[GL] Failed to dispose context: %A" exn
+                parentContext |> Option.iter ContextHandle.delete
+            with exn ->
+                Log.error "[GL] Failed to dispose context: %A" exn
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

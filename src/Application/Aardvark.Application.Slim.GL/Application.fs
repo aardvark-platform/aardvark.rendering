@@ -391,9 +391,7 @@ type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<stri
         failwithf "unknown control type: %A" ctrl
 
     override x.Destroy() =
-        // first dispose runtime in order to properly dispose resources..
         runtime.Dispose()
-        ctx.Dispose()
 
     override x.CreateGameWindow(config : WindowConfig) =
         base.CreateGameWindow { config with opengl = true }
