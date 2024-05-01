@@ -1,3 +1,6 @@
+### 5.4.10-prerelease0006
+- rebuild glvm for ARM64
+
 ### 5.4.10-prerelease0005
 - [Text] added option to disable sample shading
 
