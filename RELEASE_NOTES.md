@@ -1,3 +1,6 @@
+### 5.4.10
+- [OpenVR] changed GL texture submit to 2 textures (previously side by side, issue with Quest 3)
+
 ### 5.4.9
 - [LodRenderer] Handle exceptions in background threads
 - [GL] Implemented GLSL shader caches for platforms that do not support program binaries (e.g. MacOS)

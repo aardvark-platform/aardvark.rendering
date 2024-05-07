@@ -607,66 +607,43 @@ module Utilities =
         res
 
     let private createOpenVR (cfg : RenderConfig) =
-        match cfg.backend with
-            | Backend.Vulkan ->
-                let app = new VulkanVRApplicationLayered(cfg.samples, cfg.debug)
-                let hmdLocation = app.Hmd.MotionState.Pose |> AVal.map (fun t -> t.Forward.C3.XYZ)
+        let app = 
+            match cfg.backend with
+                | Backend.Vulkan ->
+                    let app = new VulkanVRApplicationLayered(cfg.samples, cfg.debug)
+                    app :> VrRenderer
+                | Backend.GL ->
+                    let app = new OpenGlVRApplicationLayered(cfg.samples, cfg.debug)
+                    app :> VrRenderer
+
+        let hmdLocation = app.Hmd.MotionState.Pose |> AVal.map (fun t -> t.Forward.C3.XYZ)
+
+        let stencilTest =
+            { StencilMode.None with
+                Comparison = ComparisonFunction.Equal }
 
 
-                let stencilTest =
-                    { StencilMode.None with
-                        Comparison = ComparisonFunction.Equal }
+        let app1 = unbox<IRenderWindow> app
+        { new SimpleRenderWindow(app1, app.Info.viewTrafos, app.Info.projTrafos) with
 
-                { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
+            override x.WrapSg(win, sg) =
+                sg
+                |> Sg.stencilMode' stencilTest
+                |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
+                |> Sg.uniform "ProjTrafo" app.Info.projTrafos
+                |> Sg.uniform "CameraLocation" hmdLocation
+                |> Sg.uniform "LightLocation" hmdLocation
 
-                    override x.WrapSg(win, sg) =
-                        sg
-                        |> Sg.stencilMode' stencilTest
-                        |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
-                        |> Sg.uniform "ProjTrafo" app.Info.projTrafos
-                        |> Sg.uniform "CameraLocation" hmdLocation
-                        |> Sg.uniform "LightLocation" hmdLocation
+            override x.Compile(win, sg) =
+                sg
+                |> Sg.stencilMode' stencilTest
+                |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
+                |> Sg.uniform "ProjTrafo" app.Info.projTrafos
+                |> Sg.uniform "CameraLocation" hmdLocation
+                |> Sg.uniform "LightLocation" hmdLocation
+                |> Sg.compile app1.Runtime app1.FramebufferSignature
+        } :> ISimpleRenderWindow
 
-                    override x.Compile(win, sg) =
-                        sg
-                        |> Sg.stencilMode' stencilTest
-                        |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
-                        |> Sg.uniform "ProjTrafo" app.Info.projTrafos
-                        |> Sg.uniform "CameraLocation" hmdLocation
-                        |> Sg.uniform "LightLocation" hmdLocation
-                        |> Sg.compile app.Runtime app.FramebufferSignature
-                } :> ISimpleRenderWindow
-
-            | Backend.GL -> 
-                let app = new OpenGlVRApplicationLayered(cfg.samples, cfg.debug)
-
-                let hmdLocation = app.Hmd.MotionState.Pose |> AVal.map (fun t -> t.Forward.C3.XYZ)
-
-
-                let stencilTest =
-                    { StencilMode.None with
-                        Comparison = ComparisonFunction.Equal }
-
-                { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
-
-                    override x.WrapSg(win, sg) =
-                        sg
-                        |> Sg.stencilMode' stencilTest
-                        |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
-                        |> Sg.uniform "ProjTrafo" app.Info.projTrafos
-                        |> Sg.uniform "CameraLocation" hmdLocation
-                        |> Sg.uniform "LightLocation" hmdLocation
-
-                    override x.Compile(win, sg) =
-                        sg
-                        |> Sg.stencilMode' stencilTest
-                        |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
-                        |> Sg.uniform "ProjTrafo" app.Info.projTrafos
-                        |> Sg.uniform "CameraLocation" hmdLocation
-                        |> Sg.uniform "LightLocation" hmdLocation
-                        |> Sg.compile app.Runtime app.FramebufferSignature
-                } :> ISimpleRenderWindow
-                
 
 
     let createWindow (cfg : RenderConfig) =
