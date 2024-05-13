@@ -268,7 +268,8 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             // TODO: Do we really want to enable all available features?
             // Does this have real performance implications?
             use pNext =
-                DeviceFeatures.toNativeChain dev.Features
+                dev.GetFeatures (fun e -> extensions |> Array.contains e)
+                |> DeviceFeatures.toNativeChain
                 |> if isGroup then VkStructChain.add groupInfo else id
 
             let! pInfo =
