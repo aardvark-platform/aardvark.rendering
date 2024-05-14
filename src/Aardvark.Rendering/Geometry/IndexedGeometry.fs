@@ -175,13 +175,34 @@ type IndexedGeometry =
         member x.FaceCount =
             IndexedGeometryMode.faceCount x.Mode x.FaceVertexCount
 
+        ///<summary>Creates a copy.</summary>
+        ///<param name="shallowCopy">If true, the index and attribute arrays are reused instead of being copied.</param>
+        member x.Clone(shallowCopy: bool) =
+            let indices =
+                if isNull x.IndexArray then
+                    null
+                else
+                    if shallowCopy then x.IndexArray
+                    else x.IndexArray.Copy()
+
+            let indexedAttributes =
+                if isNull x.IndexedAttributes then
+                    null
+                else
+                    let d = SymbolDict<Array>(initialCapacity = x.IndexedAttributes.Count)
+                    for (KeyValue(sem, attr)) in x.IndexedAttributes do
+                        d.[sem] <- if shallowCopy then attr else attr.Copy()
+                    d
+
+            let singleAttributes =
+                if isNull x.SingleAttributes then null
+                else x.SingleAttributes.Copy()
+
+            IndexedGeometry(x.Mode, indices, indexedAttributes, singleAttributes)
+
+        /// Creates a copy. The copy is shallow as the index and attribute arrays are reused instead of being copied.
         member x.Clone() =
-            IndexedGeometry(
-                x.Mode,
-                x.IndexArray,
-                (if isNull x.IndexedAttributes then null else x.IndexedAttributes.Copy()),
-                (if isNull x.SingleAttributes then null else x.SingleAttributes.Copy())
-            )
+            x.Clone(true)
 
         member x.ToIndexed() =
             if isNull x.IndexArray then
