@@ -15,17 +15,25 @@ module private IndexHelpers =
             | :? array<uint32> as x -> x |> Array.map ((+) (uint32 offset)) :> Array
             | :? array<uint16> as x -> x |> Array.map ((+) (uint16 offset)) :> Array
             | _ ->
-                raise <| ArgumentException($"Unsupported type {index.GetType()}.")
+                raise <| ArgumentException($"Unsupported index type {index.GetType()}.")
 
-    let applyIndex (index : Array) (data : Array) =   
+    let inline private getIntConverter<'T>() : 'T -> int32 =
+        if typeof<'T> = typeof<int32> then unbox<int32>
+        elif typeof<'T> = typeof<int16> then unbox<int16> >> int
+        elif typeof<'T> = typeof<uint32> then unbox<uint32> >> int
+        elif typeof<'T> = typeof<uint16> then unbox<uint16> >> int
+        else
+            raise <| ArgumentException($"Unsupported index type {typeof<'T>}.")
+
+    let applyIndex (index : Array) (data : Array) =
         if isNull index || isNull data then
             null
         else
-            index.Visit 
+            index.Visit
                 { new ArrayVisitor<Array>() with
                     member x.Run(index : 'i[]) =
-                        let toInt = PrimitiveValueConverter.converter<'i, int>
-                        data.Visit 
+                        let toInt = getIntConverter<'i>()
+                        data.Visit
                             { new ArrayVisitor<Array>() with
                                 member x.Run(data : 'a[]) =
                                     let l = data.Length
@@ -53,7 +61,7 @@ module private IndexHelpers =
                                 oi <- oi + 2
 
                             res :> Array
-                } 
+                }
 
     let triangleStripToList (data : Array) =
         if isNull data then
@@ -83,7 +91,7 @@ module private IndexHelpers =
 
                             res :> Array
                 }
-                
+
 module private ArrayHelpers =
 
     let concat (a : Array) (b : Array) =
@@ -101,7 +109,7 @@ module private ArrayHelpers =
                                     else
                                         Array.concat [a; unbox<'T[]> b]
                             }
-                        )                    
+                        )
                 }
             )
 
@@ -116,7 +124,7 @@ type IndexedGeometryMode =
     | LineAdjacencyList = 6
     | QuadList = 7
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>] 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndexedGeometryMode =
     let faceCount (m : IndexedGeometryMode) (fvc : int) =
         match m with
@@ -200,16 +208,15 @@ type IndexedGeometry =
                 let res = IndexedGeometry(Mode = x.Mode)
 
                 if not (isNull x.IndexedAttributes) then
-                    res.IndexedAttributes <-
-                        x.IndexedAttributes |> SymDict.map (fun name att ->
-                            IndexHelpers.applyIndex index att
-                        )
-                   
-                if not (isNull x.SingleAttributes) then     
+                    res.IndexedAttributes <- SymbolDict<Array>(initialCapacity = x.IndexedAttributes.Count)
+                    for (KeyValue(sem, att)) in x.IndexedAttributes do
+                        res.IndexedAttributes.[sem] <- IndexHelpers.applyIndex index att
+
+                if not (isNull x.SingleAttributes) then
                     res.SingleAttributes <- x.SingleAttributes.Copy()
 
                 res
-             
+
         member x.ToNonStripped() =
             match x.Mode with
             | IndexedGeometryMode.LineStrip ->
@@ -259,24 +266,28 @@ type IndexedGeometry =
                 let singleAttributes =
                     if isNull x.SingleAttributes then y.SingleAttributes
                     elif isNull y.SingleAttributes then x.SingleAttributes
-                    else SymDict.union [x.SingleAttributes; y.SingleAttributes]
+                    else
+                        let r = SymbolDict<obj>()
+                        for (KeyValue(sem, att)) in x.SingleAttributes do r.[sem] <- att
+                        for (KeyValue(sem, att)) in y.SingleAttributes do r.[sem] <- att
+                        r
 
                 let indexedAttributes =
                     if isNull x.IndexedAttributes then y.IndexedAttributes
                     elif isNull y.IndexedAttributes then x.IndexedAttributes
                     else
-                        let r = SymDict.empty
+                        let r = SymbolDict<Array>()
 
                         for KeyValue(sem, a) in x.IndexedAttributes do
-                            match y.IndexedAttributes |> SymDict.tryFind sem with
-                            | Some b ->
+                            match y.IndexedAttributes.TryGetValue(sem) with
+                            | (true, b) ->
                                 try
                                     r.[sem] <- ArrayHelpers.concat a b
                                 with
                                 | exn ->
                                     raise <| ArgumentException($"Invalid {sem} attributes: {exn.Message}")
                             | _ -> ()
-                        
+
                         r
 
                 IndexedGeometry (
@@ -285,30 +296,30 @@ type IndexedGeometry =
                     SingleAttributes  = singleAttributes,
                     IndexedAttributes = indexedAttributes
                 )
-          
-        new() = 
-            { Mode = IndexedGeometryMode.TriangleList; 
-              IndexArray = null; 
-              IndexedAttributes = null; 
+
+        new() =
+            { Mode = IndexedGeometryMode.TriangleList;
+              IndexArray = null;
+              IndexedAttributes = null;
               SingleAttributes = null }
 
-        new(indexArray, indexedAttributes, singleAttributes) = 
-            { Mode = IndexedGeometryMode.TriangleList; 
-              IndexArray = indexArray; 
-              IndexedAttributes = indexedAttributes; 
+        new(indexArray, indexedAttributes, singleAttributes) =
+            { Mode = IndexedGeometryMode.TriangleList;
+              IndexArray = indexArray;
+              IndexedAttributes = indexedAttributes;
               SingleAttributes = singleAttributes }
 
-        new(mode, indexArray, indexedAttributes, singleAttributes) = 
+        new(mode, indexArray, indexedAttributes, singleAttributes) =
             { Mode = mode
-              IndexArray = indexArray; 
-              IndexedAttributes = indexedAttributes; 
+              IndexArray = indexArray;
+              IndexedAttributes = indexedAttributes;
               SingleAttributes = singleAttributes }
     end
 
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>] 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndexedGeometry =
-    
+
     let inline mode (g : IndexedGeometry) = g.Mode
     let inline indexArray (g : IndexedGeometry) = g.IndexArray
     let inline indexedAttributes (g : IndexedGeometry) = g.IndexedAttributes

@@ -21,8 +21,6 @@
     <Compile Include="Common\ClearValuesCSharp.fs" />
     <Compile Include="Common\FrameStatistics.fs" />
     <Compile Include="Common\RenderToken.fs" />
-    <Compile Include="Common\DefaultSemantic.fs" />
-    <Compile Include="Common\ComparisonFunction.fs" />
     <Compile Include="Utilities\Locks\ColoredLock.fs" />
     <Compile Include="Utilities\Locks\LockedResource.fs" />
     <Compile Include="Utilities\Locks\RenderTaskLock.fs" />
@@ -31,7 +29,6 @@
     <Compile Include="Utilities\ConstantVal.fs" />
     <Compile Include="Utilities\PrimitiveValueConverter.fs" />
     <Compile Include="Utilities\GPUVendor.fs" />
-    <Compile Include="Utilities\ArrayVisitor.fs" />
     <Compile Include="Utilities\Timer.fs" />
     <Compile Include="Utilities\Memory.fs" />
     <Compile Include="Utilities\Trie.fs" />
@@ -40,6 +37,7 @@
     <Compile Include="Utilities\SymbolConverter.fs" />
     <Compile Include="Utilities\ShaderCodeReporting.fs" />
     <Compile Include="Utilities\MultiDict.fs" />
+    <Compile Include="Utilities\CameraExtensions.fs" />
     <Compile Include="Resources\Buffers\ExternalMemory.fs" />
     <Compile Include="Resources\Buffers\Buffers.fs" />
     <Compile Include="Resources\Buffers\BufferSlicing.fs" />
@@ -81,7 +79,6 @@
     <Compile Include="Resources\ResourceAccess.fs" />
     <Compile Include="Resources\ResourceManagement.fs" />
     <Compile Include="Resources\ResourceValidation.fs" />
-    <Compile Include="Geometry\IndexedGeometry.fs" />
     <Compile Include="Geometry\Geometry.fs" />
     <Compile Include="Geometry\GeometryPool.fs" />
     <Compile Include="Uniforms\UniformWriters.fs" />
@@ -92,18 +89,6 @@
     <Compile Include="Attributes\AttributeProvider.fs" />
     <Compile Include="Surfaces\Surface.fs" />
     <Compile Include="Surfaces\ShaderStage.fs" />
-    <Compile Include="Sampler\TextureFilter.fs" />
-    <Compile Include="Sampler\SamplerState.fs" />
-    <Compile Include="Pipeline\Modes\FillMode.fs" />
-    <Compile Include="Pipeline\Modes\CullMode.fs" />
-    <Compile Include="Pipeline\Modes\WindingOrder.fs" />
-    <Compile Include="Pipeline\Modes\BlendMode.fs" />
-    <Compile Include="Pipeline\Modes\StencilMode.fs" />
-    <Compile Include="Pipeline\Modes\DepthRange.fs" />
-    <Compile Include="Pipeline\Modes\DepthTest.fs" />
-    <Compile Include="Pipeline\Modes\DepthBias.fs" />
-    <Compile Include="Pipeline\Modes\ColorMask.fs" />
-    <Compile Include="Pipeline\Camera.fs" />
     <Compile Include="Pipeline\RenderPass.fs" />
     <Compile Include="Pipeline\DrawCalls.fs" />
     <Compile Include="Pipeline\PipelineState.fs" />
@@ -162,6 +147,9 @@
     <Compile Include="Effects\Default\DefaultSurfaces.fs" />
     <Compile Include="Effects\Effect.fs" />
     <None Include="paket.references" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Aardvark.Rendering.Common\Aardvark.Rendering.Common.fsproj" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

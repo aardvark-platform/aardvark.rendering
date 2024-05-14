@@ -16,7 +16,7 @@ type ArrayVisitor<'r>() =
 
     static let get (t : Type) =
         cache.GetOrAdd(t, Func<_,_>(fun t ->
-            let dMeth = 
+            let dMeth =
                 DynamicMethod(
                     "ArrayVisitor",
                     MethodAttributes.Static ||| MethodAttributes.Public,
@@ -32,7 +32,7 @@ type ArrayVisitor<'r>() =
             il.Emit(OpCodes.Ldarg_1)
             il.EmitCall(OpCodes.Callvirt, mRun, null)
             il.Emit(OpCodes.Ret)
-                
+
             let t = typeof<Func<ArrayVisitor<'r>, Array, 'r>>
             let del = dMeth.CreateDelegate(t) |> unbox<Func<ArrayVisitor<'r>, Array, 'r>>
             fun v a -> del.Invoke(v,a)
