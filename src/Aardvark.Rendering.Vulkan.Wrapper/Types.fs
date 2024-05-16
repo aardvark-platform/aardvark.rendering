@@ -6,6 +6,10 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 #nowarn "51"
 
+type ExtensionType =
+    | Device = 0
+    | Instance = 1
+
 [<StructLayout(LayoutKind.Explicit, Size = 3)>]
 type uint24 =
     struct
