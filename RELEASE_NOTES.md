@@ -1,5 +1,9 @@
 ### 5.4.10
 - [OpenVR] changed GL texture submit to 2 textures (previously side by side, issue with Quest 3)
+- [GL] Improved querying of supported sample counts
+- [GL] Fixed double disposal of Context
+- [GLFW] Fixed OpenTK context interop
+- [Vulkan] Fixed conservative raster validation error
 
 ### 5.4.9
 - [LodRenderer] Handle exceptions in background threads

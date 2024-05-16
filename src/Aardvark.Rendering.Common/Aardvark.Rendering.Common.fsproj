@@ -29,8 +29,8 @@
     <Compile Include="Sampler\TextureFilter.fs" />
     <Compile Include="Sampler\SamplerState.fs" />
     <Compile Include="ArrayVisitor.fs" />
-    <Compile Include="IndexedGeometry.fs" />
     <Compile Include="DefaultSemantic.fs" />
+    <Compile Include="IndexedGeometry.fs" />
     <Compile Include="Camera\Frustum.fs" />
     <Compile Include="Camera\CameraView.fs" />
     <Compile Include="Camera\Camera.fs" />

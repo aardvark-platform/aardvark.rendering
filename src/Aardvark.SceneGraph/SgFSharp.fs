@@ -39,30 +39,36 @@ module SgFSharp =
         module Caching =
 
             // Note: we need these caches because of the AVal.maps below
-            let bufferCache = ConditionalWeakTable<IAdaptiveValue, BufferView>()
+            let private cache = ConditionalWeakTable<IAdaptiveValue, obj>()
 
-            let bufferOfArray (m : aval<'a[]>) =
-                match bufferCache.TryGetValue m with
-                | (true, r) -> r
+            let private getOrCreate (create: 'T1 -> 'T2) (value: 'T1) : 'T2 =
+                match cache.TryGetValue value with
+                | (true, r) when r.GetType() = typeof<'T2> -> unbox<'T2> r
                 | _ ->
-                    let b = m |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
-                    let r = BufferView(b, typeof<'a>)
-                    bufferCache.Add(m, r)
+                    let r = create value
+                    cache.Add(value, r)
                     r
 
-            let bufferOfTrafos (m : aval<Trafo3d[]>) =
-                match bufferCache.TryGetValue m with
-                | (true, r) -> r
-                | _ ->
-                    let b =
-                        m |> AVal.map (fun a ->
-                            let a = a |> Array.map (Trafo.forward >> M44f)
-                            ArrayBuffer a :> IBuffer
-                        )
+            let bufferOfArray (value: aval<'T[]>) : BufferView =
+                value |> getOrCreate (fun value ->
+                    let b = value |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
+                    BufferView(b, typeof<'T>)
+                )
 
-                    let r =  BufferView(b, typeof<M44f>)
-                    bufferCache.Add(m, r)
-                    r
+            let buffersOfTrafos (value: aval<Trafo3d[]>) : BufferView * BufferView =
+                value |> getOrCreate (fun value ->
+                    let forward = value |> AVal.map (fun a ->
+                        let a = a |> Array.map (Trafo.forward >> M44f)
+                        ArrayBuffer a :> IBuffer
+                    )
+
+                    let backward = value |> AVal.map (fun a ->
+                        let a = a |> Array.map (Trafo.backward >> M44f)
+                        ArrayBuffer a :> IBuffer
+                    )
+
+                    BufferView(forward, typeof<M44f>), BufferView(backward, typeof<M44f>)
+                )
 
     module Sg =
         open SgFSharpHelpers
@@ -107,7 +113,7 @@ module SgFSharp =
             Sg.AdapterNode(o) :> ISg
 
         /// Combines the render objects in the given adaptive set.
-        let renderObjectSet (s : #aset<IRenderObject>) = 
+        let renderObjectSet (s : #aset<IRenderObject>) =
             Sg.RenderObjectNode(s) :> ISg
 
         /// Applies the given activation function to the the given scene graph.
@@ -790,80 +796,22 @@ module SgFSharp =
         let indirectDraw (mode : IndexedGeometryMode) (buffer : aval<IndirectBuffer>) =
             Sg.IndirectRenderNode(buffer, mode) :> ISg
 
-        /// Creates a draw call from the given indexed geometry.
-        let ofIndexedGeometry (g : IndexedGeometry) =
-            let attributes =
-                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) ->
-                    let t = v.GetType().GetElementType()
-                    let view = BufferView(~~(ArrayBuffer(v) :> IBuffer), t)
-
-                    k, view
-                ) |> Map.ofSeq
-
-
-            let index, faceVertexCount =
-                if g.IsIndexed then
-                    g.IndexArray, g.IndexArray.Length
-                else
-                    null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
-
-            let call =
-                DrawCallInfo(
-                    FaceVertexCount = faceVertexCount,
-                    FirstIndex = 0,
-                    InstanceCount = 1,
-                    FirstInstance = 0,
-                    BaseVertex = 0
-                )
-
-            let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call,g.Mode)) :> ISg
-            if not (isNull index) then
-                Sg.VertexIndexApplicator(BufferView.ofArray index, sg) :> ISg
-            else
-                sg
-
-        /// Creates a draw call from the given indexed geometry and instance count.
-        let ofIndexedGeometryInstanced (g : IndexedGeometry) (instanceCount : int) =
-            let attributes =
-                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) ->
-                    let t = v.GetType().GetElementType()
-                    let view = BufferView(~~(ArrayBuffer(v) :> IBuffer), t)
-
-                    k, view
-                ) |> Map.ofSeq
-
-
-            let index, faceVertexCount =
-                if g.IsIndexed then
-                    g.IndexArray, g.IndexArray.Length
-                else
-                    null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
-
-            let call =
-                DrawCallInfo(
-                    FaceVertexCount = faceVertexCount,
-                    FirstIndex = 0,
-                    InstanceCount = instanceCount,
-                    FirstInstance = 0,
-                    BaseVertex = 0
-                )
-
-            let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call, g.Mode)) :> ISg
-            if not (isNull index) then
-                Sg.VertexIndexApplicator(BufferView.ofArray index, sg) :> ISg
-            else
-                sg
-
         /// Creates a draw call from the given indexed geometry and an adpative instance count.
         let ofIndexedGeometryInstancedA (g : IndexedGeometry) (instanceCount : aval<int>) =
             let attributes =
-                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) ->
-                    let t = v.GetType().GetElementType()
-                    let view = BufferView(~~(ArrayBuffer(v) :> IBuffer), t)
+                let indexed =
+                    g.IndexedAttributes |> Seq.map (fun (KeyValue(sem, attr)) ->
+                        sem, BufferView(attr)
+                    ) |> Map.ofSeq
 
-                    k, view
-                ) |> Map.ofSeq
+                let single =
+                    if isNull g.SingleAttributes then Map.empty
+                    else
+                        g.SingleAttributes |> Seq.map (fun (KeyValue(sem, value)) ->
+                            sem, BufferView(SingleValueBuffer.create value)
+                        ) |> Map.ofSeq
 
+                Map.union indexed single
 
             let index, faceVertexCount =
                 if g.IsIndexed then
@@ -886,43 +834,28 @@ module SgFSharp =
             else
                 sg
 
-        /// Creates a draw call, supplying the given transformations as per-instance attributes with
-        /// name DefaultSemantic.InstanceTrafo.
+        /// Creates a draw call from the given indexed geometry and instance count.
+        let ofIndexedGeometryInstanced (g : IndexedGeometry) (instanceCount : int) =
+            instanceCount |> AVal.constant |> ofIndexedGeometryInstancedA g
+
+        /// Creates a draw call from the given indexed geometry.
+        let ofIndexedGeometry (g : IndexedGeometry) =
+            ofIndexedGeometryInstanced g 1
+
+        /// Creates a draw call, supplying the given transformations as per-instance attributes
+        /// DefaultSemantic.InstanceTrafo and DefaultSemantic.InstanceTrafoInv.
         let instancedGeometry (trafos : aval<Trafo3d[]>) (g : IndexedGeometry) =
-            let vertexAttributes =
-                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) ->
-                    let t = v.GetType().GetElementType()
-                    let view = BufferView(~~(ArrayBuffer(v) :> IBuffer), t)
-
-                    k, view
-                ) |> Map.ofSeq
-
-            let index, faceVertexCount =
-                if g.IsIndexed then
-                    g.IndexArray, g.IndexArray.Length
-                else
-                    null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
-
-            let call = trafos |> AVal.map (fun t ->
-                    DrawCallInfo(
-                        FaceVertexCount = faceVertexCount,
-                        FirstIndex = 0,
-                        InstanceCount = t.Length,
-                        FirstInstance = 0,
-                        BaseVertex = 0
-                    )
-                )
-
-            let sg = Sg.VertexAttributeApplicator(vertexAttributes, Sg.RenderNode(call, g.Mode)) :> ISg
-
             let sg =
-                if index <> null then
-                    Sg.VertexIndexApplicator(BufferView.ofArray  index, sg) :> ISg
-                else
-                    sg
+                trafos
+                |> AVal.mapNonAdaptive Array.length
+                |> ofIndexedGeometryInstancedA g
 
-            let view = Caching.bufferOfTrafos trafos
-            Sg.InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, view] |> Map.ofList, sg) :> ISg
+            let forward, backward = Caching.buffersOfTrafos trafos
+
+            Sg.InstanceAttributeApplicator([
+                DefaultSemantic.InstanceTrafo, forward
+                DefaultSemantic.InstanceTrafoInv, backward
+            ] |> Map.ofList, sg) :> ISg
 
         // ================================================================================================================
         // Bounding boxes

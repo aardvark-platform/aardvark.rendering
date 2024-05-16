@@ -62,3 +62,24 @@ type SingleValueBuffer<'T when 'T : unmanaged>(value : aval<'T>) =
         member x.AllInputsProcessed(obj) = value.AllInputsProcessed(obj)
         member x.InputChanged(t, o) = value.InputChanged(t, o)
         member x.Mark() = value.Mark()
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module SingleValueBuffer =
+
+    [<AutoOpen>]
+    module private GenericDispatch =
+        open System.Reflection
+
+        [<AbstractClass; Sealed>]
+        type Dispatcher() =
+            static member ToSingleValueBuffer<'T when 'T : unmanaged>(value: obj) : ISingleValueBuffer =
+                SingleValueBuffer<'T>(unbox<'T> value)
+
+        module Method =
+            let private flags = BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public
+            let toSingleValueBuffer = typeof<Dispatcher>.GetMethod("ToSingleValueBuffer", flags)
+
+    /// Creates a single value buffer from an untyped value.
+    let create (value: obj) =
+        let mi = Method.toSingleValueBuffer.MakeGenericMethod [| value.GetType() |]
+        mi.Invoke(null, [| value |]) |> unbox<ISingleValueBuffer>
