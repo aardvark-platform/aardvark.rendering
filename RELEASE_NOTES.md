@@ -1,3 +1,7 @@
+### 5.5.0-prerelease0001
+- [Vulkan] Updated wrapper to Vulkan 1.3.282
+- Moved some common types and modules (IndexedGeometry, Camera, DefaultSemantic) to separate Aardvark.Rendering.Common project.
+
 ### 5.4.10
 - [OpenVR] changed GL texture submit to 2 textures (previously side by side, issue with Quest 3)
 - [GL] Improved querying of supported sample counts
