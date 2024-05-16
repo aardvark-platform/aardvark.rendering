@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Generic
+open System.Runtime.InteropServices
 open Aardvark.Base
 
 [<AutoOpen>]
@@ -164,37 +165,37 @@ type IndexedGeometryMode =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndexedGeometryMode =
-    let faceCount (m : IndexedGeometryMode) (fvc : int) =
-        match m with
-            | IndexedGeometryMode.PointList -> fvc
+    let faceCount (mode: IndexedGeometryMode) (faceVertexCount: int) =
+        match mode with
+        | IndexedGeometryMode.PointList -> faceVertexCount
 
-            | IndexedGeometryMode.LineStrip -> max 0 (fvc - 1)
-            | IndexedGeometryMode.LineList -> fvc / 2
-            | IndexedGeometryMode.LineAdjacencyList -> fvc / 4
+        | IndexedGeometryMode.LineStrip -> max 0 (faceVertexCount - 1)
+        | IndexedGeometryMode.LineList -> faceVertexCount / 2
+        | IndexedGeometryMode.LineAdjacencyList -> faceVertexCount / 4
 
-            | IndexedGeometryMode.TriangleList -> fvc / 3
-            | IndexedGeometryMode.TriangleStrip -> max 0 (fvc - 2)
-            | IndexedGeometryMode.TriangleAdjacencyList -> fvc / 6
+        | IndexedGeometryMode.TriangleList -> faceVertexCount / 3
+        | IndexedGeometryMode.TriangleStrip -> max 0 (faceVertexCount - 2)
+        | IndexedGeometryMode.TriangleAdjacencyList -> faceVertexCount / 6
 
-            | IndexedGeometryMode.QuadList -> fvc / 4
+        | IndexedGeometryMode.QuadList -> faceVertexCount / 4
 
-            | _ -> 0
+        | _ -> 0
 
-    let isAdjacency (m : IndexedGeometryMode) =
-        match m with
-            | IndexedGeometryMode.LineAdjacencyList
-            | IndexedGeometryMode.TriangleAdjacencyList ->
-                true
-            | _ ->
-                false
+    let isAdjacency (mode: IndexedGeometryMode) =
+        match mode with
+        | IndexedGeometryMode.LineAdjacencyList
+        | IndexedGeometryMode.TriangleAdjacencyList ->
+            true
+        | _ ->
+            false
 
-    let isStrip (m : IndexedGeometryMode) =
-        match m with
-            | IndexedGeometryMode.LineStrip
-            | IndexedGeometryMode.TriangleStrip ->
-                true
-            | _ ->
-                false
+    let isStrip (mode: IndexedGeometryMode) =
+        match mode with
+        | IndexedGeometryMode.LineStrip
+        | IndexedGeometryMode.TriangleStrip ->
+            true
+        | _ ->
+            false
 
 type IndexedGeometry =
     class
@@ -211,12 +212,8 @@ type IndexedGeometry =
         val mutable public SingleAttributes : SymbolDict<obj>
 
         /// Indicates whether the geometry is indexed.
-        member x.IsIndexed =
+        member inline x.IsIndexed =
             not (isNull x.IndexArray)
-
-        /// Indicates whether the geometry has a non-zero face vertex count.
-        member inline x.IsEmpty =
-            x.FaceVertexCount = 0
 
         /// Indicates whether the geometry is valid (i.e. it has a position attribute and all attribute arrays are of sufficient length)
         member inline x.IsValid =
@@ -238,19 +235,23 @@ type IndexedGeometry =
                     | _ -> 0
 
         /// Effective number of vertices in the geometry (i.e. the index count if indexed and the vertex count if non-indexed).
-        member x.FaceVertexCount =
+        member inline x.FaceVertexCount =
             if isNull x.IndexArray then
                 x.VertexCount
             else
                 x.IndexArray.Length
 
+        /// Indicates whether the geometry has a non-zero face vertex count.
+        member inline x.IsEmpty =
+            x.FaceVertexCount = 0
+
         /// Number of faces in the geometry.
-        member x.FaceCount =
+        member inline x.FaceCount =
             IndexedGeometryMode.faceCount x.Mode x.FaceVertexCount
 
         ///<summary>Creates a copy.</summary>
-        ///<param name="shallowCopy">If true, the index and attribute arrays are reused instead of being copied.</param>
-        member x.Clone(shallowCopy: bool) =
+        ///<param name="shallowCopy">If true, the index and attribute arrays are reused instead of being copied. Default is true.</param>
+        member x.Clone([<Optional; DefaultParameterValue(true)>] shallowCopy: bool) =
             let indices =
                 if isNull x.IndexArray || shallowCopy then
                     x.IndexArray
@@ -272,10 +273,6 @@ type IndexedGeometry =
 
             IndexedGeometry(x.Mode, indices, indexedAttributes, singleAttributes)
 
-        /// Creates a copy. The copy is shallow as the index and attribute arrays are reused instead of being copied.
-        member x.Clone() =
-            x.Clone(true)
-
         /// Returns an indexed copy of the geometry.
         /// If it is already indexed, it is returned unmodified.
         member x.ToIndexed(indexType: Type) =
@@ -288,7 +285,7 @@ type IndexedGeometry =
 
         /// Returns an indexed copy of the geometry.
         /// If it is already indexed, it is returned unmodified.
-        member x.ToIndexed() =
+        member inline x.ToIndexed() =
             x.ToIndexed typeof<int32>
 
         /// Returns a non-indexed copy of the geometry.
