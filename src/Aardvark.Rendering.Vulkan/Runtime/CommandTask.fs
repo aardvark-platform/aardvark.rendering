@@ -2237,16 +2237,17 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         updateResources token renderToken (fun resourcesChanged ->
 
             if viewportChanged || commandChanged || resourcesChanged || framebufferChanged then
-                let cause =
-                    String.concat "; " [
-                        if commandChanged then yield "content"
-                        if resourcesChanged then yield "resources"
-                        if viewportChanged then yield "viewport"
-                        if framebufferChanged then yield "framebuffer"
-                    ]
-                    |> sprintf "{ %s }"
-
+                
                 if device.DebugConfig.PrintRenderTaskRecompile then
+                    let cause =
+                        String.concat "; " [
+                            if commandChanged then yield "content"
+                            if resourcesChanged then yield "resources"
+                            if viewportChanged then yield "viewport"
+                            if framebufferChanged then yield "framebuffer"
+                        ]
+                        |> sprintf "{ %s }"
+
                     Log.line "[Vulkan] recompile commands: %s" cause
 
                 inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue, true)
