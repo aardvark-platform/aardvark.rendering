@@ -33,6 +33,7 @@ let main argv =
                 Rendering.IntegerAttachments.tests
                 Rendering.Samplers.tests
                 Rendering.Uniforms.tests
+                Rendering.Surfaces.tests
             ]
 
         let computeTests =
@@ -59,6 +60,7 @@ let main argv =
             ``AdaptiveResource Tests``.tests
             ``ContextCreation Tests``.tests
             ``Camera Tests``.tests
+            ``IndexedGeometry Tests``.tests
         ]
 
     let allTests =
