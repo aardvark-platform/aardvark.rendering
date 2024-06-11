@@ -45,12 +45,14 @@ module AdaptivePrimitiveValueConverterExtensions =
                 member x.ConvertUntyped(value : IAdaptiveValue) = x.Convert(value)
                 member x.Convert(array : aval<Array>) = x.Convert(array)
 
-        let private staticFieldCache = Dict<Type * string, obj>()
-        let private getStaticField (name : string) (t : Type) : 'T =
-            staticFieldCache.GetOrCreate((t, name), fun (t, name) ->
-                let p = t.GetProperty(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
-                p.GetValue(null)
-            ) |> unbox<'T>
+        let private staticInstanceCache = Dict<Type, obj>()
+        let private getStaticInstance (t : Type) : 'T =
+            lock staticInstanceCache (fun () ->
+                staticInstanceCache.GetOrCreate(t, fun t ->
+                    let p = t.GetProperty("Instance", BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+                    p.GetValue(null)
+                ) |> unbox<'T>
+            )
 
         let convertArray (inputElementType : Type) (array : aval<Array>) : aval<'T[]> =
             if inputElementType = typeof<'T> then
@@ -58,7 +60,7 @@ module AdaptivePrimitiveValueConverterExtensions =
             else
                 try
                     let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputElementType; typeof<'T> |]
-                    let converter : IAdaptiveConverter<'T> = tconv |> getStaticField "Instance"
+                    let converter : IAdaptiveConverter<'T> = tconv |> getStaticInstance
                     converter.Convert(array)
                 with
                 | InvalidConversion exn -> raise exn
@@ -70,7 +72,7 @@ module AdaptivePrimitiveValueConverterExtensions =
             else
                 try
                     let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; outputType |]
-                    let converter : IAdaptiveConverter = tconv |> getStaticField "Instance"
+                    let converter : IAdaptiveConverter = tconv |> getStaticInstance
                     converter.ConvertUntyped(value)
                 with
                 | InvalidConversion exn -> raise exn
@@ -82,7 +84,7 @@ module AdaptivePrimitiveValueConverterExtensions =
             else
                 try
                     let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; typeof<'T> |]
-                    let converter : IAdaptiveConverter<'T> = tconv |> getStaticField "Instance"
+                    let converter : IAdaptiveConverter<'T> = tconv |> getStaticInstance
                     converter.Convert(value)
                 with
                 | InvalidConversion exn -> raise exn
