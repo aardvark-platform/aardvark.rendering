@@ -12,7 +12,7 @@ type IBackendSurface =
     inherit IDisposable
     abstract member Handle : obj
 
-[<RequireQualifiedAccess>]
+[<RequireQualifiedAccess; ReferenceEquality>]
 type Surface =
     | FShadeSimple of Effect
     | FShade of (EffectConfig -> EffectInputLayout * aval<Imperative.Module>)

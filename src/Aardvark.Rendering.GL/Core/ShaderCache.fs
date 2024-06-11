@@ -5,6 +5,8 @@ open Aardvark.Rendering
 
 open System
 open System.Collections.Concurrent
+open System.Collections.Generic
+open System.Runtime.CompilerServices
 
 [<AutoOpen>]
 module internal ShaderCacheKeys =
@@ -45,6 +47,7 @@ type internal ShaderCacheEntry(surface : IBackendSurface, destroy : unit -> unit
 type internal ShaderCache() =
     let codeCache = ConcurrentDictionary<CodeCacheKey, Error<ShaderCacheEntry>>()
     let effectCache = ConcurrentDictionary<EffectCacheKey, Error<ShaderCacheEntry>>()
+    let dynamicCache = ConditionalWeakTable<obj, obj>()
 
     static let box (destroy : 'T -> unit) (value : Error<'T>) : Error<ShaderCacheEntry> =
         match value with
@@ -61,6 +64,19 @@ type internal ShaderCache() =
 
     member x.GetOrAdd<'T when 'T :> IBackendSurface>(key : EffectCacheKey, create : EffectCacheKey -> Error<'T>, destroy : 'T -> unit) : Error<'T> =
         effectCache.GetOrAdd(key, create >> box destroy) |> unbox
+
+    member x.GetOrAdd(key: obj, signature: IFramebufferSignature, create: unit -> Error<'T>) : Error<'T> =
+        lock dynamicCache (fun _ ->
+            let perLayout =
+                match dynamicCache.TryGetValue key with
+                | (true, d) -> FSharp.Core.Operators.unbox d
+                | _ ->
+                    let d = Dictionary<FramebufferLayout, Error<'T>>()
+                    dynamicCache.Add(key, d)
+                    d
+
+            perLayout.GetCreate(signature.Layout, ignore >> create)
+        )
 
     member x.Entries =
         [ codeCache.Values; effectCache.Values ]

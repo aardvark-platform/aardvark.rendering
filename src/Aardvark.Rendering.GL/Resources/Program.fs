@@ -943,33 +943,35 @@ module ProgramExtensions =
                 | Error err -> Error err
 
             | Surface.FShade create ->
-                let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
+                // Use surface reference as key rather than create, since equality is undefined behavior for F# functions
+                // See F# specification: 6.9.24 Values with Underspecified Object Identity and Type Identity
+                x.ShaderCache.GetOrAdd(surface, signature, fun _ ->
+                    let (inputLayout, module_) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
 
-                let initial = AVal.force b
-                let layoutHash = inputLayout.ComputeHash()
+                    let initial = AVal.force module_
+                    let layoutHash = inputLayout.ComputeHash()
 
-                let compile (m : Module) =
-                    try
-                        ModuleCompiler.compileGLSL x.FShadeBackend m
-                    with exn ->
-                        Log.error "%s" exn.Message
-                        reraise()
+                    let compile (m : Module) =
+                        try
+                            ModuleCompiler.compileGLSL x.FShadeBackend m
+                        with exn ->
+                            Log.error "%s" exn.Message
+                            reraise()
 
-                let iface =
                     match x.TryCompileProgram(initial.Hash + layoutHash, signature, lazy (compile initial)) with
-                    | Success prog -> prog.Interface
-                    | Error e ->
-                        failf "shader compiler returned errors: %s" e
+                    | Success prog ->
+                        let changeableProgram =
+                            module_ |> AVal.map (fun m ->
+                                match x.TryCompileProgram(m.Hash + layoutHash, signature, lazy (compile m)) with
+                                | Success p -> p
+                                | Error e ->
+                                    failf "shader compiler returned errors: %s" e
+                            )
 
-                let changeableProgram =
-                    b |> AVal.map (fun m ->
-                        match x.TryCompileProgram(m.Hash + layoutHash, signature, lazy (compile m)) with
-                        | Success p -> p
-                        | Error e ->
-                            failf "shader compiler returned errors: %s" e
-                    )
+                        Success (prog.Interface, changeableProgram)
 
-                Success (iface, changeableProgram)
+                    | Error e -> Error e
+                )
 
             | Surface.None ->
                 Error "[GL] empty shader"

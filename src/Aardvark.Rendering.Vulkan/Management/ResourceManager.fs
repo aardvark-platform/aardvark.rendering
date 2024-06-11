@@ -1913,9 +1913,9 @@ type ResourceManager(device : Device) =
 
         program.PipelineLayout, resource
 
-    member private x.CreateDynamicShaderProgram(pass : RenderPass, compile : FShade.EffectConfig -> FShade.EffectInputLayout * aval<FShade.Imperative.Module>) =
+    member private x.CreateDynamicShaderProgram(key : obj, pass : RenderPass, compile : FShade.EffectConfig -> FShade.EffectInputLayout * aval<FShade.Imperative.Module>) =
         dynamicProgramCache.GetOrCreate(
-            [pass.Layout :> obj; compile :> obj],
+            [key; pass.Layout :> obj],
             fun cache key ->
                 let effectConfig = pass.EffectConfig(FShadeConfig.depthRange, false)
 
@@ -1934,7 +1934,9 @@ type ResourceManager(device : Device) =
             x.CreateShaderProgram(pass, effect, top)
 
         | Surface.FShade compile ->
-            let program = x.CreateDynamicShaderProgram(pass, compile)
+            // Use surface itself as key rather than compile function, since equality is undefined behavior for F# functions.
+            // See F# specification: 6.9.24 Values with Underspecified Object Identity and Type Identity
+            let program = x.CreateDynamicShaderProgram(data, pass, compile)
             program.Layout, program
 
         | Surface.Backend surface ->
