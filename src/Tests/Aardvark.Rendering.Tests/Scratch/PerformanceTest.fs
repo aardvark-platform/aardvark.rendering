@@ -191,7 +191,7 @@ module RenderTaskPerformance =
             app.Runtime.PrepareEffect (win.FramebufferSignature, [
                 DefaultSurfaces.trafo |> toEffect
                 DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect
-            ]) :> ISurface
+            ])
 
         let renderObjects =
             objects
@@ -271,7 +271,7 @@ module StartupPerformance =
 
         let effect = 
             using app.Context.ResourceLock (fun _ -> 
-                app.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect ]) :> ISurface
+                app.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect ])
             )
 
         let test (n : int) =
@@ -388,7 +388,7 @@ module IsActiveFlagPerformance =
                 return a
             }
 
-        let effect = app.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect; bla |> toEffect ]) :> ISurface
+        let effect = app.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect; bla |> toEffect ])
 
         let test (n : int) =
 

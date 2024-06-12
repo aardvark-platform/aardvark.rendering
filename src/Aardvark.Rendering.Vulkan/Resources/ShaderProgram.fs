@@ -631,14 +631,3 @@ type ContextShaderProgramExtensions private() =
     [<Extension>]
     static member CreateShaderProgram(this : Device, module_ : FShade.Imperative.Module) =
         ShaderProgram.ofModule module_ this
-
-    [<Extension>]
-    static member CreateShaderProgram(this : Device, pass : RenderPass, surface : ISurface) =
-        match surface with
-        | :? FShadeSurface as s ->
-            this.CreateShaderProgram(pass, s.Effect, IndexedGeometryMode.TriangleList)
-        | :? ShaderProgram as p ->
-            p.AddReference()
-            p
-        | _ ->
-            failf "unknown surface %A" surface

@@ -78,7 +78,7 @@ and IRuntime =
 
     abstract member AssembleModule : FShade.Effect * IFramebufferSignature * IndexedGeometryMode -> FShade.Imperative.Module
 
-    abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
+    abstract member PrepareEffect : IFramebufferSignature * FShade.Effect -> IBackendSurface
 
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 

@@ -4,6 +4,7 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open System.Runtime.CompilerServices
+open System
 
 [<AutoOpen>]
 module IRuntimeFSharpExtensions =
@@ -103,17 +104,20 @@ module IRuntimeFSharpExtensions =
 [<AbstractClass; Sealed; Extension>]
 type IRuntimeExtensions private() =
 
+    [<Extension>]
+    static member PrepareEffect(this : IRuntime, signature : IFramebufferSignature, effects : #seq<FShade.Effect>) =
+        this.PrepareEffect(signature, FShade.Effect.compose effects)
+
+    [<Extension>]
+    static member PrepareEffect(this : IRuntime, signature : IFramebufferSignature, [<ParamArray>] effects : FShade.Effect[]) =
+        this.PrepareEffect(signature, Seq.ofArray effects)
+
     ///<summary>Deletes the given backend surface.</summary>
     ///<param name="this">The runtime.</param>
     ///<param name="surface">The surface to delete.</param>
     [<Extension>]
     static member DeleteSurface(this : IRuntime, surface : IBackendSurface) =
         surface.Dispose()
-
-
-    // ================================================================================================================
-    // CompileClear
-    // ================================================================================================================
 
     /// Compiles a render task for clearing a framebuffer with the given values.
     [<Extension>]

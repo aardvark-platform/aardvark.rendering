@@ -474,8 +474,8 @@ type Air private() =
     // ================================================================================================================
     // Surface
     // ================================================================================================================
-    static member BindSurface(surface : ISurface) =
-        modify (fun s -> { s with surface = Surface.Backend surface })
+    static member BindSurface(surface : Surface) =
+        modify (fun s -> { s with surface = surface })
 
     static member BindEffect (l : list<FShadeEffect>) =
         let surf = FShade.Effect.compose l |> Surface.FShadeSimple

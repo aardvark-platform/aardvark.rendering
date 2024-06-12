@@ -505,18 +505,6 @@ module FShadeInterop =
             x.Layout.Link(effect, x.Runtime.DeviceCount, depthRange, flip, top, useCustomSemantic)
 
 
-    type FShadeSurface private(effect : FShadeEffect) =
-        static let surfaceCache = System.Collections.Concurrent.ConcurrentDictionary<string, FShadeSurface>()
-
-        static member Get(e : FShadeEffect) =
-            surfaceCache.GetOrAdd(e.Id, fun _ -> FShadeSurface(e))
-
-        member x.Effect = effect
-
-        interface ISurface
-
-    let toFShadeSurface (e : FShadeEffect) = FShadeSurface.Get e :> ISurface
-
     let inline toEffect a = Effect.ofFunction a
 
     module Surface =
@@ -554,45 +542,3 @@ module FShadeInterop =
                 layout, current
 
             Surface.FShade compile
-
-
-[<AbstractClass; Sealed; Extension>]
-type FShadeRuntimeExtensions private() =
-
-    static let toSurface (l : list<FShadeEffect>) =
-        match l with
-            | [s] -> FShadeSurface.Get s
-            | l -> FShadeSurface.Get (FShade.Effect.compose l)
-
-    [<Extension>]
-    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : list<FShadeEffect>) =
-        this.PrepareSurface(
-            signature,
-            toSurface l
-        )
-
-    [<Extension>]
-    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, [<ParamArray>] effects : array<FShadeEffect>) =
-        let l = List.ofArray(effects)
-        this.PrepareSurface(
-            signature,
-            toSurface l
-        )
-
-    [<Extension>]
-    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : aval<list<FShadeEffect>>) =
-        let mutable current = None
-        l |> AVal.map (fun l ->
-            let newPrep = 
-                this.PrepareSurface(
-                    signature,
-                    toSurface l
-                )
-            match current with
-                | Some c -> this.DeleteSurface c
-                | None -> ()
-            current <- Some newPrep
-            newPrep :> ISurface
-        )
-
-

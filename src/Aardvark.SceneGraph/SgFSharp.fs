@@ -763,8 +763,8 @@ module SgFSharp =
             Sg.SurfaceApplicator(s, sg) :> ISg
 
         /// Applies the given surface to the scene.
-        let surface (m : ISurface) (sg : ISg) =
-            Sg.SurfaceApplicator(Surface.Backend m, sg) :> ISg
+        let inline surface (s : ^Surface) (sg : ISg) =
+            Sg.SurfaceApplicator(Surface.create s, sg) :> ISg
 
         /// Applies the given pool of effects to the scene.
         /// The index active determines which effect is used at a time.

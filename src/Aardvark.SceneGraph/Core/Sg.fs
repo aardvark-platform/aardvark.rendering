@@ -174,9 +174,6 @@ module Sg =
 
         new(value : Surface, child : ISg) = SurfaceApplicator(value, AVal.constant child)
 
-        new(value : ISurface, child : ISg) = SurfaceApplicator(Surface.Backend value, AVal.constant child)
-        new(value : ISurface, child : aval<ISg>) = SurfaceApplicator(Surface.Backend value, child)
-
     type TextureApplicator(semantic : Symbol, texture : aval<ITexture>, child : aval<ISg>) =
         inherit UniformApplicator(semantic, texture :> IAdaptiveValue, child)
 

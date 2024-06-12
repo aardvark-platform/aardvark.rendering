@@ -239,11 +239,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     new(ctx, lock) = new ResourceManager(None, ctx, lock)
 
     interface IResourceManager with
-        member x.CreateSurface(signature, surf) =
-            failwith "[GL] IResourceManager impl"
-//            let res = x.CreateSurface(signature, surf)
-//            new CastResource<_, _>(res) :> IResource<_>
-
         member x.CreateBuffer (data : aval<IBuffer>) =
             let res = x.CreateBuffer(data)
             new CastResource<_, _>(res) :> IResource<_>

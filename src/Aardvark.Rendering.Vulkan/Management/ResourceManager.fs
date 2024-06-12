@@ -1887,8 +1887,8 @@ type ResourceManager(device : Device) =
             [count :> obj, empty :> obj; input :> obj], fun cache key -> new ImageSamplerArrayResource(cache, key, count, empty, input)
         )
 
-    member x.CreateShaderProgram(pass : RenderPass, data : ISurface) =
-        let program = device.CreateShaderProgram(pass, data)
+    member x.CreateShaderProgram(pass : RenderPass, program : ShaderProgram) =
+        program.AddReference()
 
         let resource =
             { new AbstractResourceLocation<ShaderProgram>(dummyCache, []) with
@@ -1939,8 +1939,11 @@ type ResourceManager(device : Device) =
             let program = x.CreateDynamicShaderProgram(data, pass, compile)
             program.Layout, program
 
-        | Surface.Backend surface ->
-            x.CreateShaderProgram(pass, surface)
+        | Surface.Backend (:? ShaderProgram as program) ->
+            x.CreateShaderProgram(pass, program)
+
+        | Surface.Backend unknown ->
+            failf "invalid backend surface: %A" unknown
 
         | Surface.None ->
             failf "encountered empty surface"

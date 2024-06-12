@@ -139,7 +139,7 @@ type Runtime(debug : IDebugConfig) =
 
         member x.Blit(src, srcRegion, dst, dstRegion) = x.Blit(src, srcRegion, dst, dstRegion)
 
-        member x.PrepareSurface (signature, s : ISurface) : IBackendSurface = x.PrepareSurface(signature, s)
+        member x.PrepareEffect (signature, effect : FShade.Effect) : IBackendSurface = x.PrepareEffect(signature, effect)
 
         member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj)
 
@@ -379,20 +379,14 @@ type Runtime(debug : IDebugConfig) =
         ctx.CreateTexture(texture, ValueNone)
 
     member x.PrepareBuffer (b : IBuffer, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) = ctx.CreateBuffer(b, storage)
-    member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface =
+    member x.PrepareEffect (signature : IFramebufferSignature, effect : FShade.Effect) : IBackendSurface =
         Operators.using ctx.ResourceLock (fun d ->
-            let surface =
-                match s with
-                    | :? FShadeSurface as f -> Aardvark.Rendering.Surface.FShadeSimple f.Effect
-                    | _ -> Aardvark.Rendering.Surface.Backend s
-
             if signature.LayerCount > 1 then
                 Log.warn("[PrepareSurface] Using Triangle topology.")
 
-            let iface, program = ctx.CreateProgram(signature, surface, IndexedGeometryMode.TriangleList)
+            let _, program = ctx.CreateProgram(signature, Surface.FShadeSimple effect, IndexedGeometryMode.TriangleList)
 
             AVal.force program :> IBackendSurface
-
         )
 
     member x.CreateStreamingTexture(mipMaps : bool) =

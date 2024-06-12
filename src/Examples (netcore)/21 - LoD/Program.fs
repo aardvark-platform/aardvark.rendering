@@ -179,8 +179,7 @@ module LoD =
             Instanced.trafo |> toEffect           
             DefaultSurfaces.vertexColor  |> toEffect         
         ]
-        let e = FShade.Effect.compose effects
-        FShadeSurface.Get(e) :> ISurface 
+        FShade.Effect.compose effects
 
 
     let progress = 

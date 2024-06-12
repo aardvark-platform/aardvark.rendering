@@ -43,13 +43,6 @@ type SceneGraphExtensions =
     static member Trafo(sg : ISg, modelTrafo : Trafo3d) = Sg.trafo (AVal.constant modelTrafo) sg
 
     [<Extension>]
-    static member Surface(sg : ISg, surface : ISurface) = Sg.SurfaceApplicator(match surface with
-                                                                                   | :? FShadeSurface as fs -> Surface.FShadeSimple fs.Effect
-                                                                                   | :? IBackendSurface as bs -> Surface.Backend bs
-                                                                                   | _ -> failwith "unsupported surface"
-                                                                                , sg) :> ISg
-
-    [<Extension>]
     static member Surface(sg : ISg, surface : Surface) = Sg.SurfaceApplicator(surface, sg) :> ISg
 
     [<Extension>]
