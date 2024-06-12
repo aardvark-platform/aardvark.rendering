@@ -43,12 +43,7 @@ module Surfaces =
                         Effects.VertexColor.Effect
                     ]
 
-                let compile (cfg: EffectConfig) =
-                    let module_ = Effect.toModule cfg effect
-                    let layout = EffectInputLayout.ofModule module_
-                    layout, (AVal.init module_) :> aval<_>
-
-                Surface.Dynamic compile
+                Surface.effectPool [| effect |] (AVal.init 0)
 
             match runtime, signature with
             | :? GL.Runtime as r, _ -> glDynamicShaderCaching signature surface r

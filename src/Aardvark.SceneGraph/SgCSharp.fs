@@ -55,8 +55,8 @@ type SceneGraphExtensions =
     static member Surface(sg : ISg, [<ParamArray>] effects : FShade.Effect[]) = Sg.SurfaceApplicator(Surface.Effect (FShade.Effect.compose effects), sg) :> ISg
 
     [<Extension>]
-    static member Surface(sg : ISg, creator : Func<FShade.EffectConfig, FShade.EffectInputLayout*aval<FShade.Imperative.Module>>) =
-        Sg.SurfaceApplicator(Surface.Dynamic (fun cfg -> creator.Invoke(cfg)), sg) :> ISg
+    static member Surface(sg : ISg, creator : Func<IFramebufferSignature, IndexedGeometryMode, DynamicSurface>) =
+        Sg.SurfaceApplicator(Surface.create creator, sg) :> ISg
 
     // Blending
     [<Extension>]

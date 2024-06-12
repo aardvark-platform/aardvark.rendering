@@ -25,6 +25,10 @@ type Runtime(debug : IDebugConfig) =
 
     member x.ContextLock = ctx.ResourceLock :> IDisposable
 
+    member x.ShaderDepthRange = Range1d(-1.0, 1.0)
+
+    member x.SupportsLayeredShaderInputs = ctx.SupportsLayeredEffects
+
     member x.DebugConfig = debug
 
     member x.ShaderCachePath
@@ -88,6 +92,8 @@ type Runtime(debug : IDebugConfig) =
     interface IRuntime with
 
         member x.DeviceCount = 1
+        member x.ShaderDepthRange = x.ShaderDepthRange
+        member x.SupportsLayeredShaderInputs = x.SupportsLayeredShaderInputs
         member x.DebugConfig = x.DebugConfig
         member x.ContextLock = x.ContextLock
 
@@ -99,9 +105,6 @@ type Runtime(debug : IDebugConfig) =
 
 
         member x.OnDispose = x.OnDispose
-
-        member x.AssembleModule (effect, signature, topology) =
-            x.AssembleModule(effect, signature, topology)
 
         member x.ResourceManager = manager :> IResourceManager
 
@@ -393,9 +396,6 @@ type Runtime(debug : IDebugConfig) =
         ctx.CreateStreamingTexture(mipMaps) :> IStreamingTexture
 
     member x.OnDispose = onDispose.Publish
-
-    member x.AssembleModule (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-        signature.Link(effect, Range1d(-1.0, 1.0), false, topology, not x.Context.SupportsLayeredEffects)
 
     member x.ResourceManager = manager
 

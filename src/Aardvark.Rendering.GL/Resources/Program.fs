@@ -928,7 +928,7 @@ module ProgramExtensions =
                         let glsl =
                             lazy (
                                 try
-                                    let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology, not x.SupportsLayeredEffects)
+                                    let module_ = Effect.link signature key.topology false key.effect
                                     ModuleCompiler.compileGLSL x.FShadeBackend module_
                                 with exn ->
                                     Log.error "%s" exn.Message
@@ -942,11 +942,11 @@ module ProgramExtensions =
                 | Success prog -> Success (prog.Interface, AVal.constant prog)
                 | Error err -> Error err
 
-            | Surface.Dynamic create ->
+            | Surface.Dynamic compile ->
                 // Use surface reference as key rather than create, since equality is undefined behavior for F# functions
                 // See F# specification: 6.9.24 Values with Underspecified Object Identity and Type Identity
                 x.ShaderCache.GetOrAdd(surface, signature, fun _ ->
-                    let (inputLayout, module_) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
+                    let (inputLayout, module_) = compile signature topology
 
                     let initial = AVal.force module_
                     let layoutHash = inputLayout.ComputeHash()

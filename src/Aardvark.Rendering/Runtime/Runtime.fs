@@ -76,8 +76,6 @@ and IRuntime =
     [<Obsolete("To be removed.")>]
     abstract member ResourceManager : IResourceManager
 
-    abstract member AssembleModule : FShade.Effect * IFramebufferSignature * IndexedGeometryMode -> FShade.Imperative.Module
-
     abstract member PrepareEffect : IFramebufferSignature * FShade.Effect -> IBackendSurface
 
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject

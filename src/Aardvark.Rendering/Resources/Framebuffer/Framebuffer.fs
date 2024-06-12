@@ -44,6 +44,14 @@ and IFramebufferRuntime =
 
     abstract member DeviceCount : int
 
+    /// Target depth range of shaders.
+    /// The final depth will be mapped from [-1, 1] to the target range.
+    abstract member ShaderDepthRange : Range1d
+
+    /// Returns whether the runtime supports shader inputs for layered and multiviewport rendering.
+    /// If false, shaders must use custom inputs.
+    abstract member SupportsLayeredShaderInputs : bool
+
     ///<summary>Creates a framebuffer signature with the given attachment signatures.</summary>
     ///<param name="colorAttachments">The color attachment signatures. The keys determine the slot of the corrsponding attachment.</param>
     ///<param name="depthStencilAttachment">The optional depth-stencil attachment signature.</param>

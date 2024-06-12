@@ -38,17 +38,6 @@ type RuntimeCommand =
     static member Geometries(surface : FShade.Effect, pipeline : PipelineState, geometries : aset<IndexedGeometry>) =
         RuntimeCommand.GeometriesSimpleCmd(surface, pipeline, geometries)
 
-    static member Geometries(effects : FShade.Effect[], activeEffect : aval<int>, pipeline : PipelineState, geometries : aset<Geometry>) =
-        let surface =
-            Surface.Dynamic (fun cfg ->
-                let modules = effects |> Array.map (FShade.Effect.toModule cfg)
-                let signature = FShade.EffectInputLayout.ofModules modules
-                let modules = modules |> Array.map (FShade.EffectInputLayout.apply signature)
-
-                signature, activeEffect |> AVal.map (Array.get modules)
-            )
-        RuntimeCommand.GeometriesCmd(surface, pipeline, geometries)
-
     static member LodTree(surface : Surface, pipeline : PipelineState, geometries : LodTreeLoader<Geometry>) =
         RuntimeCommand.LodTreeCmd(surface, pipeline, geometries)
 

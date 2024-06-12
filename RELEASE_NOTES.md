@@ -4,6 +4,8 @@
 - Removed ISurface interface. Was redundant apart from being a common interface for backend surfaces and effects via the FShadeSurface proxy type. Either use IBackendSurface or Surface instead.
 - Renamed Surface.FShadeSimple to Surface.Effect
 - Renamed Surface.FShade to Surface.Dynamic
+- Added support for layered rendering with dynamic shaders. The signature of dynamic shader functions changed from `EffectConfig -> DynamicSurface` to `IFramebufferSignature -> IndexedGeomtryMode -> DynamicSurface`.
+- Added Effect.link (use instead of deprecated IRuntime.AssembleModule and removed EffectConfig utilities) 
 
 ### 5.4.10
 - [OpenVR] changed GL texture submit to 2 textures (previously side by side, issue with Quest 3)

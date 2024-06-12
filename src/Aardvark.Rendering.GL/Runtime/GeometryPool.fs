@@ -988,9 +988,8 @@ module GeometryPoolData =
 
                 let shader =
                     lazy (
-                        let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
                         effect
-                        |> Effect.toModule cfg
+                        |> Effect.link signature IndexedGeometryMode.TriangleList false
                         |> ModuleCompiler.compileGLSL ctx.FShadeBackend
                     )
 

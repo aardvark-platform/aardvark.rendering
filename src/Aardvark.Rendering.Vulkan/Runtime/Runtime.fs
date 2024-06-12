@@ -35,6 +35,10 @@ type Runtime(device : Device) as this =
 
     member x.DeviceCount = device.PhysicalDevices.Length
 
+    member x.ShaderDepthRange = FShadeConfig.depthRange
+
+    member x.SupportsLayeredShaderInputs = true
+
     member x.DebugConfig = debug
 
     member x.CreateStreamingTexture (mipMaps : bool) : IStreamingTexture =
@@ -513,6 +517,10 @@ type Runtime(device : Device) as this =
 
         member x.DeviceCount = x.DeviceCount
 
+        member x.ShaderDepthRange = x.ShaderDepthRange
+
+        member x.SupportsLayeredShaderInputs = x.SupportsLayeredShaderInputs
+
         member x.MaxLocalSize = x.MaxLocalSize
 
         member x.CreateComputeShader(shader : FShade.ComputeShader) =
@@ -545,8 +553,6 @@ type Runtime(device : Device) as this =
             x.ReadPixels(src, sem, offset, size)
 
         member x.OnDispose = onDispose.Publish
-        member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-            signature.Link(effect, FShadeConfig.depthRange, false, topology)
 
         member x.ResourceManager = failf "not implemented"
 

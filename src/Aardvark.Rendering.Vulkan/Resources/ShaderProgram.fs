@@ -576,7 +576,8 @@ module ShaderProgram =
         let compile() =
             let glsl =
                 try
-                    key.layout.Link(key.effect, key.deviceCount, FShadeConfig.depthRange, false, key.topology)
+                    key.effect
+                    |> Effect.link pass key.topology false
                     |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
                     |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
                 with exn ->
