@@ -943,10 +943,8 @@ module ProgramExtensions =
                 | Error err -> Error err
 
             | Surface.Dynamic compile ->
-                // Use surface reference as key rather than create, since equality is undefined behavior for F# functions
-                // See F# specification: 6.9.24 Values with Underspecified Object Identity and Type Identity
-                x.ShaderCache.GetOrAdd(surface, signature, fun _ ->
-                    let (inputLayout, module_) = compile signature topology
+                x.ShaderCache.GetOrAdd(compile, signature, fun _ ->
+                    let (inputLayout, module_) = compile.Invoke(signature, topology)
 
                     let initial = AVal.force module_
                     let layoutHash = inputLayout.ComputeHash()

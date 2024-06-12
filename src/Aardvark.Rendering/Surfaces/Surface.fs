@@ -10,10 +10,10 @@ type IBackendSurface =
 
 type DynamicSurface = EffectInputLayout * aval<Imperative.Module>
 
-[<RequireQualifiedAccess; ReferenceEquality>]
+[<RequireQualifiedAccess>]
 type Surface =
     | Effect of effect: Effect
-    | Dynamic of compile: (IFramebufferSignature -> IndexedGeometryMode -> DynamicSurface)
+    | Dynamic of compile: Func<IFramebufferSignature, IndexedGeometryMode, DynamicSurface>
     | Backend of surface: IBackendSurface
     | None
 
@@ -31,8 +31,8 @@ module Surface =
         static member inline ToSurface(surface: Surface)         = surface
         static member inline ToSurface(effect: Effect)           = Surface.Effect effect
         static member inline ToSurface(effects: #seq<Effect>)    = Surface.Effect <| FShade.Effect.compose effects
-        static member inline ToSurface(compile)                  = Surface.Dynamic compile
-        static member inline ToSurface(compile: Func<_, _, _>)   = Surface.Dynamic (fun s t -> compile.Invoke(s, t))
+        static member inline ToSurface(compile: _ -> _ -> _)     = Surface.Dynamic compile
+        static member inline ToSurface(compile: Func<_, _, _>)   = Surface.Dynamic compile
         static member inline ToSurface(surface: IBackendSurface) = Surface.Backend surface
 
     let inline private toSurface (_ : ^Z) (data: ^T) =

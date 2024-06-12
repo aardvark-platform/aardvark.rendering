@@ -1913,12 +1913,12 @@ type ResourceManager(device : Device) =
 
         program.PipelineLayout, resource
 
-    member private x.CreateDynamicShaderProgram(key : obj, pass : RenderPass, top : IndexedGeometryMode,
-                                                compile : IFramebufferSignature -> IndexedGeometryMode -> DynamicSurface) =
+    member private x.CreateDynamicShaderProgram(pass : RenderPass, top : IndexedGeometryMode,
+                                                compile : Func<IFramebufferSignature, IndexedGeometryMode, DynamicSurface>) =
         dynamicProgramCache.GetOrCreate(
-            [key; top :> obj; pass.Layout :> obj],
+            [compile :> obj; top :> obj; pass.Layout :> obj],
             fun cache key ->
-                let _, module_ = compile pass top
+                let _, module_ = compile.Invoke(pass, top)
                 use initialProgram = device.CreateShaderProgram(AVal.force module_)
 
                 let program = new DynamicShaderProgramResource(cache, key, device, initialProgram.PipelineLayout, module_)
@@ -1933,9 +1933,7 @@ type ResourceManager(device : Device) =
             x.CreateShaderProgram(pass, effect, top)
 
         | Surface.Dynamic compile ->
-            // Use surface itself as key rather than compile function, since equality is undefined behavior for F# functions.
-            // See F# specification: 6.9.24 Values with Underspecified Object Identity and Type Identity
-            let program = x.CreateDynamicShaderProgram(data, pass, top, compile)
+            let program = x.CreateDynamicShaderProgram(pass, top, compile)
             program.Layout, program
 
         | Surface.Backend (:? ShaderProgram as program) ->
