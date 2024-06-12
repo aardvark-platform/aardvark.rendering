@@ -914,7 +914,7 @@ module ProgramExtensions =
 
         member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : Error<GLSL.GLSLProgramInterface * aval<Program>> =
             match surface with
-            | Surface.FShadeSimple effect ->
+            | Surface.Effect effect ->
                 let key : EffectCacheKey =
                     {
                         effect = effect
@@ -942,7 +942,7 @@ module ProgramExtensions =
                 | Success prog -> Success (prog.Interface, AVal.constant prog)
                 | Error err -> Error err
 
-            | Surface.FShade create ->
+            | Surface.Dynamic create ->
                 // Use surface reference as key rather than create, since equality is undefined behavior for F# functions
                 // See F# specification: 6.9.24 Values with Underspecified Object Identity and Type Identity
                 x.ShaderCache.GetOrAdd(surface, signature, fun _ ->

@@ -384,7 +384,7 @@ type Runtime(debug : IDebugConfig) =
             if signature.LayerCount > 1 then
                 Log.warn("[PrepareSurface] Using Triangle topology.")
 
-            let _, program = ctx.CreateProgram(signature, Surface.FShadeSimple effect, IndexedGeometryMode.TriangleList)
+            let _, program = ctx.CreateProgram(signature, Surface.Effect effect, IndexedGeometryMode.TriangleList)
 
             AVal.force program :> IBackendSurface
         )

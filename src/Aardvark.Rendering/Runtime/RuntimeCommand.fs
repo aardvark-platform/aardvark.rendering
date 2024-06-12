@@ -40,7 +40,7 @@ type RuntimeCommand =
 
     static member Geometries(effects : FShade.Effect[], activeEffect : aval<int>, pipeline : PipelineState, geometries : aset<Geometry>) =
         let surface =
-            Surface.FShade (fun cfg ->
+            Surface.Dynamic (fun cfg ->
                 let modules = effects |> Array.map (FShade.Effect.toModule cfg)
                 let signature = FShade.EffectInputLayout.ofModules modules
                 let modules = modules |> Array.map (FShade.EffectInputLayout.apply signature)

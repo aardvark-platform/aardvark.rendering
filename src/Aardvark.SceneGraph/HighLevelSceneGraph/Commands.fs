@@ -165,7 +165,7 @@ module RuntimeCommandSemantics =
                 | RenderCommand.RGeometries(config, geometries) ->
                     let effect =
                         match scope.Surface with
-                            | Surface.FShadeSimple e -> e
+                            | Surface.Effect e -> e
                             | s -> failwithf "[Sg] cannot create GeometryCommand with shader: %A" s
 
                     let state =

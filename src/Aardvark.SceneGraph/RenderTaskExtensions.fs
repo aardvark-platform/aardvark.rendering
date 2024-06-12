@@ -85,7 +85,7 @@ module RenderTask =
             let ro = RenderObject()
             ro.DrawCalls <- Direct (AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
             ro.Mode <- IndexedGeometryMode.TriangleList
-            ro.Surface <- Shaders.fs |> toEffect |> Surface.FShadeSimple
+            ro.Surface <- Shaders.fs |> toEffect |> Surface.Effect
             ro.Indices <- BufferView(AVal.constant (ArrayBuffer [|0;1;2; 0;2;3|] :> IBuffer), typeof<int>) |> Some
             ro.VertexAttributes <- attributeProvider
             ro.Uniforms <- uniformProvider color depth
@@ -133,7 +133,7 @@ module RenderTask =
 
                 let compose =
                     let ro = RenderObjects.create color depth
-                    ro.Surface <- effect |> FShade.Effect.compose |> Surface.FShadeSimple
+                    ro.Surface <- effect |> FShade.Effect.compose |> Surface.Effect
                     ASet.single (ro :> IRenderObject)
 
                 let composeTask = runtime.CompileRender(signature, compose)

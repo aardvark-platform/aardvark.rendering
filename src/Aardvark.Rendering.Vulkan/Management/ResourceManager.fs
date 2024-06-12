@@ -1930,10 +1930,10 @@ type ResourceManager(device : Device) =
 
     member x.CreateShaderProgram(pass : RenderPass, data : Aardvark.Rendering.Surface, top : IndexedGeometryMode) =
         match data with
-        | Surface.FShadeSimple effect ->
+        | Surface.Effect effect ->
             x.CreateShaderProgram(pass, effect, top)
 
-        | Surface.FShade compile ->
+        | Surface.Dynamic compile ->
             // Use surface itself as key rather than compile function, since equality is undefined behavior for F# functions.
             // See F# specification: 6.9.24 Values with Underspecified Object Identity and Type Identity
             let program = x.CreateDynamicShaderProgram(data, pass, compile)

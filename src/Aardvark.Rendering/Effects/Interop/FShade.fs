@@ -541,4 +541,4 @@ module FShadeInterop =
 
                 layout, current
 
-            Surface.FShade compile
+            Surface.Dynamic compile

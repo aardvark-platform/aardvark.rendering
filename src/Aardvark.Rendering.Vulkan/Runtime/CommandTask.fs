@@ -1765,7 +1765,7 @@ module private RuntimeCommands =
         let effect = Effect.withInstanceUniforms state.PerGeometryUniforms effect
 
         let pipeline = 
-            let surface = Aardvark.Rendering.Surface.FShadeSimple effect
+            let surface = Aardvark.Rendering.Surface.Effect effect
             compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
 
         let descriptorSet =

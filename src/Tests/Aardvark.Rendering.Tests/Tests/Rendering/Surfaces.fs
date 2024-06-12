@@ -48,7 +48,7 @@ module Surfaces =
                     let layout = EffectInputLayout.ofModule module_
                     layout, (AVal.init module_) :> aval<_>
 
-                Surface.FShade compile
+                Surface.Dynamic compile
 
             match runtime, signature with
             | :? GL.Runtime as r, _ -> glDynamicShaderCaching signature surface r

@@ -15,7 +15,7 @@ module ShaderDebuggerExtensions =
 
         member x.IsModified =
             match hooked.Surface, original.Surface with
-            | Surface.FShadeSimple h, Surface.FShadeSimple o -> h <> o
+            | Surface.Effect h, Surface.Effect o -> h <> o
             | _ -> false
 
     module HookedRenderObject =
@@ -30,12 +30,12 @@ module ShaderDebuggerExtensions =
             match ro with
             | :? RenderObject as ro ->
                 match ro.Surface with
-                | Surface.FShadeSimple e ->
+                | Surface.Effect e ->
                     match ShaderDebugger.tryRegisterEffect e with
                     | Some hooked ->
                         hooked |> AVal.map (fun e ->
                             let hooked = RenderObject.Clone ro
-                            hooked.Surface <- Surface.FShadeSimple e
+                            hooked.Surface <- Surface.Effect e
                             HookedRenderObject(hooked, ro)
                         )
                     | _ ->

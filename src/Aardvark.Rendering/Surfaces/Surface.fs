@@ -12,21 +12,27 @@ type DynamicSurface = EffectInputLayout * aval<Imperative.Module>
 
 [<RequireQualifiedAccess; ReferenceEquality>]
 type Surface =
-    | FShadeSimple of Effect
-    | FShade of (EffectConfig -> DynamicSurface)
-    | Backend of IBackendSurface
+    | Effect of effect: Effect
+    | Dynamic of compile: (EffectConfig -> DynamicSurface)
+    | Backend of surface: IBackendSurface
     | None
+
+    [<Obsolete("Use Surface.Effect instead.")>]
+    static member FShadeSimple(effect: Effect) = Surface.Effect effect
+
+    [<Obsolete("Use Surface.Dynamic instead.")>]
+    static member FShade(compile: EffectConfig -> DynamicSurface) = Surface.Dynamic compile
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Surface =
 
     [<Sealed; AbstractClass>]
     type Converter() =
-        static member inline ToSurface(surface: Surface) = surface
-        static member inline ToSurface(effect: Effect) = Surface.FShadeSimple effect
-        static member inline ToSurface(effects: #seq<Effect>) = Surface.FShadeSimple <| FShade.Effect.compose effects
-        static member inline ToSurface(create: EffectConfig -> DynamicSurface) = Surface.FShade create
-        static member inline ToSurface(surface: IBackendSurface) = Surface.Backend surface
+        static member inline ToSurface(surface: Surface)                       = surface
+        static member inline ToSurface(effect: Effect)                         = Surface.Effect effect
+        static member inline ToSurface(effects: #seq<Effect>)                  = Surface.Effect <| FShade.Effect.compose effects
+        static member inline ToSurface(compile: EffectConfig -> DynamicSurface) = Surface.Dynamic compile
+        static member inline ToSurface(surface: IBackendSurface)               = Surface.Backend surface
 
     let inline private toSurface (_ : ^Z) (data: ^T) =
         ((^Z or ^T) : (static member ToSurface : ^T -> Surface)(data))

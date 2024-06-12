@@ -32,7 +32,7 @@ module SgFSharp =
             inherit EffectBuilder()
 
             member x.Run(f : unit -> list<FShadeEffect>) =
-                let surface = f() |> FShade.Effect.compose |> Surface.FShadeSimple
+                let surface = f() |> FShade.Effect.compose |> Surface.Effect
                 fun (sg : ISg) -> Sg.SurfaceApplicator(surface, sg) :> ISg
 
         // Utilities to create cached buffer views
@@ -759,7 +759,7 @@ module SgFSharp =
 
         /// Applies the given effects to the scene.
         let effect (s : seq<FShadeEffect>) (sg : ISg) =
-            let s = FShade.Effect.compose s |> Surface.FShadeSimple
+            let s = FShade.Effect.compose s |> Surface.Effect
             Sg.SurfaceApplicator(s, sg) :> ISg
 
         /// Applies the given surface to the scene.
