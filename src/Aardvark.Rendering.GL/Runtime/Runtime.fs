@@ -53,9 +53,8 @@ type Runtime(debug : IDebugConfig) =
             try
                 Log.startTimed "initializing OpenGL runtime"
 
-                Driver.printDriverInfo 4
-
                 let driver = context.Driver
+                driver |> Driver.print 4
 
                 // GL_CONTEXT_CORE_PROFILE_BIT 1
                 // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
