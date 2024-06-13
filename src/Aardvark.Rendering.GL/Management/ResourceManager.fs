@@ -238,17 +238,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     new(parent, lock) = new ResourceManager(Some parent, parent.Context, lock)
     new(ctx, lock) = new ResourceManager(None, ctx, lock)
 
-    interface IResourceManager with
-        member x.CreateBuffer (data : aval<IBuffer>) =
-            let res = x.CreateBuffer(data)
-            new CastResource<_, _>(res) :> IResource<_>
-
-        member x.CreateTexture (data : aval<ITexture>) =
-            let res = x.CreateTexture(data, { Dimension = TextureDimension.Texture2D; IsArray = false; IsMultisampled = false })
-            new CastResource<_, _>(res) :> IResource<_>
-
-
-
     member x.Context = ctx
 
     member x.CreateBuffer(data : aval<#IBuffer>) =

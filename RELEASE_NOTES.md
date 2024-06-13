@@ -8,6 +8,7 @@
 - Added Effect.link (use instead of deprecated IRuntime.AssembleModule and removed EffectConfig utilities)
 - IRuntime.PrepareEffect now takes an optional topology for layered effects.
 - [GL] Cleanup up shader program creation and caching. Removed various methods for creating and compiling shaders from `Context`.
+- Removed obsolete IResourceManager interface
 
 ### 5.4.10
 - [OpenVR] changed GL texture submit to 2 textures (previously side by side, issue with Quest 3)

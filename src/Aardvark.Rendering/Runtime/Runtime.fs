@@ -74,9 +74,6 @@ and IRuntime =
 
     abstract member OnDispose : IEvent<unit>
 
-    [<Obsolete("To be removed.")>]
-    abstract member ResourceManager : IResourceManager
-
     /// Compiles an effect for the given framebuffer signature and topology.
     /// The topology is ignored unless the signature is layered.
     abstract member PrepareEffect : signature: IFramebufferSignature * effect: FShade.Effect *

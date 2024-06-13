@@ -554,8 +554,6 @@ type Runtime(device : Device) as this =
 
         member x.OnDispose = onDispose.Publish
 
-        member x.ResourceManager = failf "not implemented"
-
         member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
                                             depthStencilAttachment : Option<TextureFormat>,
                                             samples : int, layers : int, perLayerUniforms : seq<string>) =

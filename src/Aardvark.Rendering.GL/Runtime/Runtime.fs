@@ -110,8 +110,6 @@ type Runtime(debug : IDebugConfig) =
 
         member x.OnDispose = x.OnDispose
 
-        member x.ResourceManager = manager :> IResourceManager
-
         member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
                                             depthStencilAttachment : Option<TextureFormat>,
                                             samples : int, layers : int, perLayerUniforms : seq<string>) =
