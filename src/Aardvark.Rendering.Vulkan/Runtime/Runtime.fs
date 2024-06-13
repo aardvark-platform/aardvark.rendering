@@ -132,8 +132,8 @@ type Runtime(device : Device) as this =
 
         device.CreateFramebuffer(unbox signature, views) :> IFramebuffer
 
-    member x.PrepareEffect (signature : IFramebufferSignature, effect : FShade.Effect) =
-        device.CreateShaderProgram(unbox<RenderPass> signature, effect, IndexedGeometryMode.TriangleList)
+    member x.PrepareEffect (signature : IFramebufferSignature, effect : FShade.Effect, topology : IndexedGeometryMode) =
+        device.CreateShaderProgram(unbox<RenderPass> signature, effect, topology)
 
     member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(false)>] export : bool) =
         ResourceValidation.Textures.validateForPrepare t
@@ -571,7 +571,7 @@ type Runtime(device : Device) as this =
         member x.CompileRender (signature, set) = x.CompileRender(signature, set)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
-        member x.PrepareEffect(signature, effect) = x.PrepareEffect(signature, effect)
+        member x.PrepareEffect(signature, effect, topology) = x.PrepareEffect(signature, effect, topology)
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
         member x.PrepareTexture(t) = x.PrepareTexture(t)
         member x.PrepareBuffer(b, u, s) = x.PrepareBuffer(b, u, s)

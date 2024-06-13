@@ -146,7 +146,7 @@ type Runtime(debug : IDebugConfig) =
 
         member x.Blit(src, srcRegion, dst, dstRegion) = x.Blit(src, srcRegion, dst, dstRegion)
 
-        member x.PrepareEffect (signature, effect : FShade.Effect) : IBackendSurface = x.PrepareEffect(signature, effect)
+        member x.PrepareEffect(signature, effect, topology) = x.PrepareEffect(signature, effect, topology)
 
         member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj)
 
@@ -386,12 +386,12 @@ type Runtime(debug : IDebugConfig) =
         ctx.CreateTexture(texture, ValueNone)
 
     member x.PrepareBuffer (b : IBuffer, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) = ctx.CreateBuffer(b, storage)
-    member x.PrepareEffect (signature : IFramebufferSignature, effect : FShade.Effect) : IBackendSurface =
+    member x.PrepareEffect (signature : IFramebufferSignature, effect : FShade.Effect, topology : IndexedGeometryMode) : IBackendSurface =
         Operators.using ctx.ResourceLock (fun d ->
             if signature.LayerCount > 1 then
                 Log.warn("[PrepareSurface] Using Triangle topology.")
 
-            let _, program = ctx.CreateProgram(signature, Surface.Effect effect, IndexedGeometryMode.TriangleList)
+            let _, program = ctx.CreateProgram(signature, Surface.Effect effect, topology)
 
             AVal.force program :> IBackendSurface
         )

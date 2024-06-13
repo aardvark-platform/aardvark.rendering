@@ -6,6 +6,7 @@
 - Renamed Surface.FShade to Surface.Dynamic
 - Added support for layered rendering with dynamic shaders. The signature of dynamic shader functions changed from `EffectConfig -> DynamicSurface` to `IFramebufferSignature -> IndexedGeomtryMode -> DynamicSurface`.
 - Added Effect.link (use instead of deprecated IRuntime.AssembleModule and removed EffectConfig utilities)
+- IRuntime.PrepareEffect now takes an optional topology for layered effects.
 - [GL] Cleanup up shader program creation and caching. Removed various methods for creating and compiling shaders from `Context`.
 
 ### 5.4.10

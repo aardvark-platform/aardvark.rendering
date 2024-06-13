@@ -2,10 +2,11 @@
 
 open System
 open System.Threading
+open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering.Raytracing
 open FSharp.Data.Adaptive
-open System.Runtime.CompilerServices
 open Microsoft.FSharp.Control
 
 /// Interface for backend-specific debug configurations.
@@ -76,7 +77,10 @@ and IRuntime =
     [<Obsolete("To be removed.")>]
     abstract member ResourceManager : IResourceManager
 
-    abstract member PrepareEffect : IFramebufferSignature * FShade.Effect -> IBackendSurface
+    /// Compiles an effect for the given framebuffer signature and topology.
+    /// The topology is ignored unless the signature is layered.
+    abstract member PrepareEffect : signature: IFramebufferSignature * effect: FShade.Effect *
+                                    [<Optional; DefaultParameterValue(IndexedGeometryMode.TriangleList)>] topology: IndexedGeometryMode -> IBackendSurface
 
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
