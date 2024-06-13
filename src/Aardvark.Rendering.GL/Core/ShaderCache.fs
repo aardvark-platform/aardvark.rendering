@@ -25,6 +25,16 @@ module internal ShaderCacheKeys =
         | Effect of EffectCacheKey
         | Compute of id: string
 
+    type DynamicSurfaceFunc =
+        Func<IFramebufferSignature, IndexedGeometryMode, DynamicSurface>
+
+    type DynamicSurfaceCacheKey =
+        {
+            compile : DynamicSurfaceFunc
+            layout : FramebufferLayout
+            topology : IndexedGeometryMode
+        }
+
 type internal ShaderCacheEntry(surface : IBackendSurface, destroy : unit -> unit) =
     member x.Surface = surface
     member x.Dispose() = destroy()
@@ -45,7 +55,7 @@ type internal ShaderCacheEntry(surface : IBackendSurface, destroy : unit -> unit
 
 type internal ShaderCache() =
     let staticCache = ConcurrentDictionary<ShaderCacheKey, Error<ShaderCacheEntry>>()
-    let dynamicCache = ConditionalWeakTable<obj, obj>()
+    let dynamicCache = ConditionalWeakTable<DynamicSurfaceFunc, obj>()
 
     static let box (destroy : 'T -> unit) (value : Error<'T>) : Error<ShaderCacheEntry> =
         match value with
@@ -60,17 +70,17 @@ type internal ShaderCache() =
     member x.GetOrAdd<'T when 'T :> IBackendSurface>(key : ShaderCacheKey, create : ShaderCacheKey -> Error<'T>, destroy : 'T -> unit) : Error<'T> =
         staticCache.GetOrAdd(key, create >> box destroy) |> unbox
 
-    member x.GetOrAdd(key: obj, signature: IFramebufferSignature, create: unit -> Error<'T>) : Error<'T> =
+    member x.GetOrAdd(key: DynamicSurfaceCacheKey, create: DynamicSurfaceCacheKey -> Error<'T>) : Error<'T> =
         lock dynamicCache (fun _ ->
-            let perLayout =
-                match dynamicCache.TryGetValue key with
+            let dict =
+                match dynamicCache.TryGetValue key.compile with
                 | (true, d) -> FSharp.Core.Operators.unbox d
                 | _ ->
-                    let d = Dictionary<FramebufferLayout, Error<'T>>()
-                    dynamicCache.Add(key, d)
+                    let d = Dictionary<DynamicSurfaceCacheKey, Error<'T>>()
+                    dynamicCache.Add(key.compile, d)
                     d
 
-            perLayout.GetCreate(signature.Layout, ignore >> create)
+            dict.GetCreate(key, create)
         )
 
     member x.Entries =

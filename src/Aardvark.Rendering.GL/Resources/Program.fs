@@ -894,8 +894,15 @@ module ProgramExtensions =
                 | Error err -> Error err
 
             | Surface.Dynamic compile ->
-                x.ShaderCache.GetOrAdd(compile, signature, fun _ ->
-                    let (inputLayout, module_) = compile.Invoke(signature, topology)
+                let key : DynamicSurfaceCacheKey =
+                    {
+                        compile = compile
+                        layout = signature.Layout
+                        topology = topology
+                    }
+
+                x.ShaderCache.GetOrAdd(key, fun key ->
+                    let (inputLayout, module_) = key.compile.Invoke(signature, key.topology)
 
                     let initial = AVal.force module_
                     let layoutHash = inputLayout.ComputeHash()
@@ -907,11 +914,11 @@ module ProgramExtensions =
                             Log.error "%s" exn.Message
                             reraise()
 
-                    match x.TryGetOrCompileEffect(initial.Hash + layoutHash, signature, topology, fun () -> compile initial) with
+                    match x.TryGetOrCompileEffect(initial.Hash + layoutHash, signature, key.topology, fun () -> compile initial) with
                     | Success prog ->
                         let changeableProgram =
                             module_ |> AVal.map (fun m ->
-                                match x.TryGetOrCompileEffect(m.Hash + layoutHash, signature, topology, fun () -> compile m) with
+                                match x.TryGetOrCompileEffect(m.Hash + layoutHash, signature, key.topology, fun () -> compile m) with
                                 | Success p -> p
                                 | Error e ->
                                     failf "shader compiler returned errors: %s" e
