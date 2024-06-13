@@ -29,7 +29,6 @@
     <Compile Include="LiveDemo.fs" />
     <Compile Include="Instancing.fs" />
     <None Include="LiveDemo.fsx" />
-    <Compile Include="Compute.fs" />
     <Compile Include="ShaderSwitches.fs" />
     <Compile Include="Commands.fs" />
     <Compile Include="Trie.fs" />

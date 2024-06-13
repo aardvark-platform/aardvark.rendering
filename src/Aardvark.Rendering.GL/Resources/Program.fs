@@ -4,8 +4,10 @@ open System
 open System.Threading
 open Aardvark.Base
 open Aardvark.Rendering
+open FShade.Imperative
+open FShade
+open FShade.GLSL
 
-open Aardvark.Rendering.ShaderReflection
 open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
@@ -72,9 +74,6 @@ type Program =
 
 [<AutoOpen>]
 module ProgramExtensions =
-    //type UniformField = Aardvark.Rendering.GL.UniformField
-    open System.Text.RegularExpressions
-    open System
 
     [<AutoOpen>]
     module private RuntimeExtensions =
@@ -139,46 +138,38 @@ module ProgramExtensions =
                 Backend.Create cfg
             )
 
-    type Context with
-        member x.FShadeBackend = FShadeBackend.get x
+    [<AutoOpen>]
+    module private Utilities =
+        let nl = Environment.NewLine
 
+        let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
 
+        let addPreprocessorDefine (define : string) (code : string) =
+            let mutable replaced = false
+            let def = $"#define {define}{nl}"
 
-    let private getShaderType (stage : ShaderStage) =
-        match stage with
-        | ShaderStage.Vertex -> ShaderType.VertexShader
-        | ShaderStage.TessControl -> ShaderType.TessControlShader
-        | ShaderStage.TessEval -> ShaderType.TessEvaluationShader
-        | ShaderStage.Geometry -> ShaderType.GeometryShader
-        | ShaderStage.Fragment -> ShaderType.FragmentShader
-        | ShaderStage.Compute -> ShaderType.ComputeShader
-        | _ -> failf "unknown shader-stage: %A" stage
+            let newCode =
+                versionRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->
+                    let v = m.Groups.["version"].Value
+                    replaced <- true
+                    $"#version {v}{nl}{def}"
+                ))
 
-    let private nl = Environment.NewLine
+            if replaced then newCode
+            else def + newCode
 
-    let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
-    let private addPreprocessorDefine (define : string) (code : string) =
-        let mutable replaced = false
-        let def = $"#define {define}{nl}"
+    module private ShaderCompiler =
+        let private getShaderType (stage : ShaderStage) =
+            match stage with
+            | ShaderStage.Vertex -> ShaderType.VertexShader
+            | ShaderStage.TessControl -> ShaderType.TessControlShader
+            | ShaderStage.TessEval -> ShaderType.TessEvaluationShader
+            | ShaderStage.Geometry -> ShaderType.GeometryShader
+            | ShaderStage.Fragment -> ShaderType.FragmentShader
+            | ShaderStage.Compute -> ShaderType.ComputeShader
+            | _ -> failf "unknown shader-stage: %A" stage
 
-        let newCode =
-            versionRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->
-                let v = m.Groups.["version"].Value
-                replaced <- true
-                $"#version {v}{nl}{def}"
-            ))
-
-        if replaced then newCode
-        else def + newCode
-
-    let private outputSuffixes = ["{0}"; "{0}Out"; "{0}Frag"; "Pixel{0}"; "{0}Pixel"; "{0}Fragment"]
-    let private geometryOutputSuffixes = ["{0}"; "{0}Out"; "{0}Geometry"; "{0}TessControl"; "{0}TessEval"; "Geometry{0}"; "TessControl{0}"; "TessEval{0}"]
-
-
-    module ShaderCompiler =
-        let private tryCompileShader (stage : ShaderStage) (code : string) (entryPoint : string) (x : Context) =
-            use __ = x.ResourceLock
-
+        let private tryCompileShader (stage : ShaderStage) (code : string) (entryPoint : string) (context : Context) =
             let code = code.Replace(sprintf "%s(" entryPoint, "main(")
 
             let handle = GL.CreateShader(getShaderType stage)
@@ -228,7 +219,7 @@ module ProgramExtensions =
             match topologies with
             | Success topologies when status = 1 ->
                 Success {
-                    Context = x
+                    Context = context
                     Handle = handle
                     Stage = stage
                     SupportedModes = topologies
@@ -244,16 +235,14 @@ module ProgramExtensions =
             | Error err ->
                 Error (err + nl)
 
-        let tryCompileCompute (code : string) (x : Context) =
-            use __ = x.ResourceLock
-
-            match tryCompileShader ShaderStage.Compute code "main" x with
+        let tryCompileCompute (code : string) (context : Context) =
+            match tryCompileShader ShaderStage.Compute code "main" context with
             | Success shader ->
                 Success [shader]
             | Error err ->
                 Error $"failed to compile compute program{nl}{nl}{err}"
 
-        let tryCompileShaders (withFragment : bool) (code : string) (x : Context) =
+        let tryCompileShaders (withFragment : bool) (code : string) (context : Context) =
             let vs = code.Contains "#ifdef Vertex"
             let tcs = code.Contains "#ifdef TessControl"
             let tev = code.Contains "#ifdef TessEval"
@@ -275,46 +264,45 @@ module ProgramExtensions =
                                 .Replace("out vec4 Colors3Out", "out vec4 ColorsOut")
                        else code
 
-            Operators.using x.ResourceLock (fun _ ->
-                let results =
-                    stages |> List.map (fun (def, entry, stage) ->
-                        let codeWithDefine = addPreprocessorDefine def code
-                        stage, tryCompileShader stage codeWithDefine entry x
+            let results =
+                stages |> List.map (fun (def, entry, stage) ->
+                    let codeWithDefine = addPreprocessorDefine def code
+                    stage, tryCompileShader stage codeWithDefine entry context
+                )
+
+            let errors = results |> List.choose (fun (stage, r) -> match r with | Error e -> Some(stage, e) | _ -> None)
+
+            if List.isEmpty errors then
+                let shaders = results |> List.choose (function (_,Success r) -> Some r | _ -> None)
+                Success shaders
+            else
+                let err = errors |> List.map (fun (stage, e) -> $"{stage}:{nl}{e}") |> String.concat nl
+                Error $"failed to compile program{nl}{nl}{err}"
+
+
+        let private outputSuffixes = ["{0}"; "{0}Out"; "{0}Frag"; "Pixel{0}"; "{0}Pixel"; "{0}Fragment"]
+
+        let setFragDataLocations (outputs : Map<string, int>) (handle : int) (context : Context) =
+            outputs
+            |> Map.toList
+            |> List.map (fun (name, location) ->
+                let outputNameAndIndex =
+                    outputSuffixes |> List.tryPick (fun s ->
+                        let outputName = String.Format(s, name)
+                        let index = GL.GetFragDataIndex(handle, outputName)
+                        GL.Check "could not get FragDataIndex"
+                        if index >= 0 then Some (outputName, index)
+                        else None
                     )
 
-                let errors = results |> List.choose (fun (stage, r) -> match r with | Error e -> Some(stage, e) | _ -> None)
+                match outputNameAndIndex with
+                | Some (outputName, index) ->
+                    GL.BindFragDataLocation(handle, location, name)
+                    GL.Check "could not bind FragData location"
 
-                if List.isEmpty errors then
-                    let shaders = results |> List.choose (function (_,Success r) -> Some r | _ -> None)
-                    Success shaders
-                else
-                    let err = errors |> List.map (fun (stage, e) -> $"{stage}:{nl}{e}") |> String.concat nl
-                    Error $"failed to compile program{nl}{nl}{err}"
-            )
-
-        let setFragDataLocations (fboSignature : Map<string, int>) (handle : int) (x : Context) =
-            Operators.using x.ResourceLock (fun _ ->
-                fboSignature
-                |> Map.toList
-                |> List.map (fun (name, location) ->
-                    let outputNameAndIndex =
-                        outputSuffixes |> List.tryPick (fun s ->
-                            let outputName = String.Format(s, name)
-                            let index = GL.GetFragDataIndex(handle, outputName)
-                            GL.Check "could not get FragDataIndex"
-                            if index >= 0 then Some (outputName, index)
-                            else None
-                        )
-
-                    match outputNameAndIndex with
-                    | Some (outputName, index) ->
-                        GL.BindFragDataLocation(handle, location, name)
-                        GL.Check "could not bind FragData location"
-
-                        { attributeIndex = location; size = 1; name = outputName; semantic = name; attributeType = ActiveAttribType.FloatVec4 }
-                    | None ->
-                        failf "could not get desired program-output: %A" name
-                )
+                    { attributeIndex = location; size = 1; name = outputName; semantic = name; attributeType = ActiveAttribType.FloatVec4 }
+                | None ->
+                    failf "could not get desired program-output: %A" name
             )
 
         let tryLinkProgram (handle : int) (code : string) (shaders : list<Shader>) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
@@ -389,7 +377,9 @@ module ProgramExtensions =
     module private ProgramCompiler =
 
         let fixBindings (program : Program) (iface : FShade.GLSL.GLSLProgramInterface) =
-            if program.Context.FShadeBackend.Config.bindingMode = FShade.GLSL.BindingMode.None then
+            let backend = FShadeBackend.get program.Context
+
+            if backend.Config.bindingMode = FShade.GLSL.BindingMode.None then
                 let uniformBuffers =
                     let mutable b = 0
                     iface.uniformBuffers |> MapExt.map (fun name ub ->
@@ -482,22 +472,22 @@ module ProgramExtensions =
 
             result
 
-        let tryCompileCode (context : Context) (framebufferSignature : Map<string, int>) (code : string) =
+        let private tryCompileCode (outputs : Map<string, int>) (context : Context) (code : string) =
             let printCode message =
                 code |> printCode message true
 
             tryCompileInternal context printCode (fun _ ->
                 match context |> ShaderCompiler.tryCompileShaders true code with
                 | Success shaders ->
-                    let findOutputs = ShaderCompiler.setFragDataLocations framebufferSignature
+                    let findOutputs = ShaderCompiler.setFragDataLocations outputs
                     shaders |> tryLink context findOutputs code
 
                 | Error err ->
                     Error err
             )
 
-        let tryCompile (context : Context) (framebufferSignature : Map<string, int>) (shader : FShade.GLSL.GLSLShader) =
-            match shader.code |> tryCompileCode context framebufferSignature with
+        let tryCompile (outputs : Map<string, int>) (context : Context) (shader : FShade.GLSL.GLSLShader) =
+            match shader.code |> tryCompileCode outputs context with
             | Success program ->
                 let iface = fixBindings program shader.iface
                 let program = { program with Interface = iface }
@@ -506,7 +496,7 @@ module ProgramExtensions =
             | Error e ->
                 Error e
 
-        let tryCompileComputeCode (context : Context) (code : string) =
+        let private tryCompileComputeCode (context : Context) (code : string) =
             let printCode message =
                 code |> printCode message false
 
@@ -519,24 +509,19 @@ module ProgramExtensions =
                     Error err
             )
 
-        let tryCompileCompute (context : Context) (iface : FShade.GLSL.GLSLProgramInterface) (code : string)  =
-            match code |> tryCompileComputeCode context with
-            | Success program -> Success { program with Interface = iface }
+        let tryCompileCompute (context : Context) (shader : FShade.GLSL.GLSLShader)  =
+            match shader.code |> tryCompileComputeCode context with
+            | Success program -> Success { program with Interface = shader.iface }
             | res -> res
-
-    open FShade.Imperative
-    open FShade
-    open FShade.GLSL
-
-    let private pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
     type private OutputSignature =
         {
-            device      : string
-            id          : string
-            outputs     : Map<string, int * TextureFormat>
-            layered     : Set<string>
-            layerCount  : int
+            device              : string
+            id                  : string
+            outputs             : Map<string, int * TextureFormat>
+            layered             : Set<string>
+            layerCount          : int
+            layeredShaderInputs : bool
         }
 
     type private ShaderCacheEntry =
@@ -741,7 +726,9 @@ module ProgramExtensions =
                 let entry = ShaderCacheEntry.unpickle data
                 Program.ofShaderCacheEntry context fixBindings entry
 
-        let private tryGetCacheFile (extension : string) (context : Context) (key : CodeCacheKey) =
+        let private pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+
+        let private tryGetCacheFile (extension : string) (context : Context) (key : ShaderCacheKey) =
             context.ShaderCachePath |> Option.map (fun prefix ->
                 // NOTE: context.Diver represents information obtained by primary context
                 // -> possible that resource context have been created differently
@@ -753,20 +740,37 @@ module ProgramExtensions =
                         Log.warn "[GL] No context current, using information of primary context to determine shader cache file name"
                         context.Driver
 
+                let device = $"{driver.vendor}_{driver.renderer}_{driver.versionString}/{driver.profileMask}"
+
                 let key =
-                    {
-                        device     = driver.vendor + "_" + driver.renderer + "_" + driver.versionString + "/" + driver.profileMask.ToString()
-                        id         = key.id
-                        outputs    = key.layout.ColorAttachments |> Map.toList |> List.map (fun (id, att) -> string att.Name, (id, att.Format)) |> Map.ofList
-                        layered    = key.layout.PerLayerUniforms
-                        layerCount = key.layout.LayerCount
-                    }
+                    match key with
+                    | ShaderCacheKey.Effect k ->
+                        let outputs =
+                            k.layout.ColorAttachments
+                            |> Map.toList
+                            |> List.map (fun (id, att) -> string att.Name, (id, att.Format))
+                            |> Map.ofList
+
+                        { device              = device
+                          id                  = k.id
+                          outputs             = outputs
+                          layered             = k.layout.PerLayerUniforms
+                          layerCount          = k.layout.LayerCount
+                          layeredShaderInputs = k.layeredShaderInputs }
+
+                    | ShaderCacheKey.Compute id ->
+                        { device              = device
+                          id                  = id
+                          outputs             = Map.empty
+                          layered             = Set.empty
+                          layerCount          = 0
+                          layeredShaderInputs = false }
 
                 let hash = pickler.ComputeHash(key).Hash |> System.Guid
                 Path.combine [prefix; string hash + "." + extension]
             )
 
-        let write (key : CodeCacheKey) (program : Program) =
+        let write (key : ShaderCacheKey) (program : Program) =
             let extension, getData =
                 if program.Context.SupportsBinaryCache then
                     "bin", fun () -> Pickling.tryGetByteArray program
@@ -799,7 +803,7 @@ module ProgramExtensions =
             else
                 None
 
-        let tryReadBinary (context : Context) (fixBindings : bool) (key : CodeCacheKey) =
+        let tryReadBinary (context : Context) (fixBindings : bool) (key : ShaderCacheKey) =
             if context.SupportsBinaryCache then
                 tryGetCacheFile "bin" context key
                 |> Option.bind (tryRead (Pickling.ofByteArray context fixBindings))
@@ -807,103 +811,53 @@ module ProgramExtensions =
                 None
 
         // GLSL only cache as fallback for platforms that do not support program binaries (e.g. MacOS)
-        let tryReadGLSL (context : Context) (key : CodeCacheKey) =
+        let tryReadGLSL (context : Context) (key : ShaderCacheKey) =
             if context.SupportsBinaryCache then None
             else
                 tryGetCacheFile "glsl" context key
                 |> Option.bind (tryRead GLSLShader.unpickle)
 
     [<AutoOpen>]
-    module internal ShaderCacheExtensions =
+    module private ShaderCacheExtensions =
         type ShaderCache with
-            member inline x.GetOrAdd(key : CodeCacheKey, create : CodeCacheKey -> Error<Program>) =
-                x.GetOrAdd(key, create, fun p -> p.Free())
-
-            member inline x.GetOrAdd(key : EffectCacheKey, create : EffectCacheKey -> Error<Program>) =
+            member inline x.GetOrAdd(key : ShaderCacheKey, create : ShaderCacheKey -> Error<Program>) =
                 x.GetOrAdd(key, create, fun p -> p.Free())
 
     type Aardvark.Rendering.GL.Context with
 
-        /// Returns whether the inputs gl_Layer and gl_ViewportIndex can be used
-        /// in fragment shaders. If not a custom output / input must be used for
-        /// layered effects.
-        member internal x.SupportsLayeredEffects =
-            x.Driver.glsl >= Version(4, 3, 0)
-
-        member x.TryGetProgramBinary(prog : Program) =
-            use __ = prog.Context.ResourceLock
-            Program.tryGetBinary prog
-
-        member x.TryCompileProgramCode(fboSignature : Map<string, int>, code : string) =
-            use __ = x.ResourceLock
-            ProgramCompiler.tryCompileCode x fboSignature code
-
-        member x.CompileProgramCode(fboSignature : Map<string, int>, code : string) =
-            match x.TryCompileProgramCode(fboSignature, code) with
-            | Success p -> p
-            | Error e ->
-                failf "shader compiler returned errors: %s" e
+        member x.FShadeBackend = FShadeBackend.get x
 
         member x.Delete(p : Program) =
             p.Dispose()
 
-        // [<Obsolete>] ??
-        member x.TryCompileComputeProgram(id : string, code : string, iface : GLSL.GLSLProgramInterface) =
-            x.TryCompileComputeProgram(id, lazy(code, iface))
-
-        member x.TryCompileComputeProgram(id : string, codeAndInterface : Lazy<string * GLSL.GLSLProgramInterface>) =
+        member internal x.TryGetOrCompileProgram(key: ShaderCacheKey, compile: unit -> GLSLShader) =
             use __ = x.ResourceLock
 
-            let layout =
-                { Samples = 0
-                  ColorAttachments = Map.empty
-                  DepthStencilAttachment = None
-                  LayerCount = 0
-                  PerLayerUniforms = Set.empty }
-
-            let key : CodeCacheKey =
-                { id = id; layout = layout }
-
             x.ShaderCache.GetOrAdd(key, fun key ->
-                match key |> FileCache.tryReadBinary x false with
-                | Some program ->
-                    Success program
+                let fixBindings =
+                    match key with
+                    | ShaderCacheKey.Effect _ -> true
+                    | _ -> false
 
-                | _ ->
-                    let (code, iface) =
-                        match FileCache.tryReadGLSL x key with
-                        | Some shader -> shader.code, shader.iface
-                        | _ -> codeAndInterface.Value
-
-                    match code |> ProgramCompiler.tryCompileCompute x iface with
-                    | Success program ->
-                        program |> FileCache.write key
-                        Success program
-
-                    | res ->
-                        res
-            )
-
-        member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) =
-            x.TryCompileProgram(id, signature.Layout, code)
-
-        member x.TryCompileProgram(id : string, layout : FramebufferLayout, shader : Lazy<GLSL.GLSLShader>) : Error<_> =
-            let key : CodeCacheKey =
-                { id = id; layout = layout }
-
-            x.ShaderCache.GetOrAdd(key, fun key ->
-                match key |> FileCache.tryReadBinary x true with
+                match key |> FileCache.tryReadBinary x fixBindings with
                 | Some program ->
                     Success program
 
                 | _ ->
                     let shader =
                         FileCache.tryReadGLSL x key
-                        |> Option.defaultWith (fun _ -> shader.Value)
+                        |> Option.defaultWith compile
 
-                    let outputs = shader.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
+                    let tryCompile =
+                        match key with
+                        | ShaderCacheKey.Effect _ ->
+                            let outputs = shader.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
+                            ProgramCompiler.tryCompile outputs
 
-                    match shader |> ProgramCompiler.tryCompile x outputs with
+                        | ShaderCacheKey.Compute _ ->
+                            ProgramCompiler.tryCompileCompute
+
+                    match tryCompile x shader with
                     | Success program ->
                         program |> FileCache.write key
                         Success program
@@ -912,33 +866,30 @@ module ProgramExtensions =
                         res
             )
 
-        member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : Error<GLSL.GLSLProgramInterface * aval<Program>> =
+        member internal x.TryGetOrCompileEffect(id: string, signature: IFramebufferSignature, topology: IndexedGeometryMode, compile: unit -> GLSLShader) =
+            let key =
+                ShaderCacheKey.Effect {
+                    id                  = id
+                    layout              = signature.Layout
+                    topology            = topology
+                    deviceCount         = signature.Runtime.DeviceCount
+                    layeredShaderInputs = signature.Runtime.SupportsLayeredShaderInputs
+                }
+
+            x.TryGetOrCompileProgram(key, compile)
+
+        member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) =
             match surface with
             | Surface.Effect effect ->
-                let key : EffectCacheKey =
-                    {
-                        effect = effect
-                        layout = signature.Layout
-                        topology = topology
-                        deviceCount = signature.Runtime.DeviceCount
-                    }
+                let compile() =
+                    try
+                        let module_ = Effect.link signature topology false effect
+                        ModuleCompiler.compileGLSL x.FShadeBackend module_
+                    with exn ->
+                        Log.error "%s" exn.Message
+                        reraise()
 
-                let program =
-                    x.ShaderCache.GetOrAdd(key, fun key ->
-                        let glsl =
-                            lazy (
-                                try
-                                    let module_ = Effect.link signature key.topology false key.effect
-                                    ModuleCompiler.compileGLSL x.FShadeBackend module_
-                                with exn ->
-                                    Log.error "%s" exn.Message
-                                    reraise()
-                            )
-
-                        x.TryCompileProgram(key.effect.Id, key.layout, glsl)
-                    )
-
-                match program with
+                match x.TryGetOrCompileEffect(effect.Id, signature, topology, compile) with
                 | Success prog -> Success (prog.Interface, AVal.constant prog)
                 | Error err -> Error err
 
@@ -956,11 +907,11 @@ module ProgramExtensions =
                             Log.error "%s" exn.Message
                             reraise()
 
-                    match x.TryCompileProgram(initial.Hash + layoutHash, signature, lazy (compile initial)) with
+                    match x.TryGetOrCompileEffect(initial.Hash + layoutHash, signature, topology, fun () -> compile initial) with
                     | Success prog ->
                         let changeableProgram =
                             module_ |> AVal.map (fun m ->
-                                match x.TryCompileProgram(m.Hash + layoutHash, signature, lazy (compile m)) with
+                                match x.TryGetOrCompileEffect(m.Hash + layoutHash, signature, topology, fun () -> compile m) with
                                 | Success p -> p
                                 | Error e ->
                                     failf "shader compiler returned errors: %s" e

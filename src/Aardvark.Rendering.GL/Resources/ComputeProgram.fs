@@ -26,19 +26,60 @@ type ComputeProgram =
         member x.Interface = x.Interface
 
 [<AutoOpen>]
-module ComputeProgramExtensions =
+module internal ComputeProgramExtensions =
     open FShade
 
     type Context with
 
-        // [<Obsolete>] ??
-        member x.TryCompileKernel (id : string, code : string, iface : FShade.GLSL.GLSLProgramInterface, localSize : V3i) =
-            x.TryCompileKernel(id, lazy((code, iface)), localSize)
+        member x.TryCreateComputeProgram (shader : FShade.ComputeShader) =
+            let compile() =
+                let backend =
+                    if x.Driver.glsl >= Version(4,3,0) then
+                        glsl430
+                    elif
+                        x.Driver.extensions |> Set.contains "GL_ARB_compute_shader" &&
+                        x.Driver.extensions |> Set.contains "GL_ARB_shading_language_420pack" &&
+                        x.Driver.glsl >= Version(4,1,0) then
+                        FShade.GLSL.Backend.Create
+                            { glsl410.Config with
+                                enabledExtensions =
+                                    glsl410.Config.enabledExtensions
+                                    |> Set.add "GL_ARB_compute_shader"
+                                    |> Set.add "GL_ARB_shading_language_420pack"
+                            }
+                    else
+                        failf "compute shader not supported: GLSL version = %A" x.Driver.glsl
 
-        member x.TryCompileKernel (id : string, codeAndInterface : Lazy<string * FShade.GLSL.GLSLProgramInterface>, localSize : V3i) =
-            use __ = x.ResourceLock
+                let glsl =
+                    try
+                        shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL backend
+                    with exn ->
+                        Log.error "%s" exn.Message
+                        reraise()
 
-            match x.TryCompileComputeProgram(id, codeAndInterface) with
+                let adjust (s : GLSL.GLSLSampler) =
+                    let textures =
+                        List.init s.samplerCount (fun i ->
+                            let texName =
+                                match Map.tryFind (s.samplerName, i) shader.csTextureNames with
+                                    | Some ti -> ti
+                                    | _ -> s.samplerName
+                            let samplerState =
+                                match Map.tryFind (s.samplerName, i) shader.csSamplerStates with
+                                    | Some sam -> sam
+                                    | _ -> SamplerState.empty
+                            texName, samplerState
+                        )
+                    { s with samplerTextures = textures }
+
+                let iface = { glsl.iface with samplers = glsl.iface.samplers |> MapExt.map (constF adjust) }
+                { glsl with iface = iface }
+
+            let localSize =
+                if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
+                else failf "compute shader has no local size"
+
+            match x.TryGetOrCompileProgram(ShaderCacheKey.Compute shader.csId, compile) with
             | Success program ->
                 let kernel = { Program = program; LocalSize = localSize }
                 Success kernel
@@ -46,60 +87,8 @@ module ComputeProgramExtensions =
             | Error err ->
                 Error err
 
-        member x.TryCompileKernel (shader : FShade.ComputeShader) =
-            let codeAndInterface =
-                lazy (
-                    let backend =
-                        if x.Driver.glsl >= Version(4,3,0) then
-                            glsl430
-                        elif
-                            x.Driver.extensions |> Set.contains "GL_ARB_compute_shader" &&
-                            x.Driver.extensions |> Set.contains "GL_ARB_shading_language_420pack" &&
-                            x.Driver.glsl >= Version(4,1,0) then
-                            FShade.GLSL.Backend.Create
-                                { glsl410.Config with
-                                    enabledExtensions =
-                                        glsl410.Config.enabledExtensions
-                                        |> Set.add "GL_ARB_compute_shader"
-                                        |> Set.add "GL_ARB_shading_language_420pack"
-                                }
-                        else
-                            failf "compute shader not supported: GLSL version = %A" x.Driver.glsl
-
-                    let glsl =
-                        try
-                            shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL backend
-                        with exn ->
-                            Log.error "%s" exn.Message
-                            reraise()
-
-                    let adjust (s : GLSL.GLSLSampler) =
-                        let textures =
-                            List.init s.samplerCount (fun i ->
-                                let texName =
-                                    match Map.tryFind (s.samplerName, i) shader.csTextureNames with
-                                        | Some ti -> ti
-                                        | _ -> s.samplerName
-                                let samplerState =
-                                    match Map.tryFind (s.samplerName, i) shader.csSamplerStates with
-                                        | Some sam -> sam
-                                        | _ -> SamplerState.empty
-                                texName, samplerState
-                            )
-                        { s with samplerTextures = textures }
-
-                    let iface = { glsl.iface with samplers = glsl.iface.samplers |> MapExt.map (constF adjust) }
-                    (glsl.code, iface)
-                )
-
-            let localSize =
-                if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
-                else failf "compute shader has no local size"
-
-            x.TryCompileKernel(shader.csId, codeAndInterface, localSize)
-
-        member x.CompileKernel (shader : FShade.ComputeShader) : ComputeProgram =
-            match x.TryCompileKernel shader with
+        member x.CreateComputeProgram (shader : FShade.ComputeShader) : ComputeProgram =
+            match x.TryCreateComputeProgram shader with
             | Success kernel ->
                 kernel
             | Error err ->
@@ -119,7 +108,7 @@ module internal ComputeProgramDebugExtensions =
         inherit AdaptiveObject()
 
         let mutable shader = input.GetValue()
-        let mutable program = context.CompileKernel shader
+        let mutable program = context.CreateComputeProgram shader
         let layout = program.Interface
 
         let validateLayout (next : GLSLProgramInterface) =
@@ -164,7 +153,7 @@ module internal ComputeProgramDebugExtensions =
                 if s <> shader then
                     let updated =
                         try
-                            ValueSome <| context.CompileKernel s
+                            ValueSome <| context.CreateComputeProgram s
                         with _ ->
                             ValueNone
 
@@ -206,4 +195,4 @@ module internal ComputeProgramDebugExtensions =
                 new HookedComputeProgram(x, hooked)
 
             | _ ->
-                x.CompileKernel shader
+                x.CreateComputeProgram shader

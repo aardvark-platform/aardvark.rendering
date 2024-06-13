@@ -10,21 +10,20 @@ open System.Runtime.CompilerServices
 
 [<AutoOpen>]
 module internal ShaderCacheKeys =
-    open FShade
-
-    type CodeCacheKey =
-        {
-            id : string
-            layout : FramebufferLayout
-        }
 
     type EffectCacheKey =
         {
-            effect : Effect
+            id : string
             layout : FramebufferLayout
             topology : IndexedGeometryMode
             deviceCount : int
+            layeredShaderInputs : bool
         }
+
+    [<RequireQualifiedAccess>]
+    type ShaderCacheKey =
+        | Effect of EffectCacheKey
+        | Compute of id: string
 
 type internal ShaderCacheEntry(surface : IBackendSurface, destroy : unit -> unit) =
     member x.Surface = surface
@@ -45,8 +44,7 @@ type internal ShaderCacheEntry(surface : IBackendSurface, destroy : unit -> unit
         member x.Dispose() = x.Dispose()
 
 type internal ShaderCache() =
-    let codeCache = ConcurrentDictionary<CodeCacheKey, Error<ShaderCacheEntry>>()
-    let effectCache = ConcurrentDictionary<EffectCacheKey, Error<ShaderCacheEntry>>()
+    let staticCache = ConcurrentDictionary<ShaderCacheKey, Error<ShaderCacheEntry>>()
     let dynamicCache = ConditionalWeakTable<obj, obj>()
 
     static let box (destroy : 'T -> unit) (value : Error<'T>) : Error<ShaderCacheEntry> =
@@ -59,11 +57,8 @@ type internal ShaderCache() =
         | Success v -> Success (unbox v.Surface)
         | Error err -> Error err
 
-    member x.GetOrAdd<'T when 'T :> IBackendSurface>(key : CodeCacheKey, create : CodeCacheKey -> Error<'T>, destroy : 'T -> unit) : Error<'T> =
-        codeCache.GetOrAdd(key, create >> box destroy) |> unbox
-
-    member x.GetOrAdd<'T when 'T :> IBackendSurface>(key : EffectCacheKey, create : EffectCacheKey -> Error<'T>, destroy : 'T -> unit) : Error<'T> =
-        effectCache.GetOrAdd(key, create >> box destroy) |> unbox
+    member x.GetOrAdd<'T when 'T :> IBackendSurface>(key : ShaderCacheKey, create : ShaderCacheKey -> Error<'T>, destroy : 'T -> unit) : Error<'T> =
+        staticCache.GetOrAdd(key, create >> box destroy) |> unbox
 
     member x.GetOrAdd(key: obj, signature: IFramebufferSignature, create: unit -> Error<'T>) : Error<'T> =
         lock dynamicCache (fun _ ->
@@ -79,8 +74,7 @@ type internal ShaderCache() =
         )
 
     member x.Entries =
-        [ codeCache.Values; effectCache.Values ]
-        |> Seq.concat
+        staticCache.Values
         |> Seq.choose (function
             | Success p -> Some p
             | _ -> None
@@ -89,8 +83,7 @@ type internal ShaderCache() =
 
     member x.Dispose() =
         for e in x.Entries do e.Dispose()
-        codeCache.Clear()
-        effectCache.Clear()
+        staticCache.Clear()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

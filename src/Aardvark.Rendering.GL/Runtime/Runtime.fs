@@ -27,7 +27,11 @@ type Runtime(debug : IDebugConfig) =
 
     member x.ShaderDepthRange = Range1d(-1.0, 1.0)
 
-    member x.SupportsLayeredShaderInputs = ctx.SupportsLayeredEffects
+    /// Returns whether the inputs gl_Layer and gl_ViewportIndex can be used
+    /// in fragment shaders. If not a custom output / input must be used for
+    /// layered effects.
+    member x.SupportsLayeredShaderInputs =
+        ctx.Driver.glsl >= Version(4, 3, 0)
 
     member x.DebugConfig = debug
 

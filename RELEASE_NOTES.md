@@ -5,7 +5,8 @@
 - Renamed Surface.FShadeSimple to Surface.Effect
 - Renamed Surface.FShade to Surface.Dynamic
 - Added support for layered rendering with dynamic shaders. The signature of dynamic shader functions changed from `EffectConfig -> DynamicSurface` to `IFramebufferSignature -> IndexedGeomtryMode -> DynamicSurface`.
-- Added Effect.link (use instead of deprecated IRuntime.AssembleModule and removed EffectConfig utilities) 
+- Added Effect.link (use instead of deprecated IRuntime.AssembleModule and removed EffectConfig utilities)
+- [GL] Cleanup up shader program creation and caching. Removed various methods for creating and compiling shaders from `Context`.
 
 ### 5.4.10
 - [OpenVR] changed GL texture submit to 2 textures (previously side by side, issue with Quest 3)
