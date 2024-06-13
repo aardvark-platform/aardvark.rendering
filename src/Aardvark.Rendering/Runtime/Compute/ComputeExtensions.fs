@@ -54,10 +54,6 @@ type IComputeRuntimeExtensions private() =
     static member CompileCompute(runtime : IComputeRuntime, commands : list<ComputeCommand>) =
         runtime.CompileCompute(commands |> AList.ofList)
 
-    [<Extension; Obsolete("Use IComputeRuntime.CompileCompute() instead.")>]
-    static member Compile(runtime : IComputeRuntime, commands : list<ComputeCommand>) =
-        runtime.CompileCompute(commands)
-
     [<Extension>]
     static member Run(runtime : IComputeRuntime, commands : list<ComputeCommand>, renderToken : RenderToken) =
         use task = runtime.CompileCompute(commands)
@@ -73,14 +69,6 @@ type IComputeShaderExtensions private() =
 
     [<Extension>]
     static member CreateInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
-        shader.Runtime.CreateInputBinding(shader, inputs)
-
-    [<Extension; Obsolete("Use CreateInputBinding instead.")>]
-    static member NewInputBinding(_runtime : IComputeRuntime, shader : IComputeShader, inputs : IUniformProvider) =
-        _runtime.CreateInputBinding(shader, inputs)
-
-    [<Extension; Obsolete("Use CreateInputBinding instead.")>]
-    static member NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
         shader.Runtime.CreateInputBinding(shader, inputs)
 
     [<Extension>]

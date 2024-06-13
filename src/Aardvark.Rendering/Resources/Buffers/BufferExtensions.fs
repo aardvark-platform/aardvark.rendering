@@ -162,10 +162,6 @@ type IBufferRangeExtensions private() =
         let slice = range.GetSlice(startIndex, endIndex)
         slice.Upload(Array.create (int slice.Count) value)
 
-    [<Extension; Obsolete("Use range.Upload(src, srcIndex, dstIndex, count) instead.")>]
-    static member Upload(range : IBufferRange<'T>, src : 'T[], dstIndex : int, count : int) =
-        range.Upload(src, 0, dstIndex, count)
-
     // ================================================================================================================
     // Download
     // ================================================================================================================
@@ -226,14 +222,6 @@ type IBufferRangeExtensions private() =
         SpanPinning.Pin(dst, fun pDst ->
             src.Download(pDst, byteSize<'T> count)
         )
-
-    [<Extension; Obsolete("Use range.Download(dst, srcIndex, dstIndex, count) instead.")>]
-    static member Download(src : IBufferRange<'T>, srcIndex : int, dst : 'T[], dstIndex : int, count : int) =
-        src.Download(dst, srcIndex, dstIndex, count)
-
-    [<Extension; Obsolete("Use range.Download(dst, srcIndex, dstIndex, count) instead.")>]
-    static member Download(src : IBufferRange<'T>, srcIndex : int, dst : 'T[], count : int) =
-        src.Download(dst, srcIndex, 0, count)
 
     // ================================================================================================================
     // DownloadAsync
@@ -375,19 +363,6 @@ type IBufferRuntimeExtensions private() =
         let buffer = this.CreateBuffer<'T>(data.Length, usage, storage)
         buffer.Upload(data)
         buffer
-
-    [<Extension; Obsolete("Use Upload instead.")>]
-    static member Copy(this : IBufferRuntime, srcData : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
-        this.Upload(srcData, dst, dstOffset, size)
-
-    [<Extension; Obsolete("Use Download instead.")>]
-    static member Copy(this : IBufferRuntime, srcBuffer : IBackendBuffer, srcOffset : nativeint, dstData : nativeint, size : nativeint) =
-        this.Download(srcBuffer, srcOffset, dstData, size)
-
-    [<Extension; Obsolete("Use DownloadAsync instead.")>]
-    static member CopyAsync(this : IBufferRuntime, srcBuffer : IBackendBuffer, srcOffset : nativeint, dstData : nativeint, size : nativeint) =
-        this.DownloadAsync(srcBuffer, srcOffset, dstData, size)
-
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =

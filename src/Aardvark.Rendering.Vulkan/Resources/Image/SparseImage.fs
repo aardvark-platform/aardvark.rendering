@@ -486,7 +486,7 @@ module SparseTextureImplemetation =
         let texture =
             AVal.custom (fun t ->
                 if isDisposed then
-                    NullTexture() :> ITexture
+                    nullTexture
                 else
                     swapBuffers()
             )

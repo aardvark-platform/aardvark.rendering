@@ -443,20 +443,8 @@ module Buffer =
     let internal updateWriter (writer : nativeint -> unit) (buffer : Buffer) =
         updateRangeWriter 0L buffer.Size writer buffer
 
-    [<Obsolete("Use uploadRangeSet instead.")>]
-    let uploadRanges (ptr : nativeint) (ranges : RangeSet) (buffer : Buffer) =
-        let baseOffset = int64 ranges.Min
-        let totalSize = int64 (ranges.Max - ranges.Min)
-
-        buffer |> updateRangeWriter baseOffset totalSize (fun dst ->
-            for r in ranges do
-                let srcOffset = nativeint r.Min
-                let dstOffset = nativeint (r.Min - ranges.Min)
-                Marshal.Copy(ptr + srcOffset, dst + dstOffset, r.Size + 1)
-        )
-
     // TODO: Rename back to uploadRanges with next major update
-    let uploadRangeSet (ptr : nativeint) (ranges : RangeSet1i) (buffer : Buffer) =
+    let uploadRanges (ptr : nativeint) (ranges : RangeSet1i) (buffer : Buffer) =
         let baseOffset = int64 ranges.Min
         let totalSize = int64 (ranges.Max - ranges.Min + 1)
 
@@ -654,14 +642,9 @@ type ContextBufferExtensions private() =
         use token = memory.Device.Token
         token |> Buffer.ofBufferWithMemory export flags data memory
 
-    [<Obsolete("Use overload with RangeSet1i parameter instead.")>]
-    [<Extension>]
-    static member inline UploadRanges(buffer : Buffer, ptr : nativeint, ranges : RangeSet) =
-        buffer |> Buffer.uploadRanges ptr ranges
-
     [<Extension>]
     static member inline UploadRanges(buffer : Buffer, ptr : nativeint, ranges : RangeSet1i) =
-        buffer |> Buffer.uploadRangeSet ptr ranges
+        buffer |> Buffer.uploadRanges ptr ranges
 
     [<Extension>]
     static member inline TryUpdate(buffer : Buffer, b : IBuffer) =

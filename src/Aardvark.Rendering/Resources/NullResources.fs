@@ -5,7 +5,7 @@ open FSharp.Data.Adaptive
 
 #nowarn "44"
 
-type NullTexture [<Obsolete("Use nullTexture or NullTexture.Instance instead.")>] () =
+type NullTexture private () =
     static let instance = NullTexture() :> ITexture
     static let instanceConst = AVal.constant instance
 

@@ -213,10 +213,6 @@ module ``Clear Utlities`` =
         member inline x.Color(s : ClearValues, semantic : Symbol, color : ^Color) =
             s |> ClearValues.colorAttachment semantic color
 
-        [<CustomOperation("color"); Obsolete("Use untupled overload of this builder operation instead.")>]
-        member inline x.Color(s : ClearValues, (semantic : Symbol, color : ^Color)) =
-            s |> ClearValues.colorAttachment semantic color
-
         [<CustomOperation("colors")>]
         member inline x.Colors(s : ClearValues, colors : Map<Symbol, ^Color>) =
             s |> ClearValues.colors colors

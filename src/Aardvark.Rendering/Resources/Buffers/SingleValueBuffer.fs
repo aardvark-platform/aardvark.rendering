@@ -16,9 +16,6 @@ type SingleValueBuffer<'T when 'T : unmanaged>(value : aval<'T>) =
 
     static let zero = SingleValueBuffer(Unchecked.defaultof<'T>)
 
-    [<Obsolete("Use SingleValueBuffer<'T>.Zero instead.")>]
-    new() = SingleValueBuffer(~~Unchecked.defaultof<'T>)
-
     new(value : 'T) = SingleValueBuffer(~~value)
 
     /// Buffer containing zero as value.

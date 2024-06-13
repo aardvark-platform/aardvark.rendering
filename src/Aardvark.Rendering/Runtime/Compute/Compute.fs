@@ -112,23 +112,11 @@ and [<RequireQualifiedAccess>]
         if dstIndex >= dst.Length then raise <| ArgumentException($"Array index {dstIndex} out of bounds (length = {dst.Length}).")
         ComputeCommand.DownloadBufferCmd(src, HostMemory.Managed (dst, dstIndex))
 
-    [<Obsolete("Use ComputeCommand.Download() instead.")>]
-    static member inline Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[], dstIndex : int) =
-        ComputeCommand.Download(src, dst, dstIndex)
-
     static member inline Download<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[]) =
         ComputeCommand.DownloadBufferCmd(src, HostMemory.Managed (dst, 0))
 
-    [<Obsolete("Use ComputeCommand.Download() instead.")>]
-    static member inline Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[]) =
-        ComputeCommand.Download(src, dst)
-
     static member inline Download<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : nativeptr<'T>) =
         ComputeCommand.DownloadBufferCmd(src, HostMemory.Unmanaged (NativePtr.toNativeInt dst))
-
-    [<Obsolete("Use ComputeCommand.Download() instead.")>]
-    static member inline Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : nativeptr<'T>) =
-        ComputeCommand.Download(src, dst)
 
 
     static member inline Upload(src : nativeint, dst : IBufferRange) =
@@ -139,23 +127,11 @@ and [<RequireQualifiedAccess>]
         if srcIndex >= src.Length then raise <| ArgumentException($"Array index {srcIndex} out of bounds (length = {src.Length}).")
         ComputeCommand.UploadBufferCmd(HostMemory.Managed (src :> Array, srcIndex), dst)
 
-    [<Obsolete("Use ComputeCommand.Upload() instead.")>]
-    static member inline Copy<'T when 'T : unmanaged>(src : 'T[], srcIndex : int, dst : IBufferRange<'T>) =
-        ComputeCommand.Upload(src, srcIndex, dst)
-
     static member inline Upload<'T when 'T : unmanaged>(src : 'T[], dst : IBufferRange<'T>) =
         ComputeCommand.UploadBufferCmd(HostMemory.Managed (src :> Array, 0), dst)
 
-    [<Obsolete("Use ComputeCommand.Upload() instead.")>]
-    static member inline Copy<'T when 'T : unmanaged>(src : 'T[], dst : IBufferRange<'T>) =
-        ComputeCommand.Upload(src, dst)
-
     static member inline Upload<'T when 'T : unmanaged>(src : nativeptr<'T>, dst : IBufferRange<'T>) =
         ComputeCommand.UploadBufferCmd(HostMemory.Unmanaged (NativePtr.toNativeInt src), dst)
-
-    [<Obsolete("Use ComputeCommand.Upload() instead.")>]
-    static member inline Copy<'T when 'T : unmanaged>(src : nativeptr<'T>, dst : IBufferRange<'T>) =
-        ComputeCommand.Upload(src, dst)
 
 
     static member inline Sync(buffer : IBackendBuffer,

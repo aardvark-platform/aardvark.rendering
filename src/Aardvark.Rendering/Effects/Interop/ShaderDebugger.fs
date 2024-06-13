@@ -61,8 +61,3 @@ module ShaderDebuggerExtensions =
                 set |> ASet.mapA hookRenderObject
             else
                 set
-
-[<Obsolete("Use ShaderDebugger module instead.")>]
-type EffectDebugger private() =
-    static member Hook (o : IRenderObject) = ShaderDebugger.hookRenderObject o
-    static member Hook (set : aset<IRenderObject>) = ShaderDebugger.hookRenderObjects set

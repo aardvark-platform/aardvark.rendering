@@ -131,7 +131,3 @@ type IComputeRuntimeMutableInputBindingExtensions private() =
     [<Extension>]
     static member CreateInputBinding(_runtime : IComputeRuntime, shader : IComputeShader) =
         new MutableComputeInputBinding(shader)
-
-    [<Extension; Obsolete("Use CreateInputBinding instead.")>]
-    static member NewInputBinding(_runtime : IComputeRuntime, shader : IComputeShader) =
-        _runtime.CreateInputBinding(shader)
