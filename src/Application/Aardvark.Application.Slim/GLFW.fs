@@ -565,8 +565,8 @@ type IWindowSurface =
     abstract CreateSwapchain : V2i -> ISwapchain
     abstract Handle : obj
 
-// TODO: Inherit IDisposable (see Instance.Dispose())
 type IWindowInterop =
+    inherit IDisposable
     abstract Boot : Glfw -> unit
     abstract CreateSurface : IRuntime * WindowConfig * Glfw * nativeptr<WindowHandle> -> IWindowSurface
     abstract WindowHints : WindowConfig * Glfw -> unit
@@ -753,10 +753,7 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
                 if v then wait <- false
 
     member x.Dispose() =
-        match interop with
-        | :? IDisposable as d -> d.Dispose()
-        | _ -> ()
-
+        interop.Dispose()
         glfw.Terminate()
 
     interface IDisposable with

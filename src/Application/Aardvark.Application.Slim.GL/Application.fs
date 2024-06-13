@@ -343,8 +343,7 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintBool.ScaleToMonitor, true)
                 glfw.WindowHint(WindowHintInt.Samples, if cfg.samples = 1 then 0 else cfg.samples)
 
-          interface IDisposable with
-            member x.Dispose() = cleanup()
+            override x.Dispose() = cleanup()
         }
 
 type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) as this =

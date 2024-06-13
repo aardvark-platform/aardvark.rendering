@@ -93,6 +93,9 @@ module private Vulkan =
 
             override __.WindowHints(cfg: WindowConfig, glfw: Glfw) = 
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.NoApi)
+
+            override __.Dispose() =
+                ()
         }
 
 type VulkanApplication private (app : HeadlessVulkanApplication, hideCocoaMenuBar : bool) =
