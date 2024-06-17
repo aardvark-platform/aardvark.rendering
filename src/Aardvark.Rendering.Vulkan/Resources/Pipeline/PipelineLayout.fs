@@ -5,63 +5,21 @@ open Aardvark.Base
 open Aardvark.Base.Sorting
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
-open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
 open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
-open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-// #nowarn "51"
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module VkShaderStageFlags =
-    let ofShaderStage =
-        LookupTable.lookupTable [
-            ShaderStage.Vertex,         VkShaderStageFlags.VertexBit
-            ShaderStage.TessControl,    VkShaderStageFlags.TessellationControlBit
-            ShaderStage.TessEval,       VkShaderStageFlags.TessellationEvaluationBit
-            ShaderStage.Geometry,       VkShaderStageFlags.GeometryBit
-            ShaderStage.Fragment,       VkShaderStageFlags.FragmentBit
-            ShaderStage.Compute,        VkShaderStageFlags.ComputeBit
-            ShaderStage.RayGeneration,  VkShaderStageFlags.RaygenBitKhr
-            ShaderStage.Intersection,   VkShaderStageFlags.IntersectionBitKhr
-            ShaderStage.AnyHit,         VkShaderStageFlags.AnyHitBitKhr
-            ShaderStage.ClosestHit,     VkShaderStageFlags.ClosestHitBitKhr
-            ShaderStage.Miss,           VkShaderStageFlags.MissBitKhr
-            ShaderStage.Callable,       VkShaderStageFlags.CallableBitKhr
-        ]
-        
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module TextureFormat =
-    open FShade.GLSL
-
-    let ofGLSLType =
-        LookupTable.lookupTable [   
-            Int(true, 8),           TextureFormat.R8i
-            Vec(2, Int(true, 8)),   TextureFormat.Rg8i
-            Vec(3, Int(true, 8)),   TextureFormat.Rgb8i
-            Vec(4, Int(true, 8)),   TextureFormat.Rgba8i
-
-            Int(true, 16),          TextureFormat.R16i
-            Vec(2, Int(true, 16)),  TextureFormat.Rg16i
-            Vec(3, Int(true, 16)),  TextureFormat.Rgb16i
-            Vec(4, Int(true, 16)),  TextureFormat.Rgba16i
-
-            Int(true, 32),          TextureFormat.R32i
-            Vec(2, Int(true, 32)),  TextureFormat.Rg32i
-            Vec(3, Int(true, 32)),  TextureFormat.Rgb32i
-            Vec(4, Int(true, 32)),  TextureFormat.Rgba32i
-
-            Float(32),              TextureFormat.R32f
-            Vec(2, Float(32)),      TextureFormat.Rg32f
-            Vec(3, Float(32)),      TextureFormat.Rgb32f
-            Vec(4, Float(32)),      TextureFormat.Rgba32f
-
-            Float(64),              TextureFormat.R32f
-            Vec(2, Float(64)),      TextureFormat.Rg32f
-            Vec(3, Float(64)),      TextureFormat.Rgb32f
-            Vec(4, Float(64)),      TextureFormat.Rgba32f
-        ]
-
+type PipelineInfo =
+    {
+        pInputs                 : list<FShade.GLSL.GLSLParameter>
+        pOutputs                : list<FShade.GLSL.GLSLParameter>
+        pUniformBlocks          : list<FShade.GLSL.GLSLUniformBuffer>
+        pStorageBlocks          : list<FShade.GLSL.GLSLStorageBuffer>
+        pTextures               : list<FShade.GLSL.GLSLSampler>
+        pImages                 : list<FShade.GLSL.GLSLImage>
+        pAccelerationStructures : list<FShade.GLSL.GLSLAccelerationStructure>
+        pEffectLayout           : Option<FShade.EffectInputLayout>
+    }
 
 type PipelineLayout =
     class

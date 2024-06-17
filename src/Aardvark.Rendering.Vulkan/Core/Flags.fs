@@ -344,6 +344,23 @@ module VkImageUsageFlags =
         let unsupported = getUnsupported features
         usage &&& ~~~unsupported
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VkShaderStageFlags =
+    let ofShaderStage =
+        LookupTable.lookupTable [
+            ShaderStage.Vertex,         VkShaderStageFlags.VertexBit
+            ShaderStage.TessControl,    VkShaderStageFlags.TessellationControlBit
+            ShaderStage.TessEval,       VkShaderStageFlags.TessellationEvaluationBit
+            ShaderStage.Geometry,       VkShaderStageFlags.GeometryBit
+            ShaderStage.Fragment,       VkShaderStageFlags.FragmentBit
+            ShaderStage.Compute,        VkShaderStageFlags.ComputeBit
+            ShaderStage.RayGeneration,  VkShaderStageFlags.RaygenBitKhr
+            ShaderStage.Intersection,   VkShaderStageFlags.IntersectionBitKhr
+            ShaderStage.AnyHit,         VkShaderStageFlags.AnyHitBitKhr
+            ShaderStage.ClosestHit,     VkShaderStageFlags.ClosestHitBitKhr
+            ShaderStage.Miss,           VkShaderStageFlags.MissBitKhr
+            ShaderStage.Callable,       VkShaderStageFlags.CallableBitKhr
+        ]
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal VkSampleCountFlags =
