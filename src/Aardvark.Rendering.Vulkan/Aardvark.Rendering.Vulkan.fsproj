@@ -63,7 +63,6 @@
     <Compile Include="Resources\States.fs" />
     <Compile Include="Resources\Pipeline.fs" />
     <Compile Include="Resources\IndirectBuffer.fs" />
-    <Compile Include="Resources\CommandResources.fs" />
     <Compile Include="Resources\GeometryPool.fs" />
     <Compile Include="Resources\Query\QueryPool.fs" />
     <Compile Include="Resources\Query\Query.fs" />
