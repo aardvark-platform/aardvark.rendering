@@ -23,6 +23,7 @@ using Aardvark.SceneGraph.CSharp;
 using Aardvark.Rendering.CSharp;
 using Aardvark.Rendering;
 using Effects = Aardvark.Rendering.Effects;
+using Aardvark.Application.WPF;
 
 namespace _01___Hello_Wpf
 {
@@ -34,6 +35,8 @@ namespace _01___Hello_Wpf
         public MainWindow()
         {
             Aardvark.Base.Aardvark.Init(); // initialize aardvark base modules
+
+            Config.useSharingControl = true;
 
             var app = new Aardvark.Application.WPF.OpenGlApplication(true);
             InitializeComponent();
@@ -52,11 +55,12 @@ namespace _01___Hello_Wpf
             var currentAngle = 0.0;
             var angle = renderControl.Time.Map(t =>
             {
-                if (checkBox.IsChecked!.Value)
-                {
-                    return currentAngle += 0.001;
-                }
-                else return currentAngle;
+                return currentAngle += 0.001;
+                //if (checkBox.IsChecked!.Value)
+                //{
+                //    return currentAngle += 0.001;
+                //}
+                //else return currentAngle;
             });
             var rotatingTrafo = angle.Map(Trafo3d.RotationZ);
 
