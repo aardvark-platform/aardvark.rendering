@@ -1133,23 +1133,23 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
         member x.Dispose() = x.Dispose()
   
 type private ExpressionCache() =
-    let store = System.Collections.Concurrent.ConcurrentDictionary<list<string>, obj>()
+    let store = System.Collections.Concurrent.ConcurrentDictionary<list<string>, Lazy<obj>>()
 
     member x.GetOrCreate(e : Expr<'a>, create : Expr<'a> -> 'b) =
         let hash = [ Expr.ComputeHash e ]
         store.GetOrAdd(hash, fun _ ->
-            create e :> obj
-        ) |> unbox<'b>
+            lazy (create e :> obj)
+        ).Value |> unbox<'b>
 
     member x.GetOrCreate(a : Expr<'a>, b : Expr<'b>, create : Expr<'a> -> Expr<'b> -> 'c) =
         let hash = [ Expr.ComputeHash a; Expr.ComputeHash b ]
         store.GetOrAdd(hash, fun _ ->
-            create a b :> obj
-        ) |> unbox<'c>
+            lazy (create a b :> obj)
+        ).Value |> unbox<'c>
 
     member x.Dispose() =
         for KeyValue(_, obj) in store do
-            match obj with
+            match obj.Value with
             | :? IDisposable as d -> d.Dispose()
             | _ -> ()
 
