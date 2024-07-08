@@ -6,6 +6,7 @@ open Aardvark.Base
 open System
 open System.Reflection
 open System.Collections.Generic
+open System.Collections.Concurrent
 open System.Runtime.CompilerServices
 
 module private MutableComputeBindingInternals =
@@ -18,23 +19,41 @@ module private MutableComputeBindingInternals =
 
         [<AutoOpen>]
         module private Dispatch =
+            let private flags = BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public
 
             type private Dispatcher() =
-                static member Create<'T>() = AVal.init Unchecked.defaultof<'T>
-                static member Change(cval : ChangeableValue<'T>, value : 'T) = cval.Value <- value
+                static member Create<'T>() : IAdaptiveValue = AVal.init Unchecked.defaultof<'T>
+                static member Change<'T>(cval: IAdaptiveValue, value: obj) = (unbox<ChangeableValue<'T>> cval).Value <- unbox<'T> value
 
-            module Method =
-                let private flags = BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public
-                let create = typeof<Dispatcher>.GetMethod("Create", flags)
-                let change = typeof<Dispatcher>.GetMethod("Change", flags)
+            module Create =
+                type Delegate = delegate of unit -> IAdaptiveValue
+                let private definition = typeof<Dispatcher>.GetMethod(nameof Dispatcher.Create, flags)
+                let private delegates = ConcurrentDictionary<Type, Delegate>()
 
-        let create (contentType : Type) =
-            let mi = Method.create.MakeGenericMethod [| contentType |]
-            mi.Invoke(null, [||]) |> unbox<IAdaptiveValue>
+                let getDelegate (t: Type) =
+                    delegates.GetOrAdd(t, fun t ->
+                        let mi = definition.MakeGenericMethod [| t |]
+                        unbox<Delegate> <| Delegate.CreateDelegate(typeof<Delegate>, null, mi)
+                    )
 
-        let change (value : obj) (cval : IAdaptiveValue) =
-            let mi = Method.change.MakeGenericMethod [| cval.ContentType |]
-            mi.Invoke(null, [| cval; value |]) |> ignore
+            module Change =
+                type Delegate = delegate of IAdaptiveValue * obj -> unit
+                let private definition = typeof<Dispatcher>.GetMethod(nameof Dispatcher.Change, flags)
+                let private delegates = ConcurrentDictionary<Type, Delegate>()
+
+                let getDelegate (t: Type) =
+                    delegates.GetOrAdd(t, fun t ->
+                        let mi = definition.MakeGenericMethod [| t |]
+                        unbox<Delegate> <| Delegate.CreateDelegate(typeof<Delegate>, null, mi)
+                    )
+
+        let create (contentType: Type) : IAdaptiveValue =
+            let del = Create.getDelegate contentType
+            del.Invoke()
+
+        let change (value: obj) (cval: IAdaptiveValue) =
+            let del = Change.getDelegate cval.ContentType
+            del.Invoke(cval, value)
 
     // When an input is first set, the provided value might be of a specialized type.
     // The type of that value determines the content type of cval value that is created at that point.

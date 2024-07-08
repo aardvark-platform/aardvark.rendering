@@ -32,7 +32,6 @@ nuget CommonMark.NET                     ~> 0.15.1
 nuget GLSLangSharp                       ~> 0.4.14
 
 nuget Unofficial.LibTessDotNet           ~> 2.0.2
-nuget SharpDX.Direct3D9                  ~> 4.0.1
 nuget AssimpNet                          ~> 5.0.0-beta1
 nuget Offler                             ~> 2.0.3
 nuget FSharp.Data                        ~> 4.2.10
@@ -41,6 +40,7 @@ nuget Unofficial.OpenTK                  ~> 3.0.21
 nuget Unofficial.OpenTK.GLControl        ~> 3.0.21
 nuget Silk.NET.GLFW                      = 2.15.0
 nuget Silk.NET.Core                      = 2.15.0
+nuget Silk.NET.Direct3D9                 = 2.15.0
 
 nuget SharpZipLib                        ~> 1.4.1
 

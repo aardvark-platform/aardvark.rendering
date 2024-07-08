@@ -345,23 +345,25 @@ module Buffer =
             new Buffer(device, handle, ptr, size, flags)
 
 
-    let private emptyBuffers = ConcurrentDictionary<DeviceHeap * bool * VkBufferUsageFlags, Buffer>()
+    let private emptyBuffers = ConcurrentDictionary<DeviceHeap * bool * VkBufferUsageFlags, Lazy<Buffer>>()
 
     let empty (export : bool) (usage : VkBufferUsageFlags) (memory : DeviceHeap) =
         let key = (memory, export, usage)
 
         let buffer =
             emptyBuffers.GetOrAdd(key, fun (memory, export, usage) ->
-                let device = memory.Device
-                let buffer = memory |> createInternal true export 1UL usage 256L
+                lazy (
+                    let device = memory.Device
+                    let buffer = memory |> createInternal true export 1UL usage 256L
 
-                device.OnDispose.Add (fun () ->
-                    emptyBuffers.TryRemove key |> ignore
-                    buffer.Dispose()
+                    device.OnDispose.Add (fun () ->
+                        emptyBuffers.TryRemove key |> ignore
+                        buffer.Dispose()
+                    )
+
+                    buffer
                 )
-
-                buffer
-            )
+            ).Value
 
         buffer.AddReference()
         buffer

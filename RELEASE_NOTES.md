@@ -13,6 +13,15 @@
 - [Vulkan] Removed unused `Pipeline` type
 - [Vulkan] Removed `TextureFormat.ofGLSLType`
 
+### 5.4.11
+- [Application.WPF.GL] SharingRenderControl implementation now uses Silk.NET.Direct3D9 instead of SharpDX
+- Removed SharpDX dependency
+- Re-added dynamic shader caches
+- Fixed multi-threading issue in PrimitiveValueConverter
+- [Sg] Use single value attributes for IndexedGeometry
+- [IndexedGeometry] Fixed Union() and added ToIndexed() overload
+- [IndexedGeometry] Added overload Clone() for deep copy
+
 ### 5.4.10
 - [OpenVR] changed GL texture submit to 2 textures (previously side by side, issue with Quest 3)
 - [GL] Improved querying of supported sample counts

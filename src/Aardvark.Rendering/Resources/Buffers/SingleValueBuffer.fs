@@ -66,17 +66,26 @@ module SingleValueBuffer =
     [<AutoOpen>]
     module private GenericDispatch =
         open System.Reflection
+        open System.Collections.Concurrent
 
         [<AbstractClass; Sealed>]
         type Dispatcher() =
             static member ToSingleValueBuffer<'T when 'T : unmanaged>(value: obj) : ISingleValueBuffer =
                 SingleValueBuffer<'T>(unbox<'T> value)
 
-        module Method =
+        module ToSingleValueBuffer =
+            type Delegate = delegate of obj -> ISingleValueBuffer
             let private flags = BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public
-            let toSingleValueBuffer = typeof<Dispatcher>.GetMethod("ToSingleValueBuffer", flags)
+            let private definition = typeof<Dispatcher>.GetMethod(nameof Dispatcher.ToSingleValueBuffer, flags)
+            let private delegates = ConcurrentDictionary<Type, Delegate>()
+
+            let getDelegate (t: Type) =
+                delegates.GetOrAdd(t, fun t ->
+                    let mi = definition.MakeGenericMethod [| t |]
+                    unbox<Delegate> <| Delegate.CreateDelegate(typeof<Delegate>, null, mi)
+                )
 
     /// Creates a single value buffer from an untyped value.
     let create (value: obj) =
-        let mi = Method.toSingleValueBuffer.MakeGenericMethod [| value.GetType() |]
-        mi.Invoke(null, [| value |]) |> unbox<ISingleValueBuffer>
+        let del = ToSingleValueBuffer.getDelegate <| value.GetType()
+        del.Invoke(value)
