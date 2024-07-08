@@ -16,6 +16,8 @@ open System.Security
 open System.Threading
 open Microsoft.FSharp.NativeInterop
 
+#nowarn "9"
+
 [<AutoOpen>]
 module private DXSharingHelpers =
 
