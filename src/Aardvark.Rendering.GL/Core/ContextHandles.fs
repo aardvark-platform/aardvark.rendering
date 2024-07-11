@@ -86,6 +86,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         (handle |> unbox<IGraphicsContextInternal>).GetAddress(name)
 
     member x.OnMakeCurrent(f : unit -> unit) =
+        if isDisposed then failwith "Failed to register OnMakeCurrent callback, the context is already disposed!"
         Interlocked.CompareExchange(&onMakeCurrent, ConcurrentHashSet(), null) |> ignore
         onMakeCurrent.Add f |> ignore
 
@@ -214,6 +215,15 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 
             if lockTaken then
                 if not isDisposed then
+
+                    // release potentially pending UnsharedObjects
+                    let actions = Interlocked.Exchange(&onMakeCurrent, null)
+                    if actions <> null then
+                        x.Use(fun () -> 
+                                for a in actions do
+                                    a()            
+                            )
+                    
                     isDisposed <- true
                     debugOutput |> Option.iter (fun dbg -> dbg.Dispose())
                     onDisposed.Trigger()

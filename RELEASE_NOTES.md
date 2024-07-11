@@ -13,6 +13,11 @@
 - [Vulkan] Removed unused `Pipeline` type
 - [Vulkan] Removed `TextureFormat.ofGLSLType`
 
+### 5.4.12
+- [GL] Fixed potential memory leak after ContextHandle is disposed
+- Optimized generic dispatch
+- Fixed potential leaks with ConcurrentDictionary.GetOrAdd
+
 ### 5.4.11
 - [Application.WPF.GL] SharingRenderControl implementation now uses Silk.NET.Direct3D9 instead of SharpDX
 - Removed SharpDX dependency
