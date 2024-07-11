@@ -2,9 +2,8 @@
 
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Assembler
 open FSharp.Data.Adaptive
-open Aardvark.Rendering.ShaderReflection
-open Aardvark.Base.Runtime
 open Microsoft.FSharp.NativeInterop
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL

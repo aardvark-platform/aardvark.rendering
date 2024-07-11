@@ -647,7 +647,7 @@ module TextureUpload =
                 for slice = 0 to count - 1 do
                     for level = 0 to expectedLevels - 1 do
                         let result = runtime.Download(texture, level = level, slice = slice)
-                        let result = result.Transformed(ImageTrafo.MirrorY).AsPixImage<uint16>()
+                        let result = result.AsPixImage<uint16>().Transformed(ImageTrafo.MirrorY)
 
                         Expect.equal result.Size (Fun.MipmapLevelSize(size, level)) "image size mismatch"
                         if level < levels then
@@ -804,7 +804,7 @@ module TextureUpload =
                     texture.Update(input.PixFormat, size, src.Address)
                 )
 
-                let output = (texture.GetValue() :?> IBackendTexture).Download().Transformed(ImageTrafo.MirrorY).AsPixImage<uint8>()
+                let output = (texture.GetValue() :?> IBackendTexture).Download().AsPixImage<uint8>().Transformed(ImageTrafo.MirrorY)
                 PixImage.compare V2i.Zero input output
 
                 let pos = V2i(123, 231)

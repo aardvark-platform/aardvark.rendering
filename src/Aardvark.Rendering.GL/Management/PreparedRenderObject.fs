@@ -11,7 +11,7 @@ open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
-open Aardvark.Base.Runtime
+open Aardvark.Assembler
 open FShade.GLSL
 open System.Threading
 

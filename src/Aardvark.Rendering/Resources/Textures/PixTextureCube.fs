@@ -11,13 +11,6 @@ type PixTextureCube(data : PixImageCube, textureParams : TextureParams) =
     new(data : PixImageCube, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
         PixTextureCube(data, { TextureParams.empty with wantMipMaps = wantMipMaps })
 
-    new(data : PixCube, textureParams : TextureParams) =
-        let faces = data.MipMapArray |> Array.map (fun p -> PixImageMipMap(p.MipArray |> Array.map (fun pi -> pi :?> PixImage)))
-        PixTextureCube(PixImageCube(faces), textureParams)
-
-    new(data : PixCube, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
-        PixTextureCube(data, { TextureParams.empty with wantMipMaps = wantMipMaps })
-
     override x.GetHashCode() =
         HashCode.Combine(data.GetHashCode(), textureParams.GetHashCode())
 

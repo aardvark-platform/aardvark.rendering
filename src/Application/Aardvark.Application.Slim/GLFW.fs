@@ -393,7 +393,7 @@ module IconLoader =
 
         let img = 
             use src = ass.GetManifestResourceStream name
-            PixImageSharp.Create(src).ToPixImage<byte>(Col.Format.RGBA)
+            PixImage.Load(src).ToPixImage<byte>(Col.Format.RGBA)
         
         let levels =
             let mutable last = img

@@ -452,7 +452,7 @@ module FShadeInterop =
 
                 effect
                 // TODO: other topologies????
-                |> Effect.toLayered semantic customSemantic layerCount perLayerUniforms top
+                |> Effect.toLayeredEffect' semantic customSemantic layerCount perLayerUniforms top
                 |> withDeviceIndex deviceCount
                 |> Effect.toModule config
 

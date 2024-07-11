@@ -107,6 +107,22 @@ type ManagedBufferExtensions private() =
             this.Set(src, nativeint values.Length * nativeint sizeof<'T>, range)
         )
 
+    /// <summary>
+    /// Sets the given offset range to the given values. The buffer is resized if necessary.
+    /// The data are repeated if not enough are provided for the specified range.
+    /// </summary>
+    /// <param name="this">The buffer to write to.</param>
+    /// <param name="values">The values to write.</param>
+    /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
+    [<Extension>]
+    static member Set(this : IManagedBuffer, values : Array, range : Range1l) =
+        let elementSize = values.GetType().GetElementType().GetCLRSize()
+        let sizeInBytes = nativeint values.Length * nativeint elementSize
+
+        pinned values (fun src ->
+            this.Set(src, sizeInBytes, range)
+        )
+
 
 module internal ManagedBufferImplementation =
 

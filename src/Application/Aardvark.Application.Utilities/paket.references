@@ -2,7 +2,6 @@ Aardvark.Base.Essentials
 Aardvark.Base.Incremental
 FShade.Core
 FShade.GLSL
-Aardvark.Base.Runtime
 FSharp.Core
 Unofficial.OpenVR
 Unofficial.OpenTK

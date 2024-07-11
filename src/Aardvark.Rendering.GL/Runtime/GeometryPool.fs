@@ -11,7 +11,7 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Rendering.Management
-open Aardvark.Base.Runtime
+open Aardvark.Assembler
 open Aardvark.Rendering.GL
 
 #nowarn "9"
@@ -1536,7 +1536,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let updateFun = Marshal.PinDelegate(new System.Action(this.Update))
     let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * array<int*int*int> * IndirectBuffer> = []
     let program =
-        new Aardvark.Assembler.FragmentProgram<_>(fun a (s : IAssemblerStream) -> compile a (AssemblerCommandStream s :> ICommandStream) |> ignore)
+        new FragmentProgram<_>(fun a (s : IAssemblerStream) -> compile a (AssemblerCommandStream s :> ICommandStream) |> ignore)
         //new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
     let puller =
         { new AdaptiveObject() with

@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open Aardvark.Base
-open Aardvark.Base.Runtime
 open Aardvark.Base.Monads.State
 open Aardvark.Assembler
 open OpenTK.Graphics.OpenGL4

@@ -150,7 +150,7 @@ module ImageUploadExtensions =
                 buffers |> create levelCount
 
             let ofPixImageMipMaps (info : TextureParams) (pix : PixImageMipMap[]) (device : Device) =
-                let format = PixFormat.toTextureFormat info pix.[0].PixFormat
+                let format = PixFormat.toTextureFormat info pix.[0].BaseImage.PixFormat
 
                 let levelCount =
                     if info.wantMipMaps then Fun.MipmapLevels(pix.[0].[0].Size) else 1

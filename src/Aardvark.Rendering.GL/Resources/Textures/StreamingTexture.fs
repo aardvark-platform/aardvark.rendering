@@ -171,39 +171,38 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
                     gc.Free()
 
                 match pixelType with
-                    | PixelType.UnsignedByte ->
-                        match pixelFormat with
-                            | PixelFormat.Rgba              -> C4b(data.[0], data.[1], data.[2], data.[3]).ToC4f()
-                            | PixelFormat.Bgra              -> C4b(data.[2], data.[1], data.[0], data.[3]).ToC4f()
-                            | PixelFormat.Rgb               -> C4b(data.[0], data.[1], data.[2], 255uy).ToC4f()
-                            | PixelFormat.Bgr               -> C4b(data.[2], data.[1], data.[0], 255uy).ToC4f()
-                            | PixelFormat.Luminance         -> C4b(data.[0], data.[0], data.[0], 255uy).ToC4f()
-                            | PixelFormat.Alpha             -> C4b(0uy, 0uy, 0uy, data.[0]).ToC4f()
-                            | PixelFormat.Red               -> C4b(data.[0], 0uy, 0uy, 255uy).ToC4f()
-                            | PixelFormat.Green             -> C4b(0uy, data.[0], 0uy, 255uy).ToC4f()
-                            | PixelFormat.Blue              -> C4b(0uy, 0uy, data.[0], 255uy).ToC4f()
-                            | PixelFormat.LuminanceAlpha    -> C4b(data.[0], data.[0], data.[0], data.[1]).ToC4f()
-                            | _                             -> failwithf "[GL] unsupported format %A" pixelFormat
+                | PixelType.UnsignedByte ->
+                    match pixelFormat with
+                    | PixelFormat.Rgba              -> C4b(data.[0], data.[1], data.[2], data.[3]).ToC4f()
+                    | PixelFormat.Bgra              -> C4b(data.[2], data.[1], data.[0], data.[3]).ToC4f()
+                    | PixelFormat.Rgb               -> C4b(data.[0], data.[1], data.[2], 255uy).ToC4f()
+                    | PixelFormat.Bgr               -> C4b(data.[2], data.[1], data.[0], 255uy).ToC4f()
+                    | PixelFormat.Luminance         -> C4b(data.[0], data.[0], data.[0], 255uy).ToC4f()
+                    | PixelFormat.Alpha             -> C4b(0uy, 0uy, 0uy, data.[0]).ToC4f()
+                    | PixelFormat.Red               -> C4b(data.[0], 0uy, 0uy, 255uy).ToC4f()
+                    | PixelFormat.Green             -> C4b(0uy, data.[0], 0uy, 255uy).ToC4f()
+                    | PixelFormat.Blue              -> C4b(0uy, 0uy, data.[0], 255uy).ToC4f()
+                    | PixelFormat.LuminanceAlpha    -> C4b(data.[0], data.[0], data.[0], data.[1]).ToC4f()
+                    | _                             -> failwithf "[GL] unsupported format %A" pixelFormat
 
-                    | PixelType.UnsignedShort ->
-                        let data = data.UnsafeCoerce<uint16>()
-                        match pixelFormat with
-                            | PixelFormat.Rgba              -> C4us(data.[0], data.[1], data.[2], data.[3]).ToC4f()
-                            | PixelFormat.Bgra              -> C4us(data.[2], data.[1], data.[0], data.[3]).ToC4f()
-                            | PixelFormat.Rgb               -> C4us(data.[0], data.[1], data.[2], 65535us).ToC4f()
-                            | PixelFormat.Bgr               -> C4us(data.[2], data.[1], data.[0], 65535us).ToC4f()
-                            | PixelFormat.Luminance         -> C4us(data.[0], data.[0], data.[0], 65535us).ToC4f()
-                            | PixelFormat.Alpha             -> C4us(0us, 0us, 0us, data.[0]).ToC4f()
-                            | PixelFormat.Red               -> C4us(data.[0], 0us, 0us, 65535us).ToC4f()
-                            | PixelFormat.Green             -> C4us(0us, data.[0], 0us, 65535us).ToC4f()
-                            | PixelFormat.Blue              -> C4us(0us, 0us, data.[0], 65535us).ToC4f()
-                            | PixelFormat.LuminanceAlpha    -> C4us(data.[0], data.[0], data.[0], data.[1]).ToC4f()
-                            | _                             -> failwithf "[GL] unsupported format %A" pixelFormat
+                | PixelType.UnsignedShort ->
+                    let data = data.AsCastSpan<_, uint16>()
 
+                    match pixelFormat with
+                    | PixelFormat.Rgba              -> C4us(data.[0], data.[1], data.[2], data.[3]).ToC4f()
+                    | PixelFormat.Bgra              -> C4us(data.[2], data.[1], data.[0], data.[3]).ToC4f()
+                    | PixelFormat.Rgb               -> C4us(data.[0], data.[1], data.[2], 65535us).ToC4f()
+                    | PixelFormat.Bgr               -> C4us(data.[2], data.[1], data.[0], 65535us).ToC4f()
+                    | PixelFormat.Luminance         -> C4us(data.[0], data.[0], data.[0], 65535us).ToC4f()
+                    | PixelFormat.Alpha             -> C4us(0us, 0us, 0us, data.[0]).ToC4f()
+                    | PixelFormat.Red               -> C4us(data.[0], 0us, 0us, 65535us).ToC4f()
+                    | PixelFormat.Green             -> C4us(0us, data.[0], 0us, 65535us).ToC4f()
+                    | PixelFormat.Blue              -> C4us(0us, 0us, data.[0], 65535us).ToC4f()
+                    | PixelFormat.LuminanceAlpha    -> C4us(data.[0], data.[0], data.[0], data.[1]).ToC4f()
+                    | _                             -> failwithf "[GL] unsupported format %A" pixelFormat
 
-
-                    | _ ->
-                        failwithf "[GL] unsupported type %A" pixelType
+                | _ ->
+                    failwithf "[GL] unsupported type %A" pixelType
         )
 
     member x.Dispose() =
@@ -430,39 +429,38 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
                     gc.Free()
 
                 match pixelType with
-                    | PixelType.UnsignedByte ->
-                        match pixelFormat with
-                            | PixelFormat.Rgba              -> C4b(data.[0], data.[1], data.[2], data.[3]).ToC4f()
-                            | PixelFormat.Bgra              -> C4b(data.[2], data.[1], data.[0], data.[3]).ToC4f()
-                            | PixelFormat.Rgb               -> C4b(data.[0], data.[1], data.[2], 255uy).ToC4f()
-                            | PixelFormat.Bgr               -> C4b(data.[2], data.[1], data.[0], 255uy).ToC4f()
-                            | PixelFormat.Luminance         -> C4b(data.[0], data.[0], data.[0], 255uy).ToC4f()
-                            | PixelFormat.Alpha             -> C4b(0uy, 0uy, 0uy, data.[0]).ToC4f()
-                            | PixelFormat.Red               -> C4b(data.[0], 0uy, 0uy, 255uy).ToC4f()
-                            | PixelFormat.Green             -> C4b(0uy, data.[0], 0uy, 255uy).ToC4f()
-                            | PixelFormat.Blue              -> C4b(0uy, 0uy, data.[0], 255uy).ToC4f()
-                            | PixelFormat.LuminanceAlpha    -> C4b(data.[0], data.[0], data.[0], data.[1]).ToC4f()
-                            | _                             -> failwithf "[GL] unsupported format %A" pixelFormat
+                | PixelType.UnsignedByte ->
+                    match pixelFormat with
+                    | PixelFormat.Rgba              -> C4b(data.[0], data.[1], data.[2], data.[3]).ToC4f()
+                    | PixelFormat.Bgra              -> C4b(data.[2], data.[1], data.[0], data.[3]).ToC4f()
+                    | PixelFormat.Rgb               -> C4b(data.[0], data.[1], data.[2], 255uy).ToC4f()
+                    | PixelFormat.Bgr               -> C4b(data.[2], data.[1], data.[0], 255uy).ToC4f()
+                    | PixelFormat.Luminance         -> C4b(data.[0], data.[0], data.[0], 255uy).ToC4f()
+                    | PixelFormat.Alpha             -> C4b(0uy, 0uy, 0uy, data.[0]).ToC4f()
+                    | PixelFormat.Red               -> C4b(data.[0], 0uy, 0uy, 255uy).ToC4f()
+                    | PixelFormat.Green             -> C4b(0uy, data.[0], 0uy, 255uy).ToC4f()
+                    | PixelFormat.Blue              -> C4b(0uy, 0uy, data.[0], 255uy).ToC4f()
+                    | PixelFormat.LuminanceAlpha    -> C4b(data.[0], data.[0], data.[0], data.[1]).ToC4f()
+                    | _                             -> failwithf "[GL] unsupported format %A" pixelFormat
 
-                    | PixelType.UnsignedShort ->
-                        let data = data.UnsafeCoerce<uint16>()
-                        match pixelFormat with
-                            | PixelFormat.Rgba              -> C4us(data.[0], data.[1], data.[2], data.[3]).ToC4f()
-                            | PixelFormat.Bgra              -> C4us(data.[2], data.[1], data.[0], data.[3]).ToC4f()
-                            | PixelFormat.Rgb               -> C4us(data.[0], data.[1], data.[2], 65535us).ToC4f()
-                            | PixelFormat.Bgr               -> C4us(data.[2], data.[1], data.[0], 65535us).ToC4f()
-                            | PixelFormat.Luminance         -> C4us(data.[0], data.[0], data.[0], 65535us).ToC4f()
-                            | PixelFormat.Alpha             -> C4us(0us, 0us, 0us, data.[0]).ToC4f()
-                            | PixelFormat.Red               -> C4us(data.[0], 0us, 0us, 65535us).ToC4f()
-                            | PixelFormat.Green             -> C4us(0us, data.[0], 0us, 65535us).ToC4f()
-                            | PixelFormat.Blue              -> C4us(0us, 0us, data.[0], 65535us).ToC4f()
-                            | PixelFormat.LuminanceAlpha    -> C4us(data.[0], data.[0], data.[0], data.[1]).ToC4f()
-                            | _                             -> failwithf "[GL] unsupported format %A" pixelFormat
+                | PixelType.UnsignedShort ->
+                    let data = data.AsCastSpan<_, uint16>()
 
+                    match pixelFormat with
+                    | PixelFormat.Rgba              -> C4us(data.[0], data.[1], data.[2], data.[3]).ToC4f()
+                    | PixelFormat.Bgra              -> C4us(data.[2], data.[1], data.[0], data.[3]).ToC4f()
+                    | PixelFormat.Rgb               -> C4us(data.[0], data.[1], data.[2], 65535us).ToC4f()
+                    | PixelFormat.Bgr               -> C4us(data.[2], data.[1], data.[0], 65535us).ToC4f()
+                    | PixelFormat.Luminance         -> C4us(data.[0], data.[0], data.[0], 65535us).ToC4f()
+                    | PixelFormat.Alpha             -> C4us(0us, 0us, 0us, data.[0]).ToC4f()
+                    | PixelFormat.Red               -> C4us(data.[0], 0us, 0us, 65535us).ToC4f()
+                    | PixelFormat.Green             -> C4us(0us, data.[0], 0us, 65535us).ToC4f()
+                    | PixelFormat.Blue              -> C4us(0us, 0us, data.[0], 65535us).ToC4f()
+                    | PixelFormat.LuminanceAlpha    -> C4us(data.[0], data.[0], data.[0], data.[1]).ToC4f()
+                    | _                             -> failwithf "[GL] unsupported format %A" pixelFormat
 
-
-                    | _ ->
-                        failwithf "[GL] unsupported type %A" pixelType
+                | _ ->
+                    failwithf "[GL] unsupported type %A" pixelType
         )
 
     member x.Dispose() =
