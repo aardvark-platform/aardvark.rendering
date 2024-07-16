@@ -588,7 +588,7 @@ type Runtime(debug : IDebugConfig) =
         let (pfmt, ptype) = TextureFormat.toFormatAndType format
         let cfmt = TextureFormat.toDownloadFormat format
         let res = PixImage.Create(cfmt, int64 size.X, int64 size.Y)
-        let gc = GCHandle.Alloc(res.Data, GCHandleType.Pinned)
+        let gc = GCHandle.Alloc(res.Array, GCHandleType.Pinned)
         try
 
             GL.ReadPixels(offset.X, src.Size.Y - size.Y - offset.Y, size.X, size.Y, pfmt, ptype, gc.AddrOfPinnedObject())
