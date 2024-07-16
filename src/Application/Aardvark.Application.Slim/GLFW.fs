@@ -383,44 +383,42 @@ type WindowConfig =
           WindowConfig.transparent = false
           WindowConfig.samples = 1 }
 
-module IconLoader = 
-    
-    type private Self = Self
-    let private getIcon'() = 
-        let sizes = Array.sortDescending [| 16; 24; 32; 48; 64; 128; 256 |]
-        let ass = typeof<Self>.Assembly
-        let name = ass.GetManifestResourceNames() |> Array.find (fun n -> n.EndsWith "aardvark.png")
+module internal IconLoader =
+    open System.IO
 
-        let img = 
-            use src = ass.GetManifestResourceStream name
-            PixImage.Load(src).ToPixImage<byte>(Col.Format.RGBA)
-        
-        let levels =
-            let mutable last = img
-            sizes |> Array.map (fun s ->
-                if s = last.Size.X && s = last.Size.Y then
-                    last :> PixImage
-                else
-                    let dst = PixImage<byte>(Col.Format.RGBA, V2i(s,s))
-                    NativeVolume.using last.Volume (fun src ->
-                        NativeVolume.using dst.Volume (fun dst ->
-                            NativeVolume.blit src dst
-                        )
-                    )
+    let private tryLoad (name: string) =
+        try
+            let asm = typeof<WindowConfig>.Assembly
+            let resourceName = asm.GetManifestResourceNames() |> Array.tryFind (String.endsWith name)
 
-                    last <- dst
-                    dst :> PixImage
-            )
+            match resourceName with
+            | Some rn ->
+                let pix =
+                    use rs = asm.GetManifestResourceStream(rn)
+                    use ms = new MemoryStream()
+                    rs.CopyTo(ms)
+                    let volume = Volume<uint8>(ms.ToArray(), 0L, V3l(256L, 256L, 4L), V3l(4L, 1024L, 1L))
+                    PixImage<uint8>(Col.Format.RGBA, volume)
 
-        PixImageMipMap levels
+                Success <| PixImageMipMap.Create(pix, ImageInterpolation.Linear)
+
+            | _ ->
+                Error $"Could not find resource with name '{name}'."
+
+        with e ->
+            Error e.Message
+
+    let private icon =
+        lazy (
+            match tryLoad "aardvark-icon.bin" with
+            | Success icon -> Some icon
+            | Error err ->
+                Log.warn "[GLFW] Failed to load icon: %s" err
+                None
+        )
 
     let getIcon() =
-        try 
-            getIcon'() |> Some
-        with e -> 
-            Log.warn "could not load icon. %A" e.Message
-            None
-
+        icon.Value
 
 type GlfwGamepad() =
     let a = cval false
