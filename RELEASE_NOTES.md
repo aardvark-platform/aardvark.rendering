@@ -1,17 +1,5 @@
 ### 5.5.0-prerelease0001
-- [Vulkan] Updated wrapper to Vulkan 1.3.282
-- Moved some common types and modules (IndexedGeometry, Camera, DefaultSemantic) to separate Aardvark.Rendering.Common project.
-- Removed ISurface interface. Was redundant apart from being a common interface for backend surfaces and effects via the FShadeSurface proxy type. Either use IBackendSurface or Surface instead.
-- Renamed Surface.FShadeSimple to Surface.Effect
-- Renamed Surface.FShade to Surface.Dynamic
-- Added support for layered rendering with dynamic shaders. The signature of dynamic shader functions changed from `EffectConfig -> DynamicSurface` to `IFramebufferSignature -> IndexedGeomtryMode -> DynamicSurface`.
-- Added Effect.link (use instead of deprecated IRuntime.AssembleModule and removed EffectConfig utilities)
-- IRuntime.PrepareEffect now takes an optional topology for layered effects.
-- [GL] Cleanup up shader program creation and caching. Removed various methods for creating and compiling shaders from `Context`.
-- Removed obsolete IResourceManager interface
-- Removed various other obsolete APIs
-- [Vulkan] Removed unused `Pipeline` type
-- [Vulkan] Removed `TextureFormat.ofGLSLType`
+- Initial prerelease
 
 ### 5.4.12
 - [GL] Fixed potential memory leak after ContextHandle is disposed
