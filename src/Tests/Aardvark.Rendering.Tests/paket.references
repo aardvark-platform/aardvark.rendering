@@ -1,7 +1,6 @@
-Aardvark.Build
-
 group Test
-	FSharp.Core
+	Aardvark.PixImage.ImageSharp
+
 	Expecto
 	Expecto.FsCheck
 	Expecto.Hopac

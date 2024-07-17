@@ -25,6 +25,9 @@ nuget FShade.Core                                   ~> 5.6.0-prerelease0001
 nuget FShade                                        ~> 5.6.0-prerelease0001
 nuget FShade.Debug                                  ~> 5.6.0-prerelease0001
 
+// Some tests and examples require an image loader
+nuget Aardvark.PixImage.ImageSharp                  ~> 2.0.1-prerelease0001
+
 nuget Unofficial.OpenVR					            ~> 1.1.0
 nuget Unofficial.Typography                         ~> 0.1.0
 nuget CommonMark.NET                                ~> 0.15.1
@@ -49,12 +52,11 @@ group Test
 
     storage: none
 
-    nuget FSharp.Core                        >= 8.0.0 lowest_matching: true
-    nuget System.Collections.Immutable       >= 8.0.0 lowest_matching: true
-    nuget System.Reflection.Metadata         >= 8.0.0 lowest_matching: true
-    nuget Expecto                            ~> 9.0.4
-    nuget Expecto.FsCheck                    ~> 9.0.4
-    nuget Expecto.Hopac                      ~> 9.0.4
-    nuget BenchmarkDotNet                    ~> 0.13.1
-    nuget YoloDev.Expecto.TestSdk            ~> 0.13.3
-    nuget Microsoft.NET.Test.Sdk             ~> 17.5.0
+    nuget Aardvark.PixImage.ImageSharp              ~> 2.0.1-prerelease0001
+
+    nuget Expecto                                   ~> 9.0.4
+    nuget Expecto.FsCheck                           ~> 9.0.4
+    nuget Expecto.Hopac                             ~> 9.0.4
+    nuget BenchmarkDotNet                           ~> 0.13.1
+    nuget YoloDev.Expecto.TestSdk                   ~> 0.13.3
+    nuget Microsoft.NET.Test.Sdk                    ~> 17.5.0
