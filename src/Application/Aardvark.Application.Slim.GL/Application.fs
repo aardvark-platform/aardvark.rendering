@@ -486,9 +486,6 @@ type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<stri
     override x.Destroy() =
         runtime.Dispose()
 
-    override x.CreateGameWindow(config : WindowConfig) =
-        base.CreateGameWindow { config with opengl = true }
-
     interface IApplication with
         member x.Initialize(ctrl : IRenderControl, samples : int) = x.Initialize(ctrl, samples)
         member x.Runtime = x.Runtime :> IRuntime

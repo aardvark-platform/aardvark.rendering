@@ -359,31 +359,49 @@ type WindowState =
 
 type WindowConfig =
     {
-        title : string
-        width : int
-        height : int
-        focus : bool
-        resizable : bool
-        vsync : bool
-        transparent : bool
-        opengl : bool
+        /// Title of the window.
+        title        : string
+
+        /// Width of the window content.
+        width        : int
+
+        /// Height of the window content.
+        height       : int
+
+        /// Desired sample count for the framebuffer.
+        samples      : int
+
+        /// Specifies whether the window will be focused when created.
+        focus        : bool
+
+        /// Specifies whether the window should be resizable.
+        resizable    : bool
+
+        /// Specifies whether v-sync should be enabled.
+        vsync        : bool
+
+        /// Specifies whether the framebuffer should be transparent and composited with
+        /// the background of the window.
+        transparent  : bool
+
+        /// Specifies whether to use full resolution framebuffers on Retina displays.
         physicalSize : bool
-        samples : int
-        stereo : bool
+
+        /// Specifies whether to use OpenGL stereoscopic rendering.
+        stereo       : bool
     }
 
-    static member Default =
-        { WindowConfig.title = "Aardvark rocks \\o/"
-          WindowConfig.width = 1024
-          WindowConfig.height = 768
-          WindowConfig.resizable = true
-          WindowConfig.focus = true
-          WindowConfig.vsync = true
-          WindowConfig.opengl = true
-          WindowConfig.physicalSize = false
-          WindowConfig.transparent = false
-          WindowConfig.samples = 1
-          WindowConfig.stereo = false }
+    static member Default : WindowConfig =
+        { title        = "Aardvark rocks \\o/"
+          width        = 1024
+          height       = 768
+          samples      = 1
+          resizable    = true
+          focus        = true
+          vsync        = true
+          physicalSize = false
+          transparent  = false
+          stereo       = false }
 
 module internal IconLoader =
     open System.IO
