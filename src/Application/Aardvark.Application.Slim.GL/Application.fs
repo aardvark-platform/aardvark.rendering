@@ -18,7 +18,7 @@ open Aardvark.Glfw
 
 [<AutoOpen>]
 module private WindowHintExtensions =
-    
+
     type WindowHintBool with
         static member CocoaRetinaFramebuffer = unbox<WindowHintBool> 0x00023001
         static member ScaleToMonitor = unbox<WindowHintBool> 0x0002200C
@@ -96,12 +96,12 @@ module private OpenGL =
     type MyWindowInfo(win : nativeptr<WindowHandle>) =
         let mutable win = win
         interface IWindowInfo with
-            member x.Dispose(): unit = 
+            member x.Dispose(): unit =
                 win <- NativePtr.zero
 
-            member x.Handle: nativeint = 
+            member x.Handle: nativeint =
                 NativePtr.toNativeInt win
-    
+
     [<AllowNullLiteral>]
     type MyGraphicsContext(glfw : Glfw, win : nativeptr<WindowHandle>) as this =
         let mutable win = win
@@ -113,7 +113,7 @@ module private OpenGL =
 
         do addContext.Invoke(null, [| this :> obj |]) |> ignore
 
-        member x.LoadAll(): unit = 
+        member x.LoadAll(): unit =
             let t = typeof<OpenTK.Graphics.OpenGL4.GL>
             let m = t.GetMethod("LoadEntryPoints", BindingFlags.NonPublic ||| BindingFlags.Instance)
             let gl = OpenTK.Graphics.OpenGL4.GL()
@@ -136,62 +136,137 @@ module private OpenGL =
                 with get () = false
                 and set _ = ()
 
-            member x.GraphicsMode = 
+            member x.GraphicsMode =
                 GraphicsMode.Default
 
             member x.IsCurrent =
                 glfw.GetCurrentContext() = win
-            member x.IsDisposed: bool = 
+            member x.IsDisposed: bool =
                 win = NativePtr.zero
             member x.LoadAll() = x.LoadAll()
-            member x.MakeCurrent(window: IWindowInfo): unit = 
-                if isNull window then 
+            member x.MakeCurrent(window: IWindowInfo): unit =
+                if isNull window then
                     if OpenTK.Graphics.GraphicsContext.CurrentContextHandle <> handle then
                         failwith "overriding context"
                     glfw.MakeContextCurrent(NativePtr.zero)
-                else 
+                else
                     if OpenTK.Graphics.GraphicsContext.CurrentContextHandle.Handle <> 0n then
                         failwith "overriding context"
                     glfw.MakeContextCurrent(win)
 
-            member x.SwapBuffers(): unit = 
+            member x.SwapBuffers(): unit =
                 glfw.SwapBuffers(win)
             member x.SwapInterval
                 with get() = 0
                 and set v = ()
-            member x.Update(window: IWindowInfo): unit = 
+            member x.Update(window: IWindowInfo): unit =
                 ()
 
         interface IGraphicsContextInternal with
-            member x.Context = 
+            member x.Context =
                 handle
-            member x.GetAddress(name : string): nativeint = 
+            member x.GetAddress(name : string): nativeint =
                 glfw.GetProcAddress name
-            member x.GetAddress(name: nativeint): nativeint = 
+            member x.GetAddress(name: nativeint): nativeint =
                 let str = Marshal.PtrToStringAnsi name
                 glfw.GetProcAddress str
-            member x.Implementation: IGraphicsContext = 
+            member x.Implementation: IGraphicsContext =
                 x :> _
             member x.LoadAll() = x.LoadAll()
-        
 
+    let createStereoSwapchain (runtime : Runtime) (signature : IFramebufferSignature) (ctx : Aardvark.Rendering.GL.ContextHandle)
+                              (glfw : Glfw) (win : nativeptr<WindowHandle>) (size : V2i) =
+        let colors =
+            runtime.CreateTexture2DArray(size, TextureFormat.Rgba8, samples = signature.Samples, count = 2) |> unbox<Texture>
 
+        let depth =
+            runtime.CreateTexture2DArray(size, TextureFormat.Depth24Stencil8, samples = signature.Samples, count = 2) |> unbox<Texture>
 
-
-    let createSwapchain (runtime : Runtime) (signature : IFramebufferSignature) (ctx : Aardvark.Rendering.GL.ContextHandle) (glfw : Glfw) (win : nativeptr<WindowHandle>) (size : V2i) =
-        
-        let defaultFramebuffer = 
-            new Framebuffer(
-                runtime.Context, signature, 
-                (fun _ -> 0), 
-                ignore, 
-                [0, DefaultSemantic.Colors, new Renderbuffer(runtime.Context, 0, size, TextureFormat.Rgba8, signature.Samples, 0L) :> IFramebufferOutput], None
-            ) 
+        let framebuffer =
+            runtime.CreateFramebuffer(signature, [
+                DefaultSemantic.Colors, colors.[TextureAspect.Color,0,*] :> IFramebufferOutput
+                DefaultSemantic.DepthStencil, depth.[TextureAspect.Depth,0,*] :> IFramebufferOutput
+            ])
 
         { new ISwapchain with
-            override this.Dispose() = 
+            override this.Dispose() =
+                framebuffer.Dispose()
+                colors.Dispose()
+                depth.Dispose()
+
+            // TODO: It may be possible to simplify this
+            override this.Run(task : IRenderTask, queries : IQuery list)  =
+                use __ = runtime.Context.RenderingLock ctx
+
+                let output = OutputDescription.ofFramebuffer framebuffer
+
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, (framebuffer |> unbox<Framebuffer>).Handle)
+                GL.ColorMask(true, true, true, true)
+                GL.DepthMask(true)
+                GL.Viewport(0, 0, size.X, size.Y)
+                GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                GL.ClearDepth(1.0)
+                GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+
+                let rt = { RenderToken.Empty with Queries = queries}
+                task.Run(AdaptiveToken.Top, rt, output)
+
+                let fSrc = GL.GenFramebuffer()
+                let fDst = GL.GenFramebuffer()
+
+                let mutable temp = 0
+                GL.CreateTextures(TextureTarget.Texture2D, 1, &temp)
+                if temp = 0 then failwith ""
+                GL.TextureStorage2D(temp, 1, unbox (int colors.Format), size.X, size.Y)
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
+                GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, colors.Handle, 0, 0)
+                GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, temp, 0)
+                GL.BlitFramebuffer(0, 0, colors.Size.X, colors.Size.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fDst)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+                GL.DrawBuffer(DrawBufferMode.BackLeft)
+                GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
+                GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, colors.Handle, 0, 1)
+                GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, temp, 0)
+                GL.BlitFramebuffer(0, 0, colors.Size.X, colors.Size.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fDst)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+                GL.DrawBuffer(DrawBufferMode.BackRight)
+                GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
+
+                GL.DeleteFramebuffer fSrc
+                GL.DeleteFramebuffer fDst
+                GL.DeleteTexture temp
+
+                glfw.SwapBuffers(win)
+                true
+
+            override this.Size =
+                size
+        }
+
+    let createSwapchain (runtime : Runtime) (signature : IFramebufferSignature) (ctx : Aardvark.Rendering.GL.ContextHandle)
+                        (glfw : Glfw) (win : nativeptr<WindowHandle>) (size : V2i) =
+
+        let defaultFramebuffer =
+            new Framebuffer(
+                runtime.Context, signature,
+                (fun _ -> 0),
+                ignore,
+                [0, DefaultSemantic.Colors, new Renderbuffer(runtime.Context, 0, size, TextureFormat.Rgba8, signature.Samples, 0L) :> IFramebufferOutput], None
+            )
+
+        { new ISwapchain with
+            override this.Dispose() =
                 ()
-            override this.Run(task : IRenderTask, queries : IQuery list)  = 
+            override this.Run(task : IRenderTask, queries : IQuery list)  =
                 use __ = runtime.Context.RenderingLock ctx
 
                 let output = OutputDescription.ofFramebuffer defaultFramebuffer
@@ -209,7 +284,7 @@ module private OpenGL =
                 glfw.SwapBuffers(win)
                 true
 
-            override this.Size = 
+            override this.Size =
                 size
         }
 
@@ -233,7 +308,7 @@ module private OpenGL =
 
     let createSurface (runtime : Runtime) (cfg: WindowConfig) (glfw : Glfw) (win : nativeptr<WindowHandle>) =
         let old = glfw.GetCurrentContext()
-        
+
         glfw.MakeContextCurrent(NativePtr.zero)
 
         let ctx =
@@ -244,16 +319,16 @@ module private OpenGL =
 
         let mutable samples = cfg.samples
 
-        if not (isNull ctx) then  
+        if not (isNull ctx) then
             glfw.MakeContextCurrent(win)
-            let current = glfw.GetCurrentContext() 
+            let current = glfw.GetCurrentContext()
             let mutable desc = Unchecked.defaultof<_>
             let error = glfw.GetError(&desc)
             if error <> Silk.NET.GLFW.ErrorCode.NoError then
                 Log.error "[GLFW] error after making trying to make context current: %A" error
             if current <> win then
                 Log.error "[GLFW] could not make context current"
-            ctx.LoadAll()          
+            ctx.LoadAll()
             glfw.SwapInterval(if cfg.vsync then 1 else 0)
             samples <- getFramebufferSamples() |> Option.defaultValue cfg.samples
             glfw.MakeContextCurrent(NativePtr.zero)
@@ -267,17 +342,35 @@ module private OpenGL =
             handle.Use (fun _ ->
                 handle.Initialize(runtime.DebugConfig, setDefaultStates = true)
 
+                let layers, perLayerUniforms =
+                    if cfg.stereo then
+                        2, Set.ofList [
+                            "ProjTrafo"
+                            "ViewTrafo"
+                            "ModelViewTrafo"
+                            "ViewProjTrafo"
+                            "ModelViewProjTrafo"
+
+                            "ProjTrafoInv"
+                            "ViewTrafoInv"
+                            "ModelViewTrafoInv"
+                            "ViewProjTrafoInv"
+                            "ModelViewProjTrafoInv"
+                        ]
+                    else
+                        1, Set.empty
+
                 runtime.CreateFramebufferSignature([
                     DefaultSemantic.Colors, TextureFormat.Rgba8
                     DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
-                ], samples)
+                ], samples, layers, perLayerUniforms)
             )
 
         { new IWindowSurface with
             override x.Signature = signature
             override this.Handle =
                 handle :> obj
-            override this.CreateSwapchain(size: V2i) = 
+            override this.CreateSwapchain(size: V2i) =
                 createSwapchain runtime signature handle glfw win size
             override this.Dispose() =
                 signature.Dispose()
@@ -313,7 +406,7 @@ module private OpenGL =
                 initVersion glfw
                 install glfw
 
-            override __.CreateSurface(runtime : IRuntime, cfg: WindowConfig, glfw: Glfw, win: nativeptr<WindowHandle>) = 
+            override __.CreateSurface(runtime : IRuntime, cfg: WindowConfig, glfw: Glfw, win: nativeptr<WindowHandle>) =
                 createSurface (runtime :?> _) cfg glfw win
 
             override __.WindowHints(cfg: WindowConfig, glfw: Glfw) =
@@ -334,6 +427,7 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintRobustness.ContextRobustness, Robustness.LoseContextOnReset)
                 glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
                 glfw.WindowHint(WindowHintBool.DoubleBuffer, true)
+                glfw.WindowHint(WindowHintBool.Stereo, cfg.stereo)
                 glfw.WindowHint(WindowHintBool.OpenGLDebugContext, false)
                 glfw.WindowHint(WindowHintBool.ContextNoError, disableErrorChecks && supportsNoError)
                 glfw.WindowHint(WindowHintBool.SrgbCapable, false)
@@ -346,201 +440,8 @@ module private OpenGL =
             override x.Dispose() = cleanup()
         }
 
-module StereoExperimental =
-
-    open OpenGL
-    open FSharp.Data.Adaptive
-
-    let createSwapchain (runtime : Runtime) (signature : IFramebufferSignature) (ctx : Aardvark.Rendering.GL.ContextHandle) (glfw : Glfw) (win : nativeptr<WindowHandle>) (size : V2i) =
-        
-        let colors =
-            runtime.CreateTexture2DArray(size, TextureFormat.Rgba8, samples = signature.Samples, count = 2) |> unbox<Texture>
-
-        let depth =
-            runtime.CreateTexture2DArray(size, TextureFormat.Depth24Stencil8, samples = signature.Samples, count = 2) |> unbox<Texture>
-
-        let framebuffer =
-            runtime.CreateFramebuffer(signature, [
-                DefaultSemantic.Colors, colors.[TextureAspect.Color,0,*] :> IFramebufferOutput
-                DefaultSemantic.DepthStencil, depth.[TextureAspect.Depth,0,*] :> IFramebufferOutput
-            ])
-
-
-        { new ISwapchain with
-            override this.Dispose() = 
-                framebuffer.Dispose()
-                colors.Dispose()
-                depth.Dispose()
-                //temp.Dispose()
-
-            override this.Run(task : IRenderTask, queries : IQuery list)  = 
-                use __ = runtime.Context.RenderingLock ctx
-
-                let output = OutputDescription.ofFramebuffer framebuffer
-                
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, (framebuffer |> unbox<Framebuffer>).Handle)
-                GL.ColorMask(true, true, true, true)
-                GL.DepthMask(true)
-                GL.Viewport(0, 0, size.X, size.Y)
-                GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                GL.ClearDepth(1.0)
-                GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-
-                let rt = { RenderToken.Empty with Queries = queries}
-                task.Run(AdaptiveToken.Top, rt, output)
-
-                let fSrc = GL.GenFramebuffer()
-                let fDst = GL.GenFramebuffer()
-                    
-                let mutable temp = 0
-                GL.CreateTextures(TextureTarget.Texture2D, 1, &temp)
-                if temp = 0 then failwith ""
-                GL.TextureStorage2D(temp, 1, unbox (int colors.Format), size.X, size.Y)
-
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
-                GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, colors.Handle, 0, 0)
-                GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, temp, 0)
-                GL.BlitFramebuffer(0, 0, colors.Size.X, colors.Size.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
-                    
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fDst)
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
-                GL.DrawBuffer(DrawBufferMode.BackLeft)
-                GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
-
-                    
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
-                GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, colors.Handle, 0, 1)
-                GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, temp, 0)
-                GL.BlitFramebuffer(0, 0, colors.Size.X, colors.Size.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
-                    
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fDst)
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
-                GL.DrawBuffer(DrawBufferMode.BackRight)
-                GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
-
-                GL.DeleteFramebuffer fSrc
-                GL.DeleteFramebuffer fDst
-                GL.DeleteTexture temp
-
-                glfw.SwapBuffers(win)
-                true
-
-            override this.Size = 
-                size
-        }
-
-    let private createStereoSurface (runtime : Runtime) (cfg: WindowConfig) (glfw : Glfw) (win : nativeptr<WindowHandle>) =
-        let old = glfw.GetCurrentContext()
-        
-        glfw.MakeContextCurrent(NativePtr.zero)
-
-        let ctx =
-            new MyGraphicsContext(glfw, win)
-
-        let info =
-            new MyWindowInfo(win)
-
-        let mutable samples = cfg.samples
-
-        if not (isNull ctx) then  
-            glfw.MakeContextCurrent(win)
-            let current = glfw.GetCurrentContext() 
-            let mutable desc = Unchecked.defaultof<_>
-            let error = glfw.GetError(&desc)
-            if error <> Silk.NET.GLFW.ErrorCode.NoError then
-                Log.error "[GLFW] error after making trying to make context current: %A" error
-            if current <> win then
-                Log.error "[GLFW] could not make context current"
-            ctx.LoadAll()          
-            glfw.SwapInterval(if cfg.vsync then 1 else 0)
-            samples <- getFramebufferSamples() |> Option.defaultValue cfg.samples
-            glfw.MakeContextCurrent(NativePtr.zero)
-
-        if old <> NativePtr.zero then
-            glfw.MakeContextCurrent old
-
-        let handle = new Aardvark.Rendering.GL.ContextHandle(ctx, info)
-
-        let signature =
-            handle.Use (fun _ ->
-                handle.Initialize(runtime.DebugConfig, setDefaultStates = true)
-
-                let perLayerUniforms =
-                        Set.ofList [
-                            "ProjTrafo"; 
-                            "ViewTrafo"; 
-                            "ModelViewTrafo"; 
-                            "ViewProjTrafo"; 
-                            "ModelViewProjTrafo"
-                    
-                            "ProjTrafoInv"; 
-                            "ViewTrafoInv"; 
-                            "ModelViewTrafoInv"; 
-                            "ViewProjTrafoInv"; 
-                            "ModelViewProjTrafoInv"
-                        ]
-
-                runtime.CreateFramebufferSignature([
-                    DefaultSemantic.Colors, TextureFormat.Rgba8
-                    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
-                ], samples, 2, perLayerUniforms)
-            )
-
-        { new IWindowSurface with
-            override x.Signature = signature
-            override this.Handle =
-                handle :> obj
-            override this.CreateSwapchain(size: V2i) = 
-                createSwapchain runtime signature handle glfw win size
-            override this.Dispose() =
-                signature.Dispose()
-                ctx.Dispose()
-        }
-
-    let stereo (debug : DebugConfig) =
-        let disableErrorChecks =
-            debug.ErrorFlagCheck = ErrorFlagCheck.Disabled
-
-        { new IWindowInterop with
-            member x.Boot(glfw : Glfw) = 
-                initVersion(glfw)
-
-            member x.CreateSurface(runtime : IRuntime, cfg : WindowConfig, glfw : Glfw, win : nativeptr<WindowHandle>)=
-                createStereoSurface (runtime :?> _) cfg glfw win
-
-            member x.WindowHints(cfg : WindowConfig, glfw) =
-                glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
-                glfw.WindowHint(WindowHintInt.ContextVersionMajor, version.Major)
-                glfw.WindowHint(WindowHintInt.ContextVersionMinor, version.Minor)
-                glfw.WindowHint(WindowHintInt.DepthBits, 24)
-                glfw.WindowHint(WindowHintInt.StencilBits, 8)
-
-                let m = glfw.GetPrimaryMonitor()
-                let mode = glfw.GetVideoMode(m) |> NativePtr.read
-                glfw.WindowHint(WindowHintInt.RedBits, 8)
-                glfw.WindowHint(WindowHintInt.GreenBits, 8)
-                glfw.WindowHint(WindowHintInt.BlueBits, 8)
-                glfw.WindowHint(WindowHintInt.AlphaBits, 8)
-                glfw.WindowHint(WindowHintInt.RefreshRate, mode.RefreshRate)
-                glfw.WindowHint(WindowHintOpenGlProfile.OpenGlProfile, OpenGlProfile.Core)
-                glfw.WindowHint(WindowHintRobustness.ContextRobustness, Robustness.LoseContextOnReset)
-                glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
-                glfw.WindowHint(WindowHintBool.Stereo, true)
-                glfw.WindowHint(WindowHintBool.DoubleBuffer, true)
-                glfw.WindowHint(WindowHintBool.OpenGLDebugContext, false)
-                glfw.WindowHint(WindowHintBool.ContextNoError, disableErrorChecks && supportsNoError)
-                glfw.WindowHint(WindowHintBool.SrgbCapable, false)
-                if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
-                    glfw.WindowHint(WindowHintBool.CocoaRetinaFramebuffer, cfg.physicalSize)
-
-                glfw.WindowHint(WindowHintBool.ScaleToMonitor, true)
-                glfw.WindowHint(WindowHintInt.Samples, if cfg.samples = 1 then 0 else cfg.samples)
-        }
-
-type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<string>, windowInterop : IWindowInterop, hideCocoaMenuBar : bool) as this =
-    inherit Application(runtime, windowInterop, hideCocoaMenuBar)
+type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) as this =
+    inherit Application(runtime, OpenGL.getInterop runtime.DebugConfig, hideCocoaMenuBar)
 
     // Note: We ignore the passed parent since we determine the parent context in the CreateWindow method.
     // This is always the first created context and should therefore match the passed one anyway.
@@ -563,15 +464,7 @@ type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<stri
         if forceNvidia && RuntimeInformation.IsOSPlatform OSPlatform.Windows then
             DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
 
-        let runtime = new Runtime(debug)
-        let interop = OpenGL.interop runtime.DebugConfig
-        new OpenGlApplication(runtime, shaderCachePath, interop, hideCocoaMenuBar)
-
-    new(debug : IDebugConfig, windowInterop: IWindowInterop, shaderCachePath : Option<string>,
-        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
-        
-        let runtime = new Runtime(debug)
-        new OpenGlApplication(runtime, shaderCachePath, windowInterop, hideCocoaMenuBar)
+        new OpenGlApplication(new Runtime(debug), shaderCachePath, hideCocoaMenuBar)
 
     new(forceNvidia : bool, debug : bool, shaderCachePath : Option<string>) =
         new OpenGlApplication(forceNvidia, DebugLevel.ofBool debug, shaderCachePath)
@@ -587,7 +480,7 @@ type OpenGlApplication private (runtime : Runtime, shaderCachePath : Option<stri
     member x.Context = ctx
     member x.Runtime = runtime
 
-    member x.Initialize(ctrl : IRenderControl, samples : int) = 
+    member x.Initialize(ctrl : IRenderControl, samples : int) =
         failwithf "unknown control type: %A" ctrl
 
     override x.Destroy() =

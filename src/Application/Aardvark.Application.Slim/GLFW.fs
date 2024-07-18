@@ -369,6 +369,7 @@ type WindowConfig =
         opengl : bool
         physicalSize : bool
         samples : int
+        stereo : bool
     }
 
     static member Default =
@@ -381,7 +382,8 @@ type WindowConfig =
           WindowConfig.opengl = true
           WindowConfig.physicalSize = false
           WindowConfig.transparent = false
-          WindowConfig.samples = 1 }
+          WindowConfig.samples = 1
+          WindowConfig.stereo = false }
 
 module internal IconLoader =
     open System.IO

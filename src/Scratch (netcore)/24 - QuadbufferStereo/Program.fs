@@ -30,10 +30,8 @@ let main argv =
 
     Aardvark.Init()
 
-    let dbg = Aardvark.Rendering.GL.DebugConfig.Normal
-    let windowInterop = StereoExperimental.stereo dbg
-    use app = new OpenGlApplication(dbg, windowInterop, None, false)
-    let win = app.CreateGameWindow({ WindowConfig.Default with samples = 8; width = 1760; height= 1080 })
+    use app = new OpenGlApplication(true)
+    let win = app.CreateGameWindow({ WindowConfig.Default with samples = 8; width = 1760; height = 1080; stereo = true })
     win.Title <- "Quadbuffer Stereo. Use mouse to Rotate."
     win.Cursor <- Cursor.None
     win.RenderAsFastAsPossible <- true
