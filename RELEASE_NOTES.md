@@ -26,6 +26,9 @@
 - [LodRenderer] Handle exceptions in background threads
 - [GL] Implemented GLSL shader caches for platforms that do not support program binaries (e.g. MacOS)
 
+### 5.4.9-prerelease0001
+- [GL] experimental support for quad-buffer stereo(is back again?)
+
 ### 5.4.8
 - [GL] Fixed locking order of GlobalResourceLock and context locks to avoid potential deadlocks
 - [GL] Added workaround for layered rendering and GLSL < 430
