@@ -998,7 +998,7 @@ module TextureUpload =
                 let toMipMap arr =
                     PixImageMipMap(arr |> Array.map (fun pi -> pi :> PixImage))
 
-                let pc = PixImageCube(data |> Array.map toMipMap)
+                let pc = PixCube(data |> Array.map toMipMap)
                 let pt = PixTextureCube(pc, textureParams)
                 runtime.PrepareTexture(pt)
 

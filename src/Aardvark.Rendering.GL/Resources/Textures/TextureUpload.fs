@@ -205,8 +205,8 @@ module internal TextureUploadImplementation =
             uploadPixImageMipMapInternal texture wantMipmap generateMipmap baseLevel slice offset images
 
 
-        let uploadPixImageCube (texture : Texture) (wantMipmap : bool)
-                               (baseLevel : int) (slice : int) (offset : V2i) (data : PixImageCube) =
+        let uploadPixCube (texture : Texture) (wantMipmap : bool)
+                               (baseLevel : int) (slice : int) (offset : V2i) (data : PixCube) =
             let generateMipmap =
                 wantMipmap && data.MipMapArray |> Array.exists (fun i -> i.LevelCount < texture.MipMapLevels)
 
@@ -295,7 +295,7 @@ module ContextTextureUploadExtensions =
 
         let (|PixTextureCube|_|) (t : ITexture) =
             match t with
-            | :? PixTextureCube as t -> Some(PixTextureCube(t.TextureParams, t.PixImageCube))
+            | :? PixTextureCube as t -> Some(PixTextureCube(t.TextureParams, t.PixCube))
             | _ -> None
 
         let (|PixTexture2D|_|) (t : ITexture) =
@@ -355,7 +355,7 @@ module ContextTextureUploadExtensions =
                     let img = data.[CubeSide.NegativeX]
                     let levels = data.MipMapArray |> Array.map (fun pi -> pi.LevelCount) |> Array.min
                     let texture = this |> Texture.createOfFormatCube img.BaseImage.PixFormat img.[0].Size.X levels info
-                    Texture.uploadPixImageCube texture info.wantMipMaps 0 0 V2i.Zero data
+                    Texture.uploadPixCube texture info.wantMipMaps 0 0 V2i.Zero data
                     texture
 
                 | PixTexture3D(info, data) ->
