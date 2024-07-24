@@ -14,7 +14,7 @@
 #r "Aardvark.Application.WinForms.GL.dll"
 #r "System.Reactive.Core.dll"
 #r "Aardvark.Rendering.Interactive.dll"
-#r "Aardvark.SceneGraph.IO.dll"
+#r "Aardvark.SceneGraph.Assimp.dll"
 
 namespace Aardvark.Rendering.Interactive
 

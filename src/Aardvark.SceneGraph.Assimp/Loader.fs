@@ -1,4 +1,4 @@
-﻿namespace Aardvark.SceneGraph.IO
+﻿namespace Aardvark.SceneGraph.Assimp
 
 open Aardvark.Base
 open Aardvark.Base.Sorting
@@ -749,7 +749,7 @@ module Loader =
         //            false
         //    Log.stop ()
         //    if r then Log.line "Assimp native dependencies successfully unpacked."
-        //    else Log.line "Failed to unpack native assimp dependencies. Did you forget Aardvark.Init()? Make sure Aardvark.SceneGraph.IO.dll is in your output directory."
+        //    else Log.line "Failed to unpack native assimp dependencies. Did you forget Aardvark.Init()? Make sure Aardvark.SceneGraph.Assimp.dll is in your output directory."
 
         let defaultFlags = 
             Assimp.PostProcessSteps.CalculateTangentSpace |||

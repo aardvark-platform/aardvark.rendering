@@ -18,11 +18,11 @@ open Aardvark.Base.Incremental.Operators
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Rendering.Interactive
-open Aardvark.SceneGraph.IO
+open Aardvark.SceneGraph.Assimp
 
 
 FsiSetup.initFsi (Path.combine [BinDirectory; "Examples.exe"])
-Aardvark.SceneGraph.IO.Loader.Assimp.initialize ()
+Aardvark.SceneGraph.Assimp.Loader.Assimp.initialize ()
 
 let fillMode = Mod.init FillMode.Fill
 

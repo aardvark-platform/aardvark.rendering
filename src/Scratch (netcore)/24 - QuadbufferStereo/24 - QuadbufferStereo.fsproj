@@ -22,7 +22,7 @@
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj" />
-    <ProjectReference Include="..\..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.SceneGraph.Assimp\Aardvark.SceneGraph.Assimp.fsproj" />
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj" />

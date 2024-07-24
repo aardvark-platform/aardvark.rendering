@@ -1,4 +1,4 @@
-﻿namespace Aardvark.SceneGraph.IO
+﻿namespace Aardvark.SceneGraph.Assimp
 
 open System
 open Aardvark.Base
@@ -7,8 +7,6 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.CSharp
 open Aardvark.SceneGraph.Semantics
 open FSharp.Data.Adaptive
-open Assimp
-open Assimp.Unmanaged
 open System.Runtime.CompilerServices
 open System.Collections.Generic
 open System.Runtime.InteropServices

@@ -10,7 +10,7 @@
       "Aardvark.Rendering.Vulkan\\Aardvark.Rendering.Vulkan.fsproj",
       "Aardvark.Rendering\\Aardvark.Rendering.fsproj",
       "Aardvark.SceneGraph.Browser\\Aardvark.SceneGraph.Browser.fsproj",
-      "Aardvark.SceneGraph.IO\\Aardvark.SceneGraph.IO.fsproj",
+      "Aardvark.SceneGraph.Assimp\\Aardvark.SceneGraph.Assimp.fsproj",
       "Aardvark.SceneGraph.Opc\\Aardvark.SceneGraph.Opc.fsproj",
       "Aardvark.SceneGraph\\Aardvark.SceneGraph.fsproj",
       "Application\\Aardvark.Application.OpenVR.GL\\Aardvark.Application.OpenVR.GL.fsproj",

@@ -14,7 +14,7 @@ module InteractiveHelper =
         let assemblies =
             [
                 Assembly.Load("Aardvark.SceneGraph")
-                Assembly.Load("Aardvark.SceneGraph.IO")
+                Assembly.Load("Aardvark.SceneGraph.Assimp")
                 Assembly.Load("AssimpNet") 
                 Assembly.Load("DevILSharp") 
             ] @ others

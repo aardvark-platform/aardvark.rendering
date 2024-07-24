@@ -2,7 +2,7 @@
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
-open Aardvark.SceneGraph.IO
+open Aardvark.SceneGraph.Assimp
 open Aardvark.Application
 open System
 

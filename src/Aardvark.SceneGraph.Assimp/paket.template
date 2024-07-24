@@ -1,5 +1,5 @@
 type project
-id Aardvark.SceneGraph.IO
+id Aardvark.SceneGraph.Assimp
 authors Aardvark Platform Team
 owners Aardvark Platform Team
 projectUrl http://github.com/aardvark-platform
