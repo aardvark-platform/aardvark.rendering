@@ -1,3 +1,7 @@
+### 5.5.0-prerelease0002
+- Renamed `PixImageCube` to `PixCube`
+- Renamed `Aardvark.SceneGraph.IO` to `Aardvark.SceneGraph.Assimp`
+
 ### 5.5.0-prerelease0001
 - Initial prerelease
 
