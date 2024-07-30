@@ -25,9 +25,6 @@ nuget FShade.Core                                   ~> 5.6.0-prerelease0001
 nuget FShade                                        ~> 5.6.0-prerelease0001
 nuget FShade.Debug                                  ~> 5.6.0-prerelease0001
 
-// Some tests and examples require an image loader
-nuget Aardvark.PixImage.ImageSharp                  ~> 2.0.1-prerelease0001
-
 nuget Unofficial.OpenVR					            ~> 1.1.0
 nuget Unofficial.Typography                         ~> 0.1.0
 nuget CommonMark.NET                                ~> 0.15.1
@@ -45,6 +42,10 @@ nuget Silk.NET.Core                                 = 2.15.0
 nuget Silk.NET.Direct3D9                            = 2.15.0
 
 nuget SharpZipLib                                   ~> 1.4.1
+
+// Examples
+nuget Aardvark.PixImage.ImageSharp                  ~> 2.0.1-prerelease0001
+nuget Aardvark.Data.GLTF                            ~> 1.0.0-prerelease0001
 
 group Test
     framework: net8.0

@@ -226,6 +226,8 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "23 - NativeMemoryLeak", "Sc
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Common", "Aardvark.Rendering.Common\Aardvark.Rendering.Common.fsproj", "{FBFF12BC-5292-4154-B985-31130061F3D6}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "38 - GLTF", "Examples (netcore)\38 - GLTF\38 - GLTF.fsproj", "{470275FD-9F08-4814-A6DF-73E9C812C1D6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -624,6 +626,10 @@ Global
 		{FBFF12BC-5292-4154-B985-31130061F3D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FBFF12BC-5292-4154-B985-31130061F3D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FBFF12BC-5292-4154-B985-31130061F3D6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{470275FD-9F08-4814-A6DF-73E9C812C1D6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{470275FD-9F08-4814-A6DF-73E9C812C1D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{470275FD-9F08-4814-A6DF-73E9C812C1D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{470275FD-9F08-4814-A6DF-73E9C812C1D6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -717,6 +723,7 @@ Global
 		{159213C5-ECA5-48B6-BDCF-D75BAE733E80} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{6DFA9CC5-3C57-44FC-A989-F1DC5097C2DB} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{470275FD-9F08-4814-A6DF-73E9C812C1D6} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
