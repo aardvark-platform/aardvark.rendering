@@ -1887,8 +1887,8 @@ type ResourceManager(device : Device) =
             [count :> obj, empty :> obj; input :> obj], fun cache key -> new ImageSamplerArrayResource(cache, key, count, empty, input)
         )
 
-    member x.CreateShaderProgram(pass : RenderPass, data : ISurface) =
-        let program = device.CreateShaderProgram(pass, data)
+    member x.CreateShaderProgram(pass : RenderPass, program : ShaderProgram) =
+        program.AddReference()
 
         let resource =
             { new AbstractResourceLocation<ShaderProgram>(dummyCache, []) with
@@ -1913,13 +1913,12 @@ type ResourceManager(device : Device) =
 
         program.PipelineLayout, resource
 
-    member private x.CreateDynamicShaderProgram(key : obj, pass : RenderPass, compile : FShade.EffectConfig -> FShade.EffectInputLayout * aval<FShade.Imperative.Module>) =
+    member private x.CreateDynamicShaderProgram(pass : RenderPass, top : IndexedGeometryMode,
+                                                compile : Func<IFramebufferSignature, IndexedGeometryMode, DynamicSurface>) =
         dynamicProgramCache.GetOrCreate(
-            [key; pass.Layout :> obj],
+            [compile :> obj; top :> obj; pass.Layout :> obj],
             fun cache key ->
-                let effectConfig = pass.EffectConfig(FShadeConfig.depthRange, false)
-
-                let _, module_ = compile effectConfig
+                let _, module_ = compile.Invoke(pass, top)
                 use initialProgram = device.CreateShaderProgram(AVal.force module_)
 
                 let program = new DynamicShaderProgramResource(cache, key, device, initialProgram.PipelineLayout, module_)
@@ -1930,17 +1929,18 @@ type ResourceManager(device : Device) =
 
     member x.CreateShaderProgram(pass : RenderPass, data : Aardvark.Rendering.Surface, top : IndexedGeometryMode) =
         match data with
-        | Surface.FShadeSimple effect ->
+        | Surface.Effect effect ->
             x.CreateShaderProgram(pass, effect, top)
 
-        | Surface.FShade compile ->
-            // Use surface itself as key rather than compile function, since equality is undefined behavior for F# functions.
-            // See F# specification: 6.9.24 Values with Underspecified Object Identity and Type Identity
-            let program = x.CreateDynamicShaderProgram(data, pass, compile)
+        | Surface.Dynamic compile ->
+            let program = x.CreateDynamicShaderProgram(pass, top, compile)
             program.Layout, program
 
-        | Surface.Backend surface ->
-            x.CreateShaderProgram(pass, surface)
+        | Surface.Backend (:? ShaderProgram as program) ->
+            x.CreateShaderProgram(pass, program)
+
+        | Surface.Backend unknown ->
+            failf "invalid backend surface: %A" unknown
 
         | Surface.None ->
             failf "encountered empty surface"

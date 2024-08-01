@@ -43,27 +43,20 @@ type SceneGraphExtensions =
     static member Trafo(sg : ISg, modelTrafo : Trafo3d) = Sg.trafo (AVal.constant modelTrafo) sg
 
     [<Extension>]
-    static member Surface(sg : ISg, surface : ISurface) = Sg.SurfaceApplicator(match surface with
-                                                                                   | :? FShadeSurface as fs -> Surface.FShadeSimple fs.Effect
-                                                                                   | :? IBackendSurface as bs -> Surface.Backend bs
-                                                                                   | _ -> failwith "unsupported surface"
-                                                                                , sg) :> ISg
-
-    [<Extension>]
     static member Surface(sg : ISg, surface : Surface) = Sg.SurfaceApplicator(surface, sg) :> ISg
 
     [<Extension>]
     static member Surface(sg : ISg, surface : IBackendSurface) = Sg.SurfaceApplicator(Surface.Backend surface, sg) :> ISg
 
     [<Extension>]
-    static member Surface(sg : ISg, effect : FShade.Effect) = Sg.SurfaceApplicator(Surface.FShadeSimple effect, sg) :> ISg
+    static member Surface(sg : ISg, effect : FShade.Effect) = Sg.SurfaceApplicator(Surface.Effect effect, sg) :> ISg
 
     [<Extension>]
-    static member Surface(sg : ISg, [<ParamArray>] effects : FShade.Effect[]) = Sg.SurfaceApplicator(Surface.FShadeSimple (FShade.Effect.compose effects), sg) :> ISg
+    static member Surface(sg : ISg, [<ParamArray>] effects : FShade.Effect[]) = Sg.SurfaceApplicator(Surface.Effect (FShade.Effect.compose effects), sg) :> ISg
 
     [<Extension>]
-    static member Surface(sg : ISg, creator : Func<FShade.EffectConfig, FShade.EffectInputLayout*aval<FShade.Imperative.Module>>) =
-        Sg.SurfaceApplicator(Surface.FShade (fun cfg -> creator.Invoke(cfg)), sg) :> ISg
+    static member Surface(sg : ISg, creator : Func<IFramebufferSignature, IndexedGeometryMode, DynamicSurface>) =
+        Sg.SurfaceApplicator(Surface.create creator, sg) :> ISg
 
     // Blending
     [<Extension>]

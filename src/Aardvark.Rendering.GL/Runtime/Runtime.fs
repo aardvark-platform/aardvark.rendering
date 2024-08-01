@@ -25,6 +25,14 @@ type Runtime(debug : IDebugConfig) =
 
     member x.ContextLock = ctx.ResourceLock :> IDisposable
 
+    member x.ShaderDepthRange = Range1d(-1.0, 1.0)
+
+    /// Returns whether the inputs gl_Layer and gl_ViewportIndex can be used
+    /// in fragment shaders. If not a custom output / input must be used for
+    /// layered effects.
+    member x.SupportsLayeredShaderInputs =
+        ctx.Driver.glsl >= Version(4, 3, 0)
+
     member x.DebugConfig = debug
 
     member x.ShaderCachePath
@@ -45,9 +53,8 @@ type Runtime(debug : IDebugConfig) =
             try
                 Log.startTimed "initializing OpenGL runtime"
 
-                Driver.printDriverInfo 4
-
                 let driver = context.Driver
+                driver |> Driver.print 4
 
                 // GL_CONTEXT_CORE_PROFILE_BIT 1
                 // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
@@ -88,6 +95,8 @@ type Runtime(debug : IDebugConfig) =
     interface IRuntime with
 
         member x.DeviceCount = 1
+        member x.ShaderDepthRange = x.ShaderDepthRange
+        member x.SupportsLayeredShaderInputs = x.SupportsLayeredShaderInputs
         member x.DebugConfig = x.DebugConfig
         member x.ContextLock = x.ContextLock
 
@@ -99,11 +108,6 @@ type Runtime(debug : IDebugConfig) =
 
 
         member x.OnDispose = x.OnDispose
-
-        member x.AssembleModule (effect, signature, topology) =
-            x.AssembleModule(effect, signature, topology)
-
-        member x.ResourceManager = manager :> IResourceManager
 
         member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
                                             depthStencilAttachment : Option<TextureFormat>,
@@ -139,7 +143,7 @@ type Runtime(debug : IDebugConfig) =
 
         member x.Blit(src, srcRegion, dst, dstRegion) = x.Blit(src, srcRegion, dst, dstRegion)
 
-        member x.PrepareSurface (signature, s : ISurface) : IBackendSurface = x.PrepareSurface(signature, s)
+        member x.PrepareEffect(signature, effect, topology) = x.PrepareEffect(signature, effect, topology)
 
         member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj)
 
@@ -379,29 +383,20 @@ type Runtime(debug : IDebugConfig) =
         ctx.CreateTexture(texture, ValueNone)
 
     member x.PrepareBuffer (b : IBuffer, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) = ctx.CreateBuffer(b, storage)
-    member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface =
+    member x.PrepareEffect (signature : IFramebufferSignature, effect : FShade.Effect, topology : IndexedGeometryMode) : IBackendSurface =
         Operators.using ctx.ResourceLock (fun d ->
-            let surface =
-                match s with
-                    | :? FShadeSurface as f -> Aardvark.Rendering.Surface.FShadeSimple f.Effect
-                    | _ -> Aardvark.Rendering.Surface.Backend s
-
             if signature.LayerCount > 1 then
                 Log.warn("[PrepareSurface] Using Triangle topology.")
 
-            let iface, program = ctx.CreateProgram(signature, surface, IndexedGeometryMode.TriangleList)
+            let _, program = ctx.CreateProgram(signature, Surface.Effect effect, topology)
 
             AVal.force program :> IBackendSurface
-
         )
 
     member x.CreateStreamingTexture(mipMaps : bool) =
         ctx.CreateStreamingTexture(mipMaps) :> IStreamingTexture
 
     member x.OnDispose = onDispose.Publish
-
-    member x.AssembleModule (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-        signature.Link(effect, Range1d(-1.0, 1.0), false, topology, not x.Context.SupportsLayeredEffects)
 
     member x.ResourceManager = manager
 
@@ -599,7 +594,7 @@ type Runtime(debug : IDebugConfig) =
             GL.ReadPixels(offset.X, src.Size.Y - size.Y - offset.Y, size.X, size.Y, pfmt, ptype, gc.AddrOfPinnedObject())
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
 
-            res.Transformed(ImageTrafo.MirrorY)
+            res.TransformedPixImage(ImageTrafo.MirrorY)
         finally
             gc.Free()
 

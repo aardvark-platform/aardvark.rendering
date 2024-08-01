@@ -2,7 +2,7 @@
 open Aardvark.Rendering
 open Aardvark.Rendering.Raytracing
 open Aardvark.SceneGraph
-open Aardvark.SceneGraph.IO
+open Aardvark.SceneGraph.Assimp
 open Aardvark.SceneGraph.Raytracing
 open Aardvark.Application
 open Aardvark.Application.Slim

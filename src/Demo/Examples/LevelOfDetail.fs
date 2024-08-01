@@ -513,7 +513,7 @@ module LevelOfDetail =
             ]
 
 
-        let surface = Aardvark.Rendering.Surface.FShadeSimple effect
+        let surface = Aardvark.Rendering.Surface.Effect effect
 
 
         let state =

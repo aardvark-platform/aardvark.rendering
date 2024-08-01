@@ -16,7 +16,7 @@ open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.Text
 open System.Runtime.InteropServices
 open Aardvark.SceneGraph
-open Aardvark.SceneGraph.IO
+open Aardvark.SceneGraph.Assimp
 
 
 module Jpeg =

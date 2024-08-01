@@ -92,7 +92,7 @@ module ``Air Builder`` =
         inherit EffectBuilder()
 
         member x.Run(f : unit -> list<FShadeEffect>) =
-            let surface = f() |> FShade.Effect.compose |> Surface.FShadeSimple
+            let surface = f() |> FShade.Effect.compose |> Surface.Effect
 
             { new Air<unit>() with
                 member x.RunUnit(state) =
@@ -474,11 +474,11 @@ type Air private() =
     // ================================================================================================================
     // Surface
     // ================================================================================================================
-    static member BindSurface(surface : ISurface) =
-        modify (fun s -> { s with surface = Surface.Backend surface })
+    static member BindSurface(surface : Surface) =
+        modify (fun s -> { s with surface = surface })
 
     static member BindEffect (l : list<FShadeEffect>) =
-        let surf = FShade.Effect.compose l |> Surface.FShadeSimple
+        let surf = FShade.Effect.compose l |> Surface.Effect
         modify (fun s -> { s with surface = surf })
 
     static member BindShader = airShader

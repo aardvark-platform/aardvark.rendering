@@ -43,20 +43,40 @@ module Surfaces =
                         Effects.VertexColor.Effect
                     ]
 
-                let compile (cfg: EffectConfig) =
-                    let module_ = Effect.toModule cfg effect
-                    let layout = EffectInputLayout.ofModule module_
-                    layout, (AVal.init module_) :> aval<_>
-
-                Surface.FShade compile
+                Surface.effectPool [| effect |] (AVal.init 0)
 
             match runtime, signature with
             | :? GL.Runtime as r, _ -> glDynamicShaderCaching signature surface r
             | :? Vulkan.Runtime as r, (:? Vulkan.RenderPass as p) -> vkDynamicShaderCaching p surface r
             | _ -> failwith "Unknown backend"
 
+        let equality (_: IRuntime) =
+            let getEffect() =
+                Effect.compose [
+                    toEffect DefaultSurfaces.trafo
+                    toEffect DefaultSurfaces.vertexColor
+                ]
+
+            let s1 = Surface.Effect <| getEffect()
+            let s2 = Surface.Effect <| getEffect()
+            Expect.equal s1 s2 "Surface.Effect not equal"
+
+            let effect = getEffect()
+
+            let compile =
+                System.Func<_, _, _>(
+                    fun (signature: IFramebufferSignature) (topology: IndexedGeometryMode) ->
+                        let module_ = Effect.link signature topology false effect
+                        EffectInputLayout.ofModule module_, AVal.constant module_
+                )
+
+            let s1 = Surface.Dynamic compile
+            let s2 = Surface.Dynamic compile
+            Expect.equal s1 s2 "Surface.Dynamic not equal"
+
     let tests (backend : Backend) =
         [
-            "Dynamic shader caching", Cases.dynamicShaderCaching
+            "Dynamic shader caching",   Cases.dynamicShaderCaching
+            "Equality",                 Cases.equality
         ]
         |> prepareCases backend "Surfaces"

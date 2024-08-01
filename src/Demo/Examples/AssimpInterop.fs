@@ -14,7 +14,6 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Interactive
 
 open FSharp.Data.Adaptive
-open Aardvark.SceneGraph
 open Aardvark.Application
 
 
@@ -26,6 +25,7 @@ module Assimp =
     open System.Collections.Generic
 
     open Aardvark.Base.Ag
+    open Aardvark.SceneGraph
     open Aardvark.SceneGraph.Semantics
 
     
@@ -355,12 +355,13 @@ module Assimp =
 
 
 module AssimpInterop = 
-    open Aardvark.SceneGraph.Semantics
     open Assimp
+    open Aardvark.SceneGraph
+    open Aardvark.SceneGraph.Semantics
 
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
     System.Environment.CurrentDirectory <- Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"]
-    //Aardvark.SceneGraph.IO.Loader.Assimp.initialize ()
+    //Aardvark.SceneGraph.Assimp.Loader.Assimp.initialize ()
 
 
     let win = Interactive.Window

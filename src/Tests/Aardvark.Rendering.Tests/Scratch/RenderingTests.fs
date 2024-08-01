@@ -727,7 +727,7 @@
 //                RenderPass = RenderPass.main
 //                DrawCalls = Direct(AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
 //                Mode = IndexedGeometryMode.TriangleList
-//                Surface = DefaultSurfaces.constantColor C4f.Gray |> toEffect |> Surface.FShadeSimple
+//                Surface = DefaultSurfaces.constantColor C4f.Gray |> toEffect |> Surface.Effect
 //                DepthState      = DepthState.Default
 //                BlendState      = { BlendState.Default with Mode = AVal.constant BlendMode.Blend }
 //                StencilState    = StencilState.Default

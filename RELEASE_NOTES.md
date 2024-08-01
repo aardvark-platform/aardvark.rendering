@@ -1,3 +1,10 @@
+### 5.5.0-prerelease0002
+- Renamed `PixImageCube` to `PixCube`
+- Renamed `Aardvark.SceneGraph.IO` to `Aardvark.SceneGraph.Assimp`
+
+### 5.5.0-prerelease0001
+- Initial prerelease
+
 ### 5.4.12
 - [GL] Fixed potential memory leak after ContextHandle is disposed
 - Optimized generic dispatch
@@ -41,6 +48,9 @@
 ### 5.4.9
 - [LodRenderer] Handle exceptions in background threads
 - [GL] Implemented GLSL shader caches for platforms that do not support program binaries (e.g. MacOS)
+
+### 5.4.9-prerelease0001
+- [GL] experimental support for quad-buffer stereo(is back again?)
 
 ### 5.4.8
 - [GL] Fixed locking order of GlobalResourceLock and context locks to avoid potential deadlocks

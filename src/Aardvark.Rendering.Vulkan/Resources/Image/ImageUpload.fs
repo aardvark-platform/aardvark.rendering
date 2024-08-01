@@ -150,7 +150,7 @@ module ImageUploadExtensions =
                 buffers |> create levelCount
 
             let ofPixImageMipMaps (info : TextureParams) (pix : PixImageMipMap[]) (device : Device) =
-                let format = PixFormat.toTextureFormat info pix.[0].PixFormat
+                let format = PixFormat.toTextureFormat info pix.[0].BaseImage.PixFormat
 
                 let levelCount =
                     if info.wantMipMaps then Fun.MipmapLevels(pix.[0].[0].Size) else 1
@@ -308,7 +308,7 @@ module ImageUploadExtensions =
             let buffer = device |> ImageBuffer.ofPixVolume info data
             device |> ofImageBuffer TextureDimension.Texture3D info.wantMipMaps buffer export
 
-        let ofPixImageCube (data : PixImageCube) (info : TextureParams) (export : bool) (device : Device) =
+        let ofPixCube (data : PixCube) (info : TextureParams) (export : bool) (device : Device) =
             let buffers = device |> ImageBufferArray.ofPixImageMipMaps info data.MipMapArray
             device |> ofImageBufferArray TextureDimension.TextureCube info.wantMipMaps export buffers
 
@@ -337,7 +337,7 @@ module ImageUploadExtensions =
                 device |> ofPixImageMipMap t.PixImageMipMap t.TextureParams export
 
             | :? PixTextureCube as c ->
-                device |> ofPixImageCube c.PixImageCube c.TextureParams export
+                device |> ofPixCube c.PixCube c.TextureParams export
 
             | :? NullTexture ->
                 let properties =

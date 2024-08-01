@@ -9,7 +9,7 @@ open System.Diagnostics
 open System.Collections.Generic
 open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.Base.Runtime
+open Aardvark.Assembler
 open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
@@ -244,9 +244,6 @@ module RenderTasks =
 
         let mutable program = new Aardvark.Assembler.FragmentProgram<PreparedCommand>(compile)
 
-        let mutable stats = NativeProgramUpdateStatistics.Zero
-        member x.Count = stats.Count
-
         member x.Update(token : AdaptiveToken) =
             x.EvaluateIfNeeded token () (fun token ->
                 let ops = reader.GetChanges token
@@ -278,24 +275,8 @@ module RenderTasks =
         member x.Dispose() =
             if not (isNull state) then
                 program.Dispose()
-                stats <- NativeProgramUpdateStatistics.Zero
                 state <- null
                 reader <- Unchecked.defaultof<_>
-            
-        interface IAdaptiveProgram<unit> with
-            member x.Dispose() = x.Dispose()
-            member x.Disassemble() = null
-            member x.Run(_) = x.Run()
-            member x.Update(t) = x.Update(t); AdaptiveProgramStatistics.Zero
-            member x.StartDefragmentation() = Threading.Tasks.Task.FromResult(TimeSpan.Zero)
-            member x.AutoDefragmentation
-                with get() = false
-                and set _ = ()
-            member x.FragmentCount = 10
-            member x.NativeCallCount = 10
-            member x.ProgramSizeInBytes = 10L
-            member x.TotalJumpDistanceInBytes = 10L
-            
 
 
     type StaticOrderSubTask(ctx : Context, scope : CompilerInfo, debug : bool) =

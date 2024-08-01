@@ -665,7 +665,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                                 if isNew then
                                     let conv = PrimitiveValueConverter.getArrayConverter typeof<int> indexType
                                     let data = Array.init fvc id |> conv
-                                    indexBuffer.Set(data.UnsafeCoerce<byte>(), indexRange)
+                                    indexBuffer.Set(data, indexRange)
 
                             iptrs.Add(indexPtr)
                             int32 indexPtr.Offset

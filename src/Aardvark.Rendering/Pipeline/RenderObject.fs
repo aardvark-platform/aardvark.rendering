@@ -109,9 +109,6 @@ and RenderObject private (id : RenderObjectId,
     static member Clone(ro : RenderObject) =
         RenderObject(id = RenderObjectId.New(), other = ro)
 
-    [<Obsolete("Use default constructor instead.")>]
-    static member Create() = RenderObject()
-
     member x.Path =
         if System.Object.ReferenceEquals(x.AttributeScope,Ag.Scope.Root) then "EMPTY"
         else string x.AttributeScope

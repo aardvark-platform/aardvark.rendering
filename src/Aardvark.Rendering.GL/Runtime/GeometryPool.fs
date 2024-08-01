@@ -11,7 +11,7 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Rendering.Management
-open Aardvark.Base.Runtime
+open Aardvark.Assembler
 open Aardvark.Rendering.GL
 
 #nowarn "9"
@@ -37,7 +37,7 @@ module CullingShader =
             val mutable public BaseVertex : int
             val mutable public FirstInstance : int
         end
-            
+
     [<StructLayout(LayoutKind.Sequential)>]
     type CullingInfo =
         struct
@@ -50,7 +50,7 @@ module CullingShader =
     module CullingInfo =
         let instanceCount (i : CullingInfo) =
             int i.Min.W
-                
+
         let getMinMaxInDirection (v : V3d) (i : CullingInfo) =
             let mutable l = V3d.Zero
             let mutable h = V3d.Zero
@@ -61,14 +61,14 @@ module CullingShader =
             else
                 l.X <- float i.Max.X
                 h.X <- float i.Min.X
-                    
+
             if v.Y >= 0.0 then
                 l.Y <- float i.Min.Y
                 h.Y <- float i.Max.Y
             else
                 l.Y <- float i.Max.Y
                 h.Y <- float i.Min.Y
-                    
+
             if v.Z >= 0.0 then
                 l.Z <- float i.Min.Z
                 h.Z <- float i.Max.Z
@@ -102,7 +102,7 @@ module CullingShader =
             if id < count then
                 let b = bounds.[id]
                 let rootId = int (b.Max.W + 0.5f)
-                    
+
                 if isActive.[rootId] <> 0 && CullingInfo.intersectsViewProj viewProjs.[rootId] b then
                     infos.[id].InstanceCount <- CullingInfo.instanceCount b
                 else
@@ -110,8 +110,8 @@ module CullingShader =
         }
 
     type UniformScope with
-        member x.Bounds : CullingInfo[] = uniform?StorageBuffer?Bounds 
-        member x.ViewProjs : M44d[] = uniform?StorageBuffer?ViewProjs 
+        member x.Bounds : CullingInfo[] = uniform?StorageBuffer?Bounds
+        member x.ViewProjs : M44d[] = uniform?StorageBuffer?ViewProjs
 
     type Vertex =
         {
@@ -126,12 +126,12 @@ module CullingShader =
             V3d.OOI; V3d.IOI
             V3d.OIO; V3d.IIO
             V3d.OII; V3d.III
-                
+
             V3d.OOO; V3d.OIO
             V3d.OOI; V3d.OII
             V3d.IOO; V3d.IIO
             V3d.IOI; V3d.III
-                
+
             V3d.OOO; V3d.OOI
             V3d.OIO; V3d.OII
             V3d.IOO; V3d.IOI
@@ -142,7 +142,7 @@ module CullingShader =
         vertex {
             let bounds = uniform.Bounds.[v.id]
             let rootId = int (bounds.Max.W + 0.5f)
-                    
+
             let off = V3d bounds.CellMin.XYZ
             let size = V3d bounds.CellMax.XYZ - off
 
@@ -174,7 +174,7 @@ module GeometryPoolSignature =
 
         for i in iface.inputs do
             let sym = Symbol.Create i.paramSemantic
-            let sem = 
+            let sem =
                 if i.paramSemantic.EndsWith "Trafo" then [i.paramSemantic; i.paramSemantic.Substring(0, i.paramSemantic.Length - 5)]
                 else [i.paramSemantic]
 
@@ -198,9 +198,9 @@ module GeometryPoolSignature =
                                     assert(not (isNull arr))
                                     let t = arr.GetType().GetElementType()
                                     attributeTypes <- MapExt.add i.paramSemantic t attributeTypes
-                                | _ -> 
+                                | _ ->
                                     ()
-              
+
         let indexType =
             if isNull g.IndexArray then
                 None
@@ -208,12 +208,12 @@ module GeometryPoolSignature =
                 let t = g.IndexArray.GetType().GetElementType()
                 Some t
 
-        let textures = 
+        let textures =
             iface.samplers |> MapExt.toSeq |> Seq.map (fun (_, sam) ->
                 if sam.samplerCount > 1 then failwith "no array textures"
                 let (name, state) = sam.samplerTextures |> List.head
 
-                let fmt = 
+                let fmt =
                     match MapExt.tryFind name images with
                     | Some tex -> tex.Format
                     | None -> TextureFormat.Rgba8 // TODO: other formats????
@@ -249,7 +249,7 @@ type private Regression(degree : int, maxSamples : int) =
             [| 0.0; y.TotalSeconds / float x |]
         else
             let degree = min (count - 1) degree
-            let arr = 
+            let arr =
                 Array2D.init count (degree + 1) (fun r c ->
                     let (s,_) = samples.[r]
                     float s ** float c
@@ -260,12 +260,12 @@ type private Regression(degree : int, maxSamples : int) =
             let diag = arr.QrFactorize()
             arr.QrSolve(diag, r)
 
-    member private x.GetModel() = 
+    member private x.GetModel() =
         lock x (fun () ->
             if isNull model then model <- getModel()
             model
         )
-            
+
     member x.Add(size : int, value : MicroTime) =
         lock x (fun () ->
             let mutable found = false
@@ -289,15 +289,15 @@ type private Regression(degree : int, maxSamples : int) =
         let model = x.GetModel()
         if model.Length > 0 then
             Polynomial.Evaluate(model, float size) |> MicroTime.FromSeconds
-        else 
+        else
             MicroTime.Zero
 
 [<AutoOpen>]
-module private ContextMappingExtensions = 
+module private ContextMappingExtensions =
     type Context with
         member x.MapBufferRange(b : Buffer, offset : nativeint, size : nativeint, access : BufferAccessMask) =
             let ptr = GL.Dispatch.MapNamedBufferRange(b.Handle, offset, size, access)
-            if ptr = 0n then 
+            if ptr = 0n then
                 let err = GL.GetError()
                 failwithf "[GL] cannot map buffer %d: %A" b.Handle err
             ptr
@@ -312,7 +312,7 @@ module GeometryPoolData =
     type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, count : int) =
         let buffers, totalSize =
             let mutable totalSize = 0L
-            let buffers = 
+            let buffers =
                 semantics |> MapExt.map (fun sem (glsl, input) ->
                     let elemSize = GLSLType.sizeof glsl
                     let write = UniformWriters.getWriter 0 glsl input
@@ -325,7 +325,7 @@ module GeometryPoolData =
                     buffer, elemSize, write
                 )
             buffers, totalSize
-            
+
 
 
         member x.TotalSize = totalSize
@@ -333,7 +333,7 @@ module GeometryPoolData =
         member x.Context = ctx
         member x.Data = buffers
         member x.Buffers = buffers |> MapExt.map (fun _ (b,_,_) -> b)
-        
+
         member x.Upload(index : int, count : int, data : MapExt<string, Array>) =
             lock x (fun () ->
                 use __ = ctx.ResourceLock
@@ -347,7 +347,7 @@ module GeometryPoolData =
                             for i in 0 .. count - 1 do
                                 write.WriteUnsafeValue(data.GetValue i, ptr)
                                 ptr <- ptr + nativeint elemSize
-                        | _ -> 
+                        | _ ->
                             Marshal.Set(ptr, 0, elemSize)
                     ctx.UnmapBuffer(buffer)
                 )
@@ -375,7 +375,7 @@ module GeometryPoolData =
 
         let totalSize, buffers =
             let mutable totalSize = 0L
-            let buffers = 
+            let buffers =
                 semantics |> MapExt.map (fun sem typ ->
                     let elemSize = Marshal.SizeOf typ
                     totalSize <- totalSize + int64 elemSize * int64 count
@@ -385,17 +385,17 @@ module GeometryPoolData =
                     buffer, elemSize, typ
                 )
             totalSize, buffers
-            
+
         member x.ElementSize = totalSize / int64 count
         member x.TotalSize = totalSize
         member x.Context = ctx
         member x.Data = buffers
         member x.Buffers = buffers |> MapExt.map (fun _ (b,_,t) -> b,t)
-        
+
         member x.Write(startIndex : int, data : MapExt<string, Array>) =
             lock x (fun () ->
                 use __ = ctx.ResourceLock
-            
+
                 let count = data |> MapExt.toSeq |> Seq.map (fun (_,a) -> a.Length) |> Seq.min
                 buffers |> MapExt.iter (fun sem (buffer, elemSize,_) ->
                     let size = nativeint count * nativeint elemSize
@@ -404,11 +404,11 @@ module GeometryPoolData =
                         let ptr = ctx.MapBufferRange(buffer, offset, size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapUnsynchronizedBit)
 
                         match MapExt.tryFind sem data with
-                            | Some data ->  
+                            | Some data ->
                                 let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
                                 try Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size)
                                 finally gc.Free()
-                            | _ -> 
+                            | _ ->
                                 Marshal.Set(ptr, 0, size)
                         ctx.UnmapBuffer(buffer)
                 )
@@ -454,32 +454,32 @@ module GeometryPoolData =
                 mcopy = fun _ _ _ _ _ -> failwith "cannot copy"
                 mrealloc = fun _ _ _ -> failwith "cannot realloc"
             }
-            
+
         let mutable used = 0L
 
         let addMem (v : int64) =
             Interlocked.Add(&usedMemory.contents, v) |> ignore
             Interlocked.Add(&used, v) |> ignore
-            
+
 
         let manager = new ChunkedMemoryManager<VertexBuffer>(mem, nativeint chunkSize)
-        
-        member x.Alloc(count : int) = 
-            addMem (elementSize * int64 count) 
+
+        member x.Alloc(count : int) =
+            addMem (elementSize * int64 count)
             manager.Alloc(nativeint count)
 
-        member x.Free(b : Block<VertexBuffer>) = 
+        member x.Free(b : Block<VertexBuffer>) =
             if not b.IsFree then
-                addMem (elementSize * int64 -b.Size) 
+                addMem (elementSize * int64 -b.Size)
                 manager.Free b
 
-        member x.Dispose() = 
+        member x.Dispose() =
             addMem (-used)
             manager.Dispose()
 
-        interface IDisposable with 
+        interface IDisposable with
             member x.Dispose() = x.Dispose()
-        
+
     type internal InstanceManager(ctx : Context, semantics : MapExt<string, GLSLType * Type>, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
         let elementSize =
             semantics |> MapExt.toSeq |> Seq.sumBy (fun (_,(t,_)) -> int64 (GLSLType.sizeof t))
@@ -509,22 +509,22 @@ module GeometryPoolData =
         let addMem (v : int64) =
             Interlocked.Add(&usedMemory.contents, v) |> ignore
             Interlocked.Add(&used, v) |> ignore
-            
 
-        member x.Alloc(count : int) = 
+
+        member x.Alloc(count : int) =
             addMem (int64 count * elementSize)
             manager.Alloc(nativeint count)
 
-        member x.Free(b : Block<InstanceBuffer>) = 
+        member x.Free(b : Block<InstanceBuffer>) =
             if not b.IsFree then
                 addMem (int64 -b.Size * elementSize)
                 manager.Free b
 
-        member x.Dispose() = 
+        member x.Dispose() =
             addMem -used
             manager.Dispose()
 
-        interface IDisposable with 
+        interface IDisposable with
             member x.Dispose() = x.Dispose()
 
     type internal IndexManager(ctx : Context, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
@@ -545,33 +545,33 @@ module GeometryPoolData =
                 mcopy = fun _ _ _ _ _ -> failwith "cannot copy"
                 mrealloc = fun _ _ _ -> failwith "cannot realloc"
             }
-            
+
         let manager = new ChunkedMemoryManager<Buffer>(mem, nativeint (sizeof<int> * chunkSize))
-        
+
         let mutable used = 0L
 
         let addMem (v : int64) =
             Interlocked.Add(&usedMemory.contents, v) |> ignore
             Interlocked.Add(&used, v) |> ignore
-            
-        member x.Alloc(t : Type, count : int) = 
+
+        member x.Alloc(t : Type, count : int) =
             let size = nativeint (Marshal.SizeOf t) * nativeint count
             addMem (int64 size)
             manager.Alloc(size)
 
-        member x.Free(b : Block<Buffer>) = 
+        member x.Free(b : Block<Buffer>) =
             if not b.IsFree then
                 addMem (int64 -b.Size)
                 manager.Free b
 
-        member x.Dispose() = 
+        member x.Dispose() =
             addMem -used
             manager.Dispose()
 
-        interface IDisposable with 
+        interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    module private AtlasTextureUpload = 
+    module private AtlasTextureUpload =
 
         type ITextureFormatVisitor<'r> =
             abstract member Accept<'a when 'a : unmanaged> : Col.Format * int -> 'r
@@ -604,15 +604,15 @@ module GeometryPoolData =
                 let mutable size = V2i.II + bounds.Max - bounds.Min
                 let mutable lastOffset = offset
                 let mutable lastSize = size
-            
+
 
                 let fmt, typ = TextureFormat.toFormatAndType image.Format
 
                 let sizeInBytes = nativeint size.X * nativeint size.Y * (nativeint (TextureFormat.pixelSizeInBytes image.Format))
                 let buffer = ctx.CreateBuffer sizeInBytes
 
-            
-            
+
+
                 for level in 0 .. levels - 1 do
                     let data = image.[0, level]
 
@@ -624,44 +624,44 @@ module GeometryPoolData =
 
                                     let dstPtr = GL.Dispatch.MapNamedBufferRange(buffer.Handle, 0n, nativeint sizeInBytes, BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapWriteBit)
 
-                                    let src = 
+                                    let src =
                                         NativeVolume<'a>(
-                                            NativePtr.ofNativeInt srcPtr, 
+                                            NativePtr.ofNativeInt srcPtr,
                                             VolumeInfo(
-                                                0L, 
-                                                V3l(data.Size.XY, channels), 
+                                                0L,
+                                                V3l(data.Size.XY, channels),
                                                 V3l(int64 channels, int64 data.Size.X * int64 channels, 1L)
                                             )
                                         )
 
-                                    let dst = 
+                                    let dst =
                                         NativeVolume<'a>(
-                                            NativePtr.ofNativeInt dstPtr, 
+                                            NativePtr.ofNativeInt dstPtr,
                                             VolumeInfo(
-                                                0L, 
-                                                V3l(size.X, size.Y, channels), 
+                                                0L,
+                                                V3l(size.X, size.Y, channels),
                                                 V3l(int64 channels, int64 channels * int64 size.X, 1L)
                                             )
                                         )
 
                                     let dst =
-                                        if rotated then 
+                                        if rotated then
                                             let info = dst.Info
                                             dst.SubVolume(info.SX - 1L, 0L, 0L, info.SY, info.SX, info.SZ, info.DY, -info.DX, info.DZ)
-                                        else 
+                                        else
                                             dst
 
                                     let padding = dst.Size.XY - src.Size.XY
                                     let l = padding / 2L
                                     let h = padding - l
 
-                                
+
 
                                     NativeVolume.copy src (dst.SubVolume(V3l(l.X, l.Y, 0L), src.Size))
 
-                                    let s = l 
+                                    let s = l
                                     let e = dst.Size.XY - h - V2l.II
-                                    
+
                                     // fix borders (if any)
                                     if l.X > 0L then
                                         let p = dst.[s.X.., s.Y .. e.Y, *]
@@ -673,12 +673,12 @@ module GeometryPoolData =
                                         let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(h.X, 1L + e.Y - s.Y, p.SZ), V3l(0L, p.DY, p.DZ)))
                                         NativeVolume.copy lst dst.[e.X+1L .., s.Y .. e.Y, *]
 
-                                    if l.Y > 0L then    
+                                    if l.Y > 0L then
                                         let p = dst.[*, s.Y.., *]
                                         let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(p.SX, s.Y, p.SZ), V3l(p.DX, 0L, p.DZ)))
                                         NativeVolume.copy lst dst.[*, ..s.Y-1L,*]
 
-                                    if h.Y > 0L then    
+                                    if h.Y > 0L then
                                         let p = dst.[*, e.Y.., *]
                                         let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(p.SX, h.Y, p.SZ), V3l(p.DX, 0L, p.DZ)))
                                         NativeVolume.copy lst dst.[*, e.Y+1L..,*]
@@ -689,7 +689,7 @@ module GeometryPoolData =
                                     0
                             }
                     ) |> ignore
-                
+
                     GL.BindBuffer(BufferTarget.PixelUnpackBuffer, buffer.Handle)
                     GL.Dispatch.TextureSubImage2D(texture.Handle, TextureTarget.ofTexture texture, level, offset, size, fmt, typ, 0n)
                     GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
@@ -699,21 +699,21 @@ module GeometryPoolData =
                     offset <- offset / 2
                     size <- size / 2
 
-                
+
                 for l in levels .. texture.MipMapLevels-1 do
 
                     ctx.Blit(texture, l-1, 0, Box2i.FromMinAndSize(lastOffset, lastSize), texture, l, 0, Box2i.FromMinAndSize(offset, size), true)
-                
+
                     lastOffset <- offset
                     lastSize <- size
                     offset <- offset / 2
                     size <- size / 2
 
-                
 
 
 
-            
+
+
                 ctx.Delete buffer
 
                 //if rotated then
@@ -723,7 +723,7 @@ module GeometryPoolData =
                 //        data.Use (fun ptr ->
                 //            let src = NativeMatrix<C4b>(NativePtr.ofNativeInt ptr, MatrixInfo(0L, V2l(data.Size.XY), V2l(1, data.Size.X)))
                 //            let dst = Matrix<C4b>(data.Size.YX)
-                        
+
                 //            NativeMatrix.using (dst.Transformed ImageTrafo.Rot90) (fun dst ->
                 //                NativeMatrix.copy src dst
                 //                GL.Dispatch.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, NativePtr.toNativeInt dst.Pointer)
@@ -758,17 +758,17 @@ module GeometryPoolData =
 
 
         let sam = ctx.CreateSampler samplerState
-        let textures = 
+        let textures =
             System.Collections.Generic.Dictionary<Texture, ref<TexturePacking<Guid>>>()
 
-        //let thread = 
+        //let thread =
         //    startThread (fun () ->
         //        while true do
         //            let l = Console.ReadLine()
         //            this.SaveAtlas()
-        
+
         //    )
-        //let thread2 = 
+        //let thread2 =
         //    startThread (fun () ->
         //        while true do
         //            Thread.Sleep 1000
@@ -776,9 +776,9 @@ module GeometryPoolData =
         //            for KeyValue(_, r) in textures do
         //                Log.line "%.2f%%" (100.0 * r.Value.Occupancy)
         //            Log.stop()
-        
+
         //    )
-        member x.SaveAtlas () =    
+        member x.SaveAtlas () =
             Log.startTimed "download atlas"
             use __ = ctx.ResourceLock
             let path = System.IO.Path.Combine(Environment.GetFolderPath Environment.SpecialFolder.Desktop, "atlas")
@@ -795,11 +795,11 @@ module GeometryPoolData =
                     let src = tex.SubImage(b.Min, V2i.II + b.Max - b.Min)
                     let dst = dst.SubImage(b.Min, V2i.II + b.Max - b.Min)
                     dst.Volume.Set(src.Volume) |> ignore
-            
+
                 dst.Save(System.IO.Path.Combine(path, name), PixFileFormat.Png)
                 ()
             Log.stop()
-        
+
 
 
         member x.Context : Context = ctx
@@ -811,9 +811,9 @@ module GeometryPoolData =
             let slotSize = pad size
             lock x (fun () ->
                 //Log.line "alloc %A" slotSize
-         
+
                 let id = Guid.NewGuid()
-                let result = 
+                let result =
                     textures |> Seq.tryPick (fun (KeyValue(t, p)) ->
                         match p.Value.TryAdd(id, slotSize) with
                         | Some res ->
@@ -859,18 +859,18 @@ module GeometryPoolData =
             let ts = texture.Size.XY
             let padding = s - realSize
             let l = padding / 2
-            let trafo = 
+            let trafo =
                 M33d.Scale(1.0 / V2d ts) *
                 M33d.Translation(V2d bounds.Min + V2d l) *
                 M33d.Scale(V2d realSize)
-                    
+
 
             if rotated then
                 V4d(trafo.M02, trafo.M12, -trafo.M00, trafo.M11)
             else
                 V4d(trafo.M02, trafo.M12, trafo.M00, trafo.M11)
 
-        member x.Size = 
+        member x.Size =
             let s = V2i.II + bounds.Max - bounds.Min
             if rotated then s.YX
             else s
@@ -885,7 +885,7 @@ module GeometryPoolData =
 
         member x.Upload(image : INativeTexture) : unit =
             AtlasTextureUpload.upload texture bounds image rotated
-       
+
         member x.Dispose() =
             parent.Free x
 
@@ -965,7 +965,7 @@ module GeometryPoolData =
             culling <- cullingCache.GetOrAdd(ctx, fun ctx ->
                 lazy (
                     let cs = ComputeShader.ofFunction (V3i(1024, 1024, 1024)) CullingShader.culling
-                    let shader = ctx.CompileKernel cs
+                    let shader = ctx.CreateComputeProgram cs
                     shader
                 )
             ).Value
@@ -989,15 +989,12 @@ module GeometryPoolData =
                             Effect.ofFunction (DefaultSurfaces.constantColor C4f.Red)
                         ]
 
-                    let shader =
-                        lazy (
-                            let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
-                            effect
-                            |> Effect.toModule cfg
-                            |> ModuleCompiler.compileGLSL ctx.FShadeBackend
-                        )
+                    let compile() =
+                        effect
+                        |> Effect.link signature IndexedGeometryMode.LineList false
+                        |> ModuleCompiler.compileGLSL ctx.FShadeBackend
 
-                    match ctx.TryCompileProgram(effect.Id, signature, shader) with
+                    match ctx.TryGetOrCompileEffect(effect.Id, signature, IndexedGeometryMode.LineList, compile) with
                     | Success v -> v
                     | Error e -> failwith e
                 )
@@ -1016,7 +1013,7 @@ module GeometryPoolData =
                 )
             |]
 
-        let boxDraw = 
+        let boxDraw =
             NativePtr.allocArray [| new DrawCallInfoList(1, pCall) |]
 
         let resize (newCount : int) =
@@ -1042,14 +1039,14 @@ module GeometryPoolData =
                 bbuffer <- nbb
                 capacity <- newCapacity
                 dirty.Clear()
-                dirty.UnionWith [0..count-1] 
-                
+                dirty.UnionWith [0..count-1]
+
                 NativePtr.free om
                 ctx.Delete ob
-                if bounds then 
+                if bounds then
                     NativePtr.free obm
                     ctx.Delete obb
-        
+
         member x.Count = count
 
         member x.Add(call : DrawCallInfo, box : Box3d, cellBounds : Box3d, rootId : int) =
@@ -1077,17 +1074,17 @@ module GeometryPoolData =
                 let ess = if bounds then es + bs else es
                 Interlocked.Add(&usedMemory.contents, int64 ess) |> ignore
                 dirty.Add id |> ignore
-                    
+
                 updatePointers()
                 true
 
             else
                 resize (count + 1)
                 x.Add(call, box, cellBounds, rootId)
-                 
+
         member x.Contains (call : DrawCallInfo) =
-            call.FaceVertexCount <= 0 || 
-            call.InstanceCount <= 0 || 
+            call.FaceVertexCount <= 0 ||
+            call.InstanceCount <= 0 ||
             drawIndices.ContainsKey call
 
         member x.Remove(call : DrawCallInfo) =
@@ -1111,18 +1108,18 @@ module GeometryPoolData =
                             let lb = NativePtr.get bmem last
                             NativePtr.set bmem oid lb
                         dirty.Add oid |> ignore
-                
+
                     dirty.Remove last |> ignore
-                        
+
                     resize count
                     updatePointers()
 
                     true
                 | _ ->
                     false
-        
+
         member x.Flush() =
-        
+
             let toUpload = dirty |> Seq.toArray
             dirty.Clear()
 
@@ -1164,7 +1161,7 @@ module GeometryPoolData =
         member x.BoundsBuffer =
             bbuffer
 
-       
+
 
         member x.CompileRender(s : ICommandStream, before : ICommandStream -> unit, mvp : nativeptr<M44f>, indexType : Option<_>, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) : NativeStats =
 
@@ -1212,17 +1209,17 @@ module GeometryPoolData =
             let h = NativePtr.read indirectHandle
             if h.Count > 0 then
                 before(s)
-                if alphaToCoverage then 
+                if alphaToCoverage then
                     s.Enable(int EnableCap.SampleAlphaToCoverage)
                     s.Enable(int EnableCap.SampleAlphaToOne)
 
                 match indexType with
                     | Some indexType ->
                         s.DrawElementsIndirect(runtimeStats, isActive, mode, int indexType, indirectHandle)
-                    | _ -> 
+                    | _ ->
                         s.DrawArraysIndirect(runtimeStats, isActive, mode, indirectHandle)
-            
-                if alphaToCoverage then 
+
+                if alphaToCoverage then
                     s.Disable(int EnableCap.SampleAlphaToCoverage)
                     s.Disable(int EnableCap.SampleAlphaToOne)
                     icnt <- icnt + 4 // enable + disable
@@ -1266,12 +1263,12 @@ module GeometryPoolData =
 
 open GeometryPoolData
 
-type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<InstanceBuffer>, vb : Block<VertexBuffer>, ib : Option<Block<Buffer>>, textures : MapExt<int, TextureSlot>) = 
+type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<InstanceBuffer>, vb : Block<VertexBuffer>, ib : Option<Block<Buffer>>, textures : MapExt<int, TextureSlot>) =
     let fvc =
         match signature.indexType, ib with
             | Some it, Some ib -> int ib.Size / Marshal.SizeOf it
             | _ -> int vb.Size
-        
+
     static let getIndexType =
         LookupTable.lookupTable [
             typeof<uint8>, DrawElementsType.UnsignedByte
@@ -1282,9 +1279,9 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
             typeof<int32>, DrawElementsType.UnsignedInt
         ]
 
-    let indexType = signature.indexType |> Option.map getIndexType 
+    let indexType = signature.indexType |> Option.map getIndexType
 
-    member x.Memory = 
+    member x.Memory =
         Mem (
             int64 ub.Size * ub.Memory.Value.ElementSize +
             int64 vb.Size * vb.Memory.Value.ElementSize +
@@ -1314,13 +1311,13 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
             signature.uniformTypes |> MapExt.choose (fun name (glslType, typ) ->
                 match MapExt.tryFind name uniforms with
                     | Some att -> Some att
-                    | None -> 
+                    | None ->
                         match g.SingleAttributes.TryGetValue(Symbol.Create name) with
-                            | (true, v) -> 
+                            | (true, v) ->
                                 let arr = Array.CreateInstance(typ, 1) //Some ([| v |] :> Array)
                                 arr.SetValue(v, 0)
                                 Some arr
-                            | _ -> 
+                            | _ ->
                                 None
             )
         let vertexArrays =
@@ -1331,9 +1328,9 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
             )
 
         match ib with
-            | Some ib -> 
+            | Some ib ->
                 let gc = GCHandle.Alloc(g.IndexArray, GCHandleType.Pinned)
-                try 
+                try
                     let ptr = ctx.MapBufferRange(ib.Memory.Value, ib.Offset, ib.Size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapUnsynchronizedBit)
                     Marshal.Copy(gc.AddrOfPinnedObject(), ptr,ib.Size )
                     ctx.UnmapBuffer(ib.Memory.Value)
@@ -1360,7 +1357,7 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
                     BaseVertex = int vb.Offset
                 )
 
-            | None -> 
+            | None ->
                 DrawCallInfo(
                     FaceVertexCount = fvc,
                     FirstIndex = int vb.Offset,
@@ -1383,14 +1380,14 @@ type GeometryPool private(ctx : Context) =
     let getInstanceManager (signature : InstanceSignature) = instanceManagers.GetOrAdd(signature, fun signature -> new InstanceManager(ctx, signature, instanceChunkSize, usedMemory, totalMemory))
     let getTextureManager (semantic : string) (fmt : TextureFormat) (sam : SamplerState) = textureManagers.GetOrAdd((semantic, fmt, sam), fun (semantic, fmt, sam) -> new TextureManager(ctx, semantic, fmt, sam))
 
-    
+
     let indexManager = new IndexManager(ctx, vertexChunkSize, usedMemory, totalMemory)
 
     static member Get(ctx : Context) =
         pools.GetOrAdd(ctx, fun ctx ->
             new GeometryPool(ctx)
-        )      
-            
+        )
+
     member x.UsedMemory = Mem !usedMemory
     member x.TotalMemory = Mem !totalMemory
 
@@ -1401,13 +1398,13 @@ type GeometryPool private(ctx : Context) =
         let ub = im.Alloc(instanceCount)
         let vb = vm.Alloc(vertexCount)
 
-        let ib = 
+        let ib =
             match signature.indexType with
                 | Some t -> indexManager.Alloc(t, indexCount) |> Some
                 | None -> None
 
-        let textures = 
-            tm |> MapExt.choose (fun _ d -> 
+        let textures =
+            tm |> MapExt.choose (fun _ d ->
                 match MapExt.tryFind d.Semantic textureSizes with
                 | Some s -> d.Alloc s |> Some
                 | None -> None
@@ -1425,7 +1422,7 @@ type GeometryPool private(ctx : Context) =
             else
                 uniforms |> MapExt.toSeq |> Seq.map (fun (_,arr) -> arr.Length) |> Seq.min
 
-        let vertexCount, indexCount = 
+        let vertexCount, indexCount =
             if isNull geometry.IndexArray then
                 geometry.FaceVertexCount, 0
             else
@@ -1438,10 +1435,10 @@ type GeometryPool private(ctx : Context) =
         let slot = x.Alloc(signature, instanceCount, indexCount, vertexCount, imageSizes)
         slot.Upload(geometry, uniforms, images)
         slot
-            
+
     member x.Alloc(signature : GLSLProgramInterface, geometry : IndexedGeometry) =
         x.Alloc(signature, geometry, MapExt.empty, MapExt.empty)
-           
+
 
     member x.Free(slot : PoolSlot) =
         //Log.warn "free %A" slot.Memory
@@ -1465,7 +1462,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     static let getKey (slot : PoolSlot) =
         let textures = slot.Textures |> MapExt.map (fun _ t -> t.Texture, t.Sampler)
         slot.Mode,
-        slot.InstanceBuffer.Memory.Value, 
+        slot.InstanceBuffer.Memory.Value,
         slot.VertexBuffer.Memory.Value,
         textures,
         slot.IndexBuffer |> Option.map (fun b -> slot.IndexType.Value, b.Memory.Value)
@@ -1493,12 +1490,12 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
         let viewProj =
             match Uniforms.tryGetDerivedUniform "ModelViewProjTrafo" s.pUniformProvider with
             | Some (:? aval<Trafo3d> as mvp) -> mvp
-            | _ -> 
+            | _ ->
                 match s.pUniformProvider.TryGetUniform(Ag.Scope.Root, Symbol.Create "ModelViewProjTrafo") with
                 | Some (:? aval<Trafo3d> as mvp) -> mvp
                 | _ -> AVal.constant Trafo3d.Identity
 
-        let res = 
+        let res =
             { new Resource<Trafo3d, M44f>(ResourceKind.UniformLocation) with
                 member x.Create(t, rt, o) = viewProj.GetValue(t)
                 member x.Destroy _ = ()
@@ -1515,7 +1512,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let query : nativeptr<int> = NativePtr.allocArray [| 0 |]
     let startTime : nativeptr<uint64> = NativePtr.allocArray [| 0UL |]
     let endTime : nativeptr<uint64> = NativePtr.allocArray [| 0UL |]
-        
+
 
 
 
@@ -1538,10 +1535,10 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let isOutdated = NativePtr.allocArray [| 1 |]
     let updateFun = Marshal.PinDelegate(new System.Action(this.Update))
     let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * array<int*int*int> * IndirectBuffer> = []
-    let program = 
-        new Aardvark.Assembler.FragmentProgram<_>(fun a (s : IAssemblerStream) -> compile a (AssemblerCommandStream s :> ICommandStream) |> ignore)
+    let program =
+        new FragmentProgram<_>(fun a (s : IAssemblerStream) -> compile a (AssemblerCommandStream s :> ICommandStream) |> ignore)
         //new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
-    let puller = 
+    let puller =
         { new AdaptiveObject() with
             override x.MarkObject() =
                 NativePtr.write isOutdated 1
@@ -1552,7 +1549,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let tasks = System.Collections.Generic.HashSet<IRenderTask>()
 
     let mark() = transact (fun () -> puller.MarkOutdated())
-        
+
 
     let getIndirectBuffer(slot : PoolSlot) =
         let key = getKey slot
@@ -1565,8 +1562,8 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
         match indirects.TryGetValue key with
             | (true, ib) -> Some ib
             | _ -> None
-                
-                
+
+
     member x.Add(ref : PoolSlot, bounds : Box3d, cellBounds : Box3d, rootId : int) =
         let ib = getIndirectBuffer ref
         if ib.Add(ref.DrawCallInfo, bounds, cellBounds, rootId) then
@@ -1585,27 +1582,27 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
     member x.Contains(ref : PoolSlot) =
         match tryGetIndirectBuffer ref with
-            | Some ib -> 
+            | Some ib ->
                 ib.Contains ref.DrawCallInfo
             | None ->
                 false
 
     member x.Remove(ref : PoolSlot) =
         match tryGetIndirectBuffer ref with
-            | Some ib -> 
+            | Some ib ->
                 if ib.Remove(ref.DrawCallInfo) then
                     if ib.Count = 0 then
                         let key = getKey ref
                         indirects.Remove(key) |> ignore
                         ib.Dispose()
-                            
+
                     mark()
                     true
                 else
                     false
             | None ->
                 false
-                    
+
     member x.UsedMemory = Mem !totalMemory
     member x.TotalMemory = Mem !totalMemory
 
@@ -1621,28 +1618,28 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     member x.AverageRenderTime = MicroTime(int64 (1000000.0 * avgRenderTime.Value))
 
     member x.Update() =
-        puller.EvaluateAlways AdaptiveToken.Top (fun token ->   
+        puller.EvaluateAlways AdaptiveToken.Top (fun token ->
 
             puller.OutOfDate <- true
-                
+
             x.Evaluate(token, pProgramInterface)
-                
+
             let rawResult = NativePtr.read endTime - NativePtr.read startTime
             let ms = float rawResult / 1000000.0
             avgRenderTime.Insert ms |> ignore
 
 
 
-            let calls = 
+            let calls =
                 Dict.toList indirects |> List.map (fun ((mode, ib, vb, textures, typeAndIndex), db) ->
                     let indexType = typeAndIndex |> Option.map fst
                     let index = typeAndIndex |> Option.map snd
                     db.Flush()
 
-                    let attributes = 
+                    let attributes =
                         pProgramInterface.inputs |> List.map (fun param ->
                             match MapExt.tryFind param.paramSemantic ib.Buffers with
-                                | Some ib -> 
+                                | Some ib ->
                                     param.paramLocation, Attribute.Buffer {
                                         Type = GLSLType.toType param.paramType
                                         Buffer = ib
@@ -1652,7 +1649,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                                         Offset = 0
                                     }
 
-                                | None ->   
+                                | None ->
                                     match MapExt.tryFind param.paramSemantic vb.Buffers with
                                     | Some (vb, typ) ->
                                         let format = if typ = typeof<C4b> then VertexAttributeFormat.Normalized else VertexAttributeFormat.Default
@@ -1671,11 +1668,11 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                         |> List.toArray
 
                     let bufferBinding = ctx.CreateVertexInputBinding(index, attributes)
-                
-                    let beginMode = 
+
+                    let beginMode =
                         let bm = beginMode mode
                         NativePtr.allocArray [| GLBeginMode(int bm, 1) |]
-                            
+
                     let textureHandles =
                         textures |> MapExt.toArray |> Array.map (fun (slot, (tex, sam)) -> slot, tex.Handle, sam.Handle)
 
@@ -1685,13 +1682,13 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
             program.Clear()
             let mutable last = null
-            for a in calls do 
+            for a in calls do
                 let f = program.InsertAfter(last, a)
                 last <- f
-            
+
             program.Update()
 
-            oldCalls |> List.iter (fun (_,beginMode,bufferBinding,_,indirect) -> 
+            oldCalls |> List.iter (fun (_,beginMode,bufferBinding,_,indirect) ->
                 NativePtr.free beginMode; ctx.Delete bufferBinding
             )
             oldCalls <- calls
@@ -1702,7 +1699,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                 puller.Outputs.Add t |> ignore
 
             x.AfterUpdate()
-                
+
 
         )
 
@@ -1712,17 +1709,17 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                 assert (info.task.OutOfDate)
                 puller.Outputs.Add(info.task) |> ignore
         )
-            
+
         let mvpRes = mvpResource
         let lastState = last |> Option.bind (fun l -> l.ExitState)
 
         stream.ConditionalCall(isOutdated, updateFun.Pointer)
-            
+
         stream.Copy(info.runtimeStats, runtimeStats)
         stream.Copy(info.contextHandle, contextHandle)
-            
+
         let stats = stream.SetPipelineState(info, state, lastState)
-            
+
         stream.QueryTimestamp(query, startTime)
         stream.CallIndirect(program.EntryPointer)
         stream.QueryTimestamp(query, endTime)
@@ -1730,7 +1727,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
         stream.Copy(runtimeStats, info.runtimeStats)
 
         stats
-        
+
 
     override x.Release() =
         state.Dispose()
@@ -1748,9 +1745,9 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
         program.Dispose()
         oldCalls <- []
-            
 
-    override x.GetResources() = 
+
+    override x.GetResources() =
         Seq.append (Seq.singleton (mvpResource :> IResource)) state.Resources
 
     override x.EntryState = Some state
@@ -1781,7 +1778,7 @@ type GeometryPoolInstance =
                 sprintf "g(%d, %d)" x.indexCount x.vertexCount
             else
                 sprintf "g(%d)" x.vertexCount
-              
+
     member private x.AsString = x.ToString()
 
 module GeometryPoolInstance =
@@ -1801,7 +1798,7 @@ module GeometryPoolInstance =
         let indexCount, vertexCount =
             if g.IsIndexed then
                 let i = g.IndexArray.Length
-                let v = 
+                let v =
                     if g.IndexedAttributes.Count = 0 then 0
                     else g.IndexedAttributes.Values |> Seq.map (fun a -> a.Length) |> Seq.min
                 i, v

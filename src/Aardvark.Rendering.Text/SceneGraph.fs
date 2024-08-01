@@ -253,11 +253,11 @@ module Sg =
                 match s with
                 | RenderStyle.Normal
                 | RenderStyle.NoBoundary ->
-                    shapes.Surface <- Surface.FShadeSimple cache.InstancedEffect
+                    shapes.Surface <- Surface.Effect cache.InstancedEffect
                     RenderObject.Clone shapes :> IRenderObject
 
                 | RenderStyle.Billboard ->
-                    shapes.Surface <- Surface.FShadeSimple cache.InstancedBillboardEffect
+                    shapes.Surface <- Surface.Effect cache.InstancedBillboardEffect
                     RenderObject.Clone shapes :> IRenderObject
 
                 |> HashSet.single
@@ -453,7 +453,7 @@ module Sg =
                     member x.Dispose() =
                         old.Dispose()
                 }
-            boundary.Surface <- Surface.FShadeSimple cache.BoundaryEffect
+            boundary.Surface <- Surface.Effect cache.BoundaryEffect
 
             let writeStencil =
                 StencilMode.simple StencilOperation.Replace StencilOperation.Zero StencilOperation.Keep ComparisonFunction.Always 1
@@ -497,15 +497,15 @@ module Sg =
             style |> AVal.map(fun s ->
                 match s with
                 | RenderStyle.Normal ->
-                    shapes.Surface <- Surface.FShadeSimple cache.Effect
+                    shapes.Surface <- Surface.Effect cache.Effect
                     MultiRenderObject [boundary; shapes] :> IRenderObject
 
                 | RenderStyle.NoBoundary ->
-                    shapes.Surface <- Surface.FShadeSimple cache.Effect
+                    shapes.Surface <- Surface.Effect cache.Effect
                     RenderObject.Clone shapes :> IRenderObject
 
                 | RenderStyle.Billboard ->
-                    shapes.Surface <- Surface.FShadeSimple cache.BillboardEffect
+                    shapes.Surface <- Surface.Effect cache.BillboardEffect
                     RenderObject.Clone shapes :> IRenderObject
 
                 |> HashSet.single

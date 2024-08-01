@@ -284,10 +284,6 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     member x.MemoryUsage = memoryUsage
 
-    [<Obsolete("Use ContextHandle.Current instead.")>]
-    member x.CurrentContextHandle
-        with get() = ContextHandle.Current
-
     member x.Runtime = runtime
 
     member x.IsDisposed = isDisposed = 1

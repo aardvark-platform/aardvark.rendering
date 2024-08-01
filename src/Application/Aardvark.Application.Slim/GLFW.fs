@@ -359,68 +359,86 @@ type WindowState =
 
 type WindowConfig =
     {
-        title : string
-        width : int
-        height : int
-        focus : bool
-        resizable : bool
-        vsync : bool
-        transparent : bool
-        opengl : bool
+        /// Title of the window.
+        title        : string
+
+        /// Width of the window content.
+        width        : int
+
+        /// Height of the window content.
+        height       : int
+
+        /// Desired sample count for the framebuffer.
+        samples      : int
+
+        /// Specifies whether the window will be focused when created.
+        focus        : bool
+
+        /// Specifies whether the window should be resizable.
+        resizable    : bool
+
+        /// Specifies whether v-sync should be enabled.
+        vsync        : bool
+
+        /// Specifies whether the framebuffer should be transparent and composited with
+        /// the background of the window.
+        transparent  : bool
+
+        /// Specifies whether to use full resolution framebuffers on Retina displays.
         physicalSize : bool
-        samples : int
+
+        /// Specifies whether to use OpenGL stereoscopic rendering.
+        stereo       : bool
     }
 
-    static member Default =
-        { WindowConfig.title = "Aardvark rocks \\o/"
-          WindowConfig.width = 1024
-          WindowConfig.height = 768
-          WindowConfig.resizable = true
-          WindowConfig.focus = true
-          WindowConfig.vsync = true
-          WindowConfig.opengl = true
-          WindowConfig.physicalSize = false
-          WindowConfig.transparent = false
-          WindowConfig.samples = 1 }
+    static member Default : WindowConfig =
+        { title        = "Aardvark rocks \\o/"
+          width        = 1024
+          height       = 768
+          samples      = 1
+          resizable    = true
+          focus        = true
+          vsync        = true
+          physicalSize = false
+          transparent  = false
+          stereo       = false }
 
-module IconLoader = 
-    
-    type private Self = Self
-    let private getIcon'() = 
-        let sizes = Array.sortDescending [| 16; 24; 32; 48; 64; 128; 256 |]
-        let ass = typeof<Self>.Assembly
-        let name = ass.GetManifestResourceNames() |> Array.find (fun n -> n.EndsWith "aardvark.png")
+module internal IconLoader =
+    open System.IO
 
-        let img = 
-            use src = ass.GetManifestResourceStream name
-            PixImageSharp.Create(src).ToPixImage<byte>(Col.Format.RGBA)
-        
-        let levels =
-            let mutable last = img
-            sizes |> Array.map (fun s ->
-                if s = last.Size.X && s = last.Size.Y then
-                    last :> PixImage
-                else
-                    let dst = PixImage<byte>(Col.Format.RGBA, V2i(s,s))
-                    NativeVolume.using last.Volume (fun src ->
-                        NativeVolume.using dst.Volume (fun dst ->
-                            NativeVolume.blit src dst
-                        )
-                    )
+    let private tryLoad (name: string) =
+        try
+            let asm = typeof<WindowConfig>.Assembly
+            let resourceName = asm.GetManifestResourceNames() |> Array.tryFind (String.endsWith name)
 
-                    last <- dst
-                    dst :> PixImage
-            )
+            match resourceName with
+            | Some rn ->
+                let pix =
+                    use rs = asm.GetManifestResourceStream(rn)
+                    use ms = new MemoryStream()
+                    rs.CopyTo(ms)
+                    let volume = Volume<uint8>(ms.ToArray(), 0L, V3l(256L, 256L, 4L), V3l(4L, 1024L, 1L))
+                    PixImage<uint8>(Col.Format.RGBA, volume)
 
-        PixImageMipMap levels
+                Success <| PixImageMipMap.Create(pix, ImageInterpolation.Linear)
+
+            | _ ->
+                Error $"Could not find resource with name '{name}'."
+
+        with e ->
+            Error e.Message
+
+    let private icon =
+        lazy (
+            match tryLoad "aardvark-icon.bin" with
+            | Success icon -> Some icon
+            | Error err ->
+                Log.warn "[GLFW] Failed to load icon: %s" err
+                None
+        )
 
     let getIcon() =
-        try 
-            getIcon'() |> Some
-        with e -> 
-            Log.warn "could not load icon. %A" e.Message
-            None
-
+        icon.Value
 
 type GlfwGamepad() =
     let a = cval false
@@ -565,8 +583,8 @@ type IWindowSurface =
     abstract CreateSwapchain : V2i -> ISwapchain
     abstract Handle : obj
 
-// TODO: Inherit IDisposable (see Instance.Dispose())
 type IWindowInterop =
+    inherit IDisposable
     abstract Boot : Glfw -> unit
     abstract CreateSurface : IRuntime * WindowConfig * Glfw * nativeptr<WindowHandle> -> IWindowSurface
     abstract WindowHints : WindowConfig * Glfw -> unit
@@ -753,10 +771,7 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
                 if v then wait <- false
 
     member x.Dispose() =
-        match interop with
-        | :? IDisposable as d -> d.Dispose()
-        | _ -> ()
-
+        interop.Dispose()
         glfw.Terminate()
 
     interface IDisposable with

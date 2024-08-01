@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -25,7 +25,7 @@
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj" />
-    <ProjectReference Include="..\..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.SceneGraph.Assimp\Aardvark.SceneGraph.Assimp.fsproj" />
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj" />

@@ -176,7 +176,7 @@ module Instancing =
 
                     let newEffect = 
                         match o.Surface with
-                            | Surface.FShadeSimple e ->
+                            | Surface.Effect e ->
                                 Effect.inlineTrafo semantics e
                             | s ->
                                 failwithf "[Sg] cannot instance object with surface: %A" s
@@ -254,7 +254,7 @@ module Instancing =
                             UniformProvider.Empty
 
                     let ro = RenderObject.Clone o
-                    ro.Surface <- Surface.FShadeSimple newEffect
+                    ro.Surface <- Surface.Effect newEffect
                     ro.InstanceAttributes <- att
                     ro.VertexAttributes <- vatt
                     ro.DrawCalls <- newCall

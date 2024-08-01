@@ -28,7 +28,7 @@ module Aara =
         if cnt <> read then failwith ""
         System.Text.Encoding.Default.GetString target
 
-    let loadRaw<'a  when 'a : (new : unit -> 'a) and 'a : struct and 'a :> ValueType> (elementCount : int) (f : Stream)  =
+    let loadRaw<'a  when 'a : unmanaged> (elementCount : int) (f : Stream)  =
         let result = Array.zeroCreate<'a> elementCount
         let buffer = Array.zeroCreate<byte> (1 <<< 22)
 
@@ -45,13 +45,9 @@ module Aara =
             gc.Free()
         result
 
+    [<Obsolete("Use loadRaw instead?")>]
     let loadRaw2<'a  when 'a : unmanaged> (elementCount : int) (f : Stream) : 'a[] =
-        let target = Array.zeroCreate elementCount
-        target.UnsafeCoercedApply<byte>(fun arr ->
-            let r = f.Read(arr, 0, arr.Length)
-            if r <> arr.Length then failwith "asdfj2"
-        )
-        target
+        loadRaw elementCount f
 
     let loadFromStream<'a when 'a : unmanaged> (f : Stream) =
         let binaryReader = new BinaryReader(f,Text.Encoding.ASCII, true)
@@ -63,7 +59,7 @@ module Aara =
         
         let result =
             if typeof<'a>.Name = typeName then
-                loadRaw2<'a> elementCount f
+                loadRaw<'a> elementCount f
             else
                 match typeName with
                     | "V3d" -> f |> loadRaw<V3d> elementCount |> PrimitiveValueConverter.arrayConverter typeof<V3d>

@@ -416,6 +416,46 @@ module FShadeInterop =
             IndexedGeometryMode.QuadList, InputTopology.Patch 4
         ]
 
+    module Effect =
+
+        let link (signature: IFramebufferSignature) (topology: IndexedGeometryMode) (flipHandedness: bool) (effect: Effect) =
+            let runtime = signature.Runtime
+            let depthRange = runtime.ShaderDepthRange
+            let deviceCount = runtime.DeviceCount
+            let supportsLayeredShaderInputs = runtime.SupportsLayeredShaderInputs
+
+            let outputs =
+                signature.ColorAttachments
+                |> Map.toList
+                |> List.map (fun (slot, att) -> string att.Name, att.Type, slot)
+
+            let top = toInputTopology topology
+
+            let config =
+                { EffectConfig.ofList outputs with
+                    depthRange = depthRange
+                    flipHandedness = flipHandedness
+                }
+
+            if deviceCount = 1 && signature.LayerCount = 1 then
+                effect |> Effect.toModule config
+            else
+                let semantic, layerCount, perLayerUniforms =
+                    if deviceCount > 1 && signature.LayerCount = 1 then
+                        Intrinsics.ViewportIndex, deviceCount, Map.empty
+                    else
+                        let uniforms = signature.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq
+                        Intrinsics.Layer, signature.LayerCount, uniforms
+
+                let customSemantic =
+                    if supportsLayeredShaderInputs then semantic else"GeometryInvocationId"
+
+                effect
+                // TODO: other topologies????
+                |> Effect.toLayeredEffect' semantic customSemantic layerCount perLayerUniforms top
+                |> withDeviceIndex deviceCount
+                |> Effect.toModule config
+
     // Used as part of the key in shader caches
     type FramebufferLayout =
         {
@@ -425,65 +465,6 @@ module FShadeInterop =
             LayerCount : int
             PerLayerUniforms : Set<string>
         }
-
-        member x.EffectConfig(depthRange : Range1d, flip : bool) =
-            let outputs =
-                x.ColorAttachments
-                |> Map.toList
-                |> List.map (fun (slot, att) -> string att.Name, att.Type, slot)
-
-            { EffectConfig.ofList outputs with
-                depthRange = depthRange
-                flipHandedness = flip
-            }
-
-        member x.Link(effect : Effect, deviceCount : int, depthRange : Range1d, flip : bool, top : IndexedGeometryMode, useCustomSemantic : bool) =
-            let outputs =
-                x.ColorAttachments
-                |> Map.toList
-                |> List.map (fun (slot, att) -> string att.Name, att.Type, slot)
-
-            let top = toInputTopology top
-
-            let config =
-                { EffectConfig.ofList outputs with
-                    depthRange = depthRange
-                    flipHandedness = flip
-                }
-
-            if deviceCount > 1 then
-                if x.LayerCount > 1 then
-                    let semantic = Intrinsics.Layer
-                    let customSemantic = if useCustomSemantic then "GeometryInvocationId" else semantic
-
-                    effect
-                    // TODO: other topologies????
-                    |> Effect.toLayered semantic customSemantic x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) top
-                    |> withDeviceIndex deviceCount
-                    |> Effect.toModule config
-                else
-                    let semantic = Intrinsics.ViewportIndex
-                    let customSemantic = if useCustomSemantic then "GeometryInvocationId" else semantic
-
-                    effect
-                    // TODO: other topologies????
-                    |> Effect.toLayered semantic customSemantic deviceCount Map.empty top
-                    |> withDeviceIndex deviceCount
-                    |> Effect.toModule config
-            else
-                if x.LayerCount > 1 then
-                    let semantic = Intrinsics.Layer
-                    let customSemantic = if useCustomSemantic then "GeometryInvocationId" else semantic
-
-                    effect
-                    // TODO: other topologies????
-                    |> Effect.toLayered semantic customSemantic x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) top
-                    |> Effect.toModule config
-                else
-                    effect |> Effect.toModule config
-
-        member x.Link(effect : Effect, deviceCount : int, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) =
-            x.Link(effect, deviceCount, depthRange, flip, top, false)
 
     type IFramebufferSignature with
         member x.Layout : FramebufferLayout =
@@ -495,35 +476,13 @@ module FShadeInterop =
                 PerLayerUniforms = x.PerLayerUniforms
             }
 
-        member x.EffectConfig(depthRange : Range1d, flip : bool) =
-            x.Layout.EffectConfig(depthRange, flip)
-
-        member x.Link(effect : Effect, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) =
-            x.Layout.Link(effect, x.Runtime.DeviceCount, depthRange, flip, top, false)
-
-        member x.Link(effect : Effect, depthRange : Range1d, flip : bool, top : IndexedGeometryMode, useCustomSemantic : bool) =
-            x.Layout.Link(effect, x.Runtime.DeviceCount, depthRange, flip, top, useCustomSemantic)
-
-
-    type FShadeSurface private(effect : FShadeEffect) =
-        static let surfaceCache = System.Collections.Concurrent.ConcurrentDictionary<string, FShadeSurface>()
-
-        static member Get(e : FShadeEffect) =
-            surfaceCache.GetOrAdd(e.Id, fun _ -> FShadeSurface(e))
-
-        member x.Effect = effect
-
-        interface ISurface
-
-    let toFShadeSurface (e : FShadeEffect) = FShadeSurface.Get e :> ISurface
-
     let inline toEffect a = Effect.ofFunction a
 
     module Surface =
         let effectPool (effects : Effect[]) (active : aval<int>) =
-            let compile (cfg : EffectConfig) =
+            let compile (signature: IFramebufferSignature) (topology: IndexedGeometryMode) =
                 let layout, modules =
-                    let modules = effects |> Array.map (Effect.toModule cfg)
+                    let modules = effects |> Array.map (Effect.link signature topology false)
                     let layout = EffectInputLayout.ofModules modules
                     layout, modules |> Array.map (EffectInputLayout.apply layout)
 
@@ -535,7 +494,7 @@ module FShadeInterop =
                                 | Some hooked ->
                                     hooked |> AVal.map (fun e ->
                                         try
-                                            let m = e |> Effect.toModule cfg |> EffectInputLayout.apply layout
+                                            let m = e |> Effect.link signature topology false |> EffectInputLayout.apply layout
                                             m.Entries |> ignore // Evaluate lazy entries here to trigger potential exceptions
                                             m
                                         with exn ->
@@ -553,46 +512,20 @@ module FShadeInterop =
 
                 layout, current
 
-            Surface.FShade compile
+            Surface.Dynamic compile
 
+    type RuntimeCommand with
+        static member Geometries(effects : FShade.Effect[], activeEffect : aval<int>, pipeline : PipelineState, geometries : aset<Geometry>) =
+            let surface = Surface.effectPool effects activeEffect
+            RuntimeCommand.GeometriesCmd(surface, pipeline, geometries)
 
-[<AbstractClass; Sealed; Extension>]
-type FShadeRuntimeExtensions private() =
+[<Extension; AbstractClass; Sealed>]
+type RuntimeFShadeInteropExtensions() =
 
-    static let toSurface (l : list<FShadeEffect>) =
-        match l with
-            | [s] -> FShadeSurface.Get s
-            | l -> FShadeSurface.Get (FShade.Effect.compose l)
-
-    [<Extension>]
-    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : list<FShadeEffect>) =
-        this.PrepareSurface(
-            signature,
-            toSurface l
-        )
+    [<Extension; Obsolete("Use Effect.link or Effect.Link() instead.")>]
+    static member AssembleModule (runtime: IRuntime, effect: Effect, signature: IFramebufferSignature, topology: IndexedGeometryMode) =
+        Effect.link signature topology false effect
 
     [<Extension>]
-    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, [<ParamArray>] effects : array<FShadeEffect>) =
-        let l = List.ofArray(effects)
-        this.PrepareSurface(
-            signature,
-            toSurface l
-        )
-
-    [<Extension>]
-    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : aval<list<FShadeEffect>>) =
-        let mutable current = None
-        l |> AVal.map (fun l ->
-            let newPrep = 
-                this.PrepareSurface(
-                    signature,
-                    toSurface l
-                )
-            match current with
-                | Some c -> this.DeleteSurface c
-                | None -> ()
-            current <- Some newPrep
-            newPrep :> ISurface
-        )
-
-
+    static member Link (effect: Effect, signature: IFramebufferSignature, topology: IndexedGeometryMode) =
+        Effect.link signature topology false effect

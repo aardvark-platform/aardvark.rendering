@@ -1,6 +1,6 @@
 Aardvark.Base.Essentials
 Aardvark.Base.Incremental
-Aardvark.Base.Runtime
+
 AssimpNet
 FShade.Core
 FShade.GLSL
@@ -11,6 +11,5 @@ Unofficial.OpenTK
 
 Unofficial.OpenVR
 FShade.Debug
-SixLabors.ImageSharp
 
 Aardvark.Base.Tensors

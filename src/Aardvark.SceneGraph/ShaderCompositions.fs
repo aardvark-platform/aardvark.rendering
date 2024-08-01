@@ -23,7 +23,7 @@ module AfterShader =
                     let ro = RenderObject.Clone o
                     ro.Surface <-
                         match o.Surface with
-                        | Surface.FShadeSimple o -> Surface.FShadeSimple (FShade.Effect.compose [o; e])
+                        | Surface.Effect o -> Surface.Effect (FShade.Effect.compose [o; e])
                         | s -> s
                     ro :> IRenderObject
                 | :? MultiRenderObject as o ->

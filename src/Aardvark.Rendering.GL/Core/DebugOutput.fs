@@ -5,14 +5,33 @@ open System.Runtime.InteropServices
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
-open Aardvark.Rendering
 open Aardvark.Rendering.GL
+
+type OpenGLException =
+    inherit Exception
+    val Error: ErrorCode
+
+    new () =
+        OpenGLException("An error occurred.")
+
+    new (message: string) =
+        { inherit Exception(message); Error = ErrorCode.NoError }
+
+    new (message: string, innerException: exn) =
+        { inherit Exception(message, innerException); Error = ErrorCode.NoError }
+
+    new (error: ErrorCode) =
+        OpenGLException(error, null, null)
+
+    new (error: ErrorCode, message: string) =
+        OpenGLException(error, message, null)
+
+    new (error: ErrorCode, message: string, innerException: exn) =
+        let message = if String.IsNullOrEmpty message then "An error occurred" else message
+        { inherit Exception($"{message} (Error: {error})", innerException); Error = error }
 
 [<AutoOpen>]
 module Error =
-
-    exception OpenGLException of ec : ErrorCode * msg : string with
-        override x.Message = $"{x.msg} (Error: {x.ec})"
 
     type GL with
         static member private Check(str, throwOnError) =

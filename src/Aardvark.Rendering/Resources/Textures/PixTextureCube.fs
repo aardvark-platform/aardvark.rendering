@@ -3,17 +3,10 @@
 open Aardvark.Base
 open System.Runtime.InteropServices
 
-type PixTextureCube(data : PixImageCube, textureParams : TextureParams) =
+type PixTextureCube(data : PixCube, textureParams : TextureParams) =
 
-    member x.PixImageCube = data
+    member x.PixCube = data
     member x.TextureParams = textureParams
-
-    new(data : PixImageCube, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
-        PixTextureCube(data, { TextureParams.empty with wantMipMaps = wantMipMaps })
-
-    new(data : PixCube, textureParams : TextureParams) =
-        let faces = data.MipMapArray |> Array.map (fun p -> PixImageMipMap(p.MipArray |> Array.map (fun pi -> pi :?> PixImage)))
-        PixTextureCube(PixImageCube(faces), textureParams)
 
     new(data : PixCube, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
         PixTextureCube(data, { TextureParams.empty with wantMipMaps = wantMipMaps })
@@ -24,7 +17,7 @@ type PixTextureCube(data : PixImageCube, textureParams : TextureParams) =
     override x.Equals o =
         match o with
         | :? PixTextureCube as o ->
-            data = o.PixImageCube && textureParams = o.TextureParams
+            data = o.PixCube && textureParams = o.TextureParams
         | _ ->
             false
 
@@ -33,17 +26,17 @@ type PixTextureCube(data : PixImageCube, textureParams : TextureParams) =
 
 
 [<AutoOpen>]
-module PixImageCubeTextureExtensions =
+module PixCubeTextureExtensions =
 
     open System.Runtime.CompilerServices
 
     [<AbstractClass; Sealed; Extension>]
-    type PixImageCubeExtensions private() =
+    type PixCubeExtensions private() =
 
         [<Extension>]
-        static member ToTexture(this : PixImageCube, mipMaps : bool) =
+        static member ToTexture(this : PixCube, mipMaps : bool) =
             PixTextureCube(this, mipMaps) :> ITexture
 
-    module PixImageCube =
-        let toTexture (mipMaps : bool) (c : PixImageCube) =
+    module PixCube =
+        let toTexture (mipMaps : bool) (c : PixCube) =
             c.ToTexture mipMaps

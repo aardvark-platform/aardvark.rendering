@@ -32,7 +32,7 @@ module SgFSharp =
             inherit EffectBuilder()
 
             member x.Run(f : unit -> list<FShadeEffect>) =
-                let surface = f() |> FShade.Effect.compose |> Surface.FShadeSimple
+                let surface = f() |> FShade.Effect.compose |> Surface.Effect
                 fun (sg : ISg) -> Sg.SurfaceApplicator(surface, sg) :> ISg
 
         // Utilities to create cached buffer views
@@ -759,12 +759,12 @@ module SgFSharp =
 
         /// Applies the given effects to the scene.
         let effect (s : seq<FShadeEffect>) (sg : ISg) =
-            let s = FShade.Effect.compose s |> Surface.FShadeSimple
+            let s = FShade.Effect.compose s |> Surface.Effect
             Sg.SurfaceApplicator(s, sg) :> ISg
 
         /// Applies the given surface to the scene.
-        let surface (m : ISurface) (sg : ISg) =
-            Sg.SurfaceApplicator(Surface.Backend m, sg) :> ISg
+        let inline surface (s : ^Surface) (sg : ISg) =
+            Sg.SurfaceApplicator(Surface.create s, sg) :> ISg
 
         /// Applies the given pool of effects to the scene.
         /// The index active determines which effect is used at a time.

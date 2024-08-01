@@ -35,6 +35,10 @@ type Runtime(device : Device) as this =
 
     member x.DeviceCount = device.PhysicalDevices.Length
 
+    member x.ShaderDepthRange = FShadeConfig.depthRange
+
+    member x.SupportsLayeredShaderInputs = true
+
     member x.DebugConfig = debug
 
     member x.CreateStreamingTexture (mipMaps : bool) : IStreamingTexture =
@@ -128,8 +132,8 @@ type Runtime(device : Device) as this =
 
         device.CreateFramebuffer(unbox signature, views) :> IFramebuffer
 
-    member x.PrepareSurface (signature : IFramebufferSignature, surface : ISurface) =
-        device.CreateShaderProgram(unbox<RenderPass> signature, surface) :> IBackendSurface
+    member x.PrepareEffect (signature : IFramebufferSignature, effect : FShade.Effect, topology : IndexedGeometryMode) =
+        device.CreateShaderProgram(unbox<RenderPass> signature, effect, topology)
 
     member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(false)>] export : bool) =
         ResourceValidation.Textures.validateForPrepare t
@@ -513,6 +517,10 @@ type Runtime(device : Device) as this =
 
         member x.DeviceCount = x.DeviceCount
 
+        member x.ShaderDepthRange = x.ShaderDepthRange
+
+        member x.SupportsLayeredShaderInputs = x.SupportsLayeredShaderInputs
+
         member x.MaxLocalSize = x.MaxLocalSize
 
         member x.CreateComputeShader(shader : FShade.ComputeShader) =
@@ -545,10 +553,6 @@ type Runtime(device : Device) as this =
             x.ReadPixels(src, sem, offset, size)
 
         member x.OnDispose = onDispose.Publish
-        member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-            signature.Link(effect, FShadeConfig.depthRange, false, topology)
-
-        member x.ResourceManager = failf "not implemented"
 
         member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
                                             depthStencilAttachment : Option<TextureFormat>,
@@ -565,7 +569,7 @@ type Runtime(device : Device) as this =
         member x.CompileRender (signature, set) = x.CompileRender(signature, set)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
-        member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)
+        member x.PrepareEffect(signature, effect, topology) = x.PrepareEffect(signature, effect, topology)
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
         member x.PrepareTexture(t) = x.PrepareTexture(t)
         member x.PrepareBuffer(b, u, s) = x.PrepareBuffer(b, u, s)

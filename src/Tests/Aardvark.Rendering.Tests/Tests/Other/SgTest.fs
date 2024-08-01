@@ -140,7 +140,7 @@ module ``SceneGraph Tests`` =
                     Sg.fullScreenQuad
                     |> Sg.effect [
                         match scope.Surface with
-                        | Surface.FShadeSimple effect -> yield effect
+                        | Surface.Effect effect -> yield effect
                         | _ -> ()
 
                         yield effectAddBlue

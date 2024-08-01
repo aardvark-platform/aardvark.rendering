@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32002.185
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "24 - QuadbufferStereo", "Scratch (netcore)\24 - QuadbufferStereo\24 - QuadbufferStereo.fsproj", "{2E9FDA6B-C7D8-4103-9F4A-3EE1FCC39DED}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "37 - ReversedDepth", "Examples (netcore)\37 - ReversedDepth\37 - ReversedDepth.fsproj", "{C7F84FFE-9DA1-47D1-9607-6F1936F29CF6}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "21 - DebugPrint", "Scratch (netcore)\21 - DebugPrint\21 - DebugPrint.fsproj", "{8C626D69-45D4-4327-ADB9-5449DBCA0B06}"
@@ -133,7 +135,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Dependencies", "Dependencie
 		..\paket.dependencies = ..\paket.dependencies
 	EndProjectSection
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.IO", "Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj", "{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.Assimp", "Aardvark.SceneGraph.Assimp\Aardvark.SceneGraph.Assimp.fsproj", "{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Vulkan", "Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj", "{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}"
 EndProject
@@ -232,12 +234,20 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		..\RELEASE_NOTES.md = ..\RELEASE_NOTES.md
 	EndProjectSection
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Common", "Aardvark.Rendering.Common\Aardvark.Rendering.Common.fsproj", "{FBFF12BC-5292-4154-B985-31130061F3D6}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "38 - GLTF", "Examples (netcore)\38 - GLTF\38 - GLTF.fsproj", "{470275FD-9F08-4814-A6DF-73E9C812C1D6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2E9FDA6B-C7D8-4103-9F4A-3EE1FCC39DED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E9FDA6B-C7D8-4103-9F4A-3EE1FCC39DED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E9FDA6B-C7D8-4103-9F4A-3EE1FCC39DED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E9FDA6B-C7D8-4103-9F4A-3EE1FCC39DED}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C7F84FFE-9DA1-47D1-9607-6F1936F29CF6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C7F84FFE-9DA1-47D1-9607-6F1936F29CF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C7F84FFE-9DA1-47D1-9607-6F1936F29CF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -622,11 +632,20 @@ Global
 		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FBFF12BC-5292-4154-B985-31130061F3D6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FBFF12BC-5292-4154-B985-31130061F3D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FBFF12BC-5292-4154-B985-31130061F3D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FBFF12BC-5292-4154-B985-31130061F3D6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{470275FD-9F08-4814-A6DF-73E9C812C1D6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{470275FD-9F08-4814-A6DF-73E9C812C1D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{470275FD-9F08-4814-A6DF-73E9C812C1D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{470275FD-9F08-4814-A6DF-73E9C812C1D6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{2E9FDA6B-C7D8-4103-9F4A-3EE1FCC39DED} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{C7F84FFE-9DA1-47D1-9607-6F1936F29CF6} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{8C626D69-45D4-4327-ADB9-5449DBCA0B06} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{C335111D-56DC-4053-958F-93B98EEDD02C} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
@@ -683,6 +702,7 @@ Global
 		{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73} = {80F74456-D82F-4D38-83FE-362EFD0C2FCB}
 		{6C943F93-9A9A-4A57-9A75-A235A3443C22} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{79D48400-F885-461A-B747-E3675A7EF2EF} = {C664AC25-597F-470A-854B-045CD7E59CE2}
+		{B5AD6854-A8DC-475D-8B09-242DDB5D79BC} = {0C4B4E0F-315B-4F93-BFCE-CAE5003FB82B}
 		{99DD80B4-B1B8-4042-BEEA-B3A7FD617242} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{7AAAC578-443F-4120-BA74-3732CCE920E8} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{FB047D5E-D49A-462E-BAA0-B058CE06CFC9} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
@@ -713,6 +733,7 @@ Global
 		{159213C5-ECA5-48B6-BDCF-D75BAE733E80} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{6DFA9CC5-3C57-44FC-A989-F1DC5097C2DB} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{470275FD-9F08-4814-A6DF-73E9C812C1D6} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}

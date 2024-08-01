@@ -3,7 +3,6 @@
 #r "Aardvark.Base.Essentials.dll"
 #r "Aardvark.Base.FSharp.dll"
 #r "Aardvark.Base.Incremental.dll"
-#r "Aardvark.Base.Runtime.dll"
 #r "Aardvark.Rendering.dll"
 #r "FShade.dll"
 #r "FShade.Compiler.dll"
@@ -15,7 +14,7 @@
 #r "Aardvark.Application.WinForms.GL.dll"
 #r "System.Reactive.Core.dll"
 #r "Aardvark.Rendering.Interactive.dll"
-#r "Aardvark.SceneGraph.IO.dll"
+#r "Aardvark.SceneGraph.Assimp.dll"
 
 namespace Aardvark.Rendering.Interactive
 

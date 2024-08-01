@@ -1,6 +1,7 @@
 Aardvark.Base.Essentials
 Aardvark.Base.Incremental
-Aardvark.Base.Runtime
+Aardvark.PixImage.ImageSharp
+
 AssimpNet
 FShade.Core
 FShade.GLSL

@@ -1048,11 +1048,6 @@ type NativeVolume<'a when 'a : unmanaged> with
             icoord.Y <- ni
             frac.Y <- coord.Y - float(icoord.Y)
 
-let inline lerpy< ^a, ^b when (^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b)> (_ : ^a) (t : float) (a : ^b) (b : ^b) =
-    ((^a or ^b) : (static member Lerp : float * ^b * ^b -> ^b) (t, a,b))
-
-let inline lerper t a b = lerpy (Unchecked.defaultof<Fun>) t a b
-
 
 
 
@@ -1060,8 +1055,6 @@ let inline lerper t a b = lerpy (Unchecked.defaultof<Fun>) t a b
 [<STAThread>]
 let main args =
     //Management.run()
-    
-    let sepp = lerper 0.1 0.0 1.0
 
     let useVulkan = true
 

@@ -71,7 +71,7 @@ module ComputeImages =
                 ComputeCommand.Dispatch(size / shader.LocalSize.XY)
             ])
 
-            let result = dst.Download().Transformed(ImageTrafo.MirrorY).AsPixImage<'T>()
+            let result = dst.Download().AsPixImage<'T>().Transformed(ImageTrafo.MirrorY)
             PixImage.compare V2i.Zero pix result
 
         let flipYrgba8 = genericFlipY Shader.flipY<Formats.rgba8> PixImage.random8ui TextureFormat.Rgba8

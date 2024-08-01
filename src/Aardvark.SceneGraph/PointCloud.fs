@@ -327,7 +327,7 @@ type PointCloudInfo =
 
         /// optional surface for bounding boxes of cells that are load in progress.
         // the surface should properly transform instances by using DefaultSemantic.InstanceTrafo
-        boundingBoxSurface : Option<aval<ISurface>>
+        boundingBoxSurface : Option<aval<Surface>>
 
         progressCallback : Option<Action<LoaderProgress>>
     }

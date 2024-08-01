@@ -3,7 +3,7 @@ open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open Aardvark.SceneGraph
-open Aardvark.SceneGraph.IO
+open Aardvark.SceneGraph.Assimp
 open Aardvark.Rendering.Text
 open Aardvark.Application
 

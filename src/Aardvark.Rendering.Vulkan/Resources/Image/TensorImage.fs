@@ -369,7 +369,7 @@ type DeviceTensorExtensions private() =
         device.CreateTensorImage2D(data, data.LevelCount, srgb)
 
     [<Extension>]
-    static member inline CreateTensorImageCube(device : Device, data : PixImageCube, levels : int, srgb : bool) : TensorImageCube =
+    static member inline CreateTensorImageCube(device : Device, data : PixCube, levels : int, srgb : bool) : TensorImageCube =
         new TensorImageCube(
             data.MipMapArray |> Array.map (fun face ->
                 device.CreateTensorImage2D(face, levels, srgb)
@@ -377,7 +377,7 @@ type DeviceTensorExtensions private() =
         )
 
     [<Extension>]
-    static member inline CreateTensorImageCube(device : Device, data : PixImageCube, srgb : bool) =
+    static member inline CreateTensorImageCube(device : Device, data : PixCube, srgb : bool) =
         device.CreateTensorImageCube(data, data.MipMapArray.[0].LevelCount, srgb)
 
     [<Extension>]

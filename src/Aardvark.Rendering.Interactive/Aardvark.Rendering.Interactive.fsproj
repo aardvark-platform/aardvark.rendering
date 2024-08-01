@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
   <PropertyGroup>
-    <TargetFrameworks>net471;net6.0-windows</TargetFrameworks>
+    <TargetFrameworks>net471;net8.0-windows10.0.17763.0</TargetFrameworks>
     <OutputType>Library</OutputType>	
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     <UseWindowsForms>true</UseWindowsForms>
@@ -25,7 +25,7 @@
     <ProjectReference Include="..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
     <ProjectReference Include="..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
     <ProjectReference Include="..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj" />
-    <ProjectReference Include="..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj" />
+    <ProjectReference Include="..\Aardvark.SceneGraph.Assimp\Aardvark.SceneGraph.Assimp.fsproj" />
     <ProjectReference Include="..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />
     <ProjectReference Include="..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj" />
     <ProjectReference Include="..\Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj" />

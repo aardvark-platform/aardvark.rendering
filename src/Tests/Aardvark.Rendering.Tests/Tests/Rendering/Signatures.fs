@@ -7,9 +7,13 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
+open FShade
 open Expecto
 
 module FramebufferSignature =
+
+    type UniformScope with
+        member x.Color: V4d = x?Color
 
     module private Semantic =
         let Output0 = Sym.ofString "Output0"
@@ -40,7 +44,7 @@ module FramebufferSignature =
             fragment {
                 return {| Output1 = V4d.One; Output3 = V4d.One |}
             }
-       
+
     module Cases =
 
         let framebufferWithUnsupportedSampleCounts (runtime : IRuntime) =
@@ -139,7 +143,7 @@ module FramebufferSignature =
                 }
                 |> Sg.colorMask' ColorMask.Red
                 |> Sg.compile runtime taskSignature
-       
+
             let result =
                 let fbo = runtime.CreateFramebuffer(signature, ~~V2i(256))
                 let clear = ClearValues.ofColor V4f.Zero
@@ -281,7 +285,7 @@ module FramebufferSignature =
                 }
                 |> Sg.colorMask' ColorMask.Red
                 |> Sg.compile runtime taskSignature
-       
+
             let result =
                 let fbo = runtime.CreateFramebuffer(signature, ~~V2i(256))
                 let clear = ClearValues.ofColor V4f.Zero
@@ -297,7 +301,7 @@ module FramebufferSignature =
             finally
                 result.Release()
 
-        let renderToCubeArrayLayered (runtime : IRuntime) =
+        let renderToCubeArrayLayered (dynamic: bool) (runtime : IRuntime) =
             use signature =
                 runtime.CreateFramebufferSignature(
                     [ DefaultSemantic.Colors, TextureFormat.Rgba8],
@@ -328,19 +332,37 @@ module FramebufferSignature =
                     C4f.Tomato
                 |]
 
+            let activeShader = AVal.init 0
+
+            let applySurface =
+                let rgbaEffect = toEffect DefaultSurfaces.sgColor
+                let bgraEffect = toEffect (fun (v: Effects.Vertex) -> fragment { return uniform.Color.ZYXW })
+
+                if dynamic then
+                    Sg.effectPool [| rgbaEffect; bgraEffect |] activeShader
+                else
+                    Sg.surface rgbaEffect
+
             use task =
                 Sg.fullScreenQuad
                 |> Sg.uniform' "Color" colors
-                |> Sg.shader { do! DefaultSurfaces.sgColor }
+                |> applySurface
                 |> Sg.compile runtime signature
 
             try
-                task.Run framebuffer
+                let check (colorArr: C4b -> byte[]) =
+                    for i = 0 to colors.Length - 1 do
+                        let pi = colorBuffer.Download(slice = i).AsPixImage<uint8>()
+                        let c = C4b colors.[i]
+                        pi |> PixImage.isColor (colorArr c)
 
-                for i = 0 to colors.Length - 1 do
-                    let pi = colorBuffer.Download(slice = i).AsPixImage<uint8>()
-                    let c = C4b colors.[i]
-                    pi |> PixImage.isColor [| c.R; c.G; c.B; c.A |]
+                task.Run framebuffer
+                check (fun c -> [| c.R; c.G; c.B; c.A |])
+
+                if dynamic then
+                    transact (fun _ -> activeShader.Value <- 1)
+                    task.Run framebuffer
+                    check (fun c -> [| c.B; c.G; c.R; c.A |])
 
             finally
                 runtime.DeleteTexture colorBuffer
@@ -356,6 +378,7 @@ module FramebufferSignature =
                 "Render combined",     Cases.renderCombined
                 "Render multisampled", Cases.renderToMultisampled
 
-            "Render to cube array layered", Cases.renderToCubeArrayLayered
+            "Render to cube array layered",             Cases.renderToCubeArrayLayered false
+            "Render to cube array layered (dynamic)",    Cases.renderToCubeArrayLayered true
         ]
         |> prepareCases backend "Framebuffer signatures"

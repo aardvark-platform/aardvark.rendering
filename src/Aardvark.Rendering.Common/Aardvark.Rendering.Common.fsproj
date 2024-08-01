@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>Aardvark.Rendering.Common</AssemblyName>
+    <OutputType>Library</OutputType>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarnOn>3389;3390;3395</WarnOn>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <OutputPath>..\..\bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <OutputPath>..\..\bin\Release</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Modes\ComparisonFunction.fs" />
+    <Compile Include="Modes\FillMode.fs" />
+    <Compile Include="Modes\CullMode.fs" />
+    <Compile Include="Modes\WindingOrder.fs" />
+    <Compile Include="Modes\BlendMode.fs" />
+    <Compile Include="Modes\StencilMode.fs" />
+    <Compile Include="Modes\DepthRange.fs" />
+    <Compile Include="Modes\DepthTest.fs" />
+    <Compile Include="Modes\DepthBias.fs" />
+    <Compile Include="Modes\ColorMask.fs" />
+    <Compile Include="Sampler\TextureFilter.fs" />
+    <Compile Include="Sampler\SamplerState.fs" />
+    <Compile Include="ArrayVisitor.fs" />
+    <Compile Include="DefaultSemantic.fs" />
+    <Compile Include="IndexedGeometry.fs" />
+    <Compile Include="Camera\Frustum.fs" />
+    <Compile Include="Camera\CameraView.fs" />
+    <Compile Include="Camera\Camera.fs" />
+    <None Include="paket.references" />
+  </ItemGroup>
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
+</Project>

@@ -43,24 +43,33 @@ module TypeSizeExtensions =
 // GL_CONTEXT_FLAG_DEBUG_BIT              2
 // GL_CONTEXT_FLAG_ROBUST_ACCESS_BIT      4
 // GL_CONTEXT_FLAG_NO_ERROR_BIT           8
-type Driver = { device : GPUVendor; vendor : string; renderer : string; glsl : Version; version : Version; versionString : string; profileMask : int; contextFlags : int; extensions : Set<string> }
+type Driver =
+    { device        : GPUVendor
+      vendor        : string
+      renderer      : string
+      glsl          : Version
+      glslString    : string
+      version       : Version
+      versionString : string
+      profileMask   : int
+      contextFlags  : int
+      extensions    : Set<string> }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Driver =
 
     let private versionRx = Regex @"^[ \t\r\n]*((?:[0-9]+\.)*[0-9]+)"
 
-  
     let parseGLVersion (str : string) =
         let m = versionRx.Match str
         if m.Success then
             let str = m.Groups.[1].Value
 
-            let v = 
-                str.Split('.') 
-                |> Array.map Int32.Parse 
+            let v =
+                str.Split('.')
+                |> Array.map Int32.Parse
                 |> Array.toList
-                //|> List.collect clean 
+                //|> List.collect clean
 
             match v with
             | [] -> failwithf "could not read version from: %A" str
@@ -78,18 +87,18 @@ module Driver =
         if m.Success then
             let str = m.Groups.[1].Value
 
-            let v = 
-                str.Split('.') 
-                |> Array.map Int32.Parse 
+            let v =
+                str.Split('.')
+                |> Array.map Int32.Parse
                 |> Array.toList
 
             match v with
             | [] -> failwithf "could not read version from: %A" str
             | [a] -> Version(a, 0, 0)
-            | a::b::_ -> 
+            | a::b::_ ->
                 if b > 9 then
                     Version(a, b/10, b%10)
-                else 
+                else
                     Version(a, b, 0)
         else
             failwithf "could not read version from: %A" str
@@ -97,20 +106,29 @@ module Driver =
     let tryParseGLSLVersion (str : string) =
         try Some (parseGLSLVersion str) with _ -> None
 
-
     let readInfo() =
-        let vendor = GL.GetString(StringName.Vendor)  
-        let renderer = GL.GetString(StringName.Renderer)  
-        let versionStr = GL.GetString(StringName.Version)
-        let version = 
-            versionStr |> tryParseGLVersion |> Option.defaultValue (Version())
+        let vendor = GL.GetString(StringName.Vendor)
+        let renderer = GL.GetString(StringName.Renderer)
 
-        let glslVersion = 
-            let str = GL.GetString(StringName.ShadingLanguageVersion)
-            str |> tryParseGLSLVersion |> Option.defaultValue (Version())
+        let versionStr = GL.GetString(StringName.Version)
+        let version =
+            match tryParseGLVersion versionStr with
+            | Some v -> v
+            | _ ->
+                Log.warn "[GL] Failed to parse OpenGL version string: %s" versionStr
+                Version()
+
+        let glslStr = GL.GetString(StringName.ShadingLanguageVersion)
+        let glslVersion =
+            match tryParseGLSLVersion glslStr with
+            | Some v -> v
+            | _ ->
+                Log.warn "[GL] Failed to parse GLSL version string: %s" glslStr
+                Version()
+
         let profileMask =  GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask)
         let contextFlags = GL.GetInteger(GetPName.ContextFlags)
-        
+
         let pat = (vendor + "_" + renderer).ToLower()
         let gpu =
             if pat.Contains "nvidia" then GPUVendor.nVidia
@@ -119,37 +137,35 @@ module Driver =
             else GPUVendor.Unknown
 
         let mutable extensions = Set.empty
-        let extensionCount = GL.GetInteger(0x821d |> unbox<GetPName>) // GL_NUM_EXTENSIONS
+        let extensionCount = GL.GetInteger(GetPName.NumExtensions)
         for i in 0..extensionCount-1 do
             let name = GL.GetString(StringNameIndexed.Extensions, i)
             extensions <- Set.add name extensions
 
         {
-            device = gpu
-            vendor = vendor
-            renderer = renderer
-            glsl = glslVersion
-            version = version
+            device        = gpu
+            vendor        = vendor
+            renderer      = renderer
+            glsl          = glslVersion
+            glslString    = glslStr
+            version       = version
             versionString = versionStr
-            profileMask = profileMask
-            contextFlags = contextFlags
-            extensions = extensions
+            profileMask   = profileMask
+            contextFlags  = contextFlags
+            extensions    = extensions
         }
 
-    let printDriverInfo(verbosity : int) = 
-        Report.Line(verbosity, "[GL] vendor: {0}", GL.GetString(StringName.Vendor))
-        Report.Line(verbosity, "[GL] renderer: {0}",  GL.GetString(StringName.Renderer))
-        Report.Line(verbosity, "[GL] version: {0}", GL.GetString(StringName.Version))
-        Report.Line(verbosity, "[GL] profileMask: {0}", GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask))
-        Report.Line(verbosity, "[GL] contextFlags: {0}", GL.GetInteger(GetPName.ContextFlags))
+    let print (verbosity: int) (driver: Driver) =
+        Report.Line(verbosity, "[GL] vendor: {0}", driver.vendor)
+        Report.Line(verbosity, "[GL] renderer: {0}",  driver.renderer)
+        Report.Line(verbosity, "[GL] version: {0}", driver.versionString)
+        Report.Line(verbosity, "[GL] profileMask: {0}", driver.profileMask)
+        Report.Line(verbosity, "[GL] contextFlags: {0}", driver.contextFlags)
 
-        let extensionCount = GL.GetInteger(0x821d |> unbox<GetPName>) // GL_NUM_EXTENSIONS
         Report.Begin(verbosity, "[GL] extensions")
-        for i in 0..extensionCount-1 do
-            Report.Line(verbosity, "{0}", GL.GetString(StringNameIndexed.Extensions, i))
+        for e in driver.extensions do
+            Report.Line(verbosity, e)
         Report.End(verbosity) |> ignore
-
-
 
 module MemoryManagementUtilities =
     open System.Collections.Generic
