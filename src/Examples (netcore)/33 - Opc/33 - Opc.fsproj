@@ -13,6 +13,7 @@
     <OutputPath>..\..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="paket.references" />
     <Compile Include="Overlay.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

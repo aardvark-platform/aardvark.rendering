@@ -44,6 +44,8 @@ nuget Silk.NET.Direct3D9                 = 2.15.0
 
 nuget SharpZipLib                        ~> 1.4.1
 
+nuget Aardvark.PixImage.Pfim             ~> 0.9.2
+
 group Test
 framework: net6.0
 source https://api.nuget.org/v3/index.json
