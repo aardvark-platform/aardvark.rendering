@@ -1894,68 +1894,70 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                 let timer = new MultimediaTimer.Trigger(20)
                     
                 let pickTrees = config.pickTrees
+                let reg = shutdown.Token.Register (System.Action(MVar.put changesPending))
                 while not shutdown.IsCancellationRequested do
                     timer.Wait()
                     MVar.take changesPending
                     
-                    // atomic fetch
-                    let readers, removed = 
-                        lock rootLock (fun () ->
-                            let roots = roots
-                            let removed = List<Option<ILodTreeNode> * TaskTreeReader<_>>()
+                    if not shutdown.IsCancellationRequested then
+                        // atomic fetch
+                        let readers, removed = 
+                            lock rootLock (fun () ->
+                                let roots = roots
+                                let removed = List<Option<ILodTreeNode> * TaskTreeReader<_>>()
 
-                            let delta = HashMap.computeDelta lastRoots roots
-                            lastRoots <- roots
+                                let delta = HashMap.computeDelta lastRoots roots
+                                lastRoots <- roots
 
-                            for k, op in delta do
-                                match op with
-                                | Remove ->
-                                    match HashMap.tryRemove k readers with
-                                    | Some (r, rs) ->
-                                        readers <- rs
-                                        removed.Add((Some k, r))
-                                    | None ->
-                                        Log.error "[Lod] free of unknown: %A" (k.GetHashCode())
-                                | Set v ->
-                                    match HashMap.tryFind k readers with
-                                    | Some o ->
-                                        Log.error "[Lod] double add %A" k
-                                        removed.Add (None, o)
-                                        let r = TaskTreeReader(v)
-                                        //rootUniformCache.TryRemove k |> ignore
-                                        //rootTrafoCache.TryRemove k |> ignore
-                                        //transact (fun () -> rootIds.MarkOutdated())
-                                        readers <- HashMap.add k r readers
+                                for k, op in delta do
+                                    match op with
+                                    | Remove ->
+                                        match HashMap.tryRemove k readers with
+                                        | Some (r, rs) ->
+                                            readers <- rs
+                                            removed.Add((Some k, r))
+                                        | None ->
+                                            Log.error "[Lod] free of unknown: %A" (k.GetHashCode())
+                                    | Set v ->
+                                        match HashMap.tryFind k readers with
+                                        | Some o ->
+                                            Log.error "[Lod] double add %A" k
+                                            removed.Add (None, o)
+                                            let r = TaskTreeReader(v)
+                                            //rootUniformCache.TryRemove k |> ignore
+                                            //rootTrafoCache.TryRemove k |> ignore
+                                            //transact (fun () -> rootIds.MarkOutdated())
+                                            readers <- HashMap.add k r readers
 
-                                    | None ->
-                                        let r = TaskTreeReader(v)
-                                        readers <- HashMap.add k r readers
-                            readers, removed
-                        )
-
-                    for (root, r) in removed do
-                        match root with
-                        | Some root -> 
-                            match pickTrees with
-                            | Some mm -> transact (fun () -> mm.Value <- mm.Value |> HashMap.remove root)
-                            | None -> ()
-                        | None ->
-                            ()
-                        r.Destroy(renderDelta)
-
-                    for (root,r) in readers do
-                        r.Update(renderDelta)
-                        match pickTrees with
-                        | Some mm ->
-                            let trafo = getRootTrafo root
-                            let picky = r.State |> Option.bind (fun s -> SimplePickTree.ofTreeNode trafo s)
-                            transact (fun () -> 
-                                match picky with
-                                | Some picky -> mm.Value <- mm.Value |> HashMap.add root picky
-                                | None -> mm.Value <- mm.Value |> HashMap.remove root
+                                        | None ->
+                                            let r = TaskTreeReader(v)
+                                            readers <- HashMap.add k r readers
+                                readers, removed
                             )
-                        | None ->
-                            ()
+
+                        for (root, r) in removed do
+                            match root with
+                            | Some root -> 
+                                match pickTrees with
+                                | Some mm -> transact (fun () -> mm.Value <- mm.Value |> HashMap.remove root)
+                                | None -> ()
+                            | None ->
+                                ()
+                            r.Destroy(renderDelta)
+
+                        for (root,r) in readers do
+                            r.Update(renderDelta)
+                            match pickTrees with
+                            | Some mm ->
+                                let trafo = getRootTrafo root
+                                let picky = r.State |> Option.bind (fun s -> SimplePickTree.ofTreeNode trafo s)
+                                transact (fun () -> 
+                                    match picky with
+                                    | Some picky -> mm.Value <- mm.Value |> HashMap.add root picky
+                                    | None -> mm.Value <- mm.Value |> HashMap.remove root
+                                )
+                            | None ->
+                                ()
                     
 
                 for (root,r) in readers do
@@ -2179,7 +2181,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
 
     override x.Release() =
         shutdown.Cancel()
-        cameraPrediction.Join()
+        cameraPrediction.Join(40) |> ignore
         thread.Join()
         puller.Join()
         inner.Dispose()

@@ -44,6 +44,7 @@ nuget Silk.NET.Direct3D9                            = 2.15.0
 nuget SharpZipLib                                   ~> 1.4.1
 
 // Examples
+nuget Aardvark.PixImage.DevIL                       ~> 5.2.33-prerelease0001
 nuget Aardvark.PixImage.ImageSharp                  ~> 2.0.1-prerelease0001
 nuget Aardvark.Data.GLTF                            ~> 1.0.0-prerelease0001
 
