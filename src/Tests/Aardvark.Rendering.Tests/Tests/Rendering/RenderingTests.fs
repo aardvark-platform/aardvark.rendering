@@ -13,6 +13,7 @@ module ``Rendering Tests`` =
         IntegerAttachments.tests
         Samplers.tests
         Uniforms.tests
+        Surfaces.tests
     ]
 
     [<Tests>]

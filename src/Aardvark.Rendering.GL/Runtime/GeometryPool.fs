@@ -903,8 +903,8 @@ module GeometryPoolData =
             if a % b = 0 then a / b
             else 1 + a / b
 
-        static let cullingCache = System.Collections.Concurrent.ConcurrentDictionary<Context, ComputeProgram>()
-        static let boundCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Program>()
+        static let cullingCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Lazy<ComputeProgram>>()
+        static let boundCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Lazy<Program>>()
         
         let initialCapacity = Fun.NextPowerOfTwo initialCapacity
         let adjust (call : DrawCallInfo) =
@@ -963,10 +963,12 @@ module GeometryPoolData =
 
         do if bounds then
             culling <- cullingCache.GetOrAdd(ctx, fun ctx ->
-                let cs = ComputeShader.ofFunction (V3i(1024, 1024, 1024)) CullingShader.culling
-                let shader = ctx.CompileKernel cs
-                shader
-            )
+                lazy (
+                    let cs = ComputeShader.ofFunction (V3i(1024, 1024, 1024)) CullingShader.culling
+                    let shader = ctx.CompileKernel cs
+                    shader
+                )
+            ).Value
 
             infoSlot <- culling.Interface.storageBuffers.["infos"].ssbBinding
             boundSlot <- culling.Interface.storageBuffers.["bounds"].ssbBinding
@@ -980,24 +982,26 @@ module GeometryPoolData =
             countOffset <- nativeint countField.ufOffset
 
             boxShader <- boundCache.GetOrAdd(ctx, fun ctx ->
-                let effect =
-                    FShade.Effect.compose [
-                        Effect.ofFunction CullingShader.renderBounds
-                        Effect.ofFunction (DefaultSurfaces.constantColor C4f.Red)
-                    ]
+                lazy (
+                    let effect =
+                        FShade.Effect.compose [
+                            Effect.ofFunction CullingShader.renderBounds
+                            Effect.ofFunction (DefaultSurfaces.constantColor C4f.Red)
+                        ]
 
-                let shader =
-                    lazy (
-                        let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
-                        effect
-                        |> Effect.toModule cfg
-                        |> ModuleCompiler.compileGLSL ctx.FShadeBackend
-                    )
+                    let shader =
+                        lazy (
+                            let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
+                            effect
+                            |> Effect.toModule cfg
+                            |> ModuleCompiler.compileGLSL ctx.FShadeBackend
+                        )
 
-                match ctx.TryCompileProgram(effect.Id, signature, shader) with
-                | Success v -> v
-                | Error e -> failwith e
-            )
+                    match ctx.TryCompileProgram(effect.Id, signature, shader) with
+                    | Success v -> v
+                    | Error e -> failwith e
+                )
+            ).Value
 
             boxBoundSlot <- boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "Bounds" then Some b.ssbBinding else None)
             boxViewProjSlot <- boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "ViewProjs" then Some b.ssbBinding else None)

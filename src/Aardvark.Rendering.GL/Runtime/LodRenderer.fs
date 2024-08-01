@@ -1816,10 +1816,16 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                 dataSize        = ref 0L
             }
 
-                
+        let inline startThreadSafe (name: string) (run: unit -> unit) =
+            startThread (fun () ->
+                try
+                    run()
+                with exn ->
+                    Log.error "[LodRenderer] %s thread faulted: %A" name exn
+            )
 
         let cameraPrediction =
-            startThread (fun () ->
+            startThreadSafe "Camera prediction" (fun () ->
                 let mutable lastTime = time()
                 let mutable lastReport = time()
                 let timer = new MultimediaTimer.Trigger(5)
@@ -1884,72 +1890,74 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
         //let rootDeltas = ref HDeltaSet.empty
 
         let puller =
-            startThread (fun () ->
+            startThreadSafe "Puller" (fun () ->
                 let timer = new MultimediaTimer.Trigger(20)
                     
                 let pickTrees = config.pickTrees
+                let reg = shutdown.Token.Register (System.Action(MVar.put changesPending))
                 while not shutdown.IsCancellationRequested do
                     timer.Wait()
                     MVar.take changesPending
                     
-                    // atomic fetch
-                    let readers, removed = 
-                        lock rootLock (fun () ->
-                            let roots = roots
-                            let removed = List<Option<ILodTreeNode> * TaskTreeReader<_>>()
+                    if not shutdown.IsCancellationRequested then
+                        // atomic fetch
+                        let readers, removed = 
+                            lock rootLock (fun () ->
+                                let roots = roots
+                                let removed = List<Option<ILodTreeNode> * TaskTreeReader<_>>()
 
-                            let delta = HashMap.computeDelta lastRoots roots
-                            lastRoots <- roots
+                                let delta = HashMap.computeDelta lastRoots roots
+                                lastRoots <- roots
 
-                            for k, op in delta do
-                                match op with
-                                | Remove ->
-                                    match HashMap.tryRemove k readers with
-                                    | Some (r, rs) ->
-                                        readers <- rs
-                                        removed.Add((Some k, r))
-                                    | None ->
-                                        Log.error "[Lod] free of unknown: %A" (k.GetHashCode())
-                                | Set v ->
-                                    match HashMap.tryFind k readers with
-                                    | Some o ->
-                                        Log.error "[Lod] double add %A" k
-                                        removed.Add (None, o)
-                                        let r = TaskTreeReader(v)
-                                        //rootUniformCache.TryRemove k |> ignore
-                                        //rootTrafoCache.TryRemove k |> ignore
-                                        //transact (fun () -> rootIds.MarkOutdated())
-                                        readers <- HashMap.add k r readers
+                                for k, op in delta do
+                                    match op with
+                                    | Remove ->
+                                        match HashMap.tryRemove k readers with
+                                        | Some (r, rs) ->
+                                            readers <- rs
+                                            removed.Add((Some k, r))
+                                        | None ->
+                                            Log.error "[Lod] free of unknown: %A" (k.GetHashCode())
+                                    | Set v ->
+                                        match HashMap.tryFind k readers with
+                                        | Some o ->
+                                            Log.error "[Lod] double add %A" k
+                                            removed.Add (None, o)
+                                            let r = TaskTreeReader(v)
+                                            //rootUniformCache.TryRemove k |> ignore
+                                            //rootTrafoCache.TryRemove k |> ignore
+                                            //transact (fun () -> rootIds.MarkOutdated())
+                                            readers <- HashMap.add k r readers
 
-                                    | None ->
-                                        let r = TaskTreeReader(v)
-                                        readers <- HashMap.add k r readers
-                            readers, removed
-                        )
-
-                    for (root, r) in removed do
-                        match root with
-                        | Some root -> 
-                            match pickTrees with
-                            | Some mm -> transact (fun () -> mm.Value <- mm.Value |> HashMap.remove root)
-                            | None -> ()
-                        | None ->
-                            ()
-                        r.Destroy(renderDelta)
-
-                    for (root,r) in readers do
-                        r.Update(renderDelta)
-                        match pickTrees with
-                        | Some mm ->
-                            let trafo = getRootTrafo root
-                            let picky = r.State |> Option.bind (fun s -> SimplePickTree.ofTreeNode trafo s)
-                            transact (fun () -> 
-                                match picky with
-                                | Some picky -> mm.Value <- mm.Value |> HashMap.add root picky
-                                | None -> mm.Value <- mm.Value |> HashMap.remove root
+                                        | None ->
+                                            let r = TaskTreeReader(v)
+                                            readers <- HashMap.add k r readers
+                                readers, removed
                             )
-                        | None ->
-                            ()
+
+                        for (root, r) in removed do
+                            match root with
+                            | Some root -> 
+                                match pickTrees with
+                                | Some mm -> transact (fun () -> mm.Value <- mm.Value |> HashMap.remove root)
+                                | None -> ()
+                            | None ->
+                                ()
+                            r.Destroy(renderDelta)
+
+                        for (root,r) in readers do
+                            r.Update(renderDelta)
+                            match pickTrees with
+                            | Some mm ->
+                                let trafo = getRootTrafo root
+                                let picky = r.State |> Option.bind (fun s -> SimplePickTree.ofTreeNode trafo s)
+                                transact (fun () -> 
+                                    match picky with
+                                    | Some picky -> mm.Value <- mm.Value |> HashMap.add root picky
+                                    | None -> mm.Value <- mm.Value |> HashMap.remove root
+                                )
+                            | None ->
+                                ()
                     
 
                 for (root,r) in readers do
@@ -1961,7 +1969,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
             )
                 
         let thread = 
-            startThread (fun () ->
+            startThreadSafe "Update" (fun () ->
                 let notConverged = MVar.create () //new ManualResetEventSlim(true)
 
                 let cancel = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, CancellationTokenSource>()
@@ -2032,126 +2040,126 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                     while not shutdown.IsCancellationRequested do
                         timer.Wait()
                         MVar.take notConverged
-                        shutdown.Token.ThrowIfCancellationRequested()
 
-                        //caller.EvaluateAlways AdaptiveToken.Top (fun token ->
-                        let view = config.view.GetValue AdaptiveToken.Top
-                        let proj = config.proj.GetValue AdaptiveToken.Top
-                        let maxSplits = config.maxSplits.GetValue AdaptiveToken.Top
+                        if not shutdown.IsCancellationRequested then
+                            //caller.EvaluateAlways AdaptiveToken.Top (fun token ->
+                            let view = config.view.GetValue AdaptiveToken.Top
+                            let proj = config.proj.GetValue AdaptiveToken.Top
+                            let maxSplits = config.maxSplits.GetValue AdaptiveToken.Top
                           
-                        deltas <-   
-                            let ops = reader.GetChanges AdaptiveToken.Top
-                            HashSetDelta.combine deltas ops
+                            deltas <-   
+                                let ops = reader.GetChanges AdaptiveToken.Top
+                                HashSetDelta.combine deltas ops
 
-                        let toFree = 
-                            lock toFreeUniforms (fun () ->
-                                let r = !toFreeUniforms
-                                toFreeUniforms := HashSet.empty
-                                r
+                            let toFree = 
+                                lock toFreeUniforms (fun () ->
+                                    let r = !toFreeUniforms
+                                    toFreeUniforms := HashSet.empty
+                                    r
+                                )
+
+                            toFree |> HashSet.iter ( fun node -> 
+                                freeRootId node
+                                rootUniforms <- HashMap.remove node rootUniforms
                             )
-
-                        toFree |> HashSet.iter ( fun node -> 
-                            freeRootId node
-                            rootUniforms <- HashMap.remove node rootUniforms
-                        )
                         
 
-                        if maxSplits > 0 then
-                            let ops =
-                                let d = deltas
-                                deltas <- HashSetDelta.empty
-                                d
+                            if maxSplits > 0 then
+                                let ops =
+                                    let d = deltas
+                                    deltas <- HashSetDelta.empty
+                                    d
 
-                            //if ops.Count > 0 then
-                            //    lock rootDeltas (fun () ->
-                            //        rootDeltas := HDeltaSet.combine !rootDeltas ops
-                            //    )
-                            //    MVar.put changesPending ()
+                                //if ops.Count > 0 then
+                                //    lock rootDeltas (fun () ->
+                                //        rootDeltas := HDeltaSet.combine !rootDeltas ops
+                                //    )
+                                //    MVar.put changesPending ()
 
-                            //if ops.Count > 0 then 
-                            //    for o in ops do
-                            //        match o with
-                            //        | Add(_,v) ->
-                            //            Log.warn "add %A" v.root
-                            //        | Rem(_,v) ->
-                            //            Log.warn "rem %A" v.root
+                                //if ops.Count > 0 then 
+                                //    for o in ops do
+                                //        match o with
+                                //        | Add(_,v) ->
+                                //            Log.warn "add %A" v.root
+                                //        | Rem(_,v) ->
+                                //            Log.warn "rem %A" v.root
 
-                            let roots = 
-                                if ops.Count > 0 then
-                                    lock rootLock (fun () ->
-                                        for o in ops do
-                                            match o with
-                                            | Add(_,i) ->
-                                                let r = i.root
-                                                match HashMap.tryFind r roots with
-                                                | Some o ->
-                                                    Log.error "[Lod] add of existing root %A" i.root
-                                                | None -> 
-                                                    let u = i.uniforms
-                                                    rootUniforms <- HashMap.add r u rootUniforms
-                                                    let rid = getRootId r
-                                                    let load ct n = load ct rid n (fun _ _ r -> r)
-                                                    roots <- HashMap.add r (TaskTree(load, rid)) roots
+                                let roots = 
+                                    if ops.Count > 0 then
+                                        lock rootLock (fun () ->
+                                            for o in ops do
+                                                match o with
+                                                | Add(_,i) ->
+                                                    let r = i.root
+                                                    match HashMap.tryFind r roots with
+                                                    | Some o ->
+                                                        Log.error "[Lod] add of existing root %A" i.root
+                                                    | None -> 
+                                                        let u = i.uniforms
+                                                        rootUniforms <- HashMap.add r u rootUniforms
+                                                        let rid = getRootId r
+                                                        let load ct n = load ct rid n (fun _ _ r -> r)
+                                                        roots <- HashMap.add r (TaskTree(load, rid)) roots
 
-                                            | Rem(_,i) ->
-                                                let r = i.root
-                                                match HashMap.tryRemove r roots with
-                                                | Some (_, rest) ->
+                                                | Rem(_,i) ->
+                                                    let r = i.root
+                                                    match HashMap.tryRemove r roots with
+                                                    | Some (_, rest) ->
                                                     
-                                                    roots <- rest
-                                                | None ->
-                                                    Log.error "[Lod] remove of nonexisting root %A" i.root
+                                                        roots <- rest
+                                                    | None ->
+                                                        Log.error "[Lod] remove of nonexisting root %A" i.root
 
-                                        MVar.put changesPending ()
-                                        roots
-                                    )
-                                else
-                                    lock rootLock (fun () -> roots)
+                                            MVar.put changesPending ()
+                                            roots
+                                        )
+                                    else
+                                        lock rootLock (fun () -> roots)
                                 
 
-                            let modelView (r : ILodTreeNode) =
-                                let t = getRootTrafo r
-                                subs.GetOrCreate(t, fun t -> t.AddMarkingCallback (MVar.put notConverged)) |> ignore
-                                let m = t.GetValue()
-                                m * view
+                                let modelView (r : ILodTreeNode) =
+                                    let t = getRootTrafo r
+                                    subs.GetOrCreate(t, fun t -> t.AddMarkingCallback (MVar.put notConverged)) |> ignore
+                                    let m = t.GetValue()
+                                    m * view
                                 
-                            let budget = config.budget.GetValue()
-                            let splitfactor = config.splitfactor.GetValue()
+                                let budget = config.budget.GetValue()
+                                let splitfactor = config.splitfactor.GetValue()
 
-                            let start = time()
-                            let maxQ =
-                                if budget < 0L then 1.0
-                                else fst (TreeHelpers.getMaxQuality budget splitfactor (Seq.map fst roots) modelView proj)
+                                let start = time()
+                                let maxQ =
+                                    if budget < 0L then 1.0
+                                    else fst (TreeHelpers.getMaxQuality budget splitfactor (Seq.map fst roots) modelView proj)
 
-                            let dt = time() - start
-                            maxQualityTime.Insert(dt.TotalMilliseconds) |> ignore
+                                let dt = time() - start
+                                maxQualityTime.Insert(dt.TotalMilliseconds) |> ignore
 
 
                             
-                            let collapseIfNotSplit = maxQ < 1.0
-                            let start = time()
-                            let queue = List()
-                            for (k,v) in roots do
-                                v.BuildQueue(state, collapseIfNotSplit, k, maxQ, splitfactor, modelView, proj, queue)
+                                let collapseIfNotSplit = maxQ < 1.0
+                                let start = time()
+                                let queue = List()
+                                for (k,v) in roots do
+                                    v.BuildQueue(state, collapseIfNotSplit, k, maxQ, splitfactor, modelView, proj, queue)
             
-                            let q, fin = TaskTree<_>.ProcessQueue(state, queue, maxQ, splitfactor, modelView, proj, maxSplits)
-                            lastQ <- q
-                            let dt = time() - start
-                            expandTime.Insert dt.TotalMilliseconds |> ignore
+                                let q, fin = TaskTree<_>.ProcessQueue(state, queue, maxQ, splitfactor, modelView, proj, maxSplits)
+                                lastQ <- q
+                                let dt = time() - start
+                                expandTime.Insert dt.TotalMilliseconds |> ignore
 
-                            transact (fun () -> 
-                                config.stats.Value <-
-                                    {
-                                        quality = lastQ
-                                        maxQuality = maxQ
-                                        totalPrimitives = !state.dataSize
-                                        totalNodes = !state.totalNodes
-                                        usedMemory = pool.UsedMemory + inner.UsedMemory
-                                        allocatedMemory = pool.TotalMemory + inner.TotalMemory 
-                                        renderTime = inner.AverageRenderTime 
-                                    }
-                            )
-                            if not fin then MVar.put notConverged ()
+                                transact (fun () -> 
+                                    config.stats.Value <-
+                                        {
+                                            quality = lastQ
+                                            maxQuality = maxQ
+                                            totalPrimitives = !state.dataSize
+                                            totalNodes = !state.totalNodes
+                                            usedMemory = pool.UsedMemory + inner.UsedMemory
+                                            allocatedMemory = pool.TotalMemory + inner.TotalMemory 
+                                            renderTime = inner.AverageRenderTime 
+                                        }
+                                )
+                                if not fin then MVar.put notConverged ()
 
 
                 finally 
@@ -2173,7 +2181,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
 
     override x.Release() =
         shutdown.Cancel()
-        cameraPrediction.Join()
+        cameraPrediction.Join(40) |> ignore
         thread.Join()
         puller.Join()
         inner.Dispose()

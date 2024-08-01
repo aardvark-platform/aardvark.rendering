@@ -14,6 +14,9 @@ open Aardvark.Application
 open System.Windows.Threading
 open System.Security
 open System.Threading
+open Microsoft.FSharp.NativeInterop
+
+#nowarn "9"
 
 [<AutoOpen>]
 module private DXSharingHelpers =
@@ -173,40 +176,63 @@ module WGLDXExtensions =
             let worked = wglDXUnlockObjectsNV.Invoke(hDevice, objects.Length, pObjects)
             if not worked then fail "could not unlock objects"
             
+
 [<AutoOpen>]
 module WGLDXContextExtensions =
 
-    type ShareContext private(ctx : Context, d3d : SharpDX.Direct3D9.Direct3DEx, device : SharpDX.Direct3D9.DeviceEx, shareDevice : WglDxShareDevice) =
+    let inline spanny<'a when 'a : unmanaged> (ptr : nativeptr<'a>) =
+        System.Span<'a>(NativePtr.toVoidPtr ptr, 1)
+
+    open Silk.NET.Direct3D9
+    type ShareContext private(ctx : Context, d3d : nativeptr<IDirect3D9Ex>, device : nativeptr<IDirect3DDevice9Ex>, shareDevice : WglDxShareDevice) =
         static member Create(ctx : Context) =
             use __ = ctx.ResourceLock
-            let d3d = new SharpDX.Direct3D9.Direct3DEx()
-            let device = 
+
+            let d3d = D3D9.GetApi()
+            let mutable d3d9exptr = Unchecked.defaultof<_>
+            let _ = d3d.Direct3DCreate9Ex(32u, &d3d9exptr)
+            let d3d = d3d9exptr //System.Span<IDirect3D9Ex>(NativePtr.toVoidPtr d3d9exptr, 1)
+
+            let pDevice = 
                 let hndl = GetDesktopWindow()
-                let parameters = 
-                    SharpDX.Direct3D9.PresentParameters(
-                        BackBufferWidth = 10,
-                        BackBufferHeight = 10,
-                        BackBufferFormat = SharpDX.Direct3D9.Format.A8R8G8B8,
-                        BackBufferCount = 0,
-                        MultiSampleType = SharpDX.Direct3D9.MultisampleType.None,
-                        MultiSampleQuality = 0,
-                        SwapEffect = SharpDX.Direct3D9.SwapEffect.Discard,
-                        Windowed = SharpDX.Mathematics.Interop.RawBool(true),
-                        DeviceWindowHandle = hndl, 
-                        PresentationInterval = SharpDX.Direct3D9.PresentInterval.Default
+                let mutable parameters = 
+                    PresentParameters(
+                        backBufferWidth = Nullable 10u,
+                        backBufferHeight = Nullable 10u ,
+                        backBufferFormat = Nullable Format.FmtA8R8G8B8,
+                        backBufferCount = Nullable 0u,
+                        multiSampleType = Nullable MultisampleType.MultisampleNone,
+                        multiSampleQuality = Nullable 0u,
+                        swapEffect = Nullable Swapeffect.SwapeffectDiscard,
+                        windowed = Nullable 1,// SharpDX.Mathematics.Interop.RawBool(true),
+                        //deviceWindowHandle = hndl, 
+                        hDeviceWindow = Nullable hndl,
+                        presentationInterval = Nullable 0u//PresentInterval.Default
                     )
                 
+                //SharpDX.Direct3D9.CreateFlags.FpuPreserve ||| 
+                //SharpDX.Direct3D9.CreateFlags.HardwareVertexProcessing ||| 
+                //SharpDX.Direct3D9.CreateFlags.Multithreaded
+                let createFlags = 0x4u ||| 0x2u ||| 0x40u
+                let mutable dev = Unchecked.defaultof<_>
+                printfn "before"
+                let result = 
+                    spanny(d3d).[0].CreateDeviceEx(
+                        0u, 
+                        Devtype.DevtypeHal, 
+                        0n, 
+                        createFlags, 
+                        &parameters,
+                        NativePtr.zero,
+                        &dev
+                    )
+                if result <> 0 then
+                    raise <| Marshal.GetExceptionForHR(result)
+                printfn "after "
+                dev
+            let shareDevice = WGL.OpenDevice(NativePtr.toNativeInt pDevice)
 
-                new SharpDX.Direct3D9.DeviceEx(
-                    d3d, 0, 
-                    SharpDX.Direct3D9.DeviceType.Hardware, 0n, 
-                    SharpDX.Direct3D9.CreateFlags.FpuPreserve ||| SharpDX.Direct3D9.CreateFlags.HardwareVertexProcessing ||| 
-                    SharpDX.Direct3D9.CreateFlags.Multithreaded, 
-                    parameters
-            )
-            let shareDevice = WGL.OpenDevice(device.NativePointer)
-
-            ShareContext(ctx, d3d, device, shareDevice)
+            ShareContext(ctx, d3d, pDevice, shareDevice)
 
 
 
@@ -218,7 +244,7 @@ module WGLDXContextExtensions =
 
     let private shareContexts = System.Runtime.CompilerServices.ConditionalWeakTable<Context, ShareContext>()
 
-    type D3DRenderbuffer(ctx : ShareContext, resolveBuffer : int, renderBuffer : int, size : V2i, fmt : TextureFormat, samples : int, dxSurface : SharpDX.Direct3D9.Surface, shareHandle : WglDxShareHandle) =
+    type D3DRenderbuffer(ctx : ShareContext, resolveBuffer : int, renderBuffer : int, size : V2i, fmt : TextureFormat, samples : int, dxSurface : nativeptr<IDirect3DSurface9>, shareHandle : WglDxShareHandle) =
         inherit Aardvark.Rendering.GL.Renderbuffer(ctx.Context, renderBuffer, size, fmt, samples, 0L)
         let mutable shareHandle = shareHandle
 
@@ -293,7 +319,7 @@ module WGLDXContextExtensions =
                 use __ = ctx.Context.ResourceLock
                 WGL.UnregisterObject(ctx.ShareDevice, shareHandle)
                 shareHandle <- WglDxShareHandle.Null
-                dxSurface.Dispose()
+                spanny(dxSurface).[0].Release() |> ignore
                 GL.DeleteRenderbuffer(resolveBuffer)
                 GL.DeleteRenderbuffer(renderBuffer)
                 x.Handle <- 0
@@ -303,8 +329,8 @@ module WGLDXContextExtensions =
 
     let private dxFormat =
         LookupTable.lookupTable [
-            TextureFormat.Rgba8, SharpDX.Direct3D9.Format.A8R8G8B8
-            TextureFormat.Depth24Stencil8, SharpDX.Direct3D9.Format.D24S8
+            TextureFormat.Rgba8, Format.FmtA8R8G8B8
+            TextureFormat.Depth24Stencil8, Format.FmtD24S8
         ]
 
     type Context with
@@ -324,14 +350,15 @@ module WGLDXContextExtensions =
             let dxFormat = dxFormat format
             let ctx = x.ShareContext
 
-            let mutable wddmHandle = 0n
-            let surface =
-                SharpDX.Direct3D9.Surface.CreateRenderTarget(
-                    ctx.Device,
-                    size.X, size.Y, 
+            let mutable wddmHandle = Unchecked.defaultof<_>
+            let mutable surface = Unchecked.defaultof<_>
+            let _ =
+                spanny(ctx.Device).[0].CreateRenderTarget(
+                    uint32 size.X, uint32 size.Y, 
                     dxFormat,
-                    SharpDX.Direct3D9.MultisampleType.None, 0,
-                    true,
+                    MultisampleType.MultisampleNone, 0u,
+                    1,
+                    &surface,
                     &wddmHandle
                 )
 
@@ -359,8 +386,8 @@ module WGLDXContextExtensions =
 
 
 
-            WGL.SetResourceShareHandle(surface.NativePointer, wddmHandle)
-            let shareHandle = WGL.RegisterObject(ctx.ShareDevice, surface.NativePointer, resolveBuffer, All.Renderbuffer, WglDXAccess.WriteDiscard)
+            WGL.SetResourceShareHandle(NativePtr.toNativeInt surface, NativePtr.toNativeInt (NativePtr.ofVoidPtr<int> wddmHandle))
+            let shareHandle = WGL.RegisterObject(ctx.ShareDevice, NativePtr.toNativeInt surface, resolveBuffer, All.Renderbuffer, WglDXAccess.WriteDiscard)
             //let shareHandle = WglDxShareHandle.Null
 
 //            let mutable ssamples = 0
@@ -526,7 +553,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
                                             use __ = ctx.RenderingLock(handle)
                                             img.Lock()
                                             c.Lock()
-                                            img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, c.Surface.NativePointer)
+                                            img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, NativePtr.toNativeInt c.Surface)
 
                                             c.Unlock()
                                             img.AddDirtyRect(Int32Rect(0,0,img.PixelWidth, img.PixelHeight))

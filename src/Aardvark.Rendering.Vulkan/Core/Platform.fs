@@ -38,6 +38,8 @@ module Instance =
         let ShaderSubgroupVote              = EXTShaderSubgroupVote.Name
         let ShaderSubgroupBallot            = EXTShaderSubgroupBallot.Name
 
+        let ConservativeRasterization       = EXTConservativeRasterization.Name
+
         let Debug = [
             EXTDebugReport.Name
             EXTDebugUtils.Name
@@ -485,32 +487,36 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice) =
     let hasExtension (name : string) =
         globalExtensions |> Array.exists (fun e -> e.name = name)
 
-    let features =
+    let queryFeatures =
         let inline readOrEmpty (ptr : nativeptr< ^a>) =
             if NativePtr.isNull ptr then
                 ((^a) : (static member Empty : ^a) ())
             else
                 !!ptr
 
-        let f, pm, ycbcr, s16, vp, sdp, idx, rtp, acc, rq, bda =
-            use chain = new VkStructChain()
-            let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
-            let pYcbcr      = chain.Add<VkPhysicalDeviceSamplerYcbcrConversionFeatures>()
-            let p16bit      = chain.Add<VkPhysicalDevice16BitStorageFeatures>()
-            let pVarPtrs    = chain.Add<VkPhysicalDeviceVariablePointersFeatures>()
-            let pDrawParams = chain.Add<VkPhysicalDeviceShaderDrawParametersFeatures>()
-            let pIdx        = if hasExtension EXTDescriptorIndexing.Name then chain.Add<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>() else NativePtr.zero
-            let pRTP        = if hasExtension KHRRayTracingPipeline.Name then chain.Add<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>() else NativePtr.zero
-            let pAcc        = if hasExtension KHRAccelerationStructure.Name then chain.Add<VkPhysicalDeviceAccelerationStructureFeaturesKHR>() else NativePtr.zero
-            let pRQ         = if hasExtension KHRRayQuery.Name then chain.Add<VkPhysicalDeviceRayQueryFeaturesKHR>() else NativePtr.zero
-            let pDevAddr    = if hasExtension KHRBufferDeviceAddress.Name then chain.Add<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>() else NativePtr.zero
-            let pFeatures   = chain.Add<VkPhysicalDeviceFeatures2>()
+        fun (hasExtension: string -> bool) ->
+            let f, pm, ycbcr, s16, vp, sdp, idx, rtp, acc, rq, bda =
+                use chain = new VkStructChain()
+                let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
+                let pYcbcr      = chain.Add<VkPhysicalDeviceSamplerYcbcrConversionFeatures>()
+                let p16bit      = chain.Add<VkPhysicalDevice16BitStorageFeatures>()
+                let pVarPtrs    = chain.Add<VkPhysicalDeviceVariablePointersFeatures>()
+                let pDrawParams = chain.Add<VkPhysicalDeviceShaderDrawParametersFeatures>()
+                let pIdx        = if hasExtension EXTDescriptorIndexing.Name then chain.Add<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>() else NativePtr.zero
+                let pRTP        = if hasExtension KHRRayTracingPipeline.Name then chain.Add<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>() else NativePtr.zero
+                let pAcc        = if hasExtension KHRAccelerationStructure.Name then chain.Add<VkPhysicalDeviceAccelerationStructureFeaturesKHR>() else NativePtr.zero
+                let pRQ         = if hasExtension KHRRayQuery.Name then chain.Add<VkPhysicalDeviceRayQueryFeaturesKHR>() else NativePtr.zero
+                let pDevAddr    = if hasExtension KHRBufferDeviceAddress.Name then chain.Add<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>() else NativePtr.zero
+                let pFeatures   = chain.Add<VkPhysicalDeviceFeatures2>()
 
-            VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
-            (!!pFeatures).features, !!pMem, !!pYcbcr, !!p16bit, !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx,
-            readOrEmpty pRTP, readOrEmpty pAcc, readOrEmpty pRQ, readOrEmpty pDevAddr
+                VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
+                (!!pFeatures).features, !!pMem, !!pYcbcr, !!p16bit, !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx,
+                readOrEmpty pRTP, readOrEmpty pAcc, readOrEmpty pRQ, readOrEmpty pDevAddr
 
-        DeviceFeatures.create pm ycbcr s16 vp sdp idx rtp acc rq bda f
+            DeviceFeatures.create pm ycbcr s16 vp sdp idx rtp acc rq bda f
+
+    let features =
+        queryFeatures hasExtension
 
     let properties, raytracingProperties =
         use chain = new VkStructChain()
@@ -746,6 +752,8 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice) =
     member x.Instance = instance
     member x.Features : DeviceFeatures = features
     member x.Limits : DeviceLimits = limits
+
+    member internal x.GetFeatures(hasExtension: string -> bool) = queryFeatures hasExtension
 
     abstract member DeviceMask : uint32
     default x.DeviceMask = deviceMask

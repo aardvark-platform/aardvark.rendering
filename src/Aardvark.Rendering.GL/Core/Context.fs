@@ -64,6 +64,14 @@ type ResourceLockDisposable =
           bag = bag
           bagCount = bagCount }
 
+[<Struct>]
+type ResourceLockDisposableOptional(inner : ResourceLockDisposable, success : bool) =
+    static let invalid = new ResourceLockDisposableOptional(new ResourceLockDisposable(), false)
+    static member Invalid = invalid
+    member x.Success = success
+    member x.Dispose() = inner.Dispose()
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 type MemoryUsage() =
     class
@@ -176,24 +184,33 @@ type MemoryUsage() =
 /// multiple threads to submit GL calls concurrently.
 /// </summary>
 [<AllowNullLiteral>]
-type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this =
+type Context(runtime : IRuntime, createContext : ContextHandle option -> ContextHandle) as this =
 
-    static let defaultShaderCachePath = 
+    static let defaultShaderCachePath =
         Path.combine [
             CachingProperties.CacheDirectory
             "Shaders"
             "OpenGL"
         ]
 
-    let resourceContexts = Array.init RuntimeConfig.NumberOfResourceContexts (fun _ -> createContext())
-    let resourceContextCount = resourceContexts.Length
+    // Hidden unused context for sharing.
+    // Note: If None is passed to createContext, it's up to the implementation how to choose the parent.
+    let parentContext =
+        if RuntimeConfig.RobustContextSharing then Some <| createContext None
+        else None
+
+    let resourceContexts =
+        let n = max 1 RuntimeConfig.NumberOfResourceContexts
+        Array.init n (fun _ -> createContext parentContext)
 
     let memoryUsage = MemoryUsage()
 
     let bag = ConcurrentBag(resourceContexts)
-    let bagCount = new SemaphoreSlim(resourceContextCount)
+    let bagCount = new SemaphoreSlim(resourceContexts.Length)
 
     let shaderCache = new ShaderCache()
+
+    let mutable isDisposed = 0
 
     let mutable driverInfo : Option<Driver> = None
 
@@ -217,6 +234,16 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     let mutable numProgramBinaryFormats : Option<int> = None
 
+    let mutable maxSamples : Option<int> = None
+
+    let mutable maxColorTextureSamples : Option<int> = None
+
+    let mutable maxIntegerSamples : Option<int> = None
+
+    let mutable maxDepthTextureSamples : Option<int> = None
+
+    let mutable maxFramebufferSamples : Option<int> = None
+
     let mutable shaderCachePath : Option<string> = Some defaultShaderCachePath
 
     let formatSampleCounts = FastConcurrentDict()
@@ -225,21 +252,26 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     let sharedMemoryManager = SharedMemoryManager(fun _ -> this.ResourceLock)
 
-    let getOrQuery (var : byref<'T option>) (query : unit -> 'T) =
+    let getOrQuery (description : string) (var : byref<'T option>) (query : unit -> 'T) =
         match var with
         | None ->
             use __ = this.ResourceLock
             let value = query()
+            GL.Check $"Failed to query {description}"
             var <- Some value
             value
         | Some v -> v
+
+    [<Obsolete("Use overload with createContext that accepts an optional parent context.")>]
+    new (runtime : IRuntime, createContext : unit -> ContextHandle) =
+        new Context(runtime, fun (_ : ContextHandle option) -> createContext())
 
     /// <summary>
     /// Creates custom OpenGl context. Usage:
     /// let customCtx = app.Context.CreateContext()
     /// use __ = app.Context.RenderingLock(customCtx)
     /// </summary>
-    member x.CreateContext() = createContext()
+    member x.CreateContext() = createContext parentContext
 
     member internal x.ShaderCache = shaderCache
 
@@ -258,49 +290,51 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     member x.Runtime = runtime
 
+    member x.IsDisposed = isDisposed = 1
+
     member x.Driver =
-        getOrQuery &driverInfo Driver.readInfo
+        getOrQuery "driver info" &driverInfo Driver.readInfo
 
     member x.PackAlignment =
-        getOrQuery &packAlignment (fun _ ->
+        getOrQuery "pack alignment" &packAlignment (fun _ ->
             GL.GetInteger(GetPName.PackAlignment)
         )
 
     member x.UnpackAlignment =
-        getOrQuery &unpackAlignment (fun _ ->
+        getOrQuery "unpack alignment" &unpackAlignment (fun _ ->
             GL.GetInteger(GetPName.UnpackAlignment)
         )
 
     member x.MaxTextureSize =
-        getOrQuery &maxTextureSize (fun _ ->
+        getOrQuery "max texture size" &maxTextureSize (fun _ ->
             let s = GL.GetInteger(GetPName.MaxTextureSize)
             V2i s
         )
 
     member x.MaxTextureSize3D =
-        getOrQuery &maxTextureSize3d (fun _ ->
+        getOrQuery "max 3D texture size" &maxTextureSize3d (fun _ ->
             let s = GL.GetInteger(GetPName.Max3DTextureSize)
             V3i s
         )
 
     member x.MaxTextureSizeCube =
-        getOrQuery &maxTextureSizeCube (fun _ ->
+        getOrQuery "max cube texture size" &maxTextureSizeCube (fun _ ->
             GL.GetInteger(GetPName.MaxCubeMapTextureSize)
         )
 
     member x.MaxTextureArrayLayers =
-        getOrQuery &maxTextureArrayLayers (fun _ ->
+        getOrQuery "max texture array layers" &maxTextureArrayLayers (fun _ ->
             GL.GetInteger(GetPName.MaxArrayTextureLayers)
         )
 
     member x.MaxRenderbufferSize =
-        getOrQuery &maxRenderbufferSize (fun _ ->
+        getOrQuery "max renderbuffer size" &maxRenderbufferSize (fun _ ->
             let s = GL.GetInteger(GetPName.MaxRenderbufferSize)
             V2i s
         )
 
     member x.MaxComputeWorkGroupSize =
-        getOrQuery &maxComputeWorkGroupSize (fun _ ->
+        getOrQuery "max compute work group size" &maxComputeWorkGroupSize (fun _ ->
             let mutable res = V3i.Zero
             GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 0, &res.X)
             GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 1, &res.Y)
@@ -309,13 +343,38 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
         )
 
     member x.MaxComputeWorkGroupInvocations =
-        getOrQuery &maxComputeWorkGroupInvocations (fun _ ->
+        getOrQuery "max compute work group invocations" &maxComputeWorkGroupInvocations (fun _ ->
             GL.GetInteger(GetPName.MaxComputeWorkGroupInvocations)
         )
 
     member x.NumProgramBinaryFormats =
-        getOrQuery &numProgramBinaryFormats (fun _ ->
+        getOrQuery "number of program binary formats" &numProgramBinaryFormats (fun _ ->
             GL.GetInteger(GetPName.NumProgramBinaryFormats)
+        )
+
+    member x.MaxSamples =
+        getOrQuery "max samples" &maxSamples (fun _ ->
+            GL.GetInteger(GetPName.MaxSamples)
+        )
+
+    member x.MaxColorTextureSamples =
+        getOrQuery "max color texture samples" &maxColorTextureSamples (fun _ ->
+            GL.GetInteger(GetPName.MaxColorTextureSamples)
+        )
+
+    member x.MaxIntegerSamples =
+        getOrQuery "max integer samples" &maxIntegerSamples (fun _ ->
+            GL.GetInteger(GetPName.MaxIntegerSamples)
+        )
+
+    member x.MaxDepthTextureSamples =
+        getOrQuery "max depth texture samples" &maxDepthTextureSamples (fun _ ->
+            GL.GetInteger(GetPName.MaxDepthTextureSamples)
+        )
+
+    member x.MaxFramebufferSamples =
+        getOrQuery "max framebuffer samples" &maxFramebufferSamples (fun _ ->
+            GL.GetInteger(unbox<GetPName> 0x9318)
         )
 
     member internal x.ImportMemoryBlock(external : ExternalMemoryBlock) =
@@ -358,7 +417,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             new RenderingLockDisposable(ValueSome handle, ValueNone)
 
     /// <summary>
-    /// makes one of the underlying context current on the calling thread
+    /// Makes one of the underlying context current on the calling thread
     /// and returns a disposable for releasing it again
     /// </summary>
     member x.ResourceLock : ResourceLockDisposable =
@@ -380,7 +439,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             let handle =
                 match bag.TryTake() with
                 | (true, handle) -> handle
-                | _ -> failwith "could not dequeue resource-context"
+                | _ -> failf "could not dequeue resource-context"
 
             // make the obtained handle current
             handle.MakeCurrent()
@@ -390,12 +449,43 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             // no release: put resource context back in bag and reset current to None
             new ResourceLockDisposable(ValueSome handle, bag, bagCount)
 
+    /// <summary>
+    /// Tries to make one of the underlying context current on the calling thread
+    /// and returns a disposable for releasing it again. If the context was already disposed,
+    /// the Success member of the returned disposable returns false.
+    /// </summary>
+    member x.TryResourceLock : ResourceLockDisposableOptional =
+        try new ResourceLockDisposableOptional(x.ResourceLock, true)
+        with :? ObjectDisposedException -> ResourceLockDisposableOptional.Invalid
 
     /// <summary>
     /// Returns the number of samples supported by the given target and format.
     /// </summary>
     member internal x.GetFormatSamples(target : ImageTarget, format : TextureFormat) =
         formatSampleCounts.GetOrCreate((target, format), fun _ ->
+            let estimate() =
+                let maxSamples =
+                    [
+                        x.MaxSamples
+
+                        if format.IsColorRenderable then
+                            x.MaxColorTextureSamples
+
+                        if format.IsIntegerFormat then
+                            x.MaxIntegerSamples
+
+                        if format.HasDepth || format.HasStencil then
+                            x.MaxDepthTextureSamples
+                    ]
+                    |> List.min
+                    |> max 1
+
+                Report.Line(3, $"[GL] Internal format queries not supported, assuming up to {maxSamples} are supported (target = {target}, format = {format})")
+
+                [1; 2; 4; 8; 16; 32; 64]
+                |> List.filter ((>=) maxSamples)
+                |> Set.ofList
+
             if GL.ARB_internalformat_query then
                 let format = TextureFormat.toSizedInternalFormat format
 
@@ -406,12 +496,13 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
                     let buffer = GL.Dispatch.GetInternalformat(target, format, InternalFormatParameter.Samples, count)
                     GL.Check "could not query sample counts"
 
-                    Set.ofArray buffer
+                    buffer
+                    |> Set.ofArray
+                    |> Set.add 1
                 else
-                    Set.empty
+                    estimate()
             else
-                Log.warn "[GL] Internal format queries not supported, assuming all sample counts are supported (target = %A, format = %A)" target format
-                Set.ofList [1; 2; 4; 8; 16; 32; 64]
+                estimate()
         )
 
     /// <summary>
@@ -437,14 +528,16 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     /// releases all resources created by the context
     /// </summary>
     member x.Dispose() =
-        try
-            shaderCache.Dispose()
+        if Interlocked.Exchange(&isDisposed, 1) = 0 then
+            try
+                shaderCache.Dispose()
 
-            for i in 0..resourceContextCount-1 do
-                let s = resourceContexts.[i]
-                ContextHandle.delete s
-        with _ ->
-            ()
+                for c in resourceContexts do
+                    ContextHandle.delete c
+
+                parentContext |> Option.iter ContextHandle.delete
+            with exn ->
+                Log.error "[GL] Failed to dispose context: %A" exn
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

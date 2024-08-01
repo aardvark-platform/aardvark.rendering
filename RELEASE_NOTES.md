@@ -1,3 +1,24 @@
+### 5.4.12
+- [GL] Fixed potential memory leak after ContextHandle is disposed
+- Optimized generic dispatch
+- Fixed potential leaks with ConcurrentDictionary.GetOrAdd
+
+### 5.4.11
+- [Application.WPF.GL] SharingRenderControl implementation now uses Silk.NET.Direct3D9 instead of SharpDX
+- Removed SharpDX dependency
+- Re-added dynamic shader caches
+- Fixed multi-threading issue in PrimitiveValueConverter
+- [Sg] Use single value attributes for IndexedGeometry
+- [IndexedGeometry] Fixed Union() and added ToIndexed() overload
+- [IndexedGeometry] Added overload Clone() for deep copy
+
+### 5.4.10
+- [OpenVR] changed GL texture submit to 2 textures (previously side by side, issue with Quest 3)
+- [GL] Improved querying of supported sample counts
+- [GL] Fixed double disposal of Context
+- [GLFW] Fixed OpenTK context interop
+- [Vulkan] Fixed conservative raster validation error
+
 ### 5.4.10-prerelease0006
 - rebuild glvm for ARM64
 
@@ -9,12 +30,29 @@
 
 ### 5.4.10-prerelease0003
 - [FontResolve] fixed null family name failure
+
 ### 5.4.10-prerelease0002
 - [PathSegment] minor fixes
 
 ### 5.4.10-prerelease0001
 - [Text] improved Font resolver for Windows and MacOS
-- [PathSegment] fixed several PathSegment tools and added a few new ones### 5.4.7
+- [PathSegment] fixed several PathSegment tools and added a few new ones
+
+### 5.4.9
+- [LodRenderer] Handle exceptions in background threads
+- [GL] Implemented GLSL shader caches for platforms that do not support program binaries (e.g. MacOS)
+
+### 5.4.8
+- [GL] Fixed locking order of GlobalResourceLock and context locks to avoid potential deadlocks
+- [GL] Added workaround for layered rendering and GLSL < 430
+- [GL] Made context creation and sharing more robust (see RuntimeConfig.RobustContextSharing)
+- [GL] Improved disposal of ContextHandle
+- [GLVM / VKVM] Updated ARM64 binaries
+- [GLFW] Fixed context resource leaks
+- [GLFW] Reset GetCurrentContext on disposal
+- [WinForms / WPF] Removed double dispose of context
+
+### 5.4.7
 - Fixed Frustum.withAspect and Frustum.withHorizontalFieldOfViewInDegrees
 - [GL] Fixed InvalidEnum error due to GL_POINT_SPRITE
 - [GL] Removed validation via proxy textures (resulted in errors on AMD with multisampled textures)
@@ -32,7 +70,6 @@
 - [Vulkan] Improved error formatting
 - [GLFW] Use no error context only when indicated by debug config
 - Added IRenderTask.GetRuntime() and IRenderTask.GetFramebufferSignature()
-
 
 ### 5.4.6
 - [ContextHandles] GL.Enable(EnableCap.PointSprite)

@@ -203,7 +203,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     let textureArrayCache =
         UnaryCache<aval<ITexture[]>, _>(
-            fun _arr -> ConcurrentDictionary<int * TextureProperties, IResource<Texture, TextureBinding>[]>()
+            fun _arr -> ConcurrentDictionary<int * TextureProperties, Lazy<IResource<Texture, TextureBinding>[]>>()
         )
 
     let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, aval<SamplerState>>()
@@ -413,18 +413,20 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let properties = samplerType.Properties
 
         innerCache.GetOrAdd((slotCount, properties), fun _ ->
-            Array.init slotCount (fun i ->
-                let arr =
-                    textureArray |> AVal.map (fun t ->
-                        if i < t.Length then
-                            t.[i]
-                        else
-                            nullTexture
-                    )
+            lazy (
+                Array.init slotCount (fun i ->
+                    let arr =
+                        textureArray |> AVal.map (fun t ->
+                            if i < t.Length then
+                                t.[i]
+                            else
+                                nullTexture
+                        )
 
-                x.CreateTexture(arr, properties)
+                    x.CreateTexture(arr, properties)
+                )
             )
-        )
+        ).Value
 
     member x.CreateSampler (sam : aval<SamplerState>) =
         samplerCache.GetOrCreate<SamplerState>(sam, fun () -> {

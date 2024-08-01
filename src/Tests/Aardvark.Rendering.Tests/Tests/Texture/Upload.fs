@@ -767,8 +767,8 @@ module TextureUpload =
                     do! diffuseTexture
                 }
 
-            use randomTexture = runtime.CreateTexture2D(V2i(8, 8), TextureFormat.Rgba8ui)
-            randomTexture.Upload(PixImage.random8ui <| V2i(8, 8))
+            use randomTexture = runtime.CreateTexture2D(V2i(8, 8), TextureFormat.Rgba8i)
+            randomTexture.Upload(PixImage.random8i <| V2i(8, 8))
 
             runtime |> renderQuadWithNullTexture shader randomTexture
 

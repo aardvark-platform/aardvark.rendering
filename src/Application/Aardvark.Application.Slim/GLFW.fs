@@ -10,7 +10,6 @@ open Silk.NET.GLFW
 open System.Runtime.InteropServices
 open FSharp.Control
 open FSharp.Data.Adaptive
-open System.Runtime.InteropServices
 
 type private IGamepad = Aardvark.Application.IGamepad
 type private GamepadButton = Aardvark.Application.GamepadButton
@@ -231,7 +230,7 @@ module Translations =
 
 [<AutoOpen>]
 module MissingGlfwFunctions =
-    open System.Runtime.InteropServices
+    open System.Text
 
     type private GetWindowContentScaleDel = delegate of nativeptr<WindowHandle> * byref<float32> * byref<float32> -> unit
 
@@ -269,6 +268,19 @@ module MissingGlfwFunctions =
                     c <- NativePtr.read ptr
 
                 System.Text.Encoding.UTF8.GetString(l.ToArray())
+
+        member x.GetErrorMessage() =
+            let err, ptr = x.GetError()
+            let mutable msg = String.Empty
+
+            if err <> ErrorCode.NoError && not <| NativePtr.isNull ptr then
+                let mutable len = 0
+                while NativePtr.get ptr len <> 0uy do
+                    inc &len
+
+                msg <- Encoding.UTF8.GetString(ptr, len)
+
+            err, msg
 
 type WindowEvent =
     | Resize
@@ -553,6 +565,7 @@ type IWindowSurface =
     abstract CreateSwapchain : V2i -> ISwapchain
     abstract Handle : obj
 
+// TODO: Inherit IDisposable (see Instance.Dispose())
 type IWindowInterop =
     abstract Boot : Glfw -> unit
     abstract CreateSurface : IRuntime * WindowConfig * Glfw * nativeptr<WindowHandle> -> IWindowSurface
@@ -574,7 +587,13 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
 
         interop.Boot glfw
 
-    let mutable lastWindow : nativeptr<WindowHandle> option = None
+    // For GL we need to specify a parent window to enable context sharing
+    // Simply use the one that was created first, assuming it is still valid and unused.
+    // If GL.RuntimeConfig.RobustContextSharing is false, this will be a resource context which
+    // may not always be available. If the flag is true, this will be a hidden context that
+    // is guaranteed to be available.
+    let mutable parentWindow : nativeptr<WindowHandle> option = None
+
     let queue = System.Collections.Concurrent.ConcurrentQueue<unit -> unit>()
 
     let existingWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
@@ -665,7 +684,7 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
                 glfw.MakeContextCurrent(NativePtr.zero)
 
             let parent =
-                lastWindow |> Option.defaultValue NativePtr.zero
+                parentWindow |> Option.defaultValue NativePtr.zero
 
             glfw.DefaultWindowHints()
 
@@ -683,9 +702,18 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
 
             let win = glfw.CreateWindow(cfg.width, cfg.height, cfg.title, NativePtr.zero, parent)
             if win = NativePtr.zero then
-                failwithf "GLFW could not create window: %A" (fst <| glfw.GetError())
+                let err, msg = glfw.GetErrorMessage()
 
-            lastWindow <- Some win
+                let description =
+                    if String.IsNullOrWhiteSpace msg then "Could not create window"
+                    else msg
+
+                let msg = $"[GLFW] {description} (error: {err})"
+                Report.Error msg
+                failwith msg
+
+            if Option.isNone parentWindow then
+                parentWindow <- Some win
             
             let surface = interop.CreateSurface(runtime, cfg, glfw, win)
         
@@ -725,6 +753,10 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
                 if v then wait <- false
 
     member x.Dispose() =
+        match interop with
+        | :? IDisposable as d -> d.Dispose()
+        | _ -> ()
+
         glfw.Terminate()
 
     interface IDisposable with
@@ -1269,13 +1301,13 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
                 swapchain |> Option.iter Disposable.dispose
                 swapchain <- None
 
-                surface.Dispose()
-
                 renderTask.Dispose()
                 renderTask <- RenderTask.empty
 
                 gpuQuery |> Option.iter Disposable.dispose
                 gpuQuery <- None
+
+                surface.Dispose()
 
                 glfw.HideWindow(win)
                 glfw.DestroyWindow(win)

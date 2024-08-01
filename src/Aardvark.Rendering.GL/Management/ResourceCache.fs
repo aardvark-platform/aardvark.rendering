@@ -153,7 +153,7 @@ type internal Resource<'Handle, 'View when 'View : unmanaged>(kind : ResourceKin
         member x.Pointer = pointer
 
 and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Option<ResourceCache<'Handle, 'View>>, renderTaskLock : Option<RenderTaskLock>) =
-    let store = ConcurrentDictionary<list<obj>, Resource<'Handle, 'View>>()
+    let store = ConcurrentDictionary<list<obj>, Lazy<Resource<'Handle, 'View>>>()
 
     static let handleNonPrimitive =
         not typeof<'Handle>.IsPrimitive && not typeof<'Handle>.IsEnum
@@ -184,16 +184,18 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
 
     member x.TryGet(key : list<obj>) =
         match store.TryGetValue(key) with
-        | (true, v) -> Some v
+        | (true, v) -> Some v.Value
         | _ -> None
 
     member x.GetOrCreateLocal(key : list<obj>, create : unit -> Resource<'Handle, 'View>) =
         let resource =
             store.GetOrAdd(key, fun _ ->
-                let res = create()
-                res.OnDispose.Add(fun () -> store.TryRemove key |> ignore)
-                res
-            )
+                lazy (
+                    let res = create()
+                    res.OnDispose.Add(fun () -> store.TryRemove key |> ignore)
+                    res
+                )
+            ).Value
         resource.AddRef()
         resource :> IResource<_,_>
 
@@ -330,5 +332,5 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
         let remaining = store |> Seq.map (fun (KeyValue(_,r)) -> r) |> Seq.toArray
         for r in remaining do
             Log.warn "leaking resource: %A" r
-            r.ForceDispose()
+            r.Value.ForceDispose()
         store.Clear()

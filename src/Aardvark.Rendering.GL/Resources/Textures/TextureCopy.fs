@@ -67,19 +67,27 @@ module internal TextureCopyUtilities =
 
         [<AutoOpen>]
         module private CopyDispatch =
+            open System.Collections.Concurrent
 
             type private Dispatcher() =
-
                 static member CopyNativeToNative<'T when 'T : unmanaged>(src : nativeint, srcInfo : Tensor4Info, dst : nativeint, dstInfo : Tensor4Info) =
                     copyBytes<'T> src srcInfo dst dstInfo
 
-            module Method =
+            module CopyNativeToNative =
+                type Delegate = delegate of nativeint * Tensor4Info * nativeint * Tensor4Info -> unit
                 let private flags = BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public
-                let copyNativeToNative = typeof<Dispatcher>.GetMethod("CopyNativeToNative", flags)
+                let private definition = typeof<Dispatcher>.GetMethod(nameof Dispatcher.CopyNativeToNative, flags)
+                let private delegates = ConcurrentDictionary<Type, Delegate>()
+
+                let getDelegate (t: Type) =
+                    delegates.GetOrAdd(t, fun t ->
+                        let mi = definition.MakeGenericMethod [| t |]
+                        unbox<Delegate> <| Delegate.CreateDelegate(typeof<Delegate>, null, mi)
+                    )
 
         let copyBytesTyped (elementType : Type) (src : nativeint) (srcInfo : Tensor4Info) (dst : nativeint) (dstInfo : Tensor4Info) =
-            let mi = Method.copyNativeToNative.MakeGenericMethod [| elementType |]
-            mi.Invoke(null, [| src; srcInfo; dst; dstInfo |]) |> ignore
+            let del = CopyNativeToNative.getDelegate elementType
+            del.Invoke(src, srcInfo, dst, dstInfo)
 
         let copyBytesWithSize (elementSize : int) (src : nativeint) (srcInfo : Tensor4Info) (dst : nativeint) (dstInfo : Tensor4Info) =
             copyBytesTyped StructTypes.types.[elementSize] src srcInfo dst dstInfo

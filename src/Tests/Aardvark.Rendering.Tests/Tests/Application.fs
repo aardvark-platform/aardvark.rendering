@@ -9,10 +9,24 @@ open OpenTK.Graphics.OpenGL4
 open System
 open System.Reflection
 
-type TestApplication(runtime : IRuntime, disposable : IDisposable) =
-    do runtime.ShaderCachePath <- None
+[<Struct; RequireQualifiedAccess>]
+type Framework =
+    | GLFW
+    | OpenTK
 
-    member x.Runtime = runtime
+[<Struct; RequireQualifiedAccess>]
+type TestBackend =
+    | GL of Framework
+    | Vulkan
+
+type ITestApplication =
+    inherit IDisposable
+    abstract member Runtime : IRuntime
+
+type TestApplication(inner : ITestApplication, disposable : IDisposable) =
+    do inner.Runtime.ShaderCachePath <- None
+
+    member x.Runtime = inner.Runtime
     member x.Dispose() = disposable.Dispose()
 
     interface IDisposable with
@@ -24,18 +38,40 @@ module TestApplication =
         open OpenTK
         open Aardvark.Rendering.GL
 
-        let create (debug : IDebugConfig) =
-            Config.MajorVersion <- 4
-            Config.MinorVersion <- 6
-            RuntimeConfig.UseNewRenderTask <- true
-            RuntimeConfig.PreferHostSideTextureCompression <- true
-
+        let private createOpenTK (debug : IDebugConfig) =
             let toolkit = Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative))
 
             let runtime = new Runtime(debug)
-            let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugConfig)
+            let ctx = new Context(runtime, ContextHandleOpenTK.createWithParent runtime.DebugConfig)
 
             runtime.Initialize(ctx)
+
+            { new ITestApplication with
+                member x.Runtime = runtime
+                member x.Dispose() =
+                    runtime.Dispose()
+                    toolkit.Dispose() }
+
+        let private createGLFW (debug : IDebugConfig) =
+            let app = new Slim.OpenGlApplication(debug)
+
+            { new ITestApplication with
+                member x.Runtime = app.Runtime
+                member x.Dispose() = app.Dispose() }
+
+        let create (framework : Framework) (debug : IDebugConfig) =
+            Config.MajorVersion <- 4
+            Config.MinorVersion <- 6
+            RuntimeConfig.UseNewRenderTask <- true
+            RuntimeConfig.RobustContextSharing <- true
+            RuntimeConfig.PreferHostSideTextureCompression <- true
+
+            let app =
+                match framework with
+                | Framework.GLFW -> createGLFW debug
+                | Framework.OpenTK -> createOpenTK debug
+
+            let ctx = (unbox<Runtime> app.Runtime).Context
 
             let checkForErrors() =
                 use __ = ctx.ResourceLock
@@ -56,13 +92,12 @@ module TestApplication =
                     failwithf "OpenGL debug output reported errors: %s" errors
 
             new TestApplication(
-                runtime,
+                app,
                 { new IDisposable with
                     member x.Dispose() =
                         checkForErrors()
-                        runtime.Dispose()
+                        app.Dispose()
                         checkForDebugErrors()
-                        toolkit.Dispose()
                 }
             )
 
@@ -71,7 +106,14 @@ module TestApplication =
 
         let create (debug : IDebugConfig) =
             CustomDeviceChooser.Register Seq.head
-            let app = new HeadlessVulkanApplication(debug)
+
+            let headless = new HeadlessVulkanApplication(debug)
+
+            let app =
+                { new ITestApplication with
+                    member x.Runtime = headless.Runtime
+                    member x.Dispose() = headless.Dispose() }
+
             let onExit =
                 { new IDisposable with
                     member x.Dispose() =
@@ -79,7 +121,7 @@ module TestApplication =
 
                         let failed, errors =
                             let br = Environment.NewLine + Environment.NewLine
-                            let msgs = app.Instance.DebugSummary.ErrorMessages
+                            let msgs = headless.Instance.DebugSummary.ErrorMessages
 
                             msgs.Length > 0,
                             msgs |> String.concat br |> (+) br
@@ -89,26 +131,27 @@ module TestApplication =
                 }
 
             new TestApplication(
-                app.Runtime, onExit
+                app, onExit
             )
 
     let mutable private aardvarkInitialized = false
 
-    let create' (debug : IDebugConfig) (backend : Backend) =
+    let create' (debug : IDebugConfig) (backend : TestBackend) =
         if not aardvarkInitialized then
             IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
             Aardvark.Init()
             aardvarkInitialized <- true
 
         match backend with
-        | Backend.GL -> GL.create debug
-        | Backend.Vulkan -> Vulkan.create debug
+        | TestBackend.GL f -> GL.create f debug
+        | TestBackend.Vulkan -> Vulkan.create debug
 
-    let create (backend : Backend) =
+    let create (backend : TestBackend) =
         let config : IDebugConfig =
-            if backend = Backend.Vulkan then
+            if backend = TestBackend.Vulkan then
+                // Disable GPU-AV (producing sporadic false positives with Vulkan SDK 1.3.280)
                 { Vulkan.DebugConfig.Normal with
-                    ValidationLayer = Some Vulkan.ValidationLayerConfig.Full }
+                    ValidationLayer = Some { Vulkan.ValidationLayerConfig.Full with ShaderBasedValidation = Vulkan.ShaderValidation.Disabled } }
             else
                 { GL.DebugConfig.Normal with
                     DebugRenderTasks = true
@@ -117,6 +160,5 @@ module TestApplication =
         backend |> create' config
 
     let createUse f backend =
-        let app = create backend
+        use app = create backend
         f app.Runtime
-        app.Dispose()

@@ -181,8 +181,11 @@ type PatchLodTree(globalCenter : V3d, opc : OpcPaths, root : option<ILodTreeNode
 
             let img =
                 let path = Patch.extractTexturePath opc patch.info 0
-                try PixImage.Load(path).ToPixImage<byte>(Col.Format.RGBA)
-                with _ -> DefaultTextures.checkerboardPix
+                try
+                    PixImage.Load(path).ToPixImage<byte>(Col.Format.RGBA)
+                with e ->
+                    Log.error "[Opc] %s" e.Message
+                    DefaultTextures.checkerboardPix
 
             let tex = 
                 { new INativeTexture with   
@@ -475,6 +478,7 @@ let main argv =
         |> Sg.uniform "ProjTrafo" proj
         |> Sg.uniform "MipMaps" mipMaps
         |> Sg.uniform "Anisotropic" anisotropic
+        |> Sg.diffuseTexture' nullTexture
         |> Sg.viewTrafo views
         |> Sg.projTrafo proj
 

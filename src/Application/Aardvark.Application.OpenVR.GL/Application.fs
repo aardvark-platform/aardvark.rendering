@@ -66,7 +66,8 @@ type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
     let mutable cTex = Unchecked.defaultof<Texture>
     let mutable fbo = Unchecked.defaultof<IFramebuffer>
     let mutable info = Unchecked.defaultof<VrRenderInfo>
-    let mutable fTex = Unchecked.defaultof<Texture>
+    let mutable fTexl = Unchecked.defaultof<Texture>
+    let mutable fTexr = Unchecked.defaultof<Texture>
 
     let start = System.DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -93,7 +94,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
     let caller = DummyObject()
 
     let version = AVal.init 0
-    let tex = AVal.custom (fun _ -> fTex :> ITexture)
+    let tex = AVal.custom (fun _ -> fTexl :> ITexture)
     
     let keyboard = new EventKeyboard()
     let mouse = new EventMouse(false)
@@ -150,7 +151,8 @@ type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
     override x.Use(f : unit -> 'a) =
         Operators.using ctx.ResourceLock (fun _ -> f())
 
-    override x.Handedness with get() = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, -V3d.OIO, V3d.Zero)
+    //override x.Handedness 
+    //    with get() = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, -V3d.OIO, V3d.Zero)
 
     override x.OnLoad(i : VrRenderInfo) =
         //renderCtx.MakeCurrent()
@@ -161,7 +163,8 @@ type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
 
             if loaded then
                 ctx.Delete (unbox<Framebuffer> fbo)
-                ctx.Delete fTex
+                ctx.Delete fTexl
+                ctx.Delete fTexr
                 ctx.Delete dTex
                 ctx.Delete cTex
             else
@@ -171,7 +174,8 @@ type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
 
             let nTex = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Rgba8, samples)
             let nDepth = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Depth24Stencil8, samples)
-            let nfTex = ctx.CreateTexture2D(info.framebufferSize * V2i(2,1), 1, TextureFormat.Rgba8, 1)
+            let nfTexl = ctx.CreateTexture2D(info.framebufferSize, 1, TextureFormat.Rgba8, 1)
+            let nfTexr = ctx.CreateTexture2D(info.framebufferSize, 1, TextureFormat.Rgba8, 1)
 
             let nFbo =
                 runtime.CreateFramebuffer(
@@ -186,12 +190,13 @@ type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
 
             dTex <- nDepth
             cTex <- nTex
-            fTex <- nfTex
+            fTexl <- nfTexl
+            fTexr <- nfTexr
             fbo <- nFbo
 
 
-            let lTex = VrTexture.OpenGL(fTex.Handle, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0)))
-            let rTex = VrTexture.OpenGL(fTex.Handle, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
+            let lTex = VrTexture.OpenGL(fTexl.Handle)
+            let rTex = VrTexture.OpenGL(fTexr.Handle)
             loaded <- true
         
 
@@ -213,8 +218,8 @@ type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
                 GL.Sync()
 
                 if samples > 1 then
-                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 0], fTex, V2i.Zero, V2i.Zero, cTex.Size.XY)
-                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 1], fTex, V2i.Zero, V2i(cTex.Size.X, 0), cTex.Size.XY)
+                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 0], fTexl, V2i.Zero, V2i.Zero, cTex.Size.XY)
+                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 1], fTexr, V2i.Zero, V2i.Zero, cTex.Size.XY)
                 else
                     failwith "not implemented"
                     //runtime.Copy(cTex.[TextureAspect.Color, 0, *], fTex.[TextureAspect.Color, 0, *])
@@ -236,7 +241,8 @@ type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
         ctx.Delete (unbox<Framebuffer> fbo)
         ctx.Delete dTex
         ctx.Delete cTex
-        ctx.Delete fTex
+        ctx.Delete fTexl
+        ctx.Delete fTexr
 
         app.Dispose()
 

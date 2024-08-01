@@ -3,19 +3,37 @@
 open System
 open Aardvark.Base
 
+[<AutoOpen>]
+module private SymDictExtensions =
+
+    type SymbolDict<'T> with
+        member inline x.CopyOrNull() =
+            if isNull x then null else x.Copy()
+
 module private IndexHelpers =
 
-    let addOffset (offset : int) (index : Array) : Array =
+    let createIndex (indexType: Type) (count: int) =
+        let arr = Array.CreateInstance(indexType, count)
+        arr.Visit { new ArrayVisitor<Array>() with
+            member x.Run(data: 'T[]) =
+                let conv = PrimitiveValueConverter.converter<int, 'T>
+                for i = 0 to count - 1 do
+                    data.[i] <- conv i
+                arr
+        }
+
+    let addOffset (startAt: int) (offset: int) (index: Array) : Array =
         if isNull index then
             null
         else
-            match index with
-            | :? array<int32> as x -> x |> Array.map ((+) offset) :> Array
-            | :? array<int16> as x -> x |> Array.map ((+) (int16 offset)) :> Array
-            | :? array<uint32> as x -> x |> Array.map ((+) (uint32 offset)) :> Array
-            | :? array<uint16> as x -> x |> Array.map ((+) (uint16 offset)) :> Array
-            | _ ->
-                raise <| ArgumentException($"Unsupported type {index.GetType()}.")
+            index.Visit { new ArrayVisitor<Array>() with
+                member x.Run(data: 'T[]) =
+                    let ofUInt = PrimitiveValueConverter.converter<uint, 'T>
+                    let toUInt = PrimitiveValueConverter.converter<'T, uint>
+                    for i = startAt to data.Length - 1 do
+                        data.[i] <- ofUInt (uint offset + toUInt data.[i])
+                    index
+            }
 
     let applyIndex (index : Array) (data : Array) =   
         if isNull index || isNull data then
@@ -152,46 +170,101 @@ module IndexedGeometryMode =
 
 type IndexedGeometry =
     class
+        /// Primitive topology of the geometry.
         val mutable public Mode : IndexedGeometryMode
+
+        /// Index array (null for non-indexed geometry).
         val mutable public IndexArray : Array
+
+        /// Per-vertex attributes (can be null).
         val mutable public IndexedAttributes : SymbolDict<Array>
+
+        /// Single value attributes (can be null).
         val mutable public SingleAttributes : SymbolDict<obj>
 
-        member x.IsIndexed = not (isNull x.IndexArray)
+        /// Indicates whether the geometry is indexed.
+        member x.IsIndexed =
+            not (isNull x.IndexArray)
 
+        /// Indicates whether the geometry has a non-zero face vertex count.
+        member inline x.IsEmpty =
+            x.FaceVertexCount = 0
+
+        /// Indicates whether the geometry is valid (i.e. it has a position attribute and all attribute arrays are of sufficient length)
+        member inline x.IsValid =
+            if isNull x.IndexedAttributes then false
+            else
+                match x.IndexedAttributes.TryGetValue DefaultSemantic.Positions with
+                | (true, positions) -> x.IndexedAttributes |> Seq.forall (fun attr -> attr.Value.Length >= positions.Length)
+                | _ -> false
+
+        /// Total number of vertices in the geometry.
         member x.VertexCount =
             if isNull x.IndexedAttributes then 0
             else
-                match Seq.tryHead x.IndexedAttributes.Values with
-                | Some att -> att.Length
-                | _ -> 0
+                match x.IndexedAttributes.TryGetValue DefaultSemantic.Positions with
+                | (true, positions) -> positions.Length
+                | _ ->
+                    match x.IndexedAttributes |> Seq.tryHead with
+                    | Some (KeyValue(_, att)) -> att.Length
+                    | _ -> 0
 
+        /// Effective number of vertices in the geometry (i.e. the index count if indexed and the vertex count if non-indexed).
         member x.FaceVertexCount =
             if isNull x.IndexArray then
                 x.VertexCount
             else
                 x.IndexArray.Length
 
+        /// Number of faces in the geometry.
         member x.FaceCount =
             IndexedGeometryMode.faceCount x.Mode x.FaceVertexCount
 
-        member x.Clone() =
-            IndexedGeometry(
-                x.Mode,
-                x.IndexArray,
-                (if isNull x.IndexedAttributes then null else x.IndexedAttributes.Copy()),
-                (if isNull x.SingleAttributes then null else x.SingleAttributes.Copy())
-            )
+        ///<summary>Creates a copy.</summary>
+        ///<param name="shallowCopy">If true, the index and attribute arrays are reused instead of being copied.</param>
+        member x.Clone(shallowCopy: bool) =
+            let indices =
+                if isNull x.IndexArray || shallowCopy then
+                    x.IndexArray
+                else
+                    x.IndexArray.Copy()
 
-        member x.ToIndexed() =
+            let indexedAttributes =
+                if isNull x.IndexedAttributes then
+                    null
+                else
+                    let d = SymbolDict<Array>(initialCapacity = x.IndexedAttributes.Count)
+                    for (KeyValue(sem, attr)) in x.IndexedAttributes do
+                        d.[sem] <- if shallowCopy then attr else attr.Copy()
+                    d
+
+            let singleAttributes =
+                if isNull x.SingleAttributes then null
+                else x.SingleAttributes.Copy()
+
+            IndexedGeometry(x.Mode, indices, indexedAttributes, singleAttributes)
+
+        /// Creates a copy. The copy is shallow as the index and attribute arrays are reused instead of being copied.
+        member x.Clone() =
+            x.Clone(true)
+
+        /// Returns an indexed copy of the geometry.
+        /// If it is already indexed, it is returned unmodified.
+        member x.ToIndexed(indexType: Type) =
             if isNull x.IndexArray then
-                let res = x.Clone()
-                let count = x.FaceVertexCount
-                res.IndexArray <- Array.init count id
-                res
+                let copy = x.Clone()
+                copy.IndexArray <- IndexHelpers.createIndex indexType x.FaceVertexCount
+                copy
             else
                 x
 
+        /// Returns an indexed copy of the geometry.
+        /// If it is already indexed, it is returned unmodified.
+        member x.ToIndexed() =
+            x.ToIndexed typeof<int32>
+
+        /// Returns a non-indexed copy of the geometry.
+        /// If it is already non-indexed, it is returned unmodified.
         member x.ToNonIndexed() =
             if isNull x.IndexArray then
                 x
@@ -210,6 +283,8 @@ type IndexedGeometry =
 
                 res
              
+        /// Returns a copy of the geometry with a non-stripped primitive topology.
+        /// If the topology is not line or triangle strips, the geometry is returned unmodified.
         member x.ToNonStripped() =
             match x.Mode with
             | IndexedGeometryMode.LineStrip ->
@@ -227,43 +302,65 @@ type IndexedGeometry =
             | _ ->
                 x
 
+        /// Returns a union of the geometry with another.
+        /// The geometries must have the same attributes and primitive topology.
         member x.Union(y : IndexedGeometry) =
             if x.Mode <> y.Mode then
                 raise <| ArgumentException("IndexedGeometryMode must match.")
 
             let acceptedTopologies = [
-                    IndexedGeometryMode.PointList
-                    IndexedGeometryMode.LineList
-                    IndexedGeometryMode.TriangleList
-                    IndexedGeometryMode.QuadList
-                ]
+                IndexedGeometryMode.PointList
+                IndexedGeometryMode.LineList
+                IndexedGeometryMode.TriangleList
+                IndexedGeometryMode.QuadList
+            ]
 
             if not <| List.contains x.Mode acceptedTopologies then
                 raise <| ArgumentException($"IndexedGeometryMode must be one of {acceptedTopologies}.")
 
             if x.IsIndexed <> y.IsIndexed then
-                let a = if x.IsIndexed then x else y.ToIndexed()
-                let b = if y.IsIndexed then y else x.ToIndexed()
+                let a = if x.IsIndexed then x else x.ToIndexed <| y.IndexArray.GetType().GetElementType()
+                let b = if y.IsIndexed then y else y.ToIndexed <| x.IndexArray.GetType().GetElementType()
                 a.Union b
 
             else
                 let indices =
-                    try
-                        y.IndexArray
-                        |> IndexHelpers.addOffset x.VertexCount
-                        |> ArrayHelpers.concat x.IndexArray
-                    with
-                    | exn ->
-                        raise <| ArgumentException($"Invalid indices: {exn.Message}")
+                    if x.IsIndexed then
+                        try
+                            y.IndexArray
+                            |> ArrayHelpers.concat x.IndexArray
+                            |> IndexHelpers.addOffset x.IndexArray.Length x.VertexCount
+                        with
+                        | exn ->
+                            raise <| ArgumentException($"Invalid indices: {exn.Message}")
+                    else
+                        null
 
                 let singleAttributes =
-                    if isNull x.SingleAttributes then y.SingleAttributes
-                    elif isNull y.SingleAttributes then x.SingleAttributes
-                    else SymDict.union [x.SingleAttributes; y.SingleAttributes]
+                    if isNull x.SingleAttributes then y.SingleAttributes.CopyOrNull()
+                    elif isNull y.SingleAttributes then x.SingleAttributes.CopyOrNull()
+                    else
+                        let r = SymDict.empty
+
+                        for (KeyValue(sem, a)) in x.SingleAttributes do
+                            match y.SingleAttributes |> SymDict.tryFind sem with
+                            | Some b when a <> b ->
+                                raise <| ArgumentException($"Conflicting single value attribute {sem}.")
+                            | _ ->
+                                r.[sem] <- a
+
+                        for (KeyValue(sem, a)) in y.SingleAttributes do
+                            match x.SingleAttributes |> SymDict.tryFind sem with
+                            | Some b when a <> b ->
+                                raise <| ArgumentException($"Conflicting single value attribute {sem}.")
+                            | _ ->
+                                r.[sem] <- a
+
+                        r
 
                 let indexedAttributes =
-                    if isNull x.IndexedAttributes then y.IndexedAttributes
-                    elif isNull y.IndexedAttributes then x.IndexedAttributes
+                    if isNull x.IndexedAttributes then y.IndexedAttributes.CopyOrNull()
+                    elif isNull y.IndexedAttributes then x.IndexedAttributes.CopyOrNull()
                     else
                         let r = SymDict.empty
 
@@ -308,18 +405,52 @@ type IndexedGeometry =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>] 
 module IndexedGeometry =
-    
+
+    /// Returns the primitive topology of the given geometry.
     let inline mode (g : IndexedGeometry) = g.Mode
+
+    /// Returns the index array of the given geometry (null if non-indexed).
     let inline indexArray (g : IndexedGeometry) = g.IndexArray
+
+    /// Returns the per-vertex attributes of the given geometry (can be null).
     let inline indexedAttributes (g : IndexedGeometry) = g.IndexedAttributes
+
+    /// Returns the single value attributes of the given geometry (can be null).
     let inline singleAttributes (g : IndexedGeometry) = g.SingleAttributes
 
+    /// Returns whether the given geometry has a non-zero face vertex count.
+    let inline isEmpty (g : IndexedGeometry) = g.IsEmpty
+
+    /// Returns whether the given geometry is valid (i.e. it has a position attribute and all attribute arrays are of sufficient length)
+    let inline isValid (g : IndexedGeometry) = g.IsValid
+
+    /// Returns whether the given geometry is indexed.
     let inline isIndexed (g : IndexedGeometry) = g.IsIndexed
+
+    /// Returns the total number of vertices in the given geometry.
     let inline vertexCount (g : IndexedGeometry) = g.VertexCount
+
+    /// Returns the effective number of vertices in the given geometry (i.e. the index count if indexed and the vertex count if non-indexed).
     let inline faceVertexCount (g : IndexedGeometry) = g.FaceVertexCount
+
+    /// Returns the number of faces in the given geometry.
     let inline faceCount (g : IndexedGeometry) = g.FaceCount
+
+    /// Returns a shallow copy of the given geometry (index and attribute arrays are reused).
     let inline clone (g : IndexedGeometry) = g.Clone()
+
+    /// Returns an indexed copy of the given geometry.
+    /// If it is already indexed, it is returned unmodified.
     let inline toIndexed (g : IndexedGeometry) = g.ToIndexed()
+
+    /// Returns a non-indexed copy of the geometry.
+    /// If it is already non-indexed, it is returned unmodified.
     let inline toNonIndexed (g : IndexedGeometry) = g.ToNonIndexed()
+
+    /// Returns a copy of the geometry with a non-stripped primitive topology.
+    /// If the topology is not line or triangle strips, the geometry is returned unmodified.
     let inline toNonStripped (g : IndexedGeometry) = g.ToNonStripped()
+
+    /// Returns a union of two geometries with another.
+    /// The geometries must have the same attributes and primitive topology.
     let inline union (a : IndexedGeometry) (b : IndexedGeometry) = a.Union b

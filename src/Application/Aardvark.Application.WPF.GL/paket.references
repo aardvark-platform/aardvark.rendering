@@ -2,7 +2,7 @@ Aardvark.Base.Essentials
 Aardvark.Base.Incremental
 FShade.Core
 Aardvark.Base.Runtime
-SharpDX.Direct3D9
+Silk.NET.Direct3D9
 FSharp.Core
 FShade.GLSL
 Unofficial.OpenTK

@@ -966,7 +966,8 @@ module Resources =
         inherit AbstractPointerResourceWithEquality<VkPipelineRasterizationStateCreateInfo>(owner, key)
 
         override x.Free(info : VkPipelineRasterizationStateCreateInfo) =
-            Marshal.FreeHGlobal info.pNext
+            if info.pNext <> 0n then
+                Marshal.FreeHGlobal info.pNext
 
         override x.Compute(user, token, renderToken) =
             let depthClamp = depthClamp.GetValue(user, token, renderToken)
@@ -977,18 +978,23 @@ module Resources =
             let conservativeRaster = conservativeRaster.GetValue(user, token, renderToken)
             let state = RasterizerState.create conservativeRaster depthClamp bias cull front fill
 
-            let conservativeRaster =
-                VkPipelineRasterizationConservativeStateCreateInfoEXT(
-                    VkPipelineRasterizationConservativeStateCreateFlagsEXT.None,
-                    (if conservativeRaster then VkConservativeRasterizationModeEXT.Overestimate else VkConservativeRasterizationModeEXT.Disabled),
-                    0.0f
-                )
+            let pConservativeRaster =
+                if conservativeRaster then
+                    let info =
+                        VkPipelineRasterizationConservativeStateCreateInfoEXT(
+                            VkPipelineRasterizationConservativeStateCreateFlagsEXT.None,
+                            VkConservativeRasterizationModeEXT.Overestimate,
+                            0.0f
+                        )
 
-            let pConservativeRaster = NativePtr.alloc<VkPipelineRasterizationConservativeStateCreateInfoEXT> 1
-            conservativeRaster |> NativePtr.write pConservativeRaster
+                    let ptr = NativePtr.alloc<VkPipelineRasterizationConservativeStateCreateInfoEXT> 1
+                    info |> NativePtr.write ptr
+                    NativePtr.toNativeInt ptr
+                else
+                    0n
 
             VkPipelineRasterizationStateCreateInfo(
-                NativePtr.toNativeInt pConservativeRaster,
+                pConservativeRaster,
                 VkPipelineRasterizationStateCreateFlags.None,
                 (if state.depthClampEnable then 1u else 0u),
                 (if state.rasterizerDiscardEnable then 1u else 0u),
@@ -1907,9 +1913,9 @@ type ResourceManager(device : Device) =
 
         program.PipelineLayout, resource
 
-    member private x.CreateDynamicShaderProgram(pass : RenderPass, compile : FShade.EffectConfig -> FShade.EffectInputLayout * aval<FShade.Imperative.Module>) =
+    member private x.CreateDynamicShaderProgram(key : obj, pass : RenderPass, compile : FShade.EffectConfig -> FShade.EffectInputLayout * aval<FShade.Imperative.Module>) =
         dynamicProgramCache.GetOrCreate(
-            [pass.Layout :> obj; compile :> obj],
+            [key; pass.Layout :> obj],
             fun cache key ->
                 let effectConfig = pass.EffectConfig(FShadeConfig.depthRange, false)
 
@@ -1928,7 +1934,9 @@ type ResourceManager(device : Device) =
             x.CreateShaderProgram(pass, effect, top)
 
         | Surface.FShade compile ->
-            let program = x.CreateDynamicShaderProgram(pass, compile)
+            // Use surface itself as key rather than compile function, since equality is undefined behavior for F# functions.
+            // See F# specification: 6.9.24 Values with Underspecified Object Identity and Type Identity
+            let program = x.CreateDynamicShaderProgram(data, pass, compile)
             program.Layout, program
 
         | Surface.Backend surface ->
