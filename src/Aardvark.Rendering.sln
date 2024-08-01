@@ -227,12 +227,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		..\global.json = ..\global.json
 		..\paket.dependencies = ..\paket.dependencies
 		..\paket.lock = ..\paket.lock
+		..\.github\workflows\publish.yml = ..\.github\workflows\publish.yml
 		..\README.md = ..\README.md
 		..\RELEASE_NOTES.md = ..\RELEASE_NOTES.md
-		..\.github\workflows\publish.yml = ..\.github\workflows\publish.yml
 	EndProjectSection
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Text.Tests", "Tests\Aardvark.Rendering.Text.Tests\Aardvark.Rendering.Text.Tests.fsproj", "{EDDBAF72-43C6-48BB-91FB-A639AA299293}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -624,10 +622,6 @@ Global
 		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF}.Release|Any CPU.Build.0 = Release|Any CPU
-		{EDDBAF72-43C6-48BB-91FB-A639AA299293}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{EDDBAF72-43C6-48BB-91FB-A639AA299293}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{EDDBAF72-43C6-48BB-91FB-A639AA299293}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{EDDBAF72-43C6-48BB-91FB-A639AA299293}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -719,7 +713,6 @@ Global
 		{159213C5-ECA5-48B6-BDCF-D75BAE733E80} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{6DFA9CC5-3C57-44FC-A989-F1DC5097C2DB} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{DD9808AD-AEB3-4E90-A70C-E398CADE55FF} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
-		{EDDBAF72-43C6-48BB-91FB-A639AA299293} = {80F74456-D82F-4D38-83FE-362EFD0C2FCB}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}

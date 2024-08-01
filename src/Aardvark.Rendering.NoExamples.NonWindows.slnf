@@ -21,7 +21,6 @@
       "Application\\Aardvark.Application.Utilities\\Aardvark.Application.Utilities.fsproj",
       "Application\\Aardvark.Application\\Aardvark.Application.fsproj",
       "Tests\\Aardvark.Rendering.Tests\\Aardvark.Rendering.Tests.fsproj",
-      "Tests\\Aardvark.Rendering.Text.Tests\\Aardvark.Rendering.Text.Tests.fsproj",
       "Tests\\CSharpInteropTest\\CSharpInteropTest.csproj"
     ]
   }

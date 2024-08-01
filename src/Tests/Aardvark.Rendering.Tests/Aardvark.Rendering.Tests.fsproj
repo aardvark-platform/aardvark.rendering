@@ -78,6 +78,7 @@
     <Compile Include="Tests\Other\AdaptiveResourceTest.fs" />
     <Compile Include="Tests\Other\ContextCreation.fs" />
     <Compile Include="Tests\Other\StatsBench.fs" />
+    <Compile Include="Tests\Other\PathSegmentTests.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>
