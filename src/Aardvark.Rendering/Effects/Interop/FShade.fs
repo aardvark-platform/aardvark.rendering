@@ -4,6 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open FShade
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 open Microsoft.FSharp.Quotations
 open FSharp.Data.Adaptive
 open System
@@ -527,5 +528,7 @@ type RuntimeFShadeInteropExtensions() =
         Effect.link signature topology false effect
 
     [<Extension>]
-    static member Link (effect: Effect, signature: IFramebufferSignature, topology: IndexedGeometryMode) =
-        Effect.link signature topology false effect
+    static member Link (effect: Effect, signature: IFramebufferSignature,
+                        [<Optional; DefaultParameterValue(IndexedGeometryMode.TriangleList)>] topology: IndexedGeometryMode,
+                        [<Optional; DefaultParameterValue(false)>] flipHandedness: bool) =
+        Effect.link signature topology flipHandedness effect
