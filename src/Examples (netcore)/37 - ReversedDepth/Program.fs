@@ -346,7 +346,7 @@ let main argv =
                     Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, 0.0)
                 )
 
-            Sg.text FontSquirrel.Hack.Regular C4b.White str
+            Sg.text DefaultFonts.Hack.Regular C4b.White str
             |> Sg.trafo trafo
 
         let overlayFormat =
@@ -361,7 +361,7 @@ let main argv =
                     Trafo3d.Translation(-1.0 + border.X, -1.0 + border.Y, 0.0)
                 )
 
-            Sg.text FontSquirrel.Hack.Regular C4b.White (AVal.constant str)
+            Sg.text DefaultFonts.Hack.Regular C4b.White (AVal.constant str)
             |> Sg.trafo trafo
 
         Sg.ofList [scene; overlay; overlayFormat]

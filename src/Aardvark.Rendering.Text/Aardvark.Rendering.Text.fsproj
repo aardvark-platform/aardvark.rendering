@@ -17,14 +17,8 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="resources\Symbola.ttf" />
-    <Compile Include="PathSegment.fs" />
-    <Compile Include="BvhInternal.fs" />
-    <Compile Include="PathTessellator.fs" />
     <Compile Include="Path.fs" />
-    <Compile Include="FontResolver.fs" />
     <Compile Include="Font.fs" />
-    <Compile Include="GoogleFonts.fs" />
-    <Compile Include="FontSquirrel.fs" />
     <Compile Include="Text.fs" />
     <Compile Include="SceneGraph.fs" />
     <Compile Include="Markdown.fs" />

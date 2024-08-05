@@ -231,7 +231,7 @@ let main argv =
             )
 
         //TextConfig
-        Sg.text FontSquirrel.Hack.Regular C4b.White stats
+        Sg.text DefaultFonts.Hack.Regular C4b.White stats
             |> Sg.trafo trafo
             |> Sg.viewTrafo' Trafo3d.Identity
             |> Sg.projTrafo' Trafo3d.Identity

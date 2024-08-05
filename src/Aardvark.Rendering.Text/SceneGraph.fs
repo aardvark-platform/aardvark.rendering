@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Rendering.Text
 
-open System
 open Aardvark.Base
+open Aardvark.Base.Fonts
 
 open FSharp.Data.Adaptive
 open Aardvark.Rendering
@@ -19,7 +19,7 @@ type Border2d = { left : float; right: float; top: float; bottom : float } with
 module Sg =
     open Aardvark.Base.Ag
 
-    
+
     type ShapeSet (content : aset<aval<Trafo3d> * aval<ShapeList>>) =
         interface ISg
         member x.Content = content
@@ -55,7 +55,7 @@ module Sg =
 
 
             b.Child?ModelTrafoStack <- trafo::scope.ModelTrafoStack
-            
+
         member x.LocalBoundingBox(t : Shape, scope : Ag.Scope) : aval<Box3d> =
             t.Content |> AVal.map (fun c ->
                 Box3d(V3d(c.bounds.Min, 0.0), V3d(c.bounds.Max, 0.0))
@@ -67,7 +67,7 @@ module Sg =
                 box.Transformed(t.Forward)
 
             ) t.Content scope.ModelTrafo
-            
+
         member x.LocalBoundingBox(t : ShapeSet, scope : Ag.Scope) : aval<Box3d> =
             AVal.constant Box3d.Invalid
 
@@ -78,7 +78,7 @@ module Sg =
             let content = t.Content
             let cache = ShapeCache.GetOrCreateCache(scope.Runtime)
             let shapes = RenderObject.ofScope scope
-                
+
             let reader = content.GetReader()
 
             let trafosAndShapes =
@@ -91,25 +91,25 @@ module Sg =
                     )
                 )
 
-            let shapesOnly = 
+            let shapesOnly =
                 AVal.custom (fun token ->
                     reader.GetChanges token |> ignore
                     reader.State |> CountingHashSet.toArray |> Array.map (fun (trafo,shapes) ->
                         shapes.GetValue token
                     )
-                )    
+                )
 
             let trafoBuffer =
                 trafosAndShapes |> AVal.map (fun state ->
                     state |> Array.mapi (fun i (trafo, shapes) ->
-                        
-                        let trafo = 
+
+                        let trafo =
                             M34d.op_Explicit (
                                 trafo.Forward *
                                 shapes.renderTrafo.Forward
                             )
-                                
-                        let len = List.length shapes.concreteShapes 
+
+                        let len = List.length shapes.concreteShapes
                         Array.create len (M34f.op_Explicit trafo)
                     )
                     |> Array.concat
@@ -119,7 +119,7 @@ module Sg =
 
             let trafoBuffers =
                 shapesOnly |> AVal.map (fun state ->
-                    let r0, r1 = 
+                    let r0, r1 =
                         state |> Array.collect (fun shapes ->
                             let w = if shapes.flipViewDependent then -1.0f else 1.0f
 
@@ -144,7 +144,7 @@ module Sg =
                         shapes.concreteShapes |> Seq.map (fun s ->
                             let c = s.color
 
-                            let a = 
+                            let a =
                                 let size = shapes.zRange.Size
                                 if size > 0 then
                                     let layer = s.z - shapes.zRange.Min |> min 255
@@ -158,7 +158,7 @@ module Sg =
                     |> ArrayBuffer
                     :> IBuffer
                 )
-                
+
             let indirect =
                 shapesOnly |> AVal.map (fun state ->
                     state |> Seq.collect (fun shapes ->
@@ -204,12 +204,12 @@ module Sg =
                 match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "FillGlyphs") with
                     | Some (:? aval<bool> as aa) -> aa
                     | _ -> AVal.constant true
-                    
+
             let bias =
                 match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "DepthBias") with
                     | Some (:? aval<float> as bias) -> bias
                     | _ -> AVal.constant defaultDepthBias
-                    
+
             shapes.Uniforms <-
                 let old = shapes.Uniforms
                 { new IUniformProvider with
@@ -227,9 +227,9 @@ module Sg =
             let pass = scope.RenderPass
             let pass = if pass = RenderPass.main then RenderPass.shapes else pass
 
-            
-            let multisample = 
-                (aa, fill) ||> AVal.map2 (fun a f -> 
+
+            let multisample =
+                (aa, fill) ||> AVal.map2 (fun a f ->
                     // @krauthaufen - why always multisampling when outline only?
                     not f || a
                 )
@@ -267,12 +267,12 @@ module Sg =
             let content = t.Content
             let cache = ShapeCache.GetOrCreateCache(scope.Runtime)
             let shapes = RenderObject.ofScope scope
-                
+
             let content =
                 content |> AVal.map (fun c ->
-                    
+
                     let shapes =
-                        c.concreteShapes 
+                        c.concreteShapes
                         |> List.groupBy (fun c -> c.z)
                         |> List.sortBy fst
                         |> List.collect (fun (z,g) -> g)
@@ -282,8 +282,8 @@ module Sg =
 
             let indirectAndOffsets =
                 content |> AVal.map (fun renderText ->
-                    let indirectBuffer = 
-                        renderText.concreteShapes 
+                    let indirectBuffer =
+                        renderText.concreteShapes
                             |> List.toArray
                             |> Array.map (ConcreteShape.shape >> cache.GetBufferRange)
                             |> Array.mapi (fun i r ->
@@ -298,10 +298,10 @@ module Sg =
                             |> IndirectBuffer.ofArray
 
                     let trafoR0, trafoR1 =
-                        let r0, r1 = 
+                        let r0, r1 =
                             let w = if renderText.flipViewDependent then -1.0f else 1.0f
 
-                            renderText.concreteShapes 
+                            renderText.concreteShapes
                             |> List.toArray
                             |> Array.map (fun shape ->
                                 let r0 = V4f(V3f shape.trafo.R0, w)
@@ -314,8 +314,8 @@ module Sg =
                         ArrayBuffer r0 :> IBuffer,
                         ArrayBuffer r1 :> IBuffer
 
-                    let colors = 
-                        renderText.concreteShapes 
+                    let colors =
+                        renderText.concreteShapes
                             |> List.toArray
                             |> Array.map (fun s -> s.color)
                             |> ArrayBuffer
@@ -350,12 +350,12 @@ module Sg =
                 match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "FillGlyphs") with
                     | Some (:? aval<bool> as aa) -> aa
                     | _ -> AVal.constant true
-                    
+
             let bias =
                 match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "DepthBias") with
                     | Some (:? aval<float> as bias) -> bias
                     | _ -> AVal.constant defaultDepthBias
-                    
+
             shapes.Uniforms <-
                 let old = shapes.Uniforms
                 let ownTrafo = content |> AVal.map (fun c -> c.renderTrafo)
@@ -365,14 +365,14 @@ module Sg =
                             | "Antialias" -> aa :> IAdaptiveValue |> Some
                             | "FillGlyphs" -> fill :> IAdaptiveValue |> Some
                             | "DepthBias" -> bias :> IAdaptiveValue |> Some
-                            | "ModelTrafo" -> 
+                            | "ModelTrafo" ->
                                 match old.TryGetUniform(scope, sem) with
                                     | Some (:? aval<Trafo3d> as m) ->
                                         AVal.map2 (*) ownTrafo m :> IAdaptiveValue |> Some
                                     | _ ->
                                         ownTrafo :> IAdaptiveValue |> Some
 
-                            | _ -> 
+                            | _ ->
                                 old.TryGetUniform(scope, sem)
 
                     member x.Dispose() =
@@ -382,9 +382,9 @@ module Sg =
             let pass = scope.RenderPass
             let pass = if pass = RenderPass.main then RenderPass.shapes else pass
 
-            
-            let multisample = 
-                (aa, fill) ||> AVal.map2 (fun a f -> 
+
+            let multisample =
+                (aa, fill) ||> AVal.map2 (fun a f ->
                     // @krauthaufen - why always multisampling when outline only?
                     not f || a
                 )
@@ -397,7 +397,7 @@ module Sg =
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
             shapes.DepthState <- { shapes.DepthState with Bias = AVal.constant DepthBias.None }
-            
+
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
             let boundary = RenderObject.ofScope scope
@@ -418,9 +418,9 @@ module Sg =
             boundary.DrawCalls <- Direct ([drawCall] |> AVal.constant)
             boundary.Mode <- IndexedGeometryMode.TriangleList
 
-            let bounds = 
+            let bounds =
                 let e = t.BoundaryExtent
-                content |> AVal.map (fun s -> 
+                content |> AVal.map (fun s ->
                     let b = s.bounds
                     let bounds = Box2d(b.Min.X - e.left, b.Min.Y - e.bottom, b.Max.X + e.right, b.Max.Y + e.top)
                     bounds
@@ -432,9 +432,9 @@ module Sg =
                     member x.TryGetUniform(scope, sem) =
                         match string sem with
                             | "BoundaryColor" -> t.BoundaryColor |> AVal.constant :> IAdaptiveValue |> Some
-                            | "ModelTrafo" -> 
-                                let scaleTrafo = 
-                                    bounds |> AVal.map (fun bounds -> 
+                            | "ModelTrafo" ->
+                                let scaleTrafo =
+                                    bounds |> AVal.map (fun bounds ->
                                         if bounds.IsValid then
                                             Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
                                             Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
@@ -529,20 +529,20 @@ module Sg =
 
     let shapes (content : aset<aval<Trafo3d> * aval<ShapeList>>) =
         ShapeSet(content) :> ISg
-        
+
     let textWithConfig (cfg : TextConfig) (content : aval<string>) =
-        content 
+        content
         |> AVal.map cfg.Layout
         |> shape
 
     let text (f : Font) (color : C4b) (content : aval<string>) =
-        content 
-            |> AVal.map (fun c -> Text.Layout(f, color, c)) 
+        content
+            |> AVal.map (fun c -> Text.Layout(f, color, c))
             |> shape
-            
+
     let textWithBackground (f : Font) (color : C4b) (backgroundColor : C4b) (border : Border2d) (content : aval<string>) =
-        content 
-            |> AVal.map (fun c -> Text.Layout(f, color, c)) 
+        content
+            |> AVal.map (fun c -> Text.Layout(f, color, c))
             |> shapeWithBackground backgroundColor border
 
     let textsWithConfig (cfg : TextConfig) (content : aset<aval<Trafo3d> * aval<string>>) =
@@ -557,7 +557,3 @@ module Sg =
             trafo, shapeList
         )
         |> shapes
-        
-            
-
-

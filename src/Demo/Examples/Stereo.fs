@@ -3,6 +3,7 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Base.Fonts
 open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
@@ -80,7 +81,6 @@ module StereoShader =
 
 module Stereo =
     open System.Windows.Forms
-    open System.Drawing
     open Aardvark.Rendering.Text
     open System.IO
     open System.Text

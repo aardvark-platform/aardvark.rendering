@@ -158,9 +158,8 @@ let main argv =
                 Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0)
             )
 
-        let font = FontSquirrel.Hack.Regular
         // Use NoBoundary to resolve issue with render passes, such the Cube not being visible when behind the text in the WriteBuffers example
-        let textCfg = TextConfig.create font C4b.White TextAlignment.Left false RenderStyle.NoBoundary
+        let textCfg = TextConfig.create DefaultFonts.Hack.Regular C4b.White TextAlignment.Left false RenderStyle.NoBoundary
         Sg.textWithConfig textCfg helpText
             |> Sg.trafo trafo
             |> Sg.uniform "ViewTrafo" (Trafo3d.Identity |> Array.create 2 |> AVal.constant)

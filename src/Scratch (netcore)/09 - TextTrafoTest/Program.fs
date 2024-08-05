@@ -33,12 +33,9 @@ let main argv =
             samples 1
         }
 
-    let fnt = Font("Arial")
-
     let inputText = win.Time |> AVal.map (fun t -> 
                 let str = t.ToString()
                 let cnt = int ((t.TimeOfDay.TotalMilliseconds / 100.0) % 17.0)
-                Log.line "str.Sub(3, %d)" cnt
                 str.Substring(3, min cnt (str.Length - 3)))
 
     let textTrafo = win.Sizes |> AVal.map (fun size -> 
@@ -53,7 +50,7 @@ let main argv =
          scale * t
     )
 
-    let sg = Sg.text fnt C4b.White inputText
+    let sg = Sg.text DefaultFonts.Hack.Regular C4b.White inputText
                |> Sg.viewTrafo (AVal.constant Trafo3d.Identity)
                |> Sg.projTrafo textTrafo
     

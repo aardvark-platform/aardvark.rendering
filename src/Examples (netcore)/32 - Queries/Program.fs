@@ -16,7 +16,6 @@ open Aardvark.Application.Slim
 open Aardvark.Rendering.Text
 open System.Threading.Tasks
 
-
 module Shader =
     open FShade
     open Aardvark.Rendering.Effects
@@ -222,7 +221,7 @@ let overlaySg (win : IRenderWindow) (time : aval<MicroTime>) (samples : aval<uin
             Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0)
         )
 
-    Sg.text (Font("Consolas")) C4b.White str
+    Sg.text DefaultFonts.Hack.Regular C4b.White str
     |> Sg.trafo trafo
 
 

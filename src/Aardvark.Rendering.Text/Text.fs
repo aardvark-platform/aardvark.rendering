@@ -2,12 +2,10 @@
 
 
 open System
-open System.Linq
 open System.Collections.Generic
 open System.Runtime.CompilerServices
 open Aardvark.Base
-
-
+open Aardvark.Base.Fonts
 
 [<Struct>]
 type ConcreteShape =
@@ -19,7 +17,7 @@ type ConcreteShape =
     }
 
     member x.bounds =
-        x.shape.Path.bounds.Transformed(x.trafo)
+        x.shape.Path.Bounds.Transformed(x.trafo)
         //Box2d.FromMinAndSize(b.Min + x.offset, b.Size * x.scale)
 
 
@@ -640,7 +638,7 @@ type TextConfig =
     }
     static member Default =
         {
-            font = FontSquirrel.Courier_Prime.Regular
+            font = DefaultFonts.CourierPrime.Regular
             color = C4b.White
             align = TextAlignment.Center
             flipViewDependent = true
@@ -648,8 +646,8 @@ type TextConfig =
         }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module TextConfig = 
-    let create (font : Font) (color : C4b) (align : TextAlignment) (flipViewDependent : bool) (renderStyle : RenderStyle) = 
+module TextConfig =
+    let create (font : Font) (color : C4b) (align : TextAlignment) (flipViewDependent : bool) (renderStyle : RenderStyle) =
         { font = font; color = color; align = align; flipViewDependent = flipViewDependent; renderStyle = renderStyle }
 
 [<AbstractClass; Sealed; Extension>]

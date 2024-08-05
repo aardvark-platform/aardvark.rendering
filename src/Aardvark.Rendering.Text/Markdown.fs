@@ -2,11 +2,11 @@
 
 
 open Aardvark.Base
+open Aardvark.Base.Fonts
 open FSharp.Data.Adaptive
-open Aardvark.SceneGraph
 open CommonMark
 open CommonMark.Syntax
-    
+
 type TextStyle =
     {
         scale   : V2d
@@ -14,7 +14,7 @@ type TextStyle =
         emph    : bool
         code    : bool
     }
-    
+
 type FontCollection =
     {
         regular     : Font
@@ -29,20 +29,20 @@ type MarkdownConfig =
         lineSpacing         : float
         characterSpacing    : float
         headingStyles       : Map<int, TextStyle>
-        
+
         paragraphFont       : FontCollection
         codeFont            : FontCollection
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TextStyle =
-    
+
     let empty = { scale = V2d.II; strong = false; emph = false; code = false }
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module MarkdownConfig =
-    
+
     let light =
         {
             color                   = C4b(51uy, 51uy, 51uy, 255uy)
@@ -50,17 +50,17 @@ module MarkdownConfig =
             characterSpacing        = 1.0
             paragraphFont =
                 {
-                    regular     = FontSquirrel.Noto_Sans.Regular
-                    bold        = FontSquirrel.Noto_Sans.Bold
-                    italic      = FontSquirrel.Noto_Sans.Italic
-                    boldItalic  = FontSquirrel.Noto_Sans.BoldItalic
+                    regular     = DefaultFonts.NotoSans.Regular
+                    bold        = DefaultFonts.NotoSans.Bold
+                    italic      = DefaultFonts.NotoSans.Italic
+                    boldItalic  = DefaultFonts.NotoSans.BoldItalic
                 }
-            codeFont = 
+            codeFont =
                 {
-                    regular     = FontSquirrel.Courier_Prime.Regular
-                    bold        = FontSquirrel.Courier_Prime.Bold
-                    italic      = FontSquirrel.Courier_Prime.Italic
-                    boldItalic  = FontSquirrel.Courier_Prime.BoldItalic
+                    regular     = DefaultFonts.CourierPrime.Regular
+                    bold        = DefaultFonts.CourierPrime.Bold
+                    italic      = DefaultFonts.CourierPrime.Italic
+                    boldItalic  = DefaultFonts.CourierPrime.BoldItalic
                 }
 
             headingStyles =
@@ -71,7 +71,7 @@ module MarkdownConfig =
                     4, { TextStyle.empty with scale = V2d.II * 1.5; strong = true }
                     5, { TextStyle.empty with scale = V2d.II * 1.2; strong = true }
                     6, { TextStyle.empty with scale = V2d.II * 1.1; strong = true }
-                ]  
+                ]
 
         }
 
@@ -86,7 +86,7 @@ module Markdown =
     open Aardvark.Base.Monads.StateOld
 
 
-    type LayoutState = 
+    type LayoutState =
         {
             paragraph   : FontCollection
             code        : FontCollection
@@ -108,21 +108,21 @@ module Markdown =
 
         }
 
-        static member empty = 
-            { 
+        static member empty =
+            {
                 paragraph =
                     {
-                        regular     = FontSquirrel.Noto_Sans.Regular
-                        bold        = FontSquirrel.Noto_Sans.Bold
-                        italic      = FontSquirrel.Noto_Sans.Italic
-                        boldItalic  = FontSquirrel.Noto_Sans.BoldItalic
+                        regular     = DefaultFonts.NotoSans.Regular
+                        bold        = DefaultFonts.NotoSans.Bold
+                        italic      = DefaultFonts.NotoSans.Italic
+                        boldItalic  = DefaultFonts.NotoSans.BoldItalic
                     }
-                code      = 
+                code      =
                     {
-                        regular     = FontSquirrel.Courier_Prime.Regular
-                        bold        = FontSquirrel.Courier_Prime.Bold
-                        italic      = FontSquirrel.Courier_Prime.Italic
-                        boldItalic  = FontSquirrel.Courier_Prime.BoldItalic
+                        regular     = DefaultFonts.CourierPrime.Regular
+                        bold        = DefaultFonts.CourierPrime.Bold
+                        italic      = DefaultFonts.CourierPrime.Italic
+                        boldItalic  = DefaultFonts.CourierPrime.BoldItalic
                     }
 
                 x = 0.0
@@ -138,10 +138,10 @@ module Markdown =
                 //shapes = []
                 //offsets = []
                 //scales = []
-                //colors = [] 
+                //colors = []
             }
 
-    module Patterns = 
+    module Patterns =
         let inline private startFrom< ^a when ^a : (member NextSibling : ^a) and ^a : null > (b : ^a) =
             [
                 let mutable c = b
@@ -152,12 +152,12 @@ module Markdown =
 
         let rec private getAll (state : TextStyle) (i : Inline) =
             [
-                if isNull i.FirstChild then 
+                if isNull i.FirstChild then
                     if i.Tag = InlineTag.LineBreak || i.Tag = InlineTag.SoftBreak then
                         yield (state, "\n")
                     else
                         yield (state, i.LiteralContent)
-                else 
+                else
                     let state =
                         match i.Tag with
                             | InlineTag.Strong -> { state with strong = true }
@@ -165,7 +165,7 @@ module Markdown =
                             | InlineTag.Code -> { state with code = true }
                             | _ -> state
 
-                    
+
                     for c in startFrom i.FirstChild do
                         yield! getAll state  c
 
@@ -181,9 +181,9 @@ module Markdown =
         /// A paragraph block element.
         let (|Paragraph|_|) (b : Block) =
             if b.Tag = BlockTag.Paragraph then
-                b.InlineContent 
-                    |> startFrom 
-                    |> List.collect (getAll TextStyle.empty) 
+                b.InlineContent
+                    |> startFrom
+                    |> List.collect (getAll TextStyle.empty)
                     |> Some
             else
                 None
@@ -191,10 +191,10 @@ module Markdown =
         /// A heading element
         let (|Heading|_|) (b : Block) =
             if b.Tag = BlockTag.AtxHeading || b.Tag = BlockTag.SetextHeading then
-                let content = 
-                    b.InlineContent 
-                        |> startFrom 
-                        |> List.collect (getAll TextStyle.empty) 
+                let content =
+                    b.InlineContent
+                        |> startFrom
+                        |> List.collect (getAll TextStyle.empty)
                 Some(int b.Heading.Level, content)
             else
                 None
@@ -204,9 +204,9 @@ module Markdown =
             if b.Tag = BlockTag.List then
                 let listType = b.ListData.ListType
 
-                let children = 
+                let children =
                     b.FirstChild |> startFrom |> List.map (fun c -> c.FirstChild |> startFrom)
-    
+
                 Some(listType, children)
             else
                 None
@@ -214,9 +214,9 @@ module Markdown =
         /// A block-quote element.
         let (|BlockQuote|_|) (b : Block) =
             if b.Tag = BlockTag.BlockQuote then
-                b.InlineContent 
-                    |> startFrom 
-                    |> List.collect (getAll TextStyle.empty) 
+                b.InlineContent
+                    |> startFrom
+                    |> List.collect (getAll TextStyle.empty)
                     |> Some
             else
                 None
@@ -230,36 +230,36 @@ module Markdown =
         let (|FencedCode|_|) (b : Block) =
             if b.Tag = BlockTag.FencedCode then
                 b.StringContent.ToString() |> Some
-            else 
+            else
                 None
 
         /// A code block element that was formatted by indenting the lines with at least 4 spaces.
         let (|IndentedCode|_|) (b : Block) =
             if b.Tag = BlockTag.IndentedCode then
                 b.StringContent.ToString() |> Some
-            else 
+            else
                 None
 
 
-    module Layouter = 
+    module Layouter =
         open Patterns
 
 
         [<AutoOpen>]
-        module StateHelpers = 
+        module StateHelpers =
             let moveX (v : float) =
-                modifyState (fun s -> 
+                modifyState (fun s ->
                     let nx = s.x + v * s.textState.scale.X * s.config.characterSpacing
                     { s with x = nx; max = V2d(max nx s.max.X, s.max.Y); min = V2d(min nx s.min.X, s.min.Y) }
                 )
 
             let moveY (v : float) =
-                modifyState (fun s -> 
+                modifyState (fun s ->
                     let ny = s.y - v * s.textState.scale.Y * s.config.lineSpacing
                     { s with y = ny; min = V2d(s.min.X, min ny s.min.Y); max = V2d(s.max.X, max ny s.max.Y) })
 
             let indent (v : float) =
-                modifyState (fun s -> 
+                modifyState (fun s ->
                     let nx = s.indent + v * s.textState.scale.X * s.config.characterSpacing
                     { s with indent = nx; x = nx; max = V2d(max nx s.max.X, s.max.Y) }
                 )
@@ -270,7 +270,7 @@ module Markdown =
                     do! putState { s with LayoutState.color = c}
                     return s.color
                 }
-      
+
             let lineBreak =
                 state {
                     let! s = getState
@@ -283,8 +283,8 @@ module Markdown =
                     let! s = getState
                     let old = s.textState
 
-                    let nts = 
-                        { 
+                    let nts =
+                        {
                             strong      = old.strong || ts.strong
                             emph        = old.emph || ts.emph
                             code        = old.code || ts.code
@@ -297,9 +297,9 @@ module Markdown =
                     return res
                 }
 
-            
 
-            let pos = 
+
+            let pos =
                 state {
                     let! s = getState
                     return V2d(s.x, s.y)
@@ -400,7 +400,7 @@ module Markdown =
                             do! layoutParts parts
                             do! lineBreak
 
-                        | Heading(level, parts) ->  
+                        | Heading(level, parts) ->
                             let style = config.headingStyles.[level]
                             do! withTextState style (fun () ->
                                 state {
@@ -410,13 +410,13 @@ module Markdown =
                             )
 
                         | IndentedCode content | FencedCode content ->
-                            
+
                             do! moveY 1.0
                             do! indent 1.0
                             do! layoutParts [{ TextStyle.empty with code = true }, content]
                             do! indent -1.0
                             do! lineBreak
-                            
+
                         | HorizontalRuler ->
                             let h = 0.05
                             do! moveY -(0.4 + h/2.0)
@@ -427,7 +427,7 @@ module Markdown =
                             )
                             do! moveY (0.4 + h/2.0)
                             do! lineBreak
-                        
+
                         | List(kind, items) ->
                             do! moveY 0.4
 
@@ -454,28 +454,28 @@ module Markdown =
 
                         | _ ->
                             return failwithf "unknown block: %A" b.Tag
-            
+
                 }
 
             let run = layout ast
 
-            let ((), s) = 
+            let ((), s) =
                 run.runState {
                     LayoutState.empty with
                         paragraph   = config.paragraphFont
                         code        = config.codeFont
-                        color       = config.color 
+                        color       = config.color
                         config      = config
                 }
 
             let bounds = Box2d.FromPoints(s.min, s.max)
             let center = bounds.Center.X
-            
+
             let concrete =
-                s.concrete 
-                    |> List.map (fun f -> f bounds.SizeX) 
+                s.concrete
+                    |> List.map (fun f -> f bounds.SizeX)
                     |> List.map (fun shape ->
-                        { shape with trafo = M33d.Translation(-center, 0.0) * shape.trafo } 
+                        { shape with trafo = M33d.Translation(-center, 0.0) * shape.trafo }
                     )
 
             {

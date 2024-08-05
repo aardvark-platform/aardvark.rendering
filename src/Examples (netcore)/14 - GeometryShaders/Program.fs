@@ -219,8 +219,6 @@ let main argv =
     let w = 1 + (ceil (sqrt (float combinations.Length)) |> int)
     let h = ceil (float combinations.Length / float w) |> int
 
-    let font = FontSquirrel.Hack.Regular
-
     let sg =
         Sg.ofList [
             for j in 0 .. h - 1 do
@@ -230,7 +228,7 @@ let main argv =
                         let (name, effect) = combinations.[id]
      
                         let label = 
-                            Sg.text font C4b.White (AVal.constant name)
+                            Sg.text DefaultFonts.Hack.Regular C4b.White (AVal.constant name)
                                 |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Scale(0.1))
                                 |> Sg.translate 0.0 0.0 1.0
 

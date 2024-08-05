@@ -317,7 +317,7 @@ module Utilities =
                             for c in 0 .. 255 do yield char c
                         }
 
-                    let font = FontSquirrel.Hack.Regular
+                    let font = DefaultFonts.Hack.Regular
                     use __ = win.Runtime.ContextLock
                     win.Runtime.PrepareGlyphs(font, chars)
                     // Use NoBoundary to resolve issue with render passes, such the Cube not being visible when behind the text in the WriteBuffers example

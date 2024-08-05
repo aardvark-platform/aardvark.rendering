@@ -221,7 +221,7 @@ let main argv =
     let runtime = app.Runtime :> IRuntime
 
     // create a game window (better for measuring fps)
-    let win = app.CreateGameWindow(samples = 1)
+    let win = app.CreateGameWindow(samples = 1, vsync = false)
 
     // disable incremental rendering
     win.RenderAsFastAsPossible <- true
@@ -324,10 +324,9 @@ let main argv =
                 Trafo3d.Translation(-1.0 + 20.0 * px.X, -1.0 + 25.0 * px.Y, 0.0)
             )
 
-        Sg.text (Font("Consolas")) C4b.White str
+        Sg.text DefaultFonts.Hack.Regular C4b.White str
             |> Sg.trafo trafo
             |> Sg.compile runtime win.FramebufferSignature
-            
 
 
     win.RenderTask <- RenderTask.ofList [ task; overlayTask]

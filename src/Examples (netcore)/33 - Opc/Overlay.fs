@@ -475,7 +475,7 @@ module Overlay =
         let bgAlpha = byte (255.0 * 0.6)
         let config = 
             { TextConfig.Default with 
-                font = Font "Blackadder ITC"
+                font = Aardvark.Base.Fonts.Font "Blackadder ITC"
                 color = C4b(255uy, 255uy, 255uy, fgAlpha) 
                 align = TextAlignment.Left
                 flipViewDependent = false

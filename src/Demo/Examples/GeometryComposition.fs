@@ -252,7 +252,7 @@ module GeometryComposition =
         let w = 1 + (ceil (sqrt (float combinations.Length)) |> int)
         let h = ceil (float combinations.Length / float w) |> int
 
-        let font = Font("Consolas")
+        let font = Aardvark.Base.Fonts.Font("Consolas")
 
         let u (n : String) (m : IAdaptiveValue) (s : ISg) =
             Sg.UniformApplicator(n, m, s) :> ISg

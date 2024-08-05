@@ -171,7 +171,7 @@ module Program =
                     Trafo3d.Translation(-1.0 + 20.0 * px.X, -1.0 + 25.0 * px.Y, 0.0)
                 )
 
-            Sg.text FontSquirrel.Hack.Regular C4b.White str
+            Sg.text DefaultFonts.Hack.Regular C4b.White str
                 |> Sg.trafo trafo
                 |> Sg.compile runtime win.FramebufferSignature
 

@@ -282,7 +282,6 @@ module PixData =
 
 [<AutoOpen>]
 module ``Expecto Extensions`` =
-    open Aardvark.Rendering.Text
     open FsCheck
 
     type ZeroOne = ZeroOne of float
@@ -304,42 +303,6 @@ module ``Expecto Extensions`` =
                     gen {
                         let! (NormalFloat a) = Arb.generate<NormalFloat>
                         return ZeroOne (abs a % 1.0)
-                    }
-            }
-
-        static member PathSegment =
-            { new Arbitrary<PathSegment>() with
-                override x.Generator =
-                    gen {
-                        let! kind = Gen.elements [0;1;2;3]
-
-                        match kind with
-                        | 0 ->
-                            let! p0 = Arb.generate<V2d>
-                            let! p1 = Arb.generate<V2d> |> Gen.filter (fun p -> not (Fun.ApproximateEquals(p, p0, 1E-8)))
-                            return PathSegment.line p0 p1
-                        | 1 ->
-                            let! p0 = Arb.generate<V2d>
-                            let! p1 = Arb.generate<V2d> |> Gen.filter (fun p -> not (Fun.ApproximateEquals(p, p0, 1E-8)))
-                            let! p2 = Arb.generate<V2d> |> Gen.filter (fun p -> not (Fun.ApproximateEquals(p, p0, 1E-8)) && not (Fun.ApproximateEquals(p, p1, 1E-8)))
-                            return PathSegment.bezier2 p0 p1 p2
-                        | 2 ->
-                            let! center = Arb.generate<V2d>
-                            let! a0 = Arb.generate<V2d>
-                            let! a1 = Arb.generate<V2d> |> Gen.filter (fun p -> not (Fun.IsTiny(Vec.AngleBetween(Vec.normalize a0, Vec.normalize p), 1E-5)))
-
-                            let! (NormalFloat alpha0) = Arb.generate
-                            let! (NormalFloat dAlpha) = Arb.generate
-
-                            let dAlpha = dAlpha % Constant.PiHalf
-
-                            return PathSegment.arc alpha0 dAlpha (Ellipse2d(center, a0, a1))
-                        | _ ->
-                            let! p0 = Arb.generate<V2d>
-                            let! p1 = Arb.generate<V2d> |> Gen.filter (fun p -> not (Fun.ApproximateEquals(p, p0, 1E-8)))
-                            let! p2 = Arb.generate<V2d> |> Gen.filter (fun p -> not (Fun.ApproximateEquals(p, p0, 1E-8)) && not (Fun.ApproximateEquals(p, p1, 1E-8)))
-                            let! p3 = Arb.generate<V2d> |> Gen.filter (fun p -> not (Fun.ApproximateEquals(p, p0, 1E-8)) && not (Fun.ApproximateEquals(p, p1, 1E-8)) && not (Fun.ApproximateEquals(p, p2, 1E-8)))
-                            return PathSegment.bezier3 p0 p1 p2 p3
                     }
             }
 

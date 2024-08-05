@@ -44,7 +44,7 @@ let main argv =
 
 
     let someText =
-        Sg.text FontSquirrel.Hack.Regular C4b.Black (AVal.constant "Hi There!")
+        Sg.text DefaultFonts.Hack.Regular C4b.Black (AVal.constant "Hi There!")
         |> Sg.transform (Trafo3d.RotationX Constant.PiHalf)
         |> Sg.depthTest (AVal.constant DepthTest.None)
         |> Sg.pass pass2
