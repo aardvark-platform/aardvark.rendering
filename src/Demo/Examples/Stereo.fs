@@ -3,7 +3,6 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Fonts
 open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph

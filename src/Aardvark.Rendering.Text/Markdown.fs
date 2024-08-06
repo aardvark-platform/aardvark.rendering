@@ -1,6 +1,5 @@
 ﻿namespace Aardvark.Rendering.Text
 
-
 open Aardvark.Base
 open Aardvark.Base.Fonts
 open FSharp.Data.Adaptive

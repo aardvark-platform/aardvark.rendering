@@ -4,9 +4,15 @@ open System
 open System.Collections.Concurrent
 open System.Runtime.CompilerServices
 open Aardvark.Base
-open Aardvark.Base.Fonts
 open Aardvark.Rendering
 open Aardvark.FontProvider
+
+type PathSegment = Aardvark.Base.Fonts.PathSegment
+type Path        = Aardvark.Base.Fonts.Path
+type Shape       = Aardvark.Base.Fonts.Shape
+type Font        = Aardvark.Base.Fonts.Font
+type CodePoint   = Aardvark.Base.Fonts.CodePoint
+type Glyph       = Aardvark.Base.Fonts.Glyph
 
 module DefaultFonts =
 
@@ -61,7 +67,7 @@ module DefaultFonts =
 [<AutoOpen>]
 module ShapeExtensions =
 
-    type Shape with
+    type Aardvark.Base.Fonts.Shape with
         member x.IndexedGeometry =
             IndexedGeometry(
                 Mode = IndexedGeometryMode.TriangleList,
@@ -245,20 +251,20 @@ type ShapeCache(r : IRuntime) =
 type PrepareFontExtensions private() =
 
     [<Extension>]
-    static member PrepareGlyphs(r : IRuntime, f : Font, chars : seq<CodePoint>) =
-        let cache = ShapeCache.GetOrCreateCache r
+    static member PrepareGlyphs(runtime: IRuntime, font: Font, chars: seq<CodePoint>) =
+        let cache = ShapeCache.GetOrCreateCache runtime
 
         for c in chars do
-            cache.GetBufferRange (f.GetGlyph(c)) |> ignore
+            cache.GetBufferRange (font.GetGlyph(c)) |> ignore
 
     [<Extension>]
-    static member PrepareGlyphs(r : IRuntime, f : Font, chars : seq<char>) =
-        let cache = ShapeCache.GetOrCreateCache r
+    static member PrepareGlyphs(runtime: IRuntime, font: Font, chars: seq<char>) =
+        let cache = ShapeCache.GetOrCreateCache runtime
 
         for c in chars do
-            cache.GetBufferRange (f.GetGlyph(CodePoint c)) |> ignore
+            cache.GetBufferRange (font.GetGlyph(CodePoint c)) |> ignore
 
     [<Extension>]
-    static member PrepareTextShaders(r : IRuntime, f : Font, signature : IFramebufferSignature) =
-        let cache = ShapeCache.GetOrCreateCache r
+    static member PrepareTextShaders(runtime: IRuntime, signature: IFramebufferSignature) =
+        let cache = ShapeCache.GetOrCreateCache runtime
         cache.PrepareShaders signature

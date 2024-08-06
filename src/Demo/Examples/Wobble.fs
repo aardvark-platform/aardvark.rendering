@@ -41,7 +41,7 @@ module Wobble =
                 |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
                 |> AVal.map Frustum.projTrafo
 
-        let font = Aardvark.Base.Fonts.Font("Consolas")
+        let font = Font("Consolas")
         let task =
             Sg.ofList [
                 Sg.ofList [

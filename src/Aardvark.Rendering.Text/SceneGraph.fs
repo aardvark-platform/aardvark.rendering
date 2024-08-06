@@ -1,13 +1,11 @@
 ﻿namespace Aardvark.Rendering.Text
 
 open Aardvark.Base
-open Aardvark.Base.Fonts
-
-open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Rendering.Text
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
+open FSharp.Data.Adaptive
 open FSharp.Data.Traceable
 
 module RenderPass =
