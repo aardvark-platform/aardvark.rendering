@@ -1,7 +1,6 @@
 src/vkvm/libvkvm.dylib
 **/.ionide
-bin/Release
-bin/Debug
+bin/**
 !/bin/*.nuspec
 *.g.fs
 *.swp
