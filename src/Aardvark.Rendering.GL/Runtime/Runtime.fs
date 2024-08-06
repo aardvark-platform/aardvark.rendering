@@ -385,11 +385,7 @@ type Runtime(debug : IDebugConfig) =
     member x.PrepareBuffer (b : IBuffer, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) = ctx.CreateBuffer(b, storage)
     member x.PrepareEffect (signature : IFramebufferSignature, effect : FShade.Effect, topology : IndexedGeometryMode) : IBackendSurface =
         Operators.using ctx.ResourceLock (fun d ->
-            if signature.LayerCount > 1 then
-                Log.warn("[PrepareSurface] Using Triangle topology.")
-
             let _, program = ctx.CreateProgram(signature, Surface.Effect effect, topology)
-
             AVal.force program :> IBackendSurface
         )
 

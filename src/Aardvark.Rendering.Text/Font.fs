@@ -100,9 +100,9 @@ type ShapeCache(r : IRuntime) =
     let ranges = ConcurrentDictionary<Shape, Range1i>()
 
 
-    let surfaceCache = ConcurrentDictionary<IFramebufferSignature, Lazy<IBackendSurface>>()
-    let boundarySurfaceCache = ConcurrentDictionary<IFramebufferSignature, Lazy<IBackendSurface>>()
-    let billboardSurfaceCache = ConcurrentDictionary<IFramebufferSignature, Lazy<IBackendSurface>>()
+    let surfaceCache = ConcurrentDictionary<FramebufferLayout, Lazy<IBackendSurface>>()
+    let boundarySurfaceCache = ConcurrentDictionary<FramebufferLayout, Lazy<IBackendSurface>>()
+    let billboardSurfaceCache = ConcurrentDictionary<FramebufferLayout, Lazy<IBackendSurface>>()
 
 
     let pathShader =
@@ -154,7 +154,7 @@ type ShapeCache(r : IRuntime) =
         ]
 
     let surface (s : IFramebufferSignature) =
-        surfaceCache.GetOrAdd(s, fun s ->
+        surfaceCache.GetOrAdd(s.Layout, fun _ ->
             lazy (
                 r.PrepareEffect(
                     s, [
@@ -166,7 +166,7 @@ type ShapeCache(r : IRuntime) =
         ).Value
 
     let boundarySurface (s : IFramebufferSignature) =
-        boundarySurfaceCache.GetOrAdd(s, fun s ->
+        boundarySurfaceCache.GetOrAdd(s.Layout, fun _ ->
             lazy (
                 r.PrepareEffect(
                     s, [
@@ -178,7 +178,7 @@ type ShapeCache(r : IRuntime) =
         ).Value
 
     let billboardSurface (s : IFramebufferSignature) =
-        billboardSurfaceCache.GetOrAdd(s, fun s ->
+        billboardSurfaceCache.GetOrAdd(s.Layout, fun _ ->
             lazy (
                 r.PrepareEffect(
                     s, [
