@@ -1,3 +1,6 @@
+### 5.5.0
+- https://github.com/aardvark-platform/aardvark.rendering/wiki/Aardvark-Rendering-5.5-changelog
+
 ### 5.5.0-prerelease0002
 - Renamed `PixImageCube` to `PixCube`
 - Renamed `Aardvark.SceneGraph.IO` to `Aardvark.SceneGraph.Assimp`
