@@ -1633,34 +1633,34 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
             let calls =
                 Dict.toList indirects |> List.map (fun ((mode, ib, vb, textures, typeAndIndex), db) ->
                     let indexType = typeAndIndex |> Option.map fst
-                    let index = typeAndIndex |> Option.map snd
+                    let index = typeAndIndex |> Option.map snd |> Option.toValueOption
                     db.Flush()
 
                     let attributes =
                         pProgramInterface.inputs |> List.map (fun param ->
                             match MapExt.tryFind param.paramSemantic ib.Buffers with
                                 | Some ib ->
-                                    param.paramLocation, Attribute.Buffer {
+                                    struct(param.paramLocation, Attribute.Buffer {
                                         Type = GLSLType.toType param.paramType
                                         Buffer = ib
                                         Frequency = AttributeFrequency.PerInstances 1
                                         Format = VertexAttributeFormat.Default
                                         Stride = GLSLType.sizeof param.paramType
                                         Offset = 0
-                                    }
+                                    })
 
                                 | None ->
                                     match MapExt.tryFind param.paramSemantic vb.Buffers with
                                     | Some (vb, typ) ->
                                         let format = if typ = typeof<C4b> then VertexAttributeFormat.Normalized else VertexAttributeFormat.Default
-                                        param.paramLocation, Attribute.Buffer {
+                                        struct(param.paramLocation, Attribute.Buffer {
                                             Type = typ
                                             Buffer = vb
                                             Frequency = AttributeFrequency.PerVertex
                                             Format = format
                                             Stride = Marshal.SizeOf typ
                                             Offset = 0
-                                        }
+                                        })
 
                                     | None ->
                                         param.paramLocation, Attribute.Value (V4f.Zero, VertexAttributeFormat.Default)

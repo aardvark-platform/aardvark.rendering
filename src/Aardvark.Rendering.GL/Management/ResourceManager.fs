@@ -611,12 +611,12 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
                     member x.Create (t : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBindingHandle>) =
                         let attributes =
-                            bindings |> Array.map (fun (i, a) -> i, a.GetValue(t, rt))
+                            bindings |> Array.map (fun (i, a) -> struct(i, a.GetValue(t, rt)))
 
                         let index =
                             match index with
-                            | Some i -> i.Buffer.Handle.GetValue(t, rt) |> Some
-                            | _ -> None
+                            | Some i -> i.Buffer.Handle.GetValue(t, rt) |> ValueSome
+                            | _ -> ValueNone
 
                         match old with
                         | Some old ->

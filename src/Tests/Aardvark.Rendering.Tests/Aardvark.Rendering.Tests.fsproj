@@ -71,6 +71,7 @@
     <Compile Include="Tests\Compute\Jpeg.fs" />
     <Compile Include="Tests\Compute\MutableInputBinding.fs" />
     <Compile Include="Tests\Compute\ComputeTests.fs" />
+    <Compile Include="Tests\Other\AttributeBindingsBench.fs" />
     <Compile Include="Tests\Other\Camera.fs" />
     <Compile Include="Tests\Other\IndexedGeometryTests.fs" />
     <Compile Include="Tests\Other\SgTest.fs" />
