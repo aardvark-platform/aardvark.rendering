@@ -988,7 +988,7 @@ module PreparedObjectInfo =
             resources.Add activation
 
             // create all requested vertex-/instance-inputs
-            let attributeBindings =
+            let attributeBindings : struct (int * AdaptiveAttribute) list =
                 iface.inputs
                 |> List.choose (fun v ->
                     if v.paramLocation >= 0 then
@@ -1040,14 +1040,14 @@ module PreparedObjectInfo =
                     else
                         None
                 )
-                |> List.toArray
 
             let attributeBuffers =
-                attributeBindings |> Array.choose (fun (_, attr) ->
+                attributeBindings |> List.choose (fun struct (_, attr) ->
                     match attr with
                     | AdaptiveAttribute.Buffer b -> Some b.Resource
                     | _ -> None
                 )
+                |> List.toArray
 
             GL.Check "[Prepare] Buffers"
 
@@ -1076,7 +1076,7 @@ module PreparedObjectInfo =
             GL.Check "[Prepare] Indirect Buffer"
 
             // create the VertexArrayObject
-            let vibh = x.CreateVertexInputBinding(attributeBindings, index) |> addResource resources
+            let vibh = x.CreateVertexInputBinding(List.toArray attributeBindings, index) |> addResource resources
             GL.Check "[Prepare] VAO"
 
             let isActive = x.CreateIsActive rj.IsActive |> addResource resources

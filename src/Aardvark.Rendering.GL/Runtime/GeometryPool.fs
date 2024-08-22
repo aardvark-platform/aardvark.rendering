@@ -1636,38 +1636,37 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                     let index = typeAndIndex |> Option.map snd
                     db.Flush()
 
-                    let attributes =
+                    let attributes : struct (int * Attribute) list =
                         pProgramInterface.inputs |> List.map (fun param ->
                             match MapExt.tryFind param.paramSemantic ib.Buffers with
-                                | Some ib ->
+                            | Some ib ->
+                                param.paramLocation, Attribute.Buffer {
+                                    Type = GLSLType.toType param.paramType
+                                    Buffer = ib
+                                    Frequency = AttributeFrequency.PerInstances 1
+                                    Format = VertexAttributeFormat.Default
+                                    Stride = GLSLType.sizeof param.paramType
+                                    Offset = 0
+                                }
+
+                            | None ->
+                                match MapExt.tryFind param.paramSemantic vb.Buffers with
+                                | Some (vb, typ) ->
+                                    let format = if typ = typeof<C4b> then VertexAttributeFormat.Normalized else VertexAttributeFormat.Default
                                     param.paramLocation, Attribute.Buffer {
-                                        Type = GLSLType.toType param.paramType
-                                        Buffer = ib
-                                        Frequency = AttributeFrequency.PerInstances 1
-                                        Format = VertexAttributeFormat.Default
-                                        Stride = GLSLType.sizeof param.paramType
+                                        Type = typ
+                                        Buffer = vb
+                                        Frequency = AttributeFrequency.PerVertex
+                                        Format = format
+                                        Stride = Marshal.SizeOf typ
                                         Offset = 0
                                     }
 
                                 | None ->
-                                    match MapExt.tryFind param.paramSemantic vb.Buffers with
-                                    | Some (vb, typ) ->
-                                        let format = if typ = typeof<C4b> then VertexAttributeFormat.Normalized else VertexAttributeFormat.Default
-                                        param.paramLocation, Attribute.Buffer {
-                                            Type = typ
-                                            Buffer = vb
-                                            Frequency = AttributeFrequency.PerVertex
-                                            Format = format
-                                            Stride = Marshal.SizeOf typ
-                                            Offset = 0
-                                        }
-
-                                    | None ->
-                                        param.paramLocation, Attribute.Value (V4f.Zero, VertexAttributeFormat.Default)
+                                    param.paramLocation, Attribute.Value (V4f.Zero, VertexAttributeFormat.Default)
                         )
-                        |> List.toArray
 
-                    let bufferBinding = ctx.CreateVertexInputBinding(index, attributes)
+                    let bufferBinding = ctx.CreateVertexInputBinding(index, List.toArray attributes)
 
                     let beginMode =
                         let bm = beginMode mode

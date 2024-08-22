@@ -601,7 +601,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let layers = input |> AVal.mapNonAdaptive (fun l -> l.Slices)
         x.CreateImageBinding(texture, level, layers, imageType.Properties)
 
-    member x.CreateVertexInputBinding(bindings : (int * AdaptiveAttribute)[], index : IndexBinding option) =
+    member x.CreateVertexInputBinding(bindings : struct (int * AdaptiveAttribute)[], index : IndexBinding option) =
         vertexInputCache.GetOrCreate(
             [ bindings :> obj; index :> obj ],
             fun () ->
@@ -611,7 +611,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
                     member x.Create (t : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBindingHandle>) =
                         let attributes =
-                            bindings |> Array.map (fun (i, a) -> i, a.GetValue(t, rt))
+                            bindings |> Array.map (fun struct (i, a) -> struct (i, a.GetValue(t, rt)))
 
                         let index =
                             match index with
@@ -629,6 +629,11 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                         ctx.Delete vao
                 }
         )
+
+    [<Obsolete>]
+    member x.CreateVertexInputBinding(bindings : (int * AdaptiveAttribute)[], index : IndexBinding option) =
+        let bindings = bindings |> Array.map (fun (i, a) -> struct (i, a))
+        x.CreateVertexInputBinding(bindings, index)
 
     member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, uniforms : IUniformProvider) =
         uniformBufferManager.CreateUniformBuffer(layout, scope, uniforms)

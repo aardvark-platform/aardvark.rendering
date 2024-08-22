@@ -54,46 +54,66 @@ module PointerContextExtensions =
 
         module Attribute =
 
-            let private (|AttributePointerType|_|) (t : Type) =
-                match t with
-                | Float32 -> Some VertexAttribPointerType.Float
-                | Float64 -> Some VertexAttribPointerType.Double
-                | SByte   -> Some VertexAttribPointerType.Byte
-                | Int16   -> Some VertexAttribPointerType.Short
-                | Int32   -> Some VertexAttribPointerType.Int
-                | Byte    -> Some VertexAttribPointerType.UnsignedByte
-                | UInt16  -> Some VertexAttribPointerType.UnsignedShort
-                | UInt32  -> Some VertexAttribPointerType.UnsignedInt
-                | _ -> None
+            // Build a table for fast lookup instead of using active patterns multiple times.
+            let private attributeTable =
+                let primitives =
+                    [
+                        struct (typeof<float16>, VertexAttribPointerType.HalfFloat)
+                        struct (typeof<float32>, VertexAttribPointerType.Float)
+                        struct (typeof<float>,   VertexAttribPointerType.Double)
+                        struct (typeof<int8>,    VertexAttribPointerType.Byte)
+                        struct (typeof<int16>,   VertexAttribPointerType.Short)
+                        struct (typeof<int32>,   VertexAttribPointerType.Int)
+                        struct (typeof<uint8>,   VertexAttribPointerType.UnsignedByte)
+                        struct (typeof<uint16>,  VertexAttribPointerType.UnsignedShort)
+                        struct (typeof<uint32>,  VertexAttribPointerType.UnsignedInt)
+                    ]
+                    |> List.map (fun struct (t, a) ->
+                        struct (t, struct (V2i.II, a, t.GetCLRSize()))
+                    )
 
-            let private (|AttributePointer|_|) (t : Type) =
-                match t with
-                | AttributePointerType t -> Some (V2i.II, t)
-                | ColorOf (d, AttributePointerType t)
-                | VectorOf (d, AttributePointerType t) -> Some (V2i(d, 1), t)
-                | MatrixOf (d, AttributePointerType t) -> Some (d, t)
-                | _ -> None
+                let vectors =
+                    let sizes = [2; 3; 4]
 
-            let private (|Attribute|_|) =
-                (|AttributePointer|_|) >> Option.map (fun (d, t) -> d, unbox<VertexAttribType> t)
+                    primitives
+                    |> List.collect (fun struct (t, (_, a, typeSize)) ->
+                        sizes |> List.choose (fun s ->
+                            VectorType.tryGet t s
+                            |> Option.map (fun vt ->
+                                struct (vt, struct (V2i(s, 1), a, typeSize))
+                            )
+                        )
+                    )
 
-            let private vertexAttribTypeSize =
-                LookupTable.lookupTable [
-                    VertexAttribType.Byte,          sizeof<int8>
-                    VertexAttribType.UnsignedByte,  sizeof<uint8>
-                    VertexAttribType.Short,         sizeof<int16>
-                    VertexAttribType.UnsignedShort, sizeof<uint16>
-                    VertexAttribType.Int,           sizeof<int32>
-                    VertexAttribType.UnsignedInt,   sizeof<uint32>
-                    VertexAttribType.HalfFloat,     sizeof<float16>
-                    VertexAttribType.Float,         sizeof<float32>
-                    VertexAttribType.Double,        sizeof<double>
-                ]
+                let colors =
+                    let sizes = [3; 4]
 
-            let inline private vertexAttribPointerTypeSize (t : VertexAttribPointerType) =
-                t |> unbox<VertexAttribType> |> vertexAttribTypeSize
+                    primitives
+                    |> List.collect (fun struct (t, (_, a, typeSize)) ->
+                        sizes |> List.choose (fun s ->
+                            ColorType.tryGet t s
+                            |> Option.map (fun vt ->
+                                struct (vt, struct (V2i(s, 1), a, typeSize))
+                            )
+                        )
+                    )
 
-            let bindings (attributes : (int * Attribute)[]) =
+                let matrices =
+                    let sizes = MatrixType.all |> List.map _.Dimension |> List.distinct
+
+                    primitives
+                    |> List.collect (fun struct (t, (_, a, typeSize)) ->
+                        sizes |> List.choose (fun s ->
+                            MatrixType.tryGet t s
+                            |> Option.map (fun vt ->
+                                struct (vt, struct (s, a, typeSize))
+                            )
+                        )
+                    )
+
+                Dictionary.ofListV (primitives @ vectors @ colors @ matrices)
+
+            let bindings (attributes : struct (int * Attribute)[]) =
                 let buffers = System.Collections.Generic.List<_>()
                 let values = System.Collections.Generic.List<_>()
 
@@ -107,40 +127,43 @@ module PointerContextExtensions =
                             | PerVertex -> 0
                             | PerInstances i -> i
 
-                        match att.Type with
-                        | MatrixOf(s, AttributePointerType t) ->
-                            let rowSize = vertexAttribPointerTypeSize t * s.X
+                        match Dictionary.tryFindV att.Type attributeTable with
+                        | ValueSome (s, t, typeSize) ->
+                            if s.Y > 1 then
+                                let rowSize = typeSize * s.X
 
-                            let stride =
-                                if att.Stride = 0 then rowSize * s.Y
-                                else att.Stride
+                                let stride =
+                                    if att.Stride = 0 then rowSize * s.Y
+                                    else att.Stride
 
-                            for r in 0 .. s.Y - 1 do
-                                let ptr = VertexBufferBinding(uint32 (index + r), s.X, divisor, t, att.Format, stride, att.Offset + r * rowSize, buffer.Handle)
-                                buffers.Add ptr
+                                for r in 0 .. s.Y - 1 do
+                                    let ptr = VertexBufferBinding(uint32 (index + r), s.X, divisor, t, att.Format, stride, att.Offset + r * rowSize, buffer.Handle)
+                                    buffers.Add ptr
 
-                        | ColorOf(d, Byte) ->
-                            // C3b does not seem to work :/
-                            if d <> 4 then
-                                failf "cannot use %A for vertex or instance attribute buffers. Try any other color type instead." att.Type
+                            else
+                                match att.Type with
+                                | ColorOf(d, UInt8) ->
+                                    // C3b does not seem to work :/
+                                    if d <> 4 then
+                                        failf "cannot use %A for vertex or instance attribute buffers. Try any other color type instead." att.Type
 
-                            // Only works if normalized = true, i.e. only can be used for floating point attributes
-                            if att.Format <> VertexAttributeFormat.Normalized then
-                                failf "%A vertex or instance attribute buffers can only be used for normalized floating point attributes." att.Type
+                                    // Only works if normalized = true, i.e. only can be used for floating point attributes
+                                    if att.Format <> VertexAttributeFormat.Normalized then
+                                        failf "%A vertex or instance attribute buffers can only be used for normalized floating point attributes." att.Type
 
-                            // See: https://registry.khronos.org/OpenGL-Refpages/gl4/html/glVertexAttribPointer.xhtml
-                            let ptr =
-                                VertexBufferBinding(
-                                    uint32 index, int All.Bgra, divisor,
-                                    VertexAttribPointerType.UnsignedByte, VertexAttributeFormat.Normalized,
-                                    att.Stride, att.Offset, buffer.Handle
-                                )
+                                    // See: https://registry.khronos.org/OpenGL-Refpages/gl4/html/glVertexAttribPointer.xhtml
+                                    let ptr =
+                                        VertexBufferBinding(
+                                            uint32 index, int All.Bgra, divisor,
+                                            VertexAttribPointerType.UnsignedByte, VertexAttributeFormat.Normalized,
+                                            att.Stride, att.Offset, buffer.Handle
+                                        )
 
-                            buffers.Add ptr
+                                    buffers.Add ptr
 
-                        | AttributePointer (d, t) when d.Y = 1 ->
-                            let ptr = VertexBufferBinding(uint32 index, d.X, divisor, t, att.Format, att.Stride, att.Offset, buffer.Handle)
-                            buffers.Add ptr
+                                | _ ->
+                                    let ptr = VertexBufferBinding(uint32 index, s.X, divisor, t, att.Format, att.Stride, att.Offset, buffer.Handle)
+                                    buffers.Add ptr
 
                         | _ ->
                             failf "cannot use %A buffer as vertex or instance attribute buffer" att.Type
@@ -148,12 +171,12 @@ module PointerContextExtensions =
                     | Attribute.Value (value, format) ->
                         let typ = value.GetType()
 
-                        let dim, attributeType =
-                            match typ with
-                            | Attribute (d, t) -> d, t
+                        let struct (dim, attributeType, typeSize) =
+                            match Dictionary.tryFindV typ attributeTable with
+                            | ValueSome (d, a, s) -> struct (d, unbox<VertexAttribType> a, s)
                             | _ -> failf "cannot set value of %A as vertex or instance attribute" typ
 
-                        let rowSize = uint64 <| vertexAttribTypeSize attributeType * dim.X
+                        let rowSize = uint64 <| typeSize * dim.X
 
                         // Adjust BGRA layout of C3b and C4b
                         let value : obj =
@@ -175,8 +198,7 @@ module PointerContextExtensions =
                                 values.Add (NativePtr.read pBinding)
                         )
 
-
-                buffers.ToArray(), values.ToArray()
+                struct (buffers.ToArray(), values.ToArray())
 
     module NativePtr =
         let setArray (a : 'a[]) (ptr : nativeptr<'a>) =
@@ -246,8 +268,8 @@ module PointerContextExtensions =
         member x.ToStencilMode(mode : StencilMode) =
             toGLStencilMode mode
 
-        member x.CreateVertexInputBinding (index : Option<Buffer>, attributes : (int * Attribute)[]) =
-            let buffers, values = Attribute.bindings attributes
+        member x.CreateVertexInputBinding (index : Option<Buffer>, attributes : struct (int * Attribute)[]) =
+            let struct (buffers, values) = Attribute.bindings attributes
             let index = match index with | Some i -> i.Handle | _ -> 0
 
             let pBuffers = NativePtr.allocArray buffers
@@ -258,9 +280,14 @@ module PointerContextExtensions =
             NativePtr.write ptr value
             VertexInputBindingHandle ptr
 
-        member x.Update(ptr : VertexInputBindingHandle, index : Option<Buffer>, attributes : (int * Attribute)[]) =
+        [<Obsolete>]
+        member x.CreateVertexInputBinding (index : Option<Buffer>, attributes : (int * Attribute)[]) =
+            let attributes = attributes |> Array.map (fun (i, a) -> struct (i, a))
+            x.CreateVertexInputBinding(index, attributes)
+
+        member x.Update(ptr : VertexInputBindingHandle, index : Option<Buffer>, attributes : struct (int * Attribute)[]) =
             let mutable value = NativePtr.read ptr.Pointer
-            let buffers, values = Attribute.bindings attributes
+            let struct (buffers, values) = Attribute.bindings attributes
             let index = match index with | Some i -> i.Handle | _ -> 0
 
             let mutable value = value
@@ -293,6 +320,11 @@ module PointerContextExtensions =
 
             value.IndexBuffer <- index
             NativePtr.write ptr.Pointer value
+
+        [<Obsolete>]
+        member x.Update(ptr : VertexInputBindingHandle, index : Option<Buffer>, attributes : (int * Attribute)[]) =
+            let attributes = attributes |> Array.map (fun (i, a) -> struct (i, a))
+            x.Update(ptr, index, attributes)
 
         member x.Delete(ptr : VertexInputBindingHandle) =
             let v = NativePtr.read ptr.Pointer
