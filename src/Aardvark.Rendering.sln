@@ -172,8 +172,6 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim.V
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "17 - TextureArrays", "Examples (netcore)\17 - TextureArrays\17 - TextureArrays.fsproj", "{2C25EACD-8E56-4BE5-8BB7-0CB9ED004096}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.Opc", "Aardvark.SceneGraph.Opc\Aardvark.SceneGraph.Opc.fsproj", "{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scratch (netcore)", "Scratch (netcore)", "{29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}"
 	ProjectSection(SolutionItems) = preProject
 		Scratch (netcore)\new.fsx = Scratch (netcore)\new.fsx
@@ -552,10 +550,6 @@ Global
 		{2C25EACD-8E56-4BE5-8BB7-0CB9ED004096}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2C25EACD-8E56-4BE5-8BB7-0CB9ED004096}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2C25EACD-8E56-4BE5-8BB7-0CB9ED004096}.Release|Any CPU.Build.0 = Release|Any CPU
-		{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}.Release|Any CPU.Build.0 = Release|Any CPU
 		{73D82892-93D0-402C-B561-F25B5D1804B0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{73D82892-93D0-402C-B561-F25B5D1804B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{73D82892-93D0-402C-B561-F25B5D1804B0}.Release|Any CPU.ActiveCfg = Release|Any CPU

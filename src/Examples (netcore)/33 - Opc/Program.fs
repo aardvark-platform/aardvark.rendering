@@ -5,7 +5,7 @@ open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open System.Runtime.InteropServices
-open Aardvark.SceneGraph.Opc
+open Aardvark.Data.Opc
 open MBrace.FsPickler
 
 
@@ -59,8 +59,8 @@ type PatchLodTree(globalCenter : V3d, opc : OpcPaths, root : option<ILodTreeNode
     static let source = Symbol.Create "Disk"
     let patch, isLeaf =
         match tree with
-        | Leaf p -> p, true
-        | Node(p,_) -> p, false
+        | QTree.Leaf p -> p, true
+        | QTree.Node(p,_) -> p, false
 
     let cell = Cell patch.info.GlobalBoundingBox
 
@@ -101,7 +101,7 @@ type PatchLodTree(globalCenter : V3d, opc : OpcPaths, root : option<ILodTreeNode
     let children() =
         //lazy (
             match tree with
-                | Node(_, cs) ->
+                | QTree.Node(_, cs) ->
                     cs |> Array.map (fun c -> 
                         let root = 
                             match root with
@@ -109,7 +109,7 @@ type PatchLodTree(globalCenter : V3d, opc : OpcPaths, root : option<ILodTreeNode
                             | None -> this :> ILodTreeNode
                         PatchLodTree(globalCenter, opc, Some root, Some (this :> ILodTreeNode), level + 1, c) :> ILodTreeNode
                     )
-                | Leaf _ -> 
+                | QTree.Leaf _ -> 
                     Array.empty
         //)
 

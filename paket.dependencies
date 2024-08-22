@@ -43,12 +43,11 @@ nuget Silk.NET.GLFW                                 = 2.15.0
 nuget Silk.NET.Core                                 = 2.15.0
 nuget Silk.NET.Direct3D9                            = 2.15.0
 
-nuget SharpZipLib                                   ~> 1.4.1
-
 // Examples
 nuget Aardvark.PixImage.DevIL                       ~> 5.2.33
 nuget Aardvark.PixImage.ImageSharp                  ~> 2.0.1
 nuget Aardvark.Data.GLTF                            ~> 1.0.0
+nuget Aardvark.Data.Opc                             ~> 0.9.0
 
 group Test
     framework: net8.0

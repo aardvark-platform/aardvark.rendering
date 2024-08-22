@@ -3,7 +3,7 @@ open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.SceneGraph.Opc
+open Aardvark.Data.Opc
 
 open MBrace.FsPickler
 //open MBrace.FsPickler.Json
