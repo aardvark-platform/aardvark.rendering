@@ -1974,7 +1974,7 @@ type ResourceManager(device : Device) =
                         try
                             m.ContentType |> UniformWriters.getWriter target.ufOffset target.ufType
                         with
-                        | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                             failf "cannot convert uniform '%s' from %A to %A" target.ufName exn.Source exn.Target
 
                     m, writer

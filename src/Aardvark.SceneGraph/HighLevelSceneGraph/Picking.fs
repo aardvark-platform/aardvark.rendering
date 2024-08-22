@@ -293,7 +293,7 @@ module PickingSemantics =
                         let index =
                             match key.index with
                                 | Some view ->
-                                    let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<int>
+                                    let converter = Aardvark.Base.PrimitiveValueConverter.getArrayConverter view.ElementType typeof<int>
                                     key.call 
                                         |> AVal.bind (fun call -> BufferView.download call.FirstIndex call.FaceVertexCount view)
                                         |> AVal.map (converter >> unbox<int[]>)
@@ -314,7 +314,7 @@ module PickingSemantics =
                                                 call |> AVal.map (fun call -> 
                                                     call.FirstIndex + call.FaceVertexCount
                                                 )
-                                    let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<V3d>
+                                    let converter = Aardvark.Base.PrimitiveValueConverter.getArrayConverter view.ElementType typeof<V3d>
 
                                     maxVertexExclusice 
                                         |> AVal.bind (fun cnt -> BufferView.download 0 cnt view)

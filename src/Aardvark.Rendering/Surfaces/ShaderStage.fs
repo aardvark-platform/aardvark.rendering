@@ -19,7 +19,7 @@ type ShaderStage =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderStage =
     let ofFShade =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             FShade.ShaderStage.Vertex,          ShaderStage.Vertex
             FShade.ShaderStage.TessControl,     ShaderStage.TessControl
             FShade.ShaderStage.TessEval,        ShaderStage.TessEval
@@ -35,7 +35,7 @@ module ShaderStage =
         ]
 
     let toFShade =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             ShaderStage.Vertex,         FShade.ShaderStage.Vertex
             ShaderStage.TessControl,    FShade.ShaderStage.TessControl
             ShaderStage.TessEval,       FShade.ShaderStage.TessEval

@@ -47,7 +47,7 @@ type SurfaceInfo =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkSurfaceTransformFlagsKHR =
     let ofImageTrafo =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             ImageTrafo.Identity,            VkSurfaceTransformFlagsKHR.IdentityBit
             ImageTrafo.Rot90,           VkSurfaceTransformFlagsKHR.Rotate90Bit
             ImageTrafo.Rot180,          VkSurfaceTransformFlagsKHR.Rotate180Bit
@@ -59,7 +59,7 @@ module VkSurfaceTransformFlagsKHR =
         ]
 
     let toImageTrafo' =
-        LookupTable.lookupTable' [
+        LookupTable.tryLookup [
            VkSurfaceTransformFlagsKHR.IdentityBit,                      ImageTrafo.Identity
            VkSurfaceTransformFlagsKHR.Rotate90Bit,                      ImageTrafo.Rot90
            VkSurfaceTransformFlagsKHR.Rotate180Bit,                     ImageTrafo.Rot180

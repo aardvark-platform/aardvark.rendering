@@ -267,7 +267,7 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                         try
                             target.Add(v, vertexRange) |> ds.Add
                         with
-                        | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                             failf "cannot convert vertex attribute '%A' from %A to %A" k exn.Source exn.Target
 
                     | None ->
@@ -282,7 +282,7 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                         try
                             target.Add(v, instanceIndex) |> ds.Add
                         with
-                        | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                             failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
 
                     | None ->
@@ -294,7 +294,7 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                 | Some v -> indexBuffer.Add(v, indexRange) |> ds.Add
                 | None ->
                     if isNew then
-                        let conv = PrimitiveValueConverter.getArrayConverter typeof<int> signature.IndexType
+                        let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> signature.IndexType
                         let data = Array.init fvc id |> conv
                         indexBuffer.Set(data, indexRange)
 

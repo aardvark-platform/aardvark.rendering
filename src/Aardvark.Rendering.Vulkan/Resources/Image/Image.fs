@@ -38,7 +38,7 @@ module ``Image Format Extensions`` =
 
     module VkImageType =
         let ofTextureDimension =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 TextureDimension.Texture1D, VkImageType.D1d
                 TextureDimension.Texture2D, VkImageType.D2d
                 TextureDimension.Texture3D, VkImageType.D3d
@@ -48,7 +48,7 @@ module ``Image Format Extensions`` =
     module VkIndexType =
         let ofType =
             let lookup =
-                LookupTable.lookupTable' [
+                LookupTable.tryLookupV [
                     typeof<int16>, VkIndexType.Uint16
                     typeof<uint16>, VkIndexType.Uint16
                     typeof<int32>, VkIndexType.Uint32
@@ -57,7 +57,7 @@ module ``Image Format Extensions`` =
 
             fun (t : Type) ->
                 match lookup t with
-                | Some it -> it
+                | ValueSome it -> it
                 | _ -> failf "unsupported index type '%A'" t
 
     type Device with

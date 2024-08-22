@@ -28,7 +28,7 @@ module ImageDownloadExtensions =
                 | _ -> None
 
             let depthTexelSize =
-                LookupTable.lookupTable [
+                LookupTable.lookup [
                     VkFormat.D16Unorm, 2
                     VkFormat.D16UnormS8Uint, 2
                     VkFormat.D24UnormS8Uint, 4

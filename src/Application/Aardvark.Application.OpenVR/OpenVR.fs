@@ -23,7 +23,7 @@ type VrDeviceType =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal VrDeviceType =
     let ofETrackedDeviceClass =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             ETrackedDeviceClass.Controller, VrDeviceType.Controller
             ETrackedDeviceClass.HMD, VrDeviceType.Hmd
             ETrackedDeviceClass.TrackingReference, VrDeviceType.TrackingReference

@@ -188,7 +188,7 @@ module VkImageLayout =
     open KHRSwapchain
 
     let ofTextureLayout =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             TextureLayout.Undefined, VkImageLayout.Undefined
             TextureLayout.ShaderRead, VkImageLayout.ShaderReadOnlyOptimal
             TextureLayout.ShaderReadWrite, VkImageLayout.General
@@ -203,7 +203,7 @@ module VkImageLayout =
         ]
 
     let private toStageFlags (neutral : VkPipelineStageFlags) =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             VkImageLayout.Undefined,                     neutral
             VkImageLayout.General,                       VkPipelineStageFlags.AllCommandsBit
             VkImageLayout.ColorAttachmentOptimal,        VkPipelineStageFlags.ColorAttachmentOutputBit
@@ -226,7 +226,7 @@ module VkImageLayout =
 
     /// Returns the appropriate destination access flags for the given image layout.
     let toDstAccessFlags =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             VkImageLayout.Undefined,                     VkAccessFlags.None
             VkImageLayout.General,                       VkAccessFlags.MemoryReadBit |||
                                                          VkAccessFlags.MemoryWriteBit
@@ -347,7 +347,7 @@ module VkImageUsageFlags =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkShaderStageFlags =
     let ofShaderStage =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             ShaderStage.Vertex,         VkShaderStageFlags.VertexBit
             ShaderStage.TessControl,    VkShaderStageFlags.TessellationControlBit
             ShaderStage.TessEval,       VkShaderStageFlags.TessellationEvaluationBit

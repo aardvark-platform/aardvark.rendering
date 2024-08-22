@@ -98,16 +98,16 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
 
     static let defaultValue =
         match typeof<'a> with
-        | TypeInfo.Patterns.Byte    -> 255uy |> unbox<'a>
-        | TypeInfo.Patterns.SByte   -> 0y |> unbox<'a>
-        | TypeInfo.Patterns.UInt16  -> UInt16.MaxValue |> unbox<'a>
-        | TypeInfo.Patterns.Int16   -> 0s |> unbox<'a>
-        | TypeInfo.Patterns.UInt32  -> UInt32.MaxValue |> unbox<'a>
-        | TypeInfo.Patterns.Int32   -> 0 |> unbox<'a>
-        | TypeInfo.Patterns.UInt64  -> UInt64.MaxValue |> unbox<'a>
-        | TypeInfo.Patterns.Int64   -> 0L |> unbox<'a>
-        | TypeInfo.Patterns.Float32 -> 1.0f |> unbox<'a>
-        | TypeInfo.Patterns.Float64 -> 1.0 |> unbox<'a>
+        | TypeMeta.Patterns.UInt8   -> 255uy |> unbox<'a>
+        | TypeMeta.Patterns.Int8    -> 0y |> unbox<'a>
+        | TypeMeta.Patterns.UInt16  -> UInt16.MaxValue |> unbox<'a>
+        | TypeMeta.Patterns.Int16   -> 0s |> unbox<'a>
+        | TypeMeta.Patterns.UInt32  -> UInt32.MaxValue |> unbox<'a>
+        | TypeMeta.Patterns.Int32   -> 0 |> unbox<'a>
+        | TypeMeta.Patterns.UInt64  -> UInt64.MaxValue |> unbox<'a>
+        | TypeMeta.Patterns.Int64   -> 0L |> unbox<'a>
+        | TypeMeta.Patterns.Float32 -> 1.0f |> unbox<'a>
+        | TypeMeta.Patterns.Float64 -> 1.0 |> unbox<'a>
         | _ -> failf "unsupported channel-type: %A" typeof<'a>
 
     static let copy (src : NativeTensor4<'a>) (srcFormat : Col.Format) (dst : NativeTensor4<'a>) (dstFormat : Col.Format) =

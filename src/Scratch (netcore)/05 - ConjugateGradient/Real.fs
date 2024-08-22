@@ -221,7 +221,7 @@ module RealInstances =
         }
 
     let internal table =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             typeof<float32>,    Cfloat32 :> obj
             typeof<float>,      Cfloat64 :> obj
             typeof<V2f>,        CV2f :> obj
@@ -547,7 +547,7 @@ module ReflectedReal =
         }
 
     let internal table =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             typeof<float32>,    Cfloat32 :> obj
             typeof<float>,      Cfloat64 :> obj
             typeof<V2f>,        CV2f :> obj

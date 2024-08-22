@@ -54,7 +54,7 @@ module private DebugReportHelpers =
 
     module DebugReportVerbosity =
         let toMessageSeverity =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 DebugReportVerbosity.Error, MessageSeverity.Error
                 DebugReportVerbosity.Warning, MessageSeverity.Warning
                 DebugReportVerbosity.Information, MessageSeverity.Information
@@ -63,7 +63,7 @@ module private DebugReportHelpers =
 
     module VkDebugUtilsMessageSeverityFlagsEXT =
         let toMessageSeverity =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 VkDebugUtilsMessageSeverityFlagsEXT.ErrorBit, MessageSeverity.Error
                 VkDebugUtilsMessageSeverityFlagsEXT.WarningBit, MessageSeverity.Warning
                 VkDebugUtilsMessageSeverityFlagsEXT.InfoBit, MessageSeverity.Information
@@ -71,7 +71,7 @@ module private DebugReportHelpers =
             ]
 
         let ofMessageSeverity =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 MessageSeverity.Error, VkDebugUtilsMessageSeverityFlagsEXT.ErrorBit
                 MessageSeverity.Warning, VkDebugUtilsMessageSeverityFlagsEXT.WarningBit
                 MessageSeverity.Information, VkDebugUtilsMessageSeverityFlagsEXT.InfoBit

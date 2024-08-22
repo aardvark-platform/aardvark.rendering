@@ -596,7 +596,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                             try
                                 target.Add(v, geometryAttributeIndex) |> ds.Add
                             with
-                            | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                            | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                                 failf "cannot convert geometry attribute '%A' from %A to %A" k exn.Source exn.Target
 
                         | None ->
@@ -617,7 +617,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                     try
                         target.Add(v, instanceAttributeIndex) |> ds.Add
                     with
-                    | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                    | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                         failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
 
                 | None ->
@@ -642,7 +642,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                                     try
                                         target.Add(v, vertexRange) |> ds.Add
                                     with
-                                    | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                                    | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                                         failf "cannot convert vertex attribute '%A' from %A to %A" k exn.Source exn.Target
 
                                 | None ->
@@ -663,7 +663,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                             | Some idx -> indexBuffer.Add(idx, indexRange) |> ds.Add
                             | None ->
                                 if isNew then
-                                    let conv = PrimitiveValueConverter.getArrayConverter typeof<int> indexType
+                                    let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> indexType
                                     let data = Array.init fvc id |> conv
                                     indexBuffer.Set(data, indexRange)
 
@@ -685,7 +685,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                                     try
                                         target.Add(v, faceAttributeRange) |> ds.Add
                                     with
-                                    | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                                    | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                                         failf "cannot convert face attribute '%A' from %A to %A" k exn.Source exn.Target
 
                                 | None ->

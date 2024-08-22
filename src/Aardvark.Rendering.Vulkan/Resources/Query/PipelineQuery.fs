@@ -8,7 +8,7 @@ open System
 module private PipelineQueryHelpers =
 
     let base2VulkanFlags =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             InputAssemblyVertices,                  VkQueryPipelineStatisticFlags.InputAssemblyVerticesBit
             InputAssemblyPrimitives,                VkQueryPipelineStatisticFlags.InputAssemblyPrimitivesBit
             VertexShaderInvocations,                VkQueryPipelineStatisticFlags.VertexShaderInvocationsBit

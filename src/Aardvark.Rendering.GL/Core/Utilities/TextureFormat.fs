@@ -32,7 +32,7 @@ module internal TextureFormatExtensions =
 
         let toFormatAndType =
             let table =
-                LookupTable.lookupTable' [
+                LookupTable.tryLookupV [
                     TextureFormat.Bgr8,    (PixelFormat.Bgr, PixelType.UnsignedByte)
                     TextureFormat.Bgra8,   (PixelFormat.Bgra, PixelType.UnsignedByte)
                     TextureFormat.Rgb8,    (PixelFormat.Rgb, PixelType.UnsignedByte)
@@ -118,5 +118,5 @@ module internal TextureFormatExtensions =
 
             fun fmt ->
                 match fmt |> table with
-                | Some res -> res
+                | ValueSome res -> res
                 | _ -> failwithf "Conversion from format %A supported" fmt

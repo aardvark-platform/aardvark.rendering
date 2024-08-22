@@ -100,7 +100,7 @@ module BufferView =
             arr :> Array
 
         override x.Initialize (value : 'x, count : int) =
-            let conv = PrimitiveValueConverter.converter<'x, 'a>
+            let conv = Aardvark.Base.PrimitiveValueConverter.converter<'x, 'a>
             Array.create count (conv value) :> Array
 
     let download (startIndex : int) (count : int) (view : BufferView) =

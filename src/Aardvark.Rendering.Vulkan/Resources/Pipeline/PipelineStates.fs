@@ -122,7 +122,7 @@ module internal VertexInputDescription =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VertexInputState =
-    open TypeInfo
+    open TypeMeta
 
     // Note: The expected type is not enough to determine the appropriate format.
     // E.g. if V3f is expected, we might need a float32 format if the input is also float32
@@ -149,14 +149,14 @@ module VertexInputState =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RasterizerState =
     let private toVkPolygonMode =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             FillMode.Fill, VkPolygonMode.Fill
             FillMode.Line, VkPolygonMode.Line
             FillMode.Point, VkPolygonMode.Point
         ]
 
     let private toVkCullMode =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             CullMode.Back, VkCullModeFlags.BackBit
             CullMode.Front, VkCullModeFlags.FrontBit
             CullMode.FrontAndBack, VkCullModeFlags.FrontAndBack
@@ -166,7 +166,7 @@ module RasterizerState =
     // Vulkan NDC space is right-handed while Aardvark generally assumes OpenGL's left-handed NDC space
     // So we have to flip the winding order here (also in Vulkan we render upside down)
     let private toVkFrontFace =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             WindingOrder.Clockwise, VkFrontFace.CounterClockwise
             WindingOrder.CounterClockwise, VkFrontFace.Clockwise
         ]
@@ -193,7 +193,7 @@ module ColorBlendState =
 
 
     let private toVkBlendFactor =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             BlendFactor.SecondarySourceAlpha, VkBlendFactor.Src1Alpha
             BlendFactor.SecondarySourceColor, VkBlendFactor.Src1Color
             BlendFactor.InvSecondarySourceAlpha, VkBlendFactor.OneMinusSrc1Alpha
@@ -220,7 +220,7 @@ module ColorBlendState =
         ]
 
     let private toVkBlendOp =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             BlendOperation.Add, VkBlendOp.Add
             BlendOperation.Maximum, VkBlendOp.Max
             BlendOperation.Minimum, VkBlendOp.Min
@@ -272,7 +272,7 @@ module MultisampleState =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DepthState =
     let private toVkCompareOp =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             DepthTest.Greater, VkCompareOp.Greater
             DepthTest.GreaterOrEqual, VkCompareOp.GreaterOrEqual
             DepthTest.Less, VkCompareOp.Less
@@ -296,7 +296,7 @@ module DepthState =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module StencilState =
     let private toVkStencilOp =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             StencilOperation.Increment, VkStencilOp.IncrementAndClamp
             StencilOperation.IncrementWrap, VkStencilOp.IncrementAndWrap
             StencilOperation.Decrement, VkStencilOp.DecrementAndClamp
@@ -308,7 +308,7 @@ module StencilState =
         ]
 
     let private toVkStencilCompareOp  =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             ComparisonFunction.Always, VkCompareOp.Always
             ComparisonFunction.Equal, VkCompareOp.Equal
             ComparisonFunction.Greater, VkCompareOp.Greater

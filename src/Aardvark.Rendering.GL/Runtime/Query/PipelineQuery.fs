@@ -8,7 +8,7 @@ open OpenTK.Graphics.OpenGL4
 module private ``Pipeline Query Helpers`` =
 
     let base2GLTarget =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             InputAssemblyVertices,                  QueryTarget.VerticesSubmitted
             InputAssemblyPrimitives,                QueryTarget.PrimitivesSubmitted
             VertexShaderInvocations,                QueryTarget.VertexShaderInvocations

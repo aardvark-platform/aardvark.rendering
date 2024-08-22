@@ -13,7 +13,7 @@ module ``Sampler Extensions`` =
 
     module VkFilter =
         let ofFilterMode =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 FilterMode.Point, VkFilter.Nearest
                 FilterMode.Linear, VkFilter.Linear
             ]
@@ -29,7 +29,7 @@ module ``Sampler Extensions`` =
     module VkSamplerAddressMode =
         let ofWrapMode =
             let tryGetAddressMode =
-                LookupTable.lookupTable' [
+                LookupTable.tryLookupV [
                     WrapMode.Border, VkSamplerAddressMode.ClampToBorder
                     WrapMode.Clamp, VkSamplerAddressMode.ClampToEdge
                     WrapMode.Mirror, VkSamplerAddressMode.MirroredRepeat
@@ -38,12 +38,12 @@ module ``Sampler Extensions`` =
 
             fun m ->
                 match tryGetAddressMode m with
-                | Some it -> it
+                | ValueSome it -> it
                 | _ -> failf "unsupported WrapMode: %A" m
 
     module VkCompareOp =
         let ofSamplerComparisonFunction =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 ComparisonFunction.Always, VkCompareOp.Always
                 ComparisonFunction.Equal, VkCompareOp.Equal
                 ComparisonFunction.Greater, VkCompareOp.Greater

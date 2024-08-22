@@ -374,7 +374,7 @@ module Polynomial =
 
 
     let private varNames =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             typeof<int>, (fun (name : string) (i : obj) ->
                 let i = unbox<int> i
                 if i = 0 then sprintf "%s_0" name

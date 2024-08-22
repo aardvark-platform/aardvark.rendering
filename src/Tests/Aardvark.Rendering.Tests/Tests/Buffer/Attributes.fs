@@ -11,7 +11,7 @@ open Expecto
 
 module AttributeBuffer =
     open FSharp.Quotations
-    open TypeInfo
+    open TypeMeta
 
     module private AttributeShader =
         type private Vertex<'T> = { [<Color>] c : 'T }

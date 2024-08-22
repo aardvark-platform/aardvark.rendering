@@ -1189,19 +1189,19 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
     let fixup3d           = lazy (runtime.CreateComputeShader (Kernels.fixup3dKernel add ImageIO.readImage3d (ImageIO.addToImage3d add)))
 
     let scanTexture =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             2, scanTexture2d
             3, scanTexture3d
         ]
 
     let scan =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             2, scan2d
             3, scan3d
         ]
 
     let fixup =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             2, fixup2d
             3, fixup3d
         ]

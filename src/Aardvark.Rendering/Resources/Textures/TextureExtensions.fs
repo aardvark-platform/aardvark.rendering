@@ -10,7 +10,7 @@ module PixVisitors =
     [<AbstractClass>]
     type PixImageVisitor<'T>() =
         static let table =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 typeof<int8>,    (fun (self : PixImageVisitor<'T>, img : PixImage) -> self.Visit<int8>(unbox img))
                 typeof<uint8>,   (fun (self : PixImageVisitor<'T>, img : PixImage) -> self.Visit<uint8>(unbox img))
                 typeof<int16>,   (fun (self : PixImageVisitor<'T>, img : PixImage) -> self.Visit<int16>(unbox img))
@@ -41,7 +41,7 @@ module PixVisitors =
     [<AbstractClass>]
     type PixVolumeVisitor<'T>() =
         static let table =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 typeof<int8>,    (fun (self : PixVolumeVisitor<'T>, img : PixVolume) -> self.Visit<int8>(unbox img))
                 typeof<uint8>,   (fun (self : PixVolumeVisitor<'T>, img : PixVolume) -> self.Visit<uint8>(unbox img))
                 typeof<int16>,   (fun (self : PixVolumeVisitor<'T>, img : PixVolume) -> self.Visit<int16>(unbox img))

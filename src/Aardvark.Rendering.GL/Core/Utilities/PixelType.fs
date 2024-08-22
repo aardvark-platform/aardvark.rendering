@@ -6,7 +6,7 @@ open OpenTK.Graphics.OpenGL4
 module internal PixelType =
 
     let ofType =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
              typeof<uint8>,   PixelType.UnsignedByte
              typeof<int8>,    PixelType.Byte
              typeof<uint16>,  PixelType.UnsignedShort
@@ -18,7 +18,7 @@ module internal PixelType =
          ]
 
     let size =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             PixelType.UnsignedByte,             1
             PixelType.Byte,                     1
             PixelType.UnsignedShort,            2

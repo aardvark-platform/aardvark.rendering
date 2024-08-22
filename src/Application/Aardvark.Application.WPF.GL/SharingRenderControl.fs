@@ -328,7 +328,7 @@ module WGLDXContextExtensions =
             member x.Dispose() = x.Dispose()
 
     let private dxFormat =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             TextureFormat.Rgba8, Format.FmtA8R8G8B8
             TextureFormat.Depth24Stencil8, Format.FmtD24S8
         ]

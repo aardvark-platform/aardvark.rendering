@@ -808,7 +808,7 @@ module StoreTree =
         open Aardvark.Data.Points.Import
 
         let private tokens =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 "x", Ascii.Token.PositionX
                 "y", Ascii.Token.PositionY
                 "z", Ascii.Token.PositionZ

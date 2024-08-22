@@ -660,7 +660,7 @@ type ContextBufferExtensions private() =
 module ``Buffer Format Extensions`` = 
     module VkFormat =
         let ofType =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 typeof<float32>, VkFormat.R32Sfloat
                 typeof<V2f>, VkFormat.R32g32Sfloat
                 typeof<V3f>, VkFormat.R32g32b32Sfloat

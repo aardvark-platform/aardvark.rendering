@@ -3,6 +3,7 @@
 open System
 open System.Reflection
 open System.Reflection.Emit
+open System.Runtime.InteropServices
 open Microsoft.FSharp.Reflection
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
@@ -13,10 +14,60 @@ open FShade.GLSL
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module GLSLType =
-    open PrimitiveValueConverter.Interop
+
+    module Interop =
+
+        /// Type representing 2x4 matrices
+        /// Only used for padding rows of 2x2 and 2x3 matrices
+        [<Struct; StructLayout(LayoutKind.Sequential)>]
+        type M24f =
+            val M00 : float32
+            val M01 : float32
+            val M02 : float32
+            val M03 : float32
+            val M10 : float32
+            val M11 : float32
+            val M12 : float32
+            val M13 : float32
+
+            static do PrimitiveValueConverter.addConverters [
+                // padding for 2 row matrices
+                ( fun (i : M22f) -> M24f &i ) :> obj
+                ( fun (i : M22d) -> M24f &i ) :> obj
+                ( fun (i : M23f) -> M24f &i ) :> obj
+                ( fun (i : M23d) -> M24f &i ) :> obj
+            ]
+
+            new (m : inref<M22f>) =
+                { M00 = m.M00; M01 = m.M01; M02 = 0.0f; M03 = 0.0f
+                  M10 = m.M10; M11 = m.M11; M12 = 0.0f; M13 = 0.0f }
+
+            new (m : inref<M22d>) =
+                { M00 = float32 m.M00; M01 = float32 m.M01; M02 = 0.0f; M03 = 0.0f
+                  M10 = float32 m.M10; M11 = float32 m.M11; M12 = 0.0f; M13 = 0.0f }
+
+            new (m : inref<M23f>) =
+                { M00 = m.M00; M01 = m.M01; M02 = m.M02; M03 = 0.0f
+                  M10 = m.M10; M11 = m.M11; M12 = m.M12; M13 = 0.0f }
+
+            new (m : inref<M23d>) =
+                { M00 = float32 m.M00; M01 = float32 m.M01; M02 = float32 m.M02; M03 = 0.0f
+                  M10 = float32 m.M10; M11 = float32 m.M11; M12 = float32 m.M12; M13 = 0.0f }
+
+        module Patterns =
+            open TypeMeta
+
+            /// MatrixOf pattern also considering interop types.
+            [<return: Struct>]
+            let (|MatrixOf|_|) (t : Type) =
+                match t with
+                | MatrixOf r -> ValueSome r
+                | _ ->
+                    if t = typeof<M24f> then ValueSome (V2i(4, 2), typeof<float32>)
+                    else ValueNone
 
     let toType =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             Bool, typeof<int>
             Void, typeof<unit>
 
@@ -56,14 +107,14 @@ module GLSLType =
             Mat(3,4,Int(true,32)), typeof<M34i>
             Mat(4,4,Int(true,32)), typeof<M44i>
 
-            Mat(2,2,Float(32)), typeof<M24f> // Matrix rows need to be padded to 4 elements according to std140
-            Mat(2,3,Float(32)), typeof<M24f>
+            Mat(2,2,Float(32)), typeof<Interop.M24f> // Matrix rows need to be padded to 4 elements according to std140
+            Mat(2,3,Float(32)), typeof<Interop.M24f>
             Mat(3,3,Float(32)), typeof<M34f>
             Mat(3,4,Float(32)), typeof<M34f>
             Mat(4,4,Float(32)), typeof<M44f>
 
-            Mat(2,2,Float(64)), typeof<M24f>
-            Mat(2,3,Float(64)), typeof<M24f>
+            Mat(2,2,Float(64)), typeof<Interop.M24f>
+            Mat(2,3,Float(64)), typeof<Interop.M24f>
             Mat(3,3,Float(64)), typeof<M34f>
             Mat(3,4,Float(64)), typeof<M34f>
             Mat(4,4,Float(64)), typeof<M44f>

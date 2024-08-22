@@ -6,7 +6,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open FSharp.Data.Adaptive
-open TypeInfo
+open TypeMeta
 
 #nowarn "9"
 // #nowarn "51"

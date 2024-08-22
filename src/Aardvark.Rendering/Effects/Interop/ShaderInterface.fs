@@ -53,7 +53,7 @@ module ShaderPath =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderParameterType =
-    open PrimitiveValueConverter.Interop
+    open GLSLType.Interop
 
     let inline vector (componentType : ShaderParameterType) (dimension : int) = 
         Vector(componentType, dimension)
@@ -737,7 +737,7 @@ module ShaderParameterWriter =
                     if input = b then 
                         createWriter<NoConversionWriter<int>> [|input|] [||]
                     else
-                        let converter = PrimitiveValueConverter.getConverter input b
+                        let converter = Aardvark.Base.PrimitiveValueConverter.getConverter input b
                         createWriter<ConversionWriter<int, int>> [|input; b|] [|converter|]
 
                 | None ->
@@ -748,7 +748,7 @@ module ShaderParameterWriter =
                         // transposed matrices
                         | Matrix(t, rows, cols, false) ->
                             let inner = get input (Matrix(t, rows, cols, true))
-                            let transpose = PrimitiveValueConverter.getTransposeConverter input
+                            let transpose = Aardvark.Base.PrimitiveValueConverter.getTransposeConverter input
                             createWriter<MapWriter<int, int>> [|input; input|] [|inner; transpose|]
 
                         // arrays

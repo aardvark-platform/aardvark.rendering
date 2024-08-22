@@ -138,7 +138,7 @@ module Shader =
 
 
 let statisticName =
-    LookupTable.lookupTable [
+    LookupTable.lookup [
         InputAssemblyVertices, "Input vertices"
         InputAssemblyPrimitives, "Input primitives"
         VertexShaderInvocations, "Vertex shader invocations"

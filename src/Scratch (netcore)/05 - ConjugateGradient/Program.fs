@@ -285,7 +285,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
         )
 
     static let getFormat =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             typeof<FShade.Formats.r32f>, TextureFormat.R32f
             typeof<FShade.Formats.rg32f>, TextureFormat.Rg32f
             typeof<FShade.Formats.rgba32f>, TextureFormat.Rgba32f
@@ -578,7 +578,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         )
 
     static let getFormat =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             typeof<FShade.Formats.r32f>, TextureFormat.R32f
             typeof<FShade.Formats.rg32f>, TextureFormat.Rg32f
             typeof<FShade.Formats.rgba32f>, TextureFormat.Rgba32f
@@ -1193,7 +1193,7 @@ module PixImageExtensionsNew =
 
         let b255 (v : float) = clamp 0.0 1.0 v * 255.0 |> byte
 
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             PixFormat.ByteBGR, fun dz -> 
                 TensorAccessors<byte, V4d>(
                     Getter = (fun a i -> v255 (a.[int (i + 2L * dz)]) (a.[int (i + 1L * dz)]) (a.[int (i + 0L * dz)]) 255uy),

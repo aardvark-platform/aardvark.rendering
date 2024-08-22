@@ -1481,7 +1481,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                 | Some buffer -> buffer
                 | _ ->
                     let typ = GLSLType.toType buffer.ssbType
-                    let conv = PrimitiveValueConverter.convert typ
+                    let conv = Aardvark.Base.PrimitiveValueConverter.convert typ
 
                     AVal.custom (fun t ->
                         let ids = rootIds.GetValue t

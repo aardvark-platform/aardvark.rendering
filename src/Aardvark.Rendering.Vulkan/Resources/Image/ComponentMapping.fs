@@ -16,7 +16,7 @@ module internal VkComponentMappingExtensions =
             let c3 = VkComponentSwizzle.A
             let zero = VkComponentSwizzle.Zero
             let one = VkComponentSwizzle.One
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 Col.Format.Alpha, VkComponentMapping(zero, zero, zero, c0)
                 Col.Format.BGR, VkComponentMapping(c2, c1, c0, one)
                 Col.Format.BGRA, VkComponentMapping(c2, c1, c0, c3)
@@ -41,7 +41,7 @@ module internal VkComponentMappingExtensions =
 
             let create a b c d = VkComponentMapping(a,b,c,d)
 
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 TextureFormat.Bgr8, create r g b i
                 TextureFormat.Bgra8, create r g b a
                 TextureFormat.Rgb5, create r g b i

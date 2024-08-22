@@ -3,13 +3,13 @@
 open System
 open Aardvark.Base
 open Aardvark.Rendering
-open TypeInfo
-open PrimitiveValueConverter.Interop.Types.Patterns
+open TypeMeta
+open GLSLType.Interop.Patterns
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkFormat =
     let ofTextureFormat =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             TextureFormat.Bgr8,                           VkFormat.B8g8r8Unorm
             TextureFormat.Bgra8,                          VkFormat.B8g8r8a8Unorm
             TextureFormat.R3G3B2,                         VkFormat.Undefined
@@ -103,7 +103,7 @@ module VkFormat =
 
     let toTextureFormat =
         let unknown = unbox<TextureFormat> 0
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             VkFormat.Undefined, unknown
             VkFormat.R4g4UnormPack8, unknown
             VkFormat.R4g4b4a4UnormPack16, TextureFormat.Rgba4
@@ -292,7 +292,7 @@ module VkFormat =
         ]
 
     let pixelSizeInBytes =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             VkFormat.Undefined, 0
             VkFormat.R4g4UnormPack8, 1
             VkFormat.R4g4b4a4UnormPack16, 2
@@ -554,7 +554,7 @@ module VkFormat =
         let ds = Col.Format.GrayAlpha
         let s = Col.Format.Alpha
         let unknown = Col.Format.None
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             VkFormat.Undefined, none
             VkFormat.R4g4UnormPack8, rg
             VkFormat.R4g4b4a4UnormPack16, rgba
@@ -743,7 +743,7 @@ module VkFormat =
         ]
 
     let channels =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             VkFormat.Undefined, -1
             VkFormat.R4g4UnormPack8, 2
             VkFormat.R4g4b4a4UnormPack16, 4
@@ -933,7 +933,7 @@ module VkFormat =
 
     let sizeInBytes =
 
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             VkFormat.Undefined, -1
             VkFormat.R4g4UnormPack8, 1
             VkFormat.R4g4b4a4UnormPack16, 2
@@ -1068,7 +1068,7 @@ module VkFormat =
         ]
 
     let expectedType =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             VkFormat.Undefined, null
             VkFormat.R4g4UnormPack8, typeof<uint8>
             VkFormat.R4g4b4a4UnormPack16, typeof<uint16>
@@ -1264,7 +1264,7 @@ module VkFormat =
         let bgr x y flag = if flag then x else y
 
         let lookup =
-            LookupTable.lookupTable' [
+            LookupTable.tryLookup [
                 (typeof<float16>, 1), same VkFormat.R16Sfloat
                 (typeof<float16>, 2), same VkFormat.R16g16Sfloat
                 (typeof<float16>, 3), same VkFormat.R16g16b16Sfloat
@@ -1312,7 +1312,7 @@ module VkFormat =
             ]
 
         let normLookup =
-            LookupTable.lookupTable' [
+            LookupTable.tryLookup [
                 VkFormat.R8Sint,           VkFormat.R8Snorm
                 VkFormat.R8g8Sint,         VkFormat.R8g8Snorm
                 VkFormat.R8g8b8Sint,       VkFormat.R8g8b8Snorm
@@ -1337,7 +1337,7 @@ module VkFormat =
             ]
 
         let scaledLookup =
-            LookupTable.lookupTable' [
+            LookupTable.tryLookup [
                 VkFormat.R8Sint,           VkFormat.R8Sscaled
                 VkFormat.R8g8Sint,         VkFormat.R8g8Sscaled
                 VkFormat.R8g8b8Sint,       VkFormat.R8g8b8Sscaled
@@ -1377,12 +1377,12 @@ module VkFormat =
         match t with
         | ColorOf(d, t) | VectorOf(d, t) -> Some (d, t)
         | MatrixOf(s, t) -> Some (s.X, t)
-        | Num -> Some (1, t)
+        | Numeric -> Some (1, t)
         | _ -> None
 
     let inline private isBgr (t : Type) =
         match t with
-        | ColorOf(_, Byte) -> true
+        | ColorOf(_, UInt8) -> true
         | _ -> false
 
     let tryGetAttributeFormat (expectedType : Type) (inputType : Type) (normalized : bool) =

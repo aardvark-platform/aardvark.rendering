@@ -8,6 +8,9 @@ open System.Runtime.InteropServices
 open Microsoft.FSharp.Reflection
 open FSharp.Data.Adaptive
 
+#nowarn "44"
+
+[<Obsolete("Use PrimitiveValueConverter from Aardvark.Base instead.")>]
 module PrimitiveValueConverter =
 
     /// Exception thrown when an invalid conversion is requested.
@@ -29,6 +32,7 @@ module PrimitiveValueConverter =
             new(message : string, source : Type, target : Type, inner : Exception) = { inherit Exception(message, inner); Source = source; Target = target}
         end
 
+    [<Obsolete>]
     module Interop =
 
         [<AutoOpen>]
@@ -36,6 +40,7 @@ module PrimitiveValueConverter =
 
             /// Type representing 2x4 matrices
             /// Only used for padding rows of 2x2 and 2x3 matrices
+            [<Obsolete>]
             [<Struct; StructLayout(LayoutKind.Sequential)>]
             type M24f =
                 val M00 : float32
@@ -63,10 +68,12 @@ module PrimitiveValueConverter =
                     { M00 = float32 m.M00; M01 = float32 m.M01; M02 = float32 m.M02; M03 = 0.0f
                       M10 = float32 m.M10; M11 = float32 m.M11; M12 = float32 m.M12; M13 = 0.0f }
 
+            [<Obsolete>]
             module Patterns =
-                open TypeInfo
+                open TypeMeta
 
                 /// MatrixOf pattern also considering interop types.
+                [<Obsolete>]
                 let (|MatrixOf|_|) (t : Type) =
                     match t with
                     | MatrixOf(s, t) -> Some (s, t)

@@ -177,7 +177,7 @@ module internal ComputeTaskInternals =
             access |> Enum.convertFlags Conversion.ofResourceAccess MemoryBarrierFlags.None
 
         let ofTextureLayout =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 TextureLayout.Undefined,        MemoryBarrierFlags.None
 
                 TextureLayout.TransferRead,     MemoryBarrierFlags.PixelBufferBarrierBit |||

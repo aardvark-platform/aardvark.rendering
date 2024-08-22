@@ -147,7 +147,7 @@ module GLAssemblerExtensions =
     type AssemblerCommandStream(s : IAssemblerStream) =
         static let queryObjectPointers =
             lazy (
-                LookupTable.lookupTable [
+                LookupTable.lookup [
                     typeof<int>, OpenGl.Pointers.GetQueryObjectInt32
                     typeof<uint32>, OpenGl.Pointers.GetQueryObjectUInt32
                     typeof<int64>, OpenGl.Pointers.GetQueryObjectInt64
@@ -156,7 +156,7 @@ module GLAssemblerExtensions =
             )
         static let getInteger =
             lazy (
-                LookupTable.lookupTable [
+                LookupTable.lookup [
                     typeof<int>, OpenGl.Pointers.GetInteger
                     typeof<uint32>, OpenGl.Pointers.GetInteger
                     typeof<float32>, OpenGl.Pointers.GetFloat
@@ -165,7 +165,7 @@ module GLAssemblerExtensions =
             )
         static let getIndexedInteger =
             lazy (
-                LookupTable.lookupTable [
+                LookupTable.lookup [
                     yield typeof<int>, OpenGl.Pointers.GetIndexedInteger
                     yield typeof<uint32>, OpenGl.Pointers.GetIndexedInteger
                     yield typeof<int64>, OpenGl.Pointers.GetIndexedInteger64

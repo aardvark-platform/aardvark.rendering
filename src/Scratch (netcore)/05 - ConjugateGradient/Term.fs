@@ -898,7 +898,7 @@ module Term =
                         @>
 
     let private varNames =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             typeof<int>, (fun (name : string) (i : obj) ->
                 let i = unbox<int> i
                 if i = 0 then sprintf "%s_0" name
@@ -938,7 +938,7 @@ module Term =
     module private ExprExtensions =
         open Aardvark.Base.ReflectionHelpers
         open FShade.ReflectionPatterns
-        open Aardvark.Base.TypeInfo.Patterns
+        open Aardvark.Base.TypeMeta.Patterns
 
         let private vecNames = [| "X"; "Y"; "Z"; "W" |]
         let private neg = getMethodInfo <@ (~-) : int -> int @>

@@ -1270,7 +1270,7 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
             | _ -> int vb.Size
 
     static let getIndexType =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             typeof<uint8>, DrawElementsType.UnsignedByte
             typeof<int8>, DrawElementsType.UnsignedByte
             typeof<uint16>, DrawElementsType.UnsignedShort
@@ -1468,7 +1468,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
         slot.IndexBuffer |> Option.map (fun b -> slot.IndexType.Value, b.Memory.Value)
 
     static let beginMode =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             IndexedGeometryMode.PointList, BeginMode.Points
             IndexedGeometryMode.LineList, BeginMode.Lines
             IndexedGeometryMode.LineStrip, BeginMode.LineStrip

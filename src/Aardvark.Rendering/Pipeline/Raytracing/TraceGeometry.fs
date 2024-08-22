@@ -33,7 +33,7 @@ module VertexData =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndexData =
-    open TypeInfo
+    open TypeMeta
 
     let ofArray (data : Array) =
         let buffer = ArrayBuffer data

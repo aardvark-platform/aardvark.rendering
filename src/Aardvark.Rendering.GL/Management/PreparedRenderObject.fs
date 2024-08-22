@@ -929,9 +929,8 @@ type PreparedObjectInfo =
         member x.Dispose() = x.Dispose()
 
 module PreparedObjectInfo =
-    open FShade
-    open TypeInfo
-    open PrimitiveValueConverter.Interop.Types.Patterns
+    open TypeMeta
+    open GLSLType.Interop.Patterns
     open PreparedPipelineState
 
     [<AutoOpen>]
@@ -940,7 +939,7 @@ module PreparedObjectInfo =
         let (|AttributeType|_|) (t : Type) =
             match t with
             | ColorOf(_, t) | VectorOf(_, t) | MatrixOf(_, t) -> Some t
-            | Num -> Some t
+            | Numeric -> Some t
             | _ -> None
 
         let getExpectedType (t : GLSLType) =
@@ -951,7 +950,7 @@ module PreparedObjectInfo =
 
         let getIndexType =
             let tryGetIndexType =
-                LookupTable.lookupTable' [
+                LookupTable.tryLookupV [
                     typeof<byte>,   OpenGl.Enums.IndexType.UnsignedByte
                     typeof<uint16>, OpenGl.Enums.IndexType.UnsignedShort
                     typeof<uint32>, OpenGl.Enums.IndexType.UnsignedInt
@@ -962,7 +961,7 @@ module PreparedObjectInfo =
 
             fun t ->
                 match tryGetIndexType t with
-                | Some it -> it
+                | ValueSome it -> it
                 | _ -> failf "unsupported index type '%A'" t
 
         let validateDoubleAttribute (name : string) (expected : Type) (input : Type) =

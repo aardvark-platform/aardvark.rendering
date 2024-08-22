@@ -79,7 +79,7 @@ module FShadeInterop =
     module private ImageFormat =
 
         let toTextureFormat =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 ImageFormat.Rgba32f,      TextureFormat.Rgba32f
                 ImageFormat.Rgba16f,      TextureFormat.Rgba16f
                 ImageFormat.Rg32f,        TextureFormat.Rg32f
@@ -178,7 +178,7 @@ module FShadeInterop =
                 MaxAnisotropy = match state.Filter with Some Filter.Anisotropic -> 16 | _ -> 1 }
 
         let filter =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 Filter.Anisotropic,                  Aardvark.Rendering.TextureFilter.MinMagMipLinear
                 Filter.MinLinearMagMipPoint,         Aardvark.Rendering.TextureFilter.MinLinearMagMipPoint
                 Filter.MinLinearMagPointMipLinear,   Aardvark.Rendering.TextureFilter.MinLinearMagPointMipLinear
@@ -195,7 +195,7 @@ module FShadeInterop =
             ]
 
         let wrap =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 WrapMode.Wrap,         Aardvark.Rendering.WrapMode.Wrap
                 WrapMode.Mirror,       Aardvark.Rendering.WrapMode.Mirror
                 WrapMode.Clamp,        Aardvark.Rendering.WrapMode.Clamp
@@ -204,7 +204,7 @@ module FShadeInterop =
             ]
 
         let cmp =
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 ComparisonFunction.Greater,        Aardvark.Rendering.ComparisonFunction.Greater
                 ComparisonFunction.GreaterOrEqual, Aardvark.Rendering.ComparisonFunction.GreaterOrEqual
                 ComparisonFunction.Less,           Aardvark.Rendering.ComparisonFunction.Less
@@ -230,7 +230,7 @@ module FShadeInterop =
 
     // Output types for color-renderable texture formats
     let private colorFormatToType =
-        LookupTable.lookupTable' [
+        LookupTable.tryLookupV [
             TextureFormat.Bgr8,         typeof<V3d>
             TextureFormat.Bgra8,        typeof<V4d>
             TextureFormat.R3G3B2,       typeof<V3d>
@@ -369,7 +369,7 @@ module FShadeInterop =
     type AttachmentSignature with
         member x.Type =
             match colorFormatToType x.Format with
-            | Some typ -> typ
+            | ValueSome typ -> typ
             | _ ->
                 failwithf "%A is not a supported color-renderable format" x.Format
 
@@ -406,7 +406,7 @@ module FShadeInterop =
             x.imageType.dimension.TextureDimension
 
     let toInputTopology =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             IndexedGeometryMode.PointList, InputTopology.Point
             IndexedGeometryMode.LineList, InputTopology.Line
             IndexedGeometryMode.LineStrip, InputTopology.Line

@@ -67,7 +67,7 @@ module ProgramResourceExtensions =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderParameterType =
     let ofActiveUniformType =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             ActiveUniformType.Bool, Bool
             ActiveUniformType.BoolVec2, Vector(Bool, 2)
             ActiveUniformType.BoolVec3, Vector(Bool, 3)

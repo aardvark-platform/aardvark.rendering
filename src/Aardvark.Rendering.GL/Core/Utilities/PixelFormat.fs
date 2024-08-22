@@ -9,7 +9,7 @@ module internal PixelFormat =
         let build (wantInteger : bool) =
             let choose a b = if wantInteger then b else a
 
-            LookupTable.lookupTable [
+            LookupTable.lookup [
                 Col.Format.Alpha,     choose PixelFormat.Alpha PixelFormat.AlphaInteger
                 Col.Format.BW,        choose PixelFormat.Red PixelFormat.RedInteger
                 Col.Format.Gray,      choose PixelFormat.Red PixelFormat.RedInteger
@@ -28,7 +28,7 @@ module internal PixelFormat =
         if wantInteger then ofColFormatTableInteger else ofColFormatTable
 
     let channels =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             PixelFormat.Bgr, 3
             PixelFormat.Bgra, 4
             PixelFormat.Red, 1

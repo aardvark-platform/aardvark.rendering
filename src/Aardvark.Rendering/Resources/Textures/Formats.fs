@@ -200,7 +200,7 @@ module TextureFormat =
         let rgb8 = buildLookup(TextureFormat.Rgb8, TextureFormat.Srgb8)
         let rgba8 = buildLookup(TextureFormat.Rgba8, TextureFormat.Srgb8Alpha8)
 
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             PixFormat.ByteBGR  , rgb8
             PixFormat.ByteBGRA , rgba8
             PixFormat.ByteBGRP , rgba8
@@ -344,7 +344,7 @@ module TextureFormat =
         compressedFormats |> HashSet.contains fmt
 
     let toCompressed =
-        LookupTable.lookupTable' [
+        LookupTable.tryLookup [
             TextureFormat.Rgb8, TextureFormat.CompressedRgbS3tcDxt1
             TextureFormat.Rgb8ui, TextureFormat.CompressedRgbS3tcDxt1
             TextureFormat.Srgb8, TextureFormat.CompressedSrgbS3tcDxt1
@@ -365,7 +365,7 @@ module TextureFormat =
         ]
 
     let toDownloadFormat =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             TextureFormat.R8, PixFormat.ByteGray
             TextureFormat.Bgr8, PixFormat.ByteBGR
             TextureFormat.Bgra8, PixFormat.ByteBGRA
@@ -451,7 +451,7 @@ module TextureFormat =
         ]
 
     let toColFormat =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             TextureFormat.Bgr8,                           Col.Format.BGR
             TextureFormat.Bgra8,                          Col.Format.BGRA
             TextureFormat.R3G3B2,                         Col.Format.RGB
@@ -543,7 +543,7 @@ module TextureFormat =
         ]
 
     let pixelSizeInBits =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             TextureFormat.Bgr8, 24
             TextureFormat.Bgra8, 32
             TextureFormat.R3G3B2, 8
@@ -664,7 +664,7 @@ module TextureFormatExtensions =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PixFormat =
     let private typeSize =
-        LookupTable.lookupTable [
+        LookupTable.lookup [
             typeof<int8>, 1
             typeof<uint8>, 1
             typeof<int16>, 2
