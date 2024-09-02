@@ -323,11 +323,14 @@ let main argv =
                 Sg.cylinder' 32 C4b.Red 0.01 1.0
                 |> Sg.trafo (
                     line |> AVal.map (fun line ->
-                        let dir = line.P1 - line.P0
-                        let len = Vec.length dir
-                        Trafo3d.Scale(1.0, 1.0, len) *
-                        Trafo3d.RotateInto(V3d.OOI, dir / len) *
-                        Trafo3d.Translation(line.P0)
+                        if line = Line3d() then
+                            Trafo3d.Identity
+                        else
+                            let dir = line.P1 - line.P0
+                            let len = Vec.length dir
+                            Trafo3d.Scale(1.0, 1.0, len) *
+                            Trafo3d.RotateInto(V3d.OOI, dir / len) *
+                            Trafo3d.Translation(line.P0)
                     )
                 )
                 //Sg.lines ~~C4b.Red (line |> AVal.map Array.singleton)
