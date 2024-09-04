@@ -124,7 +124,7 @@ module BufferExtensions =
         member x.CreateBuffer(data : Array, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
             let size = nativeint (data.GetType().GetElementType().GLSize) * nativeint data.Length
 
-            pinned data (fun src ->
+            data |> NativeInt.pin (fun src ->
                 x.CreateBuffer(src, size, storage)
             )
 

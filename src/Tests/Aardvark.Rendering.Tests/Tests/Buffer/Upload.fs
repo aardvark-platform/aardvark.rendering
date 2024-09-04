@@ -46,7 +46,7 @@ module BufferUpload =
             let initialValue = 127uy
 
             let upload (buffer : IBackendBuffer) =
-                pinned rangeData (fun src ->
+                rangeData |> NativeInt.pin (fun src ->
                     buffer.Upload(nativeint rangeStart, src, nativeint rangeCount)
                 )
 

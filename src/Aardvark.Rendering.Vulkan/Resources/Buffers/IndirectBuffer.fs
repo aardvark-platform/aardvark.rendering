@@ -64,7 +64,7 @@ module IndirectBuffer =
 
                     let size = nativeint ab.Data.LongLength * nativeint sizeof<DrawCallInfo>
 
-                    pinned ab.Data (fun src ->
+                    ab.Data |> NativeInt.pin (fun src ->
                         device.DeviceMemory |> Buffer.ofWriter false flags size (fun dst ->
                             copy swap src dst ab.Data.Length
                         )

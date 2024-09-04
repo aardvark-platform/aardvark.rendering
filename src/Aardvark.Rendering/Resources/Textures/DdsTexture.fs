@@ -387,7 +387,7 @@ module DdsTexture =
                             { new INativeTextureData with
                                 member x.Size = size
                                 member x.SizeInBytes = int64 sizeInBytes
-                                member x.Use(f) = pinned data (fun ptr -> f (ptr + offset)) }
+                                member x.Use(f) = data |> NativePtr.pinArr (fun ptr -> f (ptr.Address + offset)) }
                         )
                     )
 

@@ -768,14 +768,14 @@ and CopyEngine(family : DeviceQueueFamily) =
                 stream.Run cmd.Handle
                 cmd.End()
 
-                cmd.Handle |> pin (fun pCmd ->
+                cmd.Handle |> NativePtr.pin (fun pCmd ->
                     let submit =
                         VkSubmitInfo(
                             0u, NativePtr.zero, NativePtr.zero,
                             1u, pCmd,
                             0u, NativePtr.zero
                         )
-                    submit |> pin (fun pSubmit ->
+                    submit |> NativePtr.pin (fun pSubmit ->
                         VkRaw.vkQueueSubmit(queue.Handle, 1u, pSubmit, fence.Handle) |> ignore
                     )
                 )
@@ -1004,7 +1004,7 @@ and [<AbstractClass>] Resource<'T when 'T : unmanaged and 'T : equality> =
             base.IsValid && x.handle <> Unchecked.defaultof<_>
 
         new(device : Device, handle : 'T, refCount : int) =
-            handle |> pin device.Instance.RegisterDebugTrace
+            handle |> NativePtr.pin device.Instance.RegisterDebugTrace
             { inherit Resource(device, refCount); handle = handle }
 
         new(device : Device, handle : 'T) =
@@ -1109,7 +1109,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                             uint32 cmds.Length, pCmdMasks,
                             signalCount, pSignalIndices
                         )
-                    ext |> pin (fun pExt ->
+                    ext |> NativePtr.pin (fun pExt ->
 
                         let submit =
                             VkSubmitInfo(
@@ -1118,7 +1118,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                                 uint32 cmds.Length, pCmds,
                                 uint32 signal.Length, pSignal
                             )
-                        submit |> pin (fun pSubmit ->
+                        submit |> NativePtr.pin (fun pSubmit ->
                             VkRaw.vkQueueSubmit(handle, 1u, pSubmit, fence)
                                 |> check "could not submit command buffer"
                         )   
@@ -1132,7 +1132,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                             uint32 signal.Length, pSignal
                         )
                         
-                    submit |> pin (fun pSubmit ->
+                    submit |> NativePtr.pin (fun pSubmit ->
                         VkRaw.vkQueueSubmit(handle, 1u, pSubmit, fence)
                             |> check "could not submit command buffer"
                     )
@@ -1400,7 +1400,7 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
                 uint32 index
             )
         let handle = 
-            createInfo |> pin (fun pCreate ->
+            createInfo |> NativePtr.pin (fun pCreate ->
                 temporary<VkCommandPool,VkCommandPool> (fun pHandle ->
                     VkRaw.vkCreateCommandPool(device.Handle, pCreate, NativePtr.zero, pHandle)
                         |> check "could not create command pool"
@@ -1453,7 +1453,7 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
                 flags |> int |> unbox,
                 uint32 familyIndex
             )
-        createInfo |> pin (fun pCreate ->
+        createInfo |> NativePtr.pin (fun pCreate ->
             temporary<VkCommandPool, VkCommandPool> (fun pHandle ->
                 VkRaw.vkCreateCommandPool(device.Handle, pCreate, NativePtr.zero, pHandle)
                     |> check "could not create command pool"
@@ -1685,7 +1685,7 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
         if handle <> 0n && device.Handle <> 0n then
             releaseResources()
 
-            handle |> pin (fun pHandle -> VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, pHandle))
+            handle |> NativePtr.pin (fun pHandle -> VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, pHandle))
             handle <- 0n
 
     interface IDisposable with
@@ -1794,7 +1794,7 @@ and Semaphore internal(device : Device) =
     let mutable handle = 
         let info = VkSemaphoreCreateInfo.Empty
 
-        info |> pin (fun pInfo ->
+        info |> NativePtr.pin (fun pInfo ->
             temporary<VkSemaphore, VkSemaphore> (fun pHandle ->
                 VkRaw.vkCreateSemaphore(device.Handle, pInfo, NativePtr.zero, pHandle)
                     |> check "could not create semaphore"
@@ -1826,7 +1826,7 @@ and Event internal(device : Device) =
     let mutable handle =
         let info = VkEventCreateInfo.Empty
 
-        info |> pin (fun pInfo ->
+        info |> NativePtr.pin (fun pInfo ->
             temporary<VkEvent, VkEvent> (fun pHandle ->
                 VkRaw.vkCreateEvent(device.Handle, pInfo, NativePtr.zero, pHandle)
                     |> check "could not create event"
@@ -1880,7 +1880,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
             )
 
         let mem = 
-            info |> pin (fun pInfo ->
+            info |> NativePtr.pin (fun pInfo ->
                 temporary<VkDeviceMemory, VkDeviceMemory> (fun pHandle ->
                     VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not 'allocate' null pointer for device heap"
@@ -2360,7 +2360,7 @@ and [<AllowNullLiteral>] DevicePtr internal(memory : DeviceMemory, offset : int6
             finally 
                 if not memory.Heap.IsHostCoherent then
                     let range = VkMappedMemoryRange(memory.Handle, uint64 x.Offset, uint64 x.Size)
-                    range |> pin (fun pRange ->
+                    range |> NativePtr.pin (fun pRange ->
                         VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, pRange)
                             |> check "could not flush memory range"
                     )
@@ -2725,7 +2725,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                         uint32 imageBinds.Length, pImageBindInfos,
                         0u, NativePtr.zero
                     )
-                bindInfo |> pin (fun pInfo ->
+                bindInfo |> NativePtr.pin (fun pInfo ->
                     VkRaw.vkQueueBindSparse(queue.Handle, 1u, pInfo, fence.Handle)
                         |> check "could not bind sparse memory"
                 )

@@ -425,7 +425,7 @@ module TensorImageCommandExtensions =
                         )
 
                     cmd.AppendCommand()
-                    copy |> pin (fun pCopy ->
+                    copy |> NativePtr.pin (fun pCopy ->
                         VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Buffer.Handle, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
                     )
 
@@ -471,7 +471,7 @@ module TensorImageCommandExtensions =
                         )
 
                     cmd.AppendCommand()
-                    copy |> pin (fun pCopy ->
+                    copy |> NativePtr.pin (fun pCopy ->
                         VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Buffer.Handle, 1u, pCopy)
                     )
 

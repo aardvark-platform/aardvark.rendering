@@ -171,7 +171,7 @@ module internal TextureDownloadImplementation =
             let pixelType = PixelType.ofType image.PixFormat.Type
             let pixelFormat = PixelFormat.ofColFormat texture.Format.IsIntegerFormat image.Format
 
-            pinned image.Array (fun dst ->
+            image.Array |> NativeInt.pin (fun dst ->
                 let dstInfo = image.VolumeInfo.ToXYWTensor4'().AsBytes(elementSize)
                 downloadNative texture level slice offset size 0 elementSize pixelFormat pixelType dst dstInfo
             )
@@ -182,7 +182,7 @@ module internal TextureDownloadImplementation =
             let pixelType = PixelType.ofType volume.PixFormat.Type
             let pixelFormat = PixelFormat.ofColFormat texture.Format.IsIntegerFormat volume.Format
 
-            pinned volume.Array (fun dst ->
+            volume.Array |> NativeInt.pin (fun dst ->
                 let dstInfo = volume.Tensor4Info.AsBytes(elementSize)
                 downloadNative texture level 0 offset volume.Size 0 elementSize pixelFormat pixelType dst dstInfo
             )
@@ -190,14 +190,14 @@ module internal TextureDownloadImplementation =
 
         let inline private copyUnsignedNormalizedDepth (matrix : Matrix<float32>) (shift : int) (maxValue : ^T)
                                                        (channels : int) (elementSize : int) (alignedLineSize : nativeint) (src : nativeint) =
-            pinned matrix.Array (fun dst ->
+            matrix.Data |> NativePtr.pinArr (fun dst ->
                 let src =
                     let info = Tensor4Info.deviceLayout true elementSize alignedLineSize channels matrix.Size.XYI
                     src |> NativeTensor4.ofNativeInt<uint8> info
 
                 let dst =
                     let info = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<float32>()
-                    dst |> NativeTensor4.ofNativeInt<uint8> info
+                    dst.Address |> NativeTensor4.ofNativeInt<uint8> info
 
                 (src, dst) ||> NativeTensor4.iterPtr2 (fun _ src dst ->
                     let src : nativeptr<'T> = NativePtr.cast src
@@ -246,9 +246,9 @@ module internal TextureDownloadImplementation =
                 downloadGeneralPixelData texture level slice offset size format typ copy
 
             | FloatingPointDepth (format, typ) ->
-                pinned matrix.Array (fun dst ->
+                matrix.Data |> NativePtr.pinArr (fun dst ->
                     let dstInfo = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<float32>()
-                    downloadNative texture level slice offset.XYO size 0 sizeof<float32> format typ dst dstInfo
+                    downloadNative texture level slice offset.XYO size 0 sizeof<float32> format typ dst.Address dstInfo
                 )
 
             | fmt -> failwithf "[GL] %A is not a supported depth format" fmt
@@ -265,9 +265,9 @@ module internal TextureDownloadImplementation =
 
             match texture.Format with
             | Stencil(format, typ, byteOffset) ->
-                pinned matrix.Array (fun dst ->
+                matrix.Data |> NativePtr.pinArr (fun dst ->
                     let dstInfo = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<int>()
-                    downloadNative texture level slice offset.XYO size byteOffset sizeof<uint8> format typ dst dstInfo
+                    downloadNative texture level slice offset.XYO size byteOffset sizeof<uint8> format typ dst.Address dstInfo
                 )
 
             | fmt -> failwithf "[GL] %A is not a supported stencil format" fmt

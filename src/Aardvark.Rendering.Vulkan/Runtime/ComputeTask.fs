@@ -79,7 +79,7 @@ module internal ComputeTaskInternals =
                         let length = arr.Length - index
                         min sizeInBytes (nativeint length * elementSize)
 
-                    pinned arr (fun ptr -> f (ptr + offset) sizeInBytes)
+                    arr |> NativeInt.pin (fun ptr -> f (ptr + offset) sizeInBytes)
 
     [<AutoOpen>]
     module private Compiler =

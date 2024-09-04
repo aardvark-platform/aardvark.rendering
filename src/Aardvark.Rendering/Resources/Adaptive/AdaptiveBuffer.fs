@@ -42,7 +42,7 @@ type AdaptiveBufferExtensions private() =
     /// <param name="sizeInBytes">The number of bytes to write to the buffer.</param>
     [<Extension>]
     static member Write(this : IAdaptiveBuffer, data : Array, offset : nativeint, sizeInBytes : nativeint) =
-        pinned data (fun src ->
+        data |> NativeInt.pin (fun src ->
             this.Write(src, offset, sizeInBytes)
         )
 
@@ -59,10 +59,9 @@ type AdaptiveBufferExtensions private() =
         assert (start >= 0 && start < data.Length)
         assert (start + length <= data.Length)
 
-        pinned data (fun src ->
-            let src = src + nativeint (start * sizeof<'T>)
+        (start, data) ||> NativePtr.pinArri (fun src ->
             let size = nativeint (length * sizeof<'T>)
-            this.Write(src, offset, size)
+            this.Write(src.Address, offset, size)
         )
 
     /// <summary>
@@ -83,8 +82,8 @@ type AdaptiveBufferExtensions private() =
     /// <param name="offset">The offset (in bytes) into the buffer.</param>
     [<Extension>]
     static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T, offset : nativeint) =
-        pinned data (fun src ->
-            this.Write(src, offset, nativeint sizeof<'T>)
+        data |> NativePtr.pin (fun src ->
+            this.Write(src.Address, offset, nativeint sizeof<'T>)
         )
 
     /// <summary>

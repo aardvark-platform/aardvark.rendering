@@ -413,7 +413,7 @@ module ``Image Command Extensions`` =
                     img.VkImageSubresourceRange
                 )
 
-            imageMemoryBarrier |> pin (fun pBarrier ->
+            imageMemoryBarrier |> NativePtr.pin (fun pBarrier ->
                 VkRaw.vkCmdPipelineBarrier(
                     cmd.Handle,
                     srcStage, dstStage,
@@ -488,7 +488,7 @@ module ``Image Command Extensions`` =
                         )
 
                     cmd.AppendCommand()
-                    copy |> pin (fun pCopy ->
+                    copy |> NativePtr.pin (fun pCopy ->
                         VkRaw.vkCmdCopyImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
                     )
 
@@ -535,7 +535,7 @@ module ``Image Command Extensions`` =
                         )
 
                     cmd.AppendCommand()
-                    copy |> pin (fun pCopy ->
+                    copy |> NativePtr.pin (fun pCopy ->
                         VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Handle, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
                     )
 
@@ -557,7 +557,7 @@ module ``Image Command Extensions`` =
                         )
 
                     cmd.AppendCommand()
-                    copy |> pin (fun pCopy ->
+                    copy |> NativePtr.pin (fun pCopy ->
                         VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Handle, 1u, pCopy)
                     )
 
@@ -587,7 +587,7 @@ module ``Image Command Extensions`` =
                         )
 
                     cmd.AppendCommand()
-                    resolve |> pin (fun pResolve ->
+                    resolve |> NativePtr.pin (fun pResolve ->
                         VkRaw.vkCmdResolveImage(cmd.Handle, src.Image.Handle, srcLayout, dst.Image.Handle, dstLayout, 1u, pResolve)
                     )
 
@@ -668,7 +668,7 @@ module ``Image Command Extensions`` =
                         )
 
                     cmd.AppendCommand()
-                    blit |> pin (fun pBlit ->
+                    blit |> NativePtr.pin (fun pBlit ->
                         VkRaw.vkCmdBlitImage(cmd.Handle, src.Image.Handle, srcLayout, dst.Image.Handle, dstLayout, 1u, pBlit, filter)
                     )
 
@@ -804,7 +804,7 @@ module ``Image Command Extensions`` =
                                     let imgSize = int64 copy.extent.width * int64 copy.extent.height * int64 copy.extent.depth * 4L
                                     totalSize <- totalSize + imgSize * int64 copy.srcSubresource.layerCount
 
-                                copy |> pin (fun pCopy ->
+                                copy |> NativePtr.pin (fun pCopy ->
                                     VkRaw.vkCmdCopyImage(
                                         cmd.Handle,
                                         baseImage.Handle, VkImageLayout.TransferSrcOptimal,
@@ -820,7 +820,7 @@ module ``Image Command Extensions`` =
                                 VkAccessFlags.TransferWriteBit,
                                 VkAccessFlags.TransferReadBit ||| VkAccessFlags.TransferWriteBit
                             )
-                        mem |> pin (fun pMem ->
+                        mem |> NativePtr.pin (fun pMem ->
                             VkRaw.vkCmdPipelineBarrier(
                                 cmd.Handle,
                                 VkPipelineStageFlags.TransferBit,
@@ -893,8 +893,8 @@ module ``Image Command Extensions`` =
                                     VkClearColorValue(float32 = color.Float)
 
                             let range = img.VkImageSubresourceRange
-                            clearValue |> pin (fun pClear ->
-                                range |> pin (fun pRange ->
+                            clearValue |> NativePtr.pin (fun pClear ->
+                                range |> NativePtr.pin (fun pRange ->
                                     cmd.AppendCommand()
                                     VkRaw.vkCmdClearColorImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, pClear, 1u, pRange)
                                 )
@@ -919,8 +919,8 @@ module ``Image Command Extensions`` =
 
                             let mutable clearValue = VkClearDepthStencilValue(depth, stencil)
                             let mutable range = img.VkImageSubresourceRange
-                            clearValue |> pin (fun pClear ->
-                                range |> pin (fun pRange ->
+                            clearValue |> NativePtr.pin (fun pClear ->
+                                range |> NativePtr.pin (fun pRange ->
                                     cmd.AppendCommand()
                                     VkRaw.vkCmdClearDepthStencilImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, pClear, 1u, pRange)
                                 )
@@ -988,7 +988,7 @@ module Image =
 
         let mutable handle =
             temporary (fun pHandle ->
-                info |> pin (fun pInfo ->
+                info |> NativePtr.pin (fun pInfo ->
                     VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not create image"
                     NativePtr.read pHandle

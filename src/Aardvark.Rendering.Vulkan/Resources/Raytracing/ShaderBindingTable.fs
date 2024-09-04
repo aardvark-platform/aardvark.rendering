@@ -140,9 +140,9 @@ module private ShaderBindingTableUtilities =
 
             let shaderHandles : uint8[] = Array.zeroCreate <| groupCount  * (int size)
 
-            pinned shaderHandles (fun ptr ->
+            shaderHandles |> NativePtr.pinArr (fun ptr ->
                 VkRaw.vkGetRayTracingShaderGroupHandlesKHR(
-                    pipeline.Device.Handle, pipeline.Handle, 0u, uint32 groupCount, uint64 shaderHandles.Length, ptr
+                    pipeline.Device.Handle, pipeline.Handle, 0u, uint32 groupCount, uint64 shaderHandles.Length, ptr.Address
                 )
                 |> check "[Raytracing] Failed to get shader group handles"
             )

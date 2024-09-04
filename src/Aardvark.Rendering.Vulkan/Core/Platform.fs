@@ -542,13 +542,13 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice) =
         if apiVersion >= Version(1,1,0) || hasExtension KHRMaintenance3.Name then
             let main3 = 
                 VkPhysicalDeviceMaintenance3Properties(10u, 10UL)
-            main3 |> pin (fun pMain3 ->
+            main3 |> NativePtr.pin (fun pMain3 ->
                 let props = 
                     VkPhysicalDeviceProperties2(
                         NativePtr.toNativeInt pMain3,
                         VkPhysicalDeviceProperties()
                     )
-                props |> pin (fun pProps ->
+                props |> NativePtr.pin (fun pProps ->
                     VkRaw.vkGetPhysicalDeviceProperties2(handle, pProps)
                     let props = NativePtr.read pProps
                     let main3 = NativePtr.read pMain3
@@ -572,13 +572,13 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice) =
                     0u,
                     0u
                 )
-            id |> pin (fun pId ->
+            id |> NativePtr.pin (fun pId ->
                 let khrProps = 
                     VkPhysicalDeviceProperties2KHR(
                         NativePtr.toNativeInt pId,
                         VkPhysicalDeviceProperties()
                     )
-                khrProps |> pin (fun pProps ->
+                khrProps |> NativePtr.pin (fun pProps ->
                     VkRaw.vkGetPhysicalDeviceProperties2(handle, pProps)
                     let id = NativePtr.read pId
                     let uid = sprintf "{ GUID = %A; Mask = %d }" id.deviceUUID id.deviceNodeMask

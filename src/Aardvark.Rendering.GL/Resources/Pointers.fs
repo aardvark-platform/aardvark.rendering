@@ -185,7 +185,7 @@ module PointerContextExtensions =
                             | :? C4b as c -> c.ToArray()
                             | _ -> value
 
-                        pinned value (fun pValue ->
+                        value |> NativeInt.pin (fun pValue ->
                             let mutable pSrc = pValue
 
                             for r = 0 to dim.Y - 1 do

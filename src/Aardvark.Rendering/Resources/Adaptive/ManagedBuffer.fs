@@ -68,8 +68,8 @@ type ManagedBufferExtensions private() =
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
     [<Extension>]
     static member Set(this : IManagedBuffer, data : byte[], range : Range1l) =
-        pinned data (fun src ->
-            this.Set(src, nativeint data.Length, range)
+        data |> NativePtr.pinArr (fun src ->
+            this.Set(src.Address, nativeint data.Length, range)
         )
 
     /// <summary>
@@ -80,8 +80,8 @@ type ManagedBufferExtensions private() =
     /// <param name="index">The index in the buffer to write to.</param>
     [<Extension>]
     static member Set<'T when 'T : unmanaged>(this : IManagedBuffer, value : 'T, index : int64) =
-        pinned value (fun src ->
-            this.Set(src, nativeint sizeof<'T>, Range1l(index, index))
+        value |> NativePtr.pin (fun src ->
+            this.Set(src.Address, nativeint sizeof<'T>, Range1l(index, index))
         )
 
     /// <summary>
@@ -103,8 +103,8 @@ type ManagedBufferExtensions private() =
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
     [<Extension>]
     static member Set<'T when 'T : unmanaged>(this : IManagedBuffer, values : 'T[], range : Range1l) =
-        pinned values (fun src ->
-            this.Set(src, nativeint values.Length * nativeint sizeof<'T>, range)
+        values |> NativePtr.pinArr (fun src ->
+            this.Set(src.Address, nativeint values.Length * nativeint sizeof<'T>, range)
         )
 
     /// <summary>
@@ -119,7 +119,7 @@ type ManagedBufferExtensions private() =
         let elementSize = values.GetType().GetElementType().GetCLRSize()
         let sizeInBytes = nativeint values.Length * nativeint elementSize
 
-        pinned values (fun src ->
+        values |> NativeInt.pin (fun src ->
             this.Set(src, sizeInBytes, range)
         )
 

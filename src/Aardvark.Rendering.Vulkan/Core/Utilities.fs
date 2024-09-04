@@ -127,16 +127,9 @@ module private Utilities =
     let inline (<!-) (ptr : nativeptr<'a>) (v : 'a) = NativePtr.write ptr v
 
     let temporary<'a, 'r when 'a : unmanaged> (f : nativeptr<'a> -> 'r) =
-        native {
-            let! ptr = Unchecked.defaultof<'a>
-            return f ptr
-        }
-        
-    let pin (f : nativeptr<'a> -> 'r) (v : 'a)  =
-        native {
-            let! ptr = v
-            return f ptr
-        }
+        let value = Unchecked.defaultof<'a>
+        use ptr = fixed &value
+        f ptr
 
     let check (str : string) (err : VkResult) =
         if err <> VkResult.Success then

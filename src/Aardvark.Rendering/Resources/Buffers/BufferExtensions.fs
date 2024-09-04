@@ -113,8 +113,8 @@ type IBufferRangeExtensions private() =
         srcIndex |> checkNonNegative "srcIndex"
         (srcIndex, count) ||> checkArrayBounds src
 
-        pinned src (fun pSrc ->
-            dst.Buffer.Upload(dst.Offset + byteSize<'T> dstIndex, pSrc + byteSize<'T> srcIndex, byteSize<'T> count)
+        (srcIndex, src) ||> NativePtr.pinArri (fun pSrc ->
+            dst.Buffer.Upload(dst.Offset + byteSize<'T> dstIndex, pSrc.Address, byteSize<'T> count)
         )
 
     ///<summary>Copies elements from an array to a buffer range.</summary>
@@ -186,8 +186,8 @@ type IBufferRangeExtensions private() =
         dstIndex |> checkNonNegative "dstIndex"
         (dstIndex, count) ||> checkArrayBounds dst
 
-        pinned dst (fun pDst ->
-            src.Buffer.Download(src.Offset + byteSize<'T> srcIndex, pDst + byteSize<'T> dstIndex, byteSize<'T> count)
+        (dstIndex, dst) ||> NativePtr.pinArri (fun pDst ->
+            src.Buffer.Download(src.Offset + byteSize<'T> srcIndex, pDst.Address, byteSize<'T> count)
         )
 
     ///<summary>Copies elements from a buffer range to an array.</summary>
@@ -249,8 +249,8 @@ type IBufferRangeExtensions private() =
         dstIndex |> checkNonNegative "dstIndex"
         (dstIndex, count) ||> checkArrayBounds dst
 
-        pinned dst (fun pDst ->
-            src.Buffer.DownloadAsync(src.Offset + byteSize<'T> srcIndex, pDst + byteSize<'T> dstIndex, byteSize<'T> count)
+        (dstIndex, dst) ||> NativePtr.pinArri (fun pDst ->
+            src.Buffer.DownloadAsync(src.Offset + byteSize<'T> srcIndex, pDst.Address, byteSize<'T> count)
         )
 
     ///<summary>Asynchronously copies elements from a buffer range to an array.</summary>

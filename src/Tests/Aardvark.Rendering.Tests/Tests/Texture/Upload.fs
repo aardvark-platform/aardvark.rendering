@@ -54,7 +54,7 @@ module TextureUpload =
                         { new INativeTextureData with
                             member x.Size = V3i(pi.Size, 1)
                             member x.SizeInBytes = int64 <| pi.Array.Length * sizeof<'T>
-                            member x.Use (f : nativeint -> 'U) = pinned pi.Array f }
+                            member x.Use (f : nativeint -> 'U) = NativeInt.pin f pi.Array }
                     ))
 
                 { new INativeTexture with

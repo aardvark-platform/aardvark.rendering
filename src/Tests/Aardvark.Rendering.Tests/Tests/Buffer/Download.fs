@@ -33,7 +33,7 @@ module BufferDownload =
 
         let private testNativeDownload (totalCount : int) (rangeStart : int) (rangeCount : int) =
             let download (buffer : IBackendBuffer) (dst : uint8[]) =
-                pinned dst (fun dst ->
+                dst |> NativeInt.pin (fun dst ->
                     buffer.Download(nativeint rangeStart, dst, nativeint rangeCount)
                 )
 
