@@ -4,6 +4,7 @@ open Aardvark.Base
 
 open System
 open System.Reflection
+open System.Collections.Concurrent
 open FSharp.Data.Adaptive
 
 [<AutoOpen>]
@@ -45,22 +46,24 @@ module AdaptivePrimitiveValueConverterExtensions =
                 member x.ConvertUntyped(value : IAdaptiveValue) = x.Convert(value)
                 member x.Convert(array : aval<Array>) = x.Convert(array)
 
-        let private staticInstanceCache = Dict<Type, obj>()
-        let private getStaticInstance (t : Type) : 'T =
-            lock staticInstanceCache (fun () ->
-                staticInstanceCache.GetOrCreate(t, fun t ->
-                    let p = t.GetProperty("Instance", BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
-                    p.GetValue(null)
-                ) |> unbox<'T>
+        let private converterCache = ConcurrentDictionary<struct (Type * Type), IAdaptiveConverter>()
+
+        let private getUntypedConverter (inputType: Type) (outputType: Type) : IAdaptiveConverter =
+            converterCache.GetOrAdd(struct (inputType, outputType), fun struct (inputType, outputType) ->
+                let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; outputType |]
+                let prop = tconv.GetProperty(nameof(AdaptiveConverter.Instance), BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+                prop.GetValue(null) |> unbox<IAdaptiveConverter>
             )
+
+        let inline private getConverter<'T> (inputType: Type) : IAdaptiveConverter<'T> =
+            getUntypedConverter inputType typeof<'T> |> unbox<IAdaptiveConverter<'T>>
 
         let convertArray (inputElementType : Type) (array : aval<Array>) : aval<'T[]> =
             if inputElementType = typeof<'T> then
                 array |> AdaptiveResource.mapNonAdaptive unbox
             else
                 try
-                    let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputElementType; typeof<'T> |]
-                    let converter : IAdaptiveConverter<'T> = tconv |> getStaticInstance
+                    let converter = getConverter<'T> inputElementType
                     converter.Convert(array)
                 with
                 | InvalidConversion exn -> raise exn
@@ -71,8 +74,7 @@ module AdaptivePrimitiveValueConverterExtensions =
                 value
             else
                 try
-                    let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; outputType |]
-                    let converter : IAdaptiveConverter = tconv |> getStaticInstance
+                    let converter = getUntypedConverter inputType outputType
                     converter.ConvertUntyped(value)
                 with
                 | InvalidConversion exn -> raise exn
@@ -83,8 +85,7 @@ module AdaptivePrimitiveValueConverterExtensions =
                 unbox value
             else
                 try
-                    let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; typeof<'T> |]
-                    let converter : IAdaptiveConverter<'T> = tconv |> getStaticInstance
+                    let converter = getConverter<'T> inputType
                     converter.Convert(value)
                 with
                 | InvalidConversion exn -> raise exn
