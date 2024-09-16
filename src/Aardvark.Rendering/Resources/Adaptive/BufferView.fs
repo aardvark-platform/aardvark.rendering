@@ -87,9 +87,9 @@ module BufferView =
 
             if stride = 0 || stride = sizeof<'a> then
                 let size = count * sizeof<'a>
-                let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
-                try NativeInt.memcpy ptr (gc.AddrOfPinnedObject()) size
-                finally gc.Free()
+                arr |> NativePtr.pinArr (fun pDst ->
+                    NativeInt.memcpy ptr pDst.Address size
+                )
             else
                 let step = nativeint stride
                 let mutable current = ptr

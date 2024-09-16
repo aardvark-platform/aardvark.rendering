@@ -258,17 +258,18 @@ module BufferExtensions =
 
             let handle = GCHandle.Alloc(source, GCHandleType.Pinned)
 
-            let elementType = source.GetType().GetElementType()
-            let elementSize = Marshal.SizeOf(elementType)
-            let targetOffset = targetStartIndex * elementSize
-            let size = count * elementSize
+            try
+                let elementType = source.GetType().GetElementType()
+                let elementSize = Marshal.SizeOf(elementType)
+                let targetOffset = targetStartIndex * elementSize
+                let size = count * elementSize
 
-            let ptr = handle.AddrOfPinnedObject() + nativeint (sourceStartIndex * elementSize)
+                let ptr = handle.AddrOfPinnedObject() + nativeint (sourceStartIndex * elementSize)
 
-            x.UploadRange(buffer, ptr, targetOffset, size)
+                x.UploadRange(buffer, ptr, targetOffset, size)
 
-
-            handle.Free()
+            finally
+                handle.Free()
 
         /// <summary>
         /// uploads a subrange of the given array to a (possibly different) range of the buffer.
@@ -324,17 +325,18 @@ module BufferExtensions =
 
             let handle = GCHandle.Alloc(target, GCHandleType.Pinned)
 
-            let elementType = target.GetType().GetElementType()
-            let elementSize = Marshal.SizeOf(elementType)
-            let sourceOffset = sourceStartIndex * elementSize
-            let size = count * elementSize
+            try
+                let elementType = target.GetType().GetElementType()
+                let elementSize = Marshal.SizeOf(elementType)
+                let sourceOffset = sourceStartIndex * elementSize
+                let size = count * elementSize
 
-            let ptr = handle.AddrOfPinnedObject() + nativeint (targetStartIndex * elementSize)
+                let ptr = handle.AddrOfPinnedObject() + nativeint (targetStartIndex * elementSize)
 
-            x.DownloadRange(buffer, ptr, sourceOffset, size)
+                x.DownloadRange(buffer, ptr, sourceOffset, size)
 
-
-            handle.Free()
+            finally
+                handle.Free()
 
         /// <summary>
         /// downloads a subrange of the given buffer to a (possibly different) range of the array.
@@ -399,16 +401,17 @@ module BufferExtensions =
 
             let handle = GCHandle.Alloc(source, GCHandleType.Pinned)
 
-            let elementType = source.GetType().GetElementType()
-            let elementSize = Marshal.SizeOf(elementType) |> nativeint
-            let size = nativeint count * elementSize
+            try
+                let elementType = source.GetType().GetElementType()
+                let elementSize = Marshal.SizeOf(elementType) |> nativeint
+                let size = nativeint count * elementSize
 
-            let ptr = handle.AddrOfPinnedObject() + nativeint sourceStartIndex * elementSize
+                let ptr = handle.AddrOfPinnedObject() + nativeint sourceStartIndex * elementSize
 
-            x.Upload(buffer, ptr, size, useNamed)
+                x.Upload(buffer, ptr, size, useNamed)
 
-
-            handle.Free()
+            finally
+                handle.Free()
 
         member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, count : int) =
             x.Upload(buffer, source, sourceStartIndex, count, true)

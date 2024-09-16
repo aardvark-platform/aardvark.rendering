@@ -1164,13 +1164,10 @@ module private Align =
 module Tools = 
 
     let toByteArray<'a when 'a : unmanaged> (arr : 'a[]) : byte[] =
-        let handle = GCHandle.Alloc(arr,GCHandleType.Pinned)
-        try
-            let target : byte[] = Array.zeroCreate (sizeof<'a> * arr.Length)
-            Marshal.Copy(handle.AddrOfPinnedObject(), target, 0, target.Length)
-            target
-        finally 
-            handle.Free()
+        use ptr = fixed arr
+        let target : byte[] = Array.zeroCreate (sizeof<'a> * arr.Length)
+        Marshal.Copy(ptr.Address, target, 0, target.Length)
+        target
 
 
 type JpegCompressor(runtime : IComputeRuntime) =
@@ -1410,22 +1407,18 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
 
         ms.Write(header, 0, header.Length)
 
-        let gc = GCHandle.Alloc(cpuBuffer, GCHandleType.Pinned)
-        let ptr = gc.AddrOfPinnedObject()
-        try
-            let mutable ptr = ptr
+        use ptr = fixed cpuBuffer
+        let mutable ptr = ptr.Address
 
-            for i in 0 .. byteCount - 1 do
-                let v : byte = NativeInt.read ptr
+        for i in 0 .. byteCount - 1 do
+            let v : byte = NativeInt.read ptr
 
-                ms.WriteByte v
+            ms.WriteByte v
 
-                if v = 0xFFuy then
-                    ms.WriteByte 0x00uy
+            if v = 0xFFuy then
+                ms.WriteByte 0x00uy
 
-                ptr <- ptr + 1n
-        finally
-            gc.Free()
+            ptr <- ptr + 1n
 
         ms.WriteByte(0xFFuy)
         ms.WriteByte(0xD9uy)
@@ -1443,10 +1436,8 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         let mutable dst = dstStart + nativeint header.Length
 
         // copy the data
-        let gc = GCHandle.Alloc(cpuBuffer, GCHandleType.Pinned)
-        let ptr = gc.AddrOfPinnedObject()
-
-        let mutable pSrc : nativeptr<byte> = NativePtr.ofNativeInt ptr
+        use ptr = fixed cpuBuffer
+        let mutable pSrc : nativeptr<byte> = ptr
         let mutable pDst : nativeptr<byte> = NativePtr.ofNativeInt dst
         let mutable i = byteCount
 
@@ -1467,9 +1458,8 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
 
             pSrc <- NativePtr.ofNativeInt ((NativePtr.toNativeInt pSrc) + 1n)
             i <- i - 1
-               
-        dst <- NativePtr.toNativeInt pDst  
-        gc.Free()
+
+        dst <- NativePtr.toNativeInt pDst
 
         // write EOI
         NativeInt.write dst 0xD9FFus

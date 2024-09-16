@@ -233,10 +233,10 @@ module GeometryPoolUtilities =
                         )
 
                     if todoCount > 0 then
-                        let gc = GCHandle.Alloc(todo, GCHandleType.Pinned)
-                        cmd.AppendCommand()
-                        VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, uint32 todoCount, NativePtr.ofNativeInt (gc.AddrOfPinnedObject()))
-                        gc.Free()
+                        todo |> NativePtr.pinArr (fun ptr ->
+                            cmd.AppendCommand()
+                            VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, uint32 todoCount, ptr)
+                        )
 
                     []
             }

@@ -466,9 +466,11 @@ module Buffer =
             let size = ab.Data.LongLength * int64 (Marshal.SizeOf ab.ElementType)
             if size = buffer.Size then
                 let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                buffer |> updateWriter (fun ptr -> Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size) )
-                gc.Free()
-                true
+                try
+                    buffer |> updateWriter (fun ptr -> Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size) )
+                    true
+                finally
+                    gc.Free()
             else
                 false
 

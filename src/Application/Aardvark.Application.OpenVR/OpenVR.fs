@@ -211,16 +211,17 @@ module RenderModels =
 
         let index = 
             let data : uint16[] = Array.zeroCreate (int m.TriangleCount * 3)
-            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-            Marshal.Copy(NativePtr.toNativeInt m.IndexData, gc.AddrOfPinnedObject(), nativeint m.TriangleCount * 3n * 2n)
-            gc.Free()
+            data |> NativePtr.pinArr (fun ptr ->
+                Marshal.Copy(NativePtr.toNativeInt m.IndexData, ptr.Address, nativeint m.TriangleCount * 3n * 2n)
+            )
+
             data |> Array.map int
 
         let vertices : Vertex[] = Array.zeroCreate (int m.VertexCount)
-        do 
-            let gc = GCHandle.Alloc(vertices, GCHandleType.Pinned)
-            Marshal.Copy(NativePtr.toNativeInt m.VertexData, gc.AddrOfPinnedObject(), nativeint m.VertexCount * nativeint sizeof<Vertex>)
-            gc.Free()
+        do
+            vertices |> NativePtr.pinArr (fun ptr ->
+                Marshal.Copy(NativePtr.toNativeInt m.VertexData, ptr.Address, nativeint m.VertexCount * nativeint sizeof<Vertex>)
+            )
 
 
         let positions = vertices |> Array.map (fun v -> V3f(v.Postion.X, -v.Postion.Z, v.Postion.Y))
@@ -775,13 +776,11 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
         let rFvc = int rMesh.unTriangleCount * 3
         let fvc = lFvc + rFvc
         let arr : V2f[] = Array.zeroCreate fvc
-        let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
-        try
-            let ptr = gc.AddrOfPinnedObject()
+        arr |> NativePtr.pinArr (fun ptr ->
+            let ptr = ptr.Address
             Marshal.Copy(lMesh.pVertexData, ptr, nativeint lFvc * 8n)
             Marshal.Copy(rMesh.pVertexData, ptr + nativeint 8 * nativeint lFvc, nativeint rFvc * 8n)
-        finally 
-            gc.Free()
+        )
 
         let eyeIndex : int[] = Array.init fvc (fun vi -> if vi < lFvc then 0 else 1)
 

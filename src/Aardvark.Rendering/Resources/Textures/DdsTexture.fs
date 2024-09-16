@@ -273,33 +273,23 @@ module DdsTexture =
     module private BinaryStreamReading =
 
         let tryReadRaw (sizeInBytes : int) (stream : Stream) =
-            let buffer = Array.zeroCreate<uint8> sizeInBytes
-
-            let rec copy (offset : int) (sizeInBytes : int) : bool =
-                let n = stream.Read(buffer, offset, sizeInBytes)
-
-                if n < sizeInBytes then
-                    if n = 0 then
-                        false
-                    else
-                        copy n (sizeInBytes - n)
-                else
-                    true
-
-            if copy 0 sizeInBytes then
+            try
+                let buffer = Array.zeroCreate<uint8> sizeInBytes
+                stream.ReadBytes(buffer)
                 Some buffer
-            else
+            with _ ->
                 None
 
-        let tryRead<'T> (stream : Stream) =
-            match stream |> tryReadRaw sizeof<'T> with
+        let tryRead<'T when 'T : unmanaged> (stream : Stream) =
+            let sizeInBytes = sizeof<'T>
+
+            match stream |> tryReadRaw sizeInBytes with
             | Some buffer ->
-                let handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-                try
-                    let obj = unbox<'T> <| Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof<'T>)
-                    Some obj
-                finally
-                    handle.Free()
+                let value = Unchecked.defaultof<'T>
+                use pSrc = fixed buffer
+                use pDst = fixed &value
+                Buffer.MemoryCopy(pSrc.Address, pDst.Address, int64 sizeInBytes, int64 sizeInBytes)
+                Some value
 
             | None ->
                 None
@@ -309,7 +299,7 @@ module DdsTexture =
             | Some buffer -> buffer
             | _ -> raise <| DdsParseException(message)
 
-        let read<'T> (message : string) (stream : Stream) =
+        let read<'T when 'T : unmanaged> (message : string) (stream : Stream) =
             match tryRead<'T> stream with
             | Some value -> value
             | _ -> raise <| DdsParseException(message)

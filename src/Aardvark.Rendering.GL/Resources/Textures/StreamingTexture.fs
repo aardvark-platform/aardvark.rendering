@@ -156,19 +156,16 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
                 let offset = pixelSize * (pos.X + pos.Y * currentSize.X)
             
                 let data : byte[] = Array.zeroCreate pixelSize
-                let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-            
-                try
+                data |> NativePtr.pinArr (fun pDst ->
                     GL.BindBuffer(BufferTarget.CopyReadBuffer, pbo)
                     GL.Check "could not bind PBO"
 
-                    GL.GetBufferSubData(BufferTarget.CopyReadBuffer, nativeint offset, nativeint pixelSize, gc.AddrOfPinnedObject())
+                    GL.GetBufferSubData(BufferTarget.CopyReadBuffer, nativeint offset, nativeint pixelSize, pDst.Address)
                     GL.Check "could not read pixel from PBO"
 
                     GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
                     GL.Check "could not unbind PBO"
-                finally
-                    gc.Free()
+                )
 
                 match pixelType with
                 | PixelType.UnsignedByte ->
@@ -414,19 +411,16 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
                 let offset = pixelSize * (pos.X + pos.Y * currentSize.X)
             
                 let data : byte[] = Array.zeroCreate pixelSize
-                let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-            
-                try
+                data |> NativePtr.pinArr (fun pDst ->
                     GL.BindBuffer(BufferTarget.CopyReadBuffer, pbo.Handle)
                     GL.Check "could not bind PBO"
 
-                    GL.GetBufferSubData(BufferTarget.CopyReadBuffer, nativeint offset, nativeint pixelSize, gc.AddrOfPinnedObject())
+                    GL.GetBufferSubData(BufferTarget.CopyReadBuffer, nativeint offset, nativeint pixelSize, pDst.Address)
                     GL.Check "could not read pixel from PBO"
 
                     GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
                     GL.Check "could not unbind PBO"
-                finally
-                    gc.Free()
+                )
 
                 match pixelType with
                 | PixelType.UnsignedByte ->

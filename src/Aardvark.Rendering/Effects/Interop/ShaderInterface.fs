@@ -517,11 +517,10 @@ module ShaderParameterWriter =
             static let sa = sizeof<'a>
 
             override x.Write(target : nativeint, value : 'a[]) =
-                let mutable target = target
                 let cnt = min length value.Length
-                let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-                try Marshal.Copy(gc.AddrOfPinnedObject(), target, cnt * sa)
-                finally gc.Free()
+                value |> NativePtr.pinArr (fun ptr ->
+                    Marshal.Copy(ptr.Address, target, cnt * sa)
+                )
            
         type FixedArrayWriter<'a>(inner : Writer<'a>, stride : int, length : int) =
             inherit Writer<'a[]>()
@@ -541,11 +540,10 @@ module ShaderParameterWriter =
             let copySize = sa * min Peano.typeSize<'d> length
 
             override x.Write(target : nativeint, value : Arr<'d, 'a>) =
-                let mutable target = target
-                let gc = GCHandle.Alloc(value.Data, GCHandleType.Pinned)
-                try Marshal.Copy(gc.AddrOfPinnedObject(), target, copySize)
-                finally gc.Free()
-           
+                value.Data |> NativePtr.pinArr (fun ptr ->
+                    Marshal.Copy(ptr.Address, target, copySize)
+                )
+
         type FixedArrWriter<'d,'a when 'd :> INatural>(inner : Writer<'a>, stride : int, length : int) =
             inherit Writer<Arr<'d, 'a>>()
 

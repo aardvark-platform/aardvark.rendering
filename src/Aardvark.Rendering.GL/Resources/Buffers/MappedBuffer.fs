@@ -266,9 +266,11 @@ module ManagedBufferImplementation =
                         assert(data.Length >= int ptr.Size)
 
                         let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                        GL.Dispatch.NamedBufferSubData(buffer.Handle, o, s, gc.AddrOfPinnedObject())
-                        GL.Check (sprintf "[Pool] could not write to buffer %A" sem)
-                        gc.Free()
+                        try
+                            GL.Dispatch.NamedBufferSubData(buffer.Handle, o, s, gc.AddrOfPinnedObject())
+                            GL.Check (sprintf "[Pool] could not write to buffer %A" sem)
+                        finally
+                            gc.Free()
                     | _ ->
                         ()
 
@@ -478,10 +480,11 @@ module ManagedBufferImplementation =
                             assert(data.Length >= int ptr.Size)
 
                             let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                        
-                            buffer.Write(o, s, gc.AddrOfPinnedObject())
-                            GL.Check (sprintf "[Pool] could not write to buffer %A" sem)
-                            gc.Free()
+                            try
+                                buffer.Write(o, s, gc.AddrOfPinnedObject())
+                                GL.Check (sprintf "[Pool] could not write to buffer %A" sem)
+                            finally
+                                gc.Free()
                         | _ ->
                             ()
                             //Log.error "%s undefined" (string sem)

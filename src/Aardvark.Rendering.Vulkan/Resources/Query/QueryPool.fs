@@ -46,13 +46,11 @@ module QueryPool =
         let bufferStride = valuesPerQuery * sizeof<uint64>
 
         let data : uint64[] = Array.zeroCreate bufferLength
-        let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-
-        try
+        data |> NativePtr.pinArr (fun ptr ->
             let result =
                 VkRaw.vkGetQueryPoolResults(
                     pool.Device.Handle, pool.Handle, 0u, uint32 pool.Count,
-                    uint64 bufferSizeInBytes, gc.AddrOfPinnedObject(),
+                    uint64 bufferSizeInBytes, ptr.Address,
                     uint64 bufferStride,
                     flags ||| VkQueryResultFlags.D64Bit
                 )
@@ -61,9 +59,7 @@ module QueryPool =
             | VkResult.Success -> Some data
             | VkResult.NotReady -> None
             | _ -> result |> check "failed to get query results" |> unbox
-
-        finally
-            gc.Free()
+        )
 
     let tryGetValues (valuesPerQuery : int) (pool : QueryPool) =
         pool |> getResults valuesPerQuery VkQueryResultFlags.None

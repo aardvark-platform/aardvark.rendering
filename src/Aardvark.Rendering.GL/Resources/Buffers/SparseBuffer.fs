@@ -379,8 +379,10 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
                     assert(data.Length >= int ptr.Size)
 
                     let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                    buffer.Write(o, s, gc.AddrOfPinnedObject())
-                    gc.Free()
+                    try
+                        buffer.Write(o, s, gc.AddrOfPinnedObject())
+                    finally
+                        gc.Free()
 
                 | _ ->
                     ()

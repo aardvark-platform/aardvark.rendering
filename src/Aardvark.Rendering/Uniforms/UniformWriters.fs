@@ -436,15 +436,13 @@ module UniformWriters =
             override x.TargetSize = targetSize
                 
             override x.Write(value : 'a[], ptr : nativeint) =
-                let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
                 let inputSize = nativeint value.Length * nativeint sizeof<'a>
                 let copySize = min targetSize inputSize
 
-                try 
-                    Marshal.Copy(gc.AddrOfPinnedObject(), ptr, copySize)
+                value |> NativePtr.pinArr (fun pSrc ->
+                    Marshal.Copy(pSrc.Address, ptr, copySize)
                     if targetSize > copySize then Marshal.Set(ptr + copySize, 0, targetSize - copySize)
-                finally 
-                    gc.Free()
+                )
 
         type PrimitiveMapWriter<'a, 'b when 'b : unmanaged>(mapping : 'a -> 'b) =
             inherit AbstractWriter<'a>()
