@@ -1,9 +1,9 @@
-group Test
-	Aardvark.PixImage.ImageSharp
 
-	Expecto
-	Expecto.FsCheck
-	Expecto.Hopac
-	BenchmarkDotNet
-	YoloDev.Expecto.TestSdk
-	Microsoft.NET.Test.Sdk
+Aardvark.PixImage.ImageSharp
+
+Expecto
+Expecto.FsCheck
+Expecto.Hopac
+BenchmarkDotNet
+YoloDev.Expecto.TestSdk
+Microsoft.NET.Test.Sdk
