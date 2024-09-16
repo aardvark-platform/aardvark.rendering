@@ -70,19 +70,6 @@ module Loader =
     let private VertexBoneWeights4 = Symbol.Create "VertexBoneWeights4"
     let private VertexBoneIndices4 = Symbol.Create "VertexBoneIndices4"
 
-    open System.Runtime.InteropServices
-    open Microsoft.FSharp.NativeInterop
-
-    let private bitsToV4f(v : obj) =
-        let mutable res = V4f.Zero
-        let gc = GCHandle.Alloc(v, GCHandleType.Pinned)
-        try
-            let size = min (Marshal.SizeOf v) sizeof<V4f>
-            Marshal.Copy (gc.AddrOfPinnedObject(), NativePtr.toNativeInt &&res, size)
-            res
-        finally
-            gc.Free()
-
     type Mesh =
         {
             index       : int
@@ -95,17 +82,16 @@ module Loader =
             member x.All = Seq.empty
             member x.TryGetAttribute(sem) =
                 match x.geometry.IndexedAttributes.TryGetValue sem with
-                    | (true, arr) ->
-                        let b = arr |> ArrayBuffer :> IBuffer |> AVal.constant
-                        Some (BufferView(b, arr.GetType().GetElementType()))
-                    | _ ->
-                        match x.geometry.SingleAttributes.TryGetValue sem with
-                            | (true, value) ->
-                                let v = bitsToV4f value
-                                Some (BufferView(SingleValueBuffer(AVal.constant v), value.GetType()))
+                | (true, arr) ->
+                    Some <| BufferView(arr)
 
-                            | _ -> 
-                                Some (BufferView(SingleValueBuffer(AVal.constant V4f.Zero), typeof<V4f>))
+                | _ ->
+                    match x.geometry.SingleAttributes.TryGetValue sem with
+                    | (true, value) ->
+                        Some <| BufferView(SingleValueBuffer.create value)
+
+                    | _ ->
+                        Some <| BufferView(SingleValueBuffer<V4f>.Zero)
 
             member x.Dispose() = ()
 
