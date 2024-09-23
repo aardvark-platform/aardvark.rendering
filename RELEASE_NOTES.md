@@ -1,3 +1,11 @@
+### 5.5.1
+- Improved adaptive converter caching
+- Optimized GCHandle.Alloc usage
+- [Assimp] Fixed remap.xml for Linux
+- [GL] Optimized construction of attribute bindings
+- [Text] Use FramebufferLayout as surface cache key
+- [Text] Added type aliases
+
 ### 5.5.0
 - https://github.com/aardvark-platform/aardvark.rendering/wiki/Aardvark-Rendering-5.5-changelog
 
