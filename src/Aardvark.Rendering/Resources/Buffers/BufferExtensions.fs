@@ -113,9 +113,10 @@ type IBufferRangeExtensions private() =
         srcIndex |> checkNonNegative "srcIndex"
         (srcIndex, count) ||> checkArrayBounds src
 
-        (srcIndex, src) ||> NativePtr.pinArri (fun pSrc ->
-            dst.Buffer.Upload(dst.Offset + byteSize<'T> dstIndex, pSrc.Address, byteSize<'T> count)
-        )
+        if count > 0 then
+            (srcIndex, src) ||> NativePtr.pinArri (fun pSrc ->
+                dst.Buffer.Upload(dst.Offset + byteSize<'T> dstIndex, pSrc.Address, byteSize<'T> count)
+            )
 
     ///<summary>Copies elements from an array to a buffer range.</summary>
     ///<param name="dst">The buffer range to copy data to.</param>
@@ -186,9 +187,10 @@ type IBufferRangeExtensions private() =
         dstIndex |> checkNonNegative "dstIndex"
         (dstIndex, count) ||> checkArrayBounds dst
 
-        (dstIndex, dst) ||> NativePtr.pinArri (fun pDst ->
-            src.Buffer.Download(src.Offset + byteSize<'T> srcIndex, pDst.Address, byteSize<'T> count)
-        )
+        if count > 0 then
+            (dstIndex, dst) ||> NativePtr.pinArri (fun pDst ->
+                src.Buffer.Download(src.Offset + byteSize<'T> srcIndex, pDst.Address, byteSize<'T> count)
+            )
 
     ///<summary>Copies elements from a buffer range to an array.</summary>
     ///<param name="src">The buffer range to copy data from.</param>
@@ -249,9 +251,12 @@ type IBufferRangeExtensions private() =
         dstIndex |> checkNonNegative "dstIndex"
         (dstIndex, count) ||> checkArrayBounds dst
 
-        (dstIndex, dst) ||> NativePtr.pinArri (fun pDst ->
-            src.Buffer.DownloadAsync(src.Offset + byteSize<'T> srcIndex, pDst.Address, byteSize<'T> count)
-        )
+        if count > 0 then
+            (dstIndex, dst) ||> NativePtr.pinArri (fun pDst ->
+                src.Buffer.DownloadAsync(src.Offset + byteSize<'T> srcIndex, pDst.Address, byteSize<'T> count)
+            )
+        else
+            id
 
     ///<summary>Asynchronously copies elements from a buffer range to an array.</summary>
     ///<param name="src">The buffer range to copy data from.</param>

@@ -59,9 +59,10 @@ type AdaptiveBufferExtensions private() =
         assert (start >= 0 && start < data.Length)
         assert (start + length <= data.Length)
 
-        (start, data) ||> NativePtr.pinArri (fun src ->
-            let size = nativeint (length * sizeof<'T>)
-            this.Write(src.Address, offset, size)
+        if length > 0 then
+            (start, data) ||> NativePtr.pinArri (fun src ->
+                let size = nativeint (length * sizeof<'T>)
+                this.Write(src.Address, offset, size)
         )
 
     /// <summary>
