@@ -66,12 +66,12 @@ module AdaptiveGeometry =
 type private LayoutManager<'a>() =
     let manager = MemoryManager.createNop()
     let store = Dict<'a, managedptr>()
-    let cnts = Dict<managedptr, 'a * ref<int>>()
+    let cnts = Dict<managedptr, struct('a * ref<int>)>()
 
     member x.Alloc(key : 'a, size : int) =
         match store.TryGetValue key with
         | (true, v) ->
-            let _,r = cnts.[v]
+            let struct(_,r) = cnts.[v]
             Interlocked.Increment &r.contents |> ignore
             v
         | _ ->
@@ -85,7 +85,7 @@ type private LayoutManager<'a>() =
     member x.TryAlloc(key : 'a, size : int) =
         match store.TryGetValue key with
         | (true, v) ->
-            let _,r = cnts.[v]
+            let struct(_,r) = cnts.[v]
             Interlocked.Increment &r.contents |> ignore
             false, v
         | _ ->
