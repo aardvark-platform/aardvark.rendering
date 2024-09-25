@@ -24,15 +24,14 @@ type AdaptiveGeometry =
         InstanceAttributes : Map<Symbol, IAdaptiveValue>
     }
 
-[<ReferenceEquality; NoComparison>]
-type PooledGeometry =
-    {
-        FaceVertexCount    : int
-        VertexCount        : int
-        Indices            : voption<BufferView>
-        VertexAttributes   : SymbolDict<BufferView>
-        InstanceAttributes : SymbolDict<IAdaptiveValue>
-    }
+/// NOTE: temporary data structure to avoid conflicts and will be reworked in 5.6 (probably become record)
+[<NoComparison>]
+type PooledGeometry (faceVertexCount : int, vertexCount : int, indices : voption<BufferView>, vertexAttributes : SymbolDict<BufferView>, instanceAttributes : SymbolDict<IAdaptiveValue>) =
+    member x.FaceVertexCount = faceVertexCount
+    member x.VertexCount = vertexCount
+    member x.Indices = indices
+    member x.VertexAttributes = vertexAttributes
+    member x.InstanceAttributes = instanceAttributes
 
 type GeometrySignature =
     {
@@ -53,7 +52,7 @@ module GeometrySignature =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AdaptiveGeometry =
 
-    let ofIndexedGeometry (instanceAttributes : list<Symbol * IAdaptiveValue>) (ig : IndexedGeometry) : AdaptiveGeometry =
+    let ofIndexedGeometry (instanceAttributes : list<Symbol * IAdaptiveValue>) (ig : IndexedGeometry) =
         let anyAtt = (ig.IndexedAttributes |> Seq.head).Value
 
         let faceVertexCount, index =
