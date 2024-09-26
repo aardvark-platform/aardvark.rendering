@@ -72,10 +72,11 @@ module AdaptiveGeometry =
         }
 
 
-type private LayoutManager<'a>() =
+type private LayoutManager<'a when 'a : equality>(cmp : IEqualityComparer<'a>)=
+
     let manager = MemoryManager.createNop()
-    let store = Dict<'a, managedptr>()
-    let cnts = Dict<managedptr, struct('a * ref<int>)>()
+    let store = Dictionary<'a, managedptr>(cmp)
+    let cnts = Dictionary<managedptr, struct('a * ref<int>)>()
 
     member x.Alloc(key : 'a, size : int) =
         match store.TryGetValue key with
@@ -113,6 +114,8 @@ type private LayoutManager<'a>() =
                 store.Remove k |> ignore
         | _ ->
             ()
+
+    new() = LayoutManager(null)
 
 type internal PoolResources =
     {
@@ -159,9 +162,46 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
     static let zero : byte[] = Array.zeroCreate 4096
 
-    let indexManager = LayoutManager<struct(obj * int)>()
-    let vertexManager = LayoutManager<obj>()
-    let instanceManager = LayoutManager<obj>()
+    
+    let cmp = { new IEqualityComparer<obj> with
+                   member x.Equals(a, b) : bool =
+                        if Object.ReferenceEquals(a, b) then
+                            true
+                        else 
+                            match a with
+                            | :? SymbolDict<BufferView> as d1 ->
+                                match b with 
+                                | :? SymbolDict<BufferView> as d2 ->
+                                    if d1.Count <> d2.Count then
+                                        false
+                                    else
+                                        let mutable e1 = d1.GetEnumerator()
+                                        let mutable e2 = d2.GetEnumerator()
+                                        let mutable equal = true
+                                        while equal && (e1.MoveNext()) && (e2.MoveNext()) do
+                                            let va = e1.Current
+                                            let vb = e2.Current
+                                            equal <- va.Key = vb.Key && Object.ReferenceEquals(va.Value, vb.Value)
+                                        equal
+
+                                | _ -> false
+                            | _ -> a.Equals(b)
+
+                   member x.GetHashCode (obj: obj): int = 
+                       match obj with 
+                       | :? SymbolDict<BufferView> as d ->
+                                let mutable hash = 0
+                                let mutable e = d.GetEnumerator()
+                                while (e.MoveNext()) do
+                                    let v = e.Current
+                                    hash <- Aardvark.Base.HashCode.GetCombined(hash, v.Key.GetHashCode(), v.Value.GetHashCode()) // System.HashCode.Combine<_,_,_>(hash, v.Key.GetHashCode(), v.Value.GetHashCode())
+                                hash
+                       | _ -> obj.GetHashCode()
+                }
+
+    let indexManager = LayoutManager<struct(obj * int)>(null)
+    let vertexManager = LayoutManager<obj>(cmp)
+    let instanceManager = LayoutManager<obj>(cmp)
 
     let toDict f = Map.toSeq >> Seq.map f >> SymDict.ofSeq
 
