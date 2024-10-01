@@ -164,6 +164,13 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
     
     let cmp = { new IEqualityComparer<obj> with
+
+                   // NOTE: SymbolDict enumeration only guaranteed to be equal when created "identical" (order of inserts, resizes, capacity, ...)
+                   //       GetHashCode -> build sum of key and value hashes
+                   //       Equals -> lookup each
+
+                   // NOTE2: Implementing a SymbolDict (SymbolMap?) that keeps it entries sorted by hash might also be an option
+
                    member x.Equals(a, b) : bool =
                         if Object.ReferenceEquals(a, b) then
                             true
@@ -176,12 +183,14 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                                         false
                                     else
                                         let mutable e1 = d1.GetEnumerator()
-                                        let mutable e2 = d2.GetEnumerator()
                                         let mutable equal = true
-                                        while equal && (e1.MoveNext()) && (e2.MoveNext()) do
-                                            let va = e1.Current
-                                            let vb = e2.Current
-                                            equal <- va.Key = vb.Key && Object.ReferenceEquals(va.Value, vb.Value)
+                                        while equal && e1.MoveNext() do
+                                            let kva = e1.Current
+                                            equal <- 
+                                                match d2.TryGetValue kva.Key with
+                                                | (true, vb) -> 
+                                                    kva.Value.Equals(vb)
+                                                | _ -> false
                                         equal
 
                                 | _ -> false
@@ -190,12 +199,14 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                    member x.GetHashCode (obj: obj): int = 
                        match obj with 
                        | :? SymbolDict<BufferView> as d ->
-                                let mutable hash = 0
+                                let mutable symHashSum = 0
+                                let mutable valHashSum = 0
                                 let mutable e = d.GetEnumerator()
                                 while (e.MoveNext()) do
                                     let v = e.Current
-                                    hash <- Aardvark.Base.HashCode.GetCombined(hash, v.Key.GetHashCode(), v.Value.GetHashCode()) // System.HashCode.Combine<_,_,_>(hash, v.Key.GetHashCode(), v.Value.GetHashCode())
-                                hash
+                                    symHashSum <- symHashSum + v.Key.GetHashCode()
+                                    valHashSum <- valHashSum + v.Value.GetHashCode()
+                                Aardvark.Base.HashCode.Combine(symHashSum, valHashSum)
                        | _ -> obj.GetHashCode()
                 }
 
