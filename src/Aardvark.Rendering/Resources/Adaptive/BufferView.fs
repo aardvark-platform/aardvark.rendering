@@ -54,10 +54,11 @@ type BufferView(buffer : aval<IBuffer>, elementType : Type,
         HashCode.Combine(buffer.GetHashCode(), elementType.GetHashCode(), offset.GetHashCode(), stride.GetHashCode(), normalized.GetHashCode())
 
     override x.Equals o =
-        match o with
-        | :? BufferView as o ->
-            o.Buffer = buffer && o.ElementType = elementType && o.Offset = offset && o.Stride = stride && o.Normalized = normalized
-        | _ -> false
+        Object.ReferenceEquals(x, o) ||
+            match o with
+            | :? BufferView as o ->
+                 o.Buffer = buffer && o.ElementType = elementType && o.Offset = offset && o.Stride = stride && o.Normalized = normalized
+            | _ -> false
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferView =
