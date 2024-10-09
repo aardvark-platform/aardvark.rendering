@@ -170,6 +170,7 @@ module Driver =
 module MemoryManagementUtilities =
     open System.Collections.Generic
 
+    [<Obsolete("Use Aardvark.Base FreeList")>]
     type FreeList<'k, 'v when 'k : comparison>() =
         static let comparer = { new IComparer<'k * HashSet<'v>> with member x.Compare((l,_), (r,_)) = compare l r }
         let sortedSet = SortedSetExt comparer

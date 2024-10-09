@@ -9,10 +9,7 @@ type ILinked<'a when 'a :> ILinked<'a>> =
 
 [<AutoOpen>]
 module private TrieDictionaryImplementation =
-    open System.Runtime.CompilerServices
     open System.Runtime.InteropServices
-    open System.Collections.Generic
-    open System
     [<AbstractClass>]
     type TrieDictionary<'k, 'v>() =
         abstract AlterWithNeighbours : key : 'k * action : (voption<'v> -> voption<'v> -> voption<'v> -> voption<'v>) -> voption<'v> * voption<'v> * voption<'v>
@@ -30,31 +27,26 @@ module private TrieDictionaryImplementation =
             }
 
         member x.Find(k : 'k) =
-            let mutable l = Unchecked.defaultof<_>
-            let mutable s = Unchecked.defaultof<_>
-            let mutable r = Unchecked.defaultof<_>
-            store.FindNeighbours (struct(k, Unchecked.defaultof<'v>), &l, &s, &r)
+            let (struct(hasL, hasV, hasR), l, v, r) = store.FindNeighboursV (struct(k, Unchecked.defaultof<'v>))
 
             let l =
-                if l.HasValue then
-                    let struct(_, v) = l.Value
-                    ValueSome v
+                if hasL then
+                    ValueSome (sndv l)
                 else ValueNone
 
-            let s =
-                if s.HasValue then
-                    let struct(_, v) = s.Value
-                    ValueSome v
+            let v =
+                if hasV then
+                    ValueSome (sndv v)
                 else
                     ValueNone
 
             let r =
-                if r.HasValue then
-                    let struct(_, v) = r.Value
-                    ValueSome v
-                else ValueNone
+                if hasR then
+                    ValueSome (sndv r)
+                else 
+                    ValueNone
 
-            struct (l, s, r)
+            struct (l, v, r)
 
         override x.Count = store.Count
 

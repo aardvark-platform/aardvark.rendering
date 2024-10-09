@@ -250,17 +250,17 @@ module RenderTasks =
                 for op in ops do
                     match op with
                     | Add(_, cmd) ->
-                        let (l, s, _r) = state.FindNeighbours((cmd, null))
-                        if s.HasValue then
+                        let (struct(hasL, hasV, _), l, _, _) = state.FindNeighboursV((cmd, null))
+                        if hasV then
                             Log.warn "[NativeRenderProgram] duplicate add of: %A" cmd
                         else
-                            let l = if l.HasValue then snd l.Value else null
+                            let l = if hasL then snd l else null
                             let self = program.InsertAfter(l, cmd)
                             state.Add((cmd, self)) |> ignore
                     | Rem(_, cmd) ->
-                        let (_, s, _) = state.FindNeighbours((cmd, null))
-                        if s.HasValue then
-                            let _, f = s.Value
+                        let (hasValue, value) = state.FindValue((cmd, null))
+                        if hasValue then
+                            let _, f = value
                             f.Dispose()
                             state.Remove(cmd, null) |> ignore
                         else

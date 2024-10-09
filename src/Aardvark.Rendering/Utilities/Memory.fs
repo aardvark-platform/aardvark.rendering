@@ -134,34 +134,61 @@ module Management =
             if v % align = 0n then v
             else v + (align - v % align)
 
-
+        [<Obsolete("use TryGetGreaterOrEqualV")>]
         member x.TryGetGreaterOrEqual(size : nativeint) =
             let query = Block(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1n, size, true)
-            let (_, _, r) = store.FindNeighbours(query)
-            if r.HasValue then
-                let r = r.Value
+            let (struct(_, _, hasR), _, _, r) = store.FindNeighboursV(query)
+            if hasR then
                 store.Remove r |> ignore
                 Some r
             else
                 None
 
+        member x.TryGetGreaterOrEqualV(size : nativeint) =
+            let query = Block(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1n, size, true)
+            let (struct(_, _, hasR), _, _, r) = store.FindNeighboursV(query)
+            if hasR then
+                store.Remove r |> ignore
+                ValueSome r
+            else
+                ValueNone
+
+        [<Obsolete("use TryGetAlignedV")>]
         member x.TryGetAligned(align : nativeint, size : nativeint) =
             let min = Block(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1n, size, true)
             let view = store.GetViewBetween(min, null)
 
-            let res =
-                view |> Seq.tryFind (fun b ->
-                    let o = next align b.Offset
-                    let s = b.Size - (o - b.Offset)
-                    s >= size
-                )
+            let mutable foundSlot = false
+            let mutable e = view.GetEnumerator()
+            while not foundSlot && e.MoveNext() do
+                let b = e.Current
+                let o = next align b.Offset
+                let s = b.Size - (o - b.Offset)
+                foundSlot <- s >= size
 
-            match res with
-                | Some res ->
-                    store.Remove res |> ignore
-                    Some res
-                | None ->
-                    None
+            if foundSlot then
+                store.Remove e.Current |> ignore
+                Some e.Current
+            else
+                None
+
+        member x.TryGetAlignedV(align : nativeint, size : nativeint) =
+            let min = Block(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1n, size, true)
+            let view = store.GetViewBetween(min, null)
+
+            let mutable foundSlot = false
+            let mutable e = view.GetEnumerator()
+            while not foundSlot && e.MoveNext() do
+                let b = e.Current
+                let o = next align b.Offset
+                let s = b.Size - (o - b.Offset)
+                foundSlot <- s >= size
+
+            if foundSlot then
+                store.Remove e.Current |> ignore
+                ValueSome e.Current
+            else
+                ValueNone
 
         member x.Insert(b : Block<'a>) =
             store.Add b |> ignore
@@ -239,8 +266,8 @@ module Management =
                 Block<'a>(x, store, 0n, 0n, true, null, null)
             else
                 lock free (fun () ->
-                    match free.TryGetAligned(align, size) with
-                        | Some b ->
+                    match free.TryGetAlignedV(align, size) with
+                        | ValueSome b ->
                             let alignedOffset = next align b.Offset
                             let alignedSize = b.Size - (alignedOffset - b.Offset)
                             if alignedOffset > b.Offset then
@@ -262,7 +289,7 @@ module Management =
 
                             b.IsFree <- false
                             b
-                        | None ->
+                        | ValueNone ->
                             grow size
                             x.Alloc(align, size)
 
@@ -273,8 +300,8 @@ module Management =
                 Block<'a>(x, store, 0n, 0n, true, null, null)
             else
                 lock free (fun () ->
-                    match free.TryGetGreaterOrEqual size with
-                        | Some b ->
+                    match free.TryGetGreaterOrEqualV size with
+                        | ValueSome b ->
                             if b.Size > size then
                                 let rest = Block<'a>(x, store, b.Offset + size, b.Size - size, true, b, b.Next)
 
@@ -287,7 +314,7 @@ module Management =
 
                             b.IsFree <- false
                             b
-                        | None ->
+                        | ValueNone ->
                             grow size
                             x.Alloc size
                 )
@@ -481,8 +508,8 @@ module Management =
                 empty
             else
                 lock free (fun () ->
-                    match free.TryGetAligned(align, size) with
-                        | Some b ->
+                    match free.TryGetAlignedV(align, size) with
+                        | ValueSome b ->
                             let alignedOffset = next align b.Offset
                             let alignedSize = b.Size - (alignedOffset - b.Offset)
                             if alignedOffset > b.Offset then
@@ -502,7 +529,7 @@ module Management =
 
                             b.IsFree <- false
                             b
-                        | None ->
+                        | ValueNone ->
                             grow size
                             x.Alloc(align, size)
 
@@ -513,8 +540,8 @@ module Management =
                 empty
             else
                 lock free (fun () ->
-                    match free.TryGetGreaterOrEqual size with
-                        | Some b ->
+                    match free.TryGetGreaterOrEqualV size with
+                        | ValueSome b ->
                             if b.Size > size then
                                 let rest = Block<'a>(x, b.Memory, b.Offset + size, b.Size - size, true, b, b.Next)
 
@@ -526,7 +553,7 @@ module Management =
 
                             b.IsFree <- false
                             b
-                        | None ->
+                        | ValueNone ->
                             grow size
                             x.Alloc size
                 )

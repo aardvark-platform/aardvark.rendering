@@ -2094,24 +2094,44 @@ and DeviceFreeList() =
         else 
             store
 
+    [<Obsolete("use TryGetAlignedV")>]
     member x.TryGetAligned(align : int64, size : int64, [<Optional; DefaultParameterValue(false)>] export : bool) =
         let min = new DeviceBlock(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1L, size, false, null, null)
         let store = getStore export
         let view = store.GetViewBetween(min, null)
 
-        let res = 
-            view |> Seq.tryFind (fun b ->
-                let o = next align b.Offset
-                let s = b.Size - (o - b.Offset)
-                s >= size
-            )
+        let mutable foundSlot = false
+        let mutable e = view.GetEnumerator()
+        while not foundSlot && e.MoveNext() do
+            let b = e.Current
+            let o = next align b.Offset
+            let s = b.Size - (o - b.Offset)
+            foundSlot <- s >= size
 
-        match res with
-            | Some res -> 
-                store.Remove res |> ignore
-                Some res
-            | None ->
-                None
+        if foundSlot then
+            store.Remove e.Current |> ignore
+            Some e.Current
+        else
+            None
+
+    member x.TryGetAlignedV(align : int64, size : int64, [<Optional; DefaultParameterValue(false)>] export : bool) =
+        let min = new DeviceBlock(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1L, size, false, null, null)
+        let store = getStore export
+        let view = store.GetViewBetween(min, null)
+
+        let mutable foundSlot = false
+        let mutable e = view.GetEnumerator()
+        while not foundSlot && e.MoveNext() do
+            let b = e.Current
+            let o = next align b.Offset
+            let s = b.Size - (o - b.Offset)
+            foundSlot <- s >= size
+
+        if foundSlot then
+            store.Remove e.Current |> ignore
+            ValueSome e.Current
+        else
+            ValueNone
 
     member x.Insert(b : DeviceBlock) =
         let store = getStore b.Memory.IsExported
@@ -2163,8 +2183,8 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
 
         else
             lock free (fun () ->
-                match free.TryGetAligned(align, size, export) with
-                | Some b ->
+                match free.TryGetAlignedV(align, size, export) with
+                | ValueSome b ->
                     let alignedOffset = next align b.Offset
                     let alignedSize = b.Size - (alignedOffset - b.Offset)
                     if alignedOffset > b.Offset then
@@ -2189,7 +2209,7 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
                     b.IsFree <- false
                     b :> DevicePtr
 
-                | None ->
+                | ValueNone ->
                     addBlock x export
                     x.Alloc(align, size, export)
             )
