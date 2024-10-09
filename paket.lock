@@ -51,7 +51,7 @@ NUGET
     Aardvark.Base.TypeProviders (4.5.15)
       FSharp.Core (>= 3.1.2.5) - restriction: || (== net471) (&& (== net8.0) (>= net45)) (&& (== net8.0-windows10.0.17763.0) (>= net45)) (&& (== netstandard2.0) (>= net45))
       FSharp.Core (>= 4.2.3) - restriction: || (&& (== net471) (< net45)) (== net8.0) (== net8.0-windows10.0.17763.0) (== netstandard2.0)
-    Aardvark.Build (1.0.24)
+    Aardvark.Build (2.0.3)
     Aardvark.Data.GLTF (1.0)
       Aardvark.Base.Tensors (>= 5.3 < 5.4)
       Aardvark.Rendering.Common (>= 5.5)

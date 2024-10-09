@@ -1,18 +1,20 @@
 {
-    "version": 1,
-    "isRoot": true,
-    "tools": {
-      "paket": {
-        "version": "8.0.0",
-        "commands": [
-          "paket"
-        ]
-      },
-      "aardpack": {
-          "version": "1.0.24",
-          "commands": [
-            "aardpack"
-          ]
-      }
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "paket": {
+      "version": "8.0.0",
+      "commands": [
+        "paket"
+      ],
+      "rollForward": false
+    },
+    "aardpack": {
+      "version": "2.0.3",
+      "commands": [
+        "aardpack"
+      ],
+      "rollForward": false
     }
   }
+}

@@ -3,7 +3,7 @@ source https://api.nuget.org/v3/index.json
 
 storage: none
 
-nuget Aardvark.Build                                ~> 1.0.24
+nuget Aardvark.Build                                ~> 2.0.2
 nuget FSharp.Core                                   >= 8.0.0 lowest_matching: true
 nuget Microsoft.NETFramework.ReferenceAssemblies    >= 1.0.0 lowest_matching: true
 
