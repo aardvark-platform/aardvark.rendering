@@ -1,3 +1,13 @@
+### 5.5.2
+- added PoolGeometry as alternative to ManagedPool with SymbolDict (more efficient attribute lookups)
+- added reference equality check to BufferView Equals
+- using SortedSetExt value option methods
+- avoid exception in upload/download/write when count=0
+- marked MemoryManagementUtilities.FreeList as obsolete (duplicate of Aardvark.Base FreeList)
+- updated Aardvark.Base to 5.3.5
+- updated Aardvark.Build to 2.0.2
+- updated aardpack to 2.0.3
+
 ### 5.5.1
 - Improved adaptive converter caching
 - Optimized GCHandle.Alloc usage
