@@ -27,6 +27,7 @@ type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int)
 //    do ctrl.AutoInvalidate <- false
 
     do this.Child <- ctrl
+       ctrl.OnPaintRender <- false
        this.Loaded.Add(fun e -> this.Focusable <- false)
 
     //override x.OnDpiChanged(oldDpi : DpiScale, newDpi : DpiScale) =

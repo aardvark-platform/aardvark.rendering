@@ -1,3 +1,6 @@
+### 5.5.3
+- OpenGL/WPF control no longer uses `OnPainRender` by default
+
 ### 5.5.2
 - added PoolGeometry as alternative to ManagedPool with SymbolDict (more efficient attribute lookups)
 - added reference equality check to BufferView Equals
