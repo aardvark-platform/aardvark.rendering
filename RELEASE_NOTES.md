@@ -1,3 +1,6 @@
+### 5.5.4
+- OpenGL/WPF control uses `OnPainRender` again
+
 ### 5.5.3
 - OpenGL/WPF control no longer uses `OnPainRender` by default
 
