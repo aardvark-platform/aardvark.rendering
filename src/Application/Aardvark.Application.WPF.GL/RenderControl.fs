@@ -6,7 +6,7 @@ open System.Windows.Forms.Integration
 open Aardvark.Application
 open System.Windows.Threading
 
-type private WinFormsControl = Aardvark.Application.WinForms.OpenGlRenderControl
+type private WinFormsControl = Aardvark.Application.WinForms.ThreadedRenderControl
 
 type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int) as this =
     inherit WindowsFormsHost()
@@ -27,7 +27,6 @@ type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int)
 //    do ctrl.AutoInvalidate <- false
 
     do this.Child <- ctrl
-       //ctrl.OnPaintRender <- false
        this.Loaded.Add(fun e -> this.Focusable <- false)
 
     //override x.OnDpiChanged(oldDpi : DpiScale, newDpi : DpiScale) =

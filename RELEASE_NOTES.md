@@ -1,3 +1,6 @@
+### 5.5.5
+- OpenGL/WPF control uses tasks for rendering (avoiding stack-inlining due to STAThread)
+
 ### 5.5.4
 - OpenGL/WPF control uses `OnPainRender` again
 

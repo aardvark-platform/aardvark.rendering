@@ -36,7 +36,7 @@ namespace _01___Hello_Wpf
         {
             Aardvark.Base.Aardvark.Init(); // initialize aardvark base modules
 
-            Config.useSharingControl = true;
+            Config.useSharingControl = false;
 
             var app = new Aardvark.Application.WPF.OpenGlApplication(true);
             InitializeComponent();
