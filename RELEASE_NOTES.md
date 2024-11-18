@@ -1,3 +1,6 @@
+### 5.5.6
+- [Assimp] Animations: fixed quaternion interpretation
+
 ### 5.5.5
 - OpenGL/WPF control uses tasks for rendering (avoiding stack-inlining due to STAThread)
 

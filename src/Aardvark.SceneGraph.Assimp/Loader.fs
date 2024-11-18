@@ -485,7 +485,7 @@ module Loader =
                 V2d(v.X, v.Y)
                
             let toQuaternion (v : Assimp.Quaternion) =
-                QuaternionD(float v.W, float v.X, float v.Y, float v.Z)
+                Rot3d(QuaternionD(float v.W, float v.X, float v.Y, float v.Z).Normalized)
 
             let private toV4i (arr : int[]) =
                 match arr.Length with
@@ -852,14 +852,15 @@ module Loader =
                         match l, r with
                             | Some(lt,lv), Some (rt,rv) -> 
                                 let f = (t - lt) / (rt - lt)
-                                lv * (1.0 - f) + rv * f
+                                let q = lv * (1.0 - f) + rv * f
+                                Rot3d(q.Normalized)
 
                             | Some(_,lv), None ->
                                 lv
                             | None, Some(_,rv) ->
                                 rv
                             | None, None ->
-                                QuaternionD.Identity
+                                Rot3d.Identity
 
                     let node = na.NodeName
 
@@ -869,7 +870,7 @@ module Loader =
                             let p = position t
                             let rot = rotation t
 
-                            let r : M44d = rot |> QuaternionD.op_Explicit
+                            let r : M44d = rot |> Rot3d.op_Explicit
                             let s = scale t
                             M44d.Translation(p) * r * M44d.Scale(s) 
                         )
