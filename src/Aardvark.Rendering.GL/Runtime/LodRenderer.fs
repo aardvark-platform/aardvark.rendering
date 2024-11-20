@@ -450,7 +450,7 @@ module LodTreeHelpers =
                 let struct (qn,_,_) = queue.HeapDequeue(cmp)
                 0.5 * (qn + quality), size
    
-    type TaskTreeNode<'a> internal(state : TaskTreeState, mapping : CancellationToken -> ILodTreeNode -> Task<option<'a>>, rootId : int, original : ILodTreeNode) =
+    type TaskTreeNode<'a> internal(state : TaskTreeState, mapping : CancellationToken -> ILodTreeNode -> Task<option<'a>>, original : ILodTreeNode) =
         static let neverTask = TaskCompletionSource<option<'a>>().Task
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
 
@@ -524,7 +524,7 @@ module LodTreeHelpers =
             let childTasks = System.Collections.Generic.List<Task<_>>()
             children <- n |> List.map (fun n ->
                 
-                let node = TaskTreeNode(state, mapping, rootId, n)
+                let node = TaskTreeNode(state, mapping, n)
                 childTasks.Add(node.Task)
                 node
             )
@@ -580,17 +580,13 @@ module LodTreeHelpers =
             | TAdd _ | TRem _ | TCollapse _ -> true
             | _ -> false
 
-    type TaskTree<'a>(mapping : CancellationToken -> ILodTreeNode -> Task<option<'a>>, rootId : int) =
+    type TaskTree<'a>(mapping : CancellationToken -> ILodTreeNode -> Task<option<'a>>) =
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
         static let cmpNode = Func<float * ILodTreeNode, float * ILodTreeNode, int>(fun (a,_) (b,_) -> compare a b)
 
         let mutable root : Option<TaskTreeNode<'a>> = None
 
         
-        //member x.RunningTasks = state.runningTasks
-
-        //member x.Version = state.version
-        member x.RootId = rootId
         member x.Root = root
 
         member internal x.BuildQueue(state : TaskTreeState, collapseIfNotSplit : bool, t : ILodTreeNode, quality : float, splitfactor : float, view : ILodTreeNode -> Trafo3d, proj : Trafo3d, queue : List<float * TaskTreeOp<'a>>) =
@@ -609,7 +605,7 @@ module LodTreeHelpers =
 
             | None -> 
                 let create () =
-                    let n = TaskTreeNode<'a>(state, mapping, rootId, t)
+                    let n = TaskTreeNode<'a>(state, mapping, t)
                     root <- Some n
                     n.Task.ContinueWith (fun (t : Task<_>) -> MVar.put state.trigger ()) |> ignore
 
@@ -1368,7 +1364,13 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
 
 
     let reader =
-        let roots = roots |> ASet.map (fun r -> { r with root = UniqueTree(Guid.NewGuid(), None, None, r.root) :> ILodTreeNode })
+        let roots = roots |> ASet.map (fun r ->
+            match r.root with
+            | :? MultiTreeNode as m ->
+                { r with root = m.Instances |> Array.map (fun r -> { r with root = UniqueTree(Guid.NewGuid(), None, None, r.root) }) |> MultiTreeNode }
+            | _ ->
+                { r with root = UniqueTree(Guid.NewGuid(), None, None, r.root) :> ILodTreeNode }
+        )
         roots.GetReader()
     let euclideanView = config.view |> AVal.map Euclidean3d.FromTrafo3d
 
@@ -1983,7 +1985,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                         | _ -> 
                             ()
          
-                let load (ct : CancellationToken) (rootId : int) (node : ILodTreeNode) (cont : CancellationToken -> ILodTreeNode -> GeometryPoolInstance -> 'r) =
+                let load (ct : CancellationToken) (node : ILodTreeNode) (cont : CancellationToken -> ILodTreeNode -> GeometryPoolInstance -> 'r) =
                     startTask ct (fun () ->
                         let startTime = time()
                         let (g,u) = node.GetData(ct, wantedInputs)
@@ -2007,6 +2009,8 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                 | Some (KeyValue(_, (v : Array) )) -> v.Length
                                 | _ -> 1
 
+                            let rootId = getRootId node
+                            
                             let u = MapExt.add "TreeId" (Array.create cnt rootId :> System.Array) u
                             let loaded = GeometryPoolInstance.ofGeometry signature g u images
                                 
@@ -2084,6 +2088,19 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                 //        | Rem(_,v) ->
                                 //            Log.warn "rem %A" v.root
 
+                                let (|Multi|_|) (node : ILodTreeNode) =
+                                    match node with
+                                    | :? MultiTreeNode as m -> Some (m.Instances, fun instances -> MultiTreeNode(instances) :> ILodTreeNode)
+                                    | :? UniqueTree as m ->
+                                        match m.Inner with
+                                        | :? MultiTreeNode as mm ->
+                                            Some (mm.Instances, fun instances -> UniqueTree(m.Id, None, None, MultiTreeNode(instances)))
+                                        | _ ->
+                                            None
+                                    | _ ->
+                                        None
+                                
+                                
                                 let roots = 
                                     if ops.Count > 0 then
                                         lock rootLock (fun () ->
@@ -2091,24 +2108,44 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                                 match o with
                                                 | Add(_,i) ->
                                                     let r = i.root
-                                                    match HashMap.tryFind r roots with
-                                                    | Some o ->
-                                                        Log.error "[Lod] add of existing root %A" i.root
-                                                    | None -> 
-                                                        let u = i.uniforms
-                                                        rootUniforms <- HashMap.add r u rootUniforms
-                                                        let rid = getRootId r
-                                                        let load ct n = load ct rid n (fun _ _ r -> r)
-                                                        roots <- HashMap.add r (TaskTree(load, rid)) roots
+                                                    
+                                                    match r with
+                                                    | Multi (instances, rebuild) ->
+                                                        for ii in instances do
+                                                            let uniforms = MapExt.union i.uniforms ii.uniforms
+                                                            rootUniforms <- HashMap.add ii.root uniforms rootUniforms
+                                                            
+                                                        let load ct n = load ct n (fun _ _ r -> r)
+                                                        roots <- HashMap.add r (TaskTree(load)) roots
+                                                    | _ ->
+                                                        match HashMap.tryFind r roots with
+                                                        | Some o ->
+                                                            Log.error "[Lod] add of existing root %A" i.root
+                                                        | None -> 
+                                                            let u = i.uniforms
+                                                            rootUniforms <- HashMap.add r u rootUniforms
+                                                            let load ct n = load ct n (fun _ _ r -> r)
+                                                            roots <- HashMap.add r (TaskTree(load)) roots
 
                                                 | Rem(_,i) ->
                                                     let r = i.root
-                                                    match HashMap.tryRemove r roots with
-                                                    | Some (_, rest) ->
-                                                    
-                                                        roots <- rest
-                                                    | None ->
-                                                        Log.error "[Lod] remove of nonexisting root %A" i.root
+                                                    match r with
+                                                    | Multi(instances, rebuild) ->
+                                                        for i in instances do
+                                                            rootUniforms <- HashMap.remove i.root rootUniforms
+                                                            freeRootId i.root
+                                                            
+                                                        match HashMap.tryRemove r roots with
+                                                        | Some (_, rest) ->
+                                                            roots <- rest
+                                                        | None -> 
+                                                            Log.error "[Lod] remove of nonexisting root %A" i.root
+                                                    | _ -> 
+                                                        match HashMap.tryRemove r roots with
+                                                        | Some (_, rest) ->
+                                                            roots <- rest
+                                                        | None ->
+                                                            Log.error "[Lod] remove of nonexisting root %A" i.root
 
                                             MVar.put changesPending ()
                                             roots

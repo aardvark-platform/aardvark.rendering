@@ -1,3 +1,6 @@
+### 5.5.7
+- LodTreeNode: added MultiTreeNode support
+
 ### 5.5.6
 - [Assimp] Animations: fixed quaternion interpretation
 

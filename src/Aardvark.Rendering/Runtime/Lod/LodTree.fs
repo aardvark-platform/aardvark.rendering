@@ -453,3 +453,54 @@ type LodTreeInstance =
         root        : ILodTreeNode
         uniforms    : MapExt<string, IAdaptiveValue>
     }
+    
+    
+type MultiTreeNode(instances : LodTreeInstance[]) =
+    static let source = Symbol.Create "Multiple"
+    let bb = instances |> Array.map (fun i -> i.root.WorldBoundingBox) |> Box3d
+    let cell = Cell bb
+    let id = Guid.NewGuid() |> string
+    
+    let dataTrafo = Trafo3d.Translation(cell.GetCenter())
+    
+    
+    member x.Instances = instances
+    
+    interface ILodTreeNode with
+        member this.Acquire() =
+            for i in instances do i.root.Acquire()
+            
+        member this.GetData(ct,inputs) =
+            let g, _ = instances.[0].root.GetData(ct, inputs)
+            let atts =
+                g.IndexedAttributes |> SymDict.map (fun _ v ->
+                    System.Array.CreateInstance(v.GetType().GetElementType(), 1)    
+                )
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.PointList,
+                IndexedAttributes = atts
+            ), MapExt.empty
+        
+        member this.Id = id
+        member this.DataTrafo = dataTrafo
+        member this.Level = 0
+        member this.Name = "MultiNode"
+        member this.Parent = None
+        member this.Release() = 
+            for i in instances do i.root.Release()
+        member this.Root = this :> ILodTreeNode
+        member this.Cell = cell
+        member this.Children =
+            instances
+            |> Seq.map (fun i -> i.root)
+            //|> Seq.map (fun i -> DecoratedNode(Some this, Some this, i.root) :> ILodTreeNode) 
+        member this.CollapseQuality(var0,var1,var2) = System.Double.PositiveInfinity
+        member this.DataSize = 0
+        member this.DataSource = source
+        member this.ShouldCollapse(var0,var1,var2,var3) = false
+        member this.ShouldSplit(var0,var1,var2,var3) = true
+        member this.SplitQuality(var0,var1,var2) = 0.0
+        member this.TotalDataSize = 0
+        member this.WorldBoundingBox = bb
+        member this.WorldCellBoundingBox = cell.BoundingBox
+    
