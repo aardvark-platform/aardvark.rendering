@@ -1,3 +1,6 @@
+### 5.5.8
+- MultiTreeNode: fixed picking
+
 ### 5.5.7
 - LodTreeNode: added MultiTreeNode support
 

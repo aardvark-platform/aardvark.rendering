@@ -1512,6 +1512,18 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
 
     let signature = state.pProgramInterface
 
+    let (|Multi|_|) (node : ILodTreeNode) =
+        match node with
+        | :? MultiTreeNode as m -> Some (m.Instances, fun instances -> MultiTreeNode(instances) :> ILodTreeNode)
+        | :? UniqueTree as m ->
+            match m.Inner with
+            | :? MultiTreeNode as mm ->
+                Some (mm.Instances, fun instances -> UniqueTree(m.Id, None, None, MultiTreeNode(instances)))
+            | _ ->
+                None
+        | _ ->
+            None
+    
     let activeBuffer =
         let data = 
             AVal.custom (fun t ->
@@ -1941,7 +1953,16 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                             match root with
                             | Some root -> 
                                 match pickTrees with
-                                | Some mm -> transact (fun () -> mm.Value <- mm.Value |> HashMap.remove root)
+                                | Some mm ->
+                                    transact (fun () ->
+                                        let roots = 
+                                            match root with
+                                            | Multi(m,_) ->
+                                                m |> Array.map (fun s -> s.root)
+                                            | _ -> [|root|]
+                                        for root in roots do 
+                                            mm.Value <- mm.Value |> HashMap.remove root
+                                    )
                                 | None -> ()
                             | None ->
                                 ()
@@ -1951,12 +1972,19 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                             r.Update(renderDelta)
                             match pickTrees with
                             | Some mm ->
-                                let trafo = getRootTrafo root
-                                let picky = r.State |> Option.bind (fun s -> SimplePickTree.ofTreeNode trafo s)
+                                let roots = 
+                                    match root with
+                                    | Multi(m,_) ->
+                                        m |> Array.map (fun s -> s.root)
+                                    | _ -> [|root|]
                                 transact (fun () -> 
-                                    match picky with
-                                    | Some picky -> mm.Value <- mm.Value |> HashMap.add root picky
-                                    | None -> mm.Value <- mm.Value |> HashMap.remove root
+                                    for root in roots do
+                                        let trafo = getRootTrafo root
+                                        let picky = r.State |> Option.bind (fun s -> SimplePickTree.ofTreeNode trafo s)
+                                    
+                                        match picky with
+                                        | Some picky -> mm.Value <- mm.Value |> HashMap.add root picky
+                                        | None -> mm.Value <- mm.Value |> HashMap.remove root
                                 )
                             | None ->
                                 ()
@@ -1965,7 +1993,15 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                 for (root,r) in readers do
                     match pickTrees with
                     | Some mm -> 
-                        transact (fun () -> mm.Value <- mm.Value |> HashMap.remove root)
+                        transact (fun () ->
+                            let roots = 
+                                match root with
+                                | Multi(m,_) ->
+                                    m |> Array.map (fun s -> s.root)
+                                | _ -> [|root|]
+                            for root in roots do 
+                                mm.Value <- mm.Value |> HashMap.remove root
+                        )
                     | None -> ()
                     r.Destroy(renderDelta)
             )
@@ -2088,18 +2124,6 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                 //        | Rem(_,v) ->
                                 //            Log.warn "rem %A" v.root
 
-                                let (|Multi|_|) (node : ILodTreeNode) =
-                                    match node with
-                                    | :? MultiTreeNode as m -> Some (m.Instances, fun instances -> MultiTreeNode(instances) :> ILodTreeNode)
-                                    | :? UniqueTree as m ->
-                                        match m.Inner with
-                                        | :? MultiTreeNode as mm ->
-                                            Some (mm.Instances, fun instances -> UniqueTree(m.Id, None, None, MultiTreeNode(instances)))
-                                        | _ ->
-                                            None
-                                    | _ ->
-                                        None
-                                
                                 
                                 let roots = 
                                     if ops.Count > 0 then
