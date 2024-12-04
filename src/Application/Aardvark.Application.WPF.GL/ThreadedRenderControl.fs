@@ -2,19 +2,21 @@
 
 
 open OpenTK
+open OpenTK.Graphics.ES20
+open OpenTK.Graphics.OpenGL
 open OpenTK.Graphics.OpenGL4
 
 open System
 open System.Threading.Tasks
 open System.Windows.Forms
-
+open System.Threading
 open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
-type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int) =
+type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int) as this =
     inherit GLControl(
         Graphics.GraphicsMode(
             OpenTK.Graphics.ColorFormat(Config.BitsPerPixel),
@@ -180,6 +182,124 @@ type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : in
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
 
+    let textures = new System.Collections.Concurrent.BlockingCollection<Texture>()
+    let presentTextures = new System.Collections.Generic.Queue<Texture>()
+    
+    let pushNewTexture(size : V2i) =
+        let tex = ctx.CreateTexture2D(size, 1, TextureFormat.Rgba8, 1)
+        textures.Add tex
+    
+    let renderPendingLock = obj()
+    let mutable renderPending = true
+    
+    let mutable disposed = false
+    
+    
+    let renderThread =
+        let handle = runtime.Context.CreateContext()
+        startThread <| fun () ->
+            try
+                let ctx = runtime.Context
+                use __ = ctx.RenderingLock handle
+                
+                let mutable depth : option<Texture> = None
+                let mutable realColor : option<Texture> = None
+                
+                GL.SetDefaultStates()
+                GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                GL.Disable(EnableCap.Multisample)
+                
+                while not disposed do
+                    lock renderPendingLock (fun () ->
+                        while not renderPending do
+                            Monitor.Wait renderPendingLock |> ignore
+                        renderPending <- false
+                    )
+                    
+                    match task with
+                    | Some task ->
+                        
+                        let color = textures.Take()
+                        
+                        let depth =
+                            match depth with
+                            | Some depth when depth.Size.XY = color.Size.XY && depth.Multisamples = samples ->
+                                depth
+                            | _ ->
+                                match depth with
+                                | Some t -> ctx.Delete t
+                                | None -> ()
+                                
+                                let d = ctx.CreateTexture2D(color.Size.XY, 1, TextureFormat.Depth24Stencil8, samples)
+                                depth <- Some d
+                                d
+                        
+                        let realColor =
+                            if samples <= 1 then
+                                color
+                            else 
+                                match realColor with
+                                | Some realColor when realColor.Size.XY = color.Size.XY && realColor.Multisamples = samples ->
+                                    realColor
+                                | _ ->
+                                    match realColor with
+                                    | Some t -> ctx.Delete t
+                                    | None -> ()
+                                    
+                                    let d = ctx.CreateTexture2D(color.Size.XY, 1, TextureFormat.Rgba8, samples)
+                                    realColor <- Some d
+                                    d 
+                        let size = realColor.Size.XY
+                        let fbo =
+                            ctx.CreateFramebuffer(
+                                fboSignature,
+                                [0, DefaultSemantic.Colors, realColor.[TextureAspect.Color, 0, 0]],
+                                Some (depth.[TextureAspect.DepthStencil, 0, 0] :> IFramebufferOutput)
+                            )
+                            
+                            
+                        GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
+                        GL.ColorMask(true, true, true, true)
+                        GL.DepthMask(true)
+                        GL.StencilMask(0xFFFFFFFFu)
+                        GL.Viewport(0,0,size.X, size.Y)
+                        GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                        GL.ClearDepth(1.0)
+                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                        GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                            
+                        task.Run(AdaptiveToken.Top, RenderToken.Zero, fbo)
+                      
+                        if samples > 1 then
+                            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,fbo.Handle)
+                            let dst = GL.GenFramebuffer()
+                            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,dst)
+                            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer,FramebufferAttachment.ColorAttachment0,color.Handle,0)
+                            GL.BlitFramebuffer(0,0,size.X,size.Y,0,0,size.X,size.Y,ClearBufferMask.ColorBufferBit,BlitFramebufferFilter.Linear)
+                            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,0)
+                            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,0)
+                            GL.DeleteFramebuffer(dst)
+                        ctx.Delete fbo
+                        
+                        GL.Flush()
+                        GL.Finish()
+                        
+                        if not first then
+                            frameTime.Insert frameWatch.Elapsed.TotalSeconds |> ignore
+                        frameWatch.Restart()
+                        transact (fun () -> time.Value <- nextFrameTime())
+                        first <- false
+                        lock presentTextures (fun () ->
+                            presentTextures.Enqueue color
+                            Monitor.PulseAll presentTextures
+                        )
+                        MessageLoop.Invalidate this |> ignore
+                        
+                    | None ->
+                        ()
+            with e ->
+                Log.error "%A" e
+        
     member x.ContextHandle = contextHandle
 
     member x.DisableThreadStealing
@@ -199,8 +319,11 @@ type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : in
         member x.IsInvalid = needsRedraw
 
     member private x.ForceRedraw() =
-        if not renderContinuously then
-            MessageLoop.Invalidate x |> ignore
+        lock renderPendingLock (fun () ->
+            renderPending <- true
+            Monitor.PulseAll renderPendingLock
+        )
+      
 
     member x.RenderContinuously
         with get() = renderContinuously
@@ -208,7 +331,7 @@ type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : in
             renderContinuously <- v
             // if continuous rendering is enabled make sure rendering is initiated
             if v then // -> only makes sense with onPaintRender
-                x.Invalidate()
+                x.ForceRedraw()
 
 
     member x.RenderTask
@@ -222,6 +345,7 @@ type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : in
 
             task <- Some t
             taskSubscription <- t.AddMarkingCallback x.ForceRedraw
+            x.ForceRedraw()
 
     member x.Sizes = sizes :> aval<_>
     member x.Samples
@@ -244,105 +368,78 @@ type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : in
         base.OnHandleCreated(e) // creates the graphics context of the control and performs MakeCurrent -> NOTE: during this call rendering in other threads can break resource sharing
 
         GL.SetDefaultStates()
+        
+        
 
 
     member x.Render() =
-
         let mutable initial = false
-        if loaded then
-            if isNull contextHandle || contextHandle.Handle.IsDisposed then
-                contextHandle <- new ContextHandle(base.Context, base.WindowInfo)
-                contextHandle.Initialize(debug, setDefaultStates = false)
-                initial <- true
+        if isNull contextHandle || contextHandle.Handle.IsDisposed then
+            contextHandle <- new ContextHandle(base.Context, base.WindowInfo)
+            contextHandle.Initialize(debug, setDefaultStates = false)
+            initial <- true
 
-            let task = 
-                Task.Factory.StartNew(new System.Action(fun () ->
-                    beforeRender.Trigger()
-
-                    let screenSize = V2i(x.ClientSize.Width, x.ClientSize.Height)
-                    if Vec.allGreater screenSize 0 then
-
-                        let fboSize = V2i(max 1 (int (round (float screenSize.X * subsampling))), (int (round (float screenSize.Y * subsampling))))
-                        match task with
-                        | Some t ->
-                            use __ = ctx.RenderingLock contextHandle
-                            let fbo, blit = getFramebuffer fboSize screenSize samples
-
-                            if initial then
-                                GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
-                                GL.Disable(EnableCap.Multisample)
-                                //let ms = GL.IsEnabled(EnableCap.Multisample)
-                                //if ms then Log.warn "multisample enabled"
-                                //else Log.warn "multisample disabled"
-                                //let samples = Array.zeroCreate 1
-                                //GL.GetFramebufferParameter(FramebufferTarget.Framebuffer, unbox (int All.Samples), samples)
-                                //Log.warn "effective samples: %A" samples.[0]
-
-                            let stopDispatcherProcessing = threadStealing.StopStealing()
-
-                            frameWatch.Restart()
-                            useTransaction transaction (fun () -> time.Value <- nextFrameTime())
-
-                            if fboSize <> sizes.Value then
-                                useTransaction transaction (fun () -> sizes.Value <- fboSize)
-
-                            transaction.Commit()
-                            transaction.Dispose()
-
-                            defaultFramebuffer.Size <- screenSize
-                            //defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
-
-                            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo.Handle)
-                            GL.ColorMask(true, true, true, true)
-                            GL.DepthMask(true)
-                            GL.StencilMask(0xFFFFFFFFu)
-                            GL.Viewport(0,0,screenSize.X, screenSize.Y)
-                            GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                            GL.ClearDepth(1.0)
-                            GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
-
-                            //EvaluationUtilities.evaluateTopLevel(fun () ->
-                            t.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
-                            blit()
-
-                            x.SwapBuffers()
-                            //System.Threading.Thread.Sleep(200)
-                            frameWatch.Stop()
-                            if not first then
-                                frameTime.Insert frameWatch.Elapsed.TotalSeconds |> ignore
-
-                            useTransaction transaction (fun () -> time.MarkOutdated())
-                            transaction.Commit()
-                            transaction.Dispose()
-
-                            stopDispatcherProcessing.Dispose()
-                            if t.OutOfDate then
-                                needsRedraw <- true
-                                if autoInvalidate then x.ForceRedraw()
-                            else
-                                needsRedraw <- false
-
-                            first <- false
-
-                        | None ->
-                            if fboSize <> sizes.Value then
-                                useTransaction transaction (fun () -> sizes.Value <- fboSize)
-                                transaction.Commit()
-                                transaction.Dispose()
-
-                            needsRedraw <- false
-
-                    afterRender.Trigger()
-
-                    needsRedraw <- renderContinuously
-                    if renderContinuously then
-                        x.ForceRedraw() // why not use ForceRedraw ?
-                ))
-            task.Wait()
+        use __ = ctx.RenderingLock contextHandle
+        
+        let screenSize = V2i(x.ClientSize.Width, x.ClientSize.Height)
+        let fboSize = V2i(max 1 (int (round (float screenSize.X * subsampling))), (int (round (float screenSize.Y * subsampling))))
+        if fboSize <> sizes.Value then
+            useTransaction transaction (fun () -> sizes.Value <- fboSize)
+        
+        
+        let colorTex = 
+            lock presentTextures (fun () ->
+                if presentTextures.Count > 0 then Some (presentTextures.Dequeue())
+                else None
+            )
+        
+        match colorTex with
+        | Some colorTex ->
+            
+            let src = GL.GenFramebuffer()
+            GL.Check()
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, src)
+            GL.Check()
+            GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, colorTex.Handle, 0)
+            GL.Check()
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+            GL.Check()
+            GL.BlitFramebuffer(0, 0, colorTex.Size.X, colorTex.Size.Y, 0, 0, screenSize.X, screenSize.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear)
+            GL.Check()
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+            GL.Check()
+            GL.DeleteFramebuffer(src)
+            GL.Check()
+            
+            if colorTex.Size.XY = fboSize then
+                textures.Add colorTex
+            else
+                ctx.Delete colorTex
+                GL.Check()
+                pushNewTexture fboSize
+                
+            x.SwapBuffers()
+            
+        | None ->
+            x.ForceRedraw()
+            
 
     override x.OnPaint(e) =
         base.OnPaint(e)
+        if not loaded then
+            let screenSize = V2i(x.ClientSize.Width, x.ClientSize.Height)
+            let fboSize = V2i(max 1 (int (round (float screenSize.X * subsampling))), (int (round (float screenSize.Y * subsampling))))
+            if fboSize <> sizes.Value then
+                useTransaction transaction (fun () -> sizes.Value <- fboSize)
+            
+            pushNewTexture fboSize
+            
+            lock presentTextures (fun () ->
+                while presentTextures.Count = 0 do
+                    Monitor.Wait presentTextures |> ignore
+            )
+            
+            
         loaded <- true
         x.Render()
 

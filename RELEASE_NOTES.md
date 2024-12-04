@@ -1,3 +1,6 @@
+### 5.5.9
+- [OpenGL/WPF] Threaded rendering control
+
 ### 5.5.8
 - MultiTreeNode: fixed picking
 
