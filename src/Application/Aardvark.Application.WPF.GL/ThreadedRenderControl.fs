@@ -190,24 +190,23 @@ type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : in
         textures.Add tex
     
     let renderPendingLock = obj()
-    let mutable renderPending = true
+    let mutable renderPending = false
     
     let mutable disposed = false
     
     
     let renderThread =
-        let handle = runtime.Context.CreateContext()
+        
         startThread <| fun () ->
             try
                 let ctx = runtime.Context
-                use __ = ctx.RenderingLock handle
+                
                 
                 let mutable depth : option<Texture> = None
                 let mutable realColor : option<Texture> = None
                 
-                GL.SetDefaultStates()
-                GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
-                GL.Disable(EnableCap.Multisample)
+                
+                let mutable ctxLock = None
                 
                 while not disposed do
                     lock renderPendingLock (fun () ->
@@ -215,6 +214,15 @@ type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : in
                             Monitor.Wait renderPendingLock |> ignore
                         renderPending <- false
                     )
+                    match ctxLock with
+                    | None -> 
+                        let handle = runtime.Context.CreateContext()
+                        let h = ctx.RenderingLock handle
+                        ctxLock <- Some h
+                        GL.SetDefaultStates()
+                        GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                        GL.Disable(EnableCap.Multisample)
+                    | Some _ -> ()
                     
                     match task with
                     | Some task ->
@@ -417,6 +425,7 @@ type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : in
                 ctx.Delete colorTex
                 GL.Check()
                 pushNewTexture fboSize
+                x.ForceRedraw()
                 
             x.SwapBuffers()
             
@@ -425,19 +434,20 @@ type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : in
             
 
     override x.OnPaint(e) =
+        //Log.line "PAINT VER 3"
         base.OnPaint(e)
+        let screenSize = V2i(x.ClientSize.Width, x.ClientSize.Height)
+        let fboSize = V2i(max 1 (int (round (float screenSize.X * subsampling))), (int (round (float screenSize.Y * subsampling))))
+        if fboSize <> sizes.Value then
+            transact (fun () -> sizes.Value <- fboSize)
+            
         if not loaded then
-            let screenSize = V2i(x.ClientSize.Width, x.ClientSize.Height)
-            let fboSize = V2i(max 1 (int (round (float screenSize.X * subsampling))), (int (round (float screenSize.Y * subsampling))))
-            if fboSize <> sizes.Value then
-                useTransaction transaction (fun () -> sizes.Value <- fboSize)
-            
             pushNewTexture fboSize
-            
-            lock presentTextures (fun () ->
-                while presentTextures.Count = 0 do
-                    Monitor.Wait presentTextures |> ignore
-            )
+            x.ForceRedraw()
+            // lock presentTextures (fun () ->
+            //     while presentTextures.Count = 0 do
+            //         Monitor.Wait presentTextures |> ignore
+            // )
             
             
         loaded <- true

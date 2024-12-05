@@ -1,3 +1,6 @@
+### 5.5.10
+- [OpenGL/WPF/ThreadedRenderControl] fixed resize
+
 ### 5.5.9
 - [OpenGL/WPF] Threaded rendering control
 
