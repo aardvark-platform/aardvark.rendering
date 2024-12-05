@@ -1,3 +1,6 @@
+### 5.5.11
+- [LodTreeNode] uniforms concurrent access fix
+
 ### 5.5.10
 - [OpenGL/WPF/ThreadedRenderControl] fixed resize
 

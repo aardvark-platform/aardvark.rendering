@@ -1400,10 +1400,14 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
     let pRenderBounds : nativeptr<int> = 
         NativePtr.allocArray [| (if config.renderBounds.GetValue() then 1 else 0) |]
 
-    let rootIdsLock = obj()
     let rootIds : cval<HashMap<ILodTreeNode, int>> = cval HashMap.empty
 
+    let rootUniformsLock = obj()
     let mutable rootUniforms : HashMap<ILodTreeNode, MapExt<string, IAdaptiveValue>> = HashMap.empty
+    let tryGetRootUniforms (node : ILodTreeNode) =
+        lock rootUniformsLock (fun () -> HashMap.tryFind node rootUniforms)
+    let updateRootUniforms f =
+        lock rootUniformsLock (fun () -> rootUniforms <- f(rootUniforms))
     let toFreeUniforms : ref<HashSet<ILodTreeNode>> = ref HashSet.empty
         
     let rootUniformCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, System.Collections.Concurrent.ConcurrentDictionary<string, Option<IAdaptiveValue>>>()
@@ -1416,7 +1420,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
     let getRootTrafo (root : ILodTreeNode) =
         let root = root.Root
         rootTrafoCache.GetOrAdd(root, fun root ->
-            match HashMap.tryFind root rootUniforms with
+            match tryGetRootUniforms root with
             | Some table -> 
                 match MapExt.tryFind "ModelTrafo" table with
                 | Some (:? aval<Trafo3d> as m) -> (m |> AVal.map ( fun m -> root.DataTrafo * m )) %* config.model
@@ -1442,33 +1446,41 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
             | "NormalMatrices"           -> getRootTrafo root |> AVal.map (fun t -> M33d.op_Explicit t.Backward.Transposed):> IAdaptiveValue |> Some
             | "NormalMatricesInv"        -> getRootTrafo root |> AVal.map (fun t -> M33d.op_Explicit t.Forward.Transposed):> IAdaptiveValue |> Some
             | _ -> 
-                match HashMap.tryFind root rootUniforms with
+                match tryGetRootUniforms root with
                 | Some table -> MapExt.tryFind name table
                 | None -> None
         )
 
     let getRootId (root : ILodTreeNode) =   
         let root = root.Root
-        match HashMap.tryFind root rootIds.Value with
-        | Some id -> 
-            id
-        | None ->
-            transact (fun () -> 
-                lock rootIdsLock (fun () ->
-                    let ids = Set.ofSeq (Seq.map snd (HashMap.toSeq rootIds.Value))
-                    let free = Seq.initInfinite id |> Seq.find (fun i -> not (Set.contains i ids))
-                    let n = HashMap.add root free rootIds.Value
-                    rootIds.Value <- n
-                    free
-                )
+        let id, t = 
+            lock rootIds (fun () ->
+                match HashMap.tryFind root rootIds.Value with
+                | Some id -> 
+                    id, None
+                | None ->
+                    let t = new Transaction()
+                    useTransaction t (fun () ->
+                        let ids = Set.ofSeq (Seq.map snd (HashMap.toSeq rootIds.Value))
+                        let free = Seq.initInfinite id |> Seq.find (fun i -> not (Set.contains i ids))
+                        let n = HashMap.add root free rootIds.Value
+                        //printfn "+ADDED ID %A %A" root free
+                        rootIds.Value <- n
+                        free, Some t
+                    )
             )
+        match t with
+        | Some t -> t.Commit(); t.Dispose()
+        | None -> ()
+        id
 
     let freeRootId (root : ILodTreeNode) =
         let root = root.Root
         rootUniformCache.TryRemove root |> ignore
         rootTrafoCache.TryRemove root |> ignore
         transact (fun () ->
-            lock rootIdsLock (fun () ->
+            lock rootIds (fun () ->
+                //printfn "-freed ID %A %A" root (rootIds.Value |> HashMap.tryFind root)
                 rootIds.Value <- HashMap.remove root rootIds.Value
             )
         )
@@ -2100,7 +2112,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
 
                             toFree |> HashSet.iter ( fun node -> 
                                 freeRootId node
-                                rootUniforms <- HashMap.remove node rootUniforms
+                                updateRootUniforms (fun rootUniforms -> HashMap.remove node rootUniforms)
                             )
                         
 
@@ -2110,21 +2122,6 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                     deltas <- HashSetDelta.empty
                                     d
 
-                                //if ops.Count > 0 then
-                                //    lock rootDeltas (fun () ->
-                                //        rootDeltas := HDeltaSet.combine !rootDeltas ops
-                                //    )
-                                //    MVar.put changesPending ()
-
-                                //if ops.Count > 0 then 
-                                //    for o in ops do
-                                //        match o with
-                                //        | Add(_,v) ->
-                                //            Log.warn "add %A" v.root
-                                //        | Rem(_,v) ->
-                                //            Log.warn "rem %A" v.root
-
-                                
                                 let roots = 
                                     if ops.Count > 0 then
                                         lock rootLock (fun () ->
@@ -2137,7 +2134,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                                     | Multi (instances, rebuild) ->
                                                         for ii in instances do
                                                             let uniforms = MapExt.union i.uniforms ii.uniforms
-                                                            rootUniforms <- HashMap.add ii.root uniforms rootUniforms
+                                                            updateRootUniforms (fun rootUniforms -> HashMap.add ii.root uniforms rootUniforms)
                                                             
                                                         let load ct n = load ct n (fun _ _ r -> r)
                                                         roots <- HashMap.add r (TaskTree(load)) roots
@@ -2147,7 +2144,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                                             Log.error "[Lod] add of existing root %A" i.root
                                                         | None -> 
                                                             let u = i.uniforms
-                                                            rootUniforms <- HashMap.add r u rootUniforms
+                                                            updateRootUniforms (fun rootUniforms -> HashMap.add r u rootUniforms)
                                                             let load ct n = load ct n (fun _ _ r -> r)
                                                             roots <- HashMap.add r (TaskTree(load)) roots
 
@@ -2156,7 +2153,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                                     match r with
                                                     | Multi(instances, rebuild) ->
                                                         for i in instances do
-                                                            rootUniforms <- HashMap.remove i.root rootUniforms
+                                                            updateRootUniforms (fun rootUniforms -> HashMap.remove i.root rootUniforms)
                                                             freeRootId i.root
                                                             
                                                         match HashMap.tryRemove r roots with
@@ -2164,7 +2161,10 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                                             roots <- rest
                                                         | None -> 
                                                             Log.error "[Lod] remove of nonexisting root %A" i.root
-                                                    | _ -> 
+                                                    | _ ->
+                                                        updateRootUniforms (fun rootUniforms -> HashMap.remove i.root rootUniforms)
+                                                        freeRootId i.root
+
                                                         match HashMap.tryRemove r roots with
                                                         | Some (_, rest) ->
                                                             roots <- rest
