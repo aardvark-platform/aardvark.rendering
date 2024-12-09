@@ -207,104 +207,112 @@ type ThreadedRenderControl(runtime : Runtime, debug : IDebugConfig, samples : in
                 
                 
                 let mutable ctxLock = None
-                
+                let t = new MultimediaTimer.Trigger(16)
                 while not disposed do
-                    lock renderPendingLock (fun () ->
-                        while not renderPending do
-                            Monitor.Wait renderPendingLock |> ignore
-                        renderPending <- false
-                    )
-                    match ctxLock with
-                    | None -> 
-                        let handle = runtime.Context.CreateContext()
-                        let h = ctx.RenderingLock handle
-                        ctxLock <- Some h
-                        GL.SetDefaultStates()
-                        GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
-                        GL.Disable(EnableCap.Multisample)
-                    | Some _ -> ()
-                    
-                    match task with
-                    | Some task ->
+                    t.Wait()
+                    // lock renderPendingLock (fun () ->
+                    //     while not renderPending do
+                    //         Monitor.Wait renderPendingLock |> ignore
+                    //     renderPending <- false 
+                    // )
+                    let shouldRender =
+                        lock renderPendingLock (fun () ->
+                            let o = renderPending
+                            renderPending <- false
+                            o
+                        )
+                    if shouldRender then 
+                        match ctxLock with
+                        | None -> 
+                            let handle = runtime.Context.CreateContext()
+                            let h = ctx.RenderingLock handle
+                            ctxLock <- Some h
+                            GL.SetDefaultStates()
+                            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                            GL.Disable(EnableCap.Multisample)
+                        | Some _ -> ()
                         
-                        let color = textures.Take()
-                        
-                        let depth =
-                            match depth with
-                            | Some depth when depth.Size.XY = color.Size.XY && depth.Multisamples = samples ->
-                                depth
-                            | _ ->
+                        match task with
+                        | Some task ->
+                            
+                            let color = textures.Take()
+                            
+                            let depth =
                                 match depth with
-                                | Some t -> ctx.Delete t
-                                | None -> ()
-                                
-                                let d = ctx.CreateTexture2D(color.Size.XY, 1, TextureFormat.Depth24Stencil8, samples)
-                                depth <- Some d
-                                d
-                        
-                        let realColor =
-                            if samples <= 1 then
-                                color
-                            else 
-                                match realColor with
-                                | Some realColor when realColor.Size.XY = color.Size.XY && realColor.Multisamples = samples ->
-                                    realColor
+                                | Some depth when depth.Size.XY = color.Size.XY && depth.Multisamples = samples ->
+                                    depth
                                 | _ ->
-                                    match realColor with
+                                    match depth with
                                     | Some t -> ctx.Delete t
                                     | None -> ()
                                     
-                                    let d = ctx.CreateTexture2D(color.Size.XY, 1, TextureFormat.Rgba8, samples)
-                                    realColor <- Some d
-                                    d 
-                        let size = realColor.Size.XY
-                        let fbo =
-                            ctx.CreateFramebuffer(
-                                fboSignature,
-                                [0, DefaultSemantic.Colors, realColor.[TextureAspect.Color, 0, 0]],
-                                Some (depth.[TextureAspect.DepthStencil, 0, 0] :> IFramebufferOutput)
+                                    let d = ctx.CreateTexture2D(color.Size.XY, 1, TextureFormat.Depth24Stencil8, samples)
+                                    depth <- Some d
+                                    d
+                            
+                            let realColor =
+                                if samples <= 1 then
+                                    color
+                                else 
+                                    match realColor with
+                                    | Some realColor when realColor.Size.XY = color.Size.XY && realColor.Multisamples = samples ->
+                                        realColor
+                                    | _ ->
+                                        match realColor with
+                                        | Some t -> ctx.Delete t
+                                        | None -> ()
+                                        
+                                        let d = ctx.CreateTexture2D(color.Size.XY, 1, TextureFormat.Rgba8, samples)
+                                        realColor <- Some d
+                                        d 
+                            let size = realColor.Size.XY
+                            let fbo =
+                                ctx.CreateFramebuffer(
+                                    fboSignature,
+                                    [0, DefaultSemantic.Colors, realColor.[TextureAspect.Color, 0, 0]],
+                                    Some (depth.[TextureAspect.DepthStencil, 0, 0] :> IFramebufferOutput)
+                                )
+                                
+                                
+                            GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
+                            GL.ColorMask(true, true, true, true)
+                            GL.DepthMask(true)
+                            GL.StencilMask(0xFFFFFFFFu)
+                            GL.Viewport(0,0,size.X, size.Y)
+                            GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                            GL.ClearDepth(1.0)
+                            GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                                
+                            task.Run(AdaptiveToken.Top, RenderToken.Zero, fbo)
+                          
+                            if samples > 1 then
+                                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,fbo.Handle)
+                                let dst = GL.GenFramebuffer()
+                                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,dst)
+                                GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer,FramebufferAttachment.ColorAttachment0,color.Handle,0)
+                                GL.BlitFramebuffer(0,0,size.X,size.Y,0,0,size.X,size.Y,ClearBufferMask.ColorBufferBit,BlitFramebufferFilter.Linear)
+                                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,0)
+                                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,0)
+                                GL.DeleteFramebuffer(dst)
+                            ctx.Delete fbo
+                            
+                            GL.Flush()
+                            GL.Finish()
+                            
+                            if not first then
+                                frameTime.Insert frameWatch.Elapsed.TotalSeconds |> ignore
+                            frameWatch.Restart()
+                            transact (fun () -> time.Value <- nextFrameTime())
+                            first <- false
+                            lock presentTextures (fun () ->
+                                presentTextures.Enqueue color
+                                Monitor.PulseAll presentTextures
                             )
+                            MessageLoop.Invalidate this |> ignore
                             
-                            
-                        GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
-                        GL.ColorMask(true, true, true, true)
-                        GL.DepthMask(true)
-                        GL.StencilMask(0xFFFFFFFFu)
-                        GL.Viewport(0,0,size.X, size.Y)
-                        GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                        GL.ClearDepth(1.0)
-                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                        GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
-                            
-                        task.Run(AdaptiveToken.Top, RenderToken.Zero, fbo)
-                      
-                        if samples > 1 then
-                            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,fbo.Handle)
-                            let dst = GL.GenFramebuffer()
-                            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,dst)
-                            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer,FramebufferAttachment.ColorAttachment0,color.Handle,0)
-                            GL.BlitFramebuffer(0,0,size.X,size.Y,0,0,size.X,size.Y,ClearBufferMask.ColorBufferBit,BlitFramebufferFilter.Linear)
-                            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,0)
-                            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer,0)
-                            GL.DeleteFramebuffer(dst)
-                        ctx.Delete fbo
-                        
-                        GL.Flush()
-                        GL.Finish()
-                        
-                        if not first then
-                            frameTime.Insert frameWatch.Elapsed.TotalSeconds |> ignore
-                        frameWatch.Restart()
-                        transact (fun () -> time.Value <- nextFrameTime())
-                        first <- false
-                        lock presentTextures (fun () ->
-                            presentTextures.Enqueue color
-                            Monitor.PulseAll presentTextures
-                        )
-                        MessageLoop.Invalidate this |> ignore
-                        
-                    | None ->
-                        ()
+                        | None ->
+                            ()
             with e ->
                 Log.error "%A" e
         

@@ -1,3 +1,7 @@
+### 5.5.12
+- [OpenGL/WPF/ThreadedRenderControl] frame throttle
+
+
 ### 5.5.11
 - [LodTreeNode] uniforms concurrent access fix
 
