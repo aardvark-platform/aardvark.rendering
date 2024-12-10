@@ -6,7 +6,7 @@ open System.Windows.Forms.Integration
 open Aardvark.Application
 open System.Windows.Threading
 
-type private WinFormsControl = Aardvark.Application.WinForms.ThreadedRenderControl
+type private WinFormsControl = Aardvark.Application.WinForms.OpenGlRenderControl
 
 type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int) as this =
     inherit WindowsFormsHost()

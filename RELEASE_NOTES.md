@@ -1,6 +1,8 @@
+### 5.5.13
+- [OpenGL/WPF/ThreadedRenderControl] re-activate classic render control
+
 ### 5.5.12
 - [OpenGL/WPF/ThreadedRenderControl] frame throttle
-
 
 ### 5.5.11
 - [LodTreeNode] uniforms concurrent access fix
