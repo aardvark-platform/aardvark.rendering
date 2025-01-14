@@ -517,7 +517,7 @@ module BlockCompression =
             member idx.Item
                 with get (x : int, y : int) =
                     let offset = x * 3 + y * 3 * 4
-                    (int (idx.Value >>> offset)) &&& 0x07
+                    uint8 ((idx.Value >>> offset) &&& 0x07UL)
 
                 and set (x : int, y : int) (value : uint8) =
                     let offset = x * 3 + y * 3 * 4
@@ -613,10 +613,10 @@ module BlockCompression =
 
             for x = 0 to 3 do
                 for y = 0 to height - 1 do
-                    dstIndex.[x, offset + height - 1 - y] <- uint8 srcIndex.[x, y]
+                    dstIndex.[x, offset + height - 1 - y] <- srcIndex.[x, y]
 
                 for y = 0 to offset - 1 do
-                    dstIndex.[x, y] <- uint8 srcIndex.[x, height - 1]
+                    dstIndex.[x, y] <- srcIndex.[x, height - 1]
 
         let inline private decode (cast : int16 -> ^T) (computePalette : ^T -> ^T -> int16[])
                                   (offset : V2i) (src : nativeint) (dst : nativeint) (dstInfo : VolumeInfo) =
@@ -634,7 +634,7 @@ module BlockCompression =
 
             for y = offset.Y to size.Y - 1 do
                 for x = offset.X to size.X - 1 do
-                    dst.[x, y, 0] <- cast palette.[indices.[x, y]]
+                    dst.[x, y, 0] <- cast palette.[int indices.[x, y]]
 
         let decodeU = decode uint8 computePaletteU
         let decodeS = decode int8 computePaletteS
