@@ -992,6 +992,19 @@ type IBackendTextureExtensions private() =
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
     ///<param name="texture">The texture to download.</param>
+    ///<param name="target">The matrix to copy the data to.</param>
+    ///<param name="level">The texture level to download. Default is 0.</param>
+    ///<param name="slice">The texture slice to download. Default is 0.</param>
+    ///<param name="offset">The minimum coordinate to download. Default is V2i.Zero.</param>
+    [<Extension>]
+    static member DownloadDepth(texture : IBackendTexture, target : Matrix<float32>,
+                                [<Optional; DefaultParameterValue(0)>] level : int,
+                                [<Optional; DefaultParameterValue(0)>] slice : int,
+                                [<Optional; DefaultParameterValue(V2i())>] offset : V2i) =
+        texture.Runtime.DownloadDepth(texture, target, level, slice, offset)
+
+    ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download. Default is 0.</param>
     ///<param name="slice">The texture slice to download. Default is 0.</param>
     ///<param name="region">The (half-open) region of the texture to copy, Box2i.Infinite or an empty Box2i if the whole texture is to be copied. Default is an empty Box2i.</param>
@@ -1002,6 +1015,19 @@ type IBackendTextureExtensions private() =
                                 [<Optional; DefaultParameterValue(0)>] slice : int,
                                 [<Optional; DefaultParameterValue(Box2i())>] region : Box2i) =
         texture.Runtime.DownloadDepth(texture, level, slice, region)
+
+    ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="texture">The texture to download.</param>
+    ///<param name="target">The matrix to copy the data to.</param>
+    ///<param name="level">The texture level to download. Default is 0.</param>
+    ///<param name="slice">The texture slice to download. Default is 0.</param>
+    ///<param name="offset">The minimum coordinate to download. Default is V2i.Zero.</param>
+    [<Extension>]
+    static member DownloadStencil(texture : IBackendTexture, target : Matrix<int>,
+                                  [<Optional; DefaultParameterValue(0)>] level : int,
+                                  [<Optional; DefaultParameterValue(0)>] slice : int,
+                                  [<Optional; DefaultParameterValue(V2i())>] offset : V2i) =
+        texture.Runtime.DownloadStencil(texture, target, level, slice, offset)
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
     ///<param name="texture">The texture to download.</param>

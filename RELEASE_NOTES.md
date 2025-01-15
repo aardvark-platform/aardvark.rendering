@@ -1,4 +1,5 @@
 - [Vulkan] Changed config location of device chooser to Aardvark cache directory
+- Added DownloadDepth() and DownloadStencil() overloads for IBackendTexture with an explicit target parameter
 
 ### 5.5.13
 - [OpenGL/WPF/ThreadedRenderControl] re-activate classic render control
