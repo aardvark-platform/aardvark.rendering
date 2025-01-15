@@ -16,7 +16,7 @@ module SimpleLighting =
 
             let l = ambient + (1.0 - ambient) * diffuse
 
-            return V4d(v.c.XYZ * diffuse, v.c.W)
+            return V4d(v.c.XYZ * l, v.c.W)
         }
 
     type Vertex = {
@@ -52,7 +52,7 @@ module SimpleLighting =
 
             let l = ambient + (1.0 - ambient) * diffuse
 
-            return V4d(v.c.XYZ * diffuse, v.c.W)
+            return V4d(v.c.XYZ * l, v.c.W)
         }
 
     let Effect = 
