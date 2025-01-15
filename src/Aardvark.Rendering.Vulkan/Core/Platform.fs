@@ -737,6 +737,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice) =
     //member x.Index : int = index
     member x.Vendor = vendor
     member x.Name = name
+    member x.FullName = if name.StartsWith(vendor, StringComparison.InvariantCultureIgnoreCase) then name else $"{vendor} {name}"
     member x.Type = properties.deviceType
     member x.APIVersion = apiVersion
     member x.DriverVersion = driverVersion
@@ -793,142 +794,162 @@ type CustomDeviceChooser private() =
 
 module ConsoleDeviceChooser =
     open System.IO
-    open System.Reflection
-    open System.Diagnostics
-    open System.Runtime.InteropServices
 
-    type private KeyCode =
-        | LeftAlt = 0xA4
-        | RightAlt = 0xA5
-        | LeftShift = 0xA0
-        | RightShift = 0xA1
+    module private Keyboard =
 
-    module private Win32 =
-        [<DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)>]
-        extern uint16 private GetKeyState(KeyCode keyCode)
+        type private KeyCode =
+            | LeftAlt = 0xA4
+            | RightAlt = 0xA5
+            | LeftShift = 0xA0
+            | RightShift = 0xA1
 
-        let isDown (key : KeyCode) =
-            let state = GetKeyState(key) 
-            (state &&& 0x8000us) = 0x8000us
+        module private Win32 =
+            [<DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)>]
+            extern uint16 private GetKeyState(KeyCode keyCode)
 
-    module private X11 =
-        let XK_Alt_L = 0xffe9
+            let isDown (key : KeyCode) =
+                let state = GetKeyState(key)
+                (state &&& 0x8000us) = 0x8000us
 
-        [<DllImport("X11")>]
-        extern nativeint XOpenDisplay(nativeint ptr)
+        module private X11 =
+            let XK_Alt_L = 0xffe9
 
-        [<DllImport("X11")>]
-        extern int XCloseDisplay(nativeint ptr)
+            [<DllImport("X11")>]
+            extern nativeint XOpenDisplay(nativeint ptr)
 
-        [<DllImport("X11")>]
-        extern int XQueryKeymap(nativeint dpy, byte[] keys)
+            [<DllImport("X11")>]
+            extern int XCloseDisplay(nativeint ptr)
 
-        [<DllImport("X11")>]
-        extern byte XKeysymToKeycode(nativeint dpy, int thing)
+            [<DllImport("X11")>]
+            extern int XQueryKeymap(nativeint dpy, byte[] keys)
 
+            [<DllImport("X11")>]
+            extern byte XKeysymToKeycode(nativeint dpy, int thing)
 
+            let altDown() =
+                let dpy = XOpenDisplay(0n)
+                if dpy = 0n then false
+                else
+                    try
+                        let keys = Array.zeroCreate<byte> 256
+                        XQueryKeymap(dpy, keys) |> ignore
+                        let kc2 = XKeysymToKeycode(dpy, XK_Alt_L) |> int
+                        let pressed = keys.[ kc2>>>3 ] &&& ( 1uy<<<(kc2&&&7) )
+                        pressed <> 0uy
+                    finally
+                        XCloseDisplay(dpy) |> ignore
+
+        /// Returns whether the ALT key is pressed.
+        /// Only works on Windows and Linux with X11 currently.
         let altDown() =
-            let dpy = XOpenDisplay(0n)
-            let keys = Array.zeroCreate<byte> 256
-            XQueryKeymap(dpy, keys) |> ignore
-            let kc2 = XKeysymToKeycode(dpy, XK_Alt_L) |> int
-            let pressed = keys.[ kc2>>>3 ] &&& ( 1uy<<<(kc2&&&7) ) 
-            XCloseDisplay(dpy) |> ignore
-            pressed <> 0uy
-    
-    let private md5 = System.Security.Cryptography.MD5.Create()
+            match Environment.OSVersion with
+            | Windows -> Win32.isDown KeyCode.LeftAlt || Win32.isDown KeyCode.RightAlt
+            | Linux -> X11.altDown()
+            | _ -> false
 
-    let private newHash() =
-        Guid.NewGuid().ToByteArray() |> Convert.ToBase64String
+    module Config =
+        open System.Security.Cryptography
+        open System.Text
 
-    let private appHash =
-        try
-            let ass = Assembly.GetEntryAssembly()
-            if isNull ass || String.IsNullOrWhiteSpace ass.Location then 
-                newHash()
+        let private filePath =
+            let newHash() =
+                Guid.NewGuid().ToByteArray() |> Convert.ToBase64String
+
+            let appHash =
+                try
+                    let asm = Assembly.GetEntryAssembly()
+                    let location = if isNull asm then null else asm.Location
+
+                    if String.IsNullOrWhiteSpace location then
+                        newHash()
+                    else
+                        let md5 = MD5.Create()
+                        location
+                        |> Encoding.Unicode.GetBytes
+                        |> md5.ComputeHash
+                        |> Convert.ToBase64String
+                with _ ->
+                    newHash()
+
+            Path.combine [
+                CachingProperties.CacheDirectory
+                "Config"
+                $"{appHash.Replace('/', '_')}.vkconfig"
+            ]
+
+        /// Reads the config file to determine a device to use.
+        let tryRead (devices: PhysicalDevice seq) =
+            if File.Exists filePath then
+                try
+                    let currentIds = devices |> Seq.map _.Id |> Set.ofSeq
+                    let cachedIds = File.readAllLines filePath
+
+                    // If there is a new device do not use the cached setting
+                    if Set.isSuperset (Set.ofSeq cachedIds) currentIds then
+                        devices |> Seq.tryFind (fun d -> d.Id = cachedIds.[0])
+                    else
+                        None
+
+                with e ->
+                    Log.warn $"[Vulkan] Failed to read device config file '{filePath}': {e.Message}"
+                    None
             else
-                ass.Location 
-                    |> System.Text.Encoding.Unicode.GetBytes
-                    |> md5.ComputeHash
-                    |> Convert.ToBase64String
-                   
-        with _ ->
-            newHash()
-               
-    let private configFile =
-        let configDir = Path.Combine(Path.GetTempPath(), "vulkan")
+                None
 
-        if not (Directory.Exists configDir) then
-            Directory.CreateDirectory configDir |> ignore
+        /// Writes the chosen device to the config file.
+        let write (chosen: PhysicalDevice) (devices: PhysicalDevice seq) =
+            try
+                let otherDeviceIds =
+                    devices
+                    |> Seq.map _.Id
+                    |> Seq.distinct
+                    |> Seq.filter ((<>) chosen.Id)
+                    |> Seq.toArray
 
-
-        let fileName = appHash.Replace('/', '_')
-        Path.Combine(configDir, sprintf "%s.vkconfig" fileName)
+                Array.append [| chosen.Id |] otherDeviceIds
+                |> File.writeAllLinesSafe filePath
+            with e ->
+                Log.warn $"[Vulkan] Failed to write device config file '{filePath}': {e.Message}"
 
     let run' (preferred : Option<PhysicalDevice>) (devices : seq<PhysicalDevice>) =
         let devices = Seq.toList devices
         match devices with
-            | [single] -> single
-            | _ -> 
-                let allIds = devices |> List.map (fun d -> d.Id) |> String.concat ";"
+        | [single] -> single
+        | _ ->
+            let choose() =
+                let devices = List.toArray devices
+                Log.line "Multiple GPUs detected (please select one)"
+                for i in 0 .. devices.Length - 1 do
+                    let d = devices.[i]
 
-                let choose() =
-                    let devices = List.toArray devices
-                    Log.line "Multiple GPUs detected (please select one)"
-                    for i in 0 .. devices.Length - 1 do
-                        let d = devices.[i]
-                        
-                        let prefix =
-                            match d with
-                                | :? PhysicalDeviceGroup as g -> sprintf "%d x "g.Devices.Length
-                                | _ -> ""
+                    let prefix =
+                        match d with
+                            | :? PhysicalDeviceGroup as g -> sprintf "%d x "g.Devices.Length
+                            | _ -> ""
 
-                        Log.line "   %d: %s%s %s" i prefix d.Vendor d.Name
-                    
-                    let mutable chosenId = -1
-                    while chosenId < 0 do
-                        printf " 0: "
-                        let entry = Console.ReadLine()
-                        match Int32.TryParse(entry) with
-                            | (true, v) when v >= 0 && v < devices.Length ->
-                                let d = devices.[v]
-                                File.WriteAllLines(configFile, [ allIds; d.Id ])
-                                chosenId <- v
-                            | _ ->
-                                ()
-                            
-                    File.WriteAllLines(configFile, [ allIds; devices.[chosenId].Id ])
-                    devices.[chosenId]
+                    Log.line "   %d: %s%s" i prefix d.FullName
 
-                let altDown = 
-                    match System.Environment.OSVersion with
-                        | Windows -> Win32.isDown KeyCode.LeftAlt || Win32.isDown KeyCode.RightAlt
-                        | Linux -> X11.altDown()
-                        | _ -> false
+                let mutable chosenId = -1
+                while chosenId < 0 do
+                    printf " > "
+                    let entry = Console.ReadLine()
+                    match Int32.TryParse(entry) with
+                    | (true, v) when v >= 0 && v < devices.Length -> chosenId <- v
+                    | _ -> ()
 
-                if altDown then
-                    choose()
-                else
+                let chosen = devices.[chosenId]
+                Config.write chosen devices
+                chosen
 
-                    match preferred with
-                        | Some pref -> 
-                            pref
-                        | _ ->
-                            if File.Exists configFile && not altDown then
-                                let cache = File.ReadAllLines configFile
-                                match cache with
-                                    | [| fAll; fcache |] when fAll = allIds ->
+            if Keyboard.altDown() then
+                choose()
+            else
+                match preferred with
+                | Some pref -> pref
+                | _ ->
+                    match Config.tryRead devices with
+                    | Some chosen -> chosen
+                    | _ -> choose()
 
-                                        match devices |> List.tryFind (fun d -> d.Id = fcache) with
-                                            | Some d -> d
-                                            | _ -> choose()
-
-                                    | _ ->
-                                        choose()
-                            else
-                                choose()
-             
-    
     let run (devices : seq<PhysicalDevice>) : PhysicalDevice =
         run' None devices
-        

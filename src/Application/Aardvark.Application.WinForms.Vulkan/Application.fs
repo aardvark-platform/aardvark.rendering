@@ -12,80 +12,40 @@ open FSharp.Data.Adaptive.Operators
 open System.Runtime.InteropServices
 
 module VisualDeviceChooser =
-    open System.IO
-    open System.Reflection
     open System.Windows.Forms
-    open Aardvark.Application
-
-    let private md5 = System.Security.Cryptography.MD5.Create()
-
-    let private newHash() =
-        Guid.NewGuid().ToByteArray() |> Convert.ToBase64String
-
-    let private appHash =
-        try
-            let ass = Assembly.GetEntryAssembly()
-            if isNull ass || String.IsNullOrWhiteSpace ass.Location then 
-                newHash()
-            else
-                ass.Location 
-                    |> System.Text.Encoding.Unicode.GetBytes
-                    |> md5.ComputeHash
-                    |> Convert.ToBase64String
-                   
-        with _ ->
-            newHash()
-               
-    let private configFile =
-        let configDir = Path.Combine(Path.GetTempPath(), "vulkan")
-
-        if not (Directory.Exists configDir) then
-            Directory.CreateDirectory configDir |> ignore
-
-
-        let fileName = appHash.Replace('/', '_')
-        Path.Combine(configDir, sprintf "%s.vkconfig" fileName)
 
     let run(devices : list<PhysicalDevice>) =
         match devices with
-            | [single] -> single
-            | _ -> 
-                let allIds = devices |> List.map (fun d -> d.Id) |> String.concat ";"
+        | [single] -> single
+        | _ ->
+            let choose() =
+                let chosen =
+                    devices
+                    |> List.mapi (fun i d ->
+                        let prefix =
+                            match d with
+                            | :? PhysicalDeviceGroup as g -> sprintf "%d x "g.Devices.Length
+                            | _ -> ""
+                        let name = sprintf "%s%s" prefix d.FullName
+                        name, d
+                    )
+                    |> ChooseForm.run
 
-                let choose() =
-                    let chosen = 
-                        devices
-                            |> List.mapi (fun i d -> 
-                                let prefix =
-                                    match d with
-                                        | :? PhysicalDeviceGroup as g -> sprintf "%d x "g.Devices.Length
-                                        | _ -> ""
-                                let name = sprintf "%s%s %s" prefix d.Vendor d.Name
-                                name, d
-                               )
-                            |> ChooseForm.run
-                    match chosen with
-                        | Some d -> 
-                            File.WriteAllLines(configFile, [ allIds; d.Id ])
-                            d
-                        | None -> 
-                            Log.warn "no vulkan device chosen => stopping Application"
-                            Environment.Exit 0
-                            failwith ""
+                match chosen with
+                | Some d ->
+                    ConsoleDeviceChooser.Config.write d devices
+                    d
+                | None ->
+                    Log.warn "no vulkan device chosen => stopping Application"
+                    Environment.Exit 0
+                    failwith ""
 
-                if File.Exists configFile && Control.ModifierKeys <> Keys.Alt then
-                    let cache = File.ReadAllLines configFile
-                    match cache with
-                        | [| fAll; fcache |] when fAll = allIds ->
-                    
-                            match devices |> List.tryFind (fun d -> d.Id = fcache) with
-                                | Some d -> d
-                                | _ -> choose()
-
-                        | _ ->
-                            choose()
-                else
-                    choose()
+            if Control.ModifierKeys <> Keys.Alt then
+                match ConsoleDeviceChooser.Config.tryRead devices with
+                | Some chosen -> chosen
+                | _ -> choose()
+            else
+                choose()
 
 
 

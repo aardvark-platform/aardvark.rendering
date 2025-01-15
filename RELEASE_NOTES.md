@@ -1,3 +1,5 @@
+- [Vulkan] Changed config location of device chooser to Aardvark cache directory
+
 ### 5.5.13
 - [OpenGL/WPF/ThreadedRenderControl] re-activate classic render control
 
