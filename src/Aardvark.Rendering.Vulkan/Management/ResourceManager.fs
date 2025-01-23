@@ -797,27 +797,28 @@ module Resources =
                 let mutable changed = deltas.Count > 0
 
                 for image in pending.GetAndClear() do
-                    let info = image.Update(user, token, renderToken)
+                    if indices.Contains image then
+                        let info = image.Update(user, token, renderToken)
 
-                    for i in indices.[image] do
+                        for i in indices.[image] do
 
-                        // If handle is zero handle, a new resource has been bound to the slot.
-                        // In this case versionOffsets stores the previous version on that slot.
-                        // Compute a new offset for the new handle, so the effective version is incremented by 1.
-                        if Object.ReferenceEquals(handle.[i], zeroHandle) then
-                            let offset = (versionOffsets.[i] - info.version) + 1
-                            handle.[i] <- { info with version = info.version + offset }
-                            versionOffsets.[i] <- offset
-                            changed <- true
-
-                        // Otherwise, the bound resource has not changed.
-                        // Check if its version has changed.
-                        else
-                            let version = info.version + versionOffsets.[i]
-
-                            if version <> handle.[i].version then
-                                handle.[i] <- { info with version = version }
+                            // If handle is zero handle, a new resource has been bound to the slot.
+                            // In this case versionOffsets stores the previous version on that slot.
+                            // Compute a new offset for the new handle, so the effective version is incremented by 1.
+                            if Object.ReferenceEquals(handle.[i], zeroHandle) then
+                                let offset = (versionOffsets.[i] - info.version) + 1
+                                handle.[i] <- { info with version = info.version + offset }
+                                versionOffsets.[i] <- offset
                                 changed <- true
+
+                            // Otherwise, the bound resource has not changed.
+                            // Check if its version has changed.
+                            else
+                                let version = info.version + versionOffsets.[i]
+
+                                if version <> handle.[i].version then
+                                    handle.[i] <- { info with version = version }
+                                    changed <- true
 
                 if changed then
                     inc &version
