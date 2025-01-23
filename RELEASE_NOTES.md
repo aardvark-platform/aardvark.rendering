@@ -1,6 +1,7 @@
 - [Vulkan] Changed config location of device chooser to Aardvark cache directory
 - Added DownloadDepth() and DownloadStencil() overloads for IBackendTexture with an explicit target parameter
 - Fixed simpleLighting and stableLight shaders to use ambient term
+- Fixed race conditions with compact buffers and Vulkan image sampler arrays
 
 ### 5.5.13
 - [OpenGL/WPF/ThreadedRenderControl] re-activate classic render control
