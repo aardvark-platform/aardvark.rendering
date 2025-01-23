@@ -378,8 +378,11 @@ module ImageUploadExtensions =
                 t.AddReference()
                 t
 
+            | null ->
+                failf "texture data is null (use NullTexture if this is intended)"
+
             | _ ->
-                failf "unsupported texture-type: %A" texture
+                failf $"unsupported texture type: {texture.GetType()}"
 
         let ofTexture (texture : ITexture) (export : bool) (device : Device) =
             ofTextureInternal texture ValueNone export device

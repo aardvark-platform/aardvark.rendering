@@ -263,7 +263,7 @@ module ResourceValidation =
         /// Raises an ArgumentException if the texture is a null texture.
         let inline validateForPrepare (texture : ITexture) =
             match texture with
-            | :? NullTexture -> raise <| ArgumentException("Cannot prepare a NullTexture")
+            | :? NullTexture -> raise <| ArgumentException("Cannot prepare a NullTexture.")
             | _ -> ()
 
     module Buffers =

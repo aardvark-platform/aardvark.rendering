@@ -382,8 +382,11 @@ module ContextTextureUploadExtensions =
                     Texture.uploadNativeTexture texture 0 0 data
                     texture
 
+                | null ->
+                    failf "texture data is null (use NullTexture if this is intended)"
+
                 | _ ->
-                    failf "unsupported texture data"
+                    failf $"unsupported texture type: {data.GetType()}"
             )
 
         [<Extension>]
