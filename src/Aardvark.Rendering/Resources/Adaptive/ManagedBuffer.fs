@@ -236,8 +236,7 @@ module internal ManagedBufferImplementation =
         override x.InputChangedObject(_, object) =
             match object with
             | :? AbstractWriter as writer -> pending.Add writer |> ignore
-            | _ ->
-                ()
+            | _ -> ()
 
         interface IManagedBuffer<'T> with
             member x.ElementType = typeof<'T>

@@ -110,17 +110,19 @@ module internal CompactBufferImplementation =
         let mutable currentIndex = index
 
         member x.Write(token : AdaptiveToken) =
-            x.EvaluateIfNeeded token () (fun token ->
-                let offset = nativeint currentIndex * elementSize
-                let value = evaluate.Invoke(token, input)
-                buffer.Write(value, offset)
-            )
+            if currentIndex >= 0 then
+                x.EvaluateIfNeeded token () (fun token ->
+                    let offset = nativeint currentIndex * elementSize
+                    let value = evaluate.Invoke(token, input)
+                    buffer.Write(value, offset)
+                )
 
         member x.SetIndex(index : int) =
             currentIndex <- index
             x.MarkOutdated()
 
         member x.Dispose() =
+            currentIndex <- -1
             x.Outputs.Clear()
 
         interface IDisposable with
@@ -176,8 +178,7 @@ module internal CompactBufferImplementation =
         override x.InputChangedObject(_, object) =
             match object with
             | :? Writer<'Key, 'Value> as w -> pending.Add w |> ignore
-            | _ ->
-                ()
+            | _ -> ()
 
         override x.Update(token : AdaptiveToken) =
             for w in pending.GetAndClear() do
