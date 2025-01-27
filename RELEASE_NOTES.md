@@ -1,3 +1,5 @@
+### 5.5.14
+- updated dependency FSharp.Data.Adaptive 1.2.19
 - [Vulkan] Changed config location of device chooser to Aardvark cache directory
 - Added DownloadDepth() and DownloadStencil() overloads for IBackendTexture with an explicit target parameter
 - Fixed simpleLighting and stableLight shaders to use ambient term
