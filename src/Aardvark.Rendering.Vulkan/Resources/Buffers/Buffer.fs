@@ -422,7 +422,7 @@ module Buffer =
 
             buffer
         else
-            empty false flags memory
+            empty export flags memory
 
     let internal ofWriter (export : bool) (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (memory : DeviceHeap) =
         use token = memory.Device.Token
@@ -500,7 +500,7 @@ module Buffer =
                 try (memory, token) ||> ofWriterWithToken export flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
                 finally gc.Free()
             else
-                memory |> empty false flags
+                memory |> empty export flags
 
         | :? INativeBuffer as nb ->
             if nb.SizeInBytes <> 0n then
@@ -509,7 +509,7 @@ module Buffer =
                     (memory, token) ||> ofWriterWithToken export flags size (fun dst -> Marshal.Copy(src, dst, size))
                 )
             else
-                memory |> empty false flags
+                memory |> empty export flags
 
         | :? ExportedBuffer when export ->
             ofBufferWithMemory false flags buffer memory token
