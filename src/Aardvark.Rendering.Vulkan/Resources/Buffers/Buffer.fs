@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open System.Collections.Concurrent
@@ -11,11 +10,8 @@ open Microsoft.FSharp.NativeInterop
 
 open Vulkan11
 open KHRBufferDeviceAddress
-open KHRAccelerationStructure
 
 #nowarn "9"
-#nowarn "44"    // RangeSet
-// #nowarn "51"
 
 // =======================================================================
 // Resource Definition
@@ -125,7 +121,7 @@ module BufferCommands =
                     buffer.Handle, offset, size
                 )
 
-            barrier |> pin (fun pBarrier ->
+            barrier |> NativePtr.pin (fun pBarrier ->
                 VkRaw.vkCmdPipelineBarrier(
                     cmd.Handle,
                     srcStage, dstStage,
@@ -154,7 +150,7 @@ module BufferCommands =
                 member x.Enqueue cmd =
                     let copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
                     cmd.AppendCommand()
-                    copyInfo |> pin (fun pInfo -> VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, 1u, pInfo))
+                    copyInfo |> NativePtr.pin (fun pInfo -> VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, 1u, pInfo))
                     [src]
             }
 
@@ -316,7 +312,7 @@ module Buffer =
             )
 
         let handle =
-            info |> pin (fun pInfo ->
+            info |> NativePtr.pin (fun pInfo ->
                 temporary (fun pHandle ->
                     VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not create buffer"
@@ -445,7 +441,6 @@ module Buffer =
     let internal updateWriter (writer : nativeint -> unit) (buffer : Buffer) =
         updateRangeWriter 0L buffer.Size writer buffer
 
-    // TODO: Rename back to uploadRanges with next major update
     let uploadRanges (ptr : nativeint) (ranges : RangeSet1i) (buffer : Buffer) =
         let baseOffset = int64 ranges.Min
         let totalSize = int64 (ranges.Max - ranges.Min + 1)
@@ -484,9 +479,8 @@ module Buffer =
             else
                 false
 
-        | :? IBufferRange as bv ->
-            let handle = bv.Buffer
-            tryUpdate handle buffer
+        | :? IBufferRange as bv when bv != bv.Buffer ->
+            tryUpdate bv.Buffer buffer
 
         | _ ->
             false
@@ -521,12 +515,14 @@ module Buffer =
             b.AddReference()
             b
 
-        | :? IBufferRange as bv ->
-            let handle = bv.Buffer
-            ofBufferWithMemory export flags handle memory token
+        | :? IBufferRange as bv when bv <> bv.Buffer ->
+            ofBufferWithMemory export flags bv.Buffer memory token
+
+        | _ when buffer = Unchecked.defaultof<_> ->
+            failf $"buffer data is null"
 
         | _ ->
-            failf "unsupported buffer type %A" buffer
+            failf $"unsupported buffer type: {buffer.GetType()}"
 
     let rec ofBuffer (export : bool) (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
         use token = device.Token
@@ -610,7 +606,7 @@ module BufferView =
                 )
 
             let handle = 
-                info |> pin (fun pInfo ->
+                info |> NativePtr.pin (fun pInfo ->
                     temporary (fun pHandle ->
                         VkRaw.vkCreateBufferView(device.Handle, pInfo, NativePtr.zero, pHandle)
                             |> check "could not create BufferView"
@@ -661,6 +657,7 @@ type ContextBufferExtensions private() =
 [<AutoOpen>]
 module ``Buffer Format Extensions`` = 
     module VkFormat =
+        [<Obsolete>]
         let ofType =
             LookupTable.lookup [
                 typeof<float32>, VkFormat.R32Sfloat

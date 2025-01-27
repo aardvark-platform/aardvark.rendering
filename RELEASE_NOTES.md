@@ -1,9 +1,13 @@
+- Improved error reporting for buffer creation and updating
+- [Vulkan] Respect export flag for empty buffers
+
 ### 5.5.14
 - updated dependency FSharp.Data.Adaptive 1.2.19
 - [Vulkan] Changed config location of device chooser to Aardvark cache directory
 - Added DownloadDepth() and DownloadStencil() overloads for IBackendTexture with an explicit target parameter
 - Fixed simpleLighting and stableLight shaders to use ambient term
 - Fixed race conditions with compact buffers and Vulkan image sampler arrays
+- Improved error reporting for null values as textures
 
 ### 5.5.13
 - [OpenGL/WPF/ThreadedRenderControl] re-activate classic render control

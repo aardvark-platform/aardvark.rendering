@@ -80,7 +80,7 @@ module BufferExtensions =
             match storage with
             | BufferStorage.Device -> BufferUsageHint.StaticDraw
             | BufferStorage.Host -> BufferUsageHint.StreamDraw
-            | _ -> failwithf "[GL] Unknown buffer storage type %A" storage
+            | _ -> failf "unknown buffer storage type %A" storage
 
     /// <summary>
     /// extends Context with functions for creating, modifying and deleting buffers.
@@ -156,6 +156,7 @@ module BufferExtensions =
             match data with
             | :? Buffer as bb ->
                 bb
+
             | :? ArrayBuffer as ab ->
                 x.CreateBuffer(ab.Data, storage)
 
@@ -165,32 +166,35 @@ module BufferExtensions =
             | :? IExportedBackendBuffer as b ->
                 x.ImportBuffer b
 
-            | :? IBufferRange as bv ->
-                let handle = bv.Buffer
-                x.CreateBuffer(handle, storage)
+            | :? IBufferRange as bv when bv != bv.Buffer ->
+                x.CreateBuffer(bv.Buffer, storage)
+
+            | _ when data = Unchecked.defaultof<_> ->
+                failf $"buffer data must not be null"
 
             | _ ->
-                failwith "unsupported buffer-type"
-
-
+                failf $"unsupported buffer type: {data.GetType()}"
 
         member x.Upload(b : Buffer, data : IBuffer, useNamed : bool) =
-            if b.Handle = 0 then failwith "cannot update null buffer"
+            if b.Handle = 0 then failf "cannot update null buffer"
             match data with
-            | :? ArrayBuffer as ab -> x.Upload(b, ab.Data, useNamed)
+            | :? ArrayBuffer as ab ->
+                x.Upload(b, ab.Data, useNamed)
 
             | :? Buffer as bb ->
-                if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
+                if bb.Handle <> b.Handle then failf $"cannot change backend buffer handle (old: {b.Handle}, new: {bb.Handle})"
 
             | :? INativeBuffer as n ->
                 n.Use (fun ptr -> x.Upload(b, ptr, n.SizeInBytes, useNamed))
 
-            | :? IBufferRange as bv ->
-                let handle = bv.Buffer
-                x.Upload(b, handle, useNamed)
+            | :? IBufferRange as bv when bv != bv.Buffer ->
+                x.Upload(b, bv.Buffer, useNamed)
+
+            | _ when data = Unchecked.defaultof<_> ->
+                failf $"buffer data is null"
 
             | _ ->
-                failwithf "unsupported buffer-data-type: %A" data
+                failf $"unsupported buffer type: {data.GetType()}"
 
         member x.Upload(b : Buffer, data : IBuffer) =
             x.Upload(b, data, true)
@@ -496,10 +500,10 @@ module IndirectBufferExtensions =
             use __ = x.ResourceLock
 
             if sourceOffset < 0n || targetOffset < 0n || size < 0n then
-                failwith "[GL] invalid arguments for buffer copy"
+                failf "invalid arguments for buffer copy"
 
             if targetOffset + size > target.SizeInBytes || sourceOffset + size > source.SizeInBytes then
-                failwith "[GL] insufficient buffer size"
+                failf "insufficient buffer size"
 
             GL.Dispatch.CopyNamedBufferSubData(source.Handle, target.Handle, sourceOffset, targetOffset, size)
             GL.Check "could not copy buffer"
