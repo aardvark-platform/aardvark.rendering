@@ -16,6 +16,7 @@ type HeadlessVulkanApplication(debug : IDebugConfig, instanceExtensions : list<s
             yield Instance.Extensions.GetPhysicalDeviceProperties2
             yield Instance.Extensions.ConservativeRasterization
 
+            yield! Instance.Extensions.MemoryBudget
             yield! Instance.Extensions.Raytracing
             yield! Instance.Extensions.Sharing
         ]

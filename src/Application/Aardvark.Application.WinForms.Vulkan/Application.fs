@@ -64,6 +64,7 @@ type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice>
             yield Instance.Extensions.GetPhysicalDeviceProperties2
             yield Instance.Extensions.ConservativeRasterization
 
+            yield! Instance.Extensions.MemoryBudget
             yield! Instance.Extensions.Raytracing
             yield! Instance.Extensions.Sharing
         ]

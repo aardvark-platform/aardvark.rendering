@@ -12,6 +12,7 @@ open Aardvark.Rendering
 open KHRSwapchain
 open KHRSurface
 open KHRBufferDeviceAddress
+open EXTMemoryBudget
 open Vulkan11
 
 #nowarn "9"
@@ -504,6 +505,41 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     member x.CreateFence() = new Fence(x)
     member x.CreateSemaphore() = new Semaphore(x)
     member x.CreateEvent() = new Event(x)
+
+    member x.PrintMemoryUsage(l: ILogger) =
+        let budget =
+            if x.IsExtensionEnabled EXTMemoryBudget.Name then
+                Some <| native {
+                    let! pMemoryBudgetProps = VkPhysicalDeviceMemoryBudgetPropertiesEXT.Empty
+                    let! pPhysicalDeviceMemoryProps2 = VkPhysicalDeviceMemoryProperties2(pMemoryBudgetProps.Address, VkPhysicalDeviceMemoryProperties.Empty)
+
+                    VkRaw.vkGetPhysicalDeviceMemoryProperties2(physical.Handle, pPhysicalDeviceMemoryProps2)
+
+                    return pMemoryBudgetProps.Value
+                }
+            else
+                None
+
+        for i = 0 to physical.Heaps.Length - 1 do
+            let heap = physical.Heaps.[i]
+
+            let heapFlags =
+                if heap.Flags.HasFlag MemoryHeapFlags.DeviceLocalBit then $" (device local)"
+                else ""
+
+            l.section $"Heap {i}{heapFlags}" (fun _ ->
+                l.line $"Capacity: {heap.Capacity}"
+                l.line $"Allocated: {heap.Allocated}"
+                l.line $"Available: {heap.Available}"
+
+                budget |> Option.iter (fun b ->
+                    let warning =
+                        if b.heapUsage.[i] > b.heapBudget.[i] then " (!!!)"
+                        else ""
+
+                    l.line $"Budget: {Mem b.heapUsage.[i]} / {Mem b.heapBudget.[i]}{warning}"
+                )
+            )
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -1963,8 +1999,10 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                             )
 
                         let! pHandle = VkDeviceMemory.Null
-                        VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
-                               |> check "could not allocate memory"
+                        let result = VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
+                        if result <> VkResult.Success then
+                            device.PrintMemoryUsage Logger.Default
+                            result |> check $"could not allocate {Mem size} of memory type {memory.index} in heap {heap.Index}"
 
                         return !!pHandle
                     }
@@ -1996,7 +2034,9 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
         else
             match x.TryAllocRaw(size, export) with
             | (true, ptr) -> ptr
-            | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
+            | _ ->
+                device.PrintMemoryUsage Logger.Default
+                failf $"could not allocate {Mem size} of memory type {memory.index} in heap {heap.Index} (only {heap.Available} available)"
 
     member x.TryAllocRaw(mem : Mem, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(mem.Bytes, false, &ptr)
     member x.TryAllocRaw(mem : VkDeviceSize, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(int64 mem, false, &ptr)

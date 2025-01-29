@@ -1,5 +1,8 @@
 - Improved error reporting for buffer creation and updating
 - [Vulkan] Respect export flag for empty buffers
+- [Vulkan] Print detailed memory information when allocation fails (uses VK_EXT_memory_budget if available)
+- [Vulkan] Avoid passing VkExportMemoryAllocateInfo when not exporting memory
+- [Vulkan] Added Device.PrintMemoryUsage()
 
 ### 5.5.14
 - updated dependency FSharp.Data.Adaptive 1.2.19

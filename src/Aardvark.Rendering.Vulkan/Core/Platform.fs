@@ -42,6 +42,11 @@ module Instance =
 
         let Debug                           = EXTDebugUtils.Name
 
+        let MemoryBudget = [
+            EXTMemoryBudget.Name
+            KHRGetPhysicalDeviceProperties2.Name
+        ]
+
         let Raytracing = [
                 KHRRayTracingPipeline.Name
                 KHRAccelerationStructure.Name
