@@ -1935,23 +1935,25 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
             false
         else
             if heap.TryAdd size then
+                if export && not <| device.IsExtensionEnabled ExternalMemory.Extension then
+                    failf "Cannot export memory when %s extension is disabled" ExternalMemory.Extension
+
                 let mem =
                     native {
-                        let exportFlags =
-                            if export then
-                                VkExternalMemoryHandleTypeFlags.OpaqueBit
-                            else
-                                VkExternalMemoryHandleTypeFlags.None
-
                         let allocFlags =
                             if device.PhysicalDevice.Features.Memory.BufferDeviceAddress then
                                 VkMemoryAllocateFlags.DeviceAddressBitKhr
                             else
                                 VkMemoryAllocateFlags.None
 
-                        let! exportInfo = VkExportMemoryAllocateInfo(exportFlags)
+                        let! pExportInfo =
+                            VkExportMemoryAllocateInfo(VkExternalMemoryHandleTypeFlags.OpaqueBit)
 
-                        let! pFlagsInfo = VkMemoryAllocateFlagsInfo(NativePtr.toNativeInt exportInfo, allocFlags, 0u)
+                        let pNext =
+                            if export then pExportInfo.Address
+                            else 0n
+
+                        let! pFlagsInfo = VkMemoryAllocateFlagsInfo(pNext, allocFlags, 0u)
 
                         let! pInfo =
                             VkMemoryAllocateInfo(
@@ -1969,10 +1971,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
 
                 let externalHandle : IExternalMemoryHandle =
                     if export then
-                        if device.IsExtensionEnabled ExternalMemory.Extension then
-                            mem |> ExternalMemory.ofDeviceMemory device.Handle
-                        else
-                            failf "Cannot create external handle when %s extension is disabled" ExternalMemory.Extension
+                        mem |> ExternalMemory.ofDeviceMemory device.Handle
                     else
                         null
 
@@ -1996,8 +1995,8 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
             failf "could not allocate %A (exceeds MaxAllocationSize: %A)" (Mem size) (Mem maxAllocationSize)
         else
             match x.TryAllocRaw(size, export) with
-                | (true, ptr) -> ptr
-                | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
+            | (true, ptr) -> ptr
+            | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
 
     member x.TryAllocRaw(mem : Mem, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(mem.Bytes, false, &ptr)
     member x.TryAllocRaw(mem : VkDeviceSize, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(int64 mem, false, &ptr)

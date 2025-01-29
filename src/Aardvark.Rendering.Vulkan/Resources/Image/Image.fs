@@ -1134,7 +1134,7 @@ module Image =
 
                 let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
                 let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
-                let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true, export <> ImageExportMode.None)
+                let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true, export.Enabled)
 
                 if mayHavePeers then
                     let indices = device.AllIndicesArr
