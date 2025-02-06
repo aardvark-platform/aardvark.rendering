@@ -1,3 +1,5 @@
+### 5.5.15
+- updated package FSharp.Data.Adaptive 1.2.19
 - Improved error reporting for buffer creation and updating
 - [Vulkan] Respect export flag for empty buffers
 - [Vulkan] Print detailed memory information when allocation fails (uses VK_EXT_memory_budget if available)
