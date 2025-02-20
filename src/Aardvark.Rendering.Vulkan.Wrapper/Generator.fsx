@@ -443,18 +443,27 @@ module Struct =
 
         | None -> None
 
-    let private dfs (graph : Map<'a, list<'a>>) visited start_node =
-      let rec explore path visited node =
-        if List.exists (fun n -> n = node) path    then printfn "WARNING: Dependency cycle detected"; visited else
-        if List.exists (fun n -> n = node) visited then visited else
-          let new_path = node :: path in
-          let edges    = Map.find node graph in
-          let visited  = List.fold (explore new_path) visited edges in
-          node :: visited
-      in explore [] visited start_node
+    let dfs (getName : 'a -> string) (graph : Map<'a, list<'a>>) visited start_node =
 
-    let toposort graph =
-      List.fold (fun visited (node,_) -> dfs graph visited node) [] (Map.toList graph)
+        let rec explore path visited node =
+            if List.contains node path then
+                let cycle = node :: path |> List.rev |> List.map getName |> String.concat " -> "
+                printfn "WARNING: Dependency cycle detected %s" cycle
+                visited
+            else
+                if List.contains node visited then
+                    visited
+                else
+                    let new_path = node :: path
+                    let edges    = Map.find node graph
+                    let visited  = List.fold (explore new_path) visited edges
+                    node :: visited
+
+        explore [] visited start_node
+
+    let inline toposort< ^T when ^T : comparison and (^T) : (member name : string)> (graph: Map< ^T, ^T list>) =
+        let getName (x: ^T) = x.name
+        List.fold (fun visited (node,_) -> dfs getName graph visited node) [] (Map.toList graph)
 
     let topologicalSort (s : list<Struct>) : list<Struct> =
 
@@ -573,6 +582,8 @@ type ArrayStruct =
         count : int
     }
 
+    member x.Name =
+        $"{x.baseType}_{x.count}"
 
 type Definitions =
     {
@@ -614,6 +625,15 @@ type VkVersion =
     | VkVersion11
     | VkVersion12
     | VkVersion13
+    | VkVersion14
+
+    override x.ToString() =
+        match x with
+        | VkVersion10 -> "Vulkan 1.0"
+        | VkVersion11 -> "Vulkan 1.1"
+        | VkVersion12 -> "Vulkan 1.2"
+        | VkVersion13 -> "Vulkan 1.3"
+        | VkVersion14 -> "Vulkan 1.4"
 
     static member TryParse(str) =
         match str with
@@ -621,6 +641,7 @@ type VkVersion =
         | "VK_VERSION_1_1" -> Some VkVersion11
         | "VK_VERSION_1_2" -> Some VkVersion12
         | "VK_VERSION_1_3" -> Some VkVersion13
+        | "VK_VERSION_1_4" -> Some VkVersion14
         | _ -> None
 
 let (|VkVersion|_|) (str: string) =
@@ -633,6 +654,7 @@ module VkVersion =
         | VkVersion11 -> Some "Vulkan11"
         | VkVersion12 -> Some "Vulkan12"
         | VkVersion13 -> Some "Vulkan13"
+        | VkVersion14 -> Some "Vulkan14"
 
 [<RequireQualifiedAccess>]
 type Module =
@@ -681,6 +703,7 @@ type Require =
         handles         : list<Handle>
         comment         : string option
         depends         : Dependency
+        parent          : Module
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -699,6 +722,8 @@ module Require =
 
         if x.depends <> y.depends then
             failwith "cannot union interfaces required by different APIs"
+        elif x.parent <> y.parent then
+            failwith "cannot union interfaces from different locations"
         else
             {
                 enumExtensions = mapOfListUnion x.enumExtensions y.enumExtensions
@@ -711,6 +736,7 @@ module Require =
                 handles = x.handles @ y.handles
                 comment = None
                 depends = x.depends
+                parent = x.parent
             }
 
     let unionMany (r : seq<Require>) =
@@ -787,6 +813,10 @@ module Extension =
         let name = m.Groups.["name"].Value
         sprintf "%s%s" kind (camelCase name)
 
+    let getVendor (str: string) =
+        let m = regex.Match str
+        m.Groups.["kind"].Value
+
 module Module =
 
     let isCore = function
@@ -840,7 +870,7 @@ module XmlReader =
               )
             |> Map.ofSeq
 
-    let readRequire (definitions : Definitions) (require : XElement) =
+    let readRequire (definitions : Definitions) (parent : Module) (require : XElement) =
         let enumExtensions =
             require.Elements("enum")
             |> List.ofSeq
@@ -905,6 +935,7 @@ module XmlReader =
             handles         = handles
             comment         = attrib require "comment"
             depends         = attrib require "depends" |> Dependency.ofOption
+            parent          = parent
         }
 
     let tryReadFeature (definitions : Definitions) (feature : XElement) =
@@ -914,7 +945,7 @@ module XmlReader =
                 feature.Elements("require")
                 |> List.ofSeq
                 |> List.choose (fun r ->
-                    let r = r |> readRequire definitions
+                    let r = r |> readRequire definitions (Module.Core v)
 
                     if Require.isEmpty r then
                         None
@@ -952,7 +983,7 @@ module XmlReader =
                 extension.Elements("require")
                     |> List.ofSeq
                     |> List.choose (fun r ->
-                        let r = r |> readRequire definitions
+                        let r = r |> readRequire definitions (Module.Extension name)
 
                         if Require.isEmpty r then
                             None
@@ -1146,29 +1177,51 @@ module FSharpWriter =
                 | Some e -> $"{n}.``{e}``."
                 | None -> $"{n}."
 
+        member x.Vendor =
+            match x with
+            | Global _ -> None
+            | Extension (name, _) -> Some <| Extension.getVendor name
+
+        override x.ToString() =
+            match x with
+            | Global v -> string v
+            | Extension (name, Dependency.Empty) -> name
+            | Extension (name, Dependency.Expr dep) -> $"{name} ({dep})"
+
+    type Require with
+        member x.Location =
+            match x.parent with
+            | Module.Core v -> Global v
+            | Module.Extension name -> Extension(name, x.depends)
+
     let definitionLocations = Collections.Generic.Dictionary<string, Location>()
 
     let tryGetTypeAlias (location : Location) (name : string) =
-        let name = Enum.cleanName name
-        match definitionLocations.TryGetValue(name) with
-        | true, alias ->
-            let path = alias.RelativePath(location)
-            Some <| sprintf "%s%s" path name
-        | _ ->
-            definitionLocations.Add(name, location)
+        match definitionLocations.TryGetValue name with
+        | true, aliasLocation when aliasLocation <> location ->
+            let path = aliasLocation.RelativePath(location)
+            Some $"{path}{name}"
+
+        | true, _ ->
             None
+
+        | _ ->
+            failwith $"Location for definition {name} is unknown."
 
     let getFullyQualifiedTypeName (location: Location) (name : string) =
         tryGetTypeAlias location name |> Option.defaultValue name
 
     let tryGetCommandAlias (location : Location) (name : string) =
-        match definitionLocations.TryGetValue(name) with
-        | true, alias ->
-            let path = alias.RelativePath(location)
-            Some <| sprintf "%sVkRaw.%s" path name
-        | _ ->
-            definitionLocations.Add(name, location)
+        match definitionLocations.TryGetValue name with
+        | true, aliasLocation when aliasLocation <> location ->
+            let path = aliasLocation.RelativePath(location)
+            Some $"{path}VkRaw.{name}"
+
+        | true, _ ->
             None
+
+        | _ ->
+            failwith $"Location for definition {name} is unknown."
 
     let private uppercase = Regex @"[A-Z0-9]+"
     let private startsWithNumber = Regex @"^[0-9]+"
@@ -1261,47 +1314,45 @@ module FSharpWriter =
         enums |> List.iter (fun e ->
             printfn ""
             printfn "[<Flags>]"
-            printfn "type %s = | None = 0" (getFullyQualifiedTypeName (Global VkVersion10) e)
+            printfn "type %s = | None = 0" (Enum.cleanName e)
         )
 
-    let inlineArray (indent : string) (location : Location) (baseType : string) (baseTypeSize : int) (size : int) =
+    let inlineArray (indent : string) (location : Location) (typ: ArrayStruct) =
         let printfn fmt =
             Printf.kprintf (fun str ->
                 if str = "" then printfn "" else printfn "%s%s" indent str
             ) fmt
 
-        let name = sprintf "%s_%d" baseType size
-
-        match tryGetTypeAlias location name with
+        match tryGetTypeAlias location typ.Name with
         | None ->
-            let totalSize = size * baseTypeSize
-            printfn "/// Array of %d %s values." size baseType
+            let totalSize = typ.count * typ.baseTypeSize
+            printfn "/// Array of %d %s values." typ.count typ.baseType
             printfn "[<StructLayout(LayoutKind.Explicit, Size = %d)>]" totalSize
-            printfn "type %s =" name
+            printfn "type %s =" typ.Name
             printfn "    struct"
             printfn "        [<FieldOffset(0)>]"
-            printfn "        val mutable public First : %s" baseType
+            printfn "        val mutable public First : %s" typ.baseType
             printfn ""
             printfn "        member x.Item"
-            printfn "            with get (i : int) : %s =" baseType
-            printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (size - 1)
+            printfn "            with get (i : int) : %s =" typ.baseType
+            printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (typ.count - 1)
             printfn "                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt"
             printfn "                NativePtr.get ptr i"
-            printfn "            and set (i : int) (value : %s) =" baseType
-            printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (size - 1)
+            printfn "            and set (i : int) (value : %s) =" typ.baseType
+            printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (typ.count - 1)
             printfn "                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt"
             printfn "                NativePtr.set ptr i value"
             printfn ""
-            printfn "        member x.Length = %d" size
+            printfn "        member x.Length = %d" typ.count
             printfn ""
             printfn "        interface System.Collections.IEnumerable with"
-            printfn "            member x.GetEnumerator() = let x = x in (Seq.init %d (fun i -> x.[i])).GetEnumerator() :> System.Collections.IEnumerator" size
-            printfn "        interface System.Collections.Generic.IEnumerable<%s> with" baseType
-            printfn "            member x.GetEnumerator() = let x = x in (Seq.init %d (fun i -> x.[i])).GetEnumerator()" size
+            printfn "            member x.GetEnumerator() = let x = x in (Seq.init %d (fun i -> x.[i])).GetEnumerator() :> System.Collections.IEnumerator" typ.count
+            printfn "        interface System.Collections.Generic.IEnumerable<%s> with" typ.baseType
+            printfn "            member x.GetEnumerator() = let x = x in (Seq.init %d (fun i -> x.[i])).GetEnumerator()" typ.count
             printfn "    end"
         | Some alias ->
-            if name <> alias then
-                printfn "type %s = %s" name alias
+            if typ.Name <> alias then
+                printfn "type %s = %s" typ.Name alias
 
 //    let extendedEnums() =
 //        printfn "[<AutoOpen>]"
@@ -1329,10 +1380,6 @@ module FSharpWriter =
             let n = n |> capsToCamelCase [] ""
             printfn "    let %s = %s" n v
         printfn ""
-
-    let cleanEnumName (e : string) =
-        if e.Contains "FlagBits" then e.Replace("FlagBits", "Flags")
-        else e
 
     let findEnumVendorSuffix (vendorTags : string list) (e : string) =
         vendorTags
@@ -1394,7 +1441,23 @@ module FSharpWriter =
             "LPCWSTR", "cstr"
         ]
 
+    let knownStructs =
+        Map.ofList [
+            "VkClusterAccelerationStructureGeometryIndexAndGeometryFlagsNV", fun () -> ()
+            "VkClusterAccelerationStructureBuildTriangleClusterInfoNV", fun () -> ()
+            "VkClusterAccelerationStructureBuildTriangleClusterTemplateInfoNV", fun () -> ()
+        ]
+
     let reservedKeywords = Set.ofList ["module"; "type"; "object"; "SFRRectCount"; "function"]
+
+    let primitiveTypeArrays =
+        [
+            { baseType = "uint32"; baseTypeSize = 4; count = 32 }
+            { baseType = "int32"; baseTypeSize = 4; count = 7 }
+            { baseType = "byte"; baseTypeSize = 1; count = 32 }
+            { baseType = "byte"; baseTypeSize = 1; count = 8 }
+            { baseType = "float32"; baseTypeSize = 4; count = 6 }
+        ]
 
     let vulkanTypeArrays =
         [
@@ -1404,9 +1467,30 @@ module FSharpWriter =
             { baseType = "VkMemoryHeap"; baseTypeSize = 16; count = 16 }
             { baseType = "VkMemoryType"; baseTypeSize = 8; count = 32 }
             { baseType = "VkOffset3D"; baseTypeSize = 12; count = 2 }
+            { baseType = "VkQueueGlobalPriority"; baseTypeSize = 4; count = 16 }
         ]
         |> List.map (fun s -> s.baseType, s)
         |> Map.ofList
+
+    type Enum with
+        member x.ArrayType =
+            vulkanTypeArrays |> Map.tryFind (Enum.cleanName x.name)
+
+    type Handle with
+        member x.ArrayType =
+            vulkanTypeArrays |> Map.tryFind (Enum.cleanName x.name)
+
+    type Typedef with
+        member x.ArrayType =
+            vulkanTypeArrays |> Map.tryFind (Enum.cleanName x.name)
+
+    type Alias with
+        member x.ArrayType =
+            vulkanTypeArrays |> Map.tryFind (Enum.cleanName x.name)
+
+    type Struct with
+        member x.ArrayType =
+            vulkanTypeArrays |> Map.tryFind (Enum.cleanName x.name)
 
     let fsharpName (n : string) =
         if Set.contains n reservedKeywords then sprintf "_%s" n
@@ -1443,7 +1527,7 @@ module FSharpWriter =
             | "uint32", 24 -> "uint24"
             | t, 8 -> System.Console.WriteLine("WARNING: Replacing {0}:8 with uint8", t); "uint8"
             | t, 24 -> System.Console.WriteLine("WARNING: Replacing {0}:24 with uint24", t); "uint24"
-            | _ -> failwithf "unsupported bit field type %A:%A" l s
+            | t, s -> failwith $"unsupported bit field type {t}:{s}"
 
         | Ptr(Literal "char") -> "cstr"
         | FixedArray(Literal "char", s) -> sprintf "String%d" s
@@ -1484,7 +1568,7 @@ module FSharpWriter =
 
             for (name, values) in Map.toSeq exts do
 
-                let name = cleanEnumName name
+                let name = Enum.cleanName name
                 let baseName = baseEnumName vendorTags name
 
                 let exts = values |> List.map (fun c ->
@@ -1526,7 +1610,7 @@ module FSharpWriter =
             vendorTags |> List.map (capsToCamelCase [] "")
 
         for e in enums do
-            let name = cleanEnumName e.name
+            let name = Enum.cleanName e.name
 
             if name <> "VkStructureType" then
                 match tryGetTypeAlias location name with
@@ -1569,17 +1653,11 @@ module FSharpWriter =
                         printfn  "    | %s = %s"  c.name (Enum.valueToStr c.value)
                     printfn ""
 
-                    if name = "VkQueueGlobalPriorityKHR" then
-                        printfn ""
-                        inlineArray "    " (Extension("VK_KHR_global_priority", Dependency.Empty)) "VkQueueGlobalPriorityKHR" 4 16
-
-                | Some alias -> 
+                | Some alias ->
                     if name <> alias then
                         printfn "type %s = %s" name alias
 
-            match vulkanTypeArrays |> Map.tryFind name with
-            | Some arr -> inlineArray indent location name arr.baseTypeSize arr.count
-            | None -> ()
+            e.ArrayType |> Option.iter (inlineArray indent location)
 
         if enums.Length > 0 then
             printfn ""
@@ -1618,11 +1696,10 @@ module FSharpWriter =
                 printfn "type %s = nativeint" h.name
 
         for h in l do
-            match vulkanTypeArrays |> Map.tryFind h.name with
-            | Some arr ->
+            h.ArrayType |> Option.iter (fun arr ->
                 printfn ""
-                inlineArray indent location arr.baseType arr.baseTypeSize arr.count
-            | _ -> ()
+                inlineArray indent location arr
+            )
 
         if List.length l > 0 then
             printfn ""
@@ -1635,11 +1712,10 @@ module FSharpWriter =
                 printfn "%stype %s = %s" indent name alias
 
         for t in l do
-            match vulkanTypeArrays |> Map.tryFind t.name with
-            | Some arr ->
+            t.ArrayType |> Option.iter (fun arr ->
                 printfn ""
-                inlineArray indent location t.name arr.baseTypeSize arr.count
-            | None -> ()
+                inlineArray indent location arr
+            )
 
         if List.length l > 0 then
             printfn ""
@@ -1650,11 +1726,10 @@ module FSharpWriter =
                 printfn "%stype %s = %s" indent a.name a.baseSym
 
         for a in aliases do
-            match vulkanTypeArrays |> Map.tryFind a.name with
-            | Some arr ->
+            a.ArrayType |> Option.iter (fun arr ->
                 printfn ""
-                inlineArray indent location a.name arr.baseTypeSize arr.count
-            | None -> ()
+                inlineArray indent location arr
+            )
 
         if List.length aliases > 0 then
             printfn ""
@@ -1721,190 +1796,187 @@ module FSharpWriter =
             | Some comment -> printfn "/// %s" comment
             | _ -> ()
 
-            match s.alias, tryGetTypeAlias location s.name with
-            | _, Some alias ->
+            let alias =
+                s.alias
+                |> Option.map (getFullyQualifiedTypeName location)
+                |> Option.orElseWith (fun _ ->
+                    tryGetTypeAlias location s.name
+                )
+
+            match alias with
+            | Some alias ->
                 if s.name <> alias then
                     printfn "type %s = %s" s.name alias
                     printfn ""
-            | Some alias, _ ->
-                if s.name <> alias then
-                    printfn "type %s = %s" s.name (getFullyQualifiedTypeName location alias)
-                    printfn ""
-            | None, None ->
+            | None ->
+                match Map.tryFind s.name knownStructs with
+                | Some f ->
+                    printfn "type %s = struct end" s.name
 
-                if s.isUnion then printfn "[<StructLayout(LayoutKind.Explicit)>]"
-                else printfn "[<StructLayout(LayoutKind.Sequential)>]"
+                | _ ->
+                    if s.isUnion then printfn "[<StructLayout(LayoutKind.Explicit)>]"
+                    else printfn "[<StructLayout(LayoutKind.Sequential)>]"
 
 
-                printfn "type %s =" s.name
-                printfn' 1 "struct"
-                for f in s.fields do
-                    let n = fsharpName f.name
+                    printfn "type %s =" s.name
+                    printfn' 1 "struct"
+                    for f in s.fields do
+                        let n = fsharpName f.name
 
-                    if s.isUnion then
-                        printfn' 2 "[<FieldOffset(0)>]"
+                        if s.isUnion then
+                            printfn' 2 "[<FieldOffset(0)>]"
 
-                    printfn' 2 "val mutable public %s : %s" n (typeName location f.typ)
-                    ()
-
-                // Set the sType field automatically
-                let fields =
-                    match s.name with
-                    | "VkBaseInStructure"
-                    | "VkBaseOutStructure" -> s.fields
-                    | _ -> s.fields |> List.filter (fun f -> f.name <> "sType")
-
-                let hasTypeField =
-                    s.fields.Length <> fields.Length
-
-                let sType =
-                    let value =
-                        s.fields
-                        |> List.tryFind (fun f -> f.name = "sType")
-                        |> Option.bind (fun f ->
-                            match f.values with
-                            | Some v -> structureTypes |> Map.tryFind v
-                            | None -> None
-                        )
-
-                    match value with
-                    | Some v -> sprintf "%su" v
-                    | None -> @"failwith ""Reserved for future use or possibly a bug in the generator"""
-
-                let isNextPtr (f : StructField) =
-                    f.name = "pNext" && f.typ = Ptr (Literal "void")
-
-                let nextPtrIndex = fields |> List.tryFindIndex isNextPtr
-
-                // Proper default constructors are not allowed for structs...
-                let defaultConstructor() =
-                    printfn ""
-
-                    let values =
-                        fields |> List.map(fun f ->
-                            sprintf "Unchecked.defaultof<%s>" (typeName location f.typ)
-                        )
-
-                    printfn' 2 "static member Empty ="
-                    values |> toFunctionCall 3 s.name
-
-                let isEmptyMember() =
-                    printfn ""
-
-                    let checks =
-                        fields |> List.map (fun f ->
-                            sprintf "x.%s = Unchecked.defaultof<%s>" (fsharpName f.name) (typeName location f.typ)
-                        )
-
-                    printfn' 2 "member x.IsEmpty ="
-                    printfn' 3 "%s" (checks |> String.concat " && ")
-
-                // Constructor with all fields
-                let constructorWithAllFields (isPrivate : bool) =
-                    printfn ""
-
-                    let name = if isPrivate then "private new" else "new"
-                    fields |> toFunctionDecl 2 name
-
-                    let assignments = [
-                        if hasTypeField then
-                            yield "sType", sType
-
-                        yield! fields |> List.map (fun f -> (fsharpName f.name), (fsharpName f.name))
-                    ]
-
-                    assignments |> toConstructorBody 3
-
-                // Convenience constructor without pNext parameter
-                let constructorWithoutNextPtr () =
-                    match nextPtrIndex with
-                    | Some index when fields.Length > 1 ->
-                        printfn ""
-
-                        fields
-                        |> List.filter (isNextPtr >> not)
-                        |> toFunctionDecl 2 "new"
-
-                        fields
-                        |> List.mapi (fun i f ->
-                            if i = index then
-                                sprintf "Unchecked.defaultof<%s>" (typeName location f.typ)
-                            else
-                                fsharpName f.name
-                        )
-                        |> toFunctionCall 3 s.name
-
-                    | _ ->
+                        printfn' 2 "val mutable public %s : %s" n (typeName location f.typ)
                         ()
 
-                if s.isUnion then
-                    // Static member constructors for each union case
-                    for f in fields do
+                    // Set the sType field automatically
+                    let fields =
+                        match s.name with
+                        | "VkBaseInStructure"
+                        | "VkBaseOutStructure" -> s.fields
+                        | _ -> s.fields |> List.filter (fun f -> f.name <> "sType")
+
+                    let hasTypeField =
+                        s.fields.Length <> fields.Length
+
+                    let sType =
+                        let value =
+                            s.fields
+                            |> List.tryFind (fun f -> f.name = "sType")
+                            |> Option.bind (fun f ->
+                                match f.values with
+                                | Some v -> structureTypes |> Map.tryFind v
+                                | None -> None
+                            )
+
+                        match value with
+                        | Some v -> sprintf "%su" v
+                        | None -> @"failwith ""Reserved for future use or possibly a bug in the generator"""
+
+                    let isNextPtr (f : StructField) =
+                        f.name = "pNext" && f.typ = Ptr (Literal "void")
+
+                    let nextPtrIndex = fields |> List.tryFindIndex isNextPtr
+
+                    // Proper default constructors are not allowed for structs...
+                    let defaultConstructor() =
                         printfn ""
 
-                        let arg = { f with name = "value" }
-                        let name = sprintf "static member %s" (f.name.Substring(0, 1).ToUpper() + f.name.Substring(1))
-                        [arg] |> toFunctionDecl 2 name
-                        printfn' 3 "let mutable result = Unchecked.defaultof<%s>" s.name
-                        printfn' 3 "result.%s <- value" (fsharpName f.name)
-                        printfn' 3 "result"
+                        let values =
+                            fields |> List.map(fun f ->
+                                sprintf "Unchecked.defaultof<%s>" (typeName location f.typ)
+                            )
 
+                        printfn' 2 "static member Empty ="
+                        values |> toFunctionCall 3 s.name
 
-                else
+                    let isEmptyMember() =
+                        printfn ""
+
+                        let checks =
+                            fields |> List.map (fun f ->
+                                sprintf "x.%s = Unchecked.defaultof<%s>" (fsharpName f.name) (typeName location f.typ)
+                            )
+
+                        printfn' 2 "member x.IsEmpty ="
+                        printfn' 3 "%s" (checks |> String.concat " && ")
+
                     // Constructor with all fields
-                    constructorWithAllFields false
-
-                    // Constructor without pNext
-                    constructorWithoutNextPtr()
-
-                    // IsEmpty member
-                    isEmptyMember()
-
-                    // Empty default "constructor"
-                    defaultConstructor()
-
-                    if s.name = "VkExtent3D" then
+                    let constructorWithAllFields (isPrivate : bool) =
                         printfn ""
-                        printfn' 2 "new(w : int, h : int, d : int) = VkExtent3D(uint32 w, uint32 h, uint32 d)"
-                    elif s.name = "VkExtent2D" then
-                        printfn ""
-                        printfn' 2 "new(w : int, h : int) = VkExtent2D(uint32 w, uint32 h)"
+
+                        let name = if isPrivate then "private new" else "new"
+                        fields |> toFunctionDecl 2 name
+
+                        let assignments = [
+                            if hasTypeField then
+                                yield "sType", sType
+
+                            yield! fields |> List.map (fun f -> (fsharpName f.name), (fsharpName f.name))
+                        ]
+
+                        assignments |> toConstructorBody 3
+
+                    // Convenience constructor without pNext parameter
+                    let constructorWithoutNextPtr () =
+                        match nextPtrIndex with
+                        | Some index when fields.Length > 1 ->
+                            printfn ""
+
+                            fields
+                            |> List.filter (isNextPtr >> not)
+                            |> toFunctionDecl 2 "new"
+
+                            fields
+                            |> List.mapi (fun i f ->
+                                if i = index then
+                                    sprintf "Unchecked.defaultof<%s>" (typeName location f.typ)
+                                else
+                                    fsharpName f.name
+                            )
+                            |> toFunctionCall 3 s.name
+
+                        | _ ->
+                            ()
+
+                    if s.isUnion then
+                        // Static member constructors for each union case
+                        for f in fields do
+                            printfn ""
+
+                            let arg = { f with name = "value" }
+                            let name = sprintf "static member %s" (f.name.Substring(0, 1).ToUpper() + f.name.Substring(1))
+                            [arg] |> toFunctionDecl 2 name
+                            printfn' 3 "let mutable result = Unchecked.defaultof<%s>" s.name
+                            printfn' 3 "result.%s <- value" (fsharpName f.name)
+                            printfn' 3 "result"
 
 
-                let fieldSplice = s.fields |> List.map (fun f -> sprintf "%s = %%A" (fsharpName f.name))
-                let fieldAccess = s.fields |> List.map (fun f -> sprintf "x.%s" (fsharpName f.name))
+                    else
+                        // Constructor with all fields
+                        constructorWithAllFields false
 
-                printfn ""
-                printfn' 2 "override x.ToString() ="
-                printfn' 3 "String.concat \"; \" ["
+                        // Constructor without pNext
+                        constructorWithoutNextPtr()
 
-                for (s,a) in List.zip fieldSplice fieldAccess do
-                    printfn' 4 "sprintf \"%s\" %s" s a
+                        // IsEmpty member
+                        isEmptyMember()
 
-                printfn' 3 "] |> sprintf \"%s { %%s }\"" s.name
+                        // Empty default "constructor"
+                        defaultConstructor()
 
-                printfn' 1 "end"
-                printfn ""
+                        if s.name = "VkExtent3D" then
+                            printfn ""
+                            printfn' 2 "new(w : int, h : int, d : int) = VkExtent3D(uint32 w, uint32 h, uint32 d)"
+                        elif s.name = "VkExtent2D" then
+                            printfn ""
+                            printfn' 2 "new(w : int, h : int) = VkExtent2D(uint32 w, uint32 h)"
 
-                match vulkanTypeArrays |> Map.tryFind s.name with
-                | Some arr -> inlineArray indent location s.name arr.baseTypeSize arr.count
-                | _ -> ()
+
+                    let fieldSplice = s.fields |> List.map (fun f -> sprintf "%s = %%A" (fsharpName f.name))
+                    let fieldAccess = s.fields |> List.map (fun f -> sprintf "x.%s" (fsharpName f.name))
+
+                    printfn ""
+                    printfn' 2 "override x.ToString() ="
+                    printfn' 3 "String.concat \"; \" ["
+
+                    for (s,a) in List.zip fieldSplice fieldAccess do
+                        printfn' 4 "sprintf \"%s\" %s" s a
+
+                    printfn' 3 "] |> sprintf \"%s { %%s }\"" s.name
+
+                    printfn' 1 "end"
+                    printfn ""
+
+                    s.ArrayType |> Option.iter (inlineArray indent location)
 
         if structs.Length > 0 then
             printfn ""
 
     let primitiveArrays() =
-        printfn ""
-        inlineArray "" (Global VkVersion10) "uint32" 4 32
-
-        printfn ""
-        inlineArray "" (Global VkVersion10) "int32" 4 7
-
-        printfn ""
-        inlineArray "" (Global VkVersion10) "byte" 1 32
-
-        printfn ""
-        inlineArray "" (Global VkVersion10) "byte" 1 8
+        for t in primitiveTypeArrays do
+            printfn ""
+            inlineArray "" (Global VkVersion10) t
         printfn ""
 
     let rec externTypeName (location: Location) (n: Type) =
@@ -2031,7 +2103,7 @@ module FSharpWriter =
             | _ ->
                 failwithf "Cannot invoke extensionCommands for location %A" location
 
-        let exists name = definitionLocations.ContainsKey(name)
+        let exists name = tryGetCommandAlias location name |> Option.isSome
         let existAll = l |> List.map (fun c -> exists c.name) |> List.forall id
 
         printfn "module VkRaw ="
@@ -2074,14 +2146,9 @@ module FSharpWriter =
             | Some alias ->
                 printfn "    let %s = %s" c.name alias
 
-    let require (indent : int) (vendorTags : list<string>) (structureTypes : Map<string, string>) (parent : Module) (require : Require) =
-        let name =
-            require.depends |> Dependency.toString
-
-        let location =
-            match parent with
-            | Module.Core v -> Global v
-            | Module.Extension name -> Extension(name, require.depends)
+    let require (indent : int) (vendorTags : list<string>) (structureTypes : Map<string, string>) (require : Require) =
+        let name = require.depends |> Dependency.toString
+        let location = require.Location
 
         let subindent n = String.replicate (if name.IsSome then indent + n + 1 else indent + n) "    "
         let indent = String.replicate indent "    "
@@ -2107,7 +2174,7 @@ module FSharpWriter =
         enumExtensions (subindent 0) vendorTags location require.enumExtensions
 
         if not require.commands.IsEmpty then
-            if Module.isCore parent then
+            if Module.isCore require.parent then
                 coreCommands (subindent 0) location require.commands
             else
                 extensionCommands (subindent 0) location require.commands
@@ -2124,7 +2191,7 @@ module FSharpWriter =
         | _ ->
             ()
 
-        feature.requires |> Require.unionMany |> require indent vendorTags structureTypes (Module.Core feature.version)
+        feature.requires |> Require.unionMany |> require indent vendorTags structureTypes
 
     let features (vendorTags : list<string>) (structureTypes : Map<string, string>) (features : Feature list) =
         for f in features do
@@ -2132,6 +2199,10 @@ module FSharpWriter =
             printfn ""
 
     let extension (vendorTags : list<string>) (structureTypes : Map<string, string>) (e : Extension) =
+        let printfn fmt =
+            Printf.kprintf (fun str ->
+                if str = "" then printfn "" else printfn "    %s" str
+            ) fmt
 
         let name = Extension.toModuleName e.name
 
@@ -2175,53 +2246,112 @@ module FSharpWriter =
                 |> List.map (snd >> Require.unionMany)
 
             for r in requires do
-                r |> require 1 vendorTags structureTypes (Module.Extension e.name)
-
-    let topoExtensions (extensions : list<Extension>) : list<Extension> =
-        let typeMap = extensions |> List.map (fun s -> s.name, s) |> Map.ofList
-        let graph =
-            extensions |> List.map (fun s ->
-                let dependencies =
-                    s.depends.Extensions |> Set.toList |> List.choose (fun ext -> Map.tryFind ext typeMap)
-
-                let requires =
-                    s.requires |> List.collect (fun r ->
-                        r.depends.Extensions |> Set.toList |> List.choose (fun ext -> Map.tryFind ext typeMap)
-                    )
-
-                let promoted =
-                    s.Promoted |> Option.toList |> List.choose (function
-                        | Module.Extension ext -> Map.tryFind ext typeMap
-                        | _ -> None
-                    )
-
-                let obsolete =
-                    s.Obsolete |> Option.bind id |> Option.toList |> List.choose (function
-                        | Module.Extension ext -> Map.tryFind ext typeMap
-                        | _ -> None
-                    )
-
-                let deprecated =
-                    s.Deprecated |> Option.bind id |> Option.toList |> List.choose (function
-                        | Module.Extension ext -> Map.tryFind ext typeMap
-                        | _ -> None
-                    )
-
-                let usedTypes =
-                    List.concat [dependencies; requires; promoted; obsolete; deprecated]
-                    |> List.distinctBy (fun e -> e.name)
-
-                s, usedTypes
-            )
-            |> Map.ofList
-
-        Struct.toposort graph |> List.rev
+                r |> require 2 vendorTags structureTypes
 
     let extensions (vendorTags : list<string>) (structureTypes : Map<string, string>) (exts : Extension list) =
-        let sorted = topoExtensions exts
+        let sorted = exts |> List.sortBy _.number
+
+        printfn "[<AutoOpen>]"
+        printfn "module rec Extensions ="
+        printfn ""
 
         for e in sorted do
             extension vendorTags structureTypes e
+
+    // Finds and stores the location of all type definitions.
+    // If there are multiple possible locations, the best one is selected based on some simple rules.
+    let preprocess (vendorTags: string list) (emptyBitfields: string list) (features: Feature list) (extensions: Extension list) =
+        let locations = System.Collections.Generic.Dictionary<string, Location list>()
+
+        let addDefinitionLocation (location: Location) (name: string) =
+            let name = Enum.cleanName name
+
+            let value =
+                match locations.TryGetValue name with
+                | true, existing -> existing @ [location]
+                | _ -> [location]
+
+            locations.[name] <- value
+
+        let addType (location: Location) (arrayType: ArrayStruct option) (name: string) =
+            addDefinitionLocation location name
+            arrayType |> Option.iter (fun arr -> addDefinitionLocation location arr.Name)
+
+        for e in emptyBitfields do
+            addDefinitionLocation (Location.Global VkVersion10) e
+
+        let addDefinitionsFromRequire (r: Require) =
+            for f in r.funcpointers do
+                addDefinitionLocation r.Location f.name
+
+            for h in r.handles do
+                addType r.Location h.ArrayType h.name
+
+            for t in r.typedefs do
+                addType r.Location t.ArrayType t.name
+
+            for a in r.aliases do
+                addType r.Location a.ArrayType a.name
+
+            for e in r.enums do
+                addType r.Location e.ArrayType e.name
+
+            for s in r.structs do
+                addType r.Location s.ArrayType s.name
+
+            for c in r.commands do
+                addDefinitionLocation r.Location c.name
+
+        for p in primitiveTypeArrays do
+            addDefinitionLocation (Location.Global VkVersion10) p.Name
+
+        for f in features do
+            for r in f.requires do
+                addDefinitionsFromRequire r
+
+        for e in extensions do
+            for r in e.requires do
+                addDefinitionsFromRequire r
+
+        for KeyValue(name, locations) in locations do
+            match locations with
+            | [single] ->
+                definitionLocations.[name] <- single
+
+            | _ ->
+                let typeVendor = findEnumVendorSuffix vendorTags name
+
+                let getScore (location: Location) =
+                    match typeVendor, location.Vendor with
+                    | Some vt, Some vl when vt = vl -> 1
+                    | Some vt, Some vl when vt <> vl -> -1
+                    | _ -> 0
+
+                // Sort the locations:
+                // (1) Prefer core versions over later core versions and extensions
+                // (2) Prefer KHR over EXT over all other vendors
+                // (3) Prefer locations where vendor matches type vendor
+                // (4) Avoid locations where vendor does NOT match type vendor
+                let sorted =
+                    locations
+                    |> List.sortWith (fun l r ->
+                        match l, r with
+                        | Global l, Global r -> compare l r
+                        | Global _, Extension _ -> -1
+                        | Extension _, Global _ -> 1
+                        | Extension (nl, _), Extension (nr, _) ->
+                            match Extension.getVendor nl, Extension.getVendor nr with
+                            | "KHR", _ -> -1
+                            | _, "KHR" -> 1
+                            | "EXT", _ -> -1
+                            | _, "EXT" -> 1
+                            | _ -> compare (getScore r) (getScore l)
+                    )
+
+                FSharp.Core.Printf.printfn $"WARNING: Multiple definition locations for {name}: {sorted}"
+                definitionLocations.[name] <- List.head sorted
+
+open FSharpWriter
 
 let run () =
     let path = Path.Combine(__SOURCE_DIRECTORY__, "vk.xml")
@@ -2257,16 +2387,17 @@ let run () =
             typedefs = defs
         }
 
-
     let features = XmlReader.features definitions vk
-    let exts = XmlReader.extensions definitions vk
+    let extensions = XmlReader.extensions definitions vk
+
+    FSharpWriter.preprocess vendorTags emptyBitfields features extensions
 
     FSharpWriter.header()
     FSharpWriter.apiConstants defines
     FSharpWriter.emptyBitfields emptyBitfields
     FSharpWriter.primitiveArrays()
     FSharpWriter.features vendorTags structureTypes features
-    FSharpWriter.extensions vendorTags structureTypes exts
+    FSharpWriter.extensions vendorTags structureTypes extensions
 
     let str = FSharpWriter.builder.ToString()
     FSharpWriter.builder.Clear() |> ignore
