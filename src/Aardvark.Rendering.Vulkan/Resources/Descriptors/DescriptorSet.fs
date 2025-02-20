@@ -4,8 +4,8 @@ open System.Runtime.CompilerServices
 open Aardvark.Base
 
 open Aardvark.Rendering.Vulkan
-open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
 open Aardvark.Rendering.Vulkan.Raytracing
+open KHRAccelerationStructure
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"

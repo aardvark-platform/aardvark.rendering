@@ -2,12 +2,10 @@
 
 #nowarn "9"
 
-open Microsoft.FSharp.NativeInterop
-
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
-open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
-open Aardvark.Rendering.Vulkan.KHRDeferredHostOperations
+open KHRRayTracingPipeline
+open KHRDeferredHostOperations
 
 type RaytracingPipelineDescription = {
     Program : RaytracingProgram

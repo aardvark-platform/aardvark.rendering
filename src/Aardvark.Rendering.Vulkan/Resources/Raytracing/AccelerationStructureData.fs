@@ -10,8 +10,8 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
-open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
-open Aardvark.Rendering.Vulkan.KHRBufferDeviceAddress
+open KHRAccelerationStructure
+open KHRBufferDeviceAddress
 
 [<Struct>]
 type Instances =

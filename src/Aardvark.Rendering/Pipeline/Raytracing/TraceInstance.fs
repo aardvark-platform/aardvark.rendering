@@ -17,6 +17,8 @@ type VisibilityMask =
 
     static member op_Explicit (m : VisibilityMask) : uint8 = m.Value
 
+    static member op_Explicit (m : VisibilityMask) : uint32 = uint32 m.Value
+
     static member All  = VisibilityMask(true)
     static member None = VisibilityMask(false)
 

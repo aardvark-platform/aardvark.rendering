@@ -10,8 +10,8 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
-open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
-open Aardvark.Rendering.Vulkan.KHRBufferDeviceAddress
+open KHRRayTracingPipeline
+open KHRBufferDeviceAddress
 
 type ShaderBindingSubtable<'T when 'T : comparison> =
     class

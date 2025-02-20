@@ -6,10 +6,8 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.Raytracing
-open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
-open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
-open Aardvark.Rendering.Vulkan.KHRBufferDeviceAddress
 open Aardvark.Rendering.Raytracing
+open KHRRayTracingPipeline
 open FShade
 
 open FSharp.Data.Adaptive

@@ -4,7 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Raytracing
-open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
+open KHRRayTracingPipeline
 
 open FSharp.Data.Adaptive
 

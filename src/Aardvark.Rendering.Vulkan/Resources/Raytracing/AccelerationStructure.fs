@@ -2,13 +2,10 @@
 
 #nowarn "9"
 
-open Microsoft.FSharp.NativeInterop
-
 open Aardvark.Base
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
-open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
-open Aardvark.Rendering.Vulkan.KHRBufferDeviceAddress
+open KHRAccelerationStructure
 
 type AccelerationStructure =
     class

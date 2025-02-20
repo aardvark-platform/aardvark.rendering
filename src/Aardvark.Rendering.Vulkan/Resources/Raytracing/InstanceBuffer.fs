@@ -4,7 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
-open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
+open KHRAccelerationStructure
 
 open FSharp.Data.Adaptive
 
@@ -34,7 +34,7 @@ module internal InstanceBuffer =
                     | _                    -> VkGeometryInstanceFlagsKHR.ForceNoOpaqueBit
                 )
 
-            uint8 (c ||| g)
+            c ||| g
 
         let private getHitGroup (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (inst : ITraceInstance) =
             let sbt = sbt.GetValue(token)
@@ -44,7 +44,7 @@ module internal InstanceBuffer =
             if accel.GeometryCount > cfg.Length then
                 failwithf "[Raytracing] Object has %d geometries but only %d hit groups" accel.GeometryCount cfg.Length
 
-            uint24 sbt.HitGroupTable.Indices.[cfg]
+            uint32 sbt.HitGroupTable.Indices.[cfg]
 
         let evaluate (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (inst : ITraceInstance) =
             let trafo = inst.Transform.GetValue(token)
@@ -56,8 +56,8 @@ module internal InstanceBuffer =
 
             VkAccelerationStructureInstanceKHR(
                 VkTransformMatrixKHR(M34f trafo.Forward),
-                uint24 index,
-                uint8 mask,
+                index,
+                uint32 mask,
                 getHitGroup sbt token inst,
                 getFlags front geom,
                 accel.DeviceAddress

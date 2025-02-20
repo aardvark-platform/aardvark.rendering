@@ -5,7 +5,7 @@ open Aardvark.Base
 open Aardvark.Base.Sorting
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
-open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
+open KHRAccelerationStructure
 
 #nowarn "9"
 

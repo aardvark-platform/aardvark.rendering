@@ -5,6 +5,7 @@ open Aardvark.Base
 open Silk.NET.GLFW
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
+open KHRSurface
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Application
 open Aardvark.Glfw
@@ -44,7 +45,7 @@ module private Vulkan =
 
         let surf = NativePtr.read pSurf
 
-        let surface = Aardvark.Rendering.Vulkan.KHRSurface.VkSurfaceKHR(surf.Handle)
+        let surface = VkSurfaceKHR(surf.Handle)
         let surf = new Aardvark.Rendering.Vulkan.Surface(runtime.Device, surface)
 
         let samples =
