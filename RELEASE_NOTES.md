@@ -1,3 +1,6 @@
+### 5.5.16
+- now using `glEnablei/glDisablei` for BlendModes.
+
 ### 5.5.15
 - updated package FSharp.Data.Adaptive 1.2.19
 - Improved error reporting for buffer creation and updating

@@ -1156,12 +1156,16 @@ DllExport(void) hglSetBlendModes(int count, BlendMode** ptr)
 	}
 	else
 	{
-		glEnable(GL_BLEND);
-
 		for (int i = 0; i < count; i++)
 		{
-			glBlendFuncSeparatei(i, modes[i].SourceFactor, modes[i].DestFactor, modes[i].SourceFactorAlpha, modes[i].DestFactorAlpha);
-			glBlendEquationSeparatei(i, modes[i].Operation, modes[i].OperationAlpha);
+			if(modes[i].Enabled) {
+				glEnablei(GL_BLEND, i);
+				glBlendFuncSeparatei(i, modes[i].SourceFactor, modes[i].DestFactor, modes[i].SourceFactorAlpha, modes[i].DestFactorAlpha);
+				glBlendEquationSeparatei(i, modes[i].Operation, modes[i].OperationAlpha);
+			}
+			else {
+				glDisablei(GL_BLEND, i);
+			}
 		}
 	}
 	endtrace("a")
