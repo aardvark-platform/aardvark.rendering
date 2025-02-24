@@ -1,0 +1,104 @@
+name: GLVM
+on:
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - glvm-ci
+  #   paths:
+  #     - .github/workflows/glvm.yml    
+jobs:
+  windows-x64:
+    name: Windows (x64)
+    runs-on: windows-2019
+    steps:  
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: .\build.cmd
+        working-directory: .\src\GLVM
+      - name: Upload Windows native libs
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: lib/Native/Aardvark.Rendering.GL/windows/AMD64/
+  linux-x64:
+    name: Linux (x64)
+    runs-on: ubuntu-22.04
+    steps:  
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install OpenGL
+        run: sudo apt install libgl-dev
+      - name: Build
+        run: ./build.sh
+        working-directory: ./src/GLVM
+      - name: Upload Linux native libs
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: lib/Native/Aardvark.Rendering.GL/linux/AMD64/          
+  macos-x64:
+    name: MacOS (x64)
+    runs-on: macos-13
+    steps:  
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: ./build.sh
+        working-directory: ./src/GLVM
+      - name: Upload MacOS native libs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-x64
+          path: lib/Native/Aardvark.Rendering.GL/mac/AMD64/
+  macos-arm64:
+    name: MacOS (ARM64)
+    runs-on: macos-14
+    steps:  
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: ./build.sh
+        working-directory: ./src/GLVM
+      - name: Upload MacOS native libs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-arm64
+          path: lib/Native/Aardvark.Rendering.GL/mac/ARM64/          
+  build:
+    name: Build
+    runs-on: windows-latest
+    needs: 
+      - windows-x64
+      - linux-x64
+      - macos-x64
+      - macos-arm64
+    steps:  
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download MacOS dependencies (x64)
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-x64
+          path: lib/Native/Aardvark.Rendering.GL/mac/AMD64/
+      - name: Download MacOS dependencies (arm64)
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-arm64
+          path: lib/Native/Aardvark.Rendering.GL/mac/ARM64/
+      - name: Download Linux dependencies 
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x64
+          path: lib/Native/Aardvark.Rendering.GL/linux/AMD64/
+      - name: Download Windows dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-x64
+          path: lib/Native/Aardvark.Rendering.GL/windows/AMD64/
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "[GLVM] Update native libraries"
+          branch: glvm-ci-build
+          title: "[GLVM] Update native libraries"
