@@ -1,4 +1,5 @@
 - [GL] Fixed blend modes not being toggled properly per attachment
+- [Vulkan] Fixed VK_ERROR_OUT_OF_POOL_MEMORY error on some platforms when using raytracing
 
 ### 5.5.16
 - now using `glEnablei/glDisablei` for BlendModes.
