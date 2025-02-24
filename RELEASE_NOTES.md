@@ -1,3 +1,5 @@
+- [GL] Fixed blend modes not being toggled properly per attachment
+
 ### 5.5.16
 - now using `glEnablei/glDisablei` for BlendModes.
 
