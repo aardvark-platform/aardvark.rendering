@@ -44,6 +44,8 @@ static PFNGLBLENDFUNCSEPARATEPROC						glBlendFuncSeparate;
 static PFNGLBLENDFUNCSEPARATEIPROC						glBlendFuncSeparatei;
 static PFNGLBLENDEQUATIONSEPARATEPROC					glBlendEquationSeparate;
 static PFNGLBLENDEQUATIONSEPARATEIPROC					glBlendEquationSeparatei;
+static PFNGLENABLEIPROC									glEnablei;
+static PFNGLDISABLEIPROC								glDisablei;
 static PFNGLSTENCILFUNCSEPARATEPROC						glStencilFuncSeparate;
 static PFNGLSTENCILOPSEPARATEPROC						glStencilOpSeparate;
 static PFNGLPATCHPARAMETERIPROC							glPatchParameteri;
