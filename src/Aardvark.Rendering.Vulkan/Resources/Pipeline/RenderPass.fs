@@ -4,11 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open System.Runtime.CompilerServices
-open Microsoft.FSharp.NativeInterop
-
-#nowarn "9"
-// #nowarn "51"
-
 
 type RenderPass =
     class
@@ -63,14 +58,14 @@ module RenderPass =
     [<AutoOpen>]
     module private Utilities =
 
-        let rec tryFindFormat (device : Device) (fmt : VkFormat) =
-            match device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) with
-            | VkFormatFeatureFlags.None ->
-                match fmt.NextBetter with
-                | Some better -> tryFindFormat device better
-                | None -> None
-            | _ ->
-                Some fmt
+        type Device with
+            member x.TryFindFormat (format: VkFormat, features: VkFormatFeatureFlags) =
+                let flags = x.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
+                if flags.HasFlag features then Some format
+                else
+                    match format.NextBetter with
+                    | Some better -> x.TryFindFormat(better, features)
+                    | None -> None
 
         let getLoadStoreOp flag =
             if flag then
@@ -116,10 +111,15 @@ module RenderPass =
                 colorAttachments
                 |> Map.toArray
                 |> Array.mapi (fun index (slot, att) ->
+                    let format =
+                        match device.TryFindFormat(VkFormat.ofTextureFormat att.Format, VkFormatFeatureFlags.ColorAttachmentBit) with
+                        | Some fmt -> fmt
+                        | _ -> failf $"Format {att.Format} cannot be used for color attachments ({att.Name})"
+
                     let description =
                         VkAttachmentDescription(
                             VkAttachmentDescriptionFlags.None,
-                            VkFormat.ofTextureFormat att.Format,
+                            format,
                             unbox<VkSampleCountFlags> samples,
                             VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store,
                             VkAttachmentLoadOp.DontCare, VkAttachmentStoreOp.DontCare,
@@ -136,9 +136,9 @@ module RenderPass =
             let depth =
                 depthStencilAttachment |> Option.map (fun fmt ->
                     let format =
-                        match tryFindFormat device <| VkFormat.ofTextureFormat fmt with
+                        match device.TryFindFormat(VkFormat.ofTextureFormat fmt, VkFormatFeatureFlags.DepthStencilAttachmentBit) with
                         | Some fmt -> fmt
-                        | None -> failf "could not get supported format for %A" fmt
+                        | None -> failf $"Format {fmt} cannot be used for depth-stencil attachments"
 
                     let depthLoadOp, depthStoreOp = getLoadStoreOp <| VkFormat.hasDepth format
                     let stencilLoadOp, stencilStoreOp = getLoadStoreOp <| VkFormat.hasStencil format
