@@ -7,6 +7,8 @@ open Expecto
 module ``Rendering Tests`` =
 
     let private tests = [
+        Blending.tests
+        ColorMasks.tests
         Culling.tests
         RenderTasks.tests
         FramebufferSignature.tests

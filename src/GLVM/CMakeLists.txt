@@ -1,9 +1,10 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.15)
 
 project(glvm LANGUAGES CXX)
 if(WIN32)
     set(OS windows)
     SET(ARCH AMD64)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 elseif(APPLE)
     set(OS mac)
     execute_process(COMMAND uname -m OUTPUT_VARIABLE ARCH)
@@ -30,7 +31,7 @@ add_library(glvm SHARED State.h glvm.h glvm.cpp State.cpp)
 
 find_package(OpenGL REQUIRED)
 include_directories( ${OPENGL_INCLUDE_DIRS} )
-target_link_libraries(glvm ${OPENGL_LIBRARIES} )
+target_link_libraries(glvm OpenGL::GL )
 
 install(TARGETS glvm DESTINATION ${OS}/${ARCH})
 

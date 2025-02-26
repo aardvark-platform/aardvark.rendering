@@ -6,9 +6,16 @@ open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open Expecto
 
 module Samplers =
+
+    module private Semantic =
+        let Output1 = Sym.ofString "Output1"
+        let Output2 = Sym.ofString "Output2"
+        let Texture1 = Sym.ofString "Texture1"
+        let Texture2 = Sym.ofString "Texture2"
 
     module private Shader =
         open FShade
@@ -37,6 +44,29 @@ module Samplers =
         let diffuseUIntTexture (v : Vertex) =
             fragment {
                 return diffuseUIntSampler.Sample v.tc
+            }
+
+        let private borderSampler1 =
+            sampler2d {
+                texture uniform?Texture1
+                filter Filter.MinMagMipPoint
+                addressU WrapMode.Border
+                addressV WrapMode.Border
+            }
+
+        let private borderSampler2 =
+            sampler2d {
+                texture uniform?Texture2
+                filter Filter.MinMagMipPoint
+                addressU WrapMode.Border
+                addressV WrapMode.Border
+            }
+
+        let texturesWithBorderSampler (tc: V2d) (_ : Vertex) =
+            fragment {
+                let o1 = borderSampler1.Sample tc
+                let o2 = borderSampler2.Sample tc
+                return {| Output1 = o1; Output2 = o2 |}
             }
 
     module Cases =
@@ -175,6 +205,59 @@ module Samplers =
                     output.Release()
             )
 
+        let sample2DDynamicSamplerStates (runtime: IRuntime) =
+            let size = V2i(2, 1)
+            let tc = V2d(2.0, 0.0)
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    Semantic.Output1, TextureFormat.R8
+                    Semantic.Output2, TextureFormat.R8
+                ])
+
+            let input =
+                let mutable mat = Matrix<byte>(size)
+                mat.Data.[0] <- 1uy
+                mat.Data.[1] <- 2uy
+                PixImage<byte>(Col.Format.Gray, mat)
+
+            use inputTexture = runtime.CreateTexture2D(size, TextureFormat.R8)
+            inputTexture.Upload input
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.texture' Semantic.Texture1 inputTexture
+                |> Sg.modifySamplerState' Semantic.Texture1 (fun s ->
+                    { s with AddressU = WrapMode.Mirror }
+                )
+                |> Sg.texture' Semantic.Texture2 inputTexture
+                |> Sg.modifySamplerState' Semantic.Texture2 (fun s ->
+                    { s with AddressU = WrapMode.Wrap }
+                )
+                |> Sg.shader {
+                    do! Shader.texturesWithBorderSampler tc
+                }
+                |> Sg.compile runtime signature
+
+            let r1, r2 =
+                let fbo = runtime.CreateFramebuffer(signature, ~~V2i.II)
+                let clear = clear { color C4b.Black }
+                let output = task |> RenderTask.renderToWithClear fbo clear
+                let o1 = output.GetOutputTexture(Semantic.Output1)
+                let o2 = output.GetOutputTexture(Semantic.Output2)
+                o1, o2
+
+            r1.Acquire(); r2.Acquire()
+
+            try
+                let o1 = r1.GetValue().Download().AsPixImage<uint8>().Data.[0]
+                let o2 = r2.GetValue().Download().AsPixImage<uint8>().Data.[0]
+
+                Expect.equal o1 1uy "Unexpected value in output 1"
+                Expect.equal o2 2uy "Unexpected value in output 2"
+            finally
+                r1.Release(); r2.Release()
+
     let tests (backend : Backend) =
         [
             "2D rgba8i", Cases.sample2Drgba8i 1
@@ -190,5 +273,7 @@ module Samplers =
             "2D grayscale", Cases.sample2DGrayscale
 
             "2D depth / stencil", Cases.sampleDepthStencil
+
+            "2D dynamic sampler states", Cases.sample2DDynamicSamplerStates
         ]
         |> prepareCases backend "Samplers"

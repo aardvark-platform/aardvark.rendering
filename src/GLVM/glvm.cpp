@@ -92,6 +92,10 @@ DllExport(void) vmInit()
 	glBlendFuncSeparatei = (PFNGLBLENDFUNCSEPARATEIPROC)getProc("glBlendFuncSeparatei");
 	glBlendEquationSeparate = (PFNGLBLENDEQUATIONSEPARATEPROC)getProc("glBlendEquationSeparate");
 	glBlendEquationSeparatei = (PFNGLBLENDEQUATIONSEPARATEIPROC)getProc("glBlendEquationSeparatei");
+	glEnablei = (PFNGLENABLEIPROC)getProc("glEnablei");
+	glDisablei = (PFNGLDISABLEIPROC)getProc("glDisablei");
+	
+
 	glStencilFuncSeparate = (PFNGLSTENCILFUNCSEPARATEPROC)getProc("glStencilFuncSeparate");
 	glStencilOpSeparate = (PFNGLSTENCILOPSEPARATEPROC)getProc("glStencilOpSeparate");
 	glPatchParameteri = (PFNGLPATCHPARAMETERIPROC)getProc("glPatchParameteri");
@@ -1138,32 +1142,22 @@ DllExport(void) hglSetBlendModes(int count, BlendMode** ptr)
 {
 	trace("hglSetBlendMode\n");
 
-	bool enabled = false;
-	BlendMode* modes = *ptr;
+	const BlendMode* modes = *ptr;
 
 	for (int i = 0; i < count; i++)
 	{
-		if (modes[i].Enabled) 
+		if (modes[i].Enabled)
 		{
-			enabled = true;
-			break;
-		}
-	}
-
-	if (!enabled)
-	{
-		glDisable(GL_BLEND);
-	}
-	else
-	{
-		glEnable(GL_BLEND);
-
-		for (int i = 0; i < count; i++)
-		{
+			glEnablei(GL_BLEND, i);
 			glBlendFuncSeparatei(i, modes[i].SourceFactor, modes[i].DestFactor, modes[i].SourceFactorAlpha, modes[i].DestFactorAlpha);
 			glBlendEquationSeparatei(i, modes[i].Operation, modes[i].OperationAlpha);
 		}
+		else
+		{
+			glDisablei(GL_BLEND, i);
+		}
 	}
+
 	endtrace("a")
 
 }

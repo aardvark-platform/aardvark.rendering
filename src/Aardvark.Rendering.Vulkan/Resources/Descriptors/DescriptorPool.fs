@@ -1,13 +1,9 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open Aardvark.Base
-open System.Threading
 open System.Runtime.CompilerServices
-open Microsoft.FSharp.NativeInterop
 open EXTDescriptorIndexing
-
-#nowarn "9"
-// #nowarn "51"
+open KHRAccelerationStructure
 
 type DescriptorPool =
     class
@@ -81,6 +77,8 @@ type ContextDescriptorPoolExtensions private() =
                 VkDescriptorType.StorageBuffer, perTypeCount
                 VkDescriptorType.CombinedImageSampler, perTypeCount
                 VkDescriptorType.StorageImage, perTypeCount
+                if this.IsExtensionEnabled KHRAccelerationStructure.Name then
+                    VkDescriptorType.AccelerationStructureKhr, perTypeCount
             ]
 
         this |> DescriptorPool.create setCount counts

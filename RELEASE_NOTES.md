@@ -1,3 +1,10 @@
+- [GL] Fixed blend modes not being toggled properly per attachment
+- [Vulkan] Fixed VK_ERROR_OUT_OF_POOL_MEMORY error on some platforms when using raytracing
+- [Vulkan] Added check for format features when creating a render pass
+
+### 5.5.16
+- now using `glEnablei/glDisablei` for BlendModes.
+
 ### 5.5.15
 - updated package FSharp.Data.Adaptive 1.2.19
 - Improved error reporting for buffer creation and updating
