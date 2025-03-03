@@ -22,6 +22,8 @@
     <Compile Include="Vulkan.fs" />
     <Compile Include="PCI.fs" />
     <Compile Include="VKVM.fs" />
+    <None Include="VMA.fsx" />
+    <Compile Include="VMA.fs" />
     <None Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
