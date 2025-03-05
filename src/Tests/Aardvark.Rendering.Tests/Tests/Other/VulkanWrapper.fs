@@ -1,11 +1,104 @@
 ﻿namespace Aardvark.Rendering.Tests
 
 open Aardvark.Rendering.Vulkan
+open Aardvark.Rendering.Vulkan.Vulkan14
 open KHRAccelerationStructure
+open KHRFragmentShadingRate
 open NVClusterAccelerationStructure
 open Expecto
 
 module ``Vulkan Wrapper Tests`` =
+
+    module Arrays =
+
+        let uint32_32 =
+            test "uint32_32" {
+                let mutable array = uint32_32()
+                array.[array.Length - 1] <- 42u
+                Expect.equal array.[array.Length - 1] 42u ""
+            }
+
+        let int32_7 =
+            test "int32_7" {
+                let mutable array = int32_7()
+                array.[array.Length - 1] <- 42
+                Expect.equal array.[array.Length - 1] 42 ""
+            }
+
+        let byte_32 =
+            test "byte_32" {
+                let mutable array = byte_32()
+                array.[array.Length - 1] <- 42uy
+                Expect.equal array.[array.Length - 1] 42uy ""
+            }
+
+        let byte_8 =
+            test "byte_8" {
+                let mutable array = byte_8()
+                array.[array.Length - 1] <- 42uy
+                Expect.equal array.[array.Length - 1] 42uy ""
+            }
+
+        let float32_6 =
+            test "float32_6" {
+                let mutable array = float32_6()
+                array.[array.Length - 1] <- 42.0f
+                Expect.equal array.[array.Length - 1] 42.0f ""
+            }
+
+        let VkPhysicalDevice_32 =
+            test "VkPhysicalDevice_32" {
+                let mutable array = VkPhysicalDevice_32()
+                array.[array.Length - 1] <- 42n
+                Expect.equal array.[array.Length - 1] 42n ""
+            }
+
+        let VkDeviceSize_16 =
+            test "VkDeviceSize_16" {
+                let mutable array = VkDeviceSize_16()
+                array.[array.Length - 1] <- 42UL
+                Expect.equal array.[array.Length - 1] 42UL ""
+            }
+            
+        let VkOffset3D_2 =
+            test "VkOffset3D_2" {
+                let mutable array = VkOffset3D_2()
+                let value = VkOffset3D(1, 2, 3)
+                array.[array.Length - 1] <- value
+                Expect.equal array.[array.Length - 1] value ""
+            }
+
+        let VkMemoryHeap_16 =
+            test "VkMemoryHeap_16" {
+                let mutable array = VkMemoryHeap_16()
+                let value = VkMemoryHeap(42UL, VkMemoryHeapFlags.DeviceLocalBit)
+                array.[array.Length - 1] <- value
+                Expect.equal array.[array.Length - 1] value ""
+            }
+
+        let VkMemoryType_32 =
+            test "VkMemoryType_32" {
+                let mutable array = VkMemoryType_32()
+                let value = VkMemoryType(VkMemoryPropertyFlags.HostVisibleBit, 42u)
+                array.[array.Length - 1] <- value
+                Expect.equal array.[array.Length - 1] value ""
+            }
+
+        let VkQueueGlobalPriority_16 =
+            test "VkQueueGlobalPriority_16" {
+                let mutable array = VkQueueGlobalPriority_16()
+                let value = VkQueueGlobalPriority.Medium
+                array.[array.Length - 1] <- value
+                Expect.equal array.[array.Length - 1] value ""
+            }
+
+        let VkFragmentShadingRateCombinerOpKHR_2 =
+            test "VkFragmentShadingRateCombinerOpKHR_2" {
+                let mutable array = VkFragmentShadingRateCombinerOpKHR_2()
+                let value = VkFragmentShadingRateCombinerOpKHR.Mul
+                array.[array.Length - 1] <- value
+                Expect.equal array.[array.Length - 1] value ""
+            }
 
     module Bitfields =
 
@@ -69,7 +162,7 @@ module ``Vulkan Wrapper Tests`` =
                 inst.positionTruncateBitCount <- positionTruncateBitCount
                 inst.indexType <- indexType
                 inst.opacityMicromapIndexType <- opacityMicromapIndexType
-                
+
                 Expect.equal inst.triangleCount triangleCount "bad triangle count after setter"
                 Expect.equal inst.vertexCount vertexCount "bad vertex count after setter"
                 Expect.equal inst.positionTruncateBitCount positionTruncateBitCount "bad position truncate bit count after setter"
@@ -80,6 +173,21 @@ module ``Vulkan Wrapper Tests`` =
     [<Tests>]
     let tests =
         testList "VulkanWrapper" [
+            testList "Arrays" [
+                Arrays.uint32_32
+                Arrays.int32_7
+                Arrays.byte_32
+                Arrays.byte_8
+                Arrays.float32_6
+                Arrays.VkPhysicalDevice_32
+                Arrays.VkDeviceSize_16
+                Arrays.VkOffset3D_2
+                Arrays.VkMemoryHeap_16
+                Arrays.VkMemoryType_32
+                Arrays.VkQueueGlobalPriority_16
+                Arrays.VkFragmentShadingRateCombinerOpKHR_2
+            ]
+
             testList "Bitfields" [
                 Bitfields.VkAccelerationStructureInstanceKHR
                 Bitfields.VkClusterAccelerationStructureBuildTriangleClusterInfoNV

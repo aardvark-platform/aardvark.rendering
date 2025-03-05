@@ -1446,6 +1446,7 @@ module FSharpWriter =
         printfn "#nowarn \"49\""
         printfn ""
         printfn "open System"
+        printfn "open System.Diagnostics"
         printfn "open System.Runtime.InteropServices"
         printfn "open System.Runtime.CompilerServices"
         printfn "open Microsoft.FSharp.NativeInterop"
@@ -1476,6 +1477,10 @@ module FSharpWriter =
             printfn "[<StructLayout(LayoutKind.Explicit, Size = %d)>]" totalSize
             printfn "type %s =" typ.Name
             printfn "    struct"
+            printfn "        #if DEBUG"
+            printfn $"        static do Debug.Assert(sizeof<{typ.Name}> = sizeof<{typ.baseType}> * {typ.count}, $\"Unexpected size for {typ.Name}, expected {{sizeof<{typ.baseType}> * {typ.count}}} but got {{sizeof<{typ.Name}>}}.\")"
+            printfn "        #endif"
+            printfn ""
             printfn "        [<FieldOffset(0)>]"
             printfn "        val mutable public First : %s" typ.baseType
             printfn ""
