@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Tests
 
 open Aardvark.Rendering.Vulkan
+open Aardvark.Rendering.Vulkan.Memory
 open Aardvark.Rendering.Vulkan.Vulkan14
 open KHRAccelerationStructure
 open KHRFragmentShadingRate
@@ -100,6 +101,22 @@ module ``Vulkan Wrapper Tests`` =
                 Expect.equal array.[array.Length - 1] value ""
             }
 
+        let VmaDetailedStatistics_16 =
+            test "VmaDetailedStatistics_16" {
+                let mutable array = VmaDetailedStatistics_16()
+                let value = { VmaDetailedStatistics.Empty with statistics = { VmaStatistics.Empty with blockBytes = 42UL } }
+                array.[array.Length - 1] <- value
+                Expect.equal array.[array.Length - 1] value ""
+            }
+
+        let VmaDetailedStatistics_32 =
+            test "VmaDetailedStatistics_32" {
+                let mutable array = VmaDetailedStatistics_32()
+                let value = { VmaDetailedStatistics.Empty with allocationSizeMax = 42UL }
+                array.[array.Length - 1] <- value
+                Expect.equal array.[array.Length - 1] value ""
+            }
+
     module Bitfields =
 
         let VkAccelerationStructureInstanceKHR =
@@ -186,6 +203,8 @@ module ``Vulkan Wrapper Tests`` =
                 Arrays.VkMemoryType_32
                 Arrays.VkQueueGlobalPriority_16
                 Arrays.VkFragmentShadingRateCombinerOpKHR_2
+                Arrays.VmaDetailedStatistics_16
+                Arrays.VmaDetailedStatistics_32
             ]
 
             testList "Bitfields" [

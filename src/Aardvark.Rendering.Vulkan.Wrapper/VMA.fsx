@@ -251,8 +251,8 @@ module Field =
     let private rxField = Regex(@"^(const\s*)?(?<type>[A-Za-z0-9_]+[\*\s]*)(?<name>[A-Za-z0-9_]+)\s*(?:\[(?<count>[A-Z_]+)\])?\s*;$", RegexOptions.Compiled)
 
     let private getConstant = function
-        | "VK_MAX_MEMORY_TYPES" -> VkMaxMemoryTypes
-        | "VK_MAX_MEMORY_HEAPS" -> VkMaxMemoryHeaps
+        | "VK_MAX_MEMORY_TYPES" -> int VkMaxMemoryTypes
+        | "VK_MAX_MEMORY_HEAPS" -> int VkMaxMemoryHeaps
         | str ->
             match Int32.TryParse str with
             | true, value -> value
@@ -454,13 +454,15 @@ module Writer =
                     )
                     fn "}"
                     ln()
-                    blk $"static member Empty : {name} =" (fun _ ->
+                    blk $"static let empty : {name} =" (fun _ ->
                         blk "{" (fun _ ->
                             for f in fields do
                                 fn $"{f.name} = Unchecked.defaultof<{Type.fsharpName f.count f.typ}>"
                         )
                         fn "}"
                     )
+                    ln()
+                    fn $"static member Empty = empty"
                 )
 
             | Array (typ, count) ->
@@ -473,12 +475,12 @@ module Writer =
                         blk "member x.Item" (fun _ ->
                             blk $"with get (index: int) : {baseName} =" (fun _ ->
                                 fn $"if index < 0 || index > {count - 1} then raise <| IndexOutOfRangeException()"
-                                fn $"let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt"
+                                fn $"let ptr = NativePtr.cast &&x"
                                 fn $"ptr.[index]"
                             )
                             blk $"and set (index: int) (value: {baseName}) =" (fun _ ->
                                 fn $"if index < 0 || index > {count - 1} then raise <| IndexOutOfRangeException()"
-                                fn $"let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt"
+                                fn $"let ptr = NativePtr.cast &&x"
                                 fn $"ptr.[index] <- value"
                             )
                         )
