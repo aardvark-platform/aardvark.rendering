@@ -4,6 +4,7 @@ namespace Aardvark.Rendering.Vulkan
 #nowarn "49"
 
 open System
+open System.Diagnostics
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
@@ -21,49 +22,49 @@ module Constants =
     let VkAttachmentUnused = 4294967295u
 
     [<Literal>]
-    let VkFalse = 0
+    let VkFalse = 0u
 
     [<Literal>]
     let VkLodClampNone = 1000.00000000f
 
     [<Literal>]
-    let VkLuidSize = 8
+    let VkLuidSize = 8u
 
     [<Literal>]
-    let VkMaxDescriptionSize = 256
+    let VkMaxDescriptionSize = 256u
 
     [<Literal>]
-    let VkMaxDeviceGroupSize = 32
+    let VkMaxDeviceGroupSize = 32u
 
     [<Literal>]
-    let VkMaxDriverInfoSize = 256
+    let VkMaxDriverInfoSize = 256u
 
     [<Literal>]
-    let VkMaxDriverNameSize = 256
+    let VkMaxDriverNameSize = 256u
 
     [<Literal>]
-    let VkMaxExtensionNameSize = 256
+    let VkMaxExtensionNameSize = 256u
 
     [<Literal>]
-    let VkMaxGlobalPrioritySize = 16
+    let VkMaxGlobalPrioritySize = 16u
 
     [<Literal>]
-    let VkMaxMemoryHeaps = 16
+    let VkMaxMemoryHeaps = 16u
 
     [<Literal>]
-    let VkMaxMemoryTypes = 32
+    let VkMaxMemoryTypes = 32u
 
     [<Literal>]
-    let VkMaxPhysicalDeviceNameSize = 256
+    let VkMaxPhysicalDeviceNameSize = 256u
 
     [<Literal>]
-    let VkMaxPipelineBinaryKeySizeKhr = 32
+    let VkMaxPipelineBinaryKeySizeKhr = 32u
 
     [<Literal>]
-    let VkMaxShaderModuleIdentifierSizeExt = 32
+    let VkMaxShaderModuleIdentifierSizeExt = 32u
 
     [<Literal>]
-    let VkMaxVideoAv1ReferencesPerFrameKhr = 7
+    let VkMaxVideoAv1ReferencesPerFrameKhr = 7u
 
     [<Literal>]
     let VkPartitionedAccelerationStructurePartitionIndexGlobalNv = 4294967295u
@@ -96,10 +97,10 @@ module Constants =
     let VkSubpassExternal = 4294967295u
 
     [<Literal>]
-    let VkTrue = 1
+    let VkTrue = 1u
 
     [<Literal>]
-    let VkUuidSize = 16
+    let VkUuidSize = 16u
 
     [<Literal>]
     let VkWholeSize = 18446744073709551615UL
@@ -250,6 +251,10 @@ type VkVideoEncodeRateControlFlagsKHR = | None = 0
 [<StructLayout(LayoutKind.Explicit, Size = 128)>]
 type uint32_32 =
     struct
+        #if DEBUG
+        static do Debug.Assert(sizeof<uint32_32> = sizeof<uint32> * 32, $"Unexpected size for uint32_32, expected {sizeof<uint32> * 32} but got {sizeof<uint32_32>}.")
+        #endif
+
         [<FieldOffset(0)>]
         val mutable public First : uint32
 
@@ -275,6 +280,10 @@ type uint32_32 =
 [<StructLayout(LayoutKind.Explicit, Size = 28)>]
 type int32_7 =
     struct
+        #if DEBUG
+        static do Debug.Assert(sizeof<int32_7> = sizeof<int32> * 7, $"Unexpected size for int32_7, expected {sizeof<int32> * 7} but got {sizeof<int32_7>}.")
+        #endif
+
         [<FieldOffset(0)>]
         val mutable public First : int32
 
@@ -300,6 +309,10 @@ type int32_7 =
 [<StructLayout(LayoutKind.Explicit, Size = 32)>]
 type byte_32 =
     struct
+        #if DEBUG
+        static do Debug.Assert(sizeof<byte_32> = sizeof<byte> * 32, $"Unexpected size for byte_32, expected {sizeof<byte> * 32} but got {sizeof<byte_32>}.")
+        #endif
+
         [<FieldOffset(0)>]
         val mutable public First : byte
 
@@ -325,6 +338,10 @@ type byte_32 =
 [<StructLayout(LayoutKind.Explicit, Size = 8)>]
 type byte_8 =
     struct
+        #if DEBUG
+        static do Debug.Assert(sizeof<byte_8> = sizeof<byte> * 8, $"Unexpected size for byte_8, expected {sizeof<byte> * 8} but got {sizeof<byte_8>}.")
+        #endif
+
         [<FieldOffset(0)>]
         val mutable public First : byte
 
@@ -350,6 +367,10 @@ type byte_8 =
 [<StructLayout(LayoutKind.Explicit, Size = 24)>]
 type float32_6 =
     struct
+        #if DEBUG
+        static do Debug.Assert(sizeof<float32_6> = sizeof<float32> * 6, $"Unexpected size for float32_6, expected {sizeof<float32> * 6} but got {sizeof<float32_6>}.")
+        #endif
+
         [<FieldOffset(0)>]
         val mutable public First : float32
 
@@ -588,6 +609,10 @@ type VkCommandBuffer = nativeint
 [<StructLayout(LayoutKind.Explicit, Size = 256)>]
 type VkPhysicalDevice_32 =
     struct
+        #if DEBUG
+        static do Debug.Assert(sizeof<VkPhysicalDevice_32> = sizeof<VkPhysicalDevice> * 32, $"Unexpected size for VkPhysicalDevice_32, expected {sizeof<VkPhysicalDevice> * 32} but got {sizeof<VkPhysicalDevice_32>}.")
+        #endif
+
         [<FieldOffset(0)>]
         val mutable public First : VkPhysicalDevice
 
@@ -619,6 +644,10 @@ type VkSampleMask = uint32
 [<StructLayout(LayoutKind.Explicit, Size = 128)>]
 type VkDeviceSize_16 =
     struct
+        #if DEBUG
+        static do Debug.Assert(sizeof<VkDeviceSize_16> = sizeof<VkDeviceSize> * 16, $"Unexpected size for VkDeviceSize_16, expected {sizeof<VkDeviceSize> * 16} but got {sizeof<VkDeviceSize_16>}.")
+        #endif
+
         [<FieldOffset(0)>]
         val mutable public First : VkDeviceSize
 
@@ -1991,6 +2020,10 @@ type VkOffset3D =
 [<StructLayout(LayoutKind.Explicit, Size = 24)>]
 type VkOffset3D_2 =
     struct
+        #if DEBUG
+        static do Debug.Assert(sizeof<VkOffset3D_2> = sizeof<VkOffset3D> * 2, $"Unexpected size for VkOffset3D_2, expected {sizeof<VkOffset3D> * 2} but got {sizeof<VkOffset3D_2>}.")
+        #endif
+
         [<FieldOffset(0)>]
         val mutable public First : VkOffset3D
 
@@ -4927,6 +4960,10 @@ type VkMemoryHeap =
 [<StructLayout(LayoutKind.Explicit, Size = 256)>]
 type VkMemoryHeap_16 =
     struct
+        #if DEBUG
+        static do Debug.Assert(sizeof<VkMemoryHeap_16> = sizeof<VkMemoryHeap> * 16, $"Unexpected size for VkMemoryHeap_16, expected {sizeof<VkMemoryHeap> * 16} but got {sizeof<VkMemoryHeap_16>}.")
+        #endif
+
         [<FieldOffset(0)>]
         val mutable public First : VkMemoryHeap
 
@@ -5004,6 +5041,10 @@ type VkMemoryType =
 [<StructLayout(LayoutKind.Explicit, Size = 256)>]
 type VkMemoryType_32 =
     struct
+        #if DEBUG
+        static do Debug.Assert(sizeof<VkMemoryType_32> = sizeof<VkMemoryType> * 32, $"Unexpected size for VkMemoryType_32, expected {sizeof<VkMemoryType> * 32} but got {sizeof<VkMemoryType_32>}.")
+        #endif
+
         [<FieldOffset(0)>]
         val mutable public First : VkMemoryType
 
@@ -14266,6 +14307,10 @@ module Vulkan14 =
     [<StructLayout(LayoutKind.Explicit, Size = 64)>]
     type VkQueueGlobalPriority_16 =
         struct
+            #if DEBUG
+            static do Debug.Assert(sizeof<VkQueueGlobalPriority_16> = sizeof<VkQueueGlobalPriority> * 16, $"Unexpected size for VkQueueGlobalPriority_16, expected {sizeof<VkQueueGlobalPriority> * 16} but got {sizeof<VkQueueGlobalPriority_16>}.")
+            #endif
+
             [<FieldOffset(0)>]
             val mutable public First : VkQueueGlobalPriority
 
@@ -32909,6 +32954,10 @@ module rec Extensions =
         [<StructLayout(LayoutKind.Explicit, Size = 8)>]
         type VkFragmentShadingRateCombinerOpKHR_2 =
             struct
+                #if DEBUG
+                static do Debug.Assert(sizeof<VkFragmentShadingRateCombinerOpKHR_2> = sizeof<VkFragmentShadingRateCombinerOpKHR> * 2, $"Unexpected size for VkFragmentShadingRateCombinerOpKHR_2, expected {sizeof<VkFragmentShadingRateCombinerOpKHR> * 2} but got {sizeof<VkFragmentShadingRateCombinerOpKHR_2>}.")
+                #endif
+
                 [<FieldOffset(0)>]
                 val mutable public First : VkFragmentShadingRateCombinerOpKHR
 

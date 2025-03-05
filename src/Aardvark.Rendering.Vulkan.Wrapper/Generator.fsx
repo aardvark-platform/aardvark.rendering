@@ -50,6 +50,14 @@ module XmlStuff =
         | UInt64 of uint64
         | Float32 of float32
 
+        member x.ToInt32 =
+            match x with
+            | Int32 v -> Some v
+            | Int64 v -> Some <| int32 v
+            | UInt32 v -> Some <| int32 v
+            | UInt64 v -> Some <| int32 v
+            | Float32 _ -> None
+
         member x.Negated =
             match x with
             | Int32 v -> Int32 ~~~v
@@ -114,14 +122,31 @@ module XmlStuff =
             else
                 failwithf "not a number: %A" v
 
-    let rec toDefine (v : string) : string =
-        if v.StartsWith "(" && v.EndsWith ")" then
-            v.Substring(1, v.Length-2) |> toDefine
-        elif v.Contains("-") then
-            let values = v.Split('-') |> Array.map (toNumeric 10)
-            values |> Array.reduce (-) |> string
-        else
-            v |> toNumeric 10 |> string
+    let rec toDefine (t : string) (v : string) : Numeric =
+        let v =
+            if v.StartsWith "(" && v.EndsWith ")" then
+                v.Substring(1, v.Length-2) |> toDefine t
+            elif v.Contains("-") then
+                let values = v.Split('-') |> Array.map (toNumeric 10)
+                values |> Array.reduce (-)
+            else
+                v |> toNumeric 10
+
+        match v, t with
+        | Int32 _, "int32_t"
+        | Int64 _, "int64_t"
+        | UInt32 _, "uint32_t"
+        | UInt64 _, "uint64_t"
+        | Float32 _, "float" -> v
+
+        | Int32 x, "uint32_t" -> UInt32 <| uint32 x
+        | Int64 x, "uint64_t" -> UInt64 <| uint64 x
+        | UInt32 x, "int32_t" -> Int32 <| int32 x
+        | UInt64 x, "int64_t" -> Int64 <| int64 x
+
+        | _ ->
+            printfn $"WARNING: Unknown data type for define: {t}"
+            v
 
     let toInt32 (radix : int) (v : string) =
         match v |> toNumeric radix with
@@ -283,18 +308,18 @@ module Type =
         let ret = regex.Match str
         if ret.Success then Some ret else None
 
-    let arraySize (defines : Map<string, string>) (s : string) =
+    let arraySize (defines : Map<string, Numeric>) (s : string) =
         match System.Int32.TryParse s with
         | (true, s) -> s
         | _ ->
             match Map.tryFind s defines with
             | Some v ->
-                match System.Int32.TryParse v with
-                | (true, v) -> v
+                match v.ToInt32 with
+                | Some v -> v
                 | _ -> failwith "non-integer array-size"
             | _ -> failwithf "non-literal array-size: %A" s
 
-    let arraySize2d (defines : Map<string, string>) (width : string) (height : string) =
+    let arraySize2d (defines : Map<string, Numeric>) (width : string) (height : string) =
         let w = arraySize defines width
         let h = arraySize defines height
         w, h
@@ -302,7 +327,7 @@ module Type =
     let private cleanName (name : string) =
         name.Trim().Replace("FlagBits", "Flags")
 
-    let parseTypeAndName (defined : Map<string, string>) (strangeType : string) (strangeName : string) =
+    let parseTypeAndName (defined : Map<string, Numeric>) (strangeType : string) (strangeName : string) =
         let cleaned = cleanRx.Replace(strangeType, "")
 
         match cleaned |> tryMatch typeRx with
@@ -348,7 +373,7 @@ module Type =
         | BitField (t, _) ->
             baseType t
 
-    let readXmlTypeAndName (defined : Map<string, string>) (e : XElement) =
+    let readXmlTypeAndName (defined : Map<string, Numeric>) (e : XElement) =
         let strangeName = e.Element(xname "name").Value
         e.Elements(xname "comment").Remove()
         let strangeType =
@@ -488,7 +513,7 @@ type Struct = {
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Struct =
-    let tryRead (defines : Map<string, string>) (e : XElement) =
+    let tryRead (defines : Map<string, Numeric>) (e : XElement) =
         let isUnion = attrib e "category" = Some "union"
         let comment = Comment.tryRead e
         match attrib e "name" with
@@ -618,7 +643,7 @@ type Typedef = { name : string; baseType : Type }
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Typedef =
 
-    let tryRead (defines : Map<string, string>) (e : XElement) =
+    let tryRead (defines : Map<string, Numeric>) (e : XElement) =
         let (t, n) = Type.readXmlTypeAndName defines e
 
         let emit =
@@ -654,7 +679,7 @@ type Command = { returnType : Type; name : string; parameters : list<Type * stri
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Command =
-    let tryRead (defines : Map<string, string>) (e : XElement) : Option<Choice<Command, Alias>> =
+    let tryRead (defines : Map<string, Numeric>) (e : XElement) : Option<Choice<Command, Alias>> =
         try
             let proto = e.Element(xname "proto")
             let (returnType,name) = Type.readXmlTypeAndName defines proto
@@ -984,8 +1009,8 @@ module XmlReader =
             |> Seq.collect (fun e ->
                   let choices = e.Elements("enum")
                   choices |> Seq.choose (fun c ->
-                    match attrib c "name", attrib c "value" with
-                        | Some name, Some value -> Some(name, toDefine value)
+                    match attrib c "name", attrib c "value", attrib c "type" with
+                        | Some name, Some value, Some typ -> Some(name, toDefine typ value)
                         | _ -> None
                   )
               )
@@ -1215,7 +1240,7 @@ module XmlReader =
             |> Seq.map (fun s -> s.name, s)
             |> Map.ofSeq
 
-    let structs (defines : Map<string, string>) (registry : XElement) =
+    let structs (defines : Map<string, Numeric>) (registry : XElement) =
         registry.Elements("types")
             |> Seq.collect (fun tc -> tc.Elements ("type"))
             |> Seq.filter (fun t -> attrib t "category" = Some "struct" || attrib t "category" = Some "union")
@@ -1224,7 +1249,7 @@ module XmlReader =
             |> Seq.map (fun s -> s.name, s)
             |> Map.ofSeq
 
-    let typedefs (defines : Map<string, string>) (registry : XElement) =
+    let typedefs (defines : Map<string, Numeric>) (registry : XElement) =
         registry.Elements("types")
             |> Seq.collect (fun tc -> tc.Elements ("type"))
             |> Seq.filter (fun t ->  attrib t "category" = Some "basetype")
@@ -1252,7 +1277,7 @@ module XmlReader =
             )
             |> Map.ofSeq
 
-    let commands (defines : Map<string, string>) (registry : XElement) =
+    let commands (defines : Map<string, Numeric>) (registry : XElement) =
         let elems =
             registry.Element(xname "commands").Elements("command")
 
@@ -1421,6 +1446,7 @@ module FSharpWriter =
         printfn "#nowarn \"49\""
         printfn ""
         printfn "open System"
+        printfn "open System.Diagnostics"
         printfn "open System.Runtime.InteropServices"
         printfn "open System.Runtime.CompilerServices"
         printfn "open Microsoft.FSharp.NativeInterop"
@@ -1451,6 +1477,10 @@ module FSharpWriter =
             printfn "[<StructLayout(LayoutKind.Explicit, Size = %d)>]" totalSize
             printfn "type %s =" typ.Name
             printfn "    struct"
+            printfn "        #if DEBUG"
+            printfn $"        static do Debug.Assert(sizeof<{typ.Name}> = sizeof<{typ.baseType}> * {typ.count}, $\"Unexpected size for {typ.Name}, expected {{sizeof<{typ.baseType}> * {typ.count}}} but got {{sizeof<{typ.Name}>}}.\")"
+            printfn "        #endif"
+            printfn ""
             printfn "        [<FieldOffset(0)>]"
             printfn "        val mutable public First : %s" typ.baseType
             printfn ""
@@ -1491,15 +1521,15 @@ module FSharpWriter =
 ////        VK_STRUCTURE_TYPE_MIR_SURFACE_CREATE_INFO_KHR = 1000007000,
 ////        VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR = 1000008000,
 ////        VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000,
-    let apiConstants (map : Map<string, string>) =
+    let apiConstants (map : Map<string, Numeric>) =
         printfn ""
         printfn "[<AutoOpen>]"
         printfn "module Constants ="
-        for (n,v) in Map.toSeq map do
+        for (n, v) in Map.toSeq map do
             printfn ""
             printfn "    [<Literal>]"
             let n = n |> capsToCamelCase [] ""
-            printfn "    let %s = %s" n v
+            printfn "    let %s = %s" n (string v)
         printfn ""
 
     let findEnumVendorSuffix (vendorTags : string list) (e : string) =
