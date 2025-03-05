@@ -21,49 +21,49 @@ module Constants =
     let VkAttachmentUnused = 4294967295u
 
     [<Literal>]
-    let VkFalse = 0
+    let VkFalse = 0u
 
     [<Literal>]
     let VkLodClampNone = 1000.00000000f
 
     [<Literal>]
-    let VkLuidSize = 8
+    let VkLuidSize = 8u
 
     [<Literal>]
-    let VkMaxDescriptionSize = 256
+    let VkMaxDescriptionSize = 256u
 
     [<Literal>]
-    let VkMaxDeviceGroupSize = 32
+    let VkMaxDeviceGroupSize = 32u
 
     [<Literal>]
-    let VkMaxDriverInfoSize = 256
+    let VkMaxDriverInfoSize = 256u
 
     [<Literal>]
-    let VkMaxDriverNameSize = 256
+    let VkMaxDriverNameSize = 256u
 
     [<Literal>]
-    let VkMaxExtensionNameSize = 256
+    let VkMaxExtensionNameSize = 256u
 
     [<Literal>]
-    let VkMaxGlobalPrioritySize = 16
+    let VkMaxGlobalPrioritySize = 16u
 
     [<Literal>]
-    let VkMaxMemoryHeaps = 16
+    let VkMaxMemoryHeaps = 16u
 
     [<Literal>]
-    let VkMaxMemoryTypes = 32
+    let VkMaxMemoryTypes = 32u
 
     [<Literal>]
-    let VkMaxPhysicalDeviceNameSize = 256
+    let VkMaxPhysicalDeviceNameSize = 256u
 
     [<Literal>]
-    let VkMaxPipelineBinaryKeySizeKhr = 32
+    let VkMaxPipelineBinaryKeySizeKhr = 32u
 
     [<Literal>]
-    let VkMaxShaderModuleIdentifierSizeExt = 32
+    let VkMaxShaderModuleIdentifierSizeExt = 32u
 
     [<Literal>]
-    let VkMaxVideoAv1ReferencesPerFrameKhr = 7
+    let VkMaxVideoAv1ReferencesPerFrameKhr = 7u
 
     [<Literal>]
     let VkPartitionedAccelerationStructurePartitionIndexGlobalNv = 4294967295u
@@ -96,10 +96,10 @@ module Constants =
     let VkSubpassExternal = 4294967295u
 
     [<Literal>]
-    let VkTrue = 1
+    let VkTrue = 1u
 
     [<Literal>]
-    let VkUuidSize = 16
+    let VkUuidSize = 16u
 
     [<Literal>]
     let VkWholeSize = 18446744073709551615UL
