@@ -401,7 +401,7 @@ type ShaderLimits =
         l.line "max clip/cull distances: %d" x.MaxCombinedClipAndCullDistances
         l.line "subpixel offset bits:    %d" x.SubPixelInterpolationOffsetBits
         l.line "texel offset:            [%d .. %d]" x.MinTexelOffset x.MaxTexelOffset
-        l.line "texel grather offset:    [%d .. %d]" x.MinTexelGatherOffset x.MaxTexelGatherOffset
+        l.line "texel gather offset:     [%d .. %d]" x.MinTexelGatherOffset x.MaxTexelGatherOffset
         l.line "interpolation offset:    [%f .. %f]" x.MinInterpolationOffset x.MaxInterpolationOffset
 
 type PrecisionLimits =
