@@ -11,7 +11,7 @@ open KHRSwapchain
 open KHRSurface
 
 #nowarn "9"
-// #nowarn "51"
+#nowarn "51"
 
 [<AutoOpen>]          
 module ImageTrafoExtensions =
@@ -31,6 +31,7 @@ module ImageTrafoExtensions =
                     failwithf "box cannot be transformed using %A" t
 
 type Swapchain(device : Device, description : SwapchainDescription) =
+    let fence = device.CreateFence()
     let surface = description.surface
     let renderPass = description.renderPass
 
@@ -75,9 +76,9 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 return !!pHandle
             }
 
-        use token = device.Token
+        use dt = device.Token
 
-        let buffers = 
+        let buffers =
             native {
                 let! pCount = 0u
                 VkRaw.vkGetSwapchainImagesKHR(device.Handle, handle, pCount, NativePtr.zero)
@@ -89,7 +90,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                     |> check "could not get Swapchain Images"
 
                 return imageHandles |> Array.map (fun handle ->
-                    let image = 
+                    let image =
                         new Image(
                             device,
                             handle,
@@ -105,36 +106,36 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             }
 
         let colorView =
-            let image = 
+            let image =
                 device.CreateImage(
-                    V3i(size.X, size.Y, 1), 1, 1, description.samples, 
-                    TextureDimension.Texture2D, 
-                    VkFormat.toTextureFormat description.colorFormat, 
+                    V3i(size.X, size.Y, 1), 1, 1, description.samples,
+                    TextureDimension.Texture2D,
+                    VkFormat.toTextureFormat description.colorFormat,
                     VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                 )
             // hacky-hack
-            token.Enqueue (Command.TransformLayout(image, VkImageLayout.ColorAttachmentOptimal))
-            
+            dt.Enqueue (Command.TransformLayout(image, VkImageLayout.ColorAttachmentOptimal))
+
             let view = device.CreateOutputImageView(image, 0, 1, 0, 1)
             view
 
         let depthView =
             match description.depthFormat with
                 | Some depthFormat ->
-                    let image = 
+                    let image =
                         device.CreateImage(
-                            V3i(size.X, size.Y, 1), 1, 1, description.samples, 
-                            TextureDimension.Texture2D, 
-                            VkFormat.toTextureFormat depthFormat, 
+                            V3i(size.X, size.Y, 1), 1, 1, description.samples,
+                            TextureDimension.Texture2D,
+                            VkFormat.toTextureFormat depthFormat,
                             VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                         )
                     // hacky-hack
-                    token.Enqueue (Command.TransformLayout(image, VkImageLayout.DepthStencilAttachmentOptimal))
+                    dt.Enqueue (Command.TransformLayout(image, VkImageLayout.DepthStencilAttachmentOptimal))
 
                     let view = device.CreateOutputImageView(image, 0, 1, 0, 1)
 
                     Some view
-                | _ -> 
+                | _ ->
                     None
 
         let framebuffer =
@@ -149,20 +150,17 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             if description.samples = 1 then
                 None
             else
-                let image = 
+                let image =
                     device.CreateImage(
-                        V3i(size.X, size.Y, 1), 1, 1, 1, 
-                        TextureDimension.Texture2D, 
-                        VkFormat.toTextureFormat description.colorFormat, 
+                        V3i(size.X, size.Y, 1), 1, 1, 1,
+                        TextureDimension.Texture2D,
+                        VkFormat.toTextureFormat description.colorFormat,
                         VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                     )
                 // hacky-hack
-                token.Enqueue (Command.TransformLayout(image, VkImageLayout.TransferDstOptimal))
+                dt.Enqueue (Command.TransformLayout(image, VkImageLayout.TransferDstOptimal))
                 //let view = device.CreateImageView(image, 0, 1, 0, 1, VkComponentMapping.Identity)
                 Some image
-                
-
-        token.Sync()
 
         handle, buffers, framebuffer, resolvedImage
 
@@ -174,7 +172,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
     let mutable resolvedImage : Option<Image> = None
     let mutable framebuffer : Option<Framebuffer> = None
-    let currentBuffer = ref 0u
+    let mutable currentBuffer = 0u
 
     let update() =
         if surface.Handle.IsValid && disposed = 0 then
@@ -200,15 +198,36 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 buffers <- newBuffers
                 framebuffer <- Some newFramebuffer
                 resolvedImage <- newResolvedImage
-                currentBuffer := 0u
-
-
-    member x.Present = QueueCommand.Present(handle, currentBuffer)
-    member x.AcquireNextImage = QueueCommand.AcquireNextImage(handle, currentBuffer)
+                currentBuffer <- 0u
 
     member x.Size = update(); size
     member x.Description = description
     member x.Samples = description.samples
+
+    member private x.TryAcquireNextImage() =
+        fence.Reset()
+        let result = VkRaw.vkAcquireNextImageKHR(device.Handle, handle, ~~~0UL, VkSemaphore.Null, fence.Handle, &&currentBuffer)
+
+        if VkResult.isSwapFailure result then false
+        else
+            result |> check "could not acquire swapchain image"
+            fence.Wait()
+            true
+
+    member private x.TryPresent(queue: DeviceQueue) =
+        let mutable presentInfo =
+            VkPresentInfoKHR(
+                0u, NativePtr.zero,
+                1u, &&handle,
+                &&currentBuffer, NativePtr.zero
+            )
+
+        let result = VkRaw.vkQueuePresentKHR(queue.Handle, &&presentInfo)
+
+        if VkResult.isSwapFailure result then false
+        else
+            result |> check "could not present swapchain"
+            true
 
     member x.RenderFrame (render : Framebuffer -> unit) : bool =
         lock x (fun () ->
@@ -298,12 +317,10 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 let dstRange = srcRange.Transformed description.blitTrafo
 
                 // acquire a swapchain image for rendering
-                let! acquire = x.AcquireNextImage
-                if acquire = QueueCommandResult.Success then
+                if x.TryAcquireNextImage() then
 
                     // determine color and output images (may differ when using MSAA)
-                    let outputIndex = int !currentBuffer
-                    backbuffer <- buffers.[outputIndex].Image
+                    backbuffer <- buffers.[int currentBuffer].Image
 
                     // blit the current image to the final backbuffer using the ranges from above
                     //do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
@@ -322,8 +339,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                     do! Command.TransformLayout(backbuffer, VkImageLayout.PresentSrcKhr)
 
                     // present the backbuffer
-                    let! present = x.Present
-                    return present = QueueCommandResult.Success
+                    return! x.TryPresent
 
                 else
                     return false
@@ -334,6 +350,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
         let o = System.Threading.Interlocked.Exchange(&disposed, 1)
         if o = 0 then
             // delete old things
+            VkRaw.vkDeviceWaitIdle(device.Handle) |> check "could not wait for device to be idle"
             VkRaw.vkDestroySwapchainKHR(device.Handle, handle, NativePtr.zero)
             
             framebuffer |> Option.iter (fun framebuffer ->
@@ -345,13 +362,14 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
             resolvedImage|> Option.iter Disposable.dispose
             buffers |> Array.iter Disposable.dispose
+            fence.Dispose()
 
             handle <- VkSwapchainKHR.Null
             size <- V2i.Zero
             framebuffer <- None
             buffers <- Array.zeroCreate 0
             resolvedImage <- None
-            currentBuffer := 0u
+            currentBuffer <- 0u
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

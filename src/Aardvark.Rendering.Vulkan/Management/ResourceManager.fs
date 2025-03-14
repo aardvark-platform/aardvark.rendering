@@ -598,7 +598,7 @@ module Resources =
             {
                 icreate = fun (b : Aardvark.Rendering.IndirectBuffer) -> device.CreateIndirectBuffer(indexed, b)
                 idestroy = fun b -> b.Dispose()
-                ieagerDestroy = true
+                ieagerDestroy = false
             }
         )
 

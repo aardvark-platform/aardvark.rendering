@@ -132,7 +132,8 @@ type VulkanVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
     let swResolve   = Stopwatch()
     let swTotal     = Stopwatch()
     
-    let queue = device.GraphicsFamily.Queues |> List.head
+    let queueHandle = device.GraphicsFamily.CurrentQueue
+    let queue = queueHandle.Queue
     
     new(samples : int, debug : bool, adjustSize : V2i -> V2i) = new VulkanVRApplicationLayered(samples, DebugLevel.ofBool debug, adjustSize)
 
@@ -346,9 +347,8 @@ type VulkanVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
         }
 
     override x.Use (action : unit -> 'r) =
-        let mutable res = Unchecked.defaultof<'r>
-        device.GraphicsFamily.RunSynchronously(QueueCommand.Custom (fun _queue _fence -> res <- action()))
-        res
+        use t = queue.Family.CurrentToken
+        t.FlushAndPerform (ignore >> action)
 
     override x.Release() = 
         // delete views
@@ -364,6 +364,7 @@ type VulkanVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
         fImg.Dispose()
 
         // dispose the app
+        queueHandle.Dispose()
         app.Dispose()
         
     member x.BeforeRender = beforeRender

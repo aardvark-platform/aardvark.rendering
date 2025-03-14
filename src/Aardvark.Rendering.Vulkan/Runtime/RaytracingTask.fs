@@ -167,8 +167,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
         else
             device.ComputeFamily, fun () -> device.ComputeToken
 
-    let pool = family.CreateCommandPool(CommandPoolFlags.ResetBuffer)
-    let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+    let pool = family.CreateCommandPool()
     let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
     let effect =
@@ -181,8 +180,6 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
     let mutable currentEffect = compiled.Effect
 
     let updateCommandResources (t : AdaptiveToken) (rt : RenderToken) =
-        use tt = getDeviceToken()
-
         let effect = effect.GetValue t
 
         if effect <> currentEffect then
@@ -200,8 +197,6 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
             let commandChanged =
                 compiled.Update t
 
-            tt.Sync()
-
             if commandChanged || resourcesChanged then
                 if device.DebugConfig.PrintRenderTaskRecompile then
                     let cause =
@@ -213,6 +208,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
                     Log.line "[Raytracing] recompile commands: %s" cause
 
+                pool.Reset()
                 inner.Begin(CommandBufferUsage.None, true)
 
                 for cmd in compiled.Commands do
@@ -223,35 +219,33 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
     member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
         x.EvaluateIfNeeded token () (fun token ->
-            use __ = renderToken.Use()
+            use _ = renderToken.Use()
+            use _ = getDeviceToken()
             updateCommandResources token renderToken
         )
 
     member x.Run(token : AdaptiveToken, renderToken : RenderToken) =
         x.EvaluateAlways token (fun token ->
-            use __ = renderToken.Use()
+            use _ = renderToken.Use()
+            use dt = getDeviceToken()
             updateCommandResources token renderToken
 
             let vulkanQueries = renderToken.GetVulkanQueries(onlyTimeQueries = true)
-            cmd.Begin CommandBufferUsage.OneTimeSubmit
 
-            for q in vulkanQueries do
-                q.Begin cmd
+            dt.perform {
+                for q in vulkanQueries do
+                    do! Command.Begin q
 
-            cmd.Enqueue <| Command.Execute inner
+                do! Command.Execute inner
 
-            for q in vulkanQueries do
-                q.End cmd
-
-            cmd.End()
-
-            family.RunSynchronously(cmd)
+                for q in vulkanQueries do
+                    do! Command.End q
+            }
         )
 
     member x.Dispose() =
         transact (fun _ ->
             compiled.Dispose()
-            cmd.Dispose()
             inner.Dispose()
             pool.Dispose()
         )

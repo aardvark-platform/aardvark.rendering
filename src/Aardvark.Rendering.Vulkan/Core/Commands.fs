@@ -166,28 +166,8 @@ type Command() =
 [<AbstractClass; Sealed; Extension>]
 type CommandBufferExtensions private() =
     [<Extension>]
-    static member Enqueue(this : CommandBuffer, cmd : ICommand) =
-        if not this.IsRecording then
-            failf "cannot enqueue commands to non-recording CommandBuffer"
-
+    static member inline Enqueue(this : CommandBuffer, cmd : ICommand) =
         cmd.Enqueue(this)
-
-    [<Extension>]
-    static member RunSynchronously(this : DeviceQueueFamily, cmd : ICommand) =
-        use pool = this.TakeCommandPool()
-        use buffer = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
-        buffer.Begin(CommandBufferUsage.OneTimeSubmit)
-        CommandBufferExtensions.Enqueue(buffer, cmd)
-        buffer.End()
-        this.RunSynchronously(buffer)
-
-    [<Extension>]
-    static member Compile(this : CommandPool, level : CommandBufferLevel, cmd : ICommand) =
-        let buffer = this.CreateCommandBuffer(level)
-        buffer.Begin(CommandBufferUsage.SimultaneousUse)
-        CommandBufferExtensions.Enqueue(buffer, cmd)
-        buffer.End()
-        buffer
 
 [<AutoOpen>]
 module CommandAPI =
@@ -249,11 +229,14 @@ module CommandAPI =
             buffer.Enqueue m
             f()
 
-        member x.Bind(m : QueueCommand, f : QueueCommandResult -> 'a) =
-            let res = buffer.EnqueueWithResult m
+        member x.Bind(m : DeviceQueue -> 'Result, f : 'Result -> 'a) =
+            let res = buffer.FlushAndPerform m
             f res
 
         member x.Return(v : 'a) = v
+
+        member x.ReturnFrom(m: DeviceQueue -> 'Result) =
+            buffer.FlushAndPerform m
 
         member x.Delay(f : unit -> 'a) = f
 
@@ -268,6 +251,7 @@ module CommandAPI =
             f m
 
         member x.Zero() = ()
+
         member x.For(elements : seq<'a>, f : 'a -> unit) =
             for a in elements do f a
 
@@ -284,11 +268,11 @@ module CommandAPI =
 
     type DeviceToken with
         member x.enqueue = TokenCommandBuilder(x, ignore)
-        member x.perform = TokenCommandBuilder(x, fun t -> t.Sync())
+        member x.perform = TokenCommandBuilder(x, fun t -> t.Flush())
 
     type Device with
         member x.eventually = TokenCommandBuilder(x.Token, Disposable.dispose)
-        member x.perform = TokenCommandBuilder(x.Token, fun t -> t.Sync(); t.Dispose())
+        member x.perform = TokenCommandBuilder(x.Token, fun t -> t.Flush(); t.Dispose())
 
     type DeviceQueueFamily with
         member x.run = SynchronousCommandBuilder(x)

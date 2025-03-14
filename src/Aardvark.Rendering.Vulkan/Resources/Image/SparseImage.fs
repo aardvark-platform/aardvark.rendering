@@ -194,14 +194,9 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                             0u, NativePtr.zero,
                             0u, NativePtr.zero
                         )
-                    let q = device.GraphicsFamily.GetQueue()
-                    let f = device.CreateFence()
-                    lock q (fun () ->
-                        q.BindSparse([| bind |], f.Handle)
-                            |> check "could not bind sparse memory"
-                    )
-                    f.Wait()
-                    f.Dispose()
+
+                    use h = device.GraphicsFamily.CurrentQueue
+                    h.Queue.BindSparseSynchronously([| bind |])
                 }
 
             tailPtr
@@ -311,14 +306,8 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                 
                         )
 
-                    let q = device.GraphicsFamily.GetQueue()
-                    let f = device.CreateFence()
-                    lock q (fun () ->
-                        q.BindSparse([| info |], f.Handle)
-                            |> check "could not bind sparse memory"
-                        f.Wait()
-                        f.Dispose()
-                    )
+                    use h = device.GraphicsFamily.CurrentQueue
+                    h.Queue.BindSparseSynchronously([| info |])
                 }
             )
 

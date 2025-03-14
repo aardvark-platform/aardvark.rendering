@@ -22,6 +22,13 @@ type VulkanException(error : VkResult, message : string, [<Optional; DefaultPara
 [<AutoOpen>]
 module private Utilities =
 
+    module VkResult =
+        open KHRSurface
+        open KHRSwapchain
+
+        let inline isSwapFailure (result: VkResult) =
+            result = VkResult.ErrorOutOfDateKhr || result = VkResult.ErrorSurfaceLostKhr || result = VkResult.SuboptimalKhr
+
     type Converter<'a when 'a : unmanaged> private() =
         static let convert =
             let t = typeof<'a>
@@ -122,6 +129,12 @@ module private Utilities =
                 v.Dispose()
 
     let native = NativeBuilder()
+
+    module NativePtr =
+        let inline stackUseArr (mapping: 'T -> 'U) (data: 'T[]) =
+            let ptr = NativePtr.stackalloc<'U> data.Length
+            for i = 0 to data.Length - 1 do ptr.[i] <- mapping data.[i]
+            ptr
 
     let inline (!!) (v : nativeptr<'a>) = NativePtr.read v
     let inline (<!-) (ptr : nativeptr<'a>) (v : 'a) = NativePtr.write ptr v

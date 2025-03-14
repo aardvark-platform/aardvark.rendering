@@ -567,16 +567,12 @@ module Buffer =
                 )
             else
                 let temp = device.HostMemory |> create VkBufferUsageFlags.TransferDstBit (int64 sizeInBytes)
-                let task = device.GraphicsFamily.Start(QueueCommand.ExecuteCommand([], [], Command.Copy(src, int64 srcOffset, temp, 0L, int64 sizeInBytes)))
+                let task = device.GraphicsFamily.StartTask(Command.Copy(src, int64 srcOffset, temp, 0L, int64 sizeInBytes))
 
                 (fun () ->
                     task.Wait()
-                    if task.IsFaulted then
-                        temp.Dispose()
-                        raise task.Exception
-                    else
-                        temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, sizeInBytes))
-                        temp.Dispose()
+                    temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, sizeInBytes))
+                    temp.Dispose()
                 )
         else
             ignore

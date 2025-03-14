@@ -293,9 +293,8 @@ module GeometryPoolUtilities =
                             VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, pRegion)
                                 |> check "could not flush range"
                         }
-                        use t = device.Token
 
-                        t.Enqueue 
+                        device.GraphicsFamily.RunSynchronously(
                             { new Command() with
                                 member x.Compatible = QueueFlags.All
                                 member x.Enqueue cmd =
@@ -306,8 +305,7 @@ module GeometryPoolUtilities =
                                         return []
                                     }
                             }
-
-                        t.Sync()
+                        )
             )
 
         interface ILockedResource with
@@ -385,22 +383,17 @@ module GeometryPoolUtilities =
 
                     | _ ->
                         device.GraphicsFamily.RunSynchronously(
-                            QueueCommand.ExecuteCommand(
-                                [], [],
-                                { new Command() with
-                                    member x.Compatible = QueueFlags.All
-                                    member x.Enqueue(cmd) =
-                                        cmd.AppendCommand()
-                                        native {
-                                            let! pCopyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
-                                            VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
-                                            return []
-                                        }
-                                }
-                            )
+                            { new Command() with
+                                member x.Compatible = QueueFlags.All
+                                member x.Enqueue(cmd) =
+                                    cmd.AppendCommand()
+                                    native {
+                                        let! pCopyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
+                                        VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
+                                        return []
+                                    }
+                            }
                         )
-
-
             )
 
         member x.IsEmpty
@@ -495,7 +488,7 @@ module GeometryPoolUtilities =
                                 t.Enqueue(b)
                                 deleteBuffers.Add old
 
-                            token.Sync()
+                            token.Flush()
                             capacity <- newCapacity
 
                             fun () ->
