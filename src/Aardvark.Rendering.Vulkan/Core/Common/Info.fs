@@ -274,15 +274,3 @@ module MemoryInfo =
 
     let internal hostScore (info : MemoryInfo) =
         (MemoryFlags.hostScore info.flags, info.heap.Capacity.Bytes)
-
-
-type CommandBufferLevel =
-    | Primary = 0
-    | Secondary = 1
-
-[<Flags>]
-type CommandBufferUsage = 
-    | None = 0
-    | OneTimeSubmit = 0x00000001
-    | RenderPassContinue = 0x00000002
-    | SimultaneousUse = 0x00000004

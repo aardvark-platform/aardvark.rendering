@@ -41,8 +41,8 @@ module GeometryPoolUtilities =
                         VkBufferCreateFlags.None,
                         uint64 size, 
                         VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
-                        device.AllSharingMode,
-                        device.AllQueueFamiliesCnt, device.AllQueueFamiliesPtr
+                        device.SharingMode,
+                        device.QueueFamilyCount, device.QueueFamilyIndices
                     )
                 VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
                     |> check "could not create buffer"
@@ -178,9 +178,9 @@ module GeometryPoolUtilities =
                             VkBufferCreateFlags.None,
                             uint64 streamSize,
                             VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
-                            device.AllSharingMode,
-                            device.AllQueueFamiliesCnt,
-                            device.AllQueueFamiliesPtr
+                            device.SharingMode,
+                            device.QueueFamilyCount,
+                            device.QueueFamilyIndices
                         )
 
                     VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pBuffer)
@@ -329,9 +329,9 @@ module GeometryPoolUtilities =
                             VkBufferCreateFlags.None,
                             uint64 streamSize,
                             VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
-                            device.AllSharingMode,
-                            device.AllQueueFamiliesCnt,
-                            device.AllQueueFamiliesPtr
+                            device.SharingMode,
+                            device.QueueFamilyCount,
+                            device.QueueFamilyIndices
                         )
 
                     VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pBuffer)

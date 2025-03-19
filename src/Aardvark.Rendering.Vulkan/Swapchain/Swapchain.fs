@@ -276,7 +276,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                     do! Command.TransformLayout(colorView.Image, VkImageLayout.TransferSrcOptimal)
                     do! Command.TransformLayout(resolvedImage, VkImageLayout.TransferDstOptimal)
 
-                    if device.AllCount > 1u then
+                    if device.IsDeviceGroup then
                         let size = framebuffer.Size
                         let range =
                             {
@@ -284,7 +284,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                                 frMax = size - V2i.II
                                 frLayers = Range1i(0,renderPass.LayerCount-1)
                             }
-                        let ranges = range.Split(int device.AllCount)
+                        let ranges = range.Split(int device.PhysicalDevices.Length)
                         do! Command.PerDevice (fun di ->
                             let myRange = ranges.[di]
 
@@ -304,7 +304,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 | None ->
                     ()
 
-                if device.AllCount > 1u then
+                if device.IsDeviceGroup then
                     //do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
                     do! Command.SyncPeersDefault(currentImage, VkImageLayout.TransferSrcOptimal)
                     //do! Command.TransformLayout(currentImage, VkImageLayout.TransferDstOptimal)

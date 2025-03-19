@@ -781,7 +781,7 @@ module ``Image Command Extensions`` =
                         cmd.AppendCommand()
 
                         let baseImage = img.Image
-                        let deviceIndices = baseImage.Device.AllIndicesArr
+                        let deviceIndices = baseImage.Device.PhysicalDeviceGroup.AllIndicesArr
 
 
                         for di in deviceIndices do
@@ -813,7 +813,7 @@ module ``Image Command Extensions`` =
                                     )
                                 )
 
-                        VkRaw.vkCmdSetDeviceMask(cmd.Handle, baseImage.Device.AllMask)
+                        VkRaw.vkCmdSetDeviceMask(cmd.Handle, baseImage.Device.PhysicalDevice.DeviceMask)
 
                         let mem =
                             VkMemoryBarrier(
@@ -846,7 +846,7 @@ module ``Image Command Extensions`` =
                             frMax = img.Size.XY - V2i.II
                             frLayers = arrayRange
                         }
-                    range.Split(int device.AllCount)
+                    range.Split(int device.PhysicalDevices.Length)
 
                 command {
                     do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
@@ -1137,7 +1137,7 @@ module Image =
                 let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true, export.Enabled)
 
                 if mayHavePeers then
-                    let indices = device.AllIndicesArr
+                    let indices = device.PhysicalDeviceGroup.AllIndicesArr
                     let handles = Array.zeroCreate indices.Length
                     handles.[0] <- handle
                     for i in 1 .. indices.Length - 1 do

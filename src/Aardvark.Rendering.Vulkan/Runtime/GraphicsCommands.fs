@@ -35,7 +35,7 @@ module ``Graphics Commands`` =
 
                         cmd.AppendCommand()
                         VkRaw.vkCmdBeginRenderPass(cmd.Handle, pInfo, if inlineContent then VkSubpassContents.Inline else VkSubpassContents.SecondaryCommandBuffers)
-                        return [renderPass :> ICommandResource; framebuffer :> ICommandResource]
+                        return [renderPass :> IResource; framebuffer :> IResource]
                     }
             }
 

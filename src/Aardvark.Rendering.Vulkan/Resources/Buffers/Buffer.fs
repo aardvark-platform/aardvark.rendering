@@ -306,9 +306,9 @@ module Buffer =
                 VkBufferCreateFlags.None,
                 uint64 size,
                 flags,
-                (if concurrent then device.AllSharingMode else VkSharingMode.Exclusive),
-                (if concurrent then device.AllQueueFamiliesCnt else 0u),
-                (if concurrent then device.AllQueueFamiliesPtr else NativePtr.zero)
+                (if concurrent then device.SharingMode else VkSharingMode.Exclusive),
+                (if concurrent then device.QueueFamilyCount else 0u),
+                (if concurrent then device.QueueFamilyIndices else NativePtr.zero)
             )
 
         let handle =

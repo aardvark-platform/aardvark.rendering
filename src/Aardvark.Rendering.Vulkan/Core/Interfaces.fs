@@ -1,0 +1,44 @@
+﻿namespace Aardvark.Rendering.Vulkan
+
+open System
+
+type IDevice =
+    abstract member Handle : VkDevice
+    abstract member Instance : Instance
+    abstract member PhysicalDevice : PhysicalDevice
+    abstract member IsExtensionEnabled : string -> bool
+
+[<AllowNullLiteral>]
+type IDeviceObject =
+    abstract member DeviceInterface : IDevice
+
+and IDeviceQueueFamily =
+    inherit IDeviceObject
+    abstract member Info : QueueFamilyInfo
+
+type ICommandPool =
+    inherit IDeviceObject
+    abstract member Handle : VkCommandPool
+
+type IResource =
+    inherit IDisposable
+    abstract member AddReference : unit -> unit
+    abstract member ReferenceCount : int
+
+type IResource<'Handle> =
+    inherit IResource
+    abstract member Handle : 'Handle
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Resource =
+    let compensation (action: unit -> unit) =
+        { new IResource with
+            member x.ReferenceCount = 1
+            member x.AddReference() = ()
+            member x.Dispose() = action() }
+
+    let disposable (disposabl: IDisposable) =
+        { new IResource with
+            member x.ReferenceCount = 1
+            member x.AddReference() = ()
+            member x.Dispose() = disposabl.Dispose() }

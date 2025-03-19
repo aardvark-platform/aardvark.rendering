@@ -131,7 +131,7 @@ module private Utilities =
     let native = NativeBuilder()
 
     module NativePtr =
-        let inline stackUseArr (mapping: 'T -> 'U) (data: 'T[]) =
+        let inline stackUseArr ([<InlineIfLambda>] mapping: 'T -> 'U) (data: 'T[]) =
             let ptr = NativePtr.stackalloc<'U> data.Length
             for i = 0 to data.Length - 1 do ptr.[i] <- mapping data.[i]
             ptr

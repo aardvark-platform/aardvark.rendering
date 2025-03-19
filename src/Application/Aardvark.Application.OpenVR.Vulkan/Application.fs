@@ -297,10 +297,10 @@ type VulkanVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
         swResolve.Start()
         let a = cImg.[TextureAspect.Color, *, 0]
 
-        if device.AllCount > 1u then
+        if device.IsDeviceGroup then
 
             device.perform {
-                for di in 0 .. int device.AllCount - 1 do
+                for di in 0 .. int device.PhysicalDevices.Length - 1 do
                     do! Command.SetDeviceMask (1u <<< di)
                     do! Command.TransformLayout(fImg, VkImageLayout.TransferDstOptimal)
                     do! Command.TransformLayout(cImg, VkImageLayout.TransferSrcOptimal)

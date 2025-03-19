@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 #nowarn "9"
-// #nowarn "51"
 
 open System
 open System.IO
@@ -315,9 +314,9 @@ module private DebugReportHelpers =
 
                 objectTraces.AddOrUpdate(handle, stack, fun _ _ -> stack) |> ignore
 
-[<AbstractClass; Sealed; Extension>]
-type InstanceExtensions private() =
-    static let table = new ConditionalWeakTable<Instance, Option<DebugReportAdapter>>()
+[<AbstractClass; Sealed>]
+type InstanceDebugReportExtensions private() =
+    static let table = ConditionalWeakTable<Instance, Option<DebugReportAdapter>>()
 
     static let notEnabledObservable =
         { new IObservable<DebugMessage> with

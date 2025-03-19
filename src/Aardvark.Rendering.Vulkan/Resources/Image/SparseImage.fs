@@ -343,7 +343,7 @@ type SparseImageDeviceExtensions private() =
                     VkSampleCountFlags.D1Bit,
                     VkImageTiling.Optimal,
                     usage,
-                    device.AllSharingMode, device.AllQueueFamiliesCnt, device.AllQueueFamiliesPtr,
+                    device.SharingMode, device.QueueFamilyCount, device.QueueFamilyIndices,
                     VkImageLayout.Preinitialized
                 )
 

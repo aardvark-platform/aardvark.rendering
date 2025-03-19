@@ -4,20 +4,11 @@ open System
 open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
-open Microsoft.FSharp.NativeInterop
-open FSharp.Data.Adaptive
 open Vulkan11
 
-module CommandResource =
-    let compensation (f : unit -> unit) =
-        { new ICommandResource with
-            member x.AddReference() = ()
-            member x.Dispose() = f() }
-
-    let disposable (d : IDisposable) =
-        { new ICommandResource with
-            member x.AddReference() = ()
-            member x.Dispose() = d.Dispose() }
+type ICommand =
+    abstract member Compatible : QueueFlags
+    abstract member Enqueue : CommandBuffer -> unit
 
 [<AbstractClass>]
 type Command() =
@@ -50,12 +41,12 @@ type Command() =
             member x.Compatible = QueueFlags.All
             member x.Enqueue cmd =
                 cmd.AppendCommand()
-                VkRaw.vkCmdSetDeviceMask(cmd.Handle, cmd.Device.AllMask)
+                VkRaw.vkCmdSetDeviceMask(cmd.Handle, cmd.Device.PhysicalDevice.DeviceMask)
                 []
         }
 
     abstract member Compatible : QueueFlags
-    abstract member Enqueue : CommandBuffer -> list<ICommandResource>
+    abstract member Enqueue : CommandBuffer -> list<IResource>
 
     member private x.EnqueueInner(buffer) =
         let res = x.Enqueue(buffer)
@@ -145,11 +136,11 @@ type Command() =
         { new Command() with
             member x.Compatible = QueueFlags.All
             member x.Enqueue cmd =
-                if cmd.Device.AllCount = 1u then
+                if not cmd.Device.IsDeviceGroup then
                     command(0).Enqueue cmd
                 else
-                    let res = System.Collections.Generic.List<ICommandResource>()
-                    for di in cmd.Device.AllIndicesArr do
+                    let res = System.Collections.Generic.List<IResource>()
+                    for di in cmd.Device.PhysicalDeviceGroup.AllIndicesArr do
                         let mask = 1u <<< int di
                         cmd.AppendCommand()
                         VkRaw.vkCmdSetDeviceMask(cmd.Handle, mask)
@@ -158,16 +149,33 @@ type Command() =
                         res.AddRange(r)
 
                     cmd.AppendCommand()
-                    VkRaw.vkCmdSetDeviceMask(cmd.Handle, cmd.Device.AllMask)
+                    VkRaw.vkCmdSetDeviceMask(cmd.Handle, cmd.Device.PhysicalDevice.DeviceMask)
 
                     CSharpList.toList res
         }
 
-[<AbstractClass; Sealed; Extension>]
-type CommandBufferExtensions private() =
+[<AbstractClass; Sealed>]
+type ICommandExtensions private () =
+
     [<Extension>]
-    static member inline Enqueue(this : CommandBuffer, cmd : ICommand) =
-        cmd.Enqueue(this)
+    static member Enqueue(token: DeviceToken, command: ICommand) =
+        command.Enqueue(token.CurrentBuffer)
+
+    [<Extension>]
+    static member inline RunSynchronously(family: DeviceQueueFamily, command: ICommand) =
+        use token = family.CurrentToken
+        token.Enqueue command
+        token.Flush()
+
+    [<Extension>]
+    static member StartTask(family: DeviceQueueFamily, command: ICommand) =
+        use token = family.CurrentToken
+        token.Enqueue command
+        token.FlushAsync()
+
+    [<Extension>]
+    static member inline Enqueue(buffer: CommandBuffer, command: ICommand) =
+        command.Enqueue(buffer)
 
 [<AutoOpen>]
 module CommandAPI =
@@ -202,7 +210,7 @@ module CommandAPI =
                 member x.Compatible = m.Compatible
                 member x.Enqueue cmd =
                     let ld = m.Enqueue cmd
-                    let rd = CommandResource.compensation comp
+                    let rd = Resource.compensation comp
                     ld @ [rd]
             }
 

@@ -2203,10 +2203,10 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                     frMax = desc.viewport.Max;
                     frLayers = Range1i(0,renderPass.LayerCount-1)
                 }
-            range.Split(int device.AllCount)
+            range.Split(int device.PhysicalDevices.Length)
 
         let sc =
-            if device.AllCount > 1u then
+            if device.IsDeviceGroup then
                 if renderPass.LayerCount > 1 then
                     [| desc.viewport |]
                 else
