@@ -1395,3 +1395,10 @@ module VkFormat =
 
         | _ ->
             None
+
+    /// Tries to find an alternative for the given format.
+    let tryGetNextBetter (format: VkFormat) =
+        match format with
+        | VkFormat.D24UnormS8Uint -> Some VkFormat.D32SfloatS8Uint
+        | VkFormat.X8D24UnormPack32 -> Some VkFormat.D32Sfloat
+        | _ -> None

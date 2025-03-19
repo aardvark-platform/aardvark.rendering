@@ -63,7 +63,7 @@ module RenderPass =
                 let flags = x.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
                 if flags.HasFlag features then Some format
                 else
-                    match format.NextBetter with
+                    match VkFormat.tryGetNextBetter format with
                     | Some better -> x.TryFindFormat(better, features)
                     | None -> None
 

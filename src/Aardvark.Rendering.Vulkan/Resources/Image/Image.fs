@@ -1022,7 +1022,7 @@ module Image =
         let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt)
 
         if features = VkFormatFeatureFlags.None then
-            match fmt.NextBetter with
+            match VkFormat.tryGetNextBetter fmt with
             | Some fmt -> alloc size mipMapLevels count samples dim fmt usage export device
             | None -> failf "bad image format %A" fmt
         else
