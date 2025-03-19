@@ -202,7 +202,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
         Dictionary.ofList [
             for fmt in allFormats do
                 let props =
-                    temporary<VkFormatProperties,_> (fun pProps ->
+                    NativePtr.temp (fun pProps ->
                         VkRaw.vkGetPhysicalDeviceFormatProperties(handle, fmt, pProps)
                         pProps.[0]
                     )

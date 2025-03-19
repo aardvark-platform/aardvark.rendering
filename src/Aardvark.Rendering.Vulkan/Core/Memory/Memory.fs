@@ -30,7 +30,7 @@ type DeviceHeap internal(device : IDevice, memory : MemoryInfo, isHostMemory : b
 
         let mem =
             info |> NativePtr.pin (fun pInfo ->
-                temporary<VkDeviceMemory, VkDeviceMemory> (fun pHandle ->
+                NativePtr.temp (fun pHandle ->
                     VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not 'allocate' null pointer for device heap"
                     NativePtr.read pHandle
@@ -39,7 +39,7 @@ type DeviceHeap internal(device : IDevice, memory : MemoryInfo, isHostMemory : b
 
         let hostPtr =
             if hostVisible then
-                temporary<nativeint, nativeint> (fun pPtr ->
+                NativePtr.temp (fun pPtr ->
                     VkRaw.vkMapMemory(device.Handle, mem, 0UL, 16UL, VkMemoryMapFlags.None, pPtr)
                         |> check "could not map memory"
                     NativePtr.read pPtr
@@ -128,7 +128,7 @@ type DeviceHeap internal(device : IDevice, memory : MemoryInfo, isHostMemory : b
 
                 let hostPtr =
                     if hostVisible then
-                        temporary<nativeint, nativeint> (fun pPtr ->
+                        NativePtr.temp (fun pPtr ->
                             VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.None, pPtr)
                                 |> check "could not map memory"
                             NativePtr.read pPtr

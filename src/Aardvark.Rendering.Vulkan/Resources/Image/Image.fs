@@ -987,7 +987,7 @@ module Image =
             )
 
         let mutable handle =
-            temporary (fun pHandle ->
+            NativePtr.temp (fun pHandle ->
                 info |> NativePtr.pin (fun pInfo ->
                     VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not create image"
@@ -996,7 +996,7 @@ module Image =
             )
 
         let reqs =
-            temporary (fun ptr ->
+            NativePtr.temp (fun ptr ->
                 VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, ptr)
                 NativePtr.read ptr
             )
@@ -1120,14 +1120,14 @@ module Image =
                     )
 
                 let handle =
-                    temporary (fun pHandle ->
+                    NativePtr.temp (fun pHandle ->
                         VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
                             |> check "could not create image"
                         NativePtr.read pHandle
                     )
 
                 let reqs =
-                    temporary (fun ptr ->
+                    NativePtr.temp (fun ptr ->
                         VkRaw.vkGetImageMemoryRequirements(device.Handle, handle,ptr)
                         NativePtr.read ptr
                     )
@@ -1142,7 +1142,7 @@ module Image =
                     handles.[0] <- handle
                     for i in 1 .. indices.Length - 1 do
                         let handle =
-                            temporary (fun pHandle ->    
+                            NativePtr.temp (fun pHandle ->
                                 VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
                                     |> check "could not create image"
                                 NativePtr.read pHandle

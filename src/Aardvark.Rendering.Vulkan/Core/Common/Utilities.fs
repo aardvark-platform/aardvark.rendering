@@ -130,6 +130,7 @@ module private Utilities =
 
     let native = NativeBuilder()
 
+    // TODO: Remove for Aardvark.Base >= 5.3.9
     module NativePtr =
         let inline stackUseArr ([<InlineIfLambda>] mapping: 'T -> 'U) (data: 'T[]) =
             let ptr = NativePtr.stackalloc<'U> data.Length
@@ -137,12 +138,6 @@ module private Utilities =
             ptr
 
     let inline (!!) (v : nativeptr<'a>) = NativePtr.read v
-    let inline (<!-) (ptr : nativeptr<'a>) (v : 'a) = NativePtr.write ptr v
-
-    let temporary<'a, 'r when 'a : unmanaged> (f : nativeptr<'a> -> 'r) =
-        let value = Unchecked.defaultof<'a>
-        use ptr = fixed &value
-        f ptr
 
     let check (str : string) (err : VkResult) =
         if err <> VkResult.Success then

@@ -313,7 +313,7 @@ module Buffer =
 
         let handle =
             info |> NativePtr.pin (fun pInfo ->
-                temporary (fun pHandle ->
+                NativePtr.temp (fun pHandle ->
                     VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not create buffer"
                     NativePtr.read pHandle
@@ -321,7 +321,7 @@ module Buffer =
             )
 
         let reqs =
-            temporary (fun ptr ->
+            NativePtr.temp (fun ptr ->
                 VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
                 NativePtr.read ptr
             )
@@ -603,7 +603,7 @@ module BufferView =
 
             let handle = 
                 info |> NativePtr.pin (fun pInfo ->
-                    temporary (fun pHandle ->
+                    NativePtr.temp (fun pHandle ->
                         VkRaw.vkCreateBufferView(device.Handle, pInfo, NativePtr.zero, pHandle)
                             |> check "could not create BufferView"
                         NativePtr.read pHandle
