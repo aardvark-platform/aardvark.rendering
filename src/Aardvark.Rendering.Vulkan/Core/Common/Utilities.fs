@@ -162,6 +162,7 @@ module private Utilities =
             failwith msg
         ) fmt
 
+    // TODO: Remove for Aardvark.Base >= 5.3.9
     module Map =
         let ofSeqDupl (s : seq<'a * 'b>) =
             let mutable res = Map.empty
@@ -259,7 +260,7 @@ module BaseLibExtensions =
 
         let debug fmt = Printf.kprintf (fun str -> Report.Line(2, "[Vulkan] {0}", str)) fmt
 
-
+    // TODO: Remove for Aardvark.Base >= 5.3.9
     module Array =
         let choosei (f : int -> 'a -> Option<'b>) (a : 'a[]) =
             let res = System.Collections.Generic.List<'b>()
@@ -279,6 +280,7 @@ module BaseLibExtensions =
 
             res.ToArray()
 
+    // TODO: Remove for Aardvark.Base >= 5.3.9
     module List =
         let choosei (f : int -> 'a -> Option<'b>) (a : list<'a>) =
             let res = System.Collections.Generic.List<'b>()
@@ -333,36 +335,6 @@ type VulkanObject() =
 
 
 module Enum =
-    [<AutoOpen>]
-    module BitUtils =
-        let bits (f : int) =
-            let rec testBits (i : int) (mask : int) =
-                if i > 32 then []
-                else
-                    if f &&& mask <> 0 then 
-                        i :: testBits (i + 1) (mask <<< 1)
-                    else
-                        testBits (i + 1) (mask <<< 1)
-            testBits 0 0x1
-
-        let allSubsets (s : list<'a>) =
-            let rec allSubsetsInternal (s : list<'a>) =
-                match s with
-                    | [] -> [Set.empty]
-                    | h :: rest ->
-                        let r = allSubsetsInternal rest
-                        (r |> List.map (Set.add h)) @ r
-
-            allSubsetsInternal s |> List.filter (Set.isEmpty >> not)
-
-        let allSubMasks (m : int) =
-            let bits = bits m
-            allSubsets bits |> List.map (fun s ->
-                s |> Set.fold (fun m b -> m ||| (1 <<< b)) 0
-            )
-
-    let inline allSubFlags (f : ^a) =
-        allSubMasks (int f) |> List.map unbox< ^a >
 
     /// Converts a bit field to another given a conversion table
     let inline convertFlags< ^T, ^U when ^T : comparison and ^T :> Enum and
@@ -374,106 +346,6 @@ module Enum =
         )
 
         result
-
-type private MultiTable<'k, 'v when 'k : equality>(initial : seq<'k * 'v>) =
-    let store = Dictionary<'k, HashSet<'v>>()
-
-    member private x.TryRemoveEnum (f : 'k -> bool, e : byref<Dictionary.Enumerator<'k, HashSet<'v>>>, res : byref<'v>) =
-        if e.MoveNext() then
-            let current = e.Current
-            let key = current.Key
-            if f key then
-                let value = current.Value
-                let thing = value |> Seq.head
-                if value.Count = 1 then
-                    store.Remove key |> ignore
-                    res <- thing
-                    true
-                else
-                    value.Remove thing |> ignore
-                    res <- thing
-                    true
-            else
-                x.TryRemoveEnum(f, &e, &res)
-        else
-            false
-
-    member private x.TryPeekEnum (f : 'k -> bool, e : byref<Dictionary.Enumerator<'k, HashSet<'v>>>, res : byref<'v>) =
-        if e.MoveNext() then
-            let current = e.Current
-            let key = current.Key
-            if f key then
-                let value = current.Value
-                let thing = value |> Seq.head
-                res <- thing
-                true
-            else
-                x.TryPeekEnum(f, &e, &res)
-        else
-            false
-
-    member x.Add (k : 'k, v : 'v) =
-        match store.TryGetValue k with
-            | (true, set) -> set.Add v
-            | _ ->
-                let set = HashSet [v]
-                store.[k] <- set
-                true
-
-    member x.TryRemove (f : 'k -> bool, [<Out>] res : byref<'v>) =
-        let mutable e = store.GetEnumerator()
-        try x.TryRemoveEnum(f, &e, &res)
-        finally e.Dispose()
-
-    member x.TryPeek (f : 'k -> bool, [<Out>] res : byref<'v>) =
-        let mutable e = store.GetEnumerator()
-        try x.TryPeekEnum(f, &e, &res)
-        finally e.Dispose()
-
-type FlagPool<'k, 'v when 'k : enum<int> >(initial : seq<'v>, flags : 'v -> 'k) =
-    static let toInt (k : 'k) = k |> unbox<int>
-    let table = MultiTable<int, 'v>(initial |> Seq.map (fun v -> (toInt (flags v), v)))
-    let available = initial |> Seq.collect (flags >> toInt >> Enum.allSubFlags) |> HashSet.ofSeq
-
-    let changed = new System.Threading.AutoResetEvent(false)
-
-    static let check (flags : int) (f : int) =
-        f &&& flags = flags
-
-    member private x.TryAcquireInt (flags : int, [<Out>] value : byref<'v>) =
-        Monitor.Enter table
-        try table.TryRemove(check flags, &value)
-        finally Monitor.Exit table
-
-    member x.TryAcquire(flags : 'k, [<Out>] value : byref<'v>) =
-        let flags = toInt flags
-        x.TryAcquireInt(flags, &value)
-
-    member x.Acquire (flags : 'k) =
-        let flags = toInt flags
-        let mutable result = Unchecked.defaultof<'v>
-        while not (x.TryAcquireInt(flags, &result)) do
-            changed.WaitOne() |> ignore
-
-        result
-
-    member x.AcquireAsync (flags : 'k) =
-        async {
-            let flags = toInt flags
-            let mutable result = Unchecked.defaultof<'v>
-            while not (x.TryAcquireInt(flags, &result)) do
-                let! _ = Async.AwaitWaitHandle changed
-                ()
-
-            return result
-        }
-
-    member x.Release (value : 'v) =
-        let flags = flags value
-        lock table (fun () ->
-            if table.Add(toInt flags, value) then
-                changed.Set() |> ignore
-        )
 
 [<Struct>]
 type nativeptr =
