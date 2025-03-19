@@ -94,10 +94,10 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<stri
                 let name = name.ToLower()
                 match availableExtensions.TryGetValue name with
                 | true, realName ->
-                    VkRaw.debug "enabled device extension %A" name
+                    Log.Vulkan.debug "enabled device extension %A" name
                     Some realName
                 | _ ->
-                    VkRaw.warn "could not enable extension '%s' since it is not available" name
+                    Log.Vulkan.warn "could not enable extension '%s' since it is not available" name
                     None
             )
 

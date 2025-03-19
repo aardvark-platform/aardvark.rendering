@@ -19,8 +19,12 @@
     <EmbeddedResource Remove="Wrapper\**" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Core\Utilities\Utilities.fs" />
+    <Compile Include="Core\Utilities\Native.fs" />
+    <Compile Include="Core\Utilities\Error.fs" />
+    <Compile Include="Core\Utilities\Logger.fs" />
+    <Compile Include="Core\Utilities\StructChain.fs" />
     <Compile Include="Core\Common\Config.fs" />
-    <Compile Include="Core\Common\Utilities.fs" />
     <Compile Include="Core\Common\Info.fs" />
     <Compile Include="Core\Common\Formats.fs" />
     <Compile Include="Core\Common\Flags.fs" />

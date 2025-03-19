@@ -3,22 +3,14 @@
 open System
 open System.Collections.Generic
 open System.Runtime.InteropServices
+open System.Threading
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Rendering
-open System.Reflection
-open KHRGetPhysicalDeviceProperties2
-open KHRExternalMemoryCapabilities
-open KHRRayTracingPipeline
-open KHRRayQuery
-open KHRAccelerationStructure
-open KHRBufferDeviceAddress
-open EXTDescriptorIndexing
 open EXTValidationFeatures
 open Vulkan11
 
 #nowarn "9"
-// #nowarn "51"
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Instance =
@@ -94,7 +86,6 @@ module Instance =
         let Nsight              = "VK_LAYER_NV_nsight"
 
 type Instance(apiVersion : Version, layers : list<string>, extensions : list<string>, debug : IDebugConfig) as this =
-    inherit VulkanObject()
 
     static let availableLayers =
         native {
@@ -133,7 +124,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                 let name = name.ToLower()
                 match Map.tryFind name availableLayerNames with
                 | Some layer ->
-                    VkRaw.debug "enabled layer %A" name
+                    Log.Vulkan.debug "enabled layer %A" name
                     for e in layer.extensions do
                         availableExtensions.[e.name.ToLower()] <- e.name
                     true
@@ -146,13 +137,16 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                 let name = name.ToLower()
                 match availableExtensions.TryGetValue name with
                 | (true, realName) ->
-                    VkRaw.debug "enabled instance extension %A" name
+                    Log.Vulkan.debug "enabled instance extension %A" name
                     Some realName
                 | _ ->
                     None
             )
 
         enabledLayers, enabledExtensions
+
+    let mutable isDisposed = 0
+    let beforeDispose = Event<unit>()
 
     let debug = DebugConfig.unbox debug
 
@@ -323,11 +317,26 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
     static member AvailableLayers = availableLayers
     static member GlobalExtensions = globalExtensions
 
-    override x.Release() =
-        for g in groups do g.Dispose()
-        VkRaw.vkDestroyInstance(instance, NativePtr.zero)
-        instance <- VkInstance.Zero
-        
+    [<CLIEvent>]
+    member x.BeforeDispose = beforeDispose.Publish
+
+    member x.IsDisposed = isDisposed <> 0
+
+    member private x.Dispose(disposing : bool) =
+        let o = Interlocked.Exchange(&isDisposed, 1)
+        if o = 0 then
+            beforeDispose.Trigger()
+
+            for g in groups do g.Dispose()
+            VkRaw.vkDestroyInstance(instance, NativePtr.zero)
+            instance <- VkInstance.Zero
+
+            if disposing then GC.SuppressFinalize x
+
+    member x.Dispose() = x.Dispose true
+
+    override x.Finalize() = x.Dispose false
+
     member x.EnabledLayers = layers
     member x.EnabledExtensions = instanceExtensions
 
@@ -453,6 +462,9 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
         )
 
     interface IVulkanInstance
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 [<AutoOpen>]
 module InstanceExtensions =
