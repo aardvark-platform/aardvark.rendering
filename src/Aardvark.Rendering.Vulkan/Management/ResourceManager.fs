@@ -598,7 +598,7 @@ module Resources =
             {
                 icreate = fun (b : Aardvark.Rendering.IndirectBuffer) -> device.CreateIndirectBuffer(indexed, b)
                 idestroy = fun b -> b.Dispose()
-                ieagerDestroy = true
+                ieagerDestroy = false
             }
         )
 
@@ -1204,9 +1204,9 @@ module Resources =
 
                     let! pViewportState =
                         let vp  =
-                            if device.AllCount > 1u then
+                            if device.IsDeviceGroup then
                                 if renderPass.LayerCount > 1 then 1u
-                                else device.AllCount
+                                else uint32 device.PhysicalDevices.Length
                             else 1u
                         VkPipelineViewportStateCreateInfo(
                             VkPipelineViewportStateCreateFlags.None,

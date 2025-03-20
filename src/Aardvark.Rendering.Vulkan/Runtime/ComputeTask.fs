@@ -493,7 +493,7 @@ module internal ComputeTaskInternals =
 
 
     type private IPreparedCommand =
-        abstract member Run : primary: CommandBuffer * token: AdaptiveToken * renderToken: RenderToken -> unit
+        abstract member Run : deviceToken: DeviceToken * adaptiveToken: AdaptiveToken * renderToken: RenderToken -> unit
 
     module private PreparedCommand =
 
@@ -523,26 +523,21 @@ module internal ComputeTaskInternals =
             let family = inner.QueueFamily
             let hasGraphics = family.Flags.HasFlag QueueFlags.Graphics
 
-            member x.Run(primary : CommandBuffer, renderToken : RenderToken) =
+            member x.Run(deviceToken : DeviceToken, renderToken : RenderToken) =
                 let vulkanQueries = renderToken.GetVulkanQueries(onlyTimeQueries = not hasGraphics)
-                primary.Begin CommandBufferUsage.OneTimeSubmit
 
-                for q in vulkanQueries do
-                    q.Begin primary
+                deviceToken.perform {
+                    for q in vulkanQueries do
+                        do! Command.Begin q
 
-                primary.Enqueue(
-                    Command.Execute inner
-                )
+                    do! Command.Execute inner
 
-                for q in vulkanQueries do
-                    q.End primary
-
-                primary.End()
-
-                family.RunSynchronously(primary)
+                    for q in vulkanQueries do
+                        do! Command.End q
+                }
 
             interface IPreparedCommand with
-                member x.Run(p, _, rt) = x.Run(p, rt)
+                member x.Run(dt, _, rt) = x.Run(dt, rt)
 
         let private empty =
             { new IPreparedCommand with
@@ -586,7 +581,6 @@ module internal ComputeTaskInternals =
                 device.ComputeFamily, fun () -> device.ComputeToken
 
         let pool = family.CreateCommandPool(CommandPoolFlags.ResetBuffer)
-        let primary = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
         let secondary = System.Collections.Generic.List<CommandBuffer>()
         let secondaryAvailable = System.Collections.Generic.Queue<CommandBuffer>()
 
@@ -603,8 +597,6 @@ module internal ComputeTaskInternals =
 
         let updateCommandsAndResources (token : AdaptiveToken) (renderToken : RenderToken) (action : unit -> 'T) =
             use __ = renderToken.Use()
-
-            use tt = getDeviceToken()
 
             let commandChanged =
                 compiler.Update(token)
@@ -631,8 +623,6 @@ module internal ComputeTaskInternals =
                         let p = c |> PreparedCommand.ofCompiled getSecondaryCommandBuffer
                         prepared.Add p
 
-                tt.Sync()
-
                 action()
             )
 
@@ -643,9 +633,10 @@ module internal ComputeTaskInternals =
 
         member x.Run(token : AdaptiveToken, renderToken : RenderToken) =
             x.EvaluateAlways token (fun token ->
+                use dt = getDeviceToken()
                 updateCommandsAndResources token renderToken (fun _ ->
                     for p in prepared do
-                        p.Run(primary, token, renderToken)
+                        p.Run(dt, token, renderToken)
                 )
             )
 
@@ -653,7 +644,6 @@ module internal ComputeTaskInternals =
             lock x (fun _ ->
                 prepared.Clear()
                 compiler.Dispose()
-                primary.Dispose()
                 pool.Dispose()
             )
 

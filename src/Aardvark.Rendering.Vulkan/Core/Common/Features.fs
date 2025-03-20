@@ -538,7 +538,7 @@ module DeviceFeatures =
     let private toVkBool (value : bool) =
         if value then 1u else 0u
 
-    let toNativeChain (features : DeviceFeatures) =
+    let internal toNativeChain (features : DeviceFeatures) =
         let mem =
             VkPhysicalDeviceProtectedMemoryFeatures(
                 toVkBool features.Memory.ProtectedMemory

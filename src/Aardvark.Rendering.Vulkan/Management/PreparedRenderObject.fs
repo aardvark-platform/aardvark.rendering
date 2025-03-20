@@ -419,72 +419,75 @@ type DevicePreparedRenderObjectExtensions private() =
     static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : RenderObject) =
         prepareObject this renderPass ro
 
-    [<Extension>]
-    static member PrepareRenderObjectAsync(this : ResourceManager, renderPass : RenderPass, ro : RenderObject) =
-        let device = this.Device
-        let oldToken = device.UnsafeCurrentToken
-        try
-            let newToken = new DeviceToken(device.GraphicsFamily, ref None)
-            device.UnsafeSetToken (Some newToken)
+    // Note: Removed with queue rework, needs to be reimplemented if required
+    // DeviceTask cannot be exposed as a TPL task anymore since it is just a wrapper for a fence.
+    // Also the UnsafeToken functionality has been removed.
+    // [<Extension>]
+    // static member PrepareRenderObjectAsync(this : ResourceManager, renderPass : RenderPass, ro : RenderObject) =
+        // let device = this.Device
+        // let oldToken = device.UnsafeCurrentToken
+        // try
+        //     let newToken = new DeviceToken(device.GraphicsFamily, ref None)
+        //     device.UnsafeSetToken (Some newToken)
+        //
+        //     let result = prepareObject this renderPass ro
+        //
+        //     // get all "new" resources
+        //     let newResources = result.Resources |> List.filter (fun r -> r.ReferenceCount = 0)
+        //
+        //     // acquire all resources (possibly causing a ref-count greater than 1 when used multiple times)
+        //     for r in result.Resources do r.Acquire()
+        //
+        //     // update all "new" resources
+        //     for r in newResources do r.Update(ResourceUser.None, AdaptiveToken.Top, RenderToken.Empty) |> ignore
+        //
+        //     // enqueue a callback to the CopyEngine tiggering on completion of
+        //     // all prior commands (possibly including more than the needed ones)
+        //     let tcs = System.Threading.Tasks.TaskCompletionSource()
+        //     device.CopyEngine.Enqueue [ CopyCommand.Callback (fun () -> tcs.SetResult ()) ]
+        //
+        //     // when the copies are done continue syncing the token (using the graphics queue)
+        //     tcs.Task |> Task.bind (fun () ->
+        //         let task = newToken.SyncTask().AsTask
+        //
+        //         // when everything is synced properly dispose the token and return the object
+        //         task.ContinueWith(fun (t : System.Threading.Tasks.Task<_>) ->
+        //             newToken.Dispose()
+        //             result
+        //         )
+        //     )
+        // finally
+        //     device.UnsafeSetToken oldToken
         
-            let result = prepareObject this renderPass ro
-
-            // get all "new" resources
-            let newResources = result.Resources |> List.filter (fun r -> r.ReferenceCount = 0)
-
-            // acquire all resources (possibly causing a ref-count greater than 1 when used multiple times)
-            for r in result.Resources do r.Acquire()
-
-            // update all "new" resources
-            for r in newResources do r.Update(ResourceUser.None, AdaptiveToken.Top, RenderToken.Empty) |> ignore
-
-            // enqueue a callback to the CopyEngine tiggering on completion of
-            // all prior commands (possibly including more than the needed ones)
-            let tcs = System.Threading.Tasks.TaskCompletionSource()
-            device.CopyEngine.Enqueue [ CopyCommand.Callback (fun () -> tcs.SetResult ()) ]
-
-            // when the copies are done continue syncing the token (using the graphics queue)
-            tcs.Task |> Task.bind (fun () ->
-                let task = newToken.SyncTask(4).AsTask
-
-                // when everything is synced properly dispose the token and return the object
-                task.ContinueWith(fun (t : System.Threading.Tasks.Task<_>) ->
-                    newToken.Dispose()
-                    result
-                )
-            )
-        finally 
-            device.UnsafeSetToken oldToken
-        
-    [<Extension>]
-    static member PrepareRenderObjectAsync(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) : Task<PreparedMultiRenderObject> =
-        match ro with
-            | :? RenderObject as ro ->
-                DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, ro)
-                    |> Task.mapInline (fun v -> new PreparedMultiRenderObject([v]))
-
-            | :? MultiRenderObject as mo ->
-                match mo.Children with
-                    | [] -> 
-                        Task.FromResult(new PreparedMultiRenderObject([]))
-                    | [o] ->
-                        DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, o, hook)
-                    | children ->
-                        children 
-                        |> List.collectT (fun (o : IRenderObject) ->
-                            DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, o, hook) 
-                                |> Task.mapInline (fun o -> o.Children)
-                        )
-                        |> Task.mapInline (fun l -> new PreparedMultiRenderObject(l))
-
-            | :? PreparedRenderObject as o ->
-                Task.FromResult (new PreparedMultiRenderObject([o]))
-
-            | :? PreparedMultiRenderObject as mo ->
-                Task.FromResult mo
-
-            | _ ->
-                failf "unsupported RenderObject-type: %A" ro
+    // [<Extension>]
+    // static member PrepareRenderObjectAsync(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) : Task<PreparedMultiRenderObject> =
+    //     match ro with
+    //         | :? RenderObject as ro ->
+    //             DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, ro)
+    //                 |> Task.mapInline (fun v -> new PreparedMultiRenderObject([v]))
+    //
+    //         | :? MultiRenderObject as mo ->
+    //             match mo.Children with
+    //                 | [] ->
+    //                     Task.FromResult(new PreparedMultiRenderObject([]))
+    //                 | [o] ->
+    //                     DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, o, hook)
+    //                 | children ->
+    //                     children
+    //                     |> List.collectT (fun (o : IRenderObject) ->
+    //                         DevicePreparedRenderObjectExtensions.PrepareRenderObjectAsync(this, renderPass, o, hook)
+    //                             |> Task.mapInline (fun o -> o.Children)
+    //                     )
+    //                     |> Task.mapInline (fun l -> new PreparedMultiRenderObject(l))
+    //
+    //         | :? PreparedRenderObject as o ->
+    //             Task.FromResult (new PreparedMultiRenderObject([o]))
+    //
+    //         | :? PreparedMultiRenderObject as mo ->
+    //             Task.FromResult mo
+    //
+    //         | _ ->
+    //             failf "unsupported RenderObject-type: %A" ro
 
 
 

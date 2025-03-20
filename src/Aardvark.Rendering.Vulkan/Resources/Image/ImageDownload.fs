@@ -89,7 +89,8 @@ module ImageDownloadExtensions =
                                 cmd.Enqueue <| Command.ResolveMultisamples(src, resolved.[src.Aspect, src.Level, src.Slice])
                                 cmd.Enqueue <| Command.TransformLayout(srcImg, layout)
 
-                                [srcImg; resolved]
+                                cmd.AddResource srcImg
+                                cmd.AddResource resolved
                         }
 
                     resolved.[src.Aspect, src.Level, src.Slice], cmd

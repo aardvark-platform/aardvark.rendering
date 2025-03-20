@@ -1620,27 +1620,31 @@ module private RuntimeCommands =
 
         let toDelete = System.Collections.Generic.List<GeometryCommand>()
 
+        // Note: Removed with queue rework, needs to be reimplemented if required
+        // DeviceTask cannot be exposed as a TPL task anymore since it is just a wrapper for a fence.
+        // Also the UnsafeToken functionality has been removed.
         let prepare pipeline (g : Geometry) =
-            let device = compiler.manager.Device
-
-            let old = device.UnsafeCurrentToken
-            try
-                let token = new DeviceToken(device.GraphicsFamily, ref None) //compiler.manager.Device.Token
-                device.UnsafeSetToken (Some token)
-            
-                let cmd = new GeometryCommand(compiler, pipeline, g, true)
-                cmd.Update(AdaptiveToken.Top)
-
-                let task = device.CopyEngine.WaitTask()
-
-                task |> Task.bind (fun () ->
-                    token.SyncTask(4).AsTask |> Task.map (fun () ->
-                        token.Dispose()
-                        cmd
-                    )
-                )
-            finally
-                device.UnsafeSetToken old
+            raise <| NotImplementedException()
+            // let device = compiler.manager.Device
+            //
+            // let old = device.UnsafeCurrentToken
+            // try
+            //     let token = new DeviceToken(device.GraphicsFamily, ref None) //compiler.manager.Device.Token
+            //     device.UnsafeSetToken (Some token)
+            //
+            //     let cmd = new GeometryCommand(compiler, pipeline, g, true)
+            //     cmd.Update(AdaptiveToken.Top)
+            //
+            //     let task = device.CopyEngine.WaitTask()
+            //
+            //     task |> Task.bind (fun () ->
+            //         token.SyncTask().AsTask |> Task.map (fun () ->
+            //             token.Dispose()
+            //             cmd
+            //         )
+            //     )
+            // finally
+            //     device.UnsafeSetToken old
 
         let delete (cmd : GeometryCommand) =
             lock toDelete (fun () -> toDelete.Add cmd)
@@ -2122,11 +2126,10 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
     let device = manager.Device
 
-    let pool = device.GraphicsFamily.CreateCommandPool(CommandPoolFlags.ResetBuffer)
     let viewports = AVal.init [||]
     let scissors = AVal.init [||]
 
-    let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+    let pool = device.GraphicsFamily.CreateCommandPool()
     let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
     let stats = NativePtr.alloc 1
@@ -2164,7 +2167,6 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         transact (fun () ->
             compiled.Dispose()
             inner.Dispose()
-            cmd.Dispose()
             pool.Dispose()
             NativePtr.free stats
         )
@@ -2201,10 +2203,10 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                     frMax = desc.viewport.Max;
                     frLayers = Range1i(0,renderPass.LayerCount-1)
                 }
-            range.Split(int device.AllCount)
+            range.Split(int device.PhysicalDevices.Length)
 
         let sc =
-            if device.AllCount > 1u then
+            if device.IsDeviceGroup then
                 if renderPass.LayerCount > 1 then
                     [| desc.viewport |]
                 else
@@ -2229,7 +2231,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             else
                 false
 
-        use tt = device.Token
+        use dt = device.Token
 
         let commandChanged =
             updateCommands token
@@ -2250,6 +2252,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
                     Log.line "[Vulkan] recompile commands: %s" cause
 
+                pool.Reset()
                 inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue, true)
 
                 inner.enqueue {
@@ -2262,14 +2265,10 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
                 inner.End()
 
-            tt.Sync()
+            dt.perform {
+                for q in vulkanQueries do
+                    do! Command.Begin q
 
-            cmd.Begin(renderPass, CommandBufferUsage.OneTimeSubmit)
-
-            for q in vulkanQueries do
-                q.Begin cmd
-
-            cmd.enqueue {
                 let views = Map.toArray fbo.Attachments
                 let oldLayouts = Array.zeroCreate views.Length
 
@@ -2282,18 +2281,14 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                         do! Command.TransformLayout(view, VkImageLayout.ColorAttachmentOptimal)
 
                 do! Command.BeginPass(renderPass, fbo, false)
-                do! Command.Execute [inner]
+                do! Command.Execute inner
                 do! Command.EndPass
 
                 for i in 0 .. views.Length - 1 do
                     let _, view = views.[i]
                     do! Command.TransformLayout(view, oldLayouts.[i])
+
+                for q in vulkanQueries do
+                    do! Command.End q
             }
-
-            for q in vulkanQueries do
-                q.End cmd
-
-            cmd.End()
-
-            device.GraphicsFamily.RunSynchronously cmd
         )

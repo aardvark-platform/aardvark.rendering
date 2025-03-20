@@ -151,7 +151,7 @@ module BufferCommands =
                     let copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
                     cmd.AppendCommand()
                     copyInfo |> NativePtr.pin (fun pInfo -> VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, 1u, pInfo))
-                    [src]
+                    cmd.AddResource src
             }
 
         static member Copy(src : Buffer, dst : Buffer, ranges : Range1l[]) =
@@ -170,7 +170,8 @@ module BufferCommands =
 
                         cmd.AppendCommand()
                         VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, uint32 ranges.Length, pCopyInfos)
-                        [src; dst]
+                        cmd.AddResource src
+                        cmd.AddResource dst
                 }
 
 
@@ -198,7 +199,7 @@ module BufferCommands =
                         uint64 offset, uint64 size
                     )
 
-                    [buffer]
+                    cmd.AddResource buffer
             }
 
         static member Acquire(buffer : Buffer, srcQueue : DeviceQueueFamily) =
@@ -220,7 +221,7 @@ module BufferCommands =
                         VkQueueFamilyIgnored, VkQueueFamilyIgnored
                     )
 
-                    [buffer]
+                    cmd.AddResource buffer
             }
 
         static member Sync(buffer : Buffer, srcStage : VkPipelineStageFlags, srcAccess : VkAccessFlags) =
@@ -243,7 +244,7 @@ module BufferCommands =
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Size, 0u)
-                    [b]
+                    cmd.AddResource b
             }
         static member SetBuffer(b : Buffer, offset : int64, size : int64, value : byte[]) =
             { new Command() with
@@ -253,7 +254,7 @@ module BufferCommands =
                     if value.Length <> 4 then failf "pattern too long"
                     let v = BitConverter.ToUInt32(value, 0)
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, uint64 offset, uint64 size, v)
-                    [b]
+                    cmd.AddResource b
             }
 
     type CopyCommand with
@@ -306,14 +307,14 @@ module Buffer =
                 VkBufferCreateFlags.None,
                 uint64 size,
                 flags,
-                (if concurrent then device.AllSharingMode else VkSharingMode.Exclusive),
-                (if concurrent then device.AllQueueFamiliesCnt else 0u),
-                (if concurrent then device.AllQueueFamiliesPtr else NativePtr.zero)
+                (if concurrent then device.SharingMode else VkSharingMode.Exclusive),
+                (if concurrent then device.QueueFamilyCount else 0u),
+                (if concurrent then device.QueueFamilyIndices else NativePtr.zero)
             )
 
         let handle =
             info |> NativePtr.pin (fun pInfo ->
-                temporary (fun pHandle ->
+                NativePtr.temp (fun pHandle ->
                     VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not create buffer"
                     NativePtr.read pHandle
@@ -321,7 +322,7 @@ module Buffer =
             )
 
         let reqs =
-            temporary (fun ptr ->
+            NativePtr.temp (fun ptr ->
                 VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
                 NativePtr.read ptr
             )
@@ -567,16 +568,12 @@ module Buffer =
                 )
             else
                 let temp = device.HostMemory |> create VkBufferUsageFlags.TransferDstBit (int64 sizeInBytes)
-                let task = device.GraphicsFamily.Start(QueueCommand.ExecuteCommand([], [], Command.Copy(src, int64 srcOffset, temp, 0L, int64 sizeInBytes)))
+                let task = device.GraphicsFamily.StartTask(Command.Copy(src, int64 srcOffset, temp, 0L, int64 sizeInBytes))
 
                 (fun () ->
                     task.Wait()
-                    if task.IsFaulted then
-                        temp.Dispose()
-                        raise task.Exception
-                    else
-                        temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, sizeInBytes))
-                        temp.Dispose()
+                    temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, sizeInBytes))
+                    temp.Dispose()
                 )
         else
             ignore
@@ -607,7 +604,7 @@ module BufferView =
 
             let handle = 
                 info |> NativePtr.pin (fun pInfo ->
-                    temporary (fun pHandle ->
+                    NativePtr.temp (fun pHandle ->
                         VkRaw.vkCreateBufferView(device.Handle, pInfo, NativePtr.zero, pHandle)
                             |> check "could not create BufferView"
                         NativePtr.read pHandle
@@ -618,7 +615,7 @@ module BufferView =
 // =======================================================================
 // Device Extensions
 // =======================================================================
-[<AbstractClass; Sealed; Extension>]
+[<AbstractClass; Sealed>]
 type ContextBufferExtensions private() =
 
     [<Extension>]

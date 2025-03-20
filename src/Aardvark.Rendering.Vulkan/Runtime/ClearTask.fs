@@ -9,8 +9,6 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
     inherit AdaptiveObject()
 
     let id = RenderTaskId.New()
-    let pool = device.GraphicsFamily.CreateCommandPool()
-    let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
 
     let renderPassDepthAspect =
         match renderPass.DepthStencilAttachment with
@@ -22,7 +20,7 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
             let fbo = unbox<Framebuffer> outputs.framebuffer
             renderPass |> RenderPass.validateCompability fbo
 
-            use token = device.Token
+            use dt = device.Token
             use __ = renderToken.Use()
 
             let values = values.GetValue(caller, renderToken)
@@ -31,7 +29,7 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
 
             let vulkanQueries = renderToken.GetVulkanQueries()
 
-            token.enqueue {
+            dt.perform {
                 for q in vulkanQueries do
                     do! Command.Begin q
 
@@ -51,18 +49,13 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
                 for q in vulkanQueries do
                     do! Command.End q
             }
-
-            token.Sync()
         )
 
     interface IRenderTask with
         member x.Id = id
         member x.Update(c, t) = ()
         member x.Run(c,t,o) = x.Run(c,t,o)
-        member x.Dispose() =
-            cmd.Dispose()
-            pool.Dispose()
-
+        member x.Dispose() = ()
         member x.FrameId = 0UL
         member x.FramebufferSignature = Some (renderPass :> _)
         member x.Runtime = Some device.Runtime

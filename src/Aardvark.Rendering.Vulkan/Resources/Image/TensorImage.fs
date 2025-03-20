@@ -429,7 +429,8 @@ module TensorImageCommandExtensions =
                         VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Buffer.Handle, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
                     )
 
-                    [src.Buffer; dst.Image]
+                    cmd.AddResource src.Buffer
+                    cmd.AddResource dst.Image
             }
 
         static member Copy(src : TensorImage, dst : ImageSubresource) =
@@ -475,7 +476,8 @@ module TensorImageCommandExtensions =
                         VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Buffer.Handle, 1u, pCopy)
                     )
 
-                    [src.Image; dst.Buffer]
+                    cmd.AddResource src.Image
+                    cmd.AddResource dst.Buffer
             }
 
         static member Copy(src : ImageSubresource, dst : TensorImage) =

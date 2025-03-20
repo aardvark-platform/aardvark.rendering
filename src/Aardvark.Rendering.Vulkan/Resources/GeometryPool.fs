@@ -13,7 +13,7 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-// #nowarn "51"
+#nowarn "51"
 
 module GeometryPoolUtilities =
 
@@ -41,8 +41,8 @@ module GeometryPoolUtilities =
                         VkBufferCreateFlags.None,
                         uint64 size, 
                         VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
-                        device.AllSharingMode,
-                        device.AllQueueFamiliesCnt, device.AllQueueFamiliesPtr
+                        device.SharingMode,
+                        device.QueueFamilyCount, device.QueueFamilyIndices
                     )
                 VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
                     |> check "could not create buffer"
@@ -178,9 +178,9 @@ module GeometryPoolUtilities =
                             VkBufferCreateFlags.None,
                             uint64 streamSize,
                             VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
-                            device.AllSharingMode,
-                            device.AllQueueFamiliesCnt,
-                            device.AllQueueFamiliesPtr
+                            device.SharingMode,
+                            device.QueueFamilyCount,
+                            device.QueueFamilyIndices
                         )
 
                     VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pBuffer)
@@ -237,8 +237,6 @@ module GeometryPoolUtilities =
                             cmd.AppendCommand()
                             VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, uint32 todoCount, ptr)
                         )
-
-                    []
             }
 
         override x.Destroy() =
@@ -293,21 +291,16 @@ module GeometryPoolUtilities =
                             VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, pRegion)
                                 |> check "could not flush range"
                         }
-                        use t = device.Token
 
-                        t.Enqueue 
+                        device.GraphicsFamily.RunSynchronously(
                             { new Command() with
                                 member x.Compatible = QueueFlags.All
                                 member x.Enqueue cmd =
-                                    native {
-                                        let! pCopyInfo = VkBufferCopy(uint64 scratchOffset, uint64 offset, uint64 size)
-                                        cmd.AppendCommand()
-                                        VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
-                                        return []
-                                    }
+                                    cmd.AppendCommand()
+                                    let mutable copyInfo = VkBufferCopy(uint64 scratchOffset, uint64 offset, uint64 size)
+                                    VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
                             }
-
-                        t.Sync()
+                        )
             )
 
         interface ILockedResource with
@@ -331,9 +324,9 @@ module GeometryPoolUtilities =
                             VkBufferCreateFlags.None,
                             uint64 streamSize,
                             VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
-                            device.AllSharingMode,
-                            device.AllQueueFamiliesCnt,
-                            device.AllQueueFamiliesPtr
+                            device.SharingMode,
+                            device.QueueFamilyCount,
+                            device.QueueFamilyIndices
                         )
 
                     VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pBuffer)
@@ -385,22 +378,14 @@ module GeometryPoolUtilities =
 
                     | _ ->
                         device.GraphicsFamily.RunSynchronously(
-                            QueueCommand.ExecuteCommand(
-                                [], [],
-                                { new Command() with
-                                    member x.Compatible = QueueFlags.All
-                                    member x.Enqueue(cmd) =
-                                        cmd.AppendCommand()
-                                        native {
-                                            let! pCopyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
-                                            VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
-                                            return []
-                                        }
-                                }
-                            )
+                            { new Command() with
+                                member x.Compatible = QueueFlags.All
+                                member x.Enqueue(cmd) =
+                                    cmd.AppendCommand()
+                                    let mutable copyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
+                                    VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
+                            }
                         )
-
-
             )
 
         member x.IsEmpty
