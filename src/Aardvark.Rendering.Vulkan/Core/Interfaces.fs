@@ -28,17 +28,3 @@ type IResource =
 type IResource<'Handle> =
     inherit IResource
     abstract member Handle : 'Handle
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Resource =
-    let compensation (action: unit -> unit) =
-        { new IResource with
-            member x.ReferenceCount = 1
-            member x.AddReference() = ()
-            member x.Dispose() = action() }
-
-    let disposable (disposabl: IDisposable) =
-        { new IResource with
-            member x.ReferenceCount = 1
-            member x.AddReference() = ()
-            member x.Dispose() = disposabl.Dispose() }

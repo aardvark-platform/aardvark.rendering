@@ -169,15 +169,12 @@ type CommandBuffer internal (pool: ICommandPool, level: CommandBufferLevel, remo
     member x.AddResource(resource: IResource) =
         if resources.Add(resource) then resource.AddReference()
 
-    member x.AddResources(resources: seq<IResource>) =
-        resources |> Seq.iter x.AddResource
-
-    member x.AddCompensation(action: unit -> unit) =
+    member x.AddCompensation(compensation: unit -> unit) =
         x.AddResource(
             { new IResource with
                 member x.ReferenceCount = 1
                 member x.AddReference() = ()
-                member x.Dispose() = action() }
+                member x.Dispose() = compensation() }
         )
 
     member x.AddCompensation(disposable: IDisposable) =

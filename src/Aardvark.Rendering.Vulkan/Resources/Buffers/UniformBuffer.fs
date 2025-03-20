@@ -116,7 +116,7 @@ module UniformBuffer =
                 member x.Enqueue cmd = 
                     cmd.AppendCommand()
                     VkRaw.vkCmdUpdateBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Storage.Size, b.Storage.Pointer)
-                    [b]
+                    cmd.AddResource b
             }
 
         t.enqueue {

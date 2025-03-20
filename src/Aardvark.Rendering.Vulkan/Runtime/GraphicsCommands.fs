@@ -2,9 +2,9 @@
 
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
-open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
+#nowarn "51"
 
 [<AutoOpen>]
 module ``Graphics Commands`` =
@@ -15,7 +15,6 @@ module ``Graphics Commands`` =
             member x.Enqueue cmd =
                 cmd.AppendCommand()
                 VkRaw.vkCmdEndRenderPass(cmd.Handle)
-                []
         }
 
     type Command with
@@ -23,20 +22,24 @@ module ``Graphics Commands`` =
             { new Command() with
                 member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
-                    native {
-                        let! pInfo =
-                            VkRenderPassBeginInfo(
-                                renderPass.Handle,
-                                framebuffer.Handle,
-                                VkRect2D(VkOffset2D(bounds.Min.X, bounds.Min.Y), VkExtent2D(1 + bounds.SizeX, 1 + bounds.SizeY)),
-                                0u,
-                                NativePtr.zero
-                            )
+                    let mutable beginInfo =
+                        VkRenderPassBeginInfo(
+                            renderPass.Handle,
+                            framebuffer.Handle,
+                            VkRect2D(VkOffset2D(bounds.Min.X, bounds.Min.Y), VkExtent2D(1 + bounds.SizeX, 1 + bounds.SizeY)),
+                            0u,
+                            NativePtr.zero
+                        )
 
-                        cmd.AppendCommand()
-                        VkRaw.vkCmdBeginRenderPass(cmd.Handle, pInfo, if inlineContent then VkSubpassContents.Inline else VkSubpassContents.SecondaryCommandBuffers)
-                        return [renderPass :> IResource; framebuffer :> IResource]
-                    }
+                    let contents =
+                        if inlineContent then VkSubpassContents.Inline
+                        else VkSubpassContents.SecondaryCommandBuffers
+
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdBeginRenderPass(cmd.Handle, &&beginInfo, contents)
+
+                    cmd.AddResource renderPass
+                    cmd.AddResource framebuffer
             }
 
         static member BeginPass(renderPass : RenderPass, framebuffer : Framebuffer, inlineContent : bool) =
@@ -49,16 +52,13 @@ module ``Graphics Commands`` =
                 member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    native {
-                        let! pViewports =
-                            viewports |> Array.map (fun b ->
-                                VkViewport(float32 b.Min.X, float32 b.Min.X, float32 (1 + b.SizeX), float32 (1 + b.SizeY), 0.0f, 1.0f)
-                            )
 
-                        VkRaw.vkCmdSetViewport(cmd.Handle, 0u, uint32 viewports.Length, pViewports)
+                    use pViewports =
+                        fixed viewports |> Array.map (fun b ->
+                            VkViewport(float32 b.Min.X, float32 b.Min.X, float32 (1 + b.SizeX), float32 (1 + b.SizeY), 0.0f, 1.0f)
+                        )
 
-                        return []
-                    }
+                    VkRaw.vkCmdSetViewport(cmd.Handle, 0u, uint32 viewports.Length, pViewports)
             }
 
         static member SetScissors(scissors : Box2i[]) =
@@ -66,13 +66,11 @@ module ``Graphics Commands`` =
                 member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    native {
-                        let! pScissors =
-                            scissors |> Array.map (fun b ->
-                                VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(1 + b.SizeX, 1 + b.SizeY))
-                            )
 
-                        VkRaw.vkCmdSetScissor(cmd.Handle, 0u, uint32 scissors.Length, pScissors)
-                        return []
-                    }
+                    use pScissors =
+                        fixed scissors |> Array.map (fun b ->
+                            VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(1 + b.SizeX, 1 + b.SizeY))
+                        )
+
+                    VkRaw.vkCmdSetScissor(cmd.Handle, 0u, uint32 scissors.Length, pScissors)
             }

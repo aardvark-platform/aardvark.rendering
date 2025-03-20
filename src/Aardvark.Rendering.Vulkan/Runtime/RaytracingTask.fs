@@ -36,8 +36,6 @@ module private RaytracingTaskInternals =
                     member x.Enqueue cmd =
                         cmd.AppendCommand()
                         VkRaw.vkCmdBindPipeline(cmd.Handle, VkPipelineBindPoint.RayTracingKhr, pPipeline.Value)
-
-                        []
                 }
             )
 
@@ -54,8 +52,6 @@ module private RaytracingTaskInternals =
                             uint32 descriptorSets.FirstIndex, uint32 descriptorSets.Count, descriptorSets.Sets,
                             0u, NativePtr.zero
                         )
-
-                        []
                 }
             )
 
@@ -70,8 +66,6 @@ module private RaytracingTaskInternals =
                             cmd.Handle, pRaygenAddress, pMissAddress, pHitAddress, pCallableAddress,
                             uint32 count.X, uint32 count.Y, uint32 count.Z
                         )
-
-                        []
                 }
             )
 

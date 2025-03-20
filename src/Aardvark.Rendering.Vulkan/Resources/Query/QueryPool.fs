@@ -83,8 +83,6 @@ module QueryCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
                     VkRaw.vkCmdResetQueryPool(cmd.Handle, pool.Handle, 0u, uint32 pool.Count)
-
-                    []
             }
         static member BeginQuery(pool : QueryPool, index : int, flags : VkQueryControlFlags) =
             { new Command() with
@@ -92,8 +90,6 @@ module QueryCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
                     VkRaw.vkCmdBeginQuery(cmd.Handle, pool.Handle, uint32 index, flags)
-
-                    []
             }
         static member EndQuery(pool : QueryPool, index : int) =
             { new Command() with
@@ -101,8 +97,6 @@ module QueryCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
                     VkRaw.vkCmdEndQuery(cmd.Handle, pool.Handle, uint32 index)
-
-                    []
             }
 
         static member CopyQueryResults(pool : QueryPool, target : Buffer) =
@@ -111,8 +105,6 @@ module QueryCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
                     VkRaw.vkCmdCopyQueryPoolResults(cmd.Handle, pool.Handle, 0u, uint32 pool.Count, target.Handle, 0UL, 8UL, VkQueryResultFlags.D64Bit ||| VkQueryResultFlags.WaitBit ||| VkQueryResultFlags.PartialBit)
-
-                    []
             }
 
         static member WriteTimestamp(pool : QueryPool, pipelineFlags : VkPipelineStageFlags, index : int) =
@@ -121,11 +113,9 @@ module QueryCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
                     VkRaw.vkCmdWriteTimestamp(cmd.Handle, pipelineFlags, pool.Handle, uint32 index)
-
-                    []
             }
 
-[<AbstractClass; Sealed; Extension>]
+[<AbstractClass; Sealed>]
 type DeviceQueryPoolExtensions private() =
     [<Extension>]
     static member inline CreateQueryPool(device : Device, count : int) =

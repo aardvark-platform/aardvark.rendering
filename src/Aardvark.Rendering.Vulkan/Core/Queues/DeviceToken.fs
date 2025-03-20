@@ -71,8 +71,11 @@ type DeviceToken internal (family: IDeviceQueueFamily, getCurrentQueue: unit -> 
         | _ ->
             DeviceTask.Completed
 
-    member x.AddCompensation(action: unit -> unit) =
-        x.CurrentBuffer.AddCompensation(action)
+    member inline x.AddCompensation(compensation: unit -> unit) =
+        x.CurrentBuffer.AddCompensation(compensation)
+
+    member inline x.AddCompensation(disposable: IDisposable) =
+        x.CurrentBuffer.AddCompensation(disposable)
 
     member internal x.AddRef() =
         refCount <- refCount + 1

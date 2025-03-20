@@ -1,30 +1,59 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System
-open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
+open FSharp.NativeInterop
+open System
+open System.Runtime.CompilerServices
 open Vulkan11
 
-type ICommand =
+#nowarn "9"
+
+/// Represents a command that can be enqueued in a command buffer.
+[<AbstractClass>]
+type Command() =
     abstract member Compatible : QueueFlags
     abstract member Enqueue : CommandBuffer -> unit
 
-[<AbstractClass>]
-type Command() =
-    static let nop =
+[<AbstractClass; Sealed>]
+type CommandExtensions() =
+
+    [<Extension>]
+    static member Enqueue(token: DeviceToken, command: Command) =
+        command.Enqueue(token.CurrentBuffer)
+
+    [<Extension>]
+    static member inline RunSynchronously(family: DeviceQueueFamily, command: Command) =
+        use token = family.CurrentToken
+        token.Enqueue command
+        token.Flush()
+
+    [<Extension>]
+    static member StartTask(family: DeviceQueueFamily, command: Command) =
+        use token = family.CurrentToken
+        token.Enqueue command
+        token.FlushAsync()
+
+    [<Extension>]
+    static member inline Enqueue(buffer: CommandBuffer, command: Command) =
+        command.Enqueue(buffer)
+
+[<AutoOpen>]
+module ``Common Commands`` =
+
+    let private nop =
         { new Command() with
-            member x.Enqueue _ = []
+            member x.Enqueue _ = ()
             member x.Compatible = QueueFlags.All
         }
 
-    static let barrier =
+    let private barrier =
         { new Command() with
             member x.Compatible = QueueFlags.All
-            member x.Enqueue cmd =
-                cmd.AppendCommand()
+            member x.Enqueue buffer =
+                buffer.AppendCommand()
                 VkRaw.vkCmdPipelineBarrier(
-                    cmd.Handle,
+                    buffer.Handle,
                     VkPipelineStageFlags.AllCommandsBit,
                     VkPipelineStageFlags.TopOfPipeBit,
                     VkDependencyFlags.None,
@@ -32,244 +61,199 @@ type Command() =
                     0u, NativePtr.zero,
                     0u, NativePtr.zero
                 )
-
-                []
         }
 
-    static let resetDeviceMask =
+    let private resetDeviceMask =
         { new Command() with
             member x.Compatible = QueueFlags.All
-            member x.Enqueue cmd =
-                cmd.AppendCommand()
-                VkRaw.vkCmdSetDeviceMask(cmd.Handle, cmd.Device.PhysicalDevice.DeviceMask)
-                []
+            member x.Enqueue buffer =
+                buffer.AppendCommand()
+                VkRaw.vkCmdSetDeviceMask(buffer.Handle, buffer.Device.PhysicalDevice.DeviceMask)
         }
 
-    abstract member Compatible : QueueFlags
-    abstract member Enqueue : CommandBuffer -> list<IResource>
+    let inline private canExecute (buffer: CommandBuffer) =
+        if buffer.IsRecording then failf "cannot run recording CommandBuffer"
+        if buffer.Level <> CommandBufferLevel.Secondary then failf "cannot execute CommandBuffer with level %A" buffer.Level
+        not buffer.IsEmpty
 
-    member private x.EnqueueInner(buffer) =
-        let res = x.Enqueue(buffer)
-        buffer.AddResources(res)
+    type Command with
+        static member Nop = nop
+        static member Barrier = barrier
 
-    interface ICommand with
-        member x.Compatible = x.Compatible
-        member x.Enqueue(buffer) = x.EnqueueInner(buffer)
+        static member Execute(inner: CommandBuffer[]) =
+            let handles =
+                inner |> Array.choose (fun buffer ->
+                    if canExecute buffer then Some buffer.Handle
+                    else None
+                )
 
-    static member Nop = nop
+            if handles.Length = 0 then
+                Command.Nop
+            else
+                { new Command() with
+                    member x.Compatible = QueueFlags.All
+                    member x.Enqueue buffer =
+                        buffer.AppendCommand()
+                        use pHandles = fixed handles
+                        VkRaw.vkCmdExecuteCommands(buffer.Handle, uint32 handles.Length, pHandles)
+                }
 
-    static member Execute(cmd : seq<CommandBuffer>) =
-        let handles =
-            cmd |> Seq.choose (fun cmd ->
-                if cmd.IsRecording then failf "cannot run recording CommandBuffer"
-                if cmd.Level <> CommandBufferLevel.Secondary then failf "cannot execute CommandBuffer with level %A" cmd.Level
+        static member Execute(inner: CommandBuffer) =
+            if canExecute inner then
+                { new Command() with
+                    member x.Compatible = QueueFlags.All
+                    member x.Enqueue buffer =
+                        buffer.AppendCommand()
+                        let pHandle = NativePtr.stackalloc 1
+                        pHandle.[0] <- inner.Handle
+                        VkRaw.vkCmdExecuteCommands(buffer.Handle, 1u, pHandle)
+                }
+            else
+                Command.Nop
 
-                if cmd.IsEmpty then None
-                else Some cmd.Handle
-               )
-            |> Seq.toArray
+        static member Reset(event: Event) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue buffer =
+                    buffer.AppendCommand()
+                    buffer.Reset(event, VkPipelineStageFlags.BottomOfPipeBit)
+            }
 
-        if handles.Length = 0 then
-            Command.Nop
-        else
+        static member Set(event: Event) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue buffer =
+                    buffer.AppendCommand()
+                    buffer.Set(event, VkPipelineStageFlags.BottomOfPipeBit)
+            }
+
+        static member Wait(event: Event) =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    native {
-                        let! pHandles = handles
-                        VkRaw.vkCmdExecuteCommands(cmd.Handle, uint32 handles.Length, pHandles)
-                    }
-                    []
+                    cmd.WaitAll [| event |]
             }
 
-    static member Execute(cmd : CommandBuffer) =
-        Command.Execute [cmd]
-
-    static member Barrier = barrier
-    static member Reset(e : Event) =
-        { new Command() with
-            member x.Compatible = QueueFlags.All
-            member x.Enqueue cmd =
-                cmd.AppendCommand()
-                cmd.Reset(e, VkPipelineStageFlags.BottomOfPipeBit)
-                []
-        }
-    static member Set(e : Event) =
-        { new Command() with
-            member x.Compatible = QueueFlags.All
-            member x.Enqueue cmd =
-                cmd.AppendCommand()
-                cmd.Set(e, VkPipelineStageFlags.BottomOfPipeBit)
-                []
-        }
-    static member Wait(e : Event) =
-        { new Command() with
-            member x.Compatible = QueueFlags.All
-            member x.Enqueue cmd =
-                cmd.AppendCommand()
-                cmd.WaitAll [| e |]
-                []
-        }
-    static member Wait(e : Event, dstFlags : VkPipelineStageFlags) =
-        { new Command() with
-            member x.Compatible = QueueFlags.All
-            member x.Enqueue cmd =
-                cmd.AppendCommand()
-                cmd.WaitAll([| e |], dstFlags)
-                []
+        static member Wait(event: Event, dstStageFlags: VkPipelineStageFlags) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue buffer =
+                    buffer.AppendCommand()
+                    buffer.WaitAll([| event |], dstStageFlags)
         }
 
+        static member SetDeviceMask(mask: uint32) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue buffer =
+                    buffer.AppendCommand()
+                    VkRaw.vkCmdSetDeviceMask(buffer.Handle, mask)
+            }
 
-    static member SetDeviceMask(mask : uint32) =
-        { new Command() with
-            member x.Compatible = QueueFlags.All
-            member x.Enqueue cmd =
-                cmd.AppendCommand()
-                VkRaw.vkCmdSetDeviceMask(cmd.Handle, mask)
-                []
-        }
+        static member ResetDevicemask = resetDeviceMask
 
-    static member ResetDevicemask = resetDeviceMask
+        static member PerDevice (command: int -> Command) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue buffer =
+                    if not buffer.Device.IsDeviceGroup then
+                        command(0).Enqueue buffer
+                    else
+                        for di in buffer.Device.PhysicalDeviceGroup.AllIndicesArr do
+                            let mask = 1u <<< int di
+                            buffer.AppendCommand()
+                            VkRaw.vkCmdSetDeviceMask(buffer.Handle, mask)
+                            command(int di).Enqueue buffer
 
-    static member PerDevice (command : int -> Command) =
-        { new Command() with
-            member x.Compatible = QueueFlags.All
-            member x.Enqueue cmd =
-                if not cmd.Device.IsDeviceGroup then
-                    command(0).Enqueue cmd
-                else
-                    let res = System.Collections.Generic.List<IResource>()
-                    for di in cmd.Device.PhysicalDeviceGroup.AllIndicesArr do
-                        let mask = 1u <<< int di
-                        cmd.AppendCommand()
-                        VkRaw.vkCmdSetDeviceMask(cmd.Handle, mask)
-
-                        let r = command(int di).Enqueue cmd
-                        res.AddRange(r)
-
-                    cmd.AppendCommand()
-                    VkRaw.vkCmdSetDeviceMask(cmd.Handle, cmd.Device.PhysicalDevice.DeviceMask)
-
-                    CSharpList.toList res
-        }
-
-[<AbstractClass; Sealed>]
-type ICommandExtensions private () =
-
-    [<Extension>]
-    static member Enqueue(token: DeviceToken, command: ICommand) =
-        command.Enqueue(token.CurrentBuffer)
-
-    [<Extension>]
-    static member inline RunSynchronously(family: DeviceQueueFamily, command: ICommand) =
-        use token = family.CurrentToken
-        token.Enqueue command
-        token.Flush()
-
-    [<Extension>]
-    static member StartTask(family: DeviceQueueFamily, command: ICommand) =
-        use token = family.CurrentToken
-        token.Enqueue command
-        token.FlushAsync()
-
-    [<Extension>]
-    static member inline Enqueue(buffer: CommandBuffer, command: ICommand) =
-        command.Enqueue(buffer)
+                        buffer.AppendCommand()
+                        VkRaw.vkCmdSetDeviceMask(buffer.Handle, buffer.Device.PhysicalDevice.DeviceMask)
+            }
 
 [<AutoOpen>]
-module CommandAPI =
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module ``Command Builders`` =
+
     module Command =
-        let nop = Command.Nop
 
-        let inline delay (f : unit -> Command) =
-            f()
-
-        let inline bind (f : unit -> Command) (m : Command) =
-            let r = f()
-            { new Command() with
-                member x.Compatible = m.Compatible  &&& r.Compatible
-                member x.Enqueue cmd =
-                    let ld = m.Enqueue cmd
-                    let rd = r.Enqueue cmd
-                    ld @ rd
-            }
-
-        let inline append (l : Command) (r : Command) =
+        let inline append (l: Command) (r: Command) =
             { new Command() with
                 member x.Compatible = l.Compatible &&& r.Compatible
-                member x.Enqueue s =
-                    let ld = l.Enqueue s
-                    let rd = r.Enqueue s
-                    ld @ rd
+                member x.Enqueue buffer =
+                    l.Enqueue buffer
+                    r.Enqueue buffer
             }
 
-        let inline tryFinally (m : Command) (comp : unit -> unit) =
+        let inline tryFinally (compensation: unit -> unit) (cmd: Command) =
             { new Command() with
-                member x.Compatible = m.Compatible
-                member x.Enqueue cmd =
-                    let ld = m.Enqueue cmd
-                    let rd = Resource.compensation comp
-                    ld @ [rd]
+                member x.Compatible = cmd.Compatible
+                member x.Enqueue buffer =
+                    buffer.Enqueue cmd
+                    buffer.AddCompensation compensation
             }
 
-        let collect (f : 'a -> Command) (m : seq<'a>) =
-            m |> Seq.fold (fun l r -> append l (f r)) nop
+        let inline collect (mapping: 'T -> Command) (elements: seq<'T>) =
+            let cmds = ResizeArray<Command>()
+            for e in elements do cmds.Add (mapping e)
+            { new Command() with
+                member x.Compatible =
+                    (QueueFlags.All, cmds) ||> Seq.fold (fun s c -> s &&& c.Compatible)
+                member x.Enqueue buffer =
+                    for c in cmds do c.Enqueue buffer
+            }
 
     type CommandBuilder() =
-        member inline x.Bind(m : Command, f : unit -> Command) = Command.bind f m
-        member inline x.Return(v : unit) = Command.Nop
-        member inline x.Delay(f : unit -> Command) = Command.delay f
-        member inline x.Combine(l : Command, r : Command) = Command.append l r
-        member inline x.TryFinally(m : Command, comp : unit -> unit) = Command.tryFinally m comp
+        member inline x.Combine(l, r) = Command.append l r
+        member inline x.Bind(cmd, func) = x.Combine(cmd, func())
+        member inline x.Return(_: unit) = Command.Nop
+        member inline x.Delay(func: unit -> Command) = func()
+        member inline x.TryFinally(cmd, compensation) = Command.tryFinally compensation cmd
         member inline x.Zero() = Command.Nop
-        member inline x.For(elements : seq<'a>, f : 'a -> Command) = Command.collect f elements
+        member inline x.For(elements, mapping) = Command.collect mapping elements
 
     let command = CommandBuilder()
 
-    type BufferCommandBuilder(buffer : CommandBuffer) =
+    type BufferCommandBuilder(buffer: CommandBuffer) =
         inherit CommandBuilder()
-        member x.Run(cmd : Command) = buffer.Enqueue cmd
+        member x.Run(cmd: Command) = cmd.Enqueue buffer
 
-    type TokenCommandBuilder(buffer : DeviceToken, fin : DeviceToken -> unit) =
-        member x.Bind(m : Command, f : unit -> 'a) =
-            buffer.Enqueue m
-            f()
+    type TokenCommandBuilder(token: DeviceToken, fin: DeviceToken -> unit) =
+        member x.Bind(cmd: Command, func: unit -> 'T) =
+            token.Enqueue cmd
+            func()
 
-        member x.Bind(m : DeviceQueue -> 'Result, f : 'Result -> 'a) =
-            let res = buffer.FlushAndPerform m
-            f res
+        member x.Bind(action: DeviceQueue -> 'Result, func: 'Result -> 'T) =
+            let res = token.FlushAndPerform action
+            func res
 
-        member x.Return(v : 'a) = v
+        member inline x.Return(value: 'T) = value
 
-        member x.ReturnFrom(m: DeviceQueue -> 'Result) =
-            buffer.FlushAndPerform m
+        member x.ReturnFrom(action: DeviceQueue -> 'Result) =
+            token.FlushAndPerform action
 
-        member x.Delay(f : unit -> 'a) = f
+        member inline x.Delay(func: unit -> 'T) = func
 
-        member x.Combine(l : unit, r : unit -> 'a) = r()
+        member inline x.Combine(_: unit, r: unit -> 'T) = r()
 
-        member x.TryFinally(m : unit -> 'a, comp : unit -> unit) =
-            buffer.AddCompensation comp
-            m()
+        member x.TryFinally(func: unit -> 'T, compensation: unit -> unit) =
+            token.AddCompensation compensation
+            func()
 
-        member x.Using(m : 'a, f : 'a -> 'b) =
-            buffer.AddCompensation (fun () -> (m :> IDisposable).Dispose())
-            f m
+        member x.Using(resource: #IDisposable, expr: 'T -> 'U) =
+            token.AddCompensation resource
+            expr resource
 
-        member x.Zero() = ()
+        member inline x.Zero() = ()
 
-        member x.For(elements : seq<'a>, f : 'a -> unit) =
-            for a in elements do f a
+        member inline x.For(elements: 'T seq, func: 'T -> unit) =
+            for a in elements do func a
 
-        member x.Run(f : unit -> 'a) =
-            try f()
-            finally fin buffer
+        member x.Run(func: unit -> 'T) =
+            try func()
+            finally fin token
 
     type SynchronousCommandBuilder(queueFamily : DeviceQueueFamily) =
         inherit CommandBuilder()
-        member x.Run(cmd : Command) = queueFamily.RunSynchronously cmd
+        member x.Run(cmd: Command) = queueFamily.RunSynchronously cmd
 
     type CommandBuffer with
         member x.enqueue = BufferCommandBuilder(x)
@@ -284,20 +268,3 @@ module CommandAPI =
 
     type DeviceQueueFamily with
         member x.run = SynchronousCommandBuilder(x)
-
-
-[<AutoOpen>]
-module ``Memory Commands`` =
-
-    type Command with
-
-        static member ExecuteSequential (cmds : list<CommandBuffer>) =
-            match cmds with
-                | [] -> Command.Nop
-                | first :: cmds ->
-                    command {
-                        do! Command.Execute first
-                        for cmd in cmds do
-                            do! Command.Barrier
-                            do! Command.Execute cmd
-                    }

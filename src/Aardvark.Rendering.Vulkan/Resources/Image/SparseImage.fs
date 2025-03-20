@@ -658,7 +658,8 @@ module SparseTextureImplemetation =
                                 )
                             }
 
-                            [tempBuffer; back]
+                            cmd.AddResource tempBuffer
+                            cmd.AddResource back
                     }
 
 

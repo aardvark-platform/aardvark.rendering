@@ -2281,7 +2281,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                         do! Command.TransformLayout(view, VkImageLayout.ColorAttachmentOptimal)
 
                 do! Command.BeginPass(renderPass, fbo, false)
-                do! Command.Execute [inner]
+                do! Command.Execute inner
                 do! Command.EndPass
 
                 for i in 0 .. views.Length - 1 do

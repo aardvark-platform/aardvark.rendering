@@ -151,7 +151,7 @@ module BufferCommands =
                     let copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
                     cmd.AppendCommand()
                     copyInfo |> NativePtr.pin (fun pInfo -> VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, 1u, pInfo))
-                    [src]
+                    cmd.AddResource src
             }
 
         static member Copy(src : Buffer, dst : Buffer, ranges : Range1l[]) =
@@ -170,7 +170,8 @@ module BufferCommands =
 
                         cmd.AppendCommand()
                         VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, uint32 ranges.Length, pCopyInfos)
-                        [src; dst]
+                        cmd.AddResource src
+                        cmd.AddResource dst
                 }
 
 
@@ -198,7 +199,7 @@ module BufferCommands =
                         uint64 offset, uint64 size
                     )
 
-                    [buffer]
+                    cmd.AddResource buffer
             }
 
         static member Acquire(buffer : Buffer, srcQueue : DeviceQueueFamily) =
@@ -220,7 +221,7 @@ module BufferCommands =
                         VkQueueFamilyIgnored, VkQueueFamilyIgnored
                     )
 
-                    [buffer]
+                    cmd.AddResource buffer
             }
 
         static member Sync(buffer : Buffer, srcStage : VkPipelineStageFlags, srcAccess : VkAccessFlags) =
@@ -243,7 +244,7 @@ module BufferCommands =
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Size, 0u)
-                    [b]
+                    cmd.AddResource b
             }
         static member SetBuffer(b : Buffer, offset : int64, size : int64, value : byte[]) =
             { new Command() with
@@ -253,7 +254,7 @@ module BufferCommands =
                     if value.Length <> 4 then failf "pattern too long"
                     let v = BitConverter.ToUInt32(value, 0)
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, uint64 offset, uint64 size, v)
-                    [b]
+                    cmd.AddResource b
             }
 
     type CopyCommand with
@@ -614,7 +615,7 @@ module BufferView =
 // =======================================================================
 // Device Extensions
 // =======================================================================
-[<AbstractClass; Sealed; Extension>]
+[<AbstractClass; Sealed>]
 type ContextBufferExtensions private() =
 
     [<Extension>]

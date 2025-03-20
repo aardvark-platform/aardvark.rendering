@@ -87,7 +87,7 @@ module AccelerationStructure =
                             )
                         }
 
-                        []
+                        cmd.AddResource accelerationStructure
                 }
 
     let private createHandle (device : Device) (data : AccelerationStructureData) (usage : AccelerationStructureUsage)

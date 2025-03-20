@@ -446,8 +446,7 @@ module ``Image Command Extensions`` =
                         )
 
                         img.Image.Layout <- dstLayout
-
-                        [img.Image]
+                        cmd.AddResource img.Image
                 }
 
         static member Acquire(src : ImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout, srcQueue : DeviceQueueFamily) =
@@ -465,7 +464,7 @@ module ``Image Command Extensions`` =
                         uint32 cmd.QueueFamily.Index
                     )
 
-                    [src.Image]
+                    cmd.AddResource src.Image
             }
 
         static member Acquire(src : ImageSubresourceRange, layout : VkImageLayout, srcQueue : DeviceQueueFamily) =
@@ -492,7 +491,8 @@ module ``Image Command Extensions`` =
                         VkRaw.vkCmdCopyImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
                     )
 
-                    [src.Image; dst.Image]
+                    cmd.AddResource src.Image
+                    cmd.AddResource dst.Image
             }
 
         static member Copy(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
@@ -539,7 +539,8 @@ module ``Image Command Extensions`` =
                         VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Handle, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
                     )
 
-                    [src; dst.Image]
+                    cmd.AddResource src
+                    cmd.AddResource dst.Image
             }
 
         static member Copy(src : ImageSubresourceLayers, srcOffset : V3i, dst : Buffer, dstOffset : int64, dstStride : V2i, size : V3i) =
@@ -561,7 +562,8 @@ module ``Image Command Extensions`` =
                         VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Handle, 1u, pCopy)
                     )
 
-                    [src.Image; dst]
+                    cmd.AddResource src.Image
+                    cmd.AddResource dst
             }
 
         static member ResolveMultisamples(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcOffset : V3i,
@@ -591,7 +593,8 @@ module ``Image Command Extensions`` =
                         VkRaw.vkCmdResolveImage(cmd.Handle, src.Image.Handle, srcLayout, dst.Image.Handle, dstLayout, 1u, pResolve)
                     )
 
-                    [src.Image; dst.Image]
+                    cmd.AddResource src.Image
+                    cmd.AddResource dst.Image
             }
 
         static member ResolveMultisamples(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
@@ -672,7 +675,8 @@ module ``Image Command Extensions`` =
                         VkRaw.vkCmdBlitImage(cmd.Handle, src.Image.Handle, srcLayout, dst.Image.Handle, dstLayout, 1u, pBlit, filter)
                     )
 
-                    [src.Image; dst.Image]
+                    cmd.AddResource src.Image
+                    cmd.AddResource dst.Image
             }
 
         static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout,
@@ -736,8 +740,7 @@ module ``Image Command Extensions`` =
                             cmd.Enqueue <| Command.TransformLayout(img.[l,*], VkImageLayout.TransferDstOptimal, VkImageLayout.TransferSrcOptimal)
 
                         cmd.Enqueue <| Command.TransformLayout(img.[baseLevel .. img.LevelCount - 1,*], VkImageLayout.TransferSrcOptimal, oldLayout)
-
-                        [img.Image]
+                        cmd.AddResource img.Image
                 }
 
         static member TransformLayout(img : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
@@ -756,9 +759,7 @@ module ``Image Command Extensions`` =
                 { new Command() with
                     member x.Compatible = QueueFlags.All
                     member x.Enqueue (cmd : CommandBuffer) =
-                        if img.Layout = target then
-                            []
-                        else
+                        if img.Layout <> target then
                             let source = img.Layout
                             let aspect = VkFormat.toAspect img.Format
                             Command.TransformLayout(img.[unbox (int aspect), levels.Min .. levels.Max, slices.Min .. slices.Max], source, target).Enqueue(cmd)
@@ -832,7 +833,7 @@ module ``Image Command Extensions`` =
                             )
                         )
 
-                    [img.Image]
+                    cmd.AddResource img.Image
             }
 
         static member SyncPeersDefault(img : Image, dstLayout : VkImageLayout) =
@@ -863,7 +864,7 @@ module ``Image Command Extensions`` =
                     do! Command.TransformLayout(img, dstLayout)
                 }
             else
-                Command.nop
+                Command.Nop
 
     // We hide these methods since they use ClearColor, which has
     // implicit conversion operators for better C# interop. They would take precedence over the SRTP variants defined below, resulting in warnings.
@@ -900,8 +901,7 @@ module ``Image Command Extensions`` =
                                 )
                             )
                             cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
-
-                            [img.Image]
+                            cmd.AddResource img.Image
                     }
 
             static member ClearDepthStencilImpl(img : ImageSubresourceRange, depth : float32, stencil : uint32) =
@@ -926,8 +926,7 @@ module ``Image Command Extensions`` =
                                 )
                             )
                             cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
-
-                            [img.Image]
+                            cmd.AddResource img.Image
                     }
 
     open ``Internal Clear Commands``

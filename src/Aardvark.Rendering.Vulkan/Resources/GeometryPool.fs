@@ -13,7 +13,7 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-// #nowarn "51"
+#nowarn "51"
 
 module GeometryPoolUtilities =
 
@@ -237,8 +237,6 @@ module GeometryPoolUtilities =
                             cmd.AppendCommand()
                             VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, uint32 todoCount, ptr)
                         )
-
-                    []
             }
 
         override x.Destroy() =
@@ -298,12 +296,9 @@ module GeometryPoolUtilities =
                             { new Command() with
                                 member x.Compatible = QueueFlags.All
                                 member x.Enqueue cmd =
-                                    native {
-                                        let! pCopyInfo = VkBufferCopy(uint64 scratchOffset, uint64 offset, uint64 size)
-                                        cmd.AppendCommand()
-                                        VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
-                                        return []
-                                    }
+                                    cmd.AppendCommand()
+                                    let mutable copyInfo = VkBufferCopy(uint64 scratchOffset, uint64 offset, uint64 size)
+                                    VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
                             }
                         )
             )
@@ -387,11 +382,8 @@ module GeometryPoolUtilities =
                                 member x.Compatible = QueueFlags.All
                                 member x.Enqueue(cmd) =
                                     cmd.AppendCommand()
-                                    native {
-                                        let! pCopyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
-                                        VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
-                                        return []
-                                    }
+                                    let mutable copyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
+                                    VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
                             }
                         )
             )
