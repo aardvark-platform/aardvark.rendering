@@ -26,13 +26,13 @@ type CommandExtensions() =
     static member inline RunSynchronously(family: DeviceQueueFamily, command: Command) =
         use token = family.CurrentToken
         token.Enqueue command
-        token.Flush()
+        token.Sync()
 
     [<Extension>]
     static member StartTask(family: DeviceQueueFamily, command: Command) =
         use token = family.CurrentToken
         token.Enqueue command
-        token.FlushAsync()
+        token.Flush()
 
     [<Extension>]
     static member inline Enqueue(buffer: CommandBuffer, command: Command) =
@@ -222,13 +222,13 @@ module ``Command Builders`` =
             func()
 
         member x.Bind(action: DeviceQueue -> 'Result, func: 'Result -> 'T) =
-            let res = token.FlushAndPerform action
+            let res = token.Sync action
             func res
 
         member inline x.Return(value: 'T) = value
 
         member x.ReturnFrom(action: DeviceQueue -> 'Result) =
-            token.FlushAndPerform action
+            token.Sync action
 
         member inline x.Delay(func: unit -> 'T) = func
 
@@ -260,11 +260,11 @@ module ``Command Builders`` =
 
     type DeviceToken with
         member x.enqueue = TokenCommandBuilder(x, ignore)
-        member x.perform = TokenCommandBuilder(x, fun t -> t.Flush())
+        member x.perform = TokenCommandBuilder(x, _.Sync())
 
     type Device with
         member x.eventually = TokenCommandBuilder(x.Token, Disposable.dispose)
-        member x.perform = TokenCommandBuilder(x.Token, fun t -> t.Flush(); t.Dispose())
+        member x.perform = TokenCommandBuilder(x.Token, fun t -> t.Sync(); t.Dispose())
 
     type DeviceQueueFamily with
         member x.run = SynchronousCommandBuilder(x)

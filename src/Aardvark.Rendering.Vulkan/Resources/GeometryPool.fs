@@ -480,7 +480,7 @@ module GeometryPoolUtilities =
                                 t.Enqueue(b)
                                 deleteBuffers.Add old
 
-                            token.Flush()
+                            token.Sync()
                             capacity <- newCapacity
 
                             fun () ->

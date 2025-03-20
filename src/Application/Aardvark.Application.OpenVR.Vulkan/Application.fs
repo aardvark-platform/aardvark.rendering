@@ -348,7 +348,7 @@ type VulkanVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
 
     override x.Use (action : unit -> 'r) =
         use t = queue.Family.CurrentToken
-        t.FlushAndPerform (ignore >> action)
+        t.Sync (ignore >> action)
 
     override x.Release() = 
         // delete views

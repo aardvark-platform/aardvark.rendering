@@ -37,7 +37,7 @@ type DeviceToken internal (family: IDeviceQueueFamily, getCurrentQueue: unit -> 
     member internal x.DeviceInterface = family.DeviceInterface
     member internal x.FamilyInterface = family
 
-    member inline private x.Flush(queue: DeviceQueue) =
+    member inline private x.Sync(queue: DeviceQueue) =
         match currentBuffer with
         | ValueSome buffer when buffer.IsRecording ->
             buffer.End()
@@ -47,18 +47,19 @@ type DeviceToken internal (family: IDeviceQueueFamily, getCurrentQueue: unit -> 
         | _ -> ()
 
     /// Flushes any enqueued commands and waits for their completion.
-    member x.Flush() =
+    member x.Sync() =
         use h = getCurrentQueue()
-        x.Flush h.Queue
+        x.Sync h.Queue
 
-    /// Flushes any enqueued commands and performs the given action on the current queue.
-    member x.FlushAndPerform (action: DeviceQueue -> 'T) =
+    /// Flushes any enqueued commands and waits for their completion.
+    /// Performs the given action on the queue subsequently.
+    member x.Sync(action: DeviceQueue -> 'T) =
         use h = getCurrentQueue()
-        x.Flush h.Queue
+        x.Sync h.Queue
         action h.Queue
 
-    /// Flushes any enqueued commands.
-    member x.FlushAsync() =
+    /// Flushes any enqueued commands and starts a device task.
+    member x.Flush() =
         match currentBuffer with
         | ValueSome buffer when buffer.IsRecording ->
             currentBuffer <- ValueNone
@@ -81,7 +82,7 @@ type DeviceToken internal (family: IDeviceQueueFamily, getCurrentQueue: unit -> 
         refCount <- refCount + 1
 
     member internal x.RemoveRef() =
-        if refCount = 1 then x.Flush()
+        if refCount = 1 then x.Sync()
         else refCount <- refCount - 1
 
     member x.Dispose() =
