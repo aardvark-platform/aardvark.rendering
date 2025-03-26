@@ -136,7 +136,7 @@ module ImageDownloadExtensions =
 
             let buffer =
                 let sizeInBytes = mode |> CompressionMode.sizeInBytes alignedBufferSize
-                device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 sizeInBytes)
+                device.ReadbackMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (uint64 sizeInBytes)
 
             try
                 (src, device) ||> resolveAndCopy (fun src ->
@@ -158,7 +158,7 @@ module ImageDownloadExtensions =
             let imageFormat = src.Image.Format
             let srcPixFormat = PixFormat(VkFormat.expectedType imageFormat, VkFormat.toColFormat imageFormat)
 
-            let temp = device.CreateTensorImage(V3i dst.Size, srcPixFormat, VkFormat.isSrgb imageFormat)
+            let temp = device.ReadbackMemory.CreateTensorImage(V3i dst.Size, srcPixFormat, VkFormat.isSrgb imageFormat)
 
             try
                 (src, device) ||> resolveAndCopy (fun resolved ->
@@ -207,7 +207,7 @@ module ImageDownloadExtensions =
 
             let buffer =
                 let sizeInBytes = texelSize * size.X * size.Y
-                device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 sizeInBytes)
+                device.ReadbackMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (uint64 sizeInBytes)
 
             try
                 (src, device) ||> resolveAndCopy (fun src ->
@@ -232,7 +232,7 @@ module ImageDownloadExtensions =
                 buffer.Dispose()
 
 
-    [<AbstractClass; Sealed; Extension>]
+    [<AbstractClass; Sealed>]
     type ContextImageDownloadExtensions private() =
 
         [<Extension>]

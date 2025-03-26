@@ -118,13 +118,11 @@ module AccelerationStructure =
 
     /// Creates and builds an acceleration structure with the given data.
     let create (device : Device) (allowUpdate : bool) (usage : AccelerationStructureUsage) (data : AccelerationStructureData) =
-
-        use token = device.ComputeToken
         use nativeData = NativeAccelerationStructureData.alloc device allowUpdate usage data
         let buffers = nativeData |> NativeAccelerationStructureData.createBuffers device
         let accelerationStructure = createHandle device data usage allowUpdate buffers.ResultBuffer buffers.ScratchBuffer
 
-        token.perform {
+        device.perform {
             do! Command.Build(accelerationStructure, nativeData, false)
         }
 
@@ -172,9 +170,8 @@ module AccelerationStructure =
                 false
 
         if isCompatible then
-            use token = accelerationStructure.Device.ComputeToken
             use nativeData = NativeAccelerationStructureData.alloc accelerationStructure.Device true accelerationStructure.Usage data
-            token.perform {
+            accelerationStructure.Device.perform {
                 do! Command.Build(accelerationStructure, nativeData, true)
             }
 

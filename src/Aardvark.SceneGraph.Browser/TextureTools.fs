@@ -57,52 +57,11 @@ module internal BrowserTexture =
             let mutable dirty = false
             let mutable sub = emptySub
 
-            
-            let allIndices = device.PhysicalDevice.QueueFamilies |> Array.map (fun f -> uint32 f.index)
-
-
-            let createImage (textureDim : V3i) =
-                use pAll = fixed allIndices
+            let createImage (size : V3i) =
                 let fmt = VkFormat.R8g8b8a8Unorm
-                let levels = levels textureDim.XY
-                use pInfo =
-                    fixed [|
-                        VkImageCreateInfo(
-                            VkImageCreateFlags.None,
-                            VkImageType.D2d, fmt,
-                            VkExtent3D(textureDim.X, textureDim.Y, textureDim.Z),
-                            uint32 levels, 1u, VkSampleCountFlags.D1Bit, VkImageTiling.Optimal, 
-                            VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit,
-                            VkSharingMode.Concurrent,
-                            uint32 allIndices.Length,
-                            pAll,
-                            VkImageLayout.Preinitialized
-                        )
-                    |]
-
-                let img = [| VkImage.Null |]
-                use pImg = fixed img
-                VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pImg)
-                |> ignore
-                let handle = img.[0]
-
-                let reqs = [| VkMemoryRequirements() |]
-                use pReqs = fixed reqs
-                VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, pReqs)
-                let reqs = reqs.[0]
-
-                let mem = device.DeviceMemory.AllocRaw(reqs.size)
-                VkRaw.vkBindImageMemory(device.Handle, handle, mem.Handle, 0UL)
-                |> ignore
-
-
-                let img = new Image(device, handle, textureDim, 1, 1, 1, TextureDimension.Texture2D, fmt, mem, VkImageLayout.Preinitialized, VkImageLayout.General)
-                device.perform{
-                    do! Command.TransformLayout(img, VkImageLayout.General)
-                }
-                img
-
-
+                let levels = levels size.XY
+                let usage = VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit
+                device |> Image.create' true ImageExport.Disable TextureDimension.Texture2D usage fmt levels 1 1 size
 
             let toDispose = System.Collections.Generic.List<Image>()
             let resource = 
@@ -132,7 +91,7 @@ module internal BrowserTexture =
                                         let size = V3i(img.totalWidth, img.totalHeight, 1)
                                         let newImg = createImage size
                                         
-                                        let temp = device.CreateTensorImage<byte>(size, Col.Format.RGBA, false)
+                                        let temp = device.ReadbackMemory.CreateTensorImage<byte>(size, Col.Format.RGBA, false)
                                         temp.Write(img.data, nativeint (size.X * 4), Col.Format.BGRA, ImageTrafo.Identity)
                                         device.CopyEngine.Enqueue [
                                             CopyCommand.Copy(temp, newImg.[TextureAspect.Color, 0, 0])
@@ -145,7 +104,7 @@ module internal BrowserTexture =
                                         // full update
                                         let size = V3i(img.totalWidth, img.totalHeight, 1)
 
-                                        let temp = device.CreateTensorImage<byte>(size, Col.Format.RGBA, false)
+                                        let temp = device.ReadbackMemory.CreateTensorImage<byte>(size, Col.Format.RGBA, false)
                                         temp.Write(img.data, nativeint (size.X * 4), Col.Format.BGRA, ImageTrafo.Identity)
                                         device.CopyEngine.Enqueue [
                                             CopyCommand.Copy(temp, tex.[TextureAspect.Color, 0, 0])
@@ -160,7 +119,7 @@ module internal BrowserTexture =
                                         let copyOffset = cMin |> Align.prev gran
                                         let copySize = cMin + size.XY - copyOffset |> Align.next gran
 
-                                        let temp = device.CreateTensorImage<byte>(V3i(copySize, 1), Col.Format.RGBA, false)
+                                        let temp = device.ReadbackMemory.CreateTensorImage<byte>(V3i(copySize, 1), Col.Format.RGBA, false)
 
                                         NativeVolume.using client.LastImage.Volume (fun src ->
                                             let srcPart = src.SubVolume(V3i(copyOffset, 0), V3i(copySize, 4))

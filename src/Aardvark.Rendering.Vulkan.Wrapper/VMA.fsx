@@ -450,19 +450,17 @@ module Writer =
                 blk $"type {name} =" (fun _ ->
                     blk "{" (fun _ ->
                         for f in fields do
-                            fn $"{f.name} : {Type.fsharpName f.count f.typ}"
+                            fn $"mutable {f.name} : {Type.fsharpName f.count f.typ}"
                     )
                     fn "}"
                     ln()
-                    blk $"static let empty : {name} =" (fun _ ->
+                    blk $"static member Empty : {name} =" (fun _ ->
                         blk "{" (fun _ ->
                             for f in fields do
                                 fn $"{f.name} = Unchecked.defaultof<{Type.fsharpName f.count f.typ}>"
                         )
                         fn "}"
                     )
-                    ln()
-                    fn $"static member Empty = empty"
                 )
 
             | Array (typ, count) ->

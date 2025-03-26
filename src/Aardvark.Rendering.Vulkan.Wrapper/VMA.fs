@@ -125,53 +125,51 @@ type VmaVirtualBlock = nativeint
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaDeviceMemoryCallbacks =
     {
-        pfnAllocate : nativeint
-        pfnFree : nativeint
-        pUserData : nativeint
+        mutable pfnAllocate : nativeint
+        mutable pfnFree : nativeint
+        mutable pUserData : nativeint
     }
 
-    static let empty : VmaDeviceMemoryCallbacks =
+    static member Empty : VmaDeviceMemoryCallbacks =
         {
             pfnAllocate = Unchecked.defaultof<nativeint>
             pfnFree = Unchecked.defaultof<nativeint>
             pUserData = Unchecked.defaultof<nativeint>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaVulkanFunctions =
     {
-        vkGetInstanceProcAddr : nativeint
-        vkGetDeviceProcAddr : nativeint
-        vkGetPhysicalDeviceProperties : nativeint
-        vkGetPhysicalDeviceMemoryProperties : nativeint
-        vkAllocateMemory : nativeint
-        vkFreeMemory : nativeint
-        vkMapMemory : nativeint
-        vkUnmapMemory : nativeint
-        vkFlushMappedMemoryRanges : nativeint
-        vkInvalidateMappedMemoryRanges : nativeint
-        vkBindBufferMemory : nativeint
-        vkBindImageMemory : nativeint
-        vkGetBufferMemoryRequirements : nativeint
-        vkGetImageMemoryRequirements : nativeint
-        vkCreateBuffer : nativeint
-        vkDestroyBuffer : nativeint
-        vkCreateImage : nativeint
-        vkDestroyImage : nativeint
-        vkCmdCopyBuffer : nativeint
-        vkGetBufferMemoryRequirements2KHR : nativeint
-        vkGetImageMemoryRequirements2KHR : nativeint
-        vkBindBufferMemory2KHR : nativeint
-        vkBindImageMemory2KHR : nativeint
-        vkGetPhysicalDeviceMemoryProperties2KHR : nativeint
-        vkGetDeviceBufferMemoryRequirements : nativeint
-        vkGetDeviceImageMemoryRequirements : nativeint
-        vkGetMemoryWin32HandleKHR : nativeint
+        mutable vkGetInstanceProcAddr : nativeint
+        mutable vkGetDeviceProcAddr : nativeint
+        mutable vkGetPhysicalDeviceProperties : nativeint
+        mutable vkGetPhysicalDeviceMemoryProperties : nativeint
+        mutable vkAllocateMemory : nativeint
+        mutable vkFreeMemory : nativeint
+        mutable vkMapMemory : nativeint
+        mutable vkUnmapMemory : nativeint
+        mutable vkFlushMappedMemoryRanges : nativeint
+        mutable vkInvalidateMappedMemoryRanges : nativeint
+        mutable vkBindBufferMemory : nativeint
+        mutable vkBindImageMemory : nativeint
+        mutable vkGetBufferMemoryRequirements : nativeint
+        mutable vkGetImageMemoryRequirements : nativeint
+        mutable vkCreateBuffer : nativeint
+        mutable vkDestroyBuffer : nativeint
+        mutable vkCreateImage : nativeint
+        mutable vkDestroyImage : nativeint
+        mutable vkCmdCopyBuffer : nativeint
+        mutable vkGetBufferMemoryRequirements2KHR : nativeint
+        mutable vkGetImageMemoryRequirements2KHR : nativeint
+        mutable vkBindBufferMemory2KHR : nativeint
+        mutable vkBindImageMemory2KHR : nativeint
+        mutable vkGetPhysicalDeviceMemoryProperties2KHR : nativeint
+        mutable vkGetDeviceBufferMemoryRequirements : nativeint
+        mutable vkGetDeviceImageMemoryRequirements : nativeint
+        mutable vkGetMemoryWin32HandleKHR : nativeint
     }
 
-    static let empty : VmaVulkanFunctions =
+    static member Empty : VmaVulkanFunctions =
         {
             vkGetInstanceProcAddr = Unchecked.defaultof<nativeint>
             vkGetDeviceProcAddr = Unchecked.defaultof<nativeint>
@@ -202,25 +200,23 @@ type VmaVulkanFunctions =
             vkGetMemoryWin32HandleKHR = Unchecked.defaultof<nativeint>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaAllocatorCreateInfo =
     {
-        flags : VmaAllocatorCreateFlags
-        physicalDevice : VkPhysicalDevice
-        device : VkDevice
-        preferredLargeHeapBlockSize : VkDeviceSize
-        pAllocationCallbacks : nativeptr<VkAllocationCallbacks>
-        pDeviceMemoryCallbacks : nativeptr<VmaDeviceMemoryCallbacks>
-        pHeapSizeLimit : nativeptr<VkDeviceSize>
-        pVulkanFunctions : nativeptr<VmaVulkanFunctions>
-        instance : VkInstance
-        vulkanApiVersion : uint32
-        pTypeExternalMemoryHandleTypes : nativeptr<VkExternalMemoryHandleTypeFlags>
+        mutable flags : VmaAllocatorCreateFlags
+        mutable physicalDevice : VkPhysicalDevice
+        mutable device : VkDevice
+        mutable preferredLargeHeapBlockSize : VkDeviceSize
+        mutable pAllocationCallbacks : nativeptr<VkAllocationCallbacks>
+        mutable pDeviceMemoryCallbacks : nativeptr<VmaDeviceMemoryCallbacks>
+        mutable pHeapSizeLimit : nativeptr<VkDeviceSize>
+        mutable pVulkanFunctions : nativeptr<VmaVulkanFunctions>
+        mutable instance : VkInstance
+        mutable vulkanApiVersion : uint32
+        mutable pTypeExternalMemoryHandleTypes : nativeptr<VkExternalMemoryHandleTypeFlags>
     }
 
-    static let empty : VmaAllocatorCreateInfo =
+    static member Empty : VmaAllocatorCreateInfo =
         {
             flags = Unchecked.defaultof<VmaAllocatorCreateFlags>
             physicalDevice = Unchecked.defaultof<VkPhysicalDevice>
@@ -235,35 +231,31 @@ type VmaAllocatorCreateInfo =
             pTypeExternalMemoryHandleTypes = Unchecked.defaultof<nativeptr<VkExternalMemoryHandleTypeFlags>>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaAllocatorInfo =
     {
-        instance : VkInstance
-        physicalDevice : VkPhysicalDevice
-        device : VkDevice
+        mutable instance : VkInstance
+        mutable physicalDevice : VkPhysicalDevice
+        mutable device : VkDevice
     }
 
-    static let empty : VmaAllocatorInfo =
+    static member Empty : VmaAllocatorInfo =
         {
             instance = Unchecked.defaultof<VkInstance>
             physicalDevice = Unchecked.defaultof<VkPhysicalDevice>
             device = Unchecked.defaultof<VkDevice>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaStatistics =
     {
-        blockCount : uint32
-        allocationCount : uint32
-        blockBytes : VkDeviceSize
-        allocationBytes : VkDeviceSize
+        mutable blockCount : uint32
+        mutable allocationCount : uint32
+        mutable blockBytes : VkDeviceSize
+        mutable allocationBytes : VkDeviceSize
     }
 
-    static let empty : VmaStatistics =
+    static member Empty : VmaStatistics =
         {
             blockCount = Unchecked.defaultof<uint32>
             allocationCount = Unchecked.defaultof<uint32>
@@ -271,20 +263,18 @@ type VmaStatistics =
             allocationBytes = Unchecked.defaultof<VkDeviceSize>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaDetailedStatistics =
     {
-        statistics : VmaStatistics
-        unusedRangeCount : uint32
-        allocationSizeMin : VkDeviceSize
-        allocationSizeMax : VkDeviceSize
-        unusedRangeSizeMin : VkDeviceSize
-        unusedRangeSizeMax : VkDeviceSize
+        mutable statistics : VmaStatistics
+        mutable unusedRangeCount : uint32
+        mutable allocationSizeMin : VkDeviceSize
+        mutable allocationSizeMax : VkDeviceSize
+        mutable unusedRangeSizeMin : VkDeviceSize
+        mutable unusedRangeSizeMax : VkDeviceSize
     }
 
-    static let empty : VmaDetailedStatistics =
+    static member Empty : VmaDetailedStatistics =
         {
             statistics = Unchecked.defaultof<VmaStatistics>
             unusedRangeCount = Unchecked.defaultof<uint32>
@@ -293,8 +283,6 @@ type VmaDetailedStatistics =
             unusedRangeSizeMin = Unchecked.defaultof<VkDeviceSize>
             unusedRangeSizeMax = Unchecked.defaultof<VkDeviceSize>
         }
-
-    static member Empty = empty
 
 [<StructLayout(LayoutKind.Explicit, Size = 32 * 64)>]
 type VmaDetailedStatistics_32 =
@@ -343,51 +331,47 @@ type VmaDetailedStatistics_16 =
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaTotalStatistics =
     {
-        memoryType : VmaDetailedStatistics_32
-        memoryHeap : VmaDetailedStatistics_16
-        total : VmaDetailedStatistics
+        mutable memoryType : VmaDetailedStatistics_32
+        mutable memoryHeap : VmaDetailedStatistics_16
+        mutable total : VmaDetailedStatistics
     }
 
-    static let empty : VmaTotalStatistics =
+    static member Empty : VmaTotalStatistics =
         {
             memoryType = Unchecked.defaultof<VmaDetailedStatistics_32>
             memoryHeap = Unchecked.defaultof<VmaDetailedStatistics_16>
             total = Unchecked.defaultof<VmaDetailedStatistics>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaBudget =
     {
-        statistics : VmaStatistics
-        usage : VkDeviceSize
-        budget : VkDeviceSize
+        mutable statistics : VmaStatistics
+        mutable usage : VkDeviceSize
+        mutable budget : VkDeviceSize
     }
 
-    static let empty : VmaBudget =
+    static member Empty : VmaBudget =
         {
             statistics = Unchecked.defaultof<VmaStatistics>
             usage = Unchecked.defaultof<VkDeviceSize>
             budget = Unchecked.defaultof<VkDeviceSize>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaAllocationCreateInfo =
     {
-        flags : VmaAllocationCreateFlags
-        usage : VmaMemoryUsage
-        requiredFlags : VkMemoryPropertyFlags
-        preferredFlags : VkMemoryPropertyFlags
-        memoryTypeBits : uint32
-        pool : VmaPool
-        pUserData : nativeint
-        priority : float32
+        mutable flags : VmaAllocationCreateFlags
+        mutable usage : VmaMemoryUsage
+        mutable requiredFlags : VkMemoryPropertyFlags
+        mutable preferredFlags : VkMemoryPropertyFlags
+        mutable memoryTypeBits : uint32
+        mutable pool : VmaPool
+        mutable pUserData : nativeint
+        mutable priority : float32
     }
 
-    static let empty : VmaAllocationCreateInfo =
+    static member Empty : VmaAllocationCreateInfo =
         {
             flags = Unchecked.defaultof<VmaAllocationCreateFlags>
             usage = Unchecked.defaultof<VmaMemoryUsage>
@@ -399,22 +383,20 @@ type VmaAllocationCreateInfo =
             priority = Unchecked.defaultof<float32>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaPoolCreateInfo =
     {
-        memoryTypeIndex : uint32
-        flags : VmaPoolCreateFlags
-        blockSize : VkDeviceSize
-        minBlockCount : uint64
-        maxBlockCount : uint64
-        priority : float32
-        minAllocationAlignment : VkDeviceSize
-        pMemoryAllocateNext : nativeint
+        mutable memoryTypeIndex : uint32
+        mutable flags : VmaPoolCreateFlags
+        mutable blockSize : VkDeviceSize
+        mutable minBlockCount : uint64
+        mutable maxBlockCount : uint64
+        mutable priority : float32
+        mutable minAllocationAlignment : VkDeviceSize
+        mutable pMemoryAllocateNext : nativeint
     }
 
-    static let empty : VmaPoolCreateInfo =
+    static member Empty : VmaPoolCreateInfo =
         {
             memoryTypeIndex = Unchecked.defaultof<uint32>
             flags = Unchecked.defaultof<VmaPoolCreateFlags>
@@ -426,21 +408,19 @@ type VmaPoolCreateInfo =
             pMemoryAllocateNext = Unchecked.defaultof<nativeint>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaAllocationInfo =
     {
-        memoryType : uint32
-        deviceMemory : VkDeviceMemory
-        offset : VkDeviceSize
-        size : VkDeviceSize
-        pMappedData : nativeint
-        pUserData : nativeint
-        pName : cstr
+        mutable memoryType : uint32
+        mutable deviceMemory : VkDeviceMemory
+        mutable offset : VkDeviceSize
+        mutable size : VkDeviceSize
+        mutable pMappedData : nativeint
+        mutable pUserData : nativeint
+        mutable pName : cstr
     }
 
-    static let empty : VmaAllocationInfo =
+    static member Empty : VmaAllocationInfo =
         {
             memoryType = Unchecked.defaultof<uint32>
             deviceMemory = Unchecked.defaultof<VkDeviceMemory>
@@ -451,37 +431,33 @@ type VmaAllocationInfo =
             pName = Unchecked.defaultof<cstr>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaAllocationInfo2 =
     {
-        allocationInfo : VmaAllocationInfo
-        blockSize : VkDeviceSize
-        dedicatedMemory : VkBool32
+        mutable allocationInfo : VmaAllocationInfo
+        mutable blockSize : VkDeviceSize
+        mutable dedicatedMemory : VkBool32
     }
 
-    static let empty : VmaAllocationInfo2 =
+    static member Empty : VmaAllocationInfo2 =
         {
             allocationInfo = Unchecked.defaultof<VmaAllocationInfo>
             blockSize = Unchecked.defaultof<VkDeviceSize>
             dedicatedMemory = Unchecked.defaultof<VkBool32>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaDefragmentationInfo =
     {
-        flags : VmaDefragmentationFlags
-        pool : VmaPool
-        maxBytesPerPass : VkDeviceSize
-        maxAllocationsPerPass : uint32
-        pfnBreakCallback : nativeint
-        pBreakCallbackUserData : nativeint
+        mutable flags : VmaDefragmentationFlags
+        mutable pool : VmaPool
+        mutable maxBytesPerPass : VkDeviceSize
+        mutable maxAllocationsPerPass : uint32
+        mutable pfnBreakCallback : nativeint
+        mutable pBreakCallbackUserData : nativeint
     }
 
-    static let empty : VmaDefragmentationInfo =
+    static member Empty : VmaDefragmentationInfo =
         {
             flags = Unchecked.defaultof<VmaDefragmentationFlags>
             pool = Unchecked.defaultof<VmaPool>
@@ -491,50 +467,44 @@ type VmaDefragmentationInfo =
             pBreakCallbackUserData = Unchecked.defaultof<nativeint>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaDefragmentationMove =
     {
-        operation : VmaDefragmentationMoveOperation
-        srcAllocation : VmaAllocation
-        dstTmpAllocation : VmaAllocation
+        mutable operation : VmaDefragmentationMoveOperation
+        mutable srcAllocation : VmaAllocation
+        mutable dstTmpAllocation : VmaAllocation
     }
 
-    static let empty : VmaDefragmentationMove =
+    static member Empty : VmaDefragmentationMove =
         {
             operation = Unchecked.defaultof<VmaDefragmentationMoveOperation>
             srcAllocation = Unchecked.defaultof<VmaAllocation>
             dstTmpAllocation = Unchecked.defaultof<VmaAllocation>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaDefragmentationPassMoveInfo =
     {
-        moveCount : uint32
-        pMoves : nativeptr<VmaDefragmentationMove>
+        mutable moveCount : uint32
+        mutable pMoves : nativeptr<VmaDefragmentationMove>
     }
 
-    static let empty : VmaDefragmentationPassMoveInfo =
+    static member Empty : VmaDefragmentationPassMoveInfo =
         {
             moveCount = Unchecked.defaultof<uint32>
             pMoves = Unchecked.defaultof<nativeptr<VmaDefragmentationMove>>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaDefragmentationStats =
     {
-        bytesMoved : VkDeviceSize
-        bytesFreed : VkDeviceSize
-        allocationsMoved : uint32
-        deviceMemoryBlocksFreed : uint32
+        mutable bytesMoved : VkDeviceSize
+        mutable bytesFreed : VkDeviceSize
+        mutable allocationsMoved : uint32
+        mutable deviceMemoryBlocksFreed : uint32
     }
 
-    static let empty : VmaDefragmentationStats =
+    static member Empty : VmaDefragmentationStats =
         {
             bytesMoved = Unchecked.defaultof<VkDeviceSize>
             bytesFreed = Unchecked.defaultof<VkDeviceSize>
@@ -542,35 +512,31 @@ type VmaDefragmentationStats =
             deviceMemoryBlocksFreed = Unchecked.defaultof<uint32>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaVirtualBlockCreateInfo =
     {
-        size : VkDeviceSize
-        flags : VmaVirtualBlockCreateFlags
-        pAllocationCallbacks : nativeptr<VkAllocationCallbacks>
+        mutable size : VkDeviceSize
+        mutable flags : VmaVirtualBlockCreateFlags
+        mutable pAllocationCallbacks : nativeptr<VkAllocationCallbacks>
     }
 
-    static let empty : VmaVirtualBlockCreateInfo =
+    static member Empty : VmaVirtualBlockCreateInfo =
         {
             size = Unchecked.defaultof<VkDeviceSize>
             flags = Unchecked.defaultof<VmaVirtualBlockCreateFlags>
             pAllocationCallbacks = Unchecked.defaultof<nativeptr<VkAllocationCallbacks>>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaVirtualAllocationCreateInfo =
     {
-        size : VkDeviceSize
-        alignment : VkDeviceSize
-        flags : VmaVirtualAllocationCreateFlags
-        pUserData : nativeint
+        mutable size : VkDeviceSize
+        mutable alignment : VkDeviceSize
+        mutable flags : VmaVirtualAllocationCreateFlags
+        mutable pUserData : nativeint
     }
 
-    static let empty : VmaVirtualAllocationCreateInfo =
+    static member Empty : VmaVirtualAllocationCreateInfo =
         {
             size = Unchecked.defaultof<VkDeviceSize>
             alignment = Unchecked.defaultof<VkDeviceSize>
@@ -578,24 +544,20 @@ type VmaVirtualAllocationCreateInfo =
             pUserData = Unchecked.defaultof<nativeint>
         }
 
-    static member Empty = empty
-
 [<Struct; StructLayout(LayoutKind.Sequential)>]
 type VmaVirtualAllocationInfo =
     {
-        offset : VkDeviceSize
-        size : VkDeviceSize
-        pUserData : nativeint
+        mutable offset : VkDeviceSize
+        mutable size : VkDeviceSize
+        mutable pUserData : nativeint
     }
 
-    static let empty : VmaVirtualAllocationInfo =
+    static member Empty : VmaVirtualAllocationInfo =
         {
             offset = Unchecked.defaultof<VkDeviceSize>
             size = Unchecked.defaultof<VkDeviceSize>
             pUserData = Unchecked.defaultof<nativeint>
         }
-
-    static member Empty = empty
 
 [<SuppressUnmanagedCodeSecurity>]
 module Vma =

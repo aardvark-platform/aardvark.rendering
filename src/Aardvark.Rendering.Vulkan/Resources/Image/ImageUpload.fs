@@ -35,7 +35,7 @@ module ImageUploadExtensions =
                 let compression = textureFormat.CompressionMode
 
                 if compression = CompressionMode.None then
-                    let img = device.CreateTensorImage<'T>(size, TextureFormat.toColFormat textureFormat, textureFormat.IsSrgb)
+                    let img = device.ReadbackMemory.CreateTensorImage<'T>(size, TextureFormat.toColFormat textureFormat, textureFormat.IsSrgb)
                     img.Write(format, if mirrorY then src.MirrorY() else src)
                     img :> ImageBuffer
 
@@ -48,9 +48,9 @@ module ImageUploadExtensions =
                         blocks * blockSize
 
                     let sizeInBytes =
-                        int64 <| CompressionMode.sizeInBytes size compression
+                        uint64 <| CompressionMode.sizeInBytes size compression
 
-                    let buffer = device.CreateImageBuffer(textureFormat, size, alignedSize.XY, sizeInBytes)
+                    let buffer = device.ReadbackMemory.CreateImageBuffer(textureFormat, size, alignedSize.XY, sizeInBytes)
 
                     buffer.Memory.Mapped (fun dst ->
                         let srcInfo = src.Info.SubXYWVolume(0L).Transformed(ImageTrafo.MirrorY)
@@ -133,7 +133,7 @@ module ImageUploadExtensions =
                             let blocks = compression |> CompressionMode.numberOfBlocks data.Size
                             blocks * blockSize
 
-                        let buffer = device.CreateImageBuffer(texture.Format, data.Size, alignedSize.XY, data.SizeInBytes)
+                        let buffer = device.ReadbackMemory.CreateImageBuffer(texture.Format, data.Size, alignedSize.XY, uint64 data.SizeInBytes)
 
                         buffer.Memory.Mapped (fun dst ->
                             data.Use (fun src ->
@@ -201,9 +201,9 @@ module ImageUploadExtensions =
 
             let exportMode =
                 if export then
-                    ImageExportMode.Export false
+                    ImageExport.Enable false
                 else
-                    ImageExportMode.None
+                    ImageExport.Disable
 
             let count = if dimension = TextureDimension.TextureCube then slices / 6 else slices
 

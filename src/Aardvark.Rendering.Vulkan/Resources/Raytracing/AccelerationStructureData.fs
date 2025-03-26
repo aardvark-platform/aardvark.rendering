@@ -78,8 +78,7 @@ module private NativeAccelerationStructureData =
              )
 
         let prepare (device : Device) (buffer : IBuffer) =
-            use token = device.ComputeToken
-            token |> Buffer.ofBufferWithMemory false usage buffer device.DeviceMemory
+            Buffer.ofBuffer false usage buffer device.DeviceMemory
 
     let private getFlags (allowUpdate : bool) (usage : AccelerationStructureUsage) =
         let hint =
@@ -211,12 +210,12 @@ module private NativeAccelerationStructureData =
 
         let resultBuffer =
             let flags = VkBufferUsageFlags.AccelerationStructureStorageBitKhr ||| VkBufferUsageFlags.ShaderDeviceAddressBitKhr
-            device |> Buffer.alloc flags (int64 sizes.accelerationStructureSize)
+            device.DeviceMemory |> Buffer.create flags sizes.accelerationStructureSize
 
         let scratchBuffer =
             let alignment = uint64 device.PhysicalDevice.Limits.Raytracing.Value.MinAccelerationStructureScratchOffsetAlignment
             let flags = VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.ShaderDeviceAddressBitKhr
             let size = max sizes.buildScratchSize sizes.updateScratchSize
-            device |> Buffer.alloc' false false alignment flags (int64 size)
+            device.DeviceMemory |> Buffer.create' false false flags alignment size
 
         {| ResultBuffer = resultBuffer; ScratchBuffer = scratchBuffer |}

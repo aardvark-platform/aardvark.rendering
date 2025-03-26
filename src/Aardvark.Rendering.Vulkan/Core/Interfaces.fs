@@ -6,6 +6,7 @@ type IDevice =
     abstract member Handle : VkDevice
     abstract member Instance : Instance
     abstract member PhysicalDevice : PhysicalDevice
+    abstract member EnabledFeatures : DeviceFeatures
     abstract member IsExtensionEnabled : string -> bool
 
 [<AllowNullLiteral>]

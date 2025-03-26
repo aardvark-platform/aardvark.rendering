@@ -63,8 +63,10 @@ type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice>
             yield Instance.Extensions.ShaderSubgroupBallot
             yield Instance.Extensions.GetPhysicalDeviceProperties2
             yield Instance.Extensions.ConservativeRasterization
+            yield Instance.Extensions.MemoryBudget
+            yield Instance.Extensions.MemoryPriority
 
-            yield! Instance.Extensions.MemoryBudget
+            yield! Instance.Extensions.Maintenance
             yield! Instance.Extensions.Raytracing
             yield! Instance.Extensions.Sharing
         ]
@@ -84,7 +86,7 @@ type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice>
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
         let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
     
-        new Instance(Version(1,1,0), enabledLayers, enabledExtensions, debug)
+        new Instance(enabledLayers, enabledExtensions, debug)
 
     // choose a physical device
     let physicalDevice = 

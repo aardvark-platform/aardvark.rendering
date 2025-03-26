@@ -175,45 +175,23 @@ module QueueFamilyInfo =
 [<Flags>]
 type MemoryHeapFlags =
     | None = 0
-    | DeviceLocalBit = 0x00000001
+    | DeviceLocal = 1
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module MemoryHeapFlags =
-    let inline deviceLocal (f : MemoryHeapFlags) = f &&& MemoryHeapFlags.DeviceLocalBit <> MemoryHeapFlags.None
+    let inline deviceLocal (f : MemoryHeapFlags) = f &&& MemoryHeapFlags.DeviceLocal <> MemoryHeapFlags.None
 
 
 type MemoryHeapInfo(index : int, totalSize : int64, flags : MemoryHeapFlags) =
-    let mutable allocated = 0L
-
-    member x.TryAdd(size : int64) =
-        Interlocked.Change(&allocated, fun v ->
-            if v + size > totalSize then (v, false)
-            else (v + size, true)
-        )
-
-    member inline x.TryAdd(size : VkDeviceSize) = x.TryAdd (int64 size)
-    member inline x.TryAdd(size : Mem) = x.TryAdd size.Bytes
-
-    member x.Remove(size : int64) = Interlocked.Add(&allocated, -size) |> ignore
-    member inline x.Remove(size : VkDeviceSize) = x.Remove (int64 size)
-    member inline x.Remove(size : Mem) = x.Remove size.Bytes
-
     member x.Index = index
     member x.Capacity = Mem totalSize
-    member x.Allocated = Mem allocated
-    member x.Available = Mem (totalSize - allocated)
     member x.Flags = flags
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module MemoryHeapInfo =
     let inline index (info : MemoryHeapInfo) = info.Index 
-    let inline capacity (info : MemoryHeapInfo) = info.Capacity 
-    let inline available (info : MemoryHeapInfo) = info.Available 
-    let inline allocated (info : MemoryHeapInfo) = info.Allocated 
+    let inline capacity (info : MemoryHeapInfo) = info.Capacity
     let inline flags (info : MemoryHeapInfo) = info.Flags 
-
-
-
 
 
 
@@ -239,23 +217,6 @@ module MemoryFlags =
     let inline lazilyAllocated (f : MemoryFlags) = (f &&& MemoryFlags.LazilyAllocated) <> MemoryFlags.None
 
 
-    let internal deviceScore (f : MemoryFlags) =
-        if deviceLocal f then
-            1
-        else
-            0
-
-    let internal hostScore (f : MemoryFlags) =
-        if hostVisible f then
-            let mutable res = 8
-            if hostCoherent f then res <- res + 4
-            if hostCached f then res <- res + 2
-            if lazilyAllocated f then res <- res + 1
-            res
-        else
-            0
-
-
 type MemoryInfo =
     {
         index           : int
@@ -268,9 +229,3 @@ module MemoryInfo =
     let inline index (info : MemoryInfo) = info.index
     let inline heap (info : MemoryInfo) = info.heap
     let inline flags (info : MemoryInfo) = info.flags
-
-    let internal deviceScore (info : MemoryInfo) =
-        (MemoryFlags.deviceScore info.flags, info.heap.Capacity.Bytes)
-
-    let internal hostScore (info : MemoryInfo) =
-        (MemoryFlags.hostScore info.flags, info.heap.Capacity.Bytes)

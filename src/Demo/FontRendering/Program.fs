@@ -79,217 +79,217 @@ module Sems =
 
 
 
-module VulkanTests =
-    open System.Threading
-    open Aardvark.Rendering.Vulkan
-    open Microsoft.FSharp.NativeInterop
-
-    type Brick<'a>(level : int, index : V3i, data : Tensor4<'a>) =
-        let mutable witness : Option<IDisposable> = None
-
-        member x.Level = level
-        member x.Index = index
-        member x.Data = data
-
-        member x.Witness
-            with get() = witness
-            and set r = witness <- r
-
-    let run() =
-        use app = new HeadlessVulkanApplication(true)
-        let device = app.Device
-
-
-        let size = V3i(1024, 512, 256)
-        let brickSize = V3i(128,128,128)
-        let levels = 8
-
-        let rand = RandomSystem()
-        let img = app.Runtime.CreateSparseTexture<uint16>(size, levels, 1, TextureDimension.Texture3D, Col.Format.Gray, brickSize, 2L <<< 30)
-
-        let randomTensor (s : V3i) =
-            let data = new Tensor4<uint16>(V4i(s.X, s.Y, s.Z, 1))
-            data.SetByIndex(fun _ -> rand.UniformInt() |> uint16)
-
-        let bricks =
-            [|
-                for l in 0 .. img.MipMapLevels - 1 do
-                    let size = img.Size / (1 <<< l)
-
-                    let size = V3i(min brickSize.X size.X, min brickSize.Y size.Y, min brickSize.Z size.Z)
-                    let cnt = img.GetBrickCount l
-                    for x in 0 .. cnt.X - 1 do
-                        for y in 0 .. cnt.Y - 1 do
-                            for z in 0 .. cnt.Z - 1 do
-                                yield Brick(l, V3i(x,y,z), randomTensor size)
-
-            |]
-
-        let mutable resident = 0
-
-        let mutable count = 0
-
-        let residentBricks = System.Collections.Generic.HashSet<Brick<uint16>>()
-        let mutable frontBricks = Array.zeroCreate 0
-
-        img.OnSwap.Add (fun _ ->
-            frontBricks <- lock residentBricks (fun () -> Aardvark.Base.HashSet.toArray residentBricks)
-        )
-
-
-
-        let renderResult =
-            img.Texture |> AVal.map (fun t ->
-                let img = unbox<Image> t
-                let size = brickSize
-
-
-                let tensor = Tensor4<uint16>(V4i(brickSize, 1))
-
-                let sizeInBytes = int64 brickSize.X * int64 brickSize.Y * int64 brickSize.Z * int64 sizeof<uint16>
-                use tempBuffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit) sizeInBytes
-                
-
-                device.perform {
-                    do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
-                }
-
-                let result = 
-                    [
-                        for b in frontBricks do
-                            let size = V3i b.Data.Size.XYZ
-                            
-                            device.perform {
-                                do! Command.Copy(img.[TextureAspect.Color, b.Level, 0], b.Index * brickSize, tempBuffer, 0L, V2i.OO, size)
-                            }
-                                
-                            tempBuffer.Memory.MappedTensor4<uint16>(
-                                V4i(size.X, size.Y, size.Z, 1),
-                                fun src ->
-                                    NativeTensor4.using tensor (fun dst ->
-                                        let subDst = dst.SubTensor4(V4i.Zero, V4i(size.X, size.Y, size.Z, 1))
-                                        NativeTensor4.copy src subDst
-                                    )
-                            )
-
-
-
-
-                            let should = b.Data
-                            let real = tensor.SubTensor4(V4i.Zero, V4i(size, 1))
-                            let equal = should.InnerProduct(real, (=), true, (&&))
-                            if not equal then
-                                yield b
-
-
-                    ]
-                
-                result
-            )
-
-
-
-        let cancel = new CancellationTokenSource()
-
-        let mutable modifications = 0
-        let mutable totalErros = 0L
-        let uploader() =
-            try
-                let ct = cancel.Token
-                let mutable cnt = 0
-                while true do 
-                    ct.ThrowIfCancellationRequested()
-
-                    cnt <- cnt + 1
-                    let brickIndex = rand.UniformInt(bricks.Length)
-                    let brick = bricks.[brickIndex]
-
-                    lock brick (fun () ->
-                        match brick.Witness with
-                            | Some w ->
-                                // swap() -> frontBricks.Contains brick
-                                lock residentBricks (fun () -> residentBricks.Remove brick |> ignore)
-                                w.Dispose()
-                                Interlocked.Decrement(&resident) |> ignore
-                                brick.Witness <- None
-                            | None ->
-                                //Log.line "commit(%d, %A)" brick.Level brick.Index
-                                let witness = 
-                                    NativeTensor4.using brick.Data (fun data ->
-                                        img.UploadBrick(brick.Level, 0, brick.Index, data)
-                                    )
-                                brick.Witness <- Some witness
-                                lock residentBricks (fun () -> residentBricks.Add brick |> ignore)
-                                Interlocked.Increment(&resident) |> ignore
-                        Interlocked.Increment(&modifications) |> ignore
-                    )
-
-            with _ -> ()
-
-        let sw = System.Diagnostics.Stopwatch()
-
-        let renderer() =
-            try
-                let ct = cancel.Token
-                while true do
-                    ct.ThrowIfCancellationRequested()
-//                    sw.Start()
-//                    AVal.force img.Texture |> ignore
-//                    sw.Stop()
-//                    Interlocked.Increment(&count) |> ignore
+// module VulkanTests =
+//     open System.Threading
+//     open Aardvark.Rendering.Vulkan
+//     open Microsoft.FSharp.NativeInterop
 //
-//                    if count % 10 = 0 then
-//                        Log.start "frame %d" count
-//                        Log.line "modifications: %A" modifications
-//                        Log.line "resident:      %A" resident
-//                        Log.line "force:         %A" (sw.MicroTime / 10.0)
-//                        Log.stop()
-//                        sw.Reset()
+//     type Brick<'a>(level : int, index : V3i, data : Tensor4<'a>) =
+//         let mutable witness : Option<IDisposable> = None
 //
-//                    Thread.Sleep(16)
-    
-    
-                    let errors = AVal.force renderResult
-
-                    match errors with
-                        | [] -> 
-                            Log.start "frame %d" count
-                            Log.line "modifications: %A" modifications
-                            Log.line "resident: %A" resident
-                            if totalErros > 0L then Log.warn "totalErros %A" totalErros
-                            Log.stop()
-                        | _ ->
-                            let errs = List.length errors |> int64
-                            totalErros <- totalErros + errs
-                            Log.warn "errors: %A" errs
-                            ()
-    
-    
-            with _ -> ()
-
-
-
-
-        let startThread (f : unit -> unit) =
-            let t = new Thread(ThreadStart(f))
-            t.IsBackground <- true
-            t.Start()
-            t
-
-        let uploaders = 
-            Array.init 1 (fun _ -> startThread uploader)
-
-        let renderers = 
-            Array.init 1 (fun _ -> startThread renderer)
-            
-
-        Console.ReadLine() |> ignore
-        cancel.Cancel()
-
-        for t in uploaders do t.Join()
-        for t in renderers do t.Join()
-
-        img.Dispose()
+//         member x.Level = level
+//         member x.Index = index
+//         member x.Data = data
+//
+//         member x.Witness
+//             with get() = witness
+//             and set r = witness <- r
+//
+//     let run() =
+//         use app = new HeadlessVulkanApplication(true)
+//         let device = app.Device
+//
+//
+//         let size = V3i(1024, 512, 256)
+//         let brickSize = V3i(128,128,128)
+//         let levels = 8
+//
+//         let rand = RandomSystem()
+//         let img = app.Runtime.CreateSparseTexture<uint16>(size, levels, 1, TextureDimension.Texture3D, Col.Format.Gray, brickSize, 2L <<< 30)
+//
+//         let randomTensor (s : V3i) =
+//             let data = new Tensor4<uint16>(V4i(s.X, s.Y, s.Z, 1))
+//             data.SetByIndex(fun _ -> rand.UniformInt() |> uint16)
+//
+//         let bricks =
+//             [|
+//                 for l in 0 .. img.MipMapLevels - 1 do
+//                     let size = img.Size / (1 <<< l)
+//
+//                     let size = V3i(min brickSize.X size.X, min brickSize.Y size.Y, min brickSize.Z size.Z)
+//                     let cnt = img.GetBrickCount l
+//                     for x in 0 .. cnt.X - 1 do
+//                         for y in 0 .. cnt.Y - 1 do
+//                             for z in 0 .. cnt.Z - 1 do
+//                                 yield Brick(l, V3i(x,y,z), randomTensor size)
+//
+//             |]
+//
+//         let mutable resident = 0
+//
+//         let mutable count = 0
+//
+//         let residentBricks = System.Collections.Generic.HashSet<Brick<uint16>>()
+//         let mutable frontBricks = Array.zeroCreate 0
+//
+//         img.OnSwap.Add (fun _ ->
+//             frontBricks <- lock residentBricks (fun () -> Aardvark.Base.HashSet.toArray residentBricks)
+//         )
+//
+//
+//
+//         let renderResult =
+//             img.Texture |> AVal.map (fun t ->
+//                 let img = unbox<Image> t
+//                 let size = brickSize
+//
+//
+//                 let tensor = Tensor4<uint16>(V4i(brickSize, 1))
+//
+//                 let sizeInBytes = int64 brickSize.X * int64 brickSize.Y * int64 brickSize.Z * int64 sizeof<uint16>
+//                 use tempBuffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit) sizeInBytes
+//
+//
+//                 device.perform {
+//                     do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
+//                 }
+//
+//                 let result =
+//                     [
+//                         for b in frontBricks do
+//                             let size = V3i b.Data.Size.XYZ
+//
+//                             device.perform {
+//                                 do! Command.Copy(img.[TextureAspect.Color, b.Level, 0], b.Index * brickSize, tempBuffer, 0L, V2i.OO, size)
+//                             }
+//
+//                             tempBuffer.Memory.MappedTensor4<uint16>(
+//                                 V4i(size.X, size.Y, size.Z, 1),
+//                                 fun src ->
+//                                     NativeTensor4.using tensor (fun dst ->
+//                                         let subDst = dst.SubTensor4(V4i.Zero, V4i(size.X, size.Y, size.Z, 1))
+//                                         NativeTensor4.copy src subDst
+//                                     )
+//                             )
+//
+//
+//
+//
+//                             let should = b.Data
+//                             let real = tensor.SubTensor4(V4i.Zero, V4i(size, 1))
+//                             let equal = should.InnerProduct(real, (=), true, (&&))
+//                             if not equal then
+//                                 yield b
+//
+//
+//                     ]
+//
+//                 result
+//             )
+//
+//
+//
+//         let cancel = new CancellationTokenSource()
+//
+//         let mutable modifications = 0
+//         let mutable totalErros = 0L
+//         let uploader() =
+//             try
+//                 let ct = cancel.Token
+//                 let mutable cnt = 0
+//                 while true do
+//                     ct.ThrowIfCancellationRequested()
+//
+//                     cnt <- cnt + 1
+//                     let brickIndex = rand.UniformInt(bricks.Length)
+//                     let brick = bricks.[brickIndex]
+//
+//                     lock brick (fun () ->
+//                         match brick.Witness with
+//                             | Some w ->
+//                                 // swap() -> frontBricks.Contains brick
+//                                 lock residentBricks (fun () -> residentBricks.Remove brick |> ignore)
+//                                 w.Dispose()
+//                                 Interlocked.Decrement(&resident) |> ignore
+//                                 brick.Witness <- None
+//                             | None ->
+//                                 //Log.line "commit(%d, %A)" brick.Level brick.Index
+//                                 let witness =
+//                                     NativeTensor4.using brick.Data (fun data ->
+//                                         img.UploadBrick(brick.Level, 0, brick.Index, data)
+//                                     )
+//                                 brick.Witness <- Some witness
+//                                 lock residentBricks (fun () -> residentBricks.Add brick |> ignore)
+//                                 Interlocked.Increment(&resident) |> ignore
+//                         Interlocked.Increment(&modifications) |> ignore
+//                     )
+//
+//             with _ -> ()
+//
+//         let sw = System.Diagnostics.Stopwatch()
+//
+//         let renderer() =
+//             try
+//                 let ct = cancel.Token
+//                 while true do
+//                     ct.ThrowIfCancellationRequested()
+// //                    sw.Start()
+// //                    AVal.force img.Texture |> ignore
+// //                    sw.Stop()
+// //                    Interlocked.Increment(&count) |> ignore
+// //
+// //                    if count % 10 = 0 then
+// //                        Log.start "frame %d" count
+// //                        Log.line "modifications: %A" modifications
+// //                        Log.line "resident:      %A" resident
+// //                        Log.line "force:         %A" (sw.MicroTime / 10.0)
+// //                        Log.stop()
+// //                        sw.Reset()
+// //
+// //                    Thread.Sleep(16)
+//
+//
+//                     let errors = AVal.force renderResult
+//
+//                     match errors with
+//                         | [] ->
+//                             Log.start "frame %d" count
+//                             Log.line "modifications: %A" modifications
+//                             Log.line "resident: %A" resident
+//                             if totalErros > 0L then Log.warn "totalErros %A" totalErros
+//                             Log.stop()
+//                         | _ ->
+//                             let errs = List.length errors |> int64
+//                             totalErros <- totalErros + errs
+//                             Log.warn "errors: %A" errs
+//                             ()
+//
+//
+//             with _ -> ()
+//
+//
+//
+//
+//         let startThread (f : unit -> unit) =
+//             let t = new Thread(ThreadStart(f))
+//             t.IsBackground <- true
+//             t.Start()
+//             t
+//
+//         let uploaders =
+//             Array.init 1 (fun _ -> startThread uploader)
+//
+//         let renderers =
+//             Array.init 1 (fun _ -> startThread renderer)
+//
+//
+//         Console.ReadLine() |> ignore
+//         cancel.Cancel()
+//
+//         for t in uploaders do t.Join()
+//         for t in renderers do t.Join()
+//
+//         img.Dispose()
 
 let tensorPerformance() =
     

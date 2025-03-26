@@ -9,6 +9,10 @@ open Aardvark.Base
 [<AutoOpen>]
 module internal Utilities =
 
+    // TODO: Remove for Aardvark.Base >= 5.3.9
+    let inline internal (&&&=) (x: byref<'T>) (y: 'T) = x <- x &&& y
+    let inline internal (|||=) (x: byref<'T>) (y: 'T) = x <- x ||| y
+
     module VkResult =
         open KHRSurface
         open KHRSwapchain

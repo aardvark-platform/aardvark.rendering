@@ -164,9 +164,11 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<stri
     let mutable computeFamily : DeviceQueueFamily option = None
     let mutable transferFamily : DeviceQueueFamily option = None
 
-    let mutable memories : DeviceHeap[] = null
-    let mutable hostMemory : DeviceHeap = Unchecked.defaultof<_>
-    let mutable deviceMemory : DeviceHeap = Unchecked.defaultof<_>
+    let mutable memoryAllocator : MemoryAllocator = Unchecked.defaultof<_>
+    let mutable hostMemory : IDeviceMemory = Unchecked.defaultof<_>
+    let mutable deviceMemory : IDeviceMemory = Unchecked.defaultof<_>
+    let mutable stagingMemory : IDeviceMemory = Unchecked.defaultof<_>
+    let mutable readbackMemory : IDeviceMemory = Unchecked.defaultof<_>
 
     let mutable runtime = Unchecked.defaultof<IRuntime>
 
@@ -177,10 +179,10 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<stri
             | None -> failf "the device does not support transfer-queues"
         )
 
-    member private x.Initialize() =
+    member private this.Initialize() =
         queueFamilies <-
             queueFamilyInfos |> Array.map (fun info ->
-                DeviceQueueFamily.Create(x, info, onDisposeObservable)
+                DeviceQueueFamily.Create(this, info, onDisposeObservable)
             )
 
         let getFamily (info: QueueFamilyInfo) =
@@ -190,14 +192,11 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<stri
         computeFamily <- computeFamilyInfo |> Option.map getFamily
         transferFamily <- transferFamilyInfo |> Option.map getFamily
 
-        memories <-
-            physicalDevice.MemoryTypes |> Array.mapi (fun i memoryInfo ->
-                let isHostMemory = (i = physicalDevice.HostMemory.index)
-                new DeviceHeap(x, memoryInfo, isHostMemory, x.PrintMemoryUsage)
-            )
-
-        hostMemory <- memories.[physicalDevice.HostMemory.index]
-        deviceMemory <- memories.[physicalDevice.DeviceMemory.index]
+        memoryAllocator <- new MemoryAllocator(this)
+        hostMemory <- memoryAllocator.GetMemory(preferDevice = true, hostAccess = HostAccess.WriteOnly)
+        deviceMemory <- memoryAllocator.GetMemory(preferDevice = true, hostAccess = HostAccess.None)
+        stagingMemory <- memoryAllocator.GetMemory(preferDevice = false, hostAccess = HostAccess.WriteOnly)
+        readbackMemory <- memoryAllocator.GetMemory(preferDevice = false, hostAccess = HostAccess.ReadWrite)
 
     static member Create(physicalDevice: PhysicalDevice, wantedExtensions: string list) =
         let device = new Device(physicalDevice, wantedExtensions)
@@ -286,10 +285,21 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<stri
 
     member x.IsDisposed = instance.IsDisposed || isDisposed <> 0
 
-    member x.Memories = memories
+    member x.NullPtr = memoryAllocator.NullPtr
 
+    /// Memory for resources that are frequently written by the CPU and read by the GPU.
+    /// Must be host visible but device local memory is preferred.
     member x.HostMemory = hostMemory
+
+    /// Memory for static resources that are read by the GPU.
     member x.DeviceMemory = deviceMemory
+
+    /// Memory for staging buffers that are only written (sequentially) by the CPU.
+    /// If the staging memory is written non-sequentially use ReadbackMemory instead.
+    member x.StagingMemory = stagingMemory
+
+    /// Memory for resources that are read by the CPU to readback data from the GPU.
+    member x.ReadbackMemory = readbackMemory
 
     member x.OnDispose = onDisposeObservable :> IObservable<_>
 
@@ -301,7 +311,7 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<stri
                     copyEngine.Value.Dispose()
 
                 onDispose.Trigger()
-                for h in memories do h.Dispose()
+                memoryAllocator.Dispose()
                 for f in queueFamilies do f.Dispose()
                 VkRaw.vkDestroyDevice(device, NativePtr.zero)
                 device <- VkDevice.Zero
@@ -316,46 +326,15 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<stri
     member x.PhysicalDeviceGroup = physicalDevice :?> PhysicalDeviceGroup
     member x.IsDeviceGroup = isGroup
 
-    member x.PrintMemoryUsage(l: ILogger) =
-        let budget =
-            if x.IsExtensionEnabled EXTMemoryBudget.Name then
-                Some <| native {
-                    let! pMemoryBudgetProps = VkPhysicalDeviceMemoryBudgetPropertiesEXT.Empty
-                    let! pPhysicalDeviceMemoryProps2 = VkPhysicalDeviceMemoryProperties2(pMemoryBudgetProps.Address, VkPhysicalDeviceMemoryProperties.Empty)
-
-                    VkRaw.vkGetPhysicalDeviceMemoryProperties2(physicalDevice.Handle, pPhysicalDeviceMemoryProps2)
-
-                    return pMemoryBudgetProps.Value
-                }
-            else
-                None
-
-        for i = 0 to physicalDevice.Heaps.Length - 1 do
-            let heap = physicalDevice.Heaps.[i]
-
-            let heapFlags =
-                if heap.Flags.HasFlag MemoryHeapFlags.DeviceLocalBit then $" (device local)"
-                else ""
-
-            l.section $"Heap {i}{heapFlags}" (fun _ ->
-                l.line $"Capacity: {heap.Capacity}"
-                l.line $"Allocated: {heap.Allocated}"
-                l.line $"Available: {heap.Available}"
-
-                budget |> Option.iter (fun b ->
-                    let warning =
-                        if b.heapUsage.[i] > b.heapBudget.[i] then " (!!!)"
-                        else ""
-
-                    l.line $"Budget: {Mem b.heapUsage.[i]} / {Mem b.heapBudget.[i]}{warning}"
-                )
-            )
+    member x.PrintMemoryUsage(logger: ILogger) =
+        memoryAllocator.PrintUsage logger
 
     interface IDevice with
         member x.Handle = x.Handle
         member x.Instance = x.Instance
         member x.PhysicalDevice = x.PhysicalDevice
-        member x.IsExtensionEnabled(name) = x.IsExtensionEnabled(name)
+        member x.EnabledFeatures = x.EnabledFeatures
+        member x.IsExtensionEnabled(extension) = x.IsExtensionEnabled(extension)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -370,83 +349,9 @@ module IDeviceObjectExtensions =
 [<AbstractClass; Sealed>]
 type DeviceExtensions private() =
 
-    static let rec tryFindMemory (bits : uint32) (i : int)  (memories : DeviceHeap[]) =
-        if i >= memories.Length then
-            None
-        else
-            let mem = memories.[i]
-            if mem.Mask &&& bits <> 0u then
-                Some mem
-            else
-                tryFindMemory bits (i + 1) memories
-
-    static let rec tryFindDeviceMemory (bits : uint32) (i : int)  (memories : DeviceHeap[]) =
-        if i >= memories.Length then
-            None
-        else
-            let mem = memories.[i]
-            if mem.Mask &&& bits <> 0u && mem.Info.flags &&& MemoryFlags.DeviceLocal <> MemoryFlags.None then
-                Some mem
-            else
-                tryFindDeviceMemory bits (i + 1) memories
-
-    static let rec tryAlloc (reqs : VkMemoryRequirements) (export : bool) (i : int) (memories : DeviceHeap[]) =
-        if i >= memories.Length then
-            None
-        else
-            let mem = memories.[i]
-            if mem.Mask &&& reqs.memoryTypeBits <> 0u then
-                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size, export)
-                Some ptr
-            else
-                tryAlloc reqs export (i + 1) memories
-
-    static let rec tryAllocDevice (reqs : VkMemoryRequirements) (export : bool) (i : int) (memories : DeviceHeap[]) =
-        if i >= memories.Length then
-            None
-        else
-            let mem = memories.[i]
-            if mem.Mask &&& reqs.memoryTypeBits <> 0u && mem.Info.flags &&& MemoryFlags.DeviceLocal <> MemoryFlags.None then
-                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size, export)
-                Some ptr
-            else
-                tryAllocDevice reqs export (i + 1) memories
-
-
     [<Extension>]
-    static member CreateDevice(this : PhysicalDevice, wantedExtensions : list<string>) =
+    static member CreateDevice(this: PhysicalDevice, wantedExtensions: list<string>) =
         Device.Create(this, wantedExtensions)
-
-    [<Extension>]
-    static member GetMemory(this : Device, bits : uint32,
-                            [<Optional; DefaultParameterValue(false)>] preferDevice : bool) =
-        if preferDevice then
-            match tryFindDeviceMemory bits 0 this.Memories with
-            | Some mem -> mem
-            | None -> 
-                match tryFindMemory bits 0 this.Memories with
-                | Some mem -> mem
-                | None -> failf "could not find compatible memory for types: %A" bits
-        else
-            match tryFindMemory bits 0 this.Memories with
-            | Some mem -> mem
-            | None -> failf "could not find compatible memory for types: %A" bits
-
-    [<Extension>]
-    static member Alloc(this : Device, reqs : VkMemoryRequirements,
-                        [<Optional; DefaultParameterValue(false)>] preferDevice : bool,
-                        [<Optional; DefaultParameterValue(false)>] export : bool) =
-        if preferDevice then
-            match tryAllocDevice reqs export 0 this.Memories with
-            | Some mem -> mem
-            | None -> 
-                match tryAlloc reqs export 0 this.Memories with
-                | Some mem -> mem
-                | None -> failf "could not find compatible memory for %A" reqs
-        else
-            match tryAlloc reqs export 0 this.Memories with
-            | Some mem -> mem
-            | None -> failf "could not find compatible memory for %A" reqs
 
     [<Extension>]
     static member Set(semaphore: Vulkan.Semaphore) =

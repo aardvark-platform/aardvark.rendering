@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open EXTMemoryPriority
+
 type MemoryFeatures =
     {
         /// Specifies that accesses to buffers are bounds-checked against the range of the buffer descriptor
@@ -36,6 +38,9 @@ type MemoryFeatures =
         /// Specifies whether protected memory is supported.
         ProtectedMemory: bool
 
+        /// Specifies whether the implementation supports memory priorities specified at memory allocation time via VkMemoryPriorityAllocateInfoEXT.
+        MemoryPriority: bool
+
         /// Specifies whether the implementation supports accessing buffer memory in shaders as storage buffers via an address queried from vkGetBufferDeviceAddress.
         BufferDeviceAddress : bool
 
@@ -60,6 +65,7 @@ type MemoryFeatures =
         l.line "sparse 3D images:       %A" x.SparseResidencyImage3D
         l.line "sparse aliased data:    %A" x.SparseResidencyAliased
         l.line "protected memory:       %A" x.ProtectedMemory
+        l.line "memory priority:        %A" x.MemoryPriority
         l.section "buffer device address: " (fun () ->
             l.line "supported:          %A" x.BufferDeviceAddress
             l.line "capture & replay:   %A" x.BufferDeviceAddressCaptureReplay
@@ -544,6 +550,11 @@ module DeviceFeatures =
                 toVkBool features.Memory.ProtectedMemory
             )
 
+        let memp =
+            VkPhysicalDeviceMemoryPriorityFeaturesEXT(
+                toVkBool features.Memory.MemoryPriority
+            )
+
         let ycbcr =
             VkPhysicalDeviceSamplerYcbcrConversionFeatures(
                 toVkBool features.Samplers.YcbcrConversion
@@ -685,6 +696,7 @@ module DeviceFeatures =
 
         VkStructChain.empty()
         |> VkStructChain.add mem
+        |> if not memp.IsEmpty then VkStructChain.add memp else id
         |> VkStructChain.add ycbcr
         |> VkStructChain.add s16
         |> VkStructChain.add vp
@@ -697,6 +709,7 @@ module DeviceFeatures =
         |> VkStructChain.add features
 
     let create (protectedMemoryFeatures : VkPhysicalDeviceProtectedMemoryFeatures)
+               (memoryPriorityFeatures : VkPhysicalDeviceMemoryPriorityFeaturesEXT)
                (samplerYcbcrConversionFeatures : VkPhysicalDeviceSamplerYcbcrConversionFeatures)
                (storage16BitFeatures : VkPhysicalDevice16BitStorageFeatures)
                (variablePointerFeatures : VkPhysicalDeviceVariablePointersFeatures)
@@ -722,6 +735,7 @@ module DeviceFeatures =
                     SparseResidency16Samples =                      toBool features.sparseResidency16Samples
                     SparseResidencyAliased =                        toBool features.sparseResidencyAliased
                     ProtectedMemory =                               toBool protectedMemoryFeatures.protectedMemory
+                    MemoryPriority =                                toBool memoryPriorityFeatures.memoryPriority
                     BufferDeviceAddress =                           toBool bufferDeviceAddressFeatures.bufferDeviceAddress
                     BufferDeviceAddressCaptureReplay =              toBool bufferDeviceAddressFeatures.bufferDeviceAddressCaptureReplay
                     BufferDeviceAddressMultiDevice =                toBool bufferDeviceAddressFeatures.bufferDeviceAddressMultiDevice

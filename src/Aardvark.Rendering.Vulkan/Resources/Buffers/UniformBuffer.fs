@@ -102,7 +102,7 @@ module UniformBuffer =
         //let align = device.MinUniformBufferOffsetAlignment
         //let alignedSize = Alignment.next align (int64 size)
 
-        let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, int64 size)
+        let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, uint64 size)
 
         new UniformBuffer(buffer, storage, layout)
 
@@ -124,7 +124,7 @@ module UniformBuffer =
             do! Command.Sync(b, VkPipelineStageFlags.TransferBit, VkAccessFlags.TransferWriteBit)
         }
 
-[<AbstractClass; Sealed; Extension>]
+[<AbstractClass; Sealed>]
 type ContextUniformBufferExtensions private() =
     [<Extension>]
     static member inline CreateUniformBuffer(this : Device, layout : FShade.GLSL.GLSLUniformBuffer) =

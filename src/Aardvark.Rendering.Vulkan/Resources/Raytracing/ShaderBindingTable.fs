@@ -297,7 +297,7 @@ module private ShaderBindingSubtable =
                     Marshal.Copy(data.Handles.Data, e * data.Handles.Size, src + offset, data.Handles.Size)
                     offset <- offset + nativeint data.Handles.SizeAligned
 
-                table |> Buffer.updateWriter (fun dst -> Marshal.Copy(src, dst, nativeint data.TotalSize))
+                Buffer.write table (fun dst -> Marshal.Copy(src, dst, nativeint data.TotalSize))
                 true
 
             finally
@@ -307,7 +307,7 @@ module private ShaderBindingSubtable =
         let requestedSize = count * data.Handles.SizeAligned
         let size = max requestedSize data.Handles.SizeAligned
 
-        let buffer = device |> Buffer.alloc bufferUsage (int64 size)
+        let buffer = device.DeviceMemory |> Buffer.create bufferUsage (uint64 size)
         let table = new ShaderBindingSubtable<'T>(buffer, data.Lookup, uint64 data.Handles.SizeAligned)
 
         if not (table |> tryUpdate data) then

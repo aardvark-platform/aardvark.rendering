@@ -9,6 +9,7 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
+#nowarn "51"
 
 // ===========================================================================================
 // Format Conversions
@@ -99,11 +100,11 @@ module VkImageAspectFlags =
     let toTextureAspect (a : VkImageAspectFlags) =
         a |> int |> unbox<TextureAspect>
 
-[<RequireQualifiedAccess>]
-type ImageExportMode =
-    | None
-    | Export of preferArray: bool
-    member inline x.Enabled = x <> None
+[<Struct; RequireQualifiedAccess>]
+type ImageExport =
+    | Disable
+    | Enable of preferArray: bool
+    member inline this.IsEnabled = this <> Disable
 
 type Image =
     class
@@ -180,7 +181,8 @@ type Image =
         override x.ToString() =
             sprintf "0x%08X" x.Handle.Handle
 
-        new(device, handle, size, levels, layers, samples, dimension, format, memory, layout,
+        new(device: Device, handle: VkImage, size: V3i, levels: int, layers: int, samples: int,
+            dimension: TextureDimension, format: VkFormat, memory: DevicePtr, layout: VkImageLayout,
             [<Optional; DefaultParameterValue(VkImageLayout.ShaderReadOnlyOptimal)>] samplerLayout,
             [<Optional; DefaultParameterValue(null : VkImage[])>] peerHandles) =
             {
@@ -204,9 +206,9 @@ and internal ExportedImage =
         val public PreferArray : bool
 
         member x.ExternalMemory =
-            { Block  = x.Memory.Memory.ExternalBlock
-              Offset = x.Memory.Offset
-              Size   = x.Memory.Size }
+            { Block  = x.Memory.ExternalBlock
+              Offset = int64 x.Memory.Offset
+              Size   = int64 x.Memory.Size }
 
         member x.IsArray =
             x.Count > 1 || x.PreferArray
@@ -365,7 +367,7 @@ module DeviceTensorCommandExtensions =
                     VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
                     VkExtent3D(size.X, size.Y, size.Z)
                 ),
-                0L
+                0UL
             )
 
         static member Copy(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
@@ -955,7 +957,6 @@ module private ImageExtensions =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Image =
     open System.Collections.Concurrent
-    open KHRBindMemory2
     open Vulkan11
 
     [<Literal>]
@@ -965,65 +966,16 @@ module Image =
         VkImageUsageFlags.SampledBit |||
         VkImageUsageFlags.StorageBit
 
-    let allocLinear (size : V2i) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
-        let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Linear, fmt)
-        let usage = usage |> VkImageUsageFlags.filterSupported features
+    let rec create' (concurrent : bool) (export : ImageExport)
+                    (dimension : TextureDimension) (usage : VkImageUsageFlags) (format : VkFormat)
+                    (mipMapLevels : int) (count : int) (samples : int) (size : V3i) (device : Device) : Image =
 
-        let info =
-            VkImageCreateInfo(
-                VkImageCreateFlags.None,
-                VkImageType.D2d,
-                fmt,
-                VkExtent3D(uint32 size.X, uint32 size.Y, 1u),
-                1u,
-                1u,
-                VkSampleCountFlags.D1Bit,
-                VkImageTiling.Linear,
-                usage,
-                VkSharingMode.Exclusive,
-                0u, NativePtr.zero,
-                VkImageLayout.Preinitialized
-            )
-
-        let mutable handle =
-            NativePtr.temp (fun pHandle ->
-                info |> NativePtr.pin (fun pInfo ->
-                    VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
-                        |> check "could not create image"
-                    NativePtr.read pHandle
-                )
-            )
-
-        let reqs =
-            NativePtr.temp (fun ptr ->
-                VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, ptr)
-                NativePtr.read ptr
-            )
-        let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
-        let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
-
-        if device.HostMemory.Mask &&& reqs.memoryTypeBits = 0u then
-            VkRaw.vkDestroyImage(device.Handle, handle, NativePtr.zero)
-            failf "cannot create linear image in host-memory"
-
-        let ptr = device.HostMemory.Alloc(memalign, memsize)
-
-        VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
-            |> check "could not bind image memory"
-
-        new Image(device, handle, V3i(size, 1), 1, 1, 1, TextureDimension.Texture2D, fmt, ptr, VkImageLayout.Preinitialized)
-
-
-    let rec alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int)
-                  (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) 
-                  (export : ImageExportMode) (device : Device) =
-
-        let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt)
+        let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
 
         if features = VkFormatFeatureFlags.None then
-            match VkFormat.tryGetNextBetter fmt with
-            | Some fmt -> alloc size mipMapLevels count samples dim fmt usage export device
-            | None -> failf "bad image format %A" fmt
+            match VkFormat.tryGetNextBetter format with
+            | Some format -> create' concurrent export dimension usage format mipMapLevels count samples size device
+            | None -> failf "bad image format %A" format
         else
             let mayHavePeers =
                 device.IsDeviceGroup &&
@@ -1034,7 +986,7 @@ module Image =
                 )
 
             let flags =
-                if dim = TextureDimension.TextureCube then VkImageCreateFlags.CubeCompatibleBit
+                if dimension = TextureDimension.TextureCube then VkImageCreateFlags.CubeCompatibleBit
                 else VkImageCreateFlags.None
 
             let flags =
@@ -1042,165 +994,138 @@ module Image =
                 else flags
 
             let layers =
-                match dim with
+                match dimension with
                 | TextureDimension.TextureCube -> 6 * (count |> max 1)
                 | _ -> count |> max 1
 
             let size =
-                match dim with
+                match dimension with
                 | TextureDimension.Texture1D -> V3i(size.X, 1, 1)
                 | TextureDimension.Texture2D -> V3i(size.X, size.Y, 1)
                 | TextureDimension.TextureCube -> V3i(size.X, size.X, 1)
                 | _ -> size
 
             let typ =
-                VkImageType.ofTextureDimension dim
+                VkImageType.ofTextureDimension dimension
 
             let usage =
                 usage |> VkImageUsageFlags.filterSupported features
 
             let properties, externalMemoryProperties =
                 let external =
-                    if export.Enabled then
-                        if not <| device.IsExtensionEnabled ExternalMemory.Extension then
-                            failf $"Cannot export image memory because {ExternalMemory.Extension} is not supported"
+                    if export.IsEnabled then
+                        if not <| device.IsExtensionEnabled Instance.Extensions.ExternalMemory then
+                            failf $"Cannot export image memory because {Instance.Extensions.ExternalMemory} is not supported"
 
                         VkExternalMemoryHandleTypeFlags.OpaqueBit
                     else
                         VkExternalMemoryHandleTypeFlags.None
 
-                device.PhysicalDevice.GetImageProperties(fmt, typ, VkImageTiling.Optimal, usage, flags, external)
+                device.PhysicalDevice.GetImageProperties(format, typ, VkImageTiling.Optimal, usage, flags, external)
 
-            if export.Enabled && not externalMemoryProperties.IsExportable then
-                failf $"Cannot export {fmt} image with usage {usage}"
+            if export.IsEnabled && not externalMemoryProperties.IsExportable then
+                failf $"Cannot export {format} image with usage {usage}"
 
             let maxExtent = V3l.OfExtent properties.maxExtent
 
             if Vec.anyGreater (V3l size) maxExtent then
-                failf "cannot create %A image with size %A (maximum is %A)" fmt size maxExtent
+                failf "cannot create %A image with size %A (maximum is %A)" format size maxExtent
 
             if uint32 layers > properties.maxArrayLayers then
-                failf "cannot create %A image with %d layers (maximum is %d)" fmt layers properties.maxArrayLayers
+                failf "cannot create %A image with %d layers (maximum is %d)" format layers properties.maxArrayLayers
 
             if uint32 mipMapLevels > properties.maxMipLevels then
-                failf "cannot create %A image with %d mip-map levels (maximum is %d)" fmt mipMapLevels properties.maxMipLevels
+                failf "cannot create %A image with %d mip-map levels (maximum is %d)" format mipMapLevels properties.maxMipLevels
 
             let samples =
                 let counts = VkSampleCountFlags.toSet properties.sampleCounts
                 if counts.Contains samples then samples
                 else
                     let max = Set.maxElement counts
-                    Log.warn "[Vulkan] cannot create %A image with %d samples (using %d instead)" fmt samples max
+                    Log.warn "[Vulkan] cannot create %A image with %d samples (using %d instead)" format samples max
                     max
 
-            native {
-                let! pExternalMemoryInfo =
-                    VkExternalMemoryImageCreateInfo VkExternalMemoryHandleTypeFlags.OpaqueBit
+            let mutable externalMemoryInfo = VkExternalMemoryImageCreateInfo VkExternalMemoryHandleTypeFlags.OpaqueBit
 
-                let! pInfo =
-                    let pNext =
-                        if export.Enabled then NativePtr.toNativeInt pExternalMemoryInfo
-                        else 0n
+            let pNext =
+                if export.IsEnabled then NativePtr.toNativeInt &&externalMemoryInfo
+                else 0n
 
-                    VkImageCreateInfo(
-                        pNext,
-                        flags,
-                        typ,
-                        fmt,
-                        VkExtent3D(uint32 size.X, uint32 size.Y, uint32 size.Z),
-                        uint32 mipMapLevels,
-                        uint32 layers,
-                        unbox<VkSampleCountFlags> samples,
-                        VkImageTiling.Optimal,
-                        usage,
-                        VkSharingMode.Exclusive,
-                        0u, NativePtr.zero,
-                        VkImageLayout.Undefined
-                    )
+            let mutable info =
+                VkImageCreateInfo(
+                    pNext,
+                    flags,
+                    typ,
+                    format,
+                    VkExtent3D(uint32 size.X, uint32 size.Y, uint32 size.Z),
+                    uint32 mipMapLevels,
+                    uint32 layers,
+                    enum<VkSampleCountFlags> samples,
+                    VkImageTiling.Optimal,
+                    usage,
+                    (if concurrent then device.SharingMode else VkSharingMode.Exclusive),
+                    (if concurrent then device.QueueFamilyCount else 0u),
+                    (if concurrent then device.QueueFamilyIndices else NativePtr.zero),
+                    VkImageLayout.Undefined
+                )
 
-                let handle =
-                    NativePtr.temp (fun pHandle ->
-                        VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
-                            |> check "could not create image"
-                        NativePtr.read pHandle
-                    )
+            if mayHavePeers then
+                let handle, memory = device.DeviceMemory.CreateImage(&info, export = export.IsEnabled, bind = false, mayAlias = true)
 
-                let reqs =
-                    NativePtr.temp (fun ptr ->
-                        VkRaw.vkGetImageMemoryRequirements(device.Handle, handle,ptr)
-                        NativePtr.read ptr
-                    )
+                let indices = device.PhysicalDeviceGroup.AllIndicesArr
+                let handles = Array.zeroCreate indices.Length
+                handles.[0] <- handle
+                use pHandles = fixed handles
 
-                let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
-                let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
-                let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true, export.Enabled)
+                for i in 1 .. indices.Length - 1 do
+                    let pHandle = pHandles |> NativePtr.step i
+                    VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, pHandle)
+                        |> check "could not create image"
 
-                if mayHavePeers then
-                    let indices = device.PhysicalDeviceGroup.AllIndicesArr
-                    let handles = Array.zeroCreate indices.Length
-                    handles.[0] <- handle
-                    for i in 1 .. indices.Length - 1 do
-                        let handle =
-                            NativePtr.temp (fun pHandle ->
-                                VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
-                                    |> check "could not create image"
-                                NativePtr.read pHandle
-                            )
-                        handles.[i] <- handle
-
-                    for off in 0 .. indices.Length - 1 do
-                        let deviceIndices =
-                            Array.init indices.Length (fun i ->
-                                indices.[(i+off) % indices.Length] |> uint32
-                            )
-
-                        native {
-                            let! pDeviceIndices = deviceIndices
-                            let groupInfo =
-                                VkBindImageMemoryDeviceGroupInfo(
-                                    uint32 deviceIndices.Length, pDeviceIndices,
-                                    0u, NativePtr.zero
-                                )
-                            let! pGroup = groupInfo
-                            let! pInfo =
-                                VkBindImageMemoryInfo(
-                                    NativePtr.toNativeInt pGroup,
-                                    handles.[off],
-                                    ptr.Memory.Handle,
-                                    uint64 ptr.Offset
-                                )
-                            VkRaw.vkBindImageMemory2(device.Handle, 1u, pInfo)
-                                |> check "could not bind image memory"
-                        }
-
-
-                    let peerHandles = Array.skip 1 handles
-                    let result = new Image(device, handles.[0], size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined, peerHandles = peerHandles)
-
-                    device.perform {
-                        for i in 1 .. handles.Length - 1 do
-                            let img = new Image(device, handles.[i], size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined)
-                            do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
-                    }
-
-                    return result
-                else
-                    VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
-                        |> check "could not bind image memory"
-
-                    match export with
-                    | ImageExportMode.Export preferArray ->
-                        return new ExportedImage(
-                            device, handle, size, mipMapLevels, layers, samples, dim, fmt, preferArray, ptr, VkImageLayout.Undefined
+                for off in 0 .. indices.Length - 1 do
+                    use pDeviceIndices =
+                        fixed Array.init indices.Length (fun i ->
+                            indices.[(i+off) % indices.Length] |> uint32
                         )
 
-                    | _ ->
-                        return new Image(device, handle, size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                    let mutable groupInfo =
+                        VkBindImageMemoryDeviceGroupInfo(
+                            uint32 indices.Length, pDeviceIndices,
+                            0u, NativePtr.zero
+                        )
+
+                    memory.BindImage(handles.[off], 0UL, &&groupInfo)
+
+                let result =
+                    new Image(
+                        device, handles.[0], size, mipMapLevels, layers, samples, dimension, format, memory,
+                        VkImageLayout.Undefined,
+                        peerHandles = Array.skip 1 handles
+                    )
+
+                device.perform {
+                    for i in 1 .. handles.Length - 1 do
+                        let img = new Image(device, handles.[i], size, mipMapLevels, layers, samples, dimension, format, memory, VkImageLayout.Undefined)
+                        do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
                 }
 
-    let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags)
-               (export : ImageExportMode) (device : Device) =
-        alloc size mipMapLevels count samples dim fmt usage export device
+                result
+
+            else
+                let handle, memory = device.DeviceMemory.CreateImage(&info, export = export.IsEnabled)
+
+                match export with
+                | ImageExport.Enable preferArray ->
+                    new ExportedImage(
+                        device, handle, size, mipMapLevels, layers, samples, dimension, format, preferArray, memory, VkImageLayout.Undefined
+                    )
+
+                | _ ->
+                    new Image(device, handle, size, mipMapLevels, layers, samples, dimension, format, memory, VkImageLayout.Undefined)
+
+    let create (dimension : TextureDimension) (usage : VkImageUsageFlags) (format : VkFormat)
+               (mipMapLevels : int) (count : int) (samples : int) (size : V3i) (device : Device) : Image =
+        create' false ImageExport.Disable dimension usage format mipMapLevels count samples size device
 
     /// Returns an uninitialized image with size 8 in each dimension, used as NullTexture counter-part
     let internal empty =
@@ -1212,7 +1137,7 @@ module Image =
                     let size = V3i 8
                     let format = VkFormat.ofTextureFormat properties.Format
                     let samples = if properties.IsMultisampled then 2 else 1
-                    let image = device |> create size 1 1 samples properties.Dimension format defaultUsage ImageExportMode.None
+                    let image = device |> create properties.Dimension defaultUsage format 1 1 samples size
 
                     device.perform {
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
@@ -1307,20 +1232,20 @@ type ContextImageExtensions private() =
     [<Extension>]
     static member inline CreateImage(this : Device,
                                      size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : VkFormat, usage : VkImageUsageFlags,
-                                     export : ImageExportMode) =
-        this |> Image.create size mipMapLevels count samples dim fmt usage export
+                                     export : ImageExport) =
+        this |> Image.create' false export dim usage fmt mipMapLevels count samples size
 
     [<Extension>]
     static member inline CreateImage(this : Device,
                                      size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : VkFormat, usage : VkImageUsageFlags,
                                      [<Optional; DefaultParameterValue(false)>] export : bool) =
-        let export = if export then ImageExportMode.Export false else ImageExportMode.None
+        let export = if export then ImageExport.Enable false else ImageExport.Disable
         this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage, export)
 
     [<Extension>]
     static member inline CreateImage(this : Device,
                                      size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags,
-                                     export : ImageExportMode) =
+                                     export : ImageExport) =
         let fmt = VkFormat.ofTextureFormat fmt
         this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage, export)
 

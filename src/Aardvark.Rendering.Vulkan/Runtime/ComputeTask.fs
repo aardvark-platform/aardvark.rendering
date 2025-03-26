@@ -35,8 +35,8 @@ module internal ComputeTaskInternals =
     [<RequireQualifiedAccess>]
     type private HostCommand =
        | Execute  of task: IComputeTask
-       | Upload   of src: HostMemory * dst: Buffer * dstOffset: nativeint * size: nativeint
-       | Download of src: Buffer * srcOffset: nativeint * dst: HostMemory * size: nativeint
+       | Upload   of src: HostMemory * dst: Buffer * dstOffset: uint64 * size: uint64
+       | Download of src: Buffer * srcOffset: uint64 * dst: HostMemory * size: uint64
 
     [<RequireQualifiedAccess>]
     type private CompiledCommand =
@@ -65,11 +65,11 @@ module internal ComputeTaskInternals =
     module private Utilities =
 
         type Array with
-            member x.ElementSize = nativeint (Marshal.SizeOf (x.GetType().GetElementType()))
+            member x.ElementSize = nativeint <| x.GetType().GetElementType().GetCLRSize()
 
         module HostMemory =
 
-            let pin (sizeInBytes : nativeint) (f : nativeint -> nativeint -> 'T) = function
+            let pin (sizeInBytes : uint64) (f : nativeint -> uint64 -> 'T) = function
                 | HostMemory.Unmanaged ptr -> f ptr sizeInBytes
                 | HostMemory.Managed (arr, index) ->
                     let elementSize = arr.ElementSize
@@ -77,7 +77,7 @@ module internal ComputeTaskInternals =
 
                     let sizeInBytes =
                         let length = arr.Length - index
-                        min sizeInBytes (nativeint length * elementSize)
+                        min sizeInBytes (uint64 length * uint64 elementSize)
 
                     arr |> NativeInt.pin (fun ptr -> f (ptr + offset) sizeInBytes)
 
@@ -109,11 +109,11 @@ module internal ComputeTaskInternals =
             let inline execute (other : IComputeTask) =
                 hostCommand (HostCommand.Execute other)
 
-            let inline downloadBuffer (src : Buffer) (srcOffset : nativeint) (dst : HostMemory) (size : nativeint) =
+            let inline downloadBuffer (src : Buffer) (srcOffset : uint64) (dst : HostMemory) (size : uint64) =
                 let cmd = HostCommand.Download (src, srcOffset, dst, size)
                 hostCommand cmd
 
-            let inline uploadBuffer (src : HostMemory) (dst : Buffer) (dstOffset : nativeint) (size : nativeint) =
+            let inline uploadBuffer (src : HostMemory) (dst : Buffer) (dstOffset : uint64) (size : uint64) =
                 let cmd = HostCommand.Upload (src, dst, dstOffset, size)
                 hostCommand cmd
 
@@ -284,11 +284,11 @@ module internal ComputeTaskInternals =
 
                     | ComputeCommand.DownloadBufferCmd (src, dst) ->
                         let srcBuffer = src.Buffer |> unbox<Buffer>
-                        do! CompilerState.downloadBuffer srcBuffer src.Offset dst src.SizeInBytes
+                        do! CompilerState.downloadBuffer srcBuffer (uint64 src.Offset) dst (uint64 src.SizeInBytes)
 
                     | ComputeCommand.UploadBufferCmd (src, dst) ->
                         let dstBuffer = dst.Buffer |> unbox<Buffer>
-                        do! CompilerState.uploadBuffer src dstBuffer dst.Offset dst.SizeInBytes
+                        do! CompilerState.uploadBuffer src dstBuffer (uint64 dst.Offset) (uint64 dst.SizeInBytes)
 
                     | ComputeCommand.SetBufferCmd (range, value) ->
                         let buffer = unbox<Buffer> range.Buffer
@@ -497,7 +497,7 @@ module internal ComputeTaskInternals =
 
     module private PreparedCommand =
 
-        type private UploadCmd(src : HostMemory, dst : Buffer, dstOffset : nativeint, size : nativeint) =
+        type private UploadCmd(src : HostMemory, dst : Buffer, dstOffset : uint64, size : uint64) =
             member x.Run() =
                 src |> HostMemory.pin size (fun pSrc size ->
                     Buffer.upload pSrc dst dstOffset size
@@ -506,7 +506,7 @@ module internal ComputeTaskInternals =
             interface IPreparedCommand with
                 member x.Run(_, _, _) = x.Run()
 
-        type private DownloadCmd(src : Buffer, srcOffset : nativeint, dst : HostMemory, size : nativeint) =
+        type private DownloadCmd(src : Buffer, srcOffset : uint64, dst : HostMemory, size : uint64) =
             member x.Run() =
                 dst |> HostMemory.pin size (fun pDst size ->
                     Buffer.download src srcOffset pDst size
@@ -545,7 +545,7 @@ module internal ComputeTaskInternals =
 
         let ofCompiled (getSecondaryCommandBuffer : unit -> CommandBuffer) = function
             | CompiledCommand.Host (HostCommand.Upload (src, dst, dstOffset, size)) ->
-                new UploadCmd(src, dst, dstOffset, size) :> IPreparedCommand
+                new UploadCmd(src, dst, uint64 dstOffset, uint64 size) :> IPreparedCommand
 
             | CompiledCommand.Host (HostCommand.Download (src, srcOffset, dst, size)) ->
                 new DownloadCmd(src, srcOffset, dst, size) :> IPreparedCommand

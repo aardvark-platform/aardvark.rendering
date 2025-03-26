@@ -175,371 +175,371 @@ module LevelOfDetail =
 
     open Aardvark.Application
 
-    let run() =
+//     let run() =
+// //
+// //        let vk = new VulkanApplication(true)
+// //        let gl = new OpenGlApplication(true)
+// //
+// //
+// //
+// //        let rgl = gl.Runtime :> IRuntime
+// //        let rvk = vk.Runtime :> IRuntime
+// //
+// //        let testImage = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
+// //        let ref = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
+// //
+// //        let tgl = rgl.CreateTexture(V3i(1024, 1024, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+// //        let tvk = rvk.CreateTexture(V3i(1024, 1024, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+// //        let lgl = tgl.[Color, 0, 0]
+// //        let lvk = tvk.[Color, 0, 0]
+// //
+// //        let img = tcGradient 1024 1024
+// //        rgl.Copy(img, lgl)
+// //        rvk.Copy(img, lvk)
+// //        ref.Set(img)
+// //
+// //        rgl.Copy(lgl, testImage)
+// //        let equal = img.Volume.InnerProduct(testImage.Volume, (=), true, (&&))
+// //        printfn "GL: %A" equal
+// //
+// //        rvk.Copy(lvk, testImage)
+// //        let equal = img.Volume.InnerProduct(testImage.Volume, (=), true, (&&))
+// //        printfn "VK: %A" equal
+// //
+// //
+// //        let img = tcGradient 512 512
+// //        rgl.Copy(img, lgl, V2i(512, 512), V2i(512, 512))
+// //        rvk.Copy(img, lvk, V2i(512, 512), V2i(512, 512))
+// //        ref.SubImage(V2i(512, 512), V2i(512,512)).Set img
+// //
+// //
+// //        let img = PixImage.Create @"E:\Development\WorkDirectory\DataSVN\cliffs_color.jpg"
+// //        let img = img.Transformed(ImageTrafo.Rot180)
+// //        lgl.[123.., 235..] <- img
+// //        lvk.[123.., 235..] <- img
+// //        ref.SubImage(V2i(123,235), img.Size).Set(img.ToPixImage<byte>(Col.Format.RGBA))
+// //
+// //
+// //        rgl.Copy(lgl, testImage)
+// //        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\gl.png"
+// //
+// //        rvk.Copy(lvk, testImage)
+// //        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\vulkan.png"
+// //
+// //        ref.SaveAsImage @"C:\Users\schorsch\Desktop\ref.png"
+// //
+// //
+// //        let fgl = rgl.CreateTexture(V3i(640, 640, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+// //        let fvk = rvk.CreateTexture(V3i(640, 640, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
+// //        rgl.Copy(lgl, V3i(15, 37, 0), fgl.[TextureAspect.Color, 0, 0], V3i.Zero, fgl.Size)
+// //        rvk.Copy(lvk, V3i(15, 37, 0), fvk.[TextureAspect.Color, 0, 0], V3i.Zero, fvk.Size)
+// //
+// //
+// //        let testImage = PixImage<byte>(Col.Format.RGBA, V2i(640, 640))
+// //        rgl.Copy(fgl.[TextureAspect.Color, 0, 0], testImage)
+// //        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\gl2.png"
+// //
+// //        rvk.Copy(fvk.[TextureAspect.Color, 0, 0], testImage)
+// //        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\vulkan2.png"
+// //
+// //        ref.SubImage(V2i(15, 37), V2i(640, 640)).Copy().SaveAsImage @"C:\Users\schorsch\Desktop\ref2.png"
+// //
+// //
+// //
+// //
+// //
+// //        let cgl = new RenderControl(Width = 1024, Height = 1024)
+// //        let cvk = new RenderControl(Width = 1024, Height = 1024)
+// //
+// //        let form = new System.Windows.Forms.Form()
+// //        form.ClientSize <- Drawing.Size(1024, 1024)
+// //
+// //        let splitter = new SplitContainer(Dock = DockStyle.Fill)
+// //        form.Controls.Add(splitter)
+// //        splitter.Panel1.Controls.Add cgl
+// //        splitter.Panel2.Controls.Add cvk
+// //        splitter.SplitterMoved.Add (fun e ->
+// //            cvk.Left <- -e.SplitX - splitter.SplitterWidth
+// //        )
+// //
+// //        splitter.Resize.Add (fun e ->
+// //            cgl.Size <- splitter.Size
+// //            cvk.Size <- splitter.Size
+// //        )
+// //
+// //        vk.Initialize(cvk)
+// //        gl.Initialize(cgl)
+// //
+// //
+// //        let sg =
+// //            Sg.fullScreenQuad
+// //                |> Sg.diffuseTexture (AVal.constant (tgl :> ITexture))
+// //                |> Sg.shader {
+// //                    do! DefaultSurfaces.diffuseTexture
+// //                }
+// //        cgl.RenderTask <- rgl.CompileRender(cgl.FramebufferSignature, sg)
+// //
+// //        let sg =
+// //            Sg.fullScreenQuad
+// //                |> Sg.diffuseTexture (AVal.constant (tvk :> ITexture))
+// //                |> Sg.shader {
+// //                    do! DefaultSurfaces.diffuseTexture
+// //                }
+// //        cvk.RenderTask <- rvk.CompileRender(cvk.FramebufferSignature, sg)
+// //
+// //        System.Windows.Forms.Application.Run(form)
+// //
+// //        Environment.Exit 0
+// //
 //
-//        let vk = new VulkanApplication(true)
-//        let gl = new OpenGlApplication(true)
-//
-//        
-//
-//        let rgl = gl.Runtime :> IRuntime
-//        let rvk = vk.Runtime :> IRuntime
-//
-//        let testImage = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
-//        let ref = PixImage<byte>(Col.Format.RGBA, V2i(1024, 1024))
-//
-//        let tgl = rgl.CreateTexture(V3i(1024, 1024, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
-//        let tvk = rvk.CreateTexture(V3i(1024, 1024, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
-//        let lgl = tgl.[Color, 0, 0]
-//        let lvk = tvk.[Color, 0, 0]
-//
-//        let img = tcGradient 1024 1024
-//        rgl.Copy(img, lgl)
-//        rvk.Copy(img, lvk)
-//        ref.Set(img)
-//
-//        rgl.Copy(lgl, testImage)
-//        let equal = img.Volume.InnerProduct(testImage.Volume, (=), true, (&&))
-//        printfn "GL: %A" equal
-//        
-//        rvk.Copy(lvk, testImage)
-//        let equal = img.Volume.InnerProduct(testImage.Volume, (=), true, (&&))
-//        printfn "VK: %A" equal
-//
-//        
-//        let img = tcGradient 512 512
-//        rgl.Copy(img, lgl, V2i(512, 512), V2i(512, 512))
-//        rvk.Copy(img, lvk, V2i(512, 512), V2i(512, 512))
-//        ref.SubImage(V2i(512, 512), V2i(512,512)).Set img
-//
-//
-//        let img = PixImage.Create @"E:\Development\WorkDirectory\DataSVN\cliffs_color.jpg"
-//        let img = img.Transformed(ImageTrafo.Rot180) 
-//        lgl.[123.., 235..] <- img
-//        lvk.[123.., 235..] <- img
-//        ref.SubImage(V2i(123,235), img.Size).Set(img.ToPixImage<byte>(Col.Format.RGBA))
-//
-//
-//        rgl.Copy(lgl, testImage)
-//        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\gl.png"
-//
-//        rvk.Copy(lvk, testImage)
-//        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\vulkan.png"
-//
-//        ref.SaveAsImage @"C:\Users\schorsch\Desktop\ref.png"
-//
-//
-//        let fgl = rgl.CreateTexture(V3i(640, 640, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
-//        let fvk = rvk.CreateTexture(V3i(640, 640, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 0, 1, 1)
-//        rgl.Copy(lgl, V3i(15, 37, 0), fgl.[TextureAspect.Color, 0, 0], V3i.Zero, fgl.Size)
-//        rvk.Copy(lvk, V3i(15, 37, 0), fvk.[TextureAspect.Color, 0, 0], V3i.Zero, fvk.Size)
-//
-//        
-//        let testImage = PixImage<byte>(Col.Format.RGBA, V2i(640, 640))
-//        rgl.Copy(fgl.[TextureAspect.Color, 0, 0], testImage)
-//        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\gl2.png"
-//
-//        rvk.Copy(fvk.[TextureAspect.Color, 0, 0], testImage)
-//        testImage.SaveAsImage @"C:\Users\schorsch\Desktop\vulkan2.png"
-//
-//        ref.SubImage(V2i(15, 37), V2i(640, 640)).Copy().SaveAsImage @"C:\Users\schorsch\Desktop\ref2.png"
 //
 //
 //
+//         let app = new VulkanApplication(false)
+//         let win = app.CreateSimpleRenderWindow 1
+//
+//         let view =
+//             CameraView.lookAt (V3d(60,60,60)) V3d.Zero V3d.OOI
+//                 |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+//                 |> AVal.map CameraView.viewTrafo
+//
+//         let proj =
+//             win.Sizes
+//                 |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+//                 |> AVal.map Frustum.projTrafo
 //
 //
-//        let cgl = new RenderControl(Width = 1024, Height = 1024)
-//        let cvk = new RenderControl(Width = 1024, Height = 1024)
+//         let mutable frozen = false
 //
-//        let form = new System.Windows.Forms.Form()
-//        form.ClientSize <- Drawing.Size(1024, 1024)
+//         let vv = view |> AVal.map Array.singleton
+//         let pp = proj |> AVal.map Array.singleton
 //
-//        let splitter = new SplitContainer(Dock = DockStyle.Fill)
-//        form.Controls.Add(splitter)
-//        splitter.Panel1.Controls.Add cgl
-//        splitter.Panel2.Controls.Add cvk
-//        splitter.SplitterMoved.Add (fun e ->
-//            cvk.Left <- -e.SplitX - splitter.SplitterWidth
-//        )
+//         let views = cval vv
+//         let projs = cval pp
 //
-//        splitter.Resize.Add (fun e ->
-//            cgl.Size <- splitter.Size
-//            cvk.Size <- splitter.Size
-//        )
+//         let toggleFreeze() =
+//             transact (fun () ->
+//                 if frozen then
+//                     views.Value <- vv
+//                     projs.Value <- pp
+//                 else
+//                     views.Value <- AVal.constant (AVal.force (AVal.force views))
+//                     projs.Value <- AVal.constant (AVal.force (AVal.force projs))
+//                 frozen <- not frozen
+//             )
 //
-//        vk.Initialize(cvk)
-//        gl.Initialize(cgl)
+//         win.Keyboard.KeyDown(Keys.Space).Values.Add toggleFreeze
 //
 //
-//        let sg =
-//            Sg.fullScreenQuad
-//                |> Sg.diffuseTexture (AVal.constant (tgl :> ITexture))
-//                |> Sg.shader {
-//                    do! DefaultSurfaces.diffuseTexture
-//                }
-//        cgl.RenderTask <- rgl.CompileRender(cgl.FramebufferSignature, sg)
-//        
-//        let sg =
-//            Sg.fullScreenQuad
-//                |> Sg.diffuseTexture (AVal.constant (tvk :> ITexture))
-//                |> Sg.shader {
-//                    do! DefaultSurfaces.diffuseTexture
-//                }
-//        cvk.RenderTask <- rvk.CompileRender(cvk.FramebufferSignature, sg)
 //
-//        System.Windows.Forms.Application.Run(form)
+//         let tree = GeometryTree(Box3d(-10.0 * V3d.III, 10.0 * V3d.III))
 //
-//        Environment.Exit 0
 //
-
-
-
-
-        let app = new VulkanApplication(false)
-        let win = app.CreateSimpleRenderWindow 1
-
-        let view =
-            CameraView.lookAt (V3d(60,60,60)) V3d.Zero V3d.OOI
-                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-                |> AVal.map CameraView.viewTrafo
-
-        let proj =
-            win.Sizes 
-                |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
-                |> AVal.map Frustum.projTrafo
-
-
-        let mutable frozen = false
-
-        let vv = view |> AVal.map Array.singleton
-        let pp = proj |> AVal.map Array.singleton
-
-        let views = cval vv
-        let projs = cval pp
-
-        let toggleFreeze() =
-            transact (fun () ->
-                if frozen then
-                    views.Value <- vv
-                    projs.Value <- pp
-                else
-                    views.Value <- AVal.constant (AVal.force (AVal.force views))
-                    projs.Value <- AVal.constant (AVal.force (AVal.force projs))
-                frozen <- not frozen
-            )
-
-        win.Keyboard.KeyDown(Keys.Space).Values.Add toggleFreeze
-
-
-
-        let tree = GeometryTree(Box3d(-10.0 * V3d.III, 10.0 * V3d.III))
-
-
-        let viewProj = AVal.map2 (Array.map2 (*)) (AVal.bind id views) (AVal.bind id projs)
-
-
-        let visible =
-            viewProj |> AVal.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
-                vps |> Array.exists (ViewProjection.intersects node.Bounds)
-            )
-
-        let descend =
-            viewProj |> AVal.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
-                let projectedLength (b : Box3d) (t : Trafo3d) =
-                    let ssb = b.ComputeCorners() |> Array.map (t.Forward.TransformPosProj) |> Box3d
-                    max ssb.Size.X ssb.Size.Y
-
-                let len = vps |> Array.map (projectedLength node.Bounds) |> Array.max
-                len > 1.0
-            )
-            
-
-
-//        let active = CSet.empty
+//         let viewProj = AVal.map2 (Array.map2 (*)) (AVal.bind id views) (AVal.bind id projs)
 //
-//        let mutable pending = ref HDeltaSet.empty
 //
-//        let flush () =
-//            transact (fun () ->
-//                let pending = !Interlocked.Exchange(&pending, ref HDeltaSet.empty)
-//                for d in pending do
-//                    match d with
-//                        | Add(_,v) -> active.Add v |> ignore
-//                        | Rem(_,v) -> active.Remove v |> ignore
-//            )
+//         let visible =
+//             viewProj |> AVal.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
+//                 vps |> Array.exists (ViewProjection.intersects node.Bounds)
+//             )
 //
-//        let activate (g : Geometry) =
-//            pending := HDeltaSet.add (Add g) !pending
-//            //transact (fun () -> active.Add g |> ignore)
-//            
-//        let deactivate (g : Geometry) =
-//            pending := HDeltaSet.add (Rem g) !pending
-//            //transact (fun () -> active.Remove g |> ignore)
-
-        
-        let treeView = 
-            { 
-                root = AVal.constant (Some tree)
-                visible = visible
-                descend = descend
-                showInner = false
-            }
-
-        let loader = LodTreeLoader.create treeView
-
-        let device = app.Runtime.Device
-
-        let createLinearImage (size : V2i) (format : VkFormat) =
-            let mutable info =
-                VkImageCreateInfo(
-                    VkImageCreateFlags.None,
-                    VkImageType.D2d,
-                    format,
-                    VkExtent3D(size.X, size.Y, 1),
-                    1u,
-                    1u,
-                    VkSampleCountFlags.D1Bit,
-                    VkImageTiling.Linear,
-                    VkImageUsageFlags.TransferSrcBit,
-                    VkSharingMode.Exclusive,
-                    0u, NativePtr.zero,
-                    VkImageLayout.Preinitialized
-                )
-
-            let mutable img = VkImage.Null
-
-            VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&img) |> ignore
-            let mutable reqs = VkMemoryRequirements()
-            VkRaw.vkGetImageMemoryRequirements(device.Handle, img, &&reqs)
-            let mem = device.HostMemory.Alloc(int64 reqs.alignment, int64 reqs.size)
-            VkRaw.vkBindImageMemory(device.Handle, img, mem.Memory.Handle, uint64 mem.Offset) |> ignore
-
-
-            new Aardvark.Rendering.Vulkan.Image(device, img, V3i(size,1), 1, 1, 1, TextureDimension.Texture2D, format, mem, VkImageLayout.Preinitialized)
-
-        let createOptimalImage (size : V2i) (levels : int) (format : VkFormat) =
-            let mutable info =
-                VkImageCreateInfo(
-                    VkImageCreateFlags.None,
-                    VkImageType.D2d,
-                    format,
-                    VkExtent3D(size.X, size.Y, 1),
-                    uint32 levels,
-                    1u,
-                    VkSampleCountFlags.D1Bit,
-                    VkImageTiling.Linear,
-                    VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit,
-                    VkSharingMode.Exclusive,
-                    0u, NativePtr.zero,
-                    VkImageLayout.Undefined
-                )
-
-            let mutable img = VkImage.Null
-
-            VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&img) |> ignore
-            let mutable reqs = VkMemoryRequirements()
-            VkRaw.vkGetImageMemoryRequirements(device.Handle, img, &&reqs)
-            let mem = device.Alloc(reqs, true)
-            VkRaw.vkBindImageMemory(device.Handle, img, mem.Memory.Handle, uint64 mem.Offset) |> ignore
-
-
-            new Aardvark.Rendering.Vulkan.Image(device, img, V3i(size,1), levels, 1, 1, TextureDimension.Texture2D, format, mem, VkImageLayout.Undefined)
-
-        let size = V2i(128, 128)
-        let format = VkFormat.R8g8b8a8Unorm
-
-        let hostVisible = createLinearImage size format
-        hostVisible.Memory.Mapped(fun ptr ->
-            ()
-        )
-
-
-
-        hostVisible.Memory.MappedTensor4<byte>(V4i(size.X, size.Y, 1, 4), fun ptr ->
-            let pi = PixImage<byte>(Col.Format.RGBA, size)
-            pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-                let c = c / 16L
-                if (c.X + c.Y) % 2L = 0L then
-                    C4b.White
-                else
-                    C4b.Gray
-            ) |> ignore
-
-            NativeVolume.using pi.Volume  (fun src ->
-                NativeVolume.copy src ptr.[*,*,0,*]
-            )
-        )
-
-        let img = createOptimalImage size 1 format
-
-        device.perform {
-            do! Command.Copy(hostVisible.[TextureAspect.Color, 0, 0], V3i.Zero, img.[TextureAspect.Color, 0, 0], V3i.Zero, V3i(size, 1))
-        }
-
-        hostVisible.Dispose()
-
-        let tex = AVal.constant (img :> ITexture)
-
-        //let tex = DefaultTextures.checkerboard
-
-
-
-
+//         let descend =
+//             viewProj |> AVal.map (fun (vps : Trafo3d[]) (node : GeometryTree) ->
+//                 let projectedLength (b : Box3d) (t : Trafo3d) =
+//                     let ssb = b.ComputeCorners() |> Array.map (t.Forward.TransformPosProj) |> Box3d
+//                     max ssb.Size.X ssb.Size.Y
 //
-//        let thread = 
-//            loader |> LodTreeLoader.start {
-//                prepare     = id
-//                delete      = ignore
-//                activate    = activate
-//                deactivate  = deactivate
-//                flush       = flush
-//            }
-
-        let runtime = win.Runtime |> unbox<Runtime>
-        let device = runtime.Device
-
-        let effect =
-            FShade.Effect.compose [
-                toEffect DefaultSurfaces.trafo
-                toEffect (DefaultSurfaces.constantColor C4f.Red)
-                toEffect (DefaultSurfaces.diffuseTexture)
-
-                toEffect <| fun (v : Effects.Vertex) ->
-                    FShade.ShaderBuilders.fragment {
-                        return v.c * FShade.Imperative.ExpressionExtensions.ShaderIO.ReadInput<V4d>(FShade.Imperative.ParameterKind.Uniform, "NodeColor", None)
-                    }
-
-                //toEffect DefaultSurfaces.simpleLighting
-            ]
-
-
-        let surface = Aardvark.Rendering.Surface.Effect effect
-
-
-        let state =
-            {
-                DepthState      = DepthState.Default
-                BlendState      = BlendState.Default
-                StencilState    = StencilState.Default
-                RasterizerState = { RasterizerState.Default with FrontFacing = AVal.constant WindingOrder.Clockwise }
-
-                GlobalUniforms      = 
-                    UniformProvider.ofList [
-                        "DiffuseColorTexture", tex :> IAdaptiveValue
-                        "ViewTrafo", view :> IAdaptiveValue
-                        "ProjTrafo", proj :> IAdaptiveValue
-                        "LightLocation", view |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
-                        "CameraLocation", view |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
-                    ]
-
-                Mode                = IndexedGeometryMode.TriangleList
-                VertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f>; DefaultSemantic.DiffuseColorCoordinates, typeof<V2f> ]
-                PerGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d>; "NodeColor", typeof<V4d> ]
-            }
-
-        win.RenderTask <- runtime.CompileRender(unbox win.FramebufferSignature, RuntimeCommand.LodTree(surface, state, loader))
-
-
-
-
-        win.Run()
+//                 let len = vps |> Array.map (projectedLength node.Bounds) |> Array.max
+//                 len > 1.0
+//             )
+//
+//
+//
+// //        let active = CSet.empty
+// //
+// //        let mutable pending = ref HDeltaSet.empty
+// //
+// //        let flush () =
+// //            transact (fun () ->
+// //                let pending = !Interlocked.Exchange(&pending, ref HDeltaSet.empty)
+// //                for d in pending do
+// //                    match d with
+// //                        | Add(_,v) -> active.Add v |> ignore
+// //                        | Rem(_,v) -> active.Remove v |> ignore
+// //            )
+// //
+// //        let activate (g : Geometry) =
+// //            pending := HDeltaSet.add (Add g) !pending
+// //            //transact (fun () -> active.Add g |> ignore)
+// //
+// //        let deactivate (g : Geometry) =
+// //            pending := HDeltaSet.add (Rem g) !pending
+// //            //transact (fun () -> active.Remove g |> ignore)
+//
+//
+//         let treeView =
+//             {
+//                 root = AVal.constant (Some tree)
+//                 visible = visible
+//                 descend = descend
+//                 showInner = false
+//             }
+//
+//         let loader = LodTreeLoader.create treeView
+//
+//         let device = app.Runtime.Device
+//
+//         let createLinearImage (size : V2i) (format : VkFormat) =
+//             let mutable info =
+//                 VkImageCreateInfo(
+//                     VkImageCreateFlags.None,
+//                     VkImageType.D2d,
+//                     format,
+//                     VkExtent3D(size.X, size.Y, 1),
+//                     1u,
+//                     1u,
+//                     VkSampleCountFlags.D1Bit,
+//                     VkImageTiling.Linear,
+//                     VkImageUsageFlags.TransferSrcBit,
+//                     VkSharingMode.Exclusive,
+//                     0u, NativePtr.zero,
+//                     VkImageLayout.Preinitialized
+//                 )
+//
+//             let mutable img = VkImage.Null
+//
+//             VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&img) |> ignore
+//             let mutable reqs = VkMemoryRequirements()
+//             VkRaw.vkGetImageMemoryRequirements(device.Handle, img, &&reqs)
+//             let mem = device.HostMemory.Alloc(int64 reqs.alignment, int64 reqs.size)
+//             VkRaw.vkBindImageMemory(device.Handle, img, mem.Memory.Handle, uint64 mem.Offset) |> ignore
+//
+//
+//             new Aardvark.Rendering.Vulkan.Image(device, img, V3i(size,1), 1, 1, 1, TextureDimension.Texture2D, format, mem, VkImageLayout.Preinitialized)
+//
+//         let createOptimalImage (size : V2i) (levels : int) (format : VkFormat) =
+//             let mutable info =
+//                 VkImageCreateInfo(
+//                     VkImageCreateFlags.None,
+//                     VkImageType.D2d,
+//                     format,
+//                     VkExtent3D(size.X, size.Y, 1),
+//                     uint32 levels,
+//                     1u,
+//                     VkSampleCountFlags.D1Bit,
+//                     VkImageTiling.Linear,
+//                     VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit,
+//                     VkSharingMode.Exclusive,
+//                     0u, NativePtr.zero,
+//                     VkImageLayout.Undefined
+//                 )
+//
+//             let mutable img = VkImage.Null
+//
+//             VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&img) |> ignore
+//             let mutable reqs = VkMemoryRequirements()
+//             VkRaw.vkGetImageMemoryRequirements(device.Handle, img, &&reqs)
+//             let mem = device.Alloc(reqs, true)
+//             VkRaw.vkBindImageMemory(device.Handle, img, mem.Memory.Handle, uint64 mem.Offset) |> ignore
+//
+//
+//             new Aardvark.Rendering.Vulkan.Image(device, img, V3i(size,1), levels, 1, 1, TextureDimension.Texture2D, format, mem, VkImageLayout.Undefined)
+//
+//         let size = V2i(128, 128)
+//         let format = VkFormat.R8g8b8a8Unorm
+//
+//         let hostVisible = createLinearImage size format
+//         hostVisible.Memory.Mapped(fun ptr ->
+//             ()
+//         )
+//
+//
+//
+//         hostVisible.Memory.MappedTensor4<byte>(V4i(size.X, size.Y, 1, 4), fun ptr ->
+//             let pi = PixImage<byte>(Col.Format.RGBA, size)
+//             pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
+//                 let c = c / 16L
+//                 if (c.X + c.Y) % 2L = 0L then
+//                     C4b.White
+//                 else
+//                     C4b.Gray
+//             ) |> ignore
+//
+//             NativeVolume.using pi.Volume  (fun src ->
+//                 NativeVolume.copy src ptr.[*,*,0,*]
+//             )
+//         )
+//
+//         let img = createOptimalImage size 1 format
+//
+//         device.perform {
+//             do! Command.Copy(hostVisible.[TextureAspect.Color, 0, 0], V3i.Zero, img.[TextureAspect.Color, 0, 0], V3i.Zero, V3i(size, 1))
+//         }
+//
+//         hostVisible.Dispose()
+//
+//         let tex = AVal.constant (img :> ITexture)
+//
+//         //let tex = DefaultTextures.checkerboard
+//
+//
+//
+//
+// //
+// //        let thread =
+// //            loader |> LodTreeLoader.start {
+// //                prepare     = id
+// //                delete      = ignore
+// //                activate    = activate
+// //                deactivate  = deactivate
+// //                flush       = flush
+// //            }
+//
+//         let runtime = win.Runtime |> unbox<Runtime>
+//         let device = runtime.Device
+//
+//         let effect =
+//             FShade.Effect.compose [
+//                 toEffect DefaultSurfaces.trafo
+//                 toEffect (DefaultSurfaces.constantColor C4f.Red)
+//                 toEffect (DefaultSurfaces.diffuseTexture)
+//
+//                 toEffect <| fun (v : Effects.Vertex) ->
+//                     FShade.ShaderBuilders.fragment {
+//                         return v.c * FShade.Imperative.ExpressionExtensions.ShaderIO.ReadInput<V4d>(FShade.Imperative.ParameterKind.Uniform, "NodeColor", None)
+//                     }
+//
+//                 //toEffect DefaultSurfaces.simpleLighting
+//             ]
+//
+//
+//         let surface = Aardvark.Rendering.Surface.Effect effect
+//
+//
+//         let state =
+//             {
+//                 DepthState      = DepthState.Default
+//                 BlendState      = BlendState.Default
+//                 StencilState    = StencilState.Default
+//                 RasterizerState = { RasterizerState.Default with FrontFacing = AVal.constant WindingOrder.Clockwise }
+//
+//                 GlobalUniforms      =
+//                     UniformProvider.ofList [
+//                         "DiffuseColorTexture", tex :> IAdaptiveValue
+//                         "ViewTrafo", view :> IAdaptiveValue
+//                         "ProjTrafo", proj :> IAdaptiveValue
+//                         "LightLocation", view |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
+//                         "CameraLocation", view |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
+//                     ]
+//
+//                 Mode                = IndexedGeometryMode.TriangleList
+//                 VertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f>; DefaultSemantic.DiffuseColorCoordinates, typeof<V2f> ]
+//                 PerGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d>; "NodeColor", typeof<V4d> ]
+//             }
+//
+//         win.RenderTask <- runtime.CompileRender(unbox win.FramebufferSignature, RuntimeCommand.LodTree(surface, state, loader))
+//
+//
+//
+//
+//         win.Run()

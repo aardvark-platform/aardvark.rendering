@@ -12,6 +12,7 @@ open Vulkan11
 open KHRBufferDeviceAddress
 
 #nowarn "9"
+#nowarn "51"
 
 // =======================================================================
 // Resource Definition
@@ -21,7 +22,7 @@ type Buffer =
         inherit Resource<VkBuffer>
         val public Memory : DevicePtr
         val public Usage : VkBufferUsageFlags
-        val public Size : int64
+        val public Size : uint64
         val public DeviceAddress : VkDeviceAddress
 
         override x.Destroy() =
@@ -37,13 +38,11 @@ type Buffer =
             member x.Offset = 0n
             member x.SizeInBytes = nativeint x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
 
-        new(device : Device, handle, memory, size, usage) =
+        new(device: Device, handle: VkBuffer, memory: DevicePtr, size, usage: VkBufferUsageFlags) =
             let address =
-                if usage &&& VkBufferUsageFlags.ShaderDeviceAddressBitKhr <> VkBufferUsageFlags.None then
-                    native {
-                        let! pInfo = VkBufferDeviceAddressInfoKHR(handle)
-                        return VkRaw.vkGetBufferDeviceAddressKHR(device.Handle, pInfo)
-                    }
+                if usage.HasFlag VkBufferUsageFlags.ShaderDeviceAddressBitKhr then
+                    let mutable info = VkBufferDeviceAddressInfoKHR(handle)
+                    VkRaw.vkGetBufferDeviceAddressKHR(device.Handle, &&info)
                 else
                     0UL
 
@@ -55,9 +54,9 @@ type internal ExportedBuffer =
         inherit Buffer
 
         member x.ExternalMemory =
-            { Block  = x.Memory.Memory.ExternalBlock
-              Offset = x.Memory.Offset
-              Size   = x.Memory.Size }
+            { Block  = x.Memory.ExternalBlock
+              Offset = int64 x.Memory.Offset
+              Size   = int64 x.Memory.Size }
 
         interface IExportedBackendBuffer with
             member x.Memory = x.ExternalMemory
@@ -141,8 +140,8 @@ module BufferCommands =
     type Command with
 
         // buffer to buffer
-        static member Copy(src : Buffer, srcOffset : int64, dst : Buffer, dstOffset : int64, size : int64) =
-            if size < 0L || srcOffset < 0L || srcOffset + size > src.Size || dstOffset < 0L || dstOffset + size > dst.Size then
+        static member Copy(src : Buffer, srcOffset : uint64, dst : Buffer, dstOffset : uint64, size : uint64) =
+            if size < 0UL || srcOffset < 0UL || srcOffset + size > src.Size || dstOffset < 0UL || dstOffset + size > dst.Size then
                 failf "bad copy range"
 
             { new Command() with
@@ -176,14 +175,14 @@ module BufferCommands =
 
 
 
-        static member inline Copy(src : Buffer, dst : Buffer, size : int64) = 
-            Command.Copy(src, 0L, dst, 0L, size)
+        static member inline Copy(src : Buffer, dst : Buffer, size : uint64) =
+            Command.Copy(src, 0UL, dst, 0UL, size)
 
 
         static member inline Copy(src : Buffer, dst : Buffer) = 
-            Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
+            Command.Copy(src, 0UL, dst, 0UL, min src.Size dst.Size)
 
-        static member Acquire(buffer : Buffer, srcQueue : DeviceQueueFamily, offset : int64, size : int64) =
+        static member Acquire(buffer : Buffer, srcQueue : DeviceQueueFamily, offset : uint64, size : uint64) =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
@@ -196,14 +195,14 @@ module BufferCommands =
                         VkBufferUsageFlags.toDstAccessFlags buffer.Usage,
                         uint32 srcQueue.Index,
                         uint32 cmd.QueueFamily.Index,
-                        uint64 offset, uint64 size
+                        offset, size
                     )
 
                     cmd.AddResource buffer
             }
 
         static member Acquire(buffer : Buffer, srcQueue : DeviceQueueFamily) =
-            Command.Acquire(buffer, srcQueue, 0L, buffer.Size)
+            Command.Acquire(buffer, srcQueue, 0UL, buffer.Size)
 
 
         static member Sync(buffer : Buffer,
@@ -246,32 +245,32 @@ module BufferCommands =
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Size, 0u)
                     cmd.AddResource b
             }
-        static member SetBuffer(b : Buffer, offset : int64, size : int64, value : byte[]) =
+        static member SetBuffer(b : Buffer, offset : uint64, size : uint64, value : byte[]) =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
                     if value.Length <> 4 then failf "pattern too long"
                     let v = BitConverter.ToUInt32(value, 0)
-                    VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, uint64 offset, uint64 size, v)
+                    VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, offset, size, v)
                     cmd.AddResource b
             }
 
     type CopyCommand with
-        static member Copy(src : Buffer, srcOffset : int64, dst : Buffer, dstOffset : int64, size : int64) =
+        static member Copy(src : Buffer, srcOffset : uint64, dst : Buffer, dstOffset : uint64, size : uint64) =
             CopyCommand.Copy(src.Handle, srcOffset, dst.Handle, dstOffset, size)
 
-        static member Copy(src : Buffer, dst : Buffer, size : int64) =
-            CopyCommand.Copy(src.Handle, 0L, dst.Handle, 0L, size)
+        static member Copy(src : Buffer, dst : Buffer, size : uint64) =
+            CopyCommand.Copy(src.Handle, 0UL, dst.Handle, 0UL, size)
 
         static member Copy(src : Buffer, dst : Buffer) =
-            CopyCommand.Copy(src.Handle, 0L, dst.Handle, 0L, min src.Size dst.Size)
+            CopyCommand.Copy(src.Handle, 0UL, dst.Handle, 0UL, min src.Size dst.Size)
 
-        static member Release(buffer : Buffer, offset : int64, size : int64, dstQueueFamily : DeviceQueueFamily) =
+        static member Release(buffer : Buffer, offset : uint64, size : uint64, dstQueueFamily : DeviceQueueFamily) =
             CopyCommand.Release(buffer.Handle, offset, size, dstQueueFamily.Index)
 
         static member Release(buffer : Buffer, dstQueueFamily : DeviceQueueFamily) =
-            CopyCommand.Release(buffer, 0L, buffer.Size, dstQueueFamily)
+            CopyCommand.Release(buffer, 0UL, buffer.Size, dstQueueFamily)
 
 // =======================================================================
 // Resource functions for Device
@@ -279,8 +278,10 @@ module BufferCommands =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =
 
-    let private createInternal (concurrent : bool) (export : bool) (alignment : uint64) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
-        assert (size > 0L)
+    let private emptySize = 256UL
+
+    let private createInternal (concurrent: bool) (export: bool) (usage: VkBufferUsageFlags)
+                               (alignment: uint64) (size: uint64) (memory: IDeviceMemory) =
         let device = memory.Device
 
         let externalMemoryInfo =
@@ -291,67 +292,44 @@ module Buffer =
 
         let pNext =
             if export then
-                if device.IsExtensionEnabled ExternalMemory.Extension then
-                    if memory.Device.PhysicalDevice.GetBufferExportable(VkBufferCreateFlags.None, flags) then
+                if device.IsExtensionEnabled Instance.Extensions.ExternalMemory then
+                    if device.PhysicalDevice.GetBufferExportable(VkBufferCreateFlags.None, usage) then
                         pExternalMemoryInfo.Handle
                     else
-                        failf $"Cannot export buffer with usage {flags}"
+                        failf $"Cannot export buffer with usage {usage}"
                 else
-                    failf $"Cannot export buffer memory because {ExternalMemory.Extension} is not supported"
+                    failf $"Cannot export buffer memory because {Instance.Extensions.ExternalMemory} is not supported"
             else
                 0n
 
-        let info =
+        let mutable info =
             VkBufferCreateInfo(
                 pNext,
                 VkBufferCreateFlags.None,
-                uint64 size,
-                flags,
+                (if size > 0UL then size else emptySize),
+                usage,
                 (if concurrent then device.SharingMode else VkSharingMode.Exclusive),
                 (if concurrent then device.QueueFamilyCount else 0u),
                 (if concurrent then device.QueueFamilyIndices else NativePtr.zero)
             )
 
-        let handle =
-            info |> NativePtr.pin (fun pInfo ->
-                NativePtr.temp (fun pHandle ->
-                    VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
-                        |> check "could not create buffer"
-                    NativePtr.read pHandle
-                )
-            )
-
-        let reqs =
-            NativePtr.temp (fun ptr ->
-                VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
-                NativePtr.read ptr
-            )
-
-        if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
-            failf "cannot create buffer using memory %A" memory
-
-        let alignment = Fun.LeastCommonMultiple(alignment, reqs.alignment)
-        let ptr = memory.Alloc(int64 alignment, int64 reqs.size, export)
-
-        VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
-            |> check "could not bind buffer-memory"
+        let buffer, memory = memory.CreateBuffer(&info, alignment = alignment, export = export)
 
         if export then
-            new ExportedBuffer(device, handle, ptr, size, flags) :> Buffer
+            new ExportedBuffer(device, buffer, memory, size, usage) :> Buffer
         else
-            new Buffer(device, handle, ptr, size, flags)
+            new Buffer(device, buffer, memory, size, usage)
 
+    let private emptyBuffers = ConcurrentDictionary<_, Lazy<Buffer>>()
 
-    let private emptyBuffers = ConcurrentDictionary<DeviceHeap * bool * VkBufferUsageFlags, Lazy<Buffer>>()
-
-    let empty (export : bool) (usage : VkBufferUsageFlags) (memory : DeviceHeap) =
+    let empty (export: bool) (usage: VkBufferUsageFlags) (memory: IDeviceMemory) =
         let key = (memory, export, usage)
 
         let buffer =
             emptyBuffers.GetOrAdd(key, fun (memory, export, usage) ->
                 lazy (
                     let device = memory.Device
-                    let buffer = memory |> createInternal true export 1UL usage 256L
+                    let buffer = memory |> createInternal true export usage 0UL emptySize
 
                     device.OnDispose.Add (fun () ->
                         emptyBuffers.TryRemove key |> ignore
@@ -365,117 +343,65 @@ module Buffer =
         buffer.AddReference()
         buffer
 
-    let create' (concurrent : bool) (export : bool) (alignment : uint64) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
-        if size > 0L then
-            memory |> createInternal concurrent export alignment flags size
+    let create' (concurrent: bool) (export: bool) (usage: VkBufferUsageFlags) (alignment: uint64) (size: uint64) (memory: IDeviceMemory) =
+        if size > 0UL then
+            memory |> createInternal concurrent export usage alignment size
         else
-            memory |> empty export flags
+            memory |> empty export usage
 
-    let inline create (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
-        create' false false 1UL flags size memory
+    let inline create (usage: VkBufferUsageFlags) (size: uint64) (memory: IDeviceMemory) =
+        create' false false usage 0UL size memory
 
-    let inline alloc' (concurrent : bool) (export : bool) (alignment : uint64) (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
-        create' concurrent export alignment flags size device.DeviceMemory
+    let internal write (buffer: Buffer) (writer : nativeint -> unit) =
+        let device = buffer.Device
 
-    let inline alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
-        alloc' false false 1UL flags size device
-
-    let internal ofWriterWithToken (export : bool) (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit)
-                                   (memory : DeviceHeap) (token : DeviceToken) =
-        assert (memory.Device = token.Device)
-        let device = memory.Device
-
-        if size > 0n then
-            let size = int64 size
-            let buffer = memory |> create' false export 1UL flags size
-
-            if memory.IsHostVisible then
-                buffer.Memory.Mapped (fun dst -> writer dst)
+        if buffer.Size > 0UL then
+            if buffer.Memory.IsHostVisible then
+                buffer.Memory.Mapped writer
 
             else
                 match device.UploadMode with
                 | UploadMode.Sync ->
-                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit size
-                    hostBuffer.Memory.Mapped (fun dst -> writer dst)
+                    let hostBuffer = device.StagingMemory |> create VkBufferUsageFlags.TransferSrcBit buffer.Size
+                    hostBuffer.Memory.Mapped writer
 
-                    token.enqueue {
+                    device.eventually {
                         try do! Command.Copy(hostBuffer, buffer)
                         finally hostBuffer.Dispose()
                     }
 
                 | UploadMode.Async ->
-                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit size
-                    hostBuffer.Memory.Mapped (fun dst -> writer dst)
+                    let hostBuffer = device.StagingMemory |> create VkBufferUsageFlags.TransferSrcBit buffer.Size
+                    hostBuffer.Memory.Mapped writer
 
                     device.CopyEngine.RunSynchronously [
-                        CopyCommand.Copy(hostBuffer, buffer, int64 size)
-                        CopyCommand.Release(buffer, token.Family)
+                        CopyCommand.Copy(hostBuffer, buffer, buffer.Size)
+                        CopyCommand.Release(buffer, device.GraphicsFamily)
                         CopyCommand.Callback (fun () -> hostBuffer.Dispose())
                     ]
 
-                    token.enqueue {
+                    device.eventually {
                         do! Command.Acquire(buffer, device.TransferFamily)
                     }
 
-            buffer
-        else
-            empty export flags memory
+    let internal copyFromHost (buffer: Buffer) (src: nativeint) =
+        write buffer (fun dst -> Buffer.MemoryCopy(src, dst, buffer.Size, buffer.Size))
 
-    let internal ofWriter (export : bool) (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (memory : DeviceHeap) =
-        use token = memory.Device.Token
-        token |> ofWriterWithToken export flags size writer memory
-
-    let internal updateRangeWriter (offset : int64) (size : int64) (writer : nativeint -> unit) (buffer : Buffer) =
-        let device = buffer.Device
-
-        if buffer.Memory.Memory.Heap.IsHostVisible then
-            buffer.Memory.Mapped (fun dst -> writer (dst + nativeint offset))
-        else
-            let tmp = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit size
-            tmp.Memory.Mapped (fun dst -> writer dst)
-
-            device.eventually {
-                try do! Command.Copy(tmp, 0L, buffer, offset, size)
-                finally tmp.Dispose()
-            }
-
-    let internal updateWriter (writer : nativeint -> unit) (buffer : Buffer) =
-        updateRangeWriter 0L buffer.Size writer buffer
-
-    let uploadRanges (ptr : nativeint) (ranges : RangeSet1i) (buffer : Buffer) =
-        let baseOffset = int64 ranges.Min
-        let totalSize = int64 (ranges.Max - ranges.Min + 1)
-
-        buffer |> updateRangeWriter baseOffset totalSize (fun dst ->
-            for r in ranges do
-                let srcOffset = nativeint r.Min
-                let dstOffset = nativeint (r.Min - ranges.Min)
-                Marshal.Copy(ptr + srcOffset, dst + dstOffset, r.Size + 1)
-        )
-
-    let rec tryUpdate (data : IBuffer) (buffer : Buffer) =
+    let rec tryUpdate (data: IBuffer) (buffer: Buffer)  =
         match data with
         | :? Buffer as b ->
             buffer.Handle = b.Handle
 
         | :? ArrayBuffer as ab ->
-            let size = ab.Data.LongLength * int64 (Marshal.SizeOf ab.ElementType)
-            if size = buffer.Size then
-                let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                try
-                    buffer |> updateWriter (fun ptr -> Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size) )
-                    true
-                finally
-                    gc.Free()
+            if buffer.Size = uint64 ab.Data.LongLength * uint64 (ab.ElementType.GetCLRSize()) then
+                ab.Data |> NativeInt.pin (copyFromHost buffer)
+                true
             else
                 false
 
         | :? INativeBuffer as nb ->
-            let size = nb.SizeInBytes |> int64
-            if size = buffer.Size then
-                nb.Use(fun src ->
-                    buffer |> updateWriter (fun dst -> Marshal.Copy(src, dst, size))
-                )
+            if buffer.Size = uint64 nb.SizeInBytes then
+                nb.Use (copyFromHost buffer)
                 true
             else
                 false
@@ -486,28 +412,28 @@ module Buffer =
         | _ ->
             false
 
-    let rec ofBufferWithMemory (export : bool) (flags : VkBufferUsageFlags) (buffer : IBuffer) (memory : DeviceHeap) (token : DeviceToken) =
+    let rec ofBuffer (export: bool) (usage: VkBufferUsageFlags) (buffer: IBuffer) (memory: IDeviceMemory) =
         match buffer with
         | :? ArrayBuffer as ab ->
             if ab.Data.Length <> 0 then
-                let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
-                let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                try (memory, token) ||> ofWriterWithToken export flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
-                finally gc.Free()
+                let size = uint64 ab.Data.LongLength * uint64 (ab.ElementType.GetCLRSize())
+                let buffer = create' false export usage 0UL size memory
+                ab.Data |> NativeInt.pin (copyFromHost buffer)
+                buffer
             else
-                memory |> empty export flags
+                memory |> empty export usage
 
         | :? INativeBuffer as nb ->
             if nb.SizeInBytes <> 0n then
-                let size = nb.SizeInBytes
-                nb.Use(fun src ->
-                    (memory, token) ||> ofWriterWithToken export flags size (fun dst -> Marshal.Copy(src, dst, size))
-                )
+                let size = uint64 nb.SizeInBytes
+                let buffer = create' false export usage 0UL size memory
+                nb.Use (copyFromHost buffer)
+                buffer
             else
-                memory |> empty export flags
+                memory |> empty export usage
 
         | :? ExportedBuffer when export ->
-            ofBufferWithMemory false flags buffer memory token
+            ofBuffer false usage buffer memory
 
         | :? Buffer as b ->
             if export then
@@ -517,7 +443,7 @@ module Buffer =
             b
 
         | :? IBufferRange as bv when bv <> bv.Buffer ->
-            ofBufferWithMemory export flags bv.Buffer memory token
+            ofBuffer export usage bv.Buffer memory
 
         | _ when buffer = Unchecked.defaultof<_> ->
             failf $"buffer data is null"
@@ -525,153 +451,112 @@ module Buffer =
         | _ ->
             failf $"unsupported buffer type: {buffer.GetType()}"
 
-    let rec ofBuffer (export : bool) (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
-        use token = device.Token
-        token |> ofBufferWithMemory export flags buffer device.DeviceMemory
-
-    let inline upload (src : nativeint) (dst : Buffer) (dstOffset : nativeint) (sizeInBytes : nativeint)  =
-        if sizeInBytes > 0n then
+    let inline upload (src: nativeint) (dst: Buffer) (dstOffset: uint64) (sizeInBytes: uint64)  =
+        if sizeInBytes > 0UL then
             let device = dst.Device
 
-            if dst.Memory.Memory.Heap.IsHostVisible then
-                dst.Memory.Mapped (fun ptr -> Marshal.Copy(src, ptr + dstOffset, sizeInBytes))
+            if dst.Memory.IsHostVisible then
+                dst.Memory.CopyFrom(dstOffset, sizeInBytes, src)
             else
-                use temp = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit (int64 sizeInBytes)
+                use temp = device.StagingMemory |> create VkBufferUsageFlags.TransferSrcBit sizeInBytes
 
-                temp.Memory.Mapped(fun ptr -> Marshal.Copy(src, ptr, sizeInBytes))
+                temp.Memory.CopyFrom(sizeInBytes, src)
                 device.perform {
-                    do! Command.Copy(temp, 0L, dst, int64 dstOffset, int64 sizeInBytes)
+                    do! Command.Copy(temp, 0UL, dst, dstOffset, sizeInBytes)
                 }
 
-    let inline download (src : Buffer) (srcOffset : nativeint) (dst : nativeint) (sizeInBytes : nativeint) =
-        if sizeInBytes > 0n then
+    let inline download (src: Buffer) (srcOffset: uint64) (dst: nativeint) (sizeInBytes: uint64) =
+        if sizeInBytes > 0UL then
             let device = src.Device
 
-            if src.Memory.Memory.Heap.IsHostVisible then
-                src.Memory.Mapped (fun ptr -> Marshal.Copy(ptr + srcOffset, dst, sizeInBytes))
+            if src.Memory.IsHostVisible then
+                src.Memory.CopyTo(srcOffset, sizeInBytes, dst)
             else
-                use temp = device.HostMemory |> create VkBufferUsageFlags.TransferDstBit (int64 sizeInBytes)
+                use temp = device.ReadbackMemory |> create VkBufferUsageFlags.TransferDstBit sizeInBytes
 
                 device.perform {
-                    do! Command.Copy(src, int64 srcOffset, temp, 0L, int64 sizeInBytes)
+                    do! Command.Copy(src, srcOffset, temp, 0UL, sizeInBytes)
                 }
+                temp.Memory.CopyTo(sizeInBytes, dst)
 
-                temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, sizeInBytes))
-
-    let inline downloadAsync (src : Buffer) (srcOffset : nativeint) (dst : nativeint) (sizeInBytes : nativeint)  =
-        if sizeInBytes > 0n then
+    let inline downloadAsync (src: Buffer) (srcOffset: uint64) (dst: nativeint) (sizeInBytes: uint64)  =
+        if sizeInBytes > 0UL then
             let device = src.Device
 
-            if src.Memory.Memory.Heap.IsHostVisible then
+            if src.Memory.IsHostVisible then
                 (fun () ->
-                    src.Memory.Mapped (fun ptr -> Marshal.Copy(ptr + srcOffset, dst, sizeInBytes))
+                    src.Memory.CopyTo(srcOffset, sizeInBytes, dst)
                 )
             else
-                let temp = device.HostMemory |> create VkBufferUsageFlags.TransferDstBit (int64 sizeInBytes)
-                let task = device.GraphicsFamily.StartTask(Command.Copy(src, int64 srcOffset, temp, 0L, int64 sizeInBytes))
+                let temp = device.ReadbackMemory |> create VkBufferUsageFlags.TransferDstBit sizeInBytes
+                let task = device.GraphicsFamily.StartTask(Command.Copy(src, srcOffset, temp, 0UL, sizeInBytes))
 
                 (fun () ->
                     task.Wait()
-                    temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, sizeInBytes))
+                    temp.Memory.CopyTo(sizeInBytes, dst)
                     temp.Dispose()
                 )
         else
             ignore
 
-    let inline copy (src : Buffer) (srcOffset : nativeint) (dst : Buffer) (dstOffset : nativeint) (sizeInBytes : nativeint) =
-        if sizeInBytes > 0n then
-            let device = src.Device
-
-            device.perform {
-                do! Command.Copy(src, int64 srcOffset, dst, int64 dstOffset, int64 sizeInBytes)
+    let inline copy (src: Buffer) (srcOffset: uint64) (dst: Buffer) (dstOffset: uint64) (sizeInBytes: uint64) =
+        if sizeInBytes > 0UL then
+            src.Device.perform {
+                do! Command.Copy(src, srcOffset, dst, dstOffset, sizeInBytes)
             }
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferView =
-    let create (fmt : VkFormat) (b : Buffer) (offset : uint64) (size : uint64) (device : Device) =
-        if b.Size = 0L then
-            new BufferView(device, VkBufferView.Null, b, fmt, offset, size)
+    let create (format: VkFormat) (buffer: Buffer) (offset: uint64) (size: uint64) (device : Device) =
+        if buffer.Size = 0UL then
+            new BufferView(device, VkBufferView.Null, buffer, format, offset, size)
         else
-            let info =
+            let mutable info =
                 VkBufferViewCreateInfo(
                     VkBufferViewCreateFlags.None,
-                    b.Handle,
-                    fmt,
+                    buffer.Handle,
+                    format,
                     offset,
                     size
                 )
 
-            let handle = 
-                info |> NativePtr.pin (fun pInfo ->
-                    NativePtr.temp (fun pHandle ->
-                        VkRaw.vkCreateBufferView(device.Handle, pInfo, NativePtr.zero, pHandle)
-                            |> check "could not create BufferView"
-                        NativePtr.read pHandle
-                    )
-                )
-            new BufferView(device, handle, b, fmt, offset, size)
+            let mutable handle = VkBufferView.Null
+            VkRaw.vkCreateBufferView(device.Handle, &&info, NativePtr.zero, &&handle)
+                |> check "could not create BufferView"
+
+            new BufferView(device, handle, buffer, format, offset, size)
 
 // =======================================================================
 // Device Extensions
 // =======================================================================
 [<AbstractClass; Sealed>]
-type ContextBufferExtensions private() =
+type BufferExtensions private() =
 
     [<Extension>]
-    static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, size : int64,
+    static member inline CreateBuffer(memory: IDeviceMemory, usage: VkBufferUsageFlags, size: uint64,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        device |> Buffer.alloc' false export 1UL flags size
+        memory |> Buffer.create' false export usage 0UL size
 
     [<Extension>]
-    static member inline CreateBuffer(memory : DeviceHeap, flags : VkBufferUsageFlags, size : int64,
+    static member inline CreateBuffer(memory: IDeviceMemory, usage: VkBufferUsageFlags, data: IBuffer,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        memory |> Buffer.create' false export 1UL flags size
+        Buffer.ofBuffer export usage data memory
 
     [<Extension>]
-    static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, data : IBuffer,
+    static member inline CreateBuffer(device: Device, usage: VkBufferUsageFlags, size: uint64,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        device |> Buffer.ofBuffer export flags data
+        device.DeviceMemory.CreateBuffer(usage, size, export)
 
     [<Extension>]
-    static member inline CreateBuffer(memory : DeviceHeap, flags : VkBufferUsageFlags, data : IBuffer,
+    static member inline CreateBuffer(device: Device, usage: VkBufferUsageFlags, data: IBuffer,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        use token = memory.Device.Token
-        token |> Buffer.ofBufferWithMemory export flags data memory
+        device.DeviceMemory.CreateBuffer(usage, data, export)
 
     [<Extension>]
-    static member inline UploadRanges(buffer : Buffer, ptr : nativeint, ranges : RangeSet1i) =
-        buffer |> Buffer.uploadRanges ptr ranges
+    static member inline TryUpdate(buffer: Buffer, data: IBuffer) =
+        Buffer.tryUpdate data buffer
 
     [<Extension>]
-    static member inline TryUpdate(buffer : Buffer, b : IBuffer) =
-        buffer |> Buffer.tryUpdate b
-
-    [<Extension>]
-    static member inline CreateBufferView(device : Device, buffer : Buffer, format : VkFormat, offset : int64, size : int64) =
-        device |> BufferView.create format buffer (uint64 offset) (uint64 size)
-
-[<AutoOpen>]
-module ``Buffer Format Extensions`` = 
-    module VkFormat =
-        [<Obsolete>]
-        let ofType =
-            LookupTable.lookup [
-                typeof<float32>, VkFormat.R32Sfloat
-                typeof<V2f>, VkFormat.R32g32Sfloat
-                typeof<V3f>, VkFormat.R32g32b32Sfloat
-                typeof<V4f>, VkFormat.R32g32b32a32Sfloat
-
-                typeof<int>, VkFormat.R32Sint
-                typeof<V2i>, VkFormat.R32g32Sint
-                typeof<V3i>, VkFormat.R32g32b32Sint
-                typeof<V4i>, VkFormat.R32g32b32a32Sint
-
-                typeof<uint32>, VkFormat.R32Uint
-                typeof<uint16>, VkFormat.R16Uint
-                typeof<uint8>, VkFormat.R8Uint
-                typeof<C4b>, VkFormat.B8g8r8a8Unorm
-                typeof<C4us>, VkFormat.R16g16b16a16Unorm
-                typeof<C4ui>, VkFormat.R32g32b32a32Uint
-                typeof<C4f>, VkFormat.R32g32b32a32Sfloat
-            ]
+    static member inline CreateBufferView(device : Device, buffer : Buffer, format : VkFormat, offset : uint64, size : uint64) =
+        device |> BufferView.create format buffer offset size

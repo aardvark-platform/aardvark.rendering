@@ -20,17 +20,17 @@ module internal ImageBuffer =
     [<Literal>]
     let internal defaultUsage = VkBufferUsageFlags.TransferSrcBit
 
-    let create (format : TextureFormat) (size : V3i) (pitch : V2i) (sizeInBytes : int64) (usage : VkBufferUsageFlags) (device : Device) =
-        let buffer = device.HostMemory |> Buffer.create usage sizeInBytes
+    let create (format : TextureFormat) (size : V3i) (pitch : V2i) (sizeInBytes : uint64) (usage : VkBufferUsageFlags) (memory : IDeviceMemory) =
+        let buffer = memory |> Buffer.create usage sizeInBytes
         new ImageBuffer(buffer, size, pitch, format)
 
-[<AbstractClass; Sealed; Extension>]
+[<AbstractClass; Sealed>]
 type ImageBufferExtensions private() =
 
     [<Extension>]
-    static member inline internal CreateImageBuffer(device : Device, format : TextureFormat, size : V3i, pitch : V2i, sizeInBytes : int64,
+    static member inline internal CreateImageBuffer(memory : IDeviceMemory, format : TextureFormat, size : V3i, pitch : V2i, sizeInBytes : uint64,
                                                     [<Optional; DefaultParameterValue(ImageBuffer.defaultUsage)>] usage : VkBufferUsageFlags)  =
-        device |> ImageBuffer.create format size pitch sizeInBytes usage
+        memory |> ImageBuffer.create format size pitch sizeInBytes usage
 
 [<AutoOpen>]
 module internal ImageBufferCommandExtensions =

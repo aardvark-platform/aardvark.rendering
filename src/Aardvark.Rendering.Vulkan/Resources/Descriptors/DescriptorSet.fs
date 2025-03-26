@@ -12,7 +12,7 @@ open Microsoft.FSharp.NativeInterop
 
 type Descriptor =
     | UniformBuffer         of slot: int * buffer: UniformBuffer
-    | StorageBuffer         of slot: int * buffer: Buffer * offset: int64 * size: int64
+    | StorageBuffer         of slot: int * buffer: Buffer * offset: uint64 * size: uint64
     | CombinedImageSampler  of slot: int * element: int * view: ImageView * sampler: Sampler * layout: VkImageLayout
     | StorageImage          of slot: int * view: ImageView
     | AccelerationStructure of slot: int * accel: AccelerationStructure
@@ -161,8 +161,8 @@ module DescriptorSet =
                     let info =
                         VkDescriptorBufferInfo(
                             b.Handle,
-                            uint64 offset,
-                            if size > 0L then uint64 size else VkWholeSize
+                            offset,
+                            if size > 0UL then size else VkWholeSize
                         )
 
                     NativePtr.write bufferInfos info

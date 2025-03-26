@@ -312,7 +312,7 @@ module private RuntimeCommands =
                 member x.Dispose() = x.Dispose()
 
         type GeometrySlot internal(device : Device, vertexSize : int, vertexBlock : Block<_>, vertexBuffers : Map<Symbol, BufferRange>) =
-            let totalVertexSize = int64 vertexBlock.Size * int64 vertexSize
+            let totalVertexSize = uint64 vertexBlock.Size * uint64 vertexSize
 
             member x.BlockId = snd vertexBlock.Memory.Value
             member x.VertexBuffers = vertexBuffers
@@ -323,22 +323,22 @@ module private RuntimeCommands =
             member internal x.VertexBlock = vertexBlock
 
             member x.WriteVertexAttributes(geometry : IndexedGeometry) =
-                let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit totalVertexSize
+                let temp = device.StagingMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit totalVertexSize
 
                 let copies = List<CopyCommand>()
 
                 temp.Memory.Mapped (fun ptr ->
                     let mutable ptr = ptr
-                    let mutable offset = 0L
+                    let mutable offset = 0UL
                     for (name, target) in Map.toSeq vertexBuffers do
-                        let size = target.Size
+                        let size = uint64 target.Size
                         match geometry.IndexedAttributes.TryGetValue name with
                             | (true, src) ->
                                 let gc = GCHandle.Alloc(src, GCHandleType.Pinned)
                                 try Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size)
                                 finally gc.Free()
 
-                                copies.Add(CopyCommand.Copy(temp, offset, target.Buffer, target.Offset, target.Size))
+                                copies.Add(CopyCommand.Copy(temp, offset, target.Buffer, uint64 target.Offset, uint64 target.Size))
 
                                 ptr <- ptr + nativeint size
                                 offset <- offset + size
@@ -361,8 +361,8 @@ module private RuntimeCommands =
             let mutable capacity = initialCount
 
             let mutable ids = Marshal.AllocHGlobal (4n * nativeint initialCount)
-            let mutable cpuBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (20L * int64 capacity)
-            let mutable gpuBuffer = device.DeviceMemory |> Buffer.create (VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit) (20L * int64 capacity)
+            let mutable cpuBuffer = device.StagingMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (20UL * uint64 capacity)
+            let mutable gpuBuffer = device.DeviceMemory |> Buffer.create (VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit) (20UL * uint64 capacity)
             let mutable gpuBufferDirty = false
 
             let dead = List<Buffer>()
@@ -372,8 +372,8 @@ module private RuntimeCommands =
                 if capacity <> newCapacity then
                     let copySize = min capacity newCapacity
 
-                    let newCpuBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (20L * int64 newCapacity)
-                    let newGpuBuffer = device.DeviceMemory |> Buffer.create (VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit) (20L * int64 newCapacity)
+                    let newCpuBuffer = device.StagingMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (20UL * uint64 newCapacity)
+                    let newGpuBuffer = device.DeviceMemory |> Buffer.create (VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit) (20UL * uint64 newCapacity)
 
                     cpuBuffer.Memory.Mapped(fun src ->
                         newCpuBuffer.Memory.Mapped (fun dst ->
@@ -439,7 +439,7 @@ module private RuntimeCommands =
 
                 if gpuBufferDirty then
                     device.perform {
-                        do! Command.Copy(cpuBuffer, 0L, gpuBuffer, 0L, 20L * int64 count)
+                        do! Command.Copy(cpuBuffer, 0UL, gpuBuffer, 0UL, 20UL * uint64 count)
                     }
                     gpuBufferDirty <- false
 
@@ -467,7 +467,7 @@ module private RuntimeCommands =
         let vulkanHostMem (elementSizes : Map<string, int>) (dead : List<Buffer>) (device : Device) =
             let malloc (size : nativeint) =
                 elementSizes |> Map.map (fun _ es ->
-                    device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size * int64 es)
+                    device.StagingMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (uint64 size * uint64 es)
                 )
 
             let mfree (buffer : Map<string, Buffer>) (size : nativeint) =
@@ -536,7 +536,7 @@ module private RuntimeCommands =
                         elementSizes |> Map.map (fun _ es ->
                             Buffer.create 
                                 (VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit) 
-                                (int64 newCapacity * int64 es)
+                                (uint64 newCapacity * uint64 es)
                                 device.DeviceMemory
                         )
 
@@ -612,7 +612,7 @@ module private RuntimeCommands =
                         for (name, es) in Map.toSeq elementSizes do
                             let buffer = buffer.[name]
                             let host = ptr.[name]
-                            do! Command.Copy(host, 0L, buffer, 0L, min host.Size buffer.Size)
+                            do! Command.Copy(host, 0UL, buffer, 0UL, min host.Size buffer.Size)
                     }
 
                 )
@@ -638,8 +638,8 @@ module private RuntimeCommands =
                             let buffers = 
                                 vertexTypes |> Map.map (fun name (_,t) ->
                                     let elementSize = Marshal.SizeOf t
-                                    let sizeInBytes = int64 elementSize * int64 vertexCount
-                                    let buffer = device.DeviceMemory |> Buffer.create' true false 1UL (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
+                                    let sizeInBytes = uint64 elementSize * uint64 vertexCount
+                                    let buffer = device.DeviceMemory |> Buffer.create (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
                                     (buffer, elementSize)
                                 )
                             vertexBuffers.[id] <- buffers

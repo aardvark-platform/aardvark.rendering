@@ -45,14 +45,16 @@ type Runtime(device : Device) as this =
         raise <| NotImplementedException()
 
     member x.CreateSparseTexture<'T when 'T : unmanaged> (size : V3i, levels : int, slices : int, dimension : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'T> =
-        new SparseTextureImplemetation.DoubleBufferedSparseImage<'T>(
-            device,
-            size, levels, slices,
-            dimension, format,
-            VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit,
-            brickSize,
-            maxMemory
-        ) :> ISparseTexture<_>
+        raise <| NotImplementedException()
+        // TODO: Needs to be ported to the new memory allocator if needed
+        // new SparseTextureImplemetation.DoubleBufferedSparseImage<'T>(
+        //     device,
+        //     size, levels, slices,
+        //     dimension, format,
+        //     VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit,
+        //     brickSize,
+        //     maxMemory
+        // ) :> ISparseTexture<_>
 
     member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>,
                              [<Optional; DefaultParameterValue(0)>] level : int,
@@ -152,7 +154,7 @@ type Runtime(device : Device) as this =
         let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
         memory.CreateBuffer(flags, data, export = export) :> IBackendBuffer
 
-    member private x.CreateTextureInner(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int, export : ImageExportMode) =
+    member private x.CreateTextureInner(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int, export : ImageExport) =
         let layout =
             VkImageLayout.ShaderReadOnlyOptimal
 
@@ -176,12 +178,12 @@ type Runtime(device : Device) as this =
     member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int,
                            [<Optional; DefaultParameterValue(false)>] export : bool) : IBackendTexture =
         ResourceValidation.Textures.validateCreationParams dim size levels samples
-        x.CreateTextureInner(size, dim, format, levels, samples, 1, if export then ImageExportMode.Export false else ImageExportMode.None)
+        x.CreateTextureInner(size, dim, format, levels, samples, 1, if export then ImageExport.Enable false else ImageExport.Disable)
 
     member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int,
                                 [<Optional; DefaultParameterValue(false)>] export : bool) : IBackendTexture =
         ResourceValidation.Textures.validateCreationParamsArray dim size levels samples count
-        x.CreateTextureInner(size, dim, format, levels, samples, count, if export then ImageExportMode.Export true else ImageExportMode.None)
+        x.CreateTextureInner(size, dim, format, levels, samples, count, if export then ImageExport.Enable true else ImageExport.Disable)
 
     member x.CreateRenderbuffer(size : V2i, format : TextureFormat, samples : int) : IRenderbuffer =
         if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")
@@ -265,25 +267,25 @@ type Runtime(device : Device) as this =
 
         let flags = VkBufferUsageFlags.ofBufferUsage usage
         let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
-        memory.CreateBuffer(flags, int64 size, export = export)
+        memory.CreateBuffer(flags, uint64 size, export = export)
 
     member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
         dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
 
         let dst = unbox<Buffer> dst
-        Buffer.upload src dst dstOffset sizeInBytes
+        Buffer.upload src dst (uint64 dstOffset) (uint64 sizeInBytes)
 
     member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, sizeInBytes : nativeint) =
         src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
 
         let src = unbox<Buffer> src
-        Buffer.download src srcOffset dst sizeInBytes
+        Buffer.download src (uint64 srcOffset) dst (uint64 sizeInBytes)
 
     member x.DownloadAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, sizeInBytes : nativeint) =
         src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
 
         let src = unbox<Buffer> src
-        Buffer.downloadAsync src srcOffset dst sizeInBytes
+        Buffer.downloadAsync src (uint64 srcOffset) dst (uint64 sizeInBytes)
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
         src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
@@ -291,7 +293,7 @@ type Runtime(device : Device) as this =
 
         let src = unbox<Buffer> src
         let dst = unbox<Buffer> dst
-        Buffer.copy src srcOffset dst dstOffset sizeInBytes
+        Buffer.copy src (uint64 srcOffset) dst (uint64 dstOffset) (uint64 sizeInBytes)
 
     // upload
     member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format,

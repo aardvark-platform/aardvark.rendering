@@ -9,6 +9,7 @@ open KHRRayQuery
 open KHRAccelerationStructure
 open KHRBufferDeviceAddress
 open EXTDescriptorIndexing
+open EXTMemoryPriority
 
 type IVulkanInstance = interface end
 
@@ -53,9 +54,10 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
                 !!ptr
 
         fun (hasExtension: string -> bool) ->
-            let f, pm, ycbcr, s16, vp, sdp, idx, rtp, acc, rq, bda =
+            let f, pm, memp, ycbcr, s16, vp, sdp, idx, rtp, acc, rq, bda =
                 use chain = new VkStructChain()
                 let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
+                let pMemPrior   = if hasExtension EXTMemoryPriority.Name then chain.Add<VkPhysicalDeviceMemoryPriorityFeaturesEXT>() else NativePtr.zero
                 let pYcbcr      = chain.Add<VkPhysicalDeviceSamplerYcbcrConversionFeatures>()
                 let p16bit      = chain.Add<VkPhysicalDevice16BitStorageFeatures>()
                 let pVarPtrs    = chain.Add<VkPhysicalDeviceVariablePointersFeatures>()
@@ -68,10 +70,10 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
                 let pFeatures   = chain.Add<VkPhysicalDeviceFeatures2>()
 
                 VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
-                (!!pFeatures).features, !!pMem, !!pYcbcr, !!p16bit, !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx,
+                (!!pFeatures).features, !!pMem, !!pMemPrior, !!pYcbcr, !!p16bit, !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx,
                 readOrEmpty pRTP, readOrEmpty pAcc, readOrEmpty pRQ, readOrEmpty pDevAddr
 
-            DeviceFeatures.create pm ycbcr s16 vp sdp idx rtp acc rq bda f
+            DeviceFeatures.create pm memp ycbcr s16 vp sdp idx rtp acc rq bda f
 
     let features =
         queryFeatures hasExtension
@@ -186,7 +188,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             return !!pProps
         }
 
-    let heaps =
+    let memoryHeaps =
         Array.init (int memoryProperties.memoryHeapCount) (fun i ->
             let info = memoryProperties.memoryHeaps.[i]
             MemoryHeapInfo(i, int64 info.size, unbox (int info.flags))
@@ -195,7 +197,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
     let memoryTypes =
         Array.init (int memoryProperties.memoryTypeCount) (fun i ->
             let info = memoryProperties.memoryTypes.[i]
-            { MemoryInfo.index = i; MemoryInfo.heap = heaps.[int info.heapIndex]; MemoryInfo.flags = unbox (int info.propertyFlags) }
+            { MemoryInfo.index = i; MemoryInfo.heap = memoryHeaps.[int info.heapIndex]; MemoryInfo.flags = unbox (int info.propertyFlags) }
         )
 
     let formatProperties =
@@ -211,9 +213,6 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
 
     let imageFormatProperties = FastConcurrentDict()
     let externalBufferProperties = FastConcurrentDict()
-
-    let hostMemory = memoryTypes |> Array.maxBy MemoryInfo.hostScore
-    let deviceMemory = memoryTypes |> Array.maxBy MemoryInfo.deviceScore
 
     member x.MaxAllocationSize = maxAllocationSize
     member x.MaxPerSetDescriptors = maxPerSetDescriptors
@@ -293,7 +292,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
     member x.GlobalExtensions : ExtensionInfo[] = globalExtensions
     member x.QueueFamilies = queueFamilyInfos
     member x.MemoryTypes = memoryTypes
-    member x.Heaps = heaps
+    member x.MemoryHeaps = memoryHeaps
 
     member x.Handle = handle
     //member x.Index : int = index
@@ -303,9 +302,6 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
     member x.Type = properties.deviceType
     member x.APIVersion = apiVersion
     member x.DriverVersion = driverVersion
-
-    member x.HostMemory = hostMemory
-    member x.DeviceMemory = deviceMemory
 
     member internal x.InstanceInterface = instance
     member x.Features : DeviceFeatures = features

@@ -62,23 +62,32 @@ module IndirectBuffer =
                     if ab.ElementType <> typeof<DrawCallInfo> then
                         failf "Element type of array for indirect buffer must be DrawCallInfo (is %A)" ab.ElementType
 
-                    let size = nativeint ab.Data.LongLength * nativeint sizeof<DrawCallInfo>
+                    let size = uint64 ab.Data.LongLength * uint64 sizeof<DrawCallInfo>
+                    let buffer = Buffer.create flags size device.DeviceMemory
 
                     ab.Data |> NativeInt.pin (fun src ->
-                        device.DeviceMemory |> Buffer.ofWriter false flags size (fun dst ->
+                        Buffer.write buffer (fun dst ->
                             copy swap src dst ab.Data.Length
                         )
                     )
+
+                    buffer
                 else
                     Buffer.empty false flags device.DeviceMemory
 
             | :? INativeBuffer as nb ->
                 if nb.SizeInBytes <> 0n then
-                    let size = nb.SizeInBytes
+                    let size = uint64 nb.SizeInBytes
                     let count = int (nb.SizeInBytes / nativeint sizeof<DrawCallInfo>)
-                    nb.Use(fun src ->
-                        device.DeviceMemory |> Buffer.ofWriter false flags size (fun dst -> copy swap src dst count)
+                    let buffer = Buffer.create flags size device.DeviceMemory
+
+                    nb.Use (fun src ->
+                        Buffer.write buffer (fun dst ->
+                             copy swap src dst count
+                        )
                     )
+
+                    buffer
                 else
                     Buffer.empty false flags device.DeviceMemory
 
@@ -97,7 +106,7 @@ module IndirectBuffer =
 
         new IndirectBuffer(buffer, b.Count)
 
-[<AbstractClass; Sealed; Extension>]
+[<AbstractClass; Sealed>]
 type ContextIndirectBufferExtensions private() =
 
     [<Extension>]

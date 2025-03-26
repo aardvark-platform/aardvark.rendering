@@ -546,7 +546,7 @@ module Resources =
                 features.BindingStorageBufferUpdateAfterBind
 
             override x.GetDescriptor(buffer) =
-                Descriptor.StorageBuffer(slot, buffer, 0L, buffer.Size)
+                Descriptor.StorageBuffer(slot, buffer, 0UL, buffer.Size)
 
         type StorageImage(slot : int, image : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<ImageView>(slot, image)

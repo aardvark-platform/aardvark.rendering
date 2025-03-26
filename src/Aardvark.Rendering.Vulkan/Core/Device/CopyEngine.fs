@@ -12,11 +12,11 @@ open System.Threading
 type CopyCommand =
     internal
         | BufferToBufferCmd  of src : VkBuffer * dst : VkBuffer * info : VkBufferCopy
-        | BufferToImageCmd   of src : VkBuffer * dst : VkImage * dstLayout : VkImageLayout * info : VkBufferImageCopy * size : int64
-        | ImageToBufferCmd   of src : VkImage * srcLayout : VkImageLayout * dst : VkBuffer * info : VkBufferImageCopy * size : int64
-        | ImageToImageCmd    of src : VkImage * srcLayout : VkImageLayout * dst : VkImage * dstLayout : VkImageLayout * info : VkImageCopy * size : int64
+        | BufferToImageCmd   of src : VkBuffer * dst : VkImage * dstLayout : VkImageLayout * info : VkBufferImageCopy * size : uint64
+        | ImageToBufferCmd   of src : VkImage * srcLayout : VkImageLayout * dst : VkBuffer * info : VkBufferImageCopy * size : uint64
+        | ImageToImageCmd    of src : VkImage * srcLayout : VkImageLayout * dst : VkImage * dstLayout : VkImageLayout * info : VkImageCopy * size : uint64
         | CallbackCmd        of (unit -> unit)
-        | ReleaseBufferCmd   of buffer : VkBuffer * offset : int64 * size : int64 * dstQueueFamily : uint32
+        | ReleaseBufferCmd   of buffer : VkBuffer * offset : uint64 * size : uint64 * dstQueueFamily : uint32
         | ReleaseImageCmd    of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout * dstQueueFamily : uint32
         | TransformLayoutCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout
 
@@ -26,19 +26,19 @@ type CopyCommand =
     static member SyncImage(image : VkImage, range : VkImageSubresourceRange, layout : VkImageLayout) =
         CopyCommand.TransformLayoutCmd(image, range, layout, layout)
 
-    static member Copy(src : VkBuffer, srcOffset : int64, dst : VkBuffer, dstOffset : int64, size : int64) =
+    static member Copy(src : VkBuffer, srcOffset : uint64, dst : VkBuffer, dstOffset : uint64, size : uint64) =
         CopyCommand.BufferToBufferCmd(
             src,
             dst,
-            VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
+            VkBufferCopy(srcOffset, dstOffset, size)
         )
 
     static member Copy(src : VkBuffer, dst : VkImage, dstLayout : VkImageLayout, format : VkFormat, info : VkBufferImageCopy) =
         let sizeInBytes =
-            int64 info.imageExtent.width *
-            int64 info.imageExtent.height *
-            int64 info.imageExtent.depth *
-            int64 (VkFormat.sizeInBytes format)
+            uint64 info.imageExtent.width *
+            uint64 info.imageExtent.height *
+            uint64 info.imageExtent.depth *
+            uint64 (VkFormat.sizeInBytes format)
 
         CopyCommand.BufferToImageCmd(
             src,
@@ -48,10 +48,10 @@ type CopyCommand =
 
     static member Copy(src : VkImage, srcLayout : VkImageLayout, dst : VkBuffer, format : VkFormat, info : VkBufferImageCopy) =
         let sizeInBytes =
-            int64 info.imageExtent.width *
-            int64 info.imageExtent.height *
-            int64 info.imageExtent.depth *
-            int64 (VkFormat.sizeInBytes format)
+            uint64 info.imageExtent.width *
+            uint64 info.imageExtent.height *
+            uint64 info.imageExtent.depth *
+            uint64 (VkFormat.sizeInBytes format)
 
         CopyCommand.ImageToBufferCmd(
             src, srcLayout,
@@ -62,7 +62,7 @@ type CopyCommand =
     static member Callback(cb : unit -> unit) =
         CopyCommand.CallbackCmd cb
 
-    static member Release(buffer : VkBuffer, offset : int64, size : int64, dstQueueFamily : int) =
+    static member Release(buffer : VkBuffer, offset : uint64, size : uint64, dstQueueFamily : int) =
         CopyCommand.ReleaseBufferCmd(buffer, offset, size, uint32 dstQueueFamily)
 
     static member Release(image : VkImage, range : VkImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout, dstQueueFamily : int) =
@@ -70,10 +70,10 @@ type CopyCommand =
 
     member x.SizeInBytes =
         match x with
-            | BufferToBufferCmd(_,_,i) -> int64 i.size
+            | BufferToBufferCmd(_,_,i) -> i.size
             | BufferToImageCmd(_,_,_,_,s) -> s
             | ImageToBufferCmd(_,_,_,_,s) -> s
-            | _ -> 0L
+            | _ -> 0UL
 
 and CopyEngine(family: DeviceQueueFamily) =
     let familyIndex = family.Index
@@ -83,7 +83,7 @@ and CopyEngine(family: DeviceQueueFamily) =
     // queue
     let lockObj = obj()
     let mutable pending = List<CopyCommand>()
-    let mutable totalSize = 0L
+    let mutable totalSize = 0UL
     let mutable running = true
 
 
@@ -95,8 +95,8 @@ and CopyEngine(family: DeviceQueueFamily) =
     let mutable minBatchSize = Mem(1UL <<< 60)
     let mutable maxBatchSize = Mem(0UL)
     let enqueueMon = obj()
-    let mutable vEnqueue = 0L
-    let mutable vDone = -1L
+    let mutable vEnqueue = 0UL
+    let mutable vDone = 0UL
     let run (_threadName : string) (queue : DeviceQueue) () =
         let device = queue.DeviceInterface
         let fence = new Fence(device)
@@ -114,19 +114,19 @@ and CopyEngine(family: DeviceQueueFamily) =
                 lock lockObj (fun () ->
 
                     if not running then
-                        empty, 0L, 0L
+                        empty, 0UL, 0UL
                     else
                         while pending.Count = 0 && running do Monitor.Wait lockObj |> ignore
                         if not running then
-                            empty, 0L, 0L
-                        elif totalSize >= 0L then
+                            empty, 0UL, 0UL
+                        elif totalSize >= 0UL then
                             let mine = pending
                             let s = totalSize
                             pending <- List()
-                            totalSize <- 0L
+                            totalSize <- 0UL
                             mine, vEnqueue, s
                         else
-                            empty, 0L, 0L
+                            empty, 0UL, 0UL
                 )
 
             if copies.Count > 0 then
@@ -234,7 +234,7 @@ and CopyEngine(family: DeviceQueueFamily) =
                 fence.Wait()
                 sw.Stop()
 
-                if totalSize > 0L then
+                if totalSize > 0UL then
                     lock statLock (fun () ->
                         let totalSize = Mem totalSize
                         maxBatchSize <- max maxBatchSize totalSize
@@ -304,23 +304,23 @@ and CopyEngine(family: DeviceQueueFamily) =
             lock lockObj (fun () ->
                 pending.AddRange commands
 
-                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L
+                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0UL
                 totalSize <- totalSize + s
 
                 Monitor.PulseAll lockObj
                 s
             )
 
-        if size > 0L then () // trigger.Signal()
+        if size > 0UL then () // trigger.Signal()
 
     /// Enqueues the commands and waits for them to be submitted.
     member x.EnqueueSafe(commands : seq<CopyCommand>) =
         let enq, size =
             lock lockObj (fun () ->
-                vEnqueue <- vEnqueue + 1L
+                vEnqueue <- vEnqueue + 1UL
                 pending.AddRange commands
 
-                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L
+                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0UL
                 totalSize <- totalSize + s
 
                 Monitor.PulseAll lockObj
@@ -332,7 +332,7 @@ and CopyEngine(family: DeviceQueueFamily) =
             while vDone < enq do
                 Monitor.Wait enqueueMon |> ignore
         )
-        if size > 0L then () // trigger.Signal()
+        if size > 0UL then () // trigger.Signal()
 
     member x.Wait() =
         let l = obj()

@@ -38,7 +38,9 @@
     <Compile Include="Core\Platform\DebugReport.fs" />
     <Compile Include="Core\Interfaces.fs" />
     <Compile Include="Core\Memory\ExternalMemory.fs" />
-    <Compile Include="Core\Memory\Memory.fs" />
+    <Compile Include="Core\Memory\ExternalMemoryPool.fs" />
+    <Compile Include="Core\Memory\DevicePtr.fs" />
+    <Compile Include="Core\Memory\MemoryAllocator.fs" />
     <Compile Include="Core\Synchronization\Fence.fs" />
     <Compile Include="Core\Synchronization\Semaphore.fs" />
     <Compile Include="Core\Synchronization\Event.fs" />

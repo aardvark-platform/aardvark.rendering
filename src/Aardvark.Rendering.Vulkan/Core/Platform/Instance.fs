@@ -34,9 +34,16 @@ module Instance =
 
         let Debug                           = EXTDebugUtils.Name
 
-        let MemoryBudget = [
-            EXTMemoryBudget.Name
-            KHRGetPhysicalDeviceProperties2.Name
+        let MemoryBudget                    = EXTMemoryBudget.Name
+
+        let MemoryPriority                  = EXTMemoryPriority.Name
+
+        let Maintenance = [
+            KHRMaintenance4.Name
+            KHRMaintenance5.Name
+            KHRDynamicRendering.Name
+            KHRDepthStencilResolve.Name
+            KHRCreateRenderpass2.Name
         ]
 
         let Raytracing = [
@@ -48,6 +55,12 @@ module Instance =
                 KHRSpirv14.Name
                 KHRShaderFloatControls.Name
             ]
+
+        let ExternalMemory =
+            if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                KHRExternalMemoryWin32.Name
+            else
+                KHRExternalMemoryFd.Name
 
         let Sharing = [
                 KHRGetPhysicalDeviceProperties2.Name
@@ -86,6 +99,8 @@ module Instance =
         let Nsight              = "VK_LAYER_NV_nsight"
 
 type Instance(apiVersion : Version, layers : list<string>, extensions : list<string>, debug : IDebugConfig) as this =
+
+    static let defaultVersion = Version(1, 1, 0)
 
     static let availableLayers =
         native {
@@ -311,9 +326,17 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
     let devicesAndGroups =
         Array.append devices (groups |> Array.map (fun a -> a :> _))
 
-    new (apiVersion : Version, layers : list<string>, extensions : list<string>) =
+
+    new (layers: list<string>, extensions: list<string>, debug: IDebugConfig) =
+        new Instance(defaultVersion, layers, extensions, debug)
+
+    new (apiVersion: Version, layers: list<string>, extensions: list<string>) =
         new Instance(apiVersion, layers, extensions, DebugConfig.None)
-    
+
+    new (layers: list<string>, extensions: list<string>) =
+        new Instance(defaultVersion, layers, extensions)
+
+    static member DefaultVersion = defaultVersion
     static member AvailableLayers = availableLayers
     static member GlobalExtensions = globalExtensions
 
@@ -337,6 +360,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
     override x.Finalize() = x.Dispose false
 
+    member x.APIVersion = apiVersion
     member x.EnabledLayers = layers
     member x.EnabledExtensions = instanceExtensions
 
@@ -421,9 +445,9 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                         )
 
                         l.section "heaps:" (fun () ->
-                            for (h : MemoryHeapInfo) in d.Heaps do
+                            for (h : MemoryHeapInfo) in d.MemoryHeaps do
                                 match h.Flags with
-                                    | MemoryHeapFlags.DeviceLocalBit -> l.line "%d: %A (device local)" h.Index h.Capacity
+                                    | MemoryHeapFlags.DeviceLocal -> l.line "%d: %A (device local)" h.Index h.Capacity
                                     | _  -> l.line "%d: %A" h.Index h.Capacity
                         )
 

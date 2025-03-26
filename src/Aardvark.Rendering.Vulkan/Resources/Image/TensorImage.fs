@@ -299,19 +299,19 @@ type TensorImageCube(faces : TensorImageMipMap[]) =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TensorImage =
-    let create<'a when 'a : unmanaged> (size : V3i) (format : Col.Format) (srgb : bool) (device : Device) : TensorImage<'a> =
-        let imageFormat = device.GetSupportedFormat(VkImageTiling.Optimal, PixFormat(typeof<'a>, format), { TextureParams.empty with wantSrgb = srgb })
+    let create<'a when 'a : unmanaged> (size : V3i) (format : Col.Format) (srgb : bool) (memory : IDeviceMemory) : TensorImage<'a> =
+        let imageFormat = memory.Device.GetSupportedFormat(VkImageTiling.Optimal, PixFormat(typeof<'a>, format), { TextureParams.empty with wantSrgb = srgb })
         let format = PixFormat(VkFormat.expectedType imageFormat, VkFormat.toColFormat imageFormat)
 
         if format.Type <> typeof<'a> then
             failf "device does not support images of type %s" typeof<'a>.PrettyName
 
         let channels = format.ChannelCount
-        let sizeInBytes = int64 size.X * int64 size.Y * int64 size.Z * int64 channels * int64 sizeof<'a>
-        let buffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit) sizeInBytes
+        let sizeInBytes = uint64 size.X * uint64 size.Y * uint64 size.Z * uint64 channels * uint64 sizeof<'a>
+        let buffer = memory |> Buffer.create (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit) sizeInBytes
         new TensorImage<'a>(buffer, size, format.Format, imageFormat)
 
-    let inline private erase (creator : V3i -> Col.Format -> bool -> Device-> TensorImage<'a>) (size : V3i) (format : Col.Format) (tp : bool) (device : Device) = creator size format tp device :> TensorImage
+    let inline private erase (creator : V3i -> Col.Format -> bool -> IDeviceMemory -> TensorImage<'a>) (size : V3i) (format : Col.Format) (tp : bool) (memory : IDeviceMemory) = creator size format tp memory :> TensorImage
 
     let private creators =
         Dictionary.ofList [
@@ -329,60 +329,60 @@ module TensorImage =
             // TODO: any others?
         ]
 
-    let createUntyped (size : V3i) (format : PixFormat) (srgb : bool) (device : Device) =
-        creators.[format.Type] size format.Format srgb device
+    let createUntyped (size : V3i) (format : PixFormat) (srgb : bool) (memory : IDeviceMemory) =
+        creators.[format.Type] size format.Format srgb memory
 
-    let ofPixImage (img : PixImage) (srgb : bool) (device : Device) =
-        let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat srgb device
+    let ofPixImage (img : PixImage) (srgb : bool) (memory : IDeviceMemory) =
+        let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat srgb memory
         dst.Write(img, true)
         dst
 
-    let ofPixVolume (img : PixVolume) (srgb : bool) (device : Device) =
-        let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat srgb device
+    let ofPixVolume (img : PixVolume) (srgb : bool) (memory : IDeviceMemory) =
+        let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat srgb memory
         dst.Write(img, false)
         dst
 
 
-[<AbstractClass; Sealed; Extension>]
+[<AbstractClass; Sealed>]
 type DeviceTensorExtensions private() =
 
     [<Extension>]
-    static member inline CreateTensorImage<'a when 'a : unmanaged>(device : Device, size : V3i, format : Col.Format, srgb : bool) : TensorImage<'a> =
-        TensorImage.create size format srgb device
+    static member inline CreateTensorImage<'a when 'a : unmanaged>(memory : IDeviceMemory, size : V3i, format : Col.Format, srgb : bool) : TensorImage<'a> =
+        TensorImage.create size format srgb memory
 
     [<Extension>]
-    static member inline CreateTensorImage(device : Device, size : V3i, format : PixFormat, srgb : bool) : TensorImage =
-        TensorImage.createUntyped size format srgb device
+    static member inline CreateTensorImage(memory : IDeviceMemory, size : V3i, format : PixFormat, srgb : bool) : TensorImage =
+        TensorImage.createUntyped size format srgb memory
 
     [<Extension>]
-    static member inline CreateTensorImage2D(device : Device, data : PixImage, srgb : bool) : TensorImage =
-        device |> TensorImage.ofPixImage data srgb
+    static member inline CreateTensorImage2D(memory : IDeviceMemory, data : PixImage, srgb : bool) : TensorImage =
+        memory |> TensorImage.ofPixImage data srgb
 
     [<Extension>]
-    static member inline CreateTensorImage2D(device : Device, data : PixImageMipMap, levels : int, srgb : bool) : TensorImageMipMap =
+    static member inline CreateTensorImage2D(memory : IDeviceMemory, data : PixImageMipMap, levels : int, srgb : bool) : TensorImageMipMap =
         new TensorImageMipMap(
-            data.ImageArray |> Array.take levels |> Array.map (fun l -> TensorImage.ofPixImage l srgb device)
+            data.ImageArray |> Array.take levels |> Array.map (fun l -> TensorImage.ofPixImage l srgb memory)
         )
 
     [<Extension>]
-    static member inline CreateTensorImage2D(device : Device, data : PixImageMipMap, srgb : bool) =
-        device.CreateTensorImage2D(data, data.LevelCount, srgb)
+    static member inline CreateTensorImage2D(memory : IDeviceMemory, data : PixImageMipMap, srgb : bool) =
+        memory.CreateTensorImage2D(data, data.LevelCount, srgb)
 
     [<Extension>]
-    static member inline CreateTensorImageCube(device : Device, data : PixCube, levels : int, srgb : bool) : TensorImageCube =
+    static member inline CreateTensorImageCube(memory : IDeviceMemory, data : PixCube, levels : int, srgb : bool) : TensorImageCube =
         new TensorImageCube(
             data.MipMapArray |> Array.map (fun face ->
-                device.CreateTensorImage2D(face, levels, srgb)
+                memory.CreateTensorImage2D(face, levels, srgb)
             )
         )
 
     [<Extension>]
-    static member inline CreateTensorImageCube(device : Device, data : PixCube, srgb : bool) =
-        device.CreateTensorImageCube(data, data.MipMapArray.[0].LevelCount, srgb)
+    static member inline CreateTensorImageCube(memory : IDeviceMemory, data : PixCube, srgb : bool) =
+        memory.CreateTensorImageCube(data, data.MipMapArray.[0].LevelCount, srgb)
 
     [<Extension>]
-    static member inline CreateTensorImageVolume(device : Device, data : PixVolume, srgb : bool) : TensorImage =
-        device |> TensorImage.ofPixVolume data srgb
+    static member inline CreateTensorImageVolume(memory : IDeviceMemory, data : PixVolume, srgb : bool) : TensorImage =
+        memory |> TensorImage.ofPixVolume data srgb
 
 
 [<AutoOpen>]
@@ -527,8 +527,8 @@ module TensorImageCommandExtensions =
 
 module private ``Tensor Image must compile`` =
 
-       let createImage (device : Device) =
-           use img = device.CreateTensorImage<byte>(V3i.III, Col.Format.RGBA, false)
+       let createImage (memory : IDeviceMemory) =
+           use img = memory.CreateTensorImage<byte>(V3i.III, Col.Format.RGBA, false)
 
            let v = img.Vector
            let m = img.Matrix
