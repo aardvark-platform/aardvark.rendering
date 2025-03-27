@@ -1,9 +1,10 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.15)
 
 project(vkvm LANGUAGES CXX)
 if(WIN32)
     set(OS windows)
     SET(ARCH AMD64)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 elseif(APPLE)
     set(OS mac)
     execute_process(COMMAND uname -m OUTPUT_VARIABLE ARCH)
@@ -26,7 +27,7 @@ SET(CMAKE_BUILD_TYPE "MinSizeRel" CACHE INTERNAL "release mode")
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(vkvm SHARED commands.h vkvm.h vkvm.cpp commands.cpp)
+add_library(vkvm SHARED commands.h vkvm.h vkvm.cpp commands.cpp vma.cpp)
 
 find_package(Vulkan REQUIRED)
 target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIRS})
