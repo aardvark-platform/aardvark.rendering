@@ -2,6 +2,10 @@
 - [Vulkan] Fixed VK_ERROR_OUT_OF_POOL_MEMORY error on some platforms when using raytracing
 - [Vulkan] Added check for format features when creating a render pass
 
+### 5.6.0-prerelease0001
+- [Vulkan] Improved queue submission
+- [Vulkan] Integrated VMA for memory management
+
 ### 5.5.16
 - now using `glEnablei/glDisablei` for BlendModes.
 
