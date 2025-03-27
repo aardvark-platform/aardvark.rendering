@@ -6,10 +6,16 @@ open System.Threading
 open System.Runtime.InteropServices
 
 /// Interface for external memory handles.
-[<AllowNullLiteral>]
 type IExternalMemoryHandle =
     inherit IDisposable
     abstract member IsValid : bool
+
+/// Interface for blocks of external memory.
+[<AllowNullLiteral>]
+type IExternalMemoryBlock =
+    inherit IDisposable
+    abstract member Handle : IExternalMemoryHandle
+    abstract member SizeInBytes : int64
 
 [<AutoOpen>]
 module NativePlatformHandles =
@@ -25,7 +31,7 @@ module NativePlatformHandles =
         extern int close(int fd)
 
     [<AbstractClass>]
-    type NativeHandle<'T when 'T : equality>(handle : 'T) =
+    type NativeHandle<'T>(handle : 'T) =
         let mutable isValid = 1
 
         member x.IsValid = isValid = 1
@@ -45,17 +51,6 @@ module NativePlatformHandles =
                 if not <| x.CloseHandle() then
                     Log.warn "Could not close external memory handle."
 
-        override x.Equals(other : obj) =
-            match other with
-            | :? NativeHandle<'T> as o -> handle = o.Handle
-            | _ -> false
-
-        override x.GetHashCode() =
-            hash handle
-
-        interface IEquatable<NativeHandle<'T>> with
-            member x.Equals(o) = handle = o.Handle
-
         interface IExternalMemoryHandle with
             member x.IsValid = x.IsValid
             member x.Dispose() = x.Dispose()
@@ -70,28 +65,12 @@ module NativePlatformHandles =
 
         override x.CloseHandle() = Posix.close handle = 0
 
-
-/// Represents a block of external memory.
-type ExternalMemoryBlock =
-    {
-        /// The handle of the memory block.
-        Handle : IExternalMemoryHandle
-
-        /// The size of the memory block (in bytes).
-        SizeInBytes : int64
-    }
-
-    member x.Dispose() =
-        x.Handle.Dispose()
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
-
 /// Represents a region of an external memory block.
+[<Struct>]
 type ExternalMemory =
     {
         /// The external memory block.
-        Block : ExternalMemoryBlock
+        Block : IExternalMemoryBlock
 
         /// Start offset of the memory region (in bytes).
         Offset : int64

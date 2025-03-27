@@ -15,18 +15,21 @@ type DevicePtr =
     val mutable private allocation : VmaAllocation
     val private allocationInfo : VmaAllocationInfo2
     val private hostVisible : bool
-    val mutable private externalHandle : IExternalMemoryHandle
+    val mutable private externalBlock : ExternalMemoryBlock
 
     internal new (device: IDevice, allocator: VmaAllocator, allocation: VmaAllocation, hostVisible: bool, export: bool) =
         let mutable info = VmaAllocationInfo2.Empty
         Vma.getAllocationInfo2(allocator, allocation, &&info)
 
-        let externalHandle =
+        let externalBlock =
             if export then
-                if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
-                    ExternalMemory.Win32.getHandle allocator allocation
-                else
-                    ExternalMemory.Posix.getHandle device.Handle info.allocationInfo.deviceMemory
+                let handle =
+                    if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                        ExternalMemory.Win32.getHandle allocator allocation
+                    else
+                        ExternalMemory.Posix.getHandle device.Handle info.allocationInfo.deviceMemory
+
+                new ExternalMemoryBlock(handle, info.allocationInfo.deviceMemory, info.blockSize)
             else
                 null
 
@@ -35,7 +38,7 @@ type DevicePtr =
           allocation     = allocation
           allocationInfo = info
           hostVisible    = hostVisible
-          externalHandle = externalHandle }
+          externalBlock  = externalBlock }
 
     internal new (device: IDevice) =
         { device         = device
@@ -43,14 +46,13 @@ type DevicePtr =
           allocation     = VmaAllocation.Zero
           allocationInfo = VmaAllocationInfo2.Empty
           hostVisible    = false
-          externalHandle = null }
+          externalBlock  = null }
 
-    member this.ExternalBlock =
-        if isNull this.externalHandle then
+    member this.ExternalBlock : IExternalMemoryBlock =
+        if isNull this.externalBlock then
             raise <| NotSupportedException("[Vulkan] Cannot access external handle of unexported memory allocation.")
 
-        { Handle      = this.externalHandle
-          SizeInBytes = int64 this.allocationInfo.blockSize }
+        this.externalBlock
 
     member this.Block = this.allocationInfo.allocationInfo.deviceMemory
     member this.BlockSize = this.allocationInfo.blockSize
@@ -115,9 +117,9 @@ type DevicePtr =
 
     member this.Dispose() =
         if this.allocation <> 0n then
-            if this.externalHandle <> null then
-                this.externalHandle.Dispose()
-                this.externalHandle <- null
+            if this.externalBlock <> null then
+                this.externalBlock.Dispose()
+                this.externalBlock <- null
 
             Vma.freeMemory(this.allocator, this.allocation)
             this.allocation <- 0n

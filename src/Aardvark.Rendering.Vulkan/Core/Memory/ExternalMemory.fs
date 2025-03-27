@@ -2,9 +2,38 @@
 
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
+open System
 open Vulkan11
 
 #nowarn "51"
+
+[<AllowNullLiteral>]
+type internal ExternalMemoryBlock(handle: IExternalMemoryHandle, memory: VkDeviceMemory, sizeInBytes: uint64) =
+    member _.Handle = handle
+    member _.Memory = memory
+    member _.SizeInBytes = sizeInBytes
+
+    member _.Dispose() =
+        handle.Dispose()
+
+    member inline private _.Equals(other: ExternalMemoryBlock) =
+        memory = other.Memory
+
+    override this.Equals(obj) =
+        match obj with
+        | :? ExternalMemoryBlock as other -> this.Equals(other)
+        | _ -> false
+
+    override this.GetHashCode() =
+        hash memory.Handle
+
+    interface IEquatable<ExternalMemoryBlock> with
+        member this.Equals(other) = this.Equals(other)
+
+    interface IExternalMemoryBlock with
+        member this.Handle = this.Handle
+        member this.SizeInBytes = int64 this.SizeInBytes
+        member this.Dispose() = this.Dispose()
 
 module internal ExternalMemory =
 

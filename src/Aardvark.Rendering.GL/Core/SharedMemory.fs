@@ -9,7 +9,7 @@ open System.Collections.Generic
 [<AutoOpen>]
 module internal SharedMemory =
 
-    type SharedMemoryBlock(manager : SharedMemoryManager, handle : int, external : ExternalMemoryBlock) =
+    type SharedMemoryBlock(manager : SharedMemoryManager, handle : int, external : IExternalMemoryBlock) =
         let mutable refCount = 1
 
         member x.Handle = handle
@@ -44,7 +44,7 @@ module internal SharedMemory =
                 GL.Check "DeleteMemoryObject"
             )
 
-        member x.Import(external : ExternalMemoryBlock) =
+        member x.Import(external : IExternalMemoryBlock) =
             lock blocks (fun _ ->
                 match blocks.TryGetValue external.Handle with
                 | (true, shared) ->

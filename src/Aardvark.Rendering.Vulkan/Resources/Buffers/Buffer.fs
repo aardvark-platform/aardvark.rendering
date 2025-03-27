@@ -52,17 +52,18 @@ type Buffer =
 type internal ExportedBuffer =
     class
         inherit Buffer
-
-        member x.ExternalMemory =
-            { Block  = x.Memory.ExternalBlock
-              Offset = int64 x.Memory.Offset
-              Size   = int64 x.Memory.Size }
+        val public ExternalMemory : ExternalMemory
 
         interface IExportedBackendBuffer with
             member x.Memory = x.ExternalMemory
 
-        new(device, handle, memory, size, usage) =
-            { inherit Buffer(device, handle, memory, size, usage) }
+        new(device, handle, memory: DevicePtr, size, usage) =
+            let externalMemory =
+                { Block  = memory.ExternalBlock
+                  Offset = int64 memory.Offset
+                  Size   = int64 memory.Size }
+
+            { inherit Buffer(device, handle, memory, size, usage); ExternalMemory = externalMemory }
     end
 
 type BufferView =

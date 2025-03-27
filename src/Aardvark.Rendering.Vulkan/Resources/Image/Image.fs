@@ -204,11 +204,7 @@ and internal ExportedImage =
     class
         inherit Image
         val public PreferArray : bool
-
-        member x.ExternalMemory =
-            { Block  = x.Memory.ExternalBlock
-              Offset = int64 x.Memory.Offset
-              Size   = int64 x.Memory.Size }
+        val public ExternalMemory : ExternalMemory
 
         member x.IsArray =
             x.Count > 1 || x.PreferArray
@@ -217,12 +213,19 @@ and internal ExportedImage =
             member x.IsArray = x.IsArray
             member x.Memory = x.ExternalMemory
 
-        new(device, handle, size, levels, layers, samples, dimension, format, preferArray, memory, layout,
+        new(device, handle, size, levels, layers, samples, dimension, format, preferArray, memory: DevicePtr, layout,
             [<Optional; DefaultParameterValue(VkImageLayout.ShaderReadOnlyOptimal)>] samplerLayout : VkImageLayout,
             [<Optional; DefaultParameterValue(null : VkImage[])>] peerHandles : VkImage[]) =
+
+            let externalMemory =
+                { Block  = memory.ExternalBlock
+                  Offset = int64 memory.Offset
+                  Size   = int64 memory.Size }
+
             {
                 inherit Image(device, handle, size, levels, layers, samples, dimension, format, memory, layout, samplerLayout, peerHandles)
                 PreferArray = preferArray
+                ExternalMemory = externalMemory
             }
 
     end

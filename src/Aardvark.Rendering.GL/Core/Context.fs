@@ -373,7 +373,7 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
             GL.GetInteger(unbox<GetPName> 0x9318)
         )
 
-    member internal x.ImportMemoryBlock(external : ExternalMemoryBlock) =
+    member internal x.ImportMemoryBlock(external : IExternalMemoryBlock) =
         sharedMemoryManager.Import external
 
     /// <summary>
