@@ -184,7 +184,7 @@ module internal CompactBufferImplementation =
             for w in pending.GetAndClear() do
                 w.Write(token)
 
-[<Extension; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type RuntimeAdaptiveCompactBufferExtensions private() =
 
     /// <summary>

@@ -294,7 +294,7 @@ module ContextTextureDownloadExtensions =
                 texture |> dl level slice offset size
         )
 
-    [<Extension; AbstractClass; Sealed>]
+    [<AbstractClass; Sealed; Extension>]
     type ContextTextureDownloadExtensions =
 
         [<Extension>]

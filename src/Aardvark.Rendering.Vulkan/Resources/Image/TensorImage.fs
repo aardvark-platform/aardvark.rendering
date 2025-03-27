@@ -343,7 +343,7 @@ module TensorImage =
         dst
 
 
-[<AbstractClass; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type DeviceTensorExtensions private() =
 
     [<Extension>]

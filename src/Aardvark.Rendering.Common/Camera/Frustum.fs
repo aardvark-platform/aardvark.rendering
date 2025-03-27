@@ -121,7 +121,7 @@ module Frustum =
     let inline bottom (f : Frustum) = f.bottom
     let inline top    (f : Frustum) = f.top
 
-[<Extension;AutoOpen>]
+[<AbstractClass; Sealed; Extension>]
 type CameraCSharpExtensions() =
     [<Extension>]
     static member ProjTrafo(f : Frustum) = Frustum.projTrafo f

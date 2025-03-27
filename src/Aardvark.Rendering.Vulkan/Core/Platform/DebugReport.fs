@@ -348,7 +348,7 @@ module private DebugReportHelpers =
 
                 objectTraces.AddOrUpdate(handle, stack, fun _ _ -> stack) |> ignore
 
-[<AbstractClass; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type InstanceDebugReportExtensions private() =
 
     [<Extension>]

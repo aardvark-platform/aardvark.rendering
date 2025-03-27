@@ -233,7 +233,7 @@ module internal ImageCopyImplementation =
 [<AutoOpen>]
 module ContextTextureCopyExtensions =
 
-    [<Extension; AbstractClass; Sealed>]
+    [<AbstractClass; Sealed; Extension>]
     type ContextTextureCopyExtensions =
 
         // ================================================================================================================

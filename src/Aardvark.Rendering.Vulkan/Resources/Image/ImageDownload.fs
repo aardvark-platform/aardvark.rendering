@@ -232,7 +232,7 @@ module ImageDownloadExtensions =
                 buffer.Dispose()
 
 
-    [<AbstractClass; Sealed>]
+    [<AbstractClass; Sealed; Extension>]
     type ContextImageDownloadExtensions private() =
 
         [<Extension>]

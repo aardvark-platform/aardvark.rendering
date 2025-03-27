@@ -45,7 +45,7 @@ type IManagedBuffer =
 type IManagedBuffer<'T when 'T : unmanaged> =
     inherit IManagedBuffer
 
-[<Extension; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type ManagedBufferExtensions private() =
 
     /// <summary>

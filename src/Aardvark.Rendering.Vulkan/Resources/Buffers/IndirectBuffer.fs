@@ -106,7 +106,7 @@ module IndirectBuffer =
 
         new IndirectBuffer(buffer, b.Count)
 
-[<AbstractClass; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type ContextIndirectBufferExtensions private() =
 
     [<Extension>]

@@ -75,7 +75,7 @@ module GeometryPoolUtilities =
             member x.OnLock c = rlock.OnLock c
             member x.OnUnlock c = rlock.OnUnlock c
 
-    [<AbstractClass; Sealed>]
+    [<AbstractClass; Sealed; Extension>]
     type DeviceMappedBufferExts private() =
 
 

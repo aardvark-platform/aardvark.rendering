@@ -346,7 +346,7 @@ module IDeviceObjectExtensions =
     type IDeviceObject with
         member inline x.Device = x.DeviceInterface :?> Device
 
-[<AbstractClass; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type DeviceExtensions private() =
 
     [<Extension>]

@@ -80,7 +80,7 @@ and [<RequireQualifiedAccess>]
           RaytracingCommand.TransformLayout(texture, TextureLayout.ShaderWrite, dstLayout) ]
 
 
-[<Extension>]
+[<AbstractClass; Sealed; Extension>]
 type RaytracingTaskExtensions() =
 
     /// Updates the resources of the task without running it.

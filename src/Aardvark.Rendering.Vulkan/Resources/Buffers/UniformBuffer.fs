@@ -124,7 +124,7 @@ module UniformBuffer =
             do! Command.Sync(b, VkPipelineStageFlags.TransferBit, VkAccessFlags.TransferWriteBit)
         }
 
-[<AbstractClass; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type ContextUniformBufferExtensions private() =
     [<Extension>]
     static member inline CreateUniformBuffer(this : Device, layout : FShade.GLSL.GLSLUniformBuffer) =

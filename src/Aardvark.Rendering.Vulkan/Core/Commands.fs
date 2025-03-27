@@ -15,7 +15,7 @@ type Command() =
     abstract member Compatible : QueueFlags
     abstract member Enqueue : CommandBuffer -> unit
 
-[<AbstractClass; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type CommandExtensions() =
 
     [<Extension>]

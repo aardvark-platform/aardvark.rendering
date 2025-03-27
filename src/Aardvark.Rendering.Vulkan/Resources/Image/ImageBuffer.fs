@@ -24,7 +24,7 @@ module internal ImageBuffer =
         let buffer = memory |> Buffer.create usage sizeInBytes
         new ImageBuffer(buffer, size, pitch, format)
 
-[<AbstractClass; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type ImageBufferExtensions private() =
 
     [<Extension>]

@@ -114,7 +114,7 @@ module BlockCompression =
 
             index
 
-    [<Extension; Sealed>]
+    [<AbstractClass; Sealed; Extension>]
     type private VolumeExtensions() =
 
         [<Extension>]

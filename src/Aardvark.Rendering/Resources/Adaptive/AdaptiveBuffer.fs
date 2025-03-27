@@ -30,7 +30,7 @@ type IAdaptiveBuffer =
     /// <param name="sizeInBytes">The number of bytes to write to the buffer.</param>
     abstract member Write : data: nativeint * offset: nativeint * sizeInBytes: nativeint -> unit
 
-[<Extension; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type AdaptiveBufferExtensions private() =
 
     /// <summary>

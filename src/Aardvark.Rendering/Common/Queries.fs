@@ -14,7 +14,7 @@ type IQuery =
     /// Finishes the query.
     abstract member End : unit -> unit
 
-[<Extension; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type IQueryExtensions private() =
 
     /// Resets the queries manually.

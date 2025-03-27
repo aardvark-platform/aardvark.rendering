@@ -115,7 +115,7 @@ module QueryCommandExtensions =
                     VkRaw.vkCmdWriteTimestamp(cmd.Handle, pipelineFlags, pool.Handle, uint32 index)
             }
 
-[<AbstractClass; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type DeviceQueryPoolExtensions private() =
     [<Extension>]
     static member inline CreateQueryPool(device : Device, count : int) =

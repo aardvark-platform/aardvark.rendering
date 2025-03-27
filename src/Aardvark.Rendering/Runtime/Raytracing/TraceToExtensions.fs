@@ -6,7 +6,7 @@ open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 
-[<Extension>]
+[<AbstractClass; Sealed; Extension>]
 type CompileTraceToExtensions() =
 
     /// <summary>

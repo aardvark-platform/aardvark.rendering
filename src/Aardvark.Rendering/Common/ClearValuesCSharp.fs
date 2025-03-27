@@ -50,7 +50,7 @@ type ClearStencil =
     static member op_Explicit(value : ClearStencil) = uint8 value.Value
     static member op_Explicit(value : ClearStencil) = uint16 value.Value
 
-[<Extension; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type ClearDepthStencilExtensions private () =
 
     [<Extension>]
@@ -98,7 +98,7 @@ type Clear private () =
     static member Stencil(value : ClearStencil) =
         ClearValues.empty |> ClearValues.stencil value.Value
 
-[<Extension; AbstractClass; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type ClearValuesExtensions =
 
     [<Extension>]

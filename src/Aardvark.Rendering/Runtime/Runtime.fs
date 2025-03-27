@@ -92,7 +92,7 @@ and IRuntime =
     /// Gets or sets the path of the shader cache.
     abstract member ShaderCachePath : Option<string> with get, set
 
-[<Extension>]
+[<AbstractClass; Sealed; Extension>]
 type RenderTaskRunExtensions() =
 
     [<Extension>]

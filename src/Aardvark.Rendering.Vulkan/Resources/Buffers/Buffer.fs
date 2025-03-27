@@ -531,7 +531,7 @@ module BufferView =
 // =======================================================================
 // Device Extensions
 // =======================================================================
-[<AbstractClass; Sealed>]
+[<AbstractClass; Sealed; Extension>]
 type BufferExtensions private() =
 
     [<Extension>]
