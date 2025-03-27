@@ -100,6 +100,22 @@ module private DebugReportHelpers =
 
             mem.ToArray() |> md5.ComputeHash |> Guid
 
+        static let adapters = ConditionalWeakTable<Instance, DebugReportAdapter>()
+
+        static let notEnabledObservable =
+            { new IObservable<DebugMessage> with
+                member x.Subscribe (obs : IObserver<DebugMessage>) =
+                    obs.OnNext {
+                        id              = Guid.Empty
+                        severity        = MessageSeverity.Warning
+                        performance     = false
+                        layerPrefix     = "DR"
+                        message         = "could not subscribe to DebugMessages since the instance does not provide the needed Extension"
+                        objects         = []
+                    }
+                    obs.OnCompleted()
+                    Disposable.empty
+            }
 
         let mutable verbosity = MessageSeverity.Information
         let mutable tracingEnabled = false
@@ -245,6 +261,24 @@ module private DebugReportHelpers =
 
         let layer = CStr.malloc "DebugReport"
 
+        static member internal TryGet(instance: Instance) =
+            if instance.DebugReportEnabled then
+                lock adapters (fun () ->
+                    match adapters.TryGetValue instance with
+                    | true, adapter -> Some adapter
+                    | _ ->
+                        let adapter = DebugReportAdapter(instance)
+                        adapters.Add(instance, adapter)
+                        Some adapter
+                )
+            else
+                None
+
+        static member internal GetObservable(instance: Instance) =
+            match DebugReportAdapter.TryGet instance with
+            | Some adapter -> adapter :> IObservable<_>
+            | _ -> notEnabledObservable
+
         member x.DebugSummary =
             let msg = messages |> Seq.map (fun (KeyValue(s, n)) -> s, n) |> Map.ofSeq
             { messages = msg }
@@ -316,76 +350,40 @@ module private DebugReportHelpers =
 
 [<AbstractClass; Sealed>]
 type InstanceDebugReportExtensions private() =
-    static let table = ConditionalWeakTable<Instance, Option<DebugReportAdapter>>()
-
-    static let notEnabledObservable =
-        { new IObservable<DebugMessage> with
-            member x.Subscribe (obs : IObserver<DebugMessage>) =
-                obs.OnNext {
-                    id              = Guid.Empty
-                    severity        = MessageSeverity.Warning
-                    performance     = false
-                    layerPrefix     = "DR"
-                    message         = "could not subscribe to DebugMessages since the instance does not provide the needed Extension"
-                    objects         = []
-                }
-                obs.OnCompleted()
-                Disposable.empty
-        }
-
-    static let getAdapter (instance : Instance) =
-        if instance.DebugReportEnabled then
-            lock table (fun () ->
-                match table.TryGetValue instance with
-                    | (true, adapter) -> adapter
-                    | _ ->
-                        let adapter = new DebugReportAdapter(instance)
-                        table.Add(instance, Some adapter)
-                        Some adapter
-            )
-        else
-            None
-
-    static let registerDebugTrace instance handle =
-        match getAdapter instance with
-        | Some a -> a.TraceObject(handle)
-        | _ -> ()
 
     [<Extension>]
     static member GetDebugMessageObservable(this : Instance) =
-        match getAdapter this with
-        | Some a -> a :> IObservable<_>
-        | _ -> notEnabledObservable
+        DebugReportAdapter.GetObservable this
 
     [<Extension>]
     static member RaiseDebugMessage(this : Instance, severity : MessageSeverity, msg : string) =
-        match getAdapter this with
+        match DebugReportAdapter.TryGet this with
         | Some a -> a.Raise(severity, msg)
         | _ -> ()
 
     [<Extension>]
     static member GetDebugSummary(this : Instance) =
-        match getAdapter this with
+        match DebugReportAdapter.TryGet this with
         | Some a -> a.DebugSummary
         | _ -> { messages = Map.empty }
 
     [<Extension>]
     static member GetDebugVerbosity(this : Instance) =
-        match getAdapter this with
+        match DebugReportAdapter.TryGet this with
         | Some a -> a.Verbosity
         | _ -> MessageSeverity.Error
 
     /// Returns whether object tracing is enabled.
     [<Extension>]
     static member GetDebugTracingEnabled(this : Instance) =
-        match getAdapter this with
+        match DebugReportAdapter.TryGet this with
         | Some a -> a.TracingEnabled
         | _ -> false
 
     /// Sets the debug report verbosity.
     [<Extension>]
     static member SetDebugVerbosity(this : Instance, verbosity : DebugReportVerbosity, traceHandles : bool) =
-        match getAdapter this with
+        match DebugReportAdapter.TryGet this with
         | Some a ->
             a.Verbosity <- DebugReportVerbosity.toMessageSeverity verbosity
             a.TracingEnabled <- traceHandles
@@ -395,26 +393,28 @@ type InstanceDebugReportExtensions private() =
     /// in debug messages.
     [<Extension>]
     static member RegisterDebugTrace(this : Instance, handle : uint64) =
-        registerDebugTrace this handle
+        match DebugReportAdapter.TryGet this with
+        | Some a -> a.TraceObject(handle)
+        | _ -> ()
 
     /// Adds the object with the given handle for tracing its origin, which is displayed
     /// in debug messages.
     [<Extension>]
     static member RegisterDebugTrace(this : Instance, handle : nativeint) =
-        registerDebugTrace this (uint64 handle)
+        this.RegisterDebugTrace(uint64 handle)
 
     /// Adds the object with the given handle for tracing its origin, which is displayed
     /// in debug messages.
     [<Extension>]
     static member RegisterDebugTrace(this : Instance, handle : int64) =
-        registerDebugTrace this (uint64 handle)
+        this.RegisterDebugTrace(uint64 handle)
 
     /// Adds the object with the given handle for tracing its origin, which is displayed
     /// in debug messages.
     [<Extension>]
     static member RegisterDebugTrace<'a when 'a : unmanaged>(this : Instance, pHandle : nativeptr<'a>) =
         let handle : uint64 = pHandle |> NativePtr.cast |> NativePtr.read
-        registerDebugTrace this handle
+        this.RegisterDebugTrace handle
 
 [<AutoOpen>]
 module ``FSharp Style Debug Extensions`` =
