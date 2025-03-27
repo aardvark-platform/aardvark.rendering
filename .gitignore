@@ -1,4 +1,4 @@
-src/vkvm/libvkvm.dylib
+src/VKVM/libvkvm.dylib
 **/.ionide
 bin/**
 !/bin/*.nuspec
@@ -43,8 +43,8 @@ src/GLVM/*.dylib
 /lib/Native/Aardvark.Rendering.Vulkan/windows/x86/*.iobj
 /lib/Native/Aardvark.Rendering.Vulkan/windows/AMD64/*.ilk
 /lib/Native/Aardvark.Rendering.Vulkan/windows/x86/*.ilk
-/src/vkvm/.vs/VKVM/v14/*.suo
-/src/vkvm/*.so
+/src/VKVM/.vs/VKVM/v14/*.suo
+/src/VKVM/*.so
 .ionide.debug
 /src/Demo/Scratch/InteractionModels.g.fs
 /.paket/Paket.Restore.targets
@@ -57,4 +57,4 @@ src/Aardvark.Rendering.Interactive/bin/
 *.sln.DotSettings.user
 /src/GLVM/build/
 **/.vscode/
-/src/vkvm/build/
+/src/VKVM/build/
