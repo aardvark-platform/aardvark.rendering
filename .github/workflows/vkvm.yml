@@ -2,7 +2,7 @@ name: VKVM
 on:
   workflow_dispatch:
   push:
-    branches:
+    branches: 
       - vma
     paths:
       - .github/workflows/vkvm.yml    
