@@ -42,10 +42,10 @@ type internal MemoryAllocator (device: IDevice) =
                     VmaAllocatorCreateFlags.ExtMemoryBudgetBit
 
                 if device.EnabledFeatures.Memory.MemoryPriority then
-                    VmaAllocatorCreateFlags.BufferDeviceAddressBit
+                    VmaAllocatorCreateFlags.ExtMemoryPriorityBit
 
                 if device.EnabledFeatures.Memory.BufferDeviceAddress then
-                    VmaAllocatorCreateFlags.KhrExternalMemoryWin32Bit
+                    VmaAllocatorCreateFlags.BufferDeviceAddressBit
 
                 if device.IsExtensionEnabled KHRExternalMemoryWin32.Name then
                     VmaAllocatorCreateFlags.KhrExternalMemoryWin32Bit
