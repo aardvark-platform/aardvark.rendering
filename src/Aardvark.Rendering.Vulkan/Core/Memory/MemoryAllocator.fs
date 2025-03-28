@@ -25,13 +25,13 @@ type IDeviceMemory =
                                    [<Optional; DefaultParameterValue(0.5)>] priority: float *
                                    [<Optional; DefaultParameterValue(false)>] export: bool *
                                    [<Optional; DefaultParameterValue(true)>] bind: bool *
-                                   [<Optional; DefaultParameterValue(false)>] mayAlias: bool -> VkBuffer * DevicePtr
+                                   [<Optional; DefaultParameterValue(false)>] mayAlias: bool -> struct (VkBuffer * DevicePtr)
 
     abstract member CreateImage : info: VkImageCreateInfo byref *
                                   [<Optional; DefaultParameterValue(0.5)>] priority: float *
                                   [<Optional; DefaultParameterValue(false)>] export: bool *
                                   [<Optional; DefaultParameterValue(true)>] bind: bool *
-                                  [<Optional; DefaultParameterValue(false)>] mayAlias: bool -> VkImage * DevicePtr
+                                  [<Optional; DefaultParameterValue(false)>] mayAlias: bool -> struct (VkImage * DevicePtr)
 
 type internal MemoryAllocator (device: IDevice) =
     let mutable allocator = VmaAllocator.Zero
@@ -71,51 +71,57 @@ type internal MemoryAllocator (device: IDevice) =
 
     let nullPtr = new DevicePtr(device)
 
-    let externalMemoryPools = ConcurrentDictionary<uint32, ExternalMemoryPool>()
+    let externalMemoryPools = ConcurrentDictionary<uint32, Lazy<ExternalMemoryPool>>()
 
-    let createBuffer pBufferCreateInfo pAllocationCreateInfo hostVisible alignment export =
+    let getExternalMemoryPool memoryTypeIndex =
+        externalMemoryPools.GetOrAdd(memoryTypeIndex, fun index ->
+            lazy (new ExternalMemoryPool(allocator, index))
+        ).Value
+
+    let tryCreateBuffer pBufferCreateInfo pAllocationCreateInfo hostVisible alignment export =
         let mutable buffer = VkBuffer.Null
         let mutable allocation = VmaAllocation.Zero
 
-        Vma.createBufferWithAlignment(
-            allocator, pBufferCreateInfo, pAllocationCreateInfo, alignment,
-            &&buffer, &&allocation, NativePtr.zero
-        )
-        |> checkf "could not create buffer"
+        let result =
+            Vma.createBufferWithAlignment(
+                allocator, pBufferCreateInfo, pAllocationCreateInfo, alignment,
+                &&buffer, &&allocation, NativePtr.zero
+            )
 
-        let ptr = new DevicePtr(device, allocator, allocation, hostVisible, export)
-        buffer, ptr
+        if result = VkResult.Success then
+            let ptr = new DevicePtr(device, allocator, allocation, hostVisible, export)
+            Result.Ok struct (buffer, ptr)
+        else
+            Result.Error result
 
-    let createImage pImageCreateInfo pAllocationCreateInfo hostVisible export =
+    let tryCreateImage pImageCreateInfo pAllocationCreateInfo hostVisible export =
         let mutable image = VkImage.Null
         let mutable allocation = VmaAllocation.Zero
 
-        Vma.createImage(
-            allocator, pImageCreateInfo, pAllocationCreateInfo,
-            &&image, &&allocation, NativePtr.zero
-        )
-        |> checkf "could not allocate memory for image"
+        let result =
+            Vma.createImage(
+                allocator, pImageCreateInfo, pAllocationCreateInfo,
+                &&image, &&allocation, NativePtr.zero
+            )
 
-        let ptr = new DevicePtr(device, allocator, allocation, hostVisible, export)
-        image, ptr
+        if result = VkResult.Success then
+            let ptr = new DevicePtr(device, allocator, allocation, hostVisible, export)
+            Result.Ok struct (image, ptr)
+        else
+            Result.Error result
 
     let rec createExternalBuffer pBufferCreateInfo (allocationCreateInfo: _ byref) hostVisible alignment =
         let mutable memoryTypeIndex = 0u
         Vma.findMemoryTypeIndexForBufferInfo(allocator, pBufferCreateInfo, &&allocationCreateInfo, &&memoryTypeIndex)
             |> checkf "could not find memory type for buffer"
 
-        let pool =
-            externalMemoryPools.GetOrAdd(memoryTypeIndex, fun index ->
-                new ExternalMemoryPool(allocator, index)
-            )
+        let pool = getExternalMemoryPool memoryTypeIndex
+        allocationCreateInfo.pool <- pool.Handle
 
-        try
-            allocationCreateInfo.pool <- pool.Handle
-            createBuffer pBufferCreateInfo &&allocationCreateInfo hostVisible alignment true
-
-        with :? VulkanException as e ->
-            Log.warn $"{e.Message}"
-            allocationCreateInfo.pool <- VmaPool.Zero
+        match tryCreateBuffer pBufferCreateInfo &&allocationCreateInfo hostVisible alignment true with
+        | Result.Ok result -> result
+        | Result.Error error ->
+            Log.Vulkan.warn $"could not allocate memory for buffer (Error: {error})"
             &allocationCreateInfo.memoryTypeBits &&&= ~~~(1u <<< int32 memoryTypeIndex)
             createExternalBuffer pBufferCreateInfo &allocationCreateInfo hostVisible alignment
 
@@ -124,18 +130,13 @@ type internal MemoryAllocator (device: IDevice) =
         Vma.findMemoryTypeIndexForImageInfo(allocator, pImageCreateInfo, &&allocationCreateInfo, &&memoryTypeIndex)
             |> checkf "could not find memory type for image"
 
-        let pool =
-            externalMemoryPools.GetOrAdd(memoryTypeIndex, fun index ->
-                new ExternalMemoryPool(allocator, index)
-            )
+        let pool = getExternalMemoryPool memoryTypeIndex
+        allocationCreateInfo.pool <- pool.Handle
 
-        try
-            allocationCreateInfo.pool <- pool.Handle
-            createImage pImageCreateInfo &&allocationCreateInfo hostVisible true
-
-        with :? VulkanException as e ->
-            Log.warn $"{e.Message}"
-            allocationCreateInfo.pool <- VmaPool.Zero
+        match tryCreateImage pImageCreateInfo &&allocationCreateInfo hostVisible true with
+        | Result.Ok result -> result
+        | Result.Error error ->
+            Log.Vulkan.warn $"could not allocate memory for image (Error: {error})"
             &allocationCreateInfo.memoryTypeBits &&&= ~~~(1u <<< int32 memoryTypeIndex)
             createExternalImage pImageCreateInfo &allocationCreateInfo hostVisible
 
@@ -157,9 +158,10 @@ type internal MemoryAllocator (device: IDevice) =
             &flags |||= VmaAllocationCreateFlags.CanAliasBit
 
         { VmaAllocationCreateInfo.Empty with
-            flags    = flags
-            usage    = usage
-            priority = float32 priority }
+            flags          = flags
+            usage          = usage
+            priority       = float32 priority
+            memoryTypeBits = ~~~0u }
 
     member _.NullPtr = nullPtr
 
@@ -174,7 +176,11 @@ type internal MemoryAllocator (device: IDevice) =
             if export then
                 createExternalBuffer &&bufferCreateInfo &allocationCreateInfo hostVisible alignment
             else
-                createBuffer &&bufferCreateInfo &&allocationCreateInfo hostVisible alignment false
+                match tryCreateBuffer &&bufferCreateInfo &&allocationCreateInfo hostVisible alignment false with
+                | Result.Ok result -> result
+                | Result.Error error ->
+                    error |> checkf "could not allocate memory for buffer"
+                    Unchecked.defaultof<_>
 
         with :? VulkanException ->
             this.PrintUsage Logger.Default
@@ -191,7 +197,11 @@ type internal MemoryAllocator (device: IDevice) =
             if export then
                 createExternalImage &&imageCreateInfo &allocationCreateInfo hostVisible
             else
-                createImage &&imageCreateInfo &&allocationCreateInfo hostVisible false
+                match tryCreateImage &&imageCreateInfo &&allocationCreateInfo hostVisible false with
+                | Result.Ok result -> result
+                | Result.Error error ->
+                    error |> checkf "could not allocate memory for image"
+                    Unchecked.defaultof<_>
 
         with :? VulkanException ->
             this.PrintUsage Logger.Default
@@ -240,7 +250,7 @@ type internal MemoryAllocator (device: IDevice) =
     member _.Dispose() =
         if allocator <> VmaAllocator.Zero then
             for KeyValue(_, pool) in externalMemoryPools do
-                pool.Dispose()
+                pool.Value.Dispose()
 
             Vma.destroyAllocator allocator
             allocator <- VmaAllocator.Zero

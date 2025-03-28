@@ -1073,7 +1073,7 @@ module Image =
                 )
 
             if mayHavePeers then
-                let handle, memory = device.DeviceMemory.CreateImage(&info, export = export.IsEnabled, bind = false, mayAlias = true)
+                let struct (handle, memory) = device.DeviceMemory.CreateImage(&info, export = export.IsEnabled, bind = false, mayAlias = true)
 
                 let indices = device.PhysicalDeviceGroup.AllIndicesArr
                 let handles = Array.zeroCreate indices.Length
@@ -1115,7 +1115,7 @@ module Image =
                 result
 
             else
-                let handle, memory = device.DeviceMemory.CreateImage(&info, export = export.IsEnabled)
+                let struct (handle, memory) = device.DeviceMemory.CreateImage(&info, export = export.IsEnabled)
 
                 match export with
                 | ImageExport.Enable preferArray ->

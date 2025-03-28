@@ -314,7 +314,7 @@ module Buffer =
                 (if concurrent then device.QueueFamilyIndices else NativePtr.zero)
             )
 
-        let buffer, memory = memory.CreateBuffer(&info, alignment = alignment, export = export)
+        let struct (buffer, memory) = memory.CreateBuffer(&info, alignment = alignment, export = export)
 
         if export then
             new ExportedBuffer(device, buffer, memory, size, usage) :> Buffer
