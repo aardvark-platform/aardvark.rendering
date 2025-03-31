@@ -120,8 +120,7 @@ type internal MemoryAllocator (device: IDevice) =
 
         match tryCreateBuffer pBufferCreateInfo &&allocationCreateInfo hostVisible alignment true with
         | Result.Ok result -> result
-        | Result.Error error ->
-            Log.Vulkan.warn $"could not allocate memory for buffer (Error: {error})"
+        | Result.Error _ ->
             &allocationCreateInfo.memoryTypeBits &&&= ~~~(1u <<< int32 memoryTypeIndex)
             createExternalBuffer pBufferCreateInfo &allocationCreateInfo hostVisible alignment
 
@@ -135,8 +134,7 @@ type internal MemoryAllocator (device: IDevice) =
 
         match tryCreateImage pImageCreateInfo &&allocationCreateInfo hostVisible true with
         | Result.Ok result -> result
-        | Result.Error error ->
-            Log.Vulkan.warn $"could not allocate memory for image (Error: {error})"
+        | Result.Error _ ->
             &allocationCreateInfo.memoryTypeBits &&&= ~~~(1u <<< int32 memoryTypeIndex)
             createExternalImage pImageCreateInfo &allocationCreateInfo hostVisible
 
