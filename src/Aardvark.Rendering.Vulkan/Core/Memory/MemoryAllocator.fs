@@ -181,7 +181,7 @@ type internal MemoryAllocator (device: IDevice) =
                     Unchecked.defaultof<_>
 
         with :? VulkanException ->
-            this.PrintUsage Logger.Default
+            this.PrintUsage()
             reraise()
 
     member private this.CreateImage(imageCreateInfo: VkImageCreateInfo byref, preferDevice: bool, hostAccess: HostAccess,
@@ -202,7 +202,7 @@ type internal MemoryAllocator (device: IDevice) =
                     Unchecked.defaultof<_>
 
         with :? VulkanException ->
-            this.PrintUsage Logger.Default
+            this.PrintUsage()
             reraise()
 
     member this.GetMemory(preferDevice: bool, hostAccess: HostAccess) =
@@ -218,7 +218,8 @@ type internal MemoryAllocator (device: IDevice) =
                 this.CreateImage(&info, preferDevice, hostAccess, priority, export, bind, mayAlias)
         }
 
-    member _.PrintUsage(l: ILogger) =
+    member _.PrintUsage([<Optional; DefaultParameterValue(2)>] verbosity: int) =
+        let l = Logger.Get verbosity
         let heaps = device.PhysicalDevice.MemoryHeaps
 
         let heapBudgets = Array.zeroCreate<VmaBudget> heaps.Length

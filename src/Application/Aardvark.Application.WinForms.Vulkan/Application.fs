@@ -50,6 +50,7 @@ module VisualDeviceChooser =
 
 
 type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+    let debug = DebugConfig.unbox debug
 
     let requestedExtensions =
         [
@@ -95,7 +96,7 @@ type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice>
         else
             chooseDevice (Seq.toList (CustomDeviceChooser.Filter instance.Devices))
 
-    do instance.PrintInfo(Logger.Get 4, physicalDevice)
+    do instance.PrintInfo(physicalDevice, debug.PlatformInformationVerbosity)
 
     // create a device
     let device = 

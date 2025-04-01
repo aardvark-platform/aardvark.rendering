@@ -22,7 +22,7 @@ type ImageLimits =
         MaxArrayLayers : int
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max 1D size:   %d" x.MaxDimension1D
         l.line "max 2D size:   %A" x.MaxDimension2D
         l.line "max 3D size:   %A" x.MaxDimension3D
@@ -47,7 +47,7 @@ type SampledImageLimits =
         StorageSampleCounts : Set<int>
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "color samples:      %A" (Set.toList x.ColorSampleCounts)
         l.line "integer samples:    %A" (Set.toList x.IntegerSampleCounts)
         l.line "depth samples:      %A" (Set.toList x.DepthSampleCounts)
@@ -66,7 +66,7 @@ type SamplerLimits =
         MaxAnisotropy : float
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max allocations: %A" x.MaxAllocationCount
         l.line "max lod bias:    %A" x.MaxLodBias
         l.line "max anisotropy:  %A" x.MaxAnisotropy
@@ -86,7 +86,7 @@ type UniformLimits =
         MaxPushConstantsSize : Mem
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max buffer range:   %A" x.MaxBufferViewRange
         l.line "max storage range:  %A" x.MaxStorageViewRange
         l.line "max texel elements: %A" x.MaxTexelBufferElements
@@ -128,7 +128,7 @@ type MemoryLimits =
 
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max allocations:            %d" x.MaxAllocationCount
         l.line "max allocation size:        %A" x.MaxAllocationSize
         l.line "sparse size:                %A" x.SparseAddressSpaceSize
@@ -193,7 +193,7 @@ type DescriptorLimits =
 
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max bound sets:          %d" x.MaxBoundDescriptorSets
         l.line "max samplers:            %d" x.MaxSamplers
         l.line "max uniform buffers:     %d" x.MaxUniformBuffers
@@ -231,7 +231,7 @@ type VertexLimits =
         MaxOutputComponents : int
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max in attributes:  %d" x.MaxInputAttributes
         l.line "max in bindings:    %d" x.MaxInputBindings
         l.line "max in offset:      %d" x.MaxInputAttributeOffset
@@ -252,7 +252,7 @@ type TessControlLimits =
         /// the maximum total number of components of per-vertex and per-patch output variables which can be output from the tessellation control shader stage.
         MaxTotalOutputComponents : int
     }
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max vertex in components:  %d" x.MaxPerVertexInputComponents
         l.line "max vertex out components: %d" x.MaxPerVertexOutputComponents
         l.line "max patch out components:  %d" x.MaxPerPatchOutputComponents
@@ -266,7 +266,7 @@ type TessEvalLimits =
         /// the maximum number of components of per-vertex output variables which can be output from the tessellation evaluation shader stage.
         MaxOutputComponents : int
     }
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max in components:  %d" x.MaxInputComponents
         l.line "max out components: %d" x.MaxOutputComponents
 
@@ -282,7 +282,7 @@ type TessellationLimits =
         TessEvalLimits : TessEvalLimits
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max gen level:  %d" x.MaxGenerationLevel
         l.line "max patch size: %d" x.MaxPatchSize
         l.section "control:" (fun () ->
@@ -309,7 +309,7 @@ type GeometryLimits =
         /// the maximum total number of components of output, across all emitted vertices, which can be output from the geometry shader stage.
         MaxTotalOutputComponents : int
     }
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max invocations:    %d" x.MaxInvocations
         l.line "max out vertices:   %d" x.MaxOutputVertices
         l.line "max in components:  %d" x.MaxInputComponents
@@ -335,7 +335,7 @@ type FragmentLimits =
         /// the maximum number of array elements of a variable decorated with the SampleMask built-in decoration.
         MaxSampleMaskWords : int
     }
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max in components:     %d" x.MaxInputComponents
         l.line "max out attachments:   %d" x.MaxOutputAttachments
         l.line "max src1 attachments:  %d" x.MaxDualSrcAttachments
@@ -356,7 +356,7 @@ type ComputeLimits =
         /// the maximum size of a local compute workgroup, per dimension. These three values represent the maximum local workgroup size in the X, Y, and Z dimensions, respectively.
         MaxWorkGroupSize : V3i
     }
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "shared memory:         %A" x.MaxSharedMemorySize
         l.line "max group counts:      %A" x.MaxWorkGroupCount
         l.line "max group invocations: %d" x.MaxWorkGroupInvocations
@@ -395,7 +395,7 @@ type ShaderLimits =
         MaxCombinedClipAndCullDistances : int
 
     }
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max clip distances:      %d" x.MaxClipDistances
         l.line "max cull distances:      %d" x.MaxCullDistances
         l.line "max clip/cull distances: %d" x.MaxCombinedClipAndCullDistances
@@ -425,7 +425,7 @@ type PrecisionLimits =
         DiscreteQueuePriorities : int
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "subpixel bits:    %d" x.SubPixelPrecisionBits
         l.line "subtexel bits:    %d" x.SubTexelPrecisionBits
         l.line "mipmap bits:      %d" x.MipMapPrecisionBits
@@ -442,7 +442,7 @@ type DrawLimits =
         MaxIndirectCount    : uint32
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max index value:    %d" x.MaxIndexValue
         l.line "max indirect count: %d" x.MaxIndirectCount
 
@@ -485,7 +485,7 @@ type FramebufferLimits =
 
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max size:   %A" x.MaxSize
         l.line "max layers: %d" x.MaxLayers
         l.line "max colors: %d" x.MaxColorAttachments
@@ -523,7 +523,7 @@ type RasterizerLimits =
         StandardSampleLocations : bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "point size:       [%f .. %f .. %f]" x.PointSizeRange.Min x.PointSizeGranularity x.PointSizeRange.Max
         l.line "line width:       [%f .. %f .. %f]" x.LineWidthRange.Min x.LineWidthGranularity x.LineWidthRange.Max
         l.line "strict lines:     %A" x.StrictLines
@@ -587,7 +587,7 @@ type RaytracingLimits =
         MaxRayHitAttributeSize                                      : uint32
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "max ray recursion depth:      %d" x.MaxRayRecursionDepth
         l.line "max ray dispatch invocations: %d" x.MaxRayDispatchInvocationCount
         l.line "max ray hit attribute size:   %d" x.MaxRayHitAttributeSize
@@ -632,7 +632,7 @@ type DeviceLimits =
         Raytracing      : RaytracingLimits option
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.section "image:" (fun () -> x.Image.Print(l))
         l.section "sampled image:" (fun () -> x.SampledImage.Print(l))
         l.section "sampler:" (fun () -> x.Sampler.Print(l))

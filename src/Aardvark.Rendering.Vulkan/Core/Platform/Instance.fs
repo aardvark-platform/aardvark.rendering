@@ -371,7 +371,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
     member x.Devices = devicesAndGroups
 
-    member x.PrintInfo(l : ILogger, chosenDevice : PhysicalDevice) =
+    member x.PrintInfo(chosenDevice: PhysicalDevice, [<Optional; DefaultParameterValue(2)>] verbosity: int) =
         let devices =
             match chosenDevice with
                 | :? PhysicalDeviceGroup as g -> g.Devices
@@ -393,7 +393,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                 else None
             ) |> String.concat ", "
 
-
+        let l = Logger.Get verbosity
         l.section "instance:" (fun () ->
             l.section "layers:" (fun () ->
                 for layer in availableLayers do

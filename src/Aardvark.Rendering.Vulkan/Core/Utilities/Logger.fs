@@ -2,21 +2,19 @@
 
 open Aardvark.Base
 
-type ILogger =
+type internal ILogger =
     abstract member section<'a, 'x>     : Printf.StringFormat<'a, (unit -> 'x) -> 'x> -> 'a
     abstract member line<'a, 'x>        : Printf.StringFormat<'a, unit> -> 'a
     abstract member WithVerbosity       : int -> ILogger
     abstract member Verbosity           : int
 
-type Logger private(verbosity : int) =
-    static let instances = Array.init 6 (fun i -> Logger(i) :> ILogger)
-
-    static member Default = instances.[2]
-    static member Get v = instances.[v]
+type internal Logger private(verbosity : int) =
+    static member Default = Logger.Get 2
+    static member Get v = Logger(v) :> ILogger
 
     interface ILogger with
         member x.Verbosity = verbosity
-        member x.WithVerbosity(v) = instances.[v]
+        member x.WithVerbosity(v) = Logger.Get v
         member x.section (fmt : Printf.StringFormat<'a, (unit -> 'x) -> 'x>) =
             fmt |> Printf.kprintf (fun (str : string) ->
                 fun cont ->

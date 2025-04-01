@@ -53,7 +53,7 @@ type MemoryFeatures =
         BufferDeviceAddressMultiDevice: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "robust buffer access:   %A" x.RobustBufferAccess
         l.line "sparse binding:         %A" x.SparseBinding
         l.line "sparse buffers:         %A" x.SparseResidencyBuffer
@@ -108,7 +108,7 @@ type DescriptorFeatures =
         RuntimeDescriptorArray: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.section "update after bind: " (fun () ->
             l.line "uniform buffers:         %A" x.BindingUniformBufferUpdateAfterBind
             l.line "sampled images:          %A" x.BindingSampledImageUpdateAfterBind
@@ -140,7 +140,7 @@ type ImageFeatures =
         CompressionBC: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "cube arrays:              %A" x.ImageCubeArray
         l.line "ETC2 compression:         %A" x.CompressionETC2
         l.line "ASTC LDR compression:     %A" x.CompressionASTC_LDR
@@ -155,7 +155,7 @@ type SamplerFeatures =
         YcbcrConversion: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "anisotropy:           %A" x.Anisotropy
         l.line "ycbcr:                %A" x.YcbcrConversion
 
@@ -278,7 +278,7 @@ type ShaderFeatures =
         DrawParameters: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "geometry:                          %A" x.GeometryShader
         l.line "tesselation:                       %A" x.TessellationShader
         l.line "geometry / tesselation point size: %A" x.TessellationAndGeometryPointSize
@@ -342,7 +342,7 @@ type QueryFeatures =
         InheritedQueries: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "precise occlusion:   %A" x.OcclusionQueryPrecise
         l.line "pipeline statistics: %A" x.PipelineStatistics
         l.line "inherited queries:   %A" x.InheritedQueries
@@ -359,7 +359,7 @@ type DepthFeatures =
         BoundsTest: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "clamping:      %A" x.Clamp
         l.line "bias clamping: %A" x.BiasClamp
         l.line "bounds test:   %A" x.BoundsTest
@@ -376,7 +376,7 @@ type BlendFeatures =
         LogicOp: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "per-attachment:   %A" x.IndependentBlend
         l.line "dual-source:      %A" x.DualSrcBlend
         l.line "logic operations: %A" x.LogicOp
@@ -393,7 +393,7 @@ type DrawingFeatures =
         DrawIndirectFirstInstance: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "full 32-bit indices:          %A" x.FullDrawIndexUint32
         l.line "multi draw indirect:          %A" x.MultiDrawIndirect
         l.line "draw indirect first instance: %A" x.DrawIndirectFirstInstance
@@ -404,7 +404,7 @@ type MultiviewFeatures =
         MultiViewport: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "multiple viewports:             %A" x.MultiViewport
 
 type RasterizerFeatures =
@@ -430,7 +430,7 @@ type RasterizerFeatures =
         VariableMultisampleRate: bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "wide lines:                %A" x.WideLines
         l.line "large points:              %A" x.LargePoints
         l.line "non-solid fill mode:       %A" x.FillModeNonSolid
@@ -447,7 +447,7 @@ type GraphicsPipelineFeatures =
         Rasterizer: RasterizerFeatures
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.section "depth:" (fun () -> x.Depth.Print(l))
         l.section "blending:" (fun () -> x.Blending.Print(l))
         l.section "drawing:" (fun () -> x.Drawing.Print(l))
@@ -487,7 +487,7 @@ type RaytracingFeatures =
         AccelerationStructureHostCommands : bool
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.line "pipeline:                           %A" x.Pipeline
         l.line "ray queries:                        %A" x.RayQuery
         l.section "shader group handles: " (fun () ->
@@ -519,7 +519,7 @@ type DeviceFeatures =
         Raytracing : RaytracingFeatures
     }
 
-    member x.Print(l : ILogger) =
+    member internal x.Print(l : ILogger) =
         l.section "memory:" (fun () -> x.Memory.Print(l))
         l.section "descriptors:" (fun () -> x.Descriptors.Print(l))
         l.section "images:" (fun () -> x.Images.Print(l))

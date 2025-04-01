@@ -326,8 +326,8 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<stri
     member x.PhysicalDeviceGroup = physicalDevice :?> PhysicalDeviceGroup
     member x.IsDeviceGroup = isGroup
 
-    member x.PrintMemoryUsage(logger: ILogger) =
-        memoryAllocator.PrintUsage logger
+    member x.PrintMemoryUsage([<Optional; DefaultParameterValue(2)>] verbosity: int) =
+        memoryAllocator.PrintUsage verbosity
 
     interface IDevice with
         member x.Handle = x.Handle
