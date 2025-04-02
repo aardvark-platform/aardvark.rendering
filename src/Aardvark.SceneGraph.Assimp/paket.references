@@ -1,7 +1,7 @@
 Aardvark.Base.Incremental
 FShade.Core
 FShade.GLSL
-AssimpNet
+Aardvark.Data.Assimp
 FSharp.Core
 Aardvark.Base.Tensors
 Aardvark.Build

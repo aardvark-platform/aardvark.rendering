@@ -33,7 +33,7 @@ nuget CommonMark.NET                                ~> 0.15.1
 nuget GLSLangSharp                                  ~> 0.4.14
 
 nuget Unofficial.LibTessDotNet                      ~> 2.0.2
-nuget AssimpNet                                     ~> 5.0.0-beta1
+nuget Aardvark.Data.Assimp                          ~> 1.0.1
 nuget Offler                                        ~> 2.1.1
 nuget FSharp.Data                                   ~> 6.4.0
 

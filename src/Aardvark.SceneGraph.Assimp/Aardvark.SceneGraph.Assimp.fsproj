@@ -15,10 +15,9 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
-  <PropertyGroup Condition="($(DesignTimeBuild) == true)">
-    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
-  </PropertyGroup>
   <ItemGroup>
+    <None Include="paket.references" />
+    <None Include="paket.template" />
     <Compile Include="Loader.fs" />
     <Compile Include="AssimpExporter.fs" />
   </ItemGroup>

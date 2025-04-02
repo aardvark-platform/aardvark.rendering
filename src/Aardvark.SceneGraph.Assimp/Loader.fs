@@ -334,8 +334,8 @@ module Loader =
 
         [<AutoOpen>]
         module Conversions =
-            let toC4f (c : Assimp.Color4D) =
-                C4f(c.R, c.G, c.B, c.A)
+            let toC4f (c : System.Numerics.Vector4) =
+                C4f(c.X, c.Y, c.Z, c.W)
 
             let toBlendMode (m : Assimp.BlendMode) =
                 match m with
@@ -416,7 +416,7 @@ module Loader =
                 textureFiles
                 
 
-            let toTextures (table : Map<string, Map<Symbol, string>>) (m : Assimp.TextureSlot[]) : Map<Symbol, Texture> =
+            let toTextures (table : Map<string, Map<Symbol, string>>) (m : Assimp.TextureSlot seq) : Map<Symbol, Texture> =
                 let slots = 
                     m |> Seq.toList |> List.map (fun slot -> 
                         let path = slot.FilePath.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar)
@@ -470,21 +470,21 @@ module Loader =
 
                 textures
 
-            let toM44d (m : Assimp.Matrix4x4) : M44d =
+            let toM44d (m : System.Numerics.Matrix4x4) : M44d =
                 M44d(
-                    float m.A1, float m.A2, float m.A3, float m.A4,
-                    float m.B1, float m.B2, float m.B3, float m.B4,
-                    float m.C1, float m.C2, float m.C3, float m.C4,
-                    float m.D1, float m.D2, float m.D3, float m.D4
+                    float m.M11, float m.M12, float m.M13, float m.M14,
+                    float m.M21, float m.M22, float m.M23, float m.M24,
+                    float m.M31, float m.M32, float m.M33, float m.M34,
+                    float m.M41, float m.M42, float m.M43, float m.M44
                 )
 
-            let toV3d (v : Assimp.Vector3D) =
+            let toV3d (v : System.Numerics.Vector3) =
                 V3d(v.X, v.Y, v.Z)
 
-            let toV2d (v : Assimp.Vector2D) =
+            let toV2d (v : System.Numerics.Vector2) =
                 V2d(v.X, v.Y)
                
-            let toQuaternion (v : Assimp.Quaternion) =
+            let toQuaternion (v : System.Numerics.Quaternion) =
                 Rot3d(QuaternionD(float v.W, float v.X, float v.Y, float v.Z).Normalized)
 
             let private toV4i (arr : int[]) =
@@ -616,7 +616,7 @@ module Loader =
                     let indices = m.GetIndices()
                     let identity = indices |> Seq.indexed |> Seq.forall(fun (a,b) -> a = b)
                     if not identity then
-                        res.IndexArray <- indices
+                        res.IndexArray <- Array.ofSeq indices
 
                     
                     
@@ -800,15 +800,15 @@ module Loader =
                         0
 
 
-                let duration = a.DurationInTicks * a.TicksPerSecond
+                let duration = a.DurationInTicks / a.TicksPerSecond
                 let fps = float frames / duration
 
                 let keyFrames = Dict.empty
 
                 for na in a.NodeAnimationChannels do
-                    let pos         = na.PositionKeys |> Seq.map (fun e -> e.Time, toV3d e.Value) |> MapExt.ofSeq
-                    let rot         = na.RotationKeys |> Seq.map (fun e -> e.Time, toQuaternion e.Value) |> MapExt.ofSeq
-                    let scale       = na.ScalingKeys |> Seq.map (fun e -> e.Time, toV3d e.Value) |> MapExt.ofSeq
+                    let pos   = na.PositionKeys |> Seq.map (fun e -> e.Time / a.TicksPerSecond, toV3d e.Value) |> MapExt.ofSeq
+                    let rot   = na.RotationKeys |> Seq.map (fun e -> e.Time / a.TicksPerSecond, toQuaternion e.Value) |> MapExt.ofSeq
+                    let scale = na.ScalingKeys |> Seq.map (fun e -> e.Time / a.TicksPerSecond, toV3d e.Value) |> MapExt.ofSeq
 
                     let position (t : float) =
                         let (l,s,r) = MapExt.neighbours t pos

@@ -129,7 +129,7 @@ module Assimp =
                 | _ ->
                     if m.HasFaces && m.FaceCount > 0 && m.PrimitiveType = PrimitiveType.Triangle then
                         let scene : Scene  = scope.Scene
-                        let indexArray = m.GetIndices()
+                        let indexArray = Array.ofSeq <| m.GetIndices()
 
                         let vertexCount = m.Vertices.Count
 
@@ -163,7 +163,7 @@ module Assimp =
                         // if the mesh is indexed use its index for determinig the
                         // total face-vertex-count. otherwise use any 
                         let faceVertexCount =
-                            if indexArray <> null then
+                            if indexArray.Length > 0 then
                                 indexArray.Length
                             else
                                 vertexCount
@@ -190,7 +190,7 @@ module Assimp =
                                 ) :> ISg
 
                             let sg =
-                                if indexArray <> null then
+                                if indexArray.Length > 0 then
                                     Sg.VertexIndexApplicator(BufferView.ofArray indexArray, sg) :> ISg
                                 else
                                     sg
@@ -220,13 +220,13 @@ module Assimp =
 
         // another utility function for converting
         // transformation matrices
-        let toTrafo (m : Matrix4x4) =
+        let toTrafo (m : System.Numerics.Matrix4x4) =
             let m = 
                 M44d(
-                    float m.A1, float m.A2, float m.A3, float m.A4,
-                    float m.B1, float m.B2, float m.B3, float m.B4,
-                    float m.C1, float m.C2, float m.C3, float m.C4,
-                    float m.D1, float m.D2, float m.D3, float m.D4
+                    float m.M11, float m.M12, float m.M13, float m.M14,
+                    float m.M21, float m.M22, float m.M23, float m.M24,
+                    float m.M31, float m.M32, float m.M33, float m.M34,
+                    float m.M41, float m.M42, float m.M43, float m.M44
                 )
 
             Trafo3d(m, m.Inverse)
