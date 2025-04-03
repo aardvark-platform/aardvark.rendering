@@ -359,26 +359,17 @@ module Utilities =
             | Backend.GL -> new OpenGlApplication(debug) :> IApplication
             | Backend.Vulkan -> new VulkanApplication(debug) :> IApplication
 
-    let private chooseDevice (cfg : RenderConfig) (devices : list<PhysicalDevice>) =
-        let filtered =
-            devices |> List.filter (fun d ->
-                let kind = 
-                    match d.Type with
-                        | VkPhysicalDeviceType.DiscreteGpu -> 
-                            DeviceKind.Dedicated
-                        | VkPhysicalDeviceType.IntegratedGpu
-                        | VkPhysicalDeviceType.Cpu ->
-                            DeviceKind.Integrated
-                        | _ ->
-                            DeviceKind.Unknown
-                            
-                kind &&& cfg.deviceKind <> DeviceKind.None
-            )
+    let private deviceChooser (cfg : RenderConfig)=
+        match cfg.deviceKind with
+        | DeviceKind.Any | DeviceKind.None | DeviceKind.Unknown ->
+            DeviceChooserAuto()
 
-        match filtered with
-            | [f] -> ConsoleDeviceChooser.run' (Some f) devices
-            | _ -> ConsoleDeviceChooser.run devices
-                
+        | kind ->
+            let preferDedicated =
+                kind.HasFlag DeviceKind.Dedicated ||
+                not <| kind.HasFlag DeviceKind.Integrated
+
+            DeviceChooserAuto preferDedicated
 
     let createApplication (cfg : RenderConfig) =
         match cfg.app with
@@ -388,12 +379,8 @@ module Utilities =
             match cfg.backend with
             | Backend.GL -> 
                 new OpenGlApplication(cfg.deviceKind = DeviceKind.Dedicated, cfg.debug) :> IApplication
-            | Backend.Vulkan -> 
-                VulkanApplication.SetDeviceChooser(fun ds ->
-                    let res = chooseDevice cfg (Array.toList ds)
-                    Array.IndexOf(ds, res)
-                )
-                let app = new VulkanApplication(cfg.debug) 
+            | Backend.Vulkan ->
+                let app = new VulkanApplication(cfg.debug, chooser = deviceChooser cfg)
                 app :> IApplication
 
     let createGameWindow (app : IApplication) (cfg : RenderConfig) =
@@ -610,10 +597,10 @@ module Utilities =
         let app = 
             match cfg.backend with
                 | Backend.Vulkan ->
-                    let app = new VulkanVRApplicationLayered(cfg.samples, cfg.debug)
+                    let app = new VulkanVRApplicationLayered(cfg.debug, cfg.samples, chooser = deviceChooser cfg)
                     app :> VrRenderer
                 | Backend.GL ->
-                    let app = new OpenGlVRApplicationLayered(cfg.samples, cfg.debug)
+                    let app = new OpenGlVRApplicationLayered(cfg.debug, cfg.samples)
                     app :> VrRenderer
 
         let hmdLocation = app.Hmd.MotionState.Pose |> AVal.map (fun t -> t.Forward.C3.XYZ)

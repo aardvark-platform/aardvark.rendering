@@ -1,10 +1,11 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open Aardvark.Base
+open System.Runtime.InteropServices
 open Aardvark.Rendering
 
-type HeadlessVulkanApplication(debug : IDebugConfig, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
+type HeadlessVulkanApplication(debug: IDebugConfig, instanceExtensions: string seq, deviceExtensions: PhysicalDevice -> string seq,
+                               [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
     let debug = DebugConfig.unbox debug
 
     let requestedExtensions =
@@ -28,10 +29,10 @@ type HeadlessVulkanApplication(debug : IDebugConfig, instanceExtensions : list<s
 
     let instance = 
         let availableExtensions =
-            Instance.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
+            Instance.GlobalExtensions |> Seq.map _.name |> Set.ofSeq
 
         let availableLayers =
-            Instance.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
+            Instance.AvailableLayers |> Seq.map _.name |> Set.ofSeq
 
         // create an instance
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
@@ -41,23 +42,24 @@ type HeadlessVulkanApplication(debug : IDebugConfig, instanceExtensions : list<s
 
 
     // choose a physical device
-    let physicalDevice = 
+    let physicalDevice =
         if instance.Devices.Length = 0 then
             failwithf "[Vulkan] could not get vulkan devices"
         else
-            ConsoleDeviceChooser.run (CustomDeviceChooser.Filter instance.Devices)
+            let chooser = if chooser <> null then chooser else DeviceChooserAuto(preferDedicated = true)
+            chooser.Run instance.Devices
 
     do instance.PrintInfo(physicalDevice, debug.PlatformInformationVerbosity)
 
     // create a device
     let device = 
         let availableExtensions =
-            physicalDevice.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
+            physicalDevice.GlobalExtensions |> Seq.map _.name |> Set.ofSeq
 
         let devExt = deviceExtensions physicalDevice
-        let devExt = devExt |> List.filter (fun r -> Set.contains r availableExtensions)
+        let devExt = devExt |> Seq.filter (fun r -> Set.contains r availableExtensions)
 
-        physicalDevice.CreateDevice(requestedExtensions @ devExt)
+        physicalDevice.CreateDevice(Seq.append requestedExtensions devExt)
 
     // create a runtime
     let runtime = new Runtime(device)
@@ -71,12 +73,17 @@ type HeadlessVulkanApplication(debug : IDebugConfig, instanceExtensions : list<s
     member x.Device = device
     member x.Runtime = runtime
 
-    new(debug : bool, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
-        new HeadlessVulkanApplication(DebugLevel.ofBool debug, instanceExtensions, deviceExtensions)
+    new(debug: IDebugConfig,
+        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser : IDeviceChooser) =
+        new HeadlessVulkanApplication(debug, [], (fun _ -> Seq.empty), chooser)
 
-    new() = new HeadlessVulkanApplication(DebugLevel.None, [], fun _ -> [])
-    new(debug : IDebugConfig) = new HeadlessVulkanApplication(debug, [], fun _ -> [])
-    new(debug : bool) = new HeadlessVulkanApplication(debug, [], fun _ -> [])
+    new(debug: bool, instanceExtensions: string seq, deviceExtensions : PhysicalDevice -> string seq,
+        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser : IDeviceChooser) =
+        new HeadlessVulkanApplication(DebugLevel.ofBool debug, instanceExtensions, deviceExtensions, chooser)
+
+    new([<Optional; DefaultParameterValue(false)>] debug: bool,
+        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
+        new HeadlessVulkanApplication(debug, [], (fun _ -> Seq.empty), chooser)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

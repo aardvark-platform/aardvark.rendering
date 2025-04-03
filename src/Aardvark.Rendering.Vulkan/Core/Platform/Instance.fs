@@ -98,7 +98,7 @@ module Instance =
         let Validation          = "VK_LAYER_KHRONOS_validation"
         let Nsight              = "VK_LAYER_NV_nsight"
 
-type Instance(apiVersion : Version, layers : list<string>, extensions : list<string>, debug : IDebugConfig) as this =
+type Instance(apiVersion : Version, layers : string seq, extensions : string seq, debug : IDebugConfig) as this =
 
     static let defaultVersion = Version(1, 1, 0)
 
@@ -167,16 +167,16 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
     let extensions =
         if debug.DebugReportEnabled || debug.ValidationLayerEnabled then
-            extensions @ [Instance.Extensions.Debug]
+            List.ofSeq extensions @ [Instance.Extensions.Debug]
         else
-            extensions |> List.filter ((<>) Instance.Extensions.Debug)
+            extensions |> List.ofSeq |> List.filter ((<>) Instance.Extensions.Debug)
         |> List.distinct
 
     let layers =
         if debug.ValidationLayerEnabled then
-            layers @ [Instance.Layers.Validation]
+            List.ofSeq layers @ [Instance.Layers.Validation]
         else
-            layers |> List.filter ((<>) Instance.Layers.Validation)
+            layers |> List.ofSeq |> List.filter ((<>) Instance.Layers.Validation)
 
     let layers, instanceExtensions = filterLayersAndExtensions layers extensions
 

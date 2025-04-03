@@ -119,34 +119,24 @@ type VulkanApplication private (app : HeadlessVulkanApplication, hideCocoaMenuBa
         |> Set.ofArray
         |> Set.add "VK_KHR_swapchain"
 
-    static let getExtensions (user : list<string>) =
+    static let getExtensions (user : string seq) =
         let mutable r = surfaceExtensions
-        for u in user do r <- Set.add u r
+        if user <> null then
+            for u in user do r <- Set.add u r
         r |> Set.toList
 
-    new(userExt : list<string>, debug : IDebugConfig,
-        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
-        let app = new HeadlessVulkanApplication(debug, getExtensions userExt, (fun _ -> []))
+    new(debug : IDebugConfig,
+        [<Optional; DefaultParameterValue(null : string seq)>] extensions : string seq,
+        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool,
+        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
+        let app = new HeadlessVulkanApplication(debug, getExtensions extensions, (fun _ -> Seq.empty), chooser)
         new VulkanApplication(app, hideCocoaMenuBar)
 
-    new(userExt : list<string>,
-        [<Optional; DefaultParameterValue(false)>] debug : bool,
-        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
-        new VulkanApplication(userExt, DebugLevel.ofBool debug, hideCocoaMenuBar)
-
-    new(debug : IDebugConfig,
-        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
-        new VulkanApplication([], debug, hideCocoaMenuBar)
-
     new([<Optional; DefaultParameterValue(false)>] debug : bool,
-        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
-        new VulkanApplication([], debug, hideCocoaMenuBar)
-
-    static member SetDeviceChooser(chooser : PhysicalDevice[] -> int) =
-        Aardvark.Rendering.Vulkan.CustomDeviceChooser.Register(fun ds ->
-            let ds = Seq.toArray ds
-            ds.[chooser ds]
-        )
+        [<Optional; DefaultParameterValue(null : string seq)>] extensions : string seq,
+        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool,
+        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
+        new VulkanApplication(DebugLevel.ofBool debug, extensions, hideCocoaMenuBar, chooser)
 
     member x.Runtime = app.Runtime
 

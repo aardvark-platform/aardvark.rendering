@@ -19,7 +19,7 @@ type UploadMode =
     | Sync
     | Async
 
-type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<string>) =
+type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string seq) =
     let isGroup, physicalDevices =
         match physicalDevice with
         | :? PhysicalDeviceGroup as g -> true, g.Devices
@@ -80,9 +80,9 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<stri
 
     let wantedExtensions =
         if instance.DebugConfig.DebugPrintEnabled then
-            wantedExtensions @ [KHRShaderNonSemanticInfo.Name]
+            List.ofSeq wantedExtensions @ [KHRShaderNonSemanticInfo.Name]
         else
-            wantedExtensions
+            List.ofSeq wantedExtensions
 
     let enabledExtensions =
         let availableExtensions = physicalDevice.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
@@ -198,7 +198,7 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: list<stri
         stagingMemory <- memoryAllocator.GetMemory(preferDevice = false, hostAccess = HostAccess.WriteOnly)
         readbackMemory <- memoryAllocator.GetMemory(preferDevice = false, hostAccess = HostAccess.ReadWrite)
 
-    static member Create(physicalDevice: PhysicalDevice, wantedExtensions: string list) =
+    static member Create(physicalDevice: PhysicalDevice, wantedExtensions: string seq) =
         let device = new Device(physicalDevice, wantedExtensions)
         device.Initialize()
         device
@@ -350,7 +350,7 @@ module IDeviceObjectExtensions =
 type DeviceExtensions private() =
 
     [<Extension>]
-    static member CreateDevice(this: PhysicalDevice, wantedExtensions: list<string>) =
+    static member CreateDevice(this: PhysicalDevice, wantedExtensions: string seq) =
         Device.Create(this, wantedExtensions)
 
     [<Extension>]

@@ -1,59 +1,46 @@
 ﻿namespace Aardvark.Application.WinForms
 
 open System
-open System.Diagnostics
-open System.Collections.Concurrent
 open Aardvark.Application
 open Aardvark.Rendering.Vulkan
 open Aardvark.Base
 open Aardvark.Rendering
-open FSharp.Data.Adaptive
-open FSharp.Data.Adaptive.Operators
 open System.Runtime.InteropServices
+open System.Windows.Forms
 
-module VisualDeviceChooser =
-    open System.Windows.Forms
+/// Device chooser with a GUI.
+type DeviceChooserVisual() =
+    inherit DeviceChooser()
 
-    let run(devices : list<PhysicalDevice>) =
-        match devices with
-        | [single] -> single
-        | _ ->
-            let choose() =
-                let chosen =
-                    devices
-                    |> List.mapi (fun i d ->
-                        let prefix =
-                            match d with
-                            | :? PhysicalDeviceGroup as g -> sprintf "%d x "g.Devices.Length
-                            | _ -> ""
-                        let name = sprintf "%s%s" prefix d.FullName
-                        name, d
-                    )
-                    |> ChooseForm.run
+    override this.IgnoreCache = Control.ModifierKeys = Keys.Alt
 
-                match chosen with
-                | Some d ->
-                    ConsoleDeviceChooser.Config.write d devices
-                    d
-                | None ->
-                    Log.warn "no vulkan device chosen => stopping Application"
-                    Environment.Exit 0
-                    failwith ""
+    override this.Choose(devices) =
+        devices
+        |> Array.map (fun d ->
+            let prefix =
+                match d with
+                | :? PhysicalDeviceGroup as g -> $"{g.Devices.Length} x "
+                | _ -> ""
 
-            if Control.ModifierKeys <> Keys.Alt then
-                match ConsoleDeviceChooser.Config.tryRead devices with
-                | Some chosen -> chosen
-                | _ -> choose()
-            else
-                choose()
+            $"{prefix}{d.FullName}", d
+        )
+        |> ChooseForm.run
+        |> Option.defaultWith (fun _ ->
+            Log.warn "no vulkan device chosen => stopping Application"
+            Environment.Exit 0
+            Unchecked.defaultof<_>
+        )
 
-
-
-type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+type VulkanApplication(debug: IDebugConfig,
+                       [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq,
+                       [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
     let debug = DebugConfig.unbox debug
 
     let requestedExtensions =
         [
+            if extensions <> null then
+                yield! extensions
+
             yield Instance.Extensions.Surface
             yield Instance.Extensions.SwapChain
             yield Instance.Extensions.Win32Surface
@@ -78,10 +65,10 @@ type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice>
 
     let instance = 
         let availableExtensions =
-            Instance.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
+            Instance.GlobalExtensions |> Seq.map _.name |> Set.ofSeq
 
         let availableLayers =
-            Instance.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
+            Instance.AvailableLayers |> Seq.map _.name |> Set.ofSeq
 
         // create an instance
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
@@ -94,14 +81,15 @@ type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice>
         if instance.Devices.Length = 0 then
             failwithf "[Vulkan] could not get vulkan devices"
         else
-            chooseDevice (Seq.toList (CustomDeviceChooser.Filter instance.Devices))
+            let chooser = if chooser <> null then chooser else DeviceChooserVisual()
+            chooser.Run instance.Devices
 
     do instance.PrintInfo(physicalDevice, debug.PlatformInformationVerbosity)
 
     // create a device
     let device = 
         let availableExtensions =
-            physicalDevice.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
+            physicalDevice.GlobalExtensions |> Seq.map _.name |> Set.ofSeq
   
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
 
@@ -150,11 +138,7 @@ type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice>
 
         member x.Dispose() = x.Dispose()
 
-
-    new(debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
-        new VulkanApplication(DebugLevel.ofBool debug, chooseDevice)
-
-    new(debug : IDebugConfig) = new VulkanApplication(debug, VisualDeviceChooser.run)
-    new(debug : bool)         = new VulkanApplication(debug, VisualDeviceChooser.run)
-    new(chooser)              = new VulkanApplication(DebugLevel.None, chooser)
-    new()                     = new VulkanApplication(DebugLevel.None, VisualDeviceChooser.run)
+    new([<Optional; DefaultParameterValue(false)>] debug: bool,
+        [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq,
+        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
+        new VulkanApplication(DebugLevel.ofBool debug, extensions, chooser)

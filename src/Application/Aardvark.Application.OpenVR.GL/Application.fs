@@ -8,6 +8,7 @@ open Aardvark.Rendering.GL
 open Aardvark.Application
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
+open System.Runtime.InteropServices
 
 module StereoShader =
     open FShade
@@ -55,7 +56,8 @@ module StereoShader =
 type private DummyObject() =
     inherit AdaptiveObject()
 
-type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize : V2i -> V2i)  =
+type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
+                                [<Optional; DefaultParameterValue(1)>] samples: int)  =
     inherit VrRenderer(adjustSize)
 
     let app = new Aardvark.Application.Slim.OpenGlApplication(true, debug)
@@ -285,6 +287,11 @@ type OpenGlVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize 
     interface IRenderWindow with
         member x.Run() = x.Run()
 
-    new(samples : int, debug : bool, adjustSize : V2i -> V2i) = new OpenGlVRApplicationLayered(samples, DebugLevel.ofBool debug, adjustSize)
-    new(samples : int, debug : IDebugConfig) = new OpenGlVRApplicationLayered(samples, debug, id)
-    new(samples : int, debug : bool) = new OpenGlVRApplicationLayered(samples, debug, id)
+    new(debug: IDebugConfig, [<Optional; DefaultParameterValue(1)>] samples: int) =
+        new OpenGlVRApplicationLayered(debug, id, samples)
+
+    new(debug: bool, adjustSize: V2i -> V2i, [<Optional; DefaultParameterValue(1)>] samples: int) =
+        new OpenGlVRApplicationLayered(DebugLevel.ofBool debug, adjustSize)
+
+    new([<Optional; DefaultParameterValue(false)>] debug: bool, [<Optional; DefaultParameterValue(1)>] samples: int) =
+        new OpenGlVRApplicationLayered(debug, id, samples)

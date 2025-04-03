@@ -35,6 +35,8 @@
     <Compile Include="Core\Platform\PhysicalDeviceGroup.fs" />
     <Compile Include="Core\Platform\Instance.fs" />
     <Compile Include="Core\Platform\DeviceChooser.fs" />
+    <Compile Include="Core\Platform\DeviceChooserConsole.fs" />
+    <Compile Include="Core\Platform\DeviceChooserAuto.fs" />
     <Compile Include="Core\Platform\DebugReport.fs" />
     <Compile Include="Core\Interfaces.fs" />
     <Compile Include="Core\Memory\ExternalMemory.fs" />

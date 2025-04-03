@@ -993,17 +993,17 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
         with get() = depthRange.Value
         and set r = transact (fun () -> depthRange.Value <- r)
 
-    member x.GetVulkanInstanceExtensions() = 
+    member x.GetVulkanInstanceExtensions() : string seq =
         let b = System.Text.StringBuilder(4096, 4096)
         let len = compositor.GetVulkanInstanceExtensionsRequired(b, 4096u) 
         let str = b.ToString()
-        str.Split(' ') |> Array.toList
+        str.Split(' ')
 
-    member x.GetVulkanDeviceExtensions(physicalDevice : nativeint) = 
+    member x.GetVulkanDeviceExtensions(physicalDevice : nativeint) : string seq =
         let b = System.Text.StringBuilder(4096, 4096)
         let len = compositor.GetVulkanDeviceExtensionsRequired(physicalDevice, b, 4096u) 
         let str = b.ToString()
-        str.Split(' ') |> Array.toList
+        str.Split(' ')
 
     member x.System = system
     member x.Compositor = compositor

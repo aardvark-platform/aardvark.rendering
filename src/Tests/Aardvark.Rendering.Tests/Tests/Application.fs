@@ -105,8 +105,6 @@ module TestApplication =
         open Aardvark.Rendering.Vulkan
 
         let create (debug : IDebugConfig) =
-            CustomDeviceChooser.Register Seq.head
-
             let headless = new HeadlessVulkanApplication(debug)
 
             let app =
