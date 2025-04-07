@@ -156,8 +156,8 @@ module Effect =
             let L = uniform.LightLocation - position |> Vec.normalize
             let NdotL = Vec.dot normal L |> max 0.0
 
-            let ambient = 0.3
-            ambient + NdotL
+            let ambient = 0.1
+            ambient + 0.9 * NdotL
 
         [<ReflectedDefinition>]
         let specularLighting (shininess : float) (normal : V3d) (position : V3d) =
@@ -165,7 +165,7 @@ module Effect =
             let V = uniform.CameraLocation - position |> Vec.normalize
             let R = Vec.reflect normal -L
             let VdotR = Vec.dot V R |> max 0.0
-            pow VdotR shininess
+            0.8 * pow VdotR shininess
 
         [<ReflectedDefinition>]
         let reflection (depth : int) (direction : V3d) (normal : V3d) (position : V3d) =
@@ -178,7 +178,7 @@ module Effect =
                 V3d.Zero
 
         [<ReflectedDefinition>]
-        let lightingWithShadow (mask : int32) (reflectiveness : float) (specularAmount : float) (shininess : float)
+        let lightingWithShadow (mask : int32) (diffuse : V3d) (reflectiveness : float) (specularAmount : float) (shininess : float)
                                (position : V3d) (normal : V3d) (input : RayHitInput<Payload>) =
 
             let shadowed =
@@ -186,14 +186,14 @@ module Effect =
                 let flags = RayFlags.SkipClosestHitShader ||| RayFlags.TerminateOnFirstHit ||| RayFlags.Opaque ||| RayFlags.CullFrontFacingTriangles
                 mainScene.TraceRay<bool>(position, direction, payload = true, miss = "MissShadow", flags = flags, minT = 0.01, cullMask = mask)
 
-            let diffuse = diffuseLighting normal position
+            let diffuse = diffuse * diffuseLighting normal position
 
             let result =
                 if reflectiveness > 0.0 then
                     let reflection = reflection input.payload.recursionDepth input.ray.direction normal position
-                    reflectiveness |> lerp (V3d(diffuse)) reflection
+                    diffuse + reflectiveness * reflection
                 else
-                    V3d(diffuse)
+                    diffuse
 
             if shadowed then
                 0.3 * result
@@ -216,9 +216,9 @@ module Effect =
                     let m = uniform.NormalMatrices.[info.InstanceAttributeIndex]
                     (m * n) |> Vec.normalize
 
-                let color = uniform.FaceColors.[info.BasePrimitive + input.geometry.primitiveId]
-                let diffuse = lightingWithShadow 0xFF 0.0 1.0 16.0 position normal input
-                return { color = color * diffuse; recursionDepth = 0 }
+                let diffuse = uniform.FaceColors.[info.BasePrimitive + input.geometry.primitiveId]
+                let color = lightingWithShadow 0xFF diffuse 0.0 1.0 16.0 position normal input
+                return { color = color; recursionDepth = 0 }
             }
 
         let chitTextured (input : RayHitInput<Payload>) =
@@ -234,9 +234,9 @@ module Effect =
                 let texCoords =
                     getTextureCoords indices input
 
-                let color = textureFloor.Sample(texCoords).XYZ
-                let diffuse = lightingWithShadow 0xFF 0.3 0.5 28.0 position V3d.ZAxis input
-                return { color = color * diffuse; recursionDepth = 0 }
+                let diffuse = textureFloor.Sample(texCoords).XYZ
+                let color = lightingWithShadow 0xFF diffuse 0.3 0.5 28.0 position V3d.ZAxis input
+                return { color = color; recursionDepth = 0 }
             }
 
         let chitSphere (input : RayHitInput<Payload>) =
@@ -246,9 +246,9 @@ module Effect =
                 let center = input.objectSpace.objectToWorld.TransformPos uniform.SphereOffsets.[input.geometry.geometryIndex]
                 let normal = Vec.normalize (position - center)
 
-                let color = uniform.Colors.[info.GeometryAttributeIndex]
-                let diffuse = lightingWithShadow 0x7F 0.8 1.0 28.0 position normal input
-                return { color = color * diffuse; recursionDepth = 0 }
+                let diffuse = uniform.Colors.[info.GeometryAttributeIndex]
+                let color = lightingWithShadow 0x7F diffuse 0.4 0.8 28.0 position normal input
+                return { color = color; recursionDepth = 0 }
             }
 
         let intersectionSphere (radius : float) (input : RayIntersectionInput) =
