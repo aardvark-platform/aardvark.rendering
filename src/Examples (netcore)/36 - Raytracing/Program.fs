@@ -51,8 +51,10 @@ module Effect =
 
         type Payload =
             {
-                recursionDepth : int
-                color : V3d
+                color       : V3d
+                origin      : V3d
+                direction   : V3d
+                attenuation : float
             }
 
         let private mainScene =
@@ -77,9 +79,22 @@ module Effect =
             let target = uniform.ProjTrafoInv * V4d(d, 1.0, 1.0)
             let direction = uniform.ViewTrafoInv * V4d(target.XYZ.Normalized, 0.0)
 
-            let payload = { recursionDepth = 0; color = V3d.Zero }
-            let result = mainScene.TraceRay<Payload>(origin.XYZ, direction.XYZ, payload, flags = RayFlags.CullBackFacingTriangles)
-            result.color
+            let mutable depth = 0
+            let mutable final = V3d.Zero
+
+            let mutable payload =
+                { color       = V3d.Zero
+                  origin      = origin.XYZ
+                  direction   = direction.XYZ
+                  attenuation = 1.0 }
+
+            while depth < uniform.RecursionDepth && payload.attenuation > 0.0 do
+                let attenuation = payload.attenuation
+                payload <- mainScene.TraceRay<Payload>(payload.origin, payload.direction, payload, flags = RayFlags.CullBackFacingTriangles)
+                final <- final + payload.color * attenuation
+                depth <- depth + 1
+
+            final
 
         let rgenMain (input : RayGenerationInput) =
             raygen {
@@ -105,7 +120,12 @@ module Effect =
                     else
                         bottom
 
-                return { color = color; recursionDepth = 0 }
+                return {
+                    color       = color
+                    origin      = V3d.Zero
+                    direction   = V3d.Zero
+                    attenuation = 0.0
+                }
             }
 
         let missShadow =
@@ -168,16 +188,6 @@ module Effect =
             0.8 * pow VdotR shininess
 
         [<ReflectedDefinition>]
-        let reflection (depth : int) (direction : V3d) (normal : V3d) (position : V3d) =
-            if depth < uniform.RecursionDepth then
-                let direction = Vec.reflect normal direction
-                let payload = { recursionDepth = depth + 1; color = V3d.Zero }
-                let result = mainScene.TraceRay(position, direction, payload, flags = RayFlags.CullBackFacingTriangles)
-                result.color
-            else
-                V3d.Zero
-
-        [<ReflectedDefinition>]
         let lightingWithShadow (mask : int32) (diffuse : V3d) (reflectiveness : float) (specularAmount : float) (shininess : float)
                                (position : V3d) (normal : V3d) (input : RayHitInput<Payload>) =
 
@@ -186,20 +196,19 @@ module Effect =
                 let flags = RayFlags.SkipClosestHitShader ||| RayFlags.TerminateOnFirstHit ||| RayFlags.Opaque ||| RayFlags.CullFrontFacingTriangles
                 mainScene.TraceRay<bool>(position, direction, payload = true, miss = "MissShadow", flags = flags, minT = 0.01, cullMask = mask)
 
-            let diffuse = diffuse * diffuseLighting normal position
+            let color =
+                let diffuse = diffuse * diffuseLighting normal position
 
-            let result =
-                if reflectiveness > 0.0 then
-                    let reflection = reflection input.payload.recursionDepth input.ray.direction normal position
-                    diffuse + reflectiveness * reflection
+                if shadowed then
+                    diffuse * 0.3
                 else
-                    diffuse
+                    let specular = specularLighting shininess normal position
+                    diffuse + specularAmount * V3d(specular)
 
-            if shadowed then
-                0.3 * result
-            else
-                let specular = specularLighting shininess normal position
-                result + specularAmount * V3d(specular)
+            { color       = color
+              origin      = position
+              direction   = Vec.reflect normal input.ray.direction
+              attenuation = input.payload.attenuation * reflectiveness }
 
         let chitFaceColor (input : RayHitInput<Payload>) =
             closestHit {
@@ -217,8 +226,7 @@ module Effect =
                     (m * n) |> Vec.normalize
 
                 let diffuse = uniform.FaceColors.[info.BasePrimitive + input.geometry.primitiveId]
-                let color = lightingWithShadow 0xFF diffuse 0.0 1.0 16.0 position normal input
-                return { color = color; recursionDepth = 0 }
+                return lightingWithShadow 0xFF diffuse 0.0 1.0 16.0 position normal input
             }
 
         let chitTextured (input : RayHitInput<Payload>) =
@@ -235,8 +243,7 @@ module Effect =
                     getTextureCoords indices input
 
                 let diffuse = textureFloor.Sample(texCoords).XYZ
-                let color = lightingWithShadow 0xFF diffuse 0.3 0.5 28.0 position V3d.ZAxis input
-                return { color = color; recursionDepth = 0 }
+                return lightingWithShadow 0xFF diffuse 0.3 0.5 28.0 position V3d.ZAxis input
             }
 
         let chitSphere (input : RayHitInput<Payload>) =
@@ -247,8 +254,7 @@ module Effect =
                 let normal = Vec.normalize (position - center)
 
                 let diffuse = uniform.Colors.[info.GeometryAttributeIndex]
-                let color = lightingWithShadow 0x7F diffuse 0.4 0.8 28.0 position normal input
-                return { color = color; recursionDepth = 0 }
+                return lightingWithShadow 0x7F diffuse 0.4 0.8 28.0 position normal input
             }
 
         let intersectionSphere (radius : float) (input : RayIntersectionInput) =
@@ -539,7 +545,7 @@ let main argv =
             Effect            = Effect.main
             Scenes            = Map.ofList [Sym.ofString "MainScene", scene]
             Uniforms          = uniforms
-            MaxRecursionDepth = AVal.constant 2048
+            MaxRecursionDepth = AVal.constant 1
         }
 
     let traceOutput =
