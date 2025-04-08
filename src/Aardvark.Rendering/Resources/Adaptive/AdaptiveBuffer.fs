@@ -106,16 +106,19 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
     let mutable handle : ValueOption<IBackendBuffer> = ValueNone
     let usage = usage ||| BufferUsage.Read
 
+    abstract member CreateHandle : size: nativeint * usage: BufferUsage * storage: BufferStorage -> IBackendBuffer
+    default _.CreateHandle(size, usage, storage) = runtime.CreateBuffer(size, usage, storage)
+
     member private x.ComputeHandle(discard : bool) =
         match handle with
         | ValueNone ->
-            let h = runtime.CreateBuffer(size, usage, storage)
+            let h = x.CreateHandle(size, usage, storage)
             handle <- ValueSome h
             h
 
         | ValueSome old ->
             if old.SizeInBytes <> size then
-                let resized = runtime.CreateBuffer(size, usage, storage)
+                let resized = x.CreateHandle(size, usage, storage)
 
                 if not discard then
                     runtime.Copy(old, 0n, resized, 0n, min old.SizeInBytes size)
@@ -167,7 +170,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
         handle <- ValueNone
         size <- 0n
 
-    override x.Compute(t, rt) =
+    override x.Compute(_, _) =
         x.ComputeHandle(false)
 
     interface IAdaptiveBuffer with

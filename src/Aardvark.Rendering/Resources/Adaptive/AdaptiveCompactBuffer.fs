@@ -14,7 +14,7 @@ type ICompactBuffer =
     /// The number of elements in the input set
     abstract member Count : aval<int>
 
-module internal CompactBufferImplementation =
+module CompactBufferImplementation =
 
     [<AbstractClass>]
     type AbstractCompactBuffer<'Key, 'Value>(runtime : IBufferRuntime, input : aset<'Key>, usage : BufferUsage, storage : BufferStorage) =
@@ -27,9 +27,9 @@ module internal CompactBufferImplementation =
         let reader = compact.GetReader()
         let removals = List()
 
-        member inline private x.Transact =
-            if x.ProcessDeltasInTransaction then transact
-            else (fun ([<InlineIfLambda>] g) -> g())
+        member inline private x.Transact([<InlineIfLambda>] action: unit -> 'T) =
+            if x.ProcessDeltasInTransaction then transact action
+            else action()
 
         member inline private x.GetAlignedSize(count : int) =
             let count = nativeint <| Fun.NextPowerOfTwo(int64 count)

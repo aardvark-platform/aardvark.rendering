@@ -2085,7 +2085,7 @@ type ResourceManager(device : Device) =
         accelerationStructureCache.GetOrCreate(
             [ instances :> obj; sbt :> obj; usage :> obj ],
             fun cache key ->
-                let instanceBuffer = InstanceBuffer.create x.Device.Runtime sbt instances
+                let instanceBuffer = InstanceBuffer.create x.Device sbt instances
                 let buffer = x.CreateBuffer(instanceBuffer)
 
                 new AccelerationStructureResource(cache, key, device, buffer, instanceBuffer.Count, usage)

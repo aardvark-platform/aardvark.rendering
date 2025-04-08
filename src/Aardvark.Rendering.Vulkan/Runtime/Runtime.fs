@@ -147,12 +147,13 @@ type Runtime(device : Device) as this =
         device.CreateImage(t, export) :> IBackendTexture
 
     member x.PrepareBuffer (data : IBuffer,
+                            [<Optional; DefaultParameterValue(0UL)>] alignment : uint64,
                             [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                             [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage,
                             [<Optional; DefaultParameterValue(false)>] export : bool) =
         let flags = VkBufferUsageFlags.ofBufferUsage usage
         let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
-        memory.CreateBuffer(flags, data, export = export) :> IBackendBuffer
+        memory.CreateBuffer(flags, data, alignment, export) :> IBackendBuffer
 
     member private x.CreateTextureInner(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int, export : ImageExport) =
         let layout =
@@ -260,6 +261,7 @@ type Runtime(device : Device) as this =
         member x.Dispose() = x.Dispose()
 
     member x.CreateBuffer(size : nativeint,
+                          [<Optional; DefaultParameterValue(0UL)>] alignment : uint64,
                           [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                           [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage,
                           [<Optional; DefaultParameterValue(false)>] export : bool) =
@@ -267,7 +269,7 @@ type Runtime(device : Device) as this =
 
         let flags = VkBufferUsageFlags.ofBufferUsage usage
         let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
-        memory.CreateBuffer(flags, uint64 size, export = export)
+        memory.CreateBuffer(flags, uint64 size, alignment, export)
 
     member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
         dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
@@ -574,7 +576,7 @@ type Runtime(device : Device) as this =
         member x.PrepareEffect(signature, effect, topology) = x.PrepareEffect(signature, effect, topology)
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
         member x.PrepareTexture(t) = x.PrepareTexture(t)
-        member x.PrepareBuffer(b, u, s) = x.PrepareBuffer(b, u, s)
+        member x.PrepareBuffer(b, u, s) = x.PrepareBuffer(b, 0UL, u, s)
 
         member x.CreateStreamingTexture(mipMap) = x.CreateStreamingTexture(mipMap)
 
@@ -593,7 +595,7 @@ type Runtime(device : Device) as this =
 
         member x.CreateGeometryPool(types) = new GeometryPoolUtilities.GeometryPool(device, types) :> IGeometryPool
 
-        member x.CreateBuffer(size : nativeint, usage : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, usage, storage) :> IBackendBuffer
+        member x.CreateBuffer(size : nativeint, usage : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, 0UL, usage, storage) :> IBackendBuffer
 
         member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
             x.Upload(src, dst, dstOffset, size)

@@ -413,12 +413,12 @@ module Buffer =
         | _ ->
             false
 
-    let rec ofBuffer (export: bool) (usage: VkBufferUsageFlags) (buffer: IBuffer) (memory: IDeviceMemory) =
+    let rec ofBuffer' (export: bool) (usage: VkBufferUsageFlags) (alignment: uint64) (buffer: IBuffer) (memory: IDeviceMemory) =
         match buffer with
         | :? ArrayBuffer as ab ->
             if ab.Data.Length <> 0 then
                 let size = uint64 ab.Data.LongLength * uint64 (ab.ElementType.GetCLRSize())
-                let buffer = create' false export usage 0UL size memory
+                let buffer = create' false export usage alignment size memory
                 ab.Data |> NativeInt.pin (copyFromHost buffer)
                 buffer
             else
@@ -427,30 +427,36 @@ module Buffer =
         | :? INativeBuffer as nb ->
             if nb.SizeInBytes <> 0n then
                 let size = uint64 nb.SizeInBytes
-                let buffer = create' false export usage 0UL size memory
+                let buffer = create' false export usage alignment size memory
                 nb.Use (copyFromHost buffer)
                 buffer
             else
                 memory |> empty export usage
 
         | :? ExportedBuffer when export ->
-            ofBuffer false usage buffer memory
+            ofBuffer' false usage alignment buffer memory
 
         | :? Buffer as b ->
             if export then
                 failf "cannot export buffer after it has been created"
 
+            if alignment <> 0UL && b.DeviceAddress % alignment <> 0UL then
+                failf $"cannot use prepared buffer as it is misaligned (address = {b.DeviceAddress}, required alignment = {alignment})"
+
             b.AddReference()
             b
 
         | :? IBufferRange as bv when bv <> bv.Buffer ->
-            ofBuffer export usage bv.Buffer memory
+            ofBuffer' export usage alignment bv.Buffer memory
 
         | _ when buffer = Unchecked.defaultof<_> ->
             failf $"buffer data is null"
 
         | _ ->
             failf $"unsupported buffer type: {buffer.GetType()}"
+
+    let ofBuffer (usage: VkBufferUsageFlags) (buffer: IBuffer) (memory: IDeviceMemory) =
+        ofBuffer' false usage 0UL buffer memory
 
     let inline upload (src: nativeint) (dst: Buffer) (dstOffset: uint64) (sizeInBytes: uint64)  =
         if sizeInBytes > 0UL then
@@ -536,23 +542,27 @@ type BufferExtensions private() =
 
     [<Extension>]
     static member inline CreateBuffer(memory: IDeviceMemory, usage: VkBufferUsageFlags, size: uint64,
+                                      [<Optional; DefaultParameterValue(0UL)>] alignment : uint64,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        memory |> Buffer.create' false export usage 0UL size
+        memory |> Buffer.create' false export usage alignment size
 
     [<Extension>]
     static member inline CreateBuffer(memory: IDeviceMemory, usage: VkBufferUsageFlags, data: IBuffer,
+                                      [<Optional; DefaultParameterValue(0UL)>] alignment : uint64,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        Buffer.ofBuffer export usage data memory
+        Buffer.ofBuffer' export usage alignment data memory
 
     [<Extension>]
     static member inline CreateBuffer(device: Device, usage: VkBufferUsageFlags, size: uint64,
+                                      [<Optional; DefaultParameterValue(0UL)>] alignment : uint64,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        device.DeviceMemory.CreateBuffer(usage, size, export)
+        device.DeviceMemory.CreateBuffer(usage, size, alignment, export)
 
     [<Extension>]
     static member inline CreateBuffer(device: Device, usage: VkBufferUsageFlags, data: IBuffer,
+                                      [<Optional; DefaultParameterValue(0UL)>] alignment : uint64,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        device.DeviceMemory.CreateBuffer(usage, data, export)
+        device.DeviceMemory.CreateBuffer(usage, data, alignment, export)
 
     [<Extension>]
     static member inline TryUpdate(buffer: Buffer, data: IBuffer) =

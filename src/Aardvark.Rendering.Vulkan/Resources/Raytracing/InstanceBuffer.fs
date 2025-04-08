@@ -5,6 +5,7 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
 open KHRAccelerationStructure
+open CompactBufferImplementation
 
 open FSharp.Data.Adaptive
 
@@ -69,8 +70,16 @@ module internal InstanceBuffer =
         let release (inst : ITraceInstance) =
             inst.Geometry.Release()
 
-    let create (runtime : IRuntime) (sbt : aval<ShaderBindingTable>) (instances : aset<ITraceInstance>) =
-        runtime.CreateCompactBuffer(
-            evaluate sbt, acquire, release, instances,
-            BufferUsage.Write ||| BufferUsage.AccelerationStructure
-        )
+    let create (device : Device) (sbt : aval<ShaderBindingTable>) (instances : aset<ITraceInstance>) : ICompactBuffer =
+        { new AdaptiveCompactBuffer<_, _>(
+                device.Runtime, evaluate sbt, acquire, release, instances,
+                BufferUsage.Write ||| BufferUsage.AccelerationStructure,
+                BufferStorage.Host
+            ) with
+
+            // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03715
+            override x.CreateHandle(size, usage, storage) =
+                let usage = VkBufferUsageFlags.ofBufferUsage usage
+                let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
+                memory.CreateBuffer(usage, uint64 size, 16UL)
+        }

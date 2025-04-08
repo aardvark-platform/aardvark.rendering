@@ -77,8 +77,8 @@ module private NativeAccelerationStructureData =
                  buffer.DeviceAddress + offset
              )
 
-        let prepare (device : Device) (buffer : IBuffer) =
-            Buffer.ofBuffer false usage buffer device.DeviceMemory
+        let prepare (device : Device) (alignment : uint64) (buffer : IBuffer) =
+            Buffer.ofBuffer' false usage alignment buffer device.DeviceMemory
 
     let private getFlags (allowUpdate : bool) (usage : AccelerationStructureUsage) =
         let hint =
@@ -99,14 +99,18 @@ module private NativeAccelerationStructureData =
 
         let mutable buffers = List<Buffer>()
 
-        let getBufferAddress (offset : uint64) (buffer : IBuffer) =
-            let prepared = buffer |> Buffer.prepare device
+        let getBufferAddress (alignment : uint64) (offset : uint64) (buffer : IBuffer) =
+            if alignment <> 0UL && offset % alignment <> 0UL then
+                failf $"buffer for acceleration structure must be aligned to {alignment} bytes but the offset is {offset}"
+
+            let prepared = buffer |> Buffer.prepare device alignment
             buffers.Add(prepared)
             prepared |> Buffer.toAddress offset
 
         let ofAabbData (data : AABBsData<IBuffer>) =
             let address =
-                getBufferAddress data.Offset data.Buffer
+                // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03714
+                getBufferAddress 8UL data.Offset data.Buffer
 
             let stride =
                 if data.Stride = 0UL then
@@ -120,7 +124,8 @@ module private NativeAccelerationStructureData =
 
         let ofTriangleData (vertexData : VertexData<IBuffer>) (indexData : IndexData<IBuffer> option) (transform : Trafo3d) =
             let vertexDataAddress =
-                getBufferAddress vertexData.Offset vertexData.Buffer
+                // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03711
+                getBufferAddress 4UL vertexData.Offset vertexData.Buffer
 
             let vertexStride =
                 if vertexData.Stride = 0UL then
@@ -130,7 +135,11 @@ module private NativeAccelerationStructureData =
 
             let indexDataAddress =
                 match indexData with
-                | Some data -> getBufferAddress data.Offset data.Buffer
+                | Some data ->
+                    // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03712
+                    let alignment = if data.Type = IndexType.UInt16 then 2UL else 4UL
+                    getBufferAddress alignment data.Offset data.Buffer
+
                 | _ -> VkDeviceOrHostAddressConstKHR()
 
             let indexType =
@@ -142,8 +151,9 @@ module private NativeAccelerationStructureData =
                 |> Option.defaultValue VkIndexType.NoneKhr
 
             let transformDataAddress =
+                // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03810
                 let buffer = ArrayBuffer([| VkTransformMatrixKHR(M34f transform.Forward) |])
-                getBufferAddress 0UL buffer
+                getBufferAddress 16UL 0UL buffer
 
             VkAccelerationStructureGeometryDataKHR.Triangles(
                 VkAccelerationStructureGeometryTrianglesDataKHR(
@@ -173,11 +183,15 @@ module private NativeAccelerationStructureData =
         )
 
     let private ofInstances (allowUpdate : bool) (usage : AccelerationStructureUsage) (instances : Instances) =
+        // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03715
+        if instances.Buffer.DeviceAddress % 16UL <> 0UL then
+            failf $"instance buffers must be aligned to 16 bytes (address = {instances.Buffer.DeviceAddress})"
+
         let geometry =
             VkAccelerationStructureGeometryKHR(
                 VkGeometryTypeKHR.Instances,
                 VkAccelerationStructureGeometryDataKHR.Instances(
-                    VkAccelerationStructureGeometryInstancesDataKHR(0u, instances.Buffer |> Buffer.toAddress 0UL)
+                    VkAccelerationStructureGeometryInstancesDataKHR(VkFalse, instances.Buffer |> Buffer.toAddress 0UL)
                 ),
                 VkGeometryFlagsKHR.None
             )

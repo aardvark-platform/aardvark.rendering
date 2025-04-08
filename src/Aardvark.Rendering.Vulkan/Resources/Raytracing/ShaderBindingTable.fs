@@ -306,8 +306,9 @@ module private ShaderBindingSubtable =
     let createWithCount (device : Device) (count : int) (data : SubtableData<'T>) =
         let requestedSize = count * data.Handles.SizeAligned
         let size = max requestedSize data.Handles.SizeAligned
+        let baseAlignment = uint64 device.PhysicalDevice.Limits.Raytracing.Value.ShaderGroupBaseAlignment
 
-        let buffer = device.DeviceMemory |> Buffer.create bufferUsage (uint64 size)
+        let buffer = device.DeviceMemory.CreateBuffer(bufferUsage, uint64 size, baseAlignment)
         let table = new ShaderBindingSubtable<'T>(buffer, data.Lookup, uint64 data.Handles.SizeAligned)
 
         if not (table |> tryUpdate data) then

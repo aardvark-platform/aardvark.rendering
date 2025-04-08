@@ -475,35 +475,35 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
         b
 
     let indexBuffer =
-        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure
+        let usage = BufferUsage.Write ||| BufferUsage.Storage
         createManagedBuffer indexType usage indexBufferStorage
 
     let vertexBuffers =
-        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure
+        let usage = BufferUsage.Write ||| BufferUsage.Storage
         signature.VertexAttributeTypes |> Map.map (fun s t ->
             createManagedBuffer t usage (vertexBufferStorage s)
         )
 
     let faceAttributeBuffers =
-        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure
+        let usage = BufferUsage.Write ||| BufferUsage.Storage
         signature.FaceAttributeTypes |> Map.map (fun s t ->
             createManagedBuffer t usage (faceAttributeBufferStorage s)
         )
 
     let geometryAttributeBuffers =
-        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage
+        let usage = BufferUsage.Write ||| BufferUsage.Storage
         geometryAttributeTypes |> Map.map (fun s t ->
             createManagedBuffer t usage (geometryAttributeBufferStorage s)
         )
 
     let instanceAttributeBuffers =
-        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage
+        let usage = BufferUsage.Write ||| BufferUsage.Storage
         instanceAttributeTypes |> Map.map (fun s t ->
             createManagedBuffer t usage (instanceAttributeBufferStorage s)
         )
 
     let geometryBuffer =
-        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage
+        let usage = BufferUsage.Write ||| BufferUsage.Storage
         createManagedBuffer typeof<TraceGeometryInfo> usage geometryBufferStorage
 
     let accelerationStructures =
