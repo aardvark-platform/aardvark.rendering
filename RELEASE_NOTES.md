@@ -2,6 +2,16 @@
 - [Vulkan] Fixed VK_ERROR_OUT_OF_POOL_MEMORY error on some platforms when using raytracing
 - [Vulkan] Added check for format features when creating a render pass
 
+### 5.6.0-prerelease0002
+- Switched to Aardvark.Data.Assimp
+- [Vulkan] Fixed infinite recursion in external memory allocation
+- [Vulkan] Removed warning when allocating external memory fails
+- [Vulkan] Made ILogger and Logger internal
+- [Vulkan] Added device chooser API
+- [Vulkan] Fixed raytracing buffer alignment issues
+- [Sg] Fixed issue with multiple dynamic sampler states
+- [Sg] Simplified samplerState applicator
+
 ### 5.6.0-prerelease0001
 - [Vulkan] Improved queue submission
 - [Vulkan] Integrated VMA for memory management
