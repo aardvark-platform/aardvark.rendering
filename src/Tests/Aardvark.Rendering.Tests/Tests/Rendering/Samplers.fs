@@ -207,7 +207,7 @@ module Samplers =
 
         let sample2DDynamicSamplerStates (runtime: IRuntime) =
             let size = V2i(2, 1)
-            let tc = V2d(2.0, 0.0)
+            let tc = V2d(1.5, 0.0)
 
             use signature =
                 runtime.CreateFramebufferSignature([

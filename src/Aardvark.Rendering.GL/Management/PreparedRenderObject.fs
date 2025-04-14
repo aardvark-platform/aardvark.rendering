@@ -222,19 +222,19 @@ module PreparedPipelineState =
             x.CreateStorageBuffers(iface, uniforms, scope, null)
 
         member x.CreateTextureBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope, resources : List<IDisposable>) =
-            let samplerModifier =
-                match uniforms.TryGetUniform(scope, DefaultSemantic.SamplerStateModifier) with
-                | Some (:? aval<Symbol -> SamplerState -> SamplerState> as mode) ->
-                    Some mode
-                | _ ->
-                    None
-
             let createSampler (textureName : Symbol) (samplerState : FShade.SamplerState) =
+                let samplerModifier =
+                    match uniforms.TryGetUniform(scope, Sym.ofString $"{DefaultSemantic.SamplerStateModifier}_{textureName}") with
+                    | Some (:? aval<SamplerState -> SamplerState> as mode) ->
+                        Some mode
+                    | _ ->
+                        None
+
                 let sampler =
                     match samplerModifier with
                     | Some modifier ->
                         let samplerState = x.GetSamplerStateDescription(samplerState)
-                        x.GetDynamicSamplerState(textureName, samplerState, modifier)
+                        x.GetDynamicSamplerState(samplerState, modifier)
                     | None ->
                         x.GetStaticSamplerState(samplerState)
 

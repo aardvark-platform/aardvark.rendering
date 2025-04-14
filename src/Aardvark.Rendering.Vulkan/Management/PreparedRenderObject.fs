@@ -101,9 +101,9 @@ open Uniforms.Patterns
 type DevicePreparedRenderObjectExtensions private() =
 
     static let createSamplerState (this : ResourceManager) (name : Symbol) (uniforms : IUniformProvider) (state : FShade.SamplerState)  =
-        match uniforms.TryGetUniform(Ag.Scope.Root, DefaultSemantic.SamplerStateModifier) with
-        | Some (:? aval<Symbol -> SamplerState -> SamplerState> as modifier) ->
-            this.CreateDynamicSamplerState(name, state.SamplerState, modifier) :> aval<_>
+        match uniforms.TryGetUniform(Ag.Scope.Root, Sym.ofString $"{DefaultSemantic.SamplerStateModifier}_{name}") with
+        | Some (:? aval<SamplerState -> SamplerState> as modifier) ->
+            this.CreateDynamicSamplerState(state.SamplerState, modifier) :> aval<_>
         | _ ->
             AVal.constant state.SamplerState
 

@@ -229,48 +229,33 @@ module SgFSharp =
             sg |> textureArray name ~~textures
 
 
-        /// Sets the sampler state for the texture slot with the given name.
-        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
-        let inline samplerState (name : ^Name) (state : aval<SamplerState option>) (sg : ISg) =
-            let sym = name |> Symbol.convert Symbol.Converters.typed<ITexture>
-            let modifier =
-                adaptive {
-                    let! user = state
-                    return fun (textureSem : Symbol) (state : SamplerState) ->
-                        if sym = textureSem then
-                            match user with
-                            | Some state -> state
-                            | _ -> state
-                        else
-                            state
-                }
-            sg |> uniform DefaultSemantic.SamplerStateModifier modifier
-
-        /// Sets the sampler state for the texture slot with the given name.
-        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
-        let inline samplerState' (name : ^Name) (state : Option<SamplerState>) (sg : ISg) =
-            sg |> samplerState name ~~state
-
-
         /// Modifies the sampler state for the texture slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
         let inline modifySamplerState (name : ^Name) (modifier : aval<SamplerState -> SamplerState>) (sg : ISg) =
             let sym = name |> Symbol.convert Symbol.Converters.typed<ITexture>
-            let modifier =
-                adaptive {
-                    let! modifier = modifier
-                    return fun (textureSem : Symbol) (state : SamplerState) ->
-                        if sym = textureSem then
-                            modifier state
-                        else
-                            state
-                }
-            sg |> uniform DefaultSemantic.SamplerStateModifier modifier
+            sg |> uniform $"{DefaultSemantic.SamplerStateModifier}_{sym}" modifier
 
         /// Modifies the sampler state for the texture slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
         let inline modifySamplerState' (name : ^Name) (modifier : SamplerState -> SamplerState) (sg : ISg) =
             sg |> modifySamplerState name ~~modifier
+
+
+        /// Sets the sampler state for the texture slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline samplerState (name : ^Name) (state : aval<SamplerState option>) (sg : ISg) =
+            let modifier : aval<SamplerState -> SamplerState> =
+                state |> AVal.map (function
+                    | Some s -> fun _ -> s
+                    | _ -> id
+                )
+
+            sg |> modifySamplerState name modifier
+
+        /// Sets the sampler state for the texture slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline samplerState' (name : ^Name) (state : Option<SamplerState>) (sg : ISg) =
+            sg |> samplerState name ~~state
 
         // ================================================================================================================
         // Trafos

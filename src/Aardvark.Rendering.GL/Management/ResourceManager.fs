@@ -207,7 +207,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         )
 
     let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, aval<SamplerState>>()
-    let dynamicSamplerStateCache = ConcurrentDictionary<Symbol * SamplerState, UnaryCache<aval<(Symbol -> SamplerState -> SamplerState)>, aval<SamplerState>>>()
+    let dynamicSamplerStateCache = ConcurrentDictionary<SamplerState, UnaryCache<aval<SamplerState -> SamplerState>, aval<SamplerState>>>()
     let samplerDescriptionCache = ConcurrentDictionary<FShade.SamplerState, SamplerState>() 
 
     member private x.BufferManager = bufferManager
@@ -359,9 +359,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member x.GetSamplerStateDescription(samplerState : FShade.SamplerState) =
         samplerDescriptionCache.GetOrAdd(samplerState, fun sam -> sam.SamplerState)
 
-    member x.GetDynamicSamplerState(texName : Symbol, samplerState : SamplerState, modifier : aval<(Symbol -> SamplerState -> SamplerState)>) : aval<SamplerState> =
-        dynamicSamplerStateCache.GetOrAdd((texName, samplerState), fun (sym, sam) ->
-            UnaryCache(fun modi -> modi |> AVal.map (fun f -> f sym sam))
+    member x.GetDynamicSamplerState(samplerState : SamplerState, modifier : aval<(SamplerState -> SamplerState)>) : aval<SamplerState> =
+        dynamicSamplerStateCache.GetOrAdd(samplerState, fun sam ->
+            UnaryCache(fun modi -> modi |> AVal.map (fun f -> f sam))
         ).Invoke(modifier)
 
     member x.GetStaticSamplerState(samplerState : FShade.SamplerState) =

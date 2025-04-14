@@ -651,8 +651,8 @@ module Resources =
             }
         )
 
-    type DynamicSamplerStateResource(owner : IResourceCache, key : list<obj>, name : Symbol,
-                                     state : SamplerState, modifier : aval<Symbol -> SamplerState -> SamplerState>) =
+    type DynamicSamplerStateResource(owner : IResourceCache, key : list<obj>,
+                                     state : SamplerState, modifier : aval<SamplerState -> SamplerState>) =
         inherit AbstractResourceLocation<SamplerState>(owner, key)
 
         let mutable cache = None
@@ -666,7 +666,7 @@ module Resources =
         override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
                 let f = modifier.GetValue(user, token, renderToken)
-                cache <- Some (state |> f name)
+                cache <- Some (f state)
 
             match cache with
             | Some s -> { handle = s; version = 0 }
@@ -1818,10 +1818,10 @@ type ResourceManager(device : Device) =
     member x.CreateSampler(data : aval<SamplerState>) =
         samplerCache.GetOrCreate([data :> obj], fun cache key -> new SamplerResource(cache, key, device, data))
 
-    member x.CreateDynamicSamplerState(name : Symbol, state : SamplerState, modifier : aval<Symbol -> SamplerState -> SamplerState>) =
+    member x.CreateDynamicSamplerState(state : SamplerState, modifier : aval<SamplerState -> SamplerState>) =
         samplerStateCache.GetOrCreate(
-            [name :> obj; state :> obj; modifier :> obj],
-            fun cache key -> new DynamicSamplerStateResource(cache, key, name, state, modifier)
+            [state :> obj; modifier :> obj],
+            fun cache key -> new DynamicSamplerStateResource(cache, key, state, modifier)
         )
 
     member x.CreateImageSampler(samplerType : FShade.GLSL.GLSLSamplerType,
