@@ -78,7 +78,7 @@ module TextureDownload =
             let framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colorTexture.GetOutputView()])
 
             let sampler =
-                Some { SamplerState.Default with Filter = TextureFilter.MinMagPoint }
+                { SamplerState.Default with Filter = TextureFilter.MinMagPoint }
 
             use task =
                 Sg.fullScreenQuad

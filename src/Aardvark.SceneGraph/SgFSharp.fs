@@ -243,18 +243,13 @@ module SgFSharp =
 
         /// Sets the sampler state for the texture slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
-        let inline samplerState (name : ^Name) (state : aval<SamplerState option>) (sg : ISg) =
-            let modifier : aval<SamplerState -> SamplerState> =
-                state |> AVal.map (function
-                    | Some s -> fun _ -> s
-                    | _ -> id
-                )
-
+        let inline samplerState (name : ^Name) (state : aval<SamplerState>) (sg : ISg) =
+            let modifier = state |> AVal.map (fun s -> (fun _ -> s))
             sg |> modifySamplerState name modifier
 
         /// Sets the sampler state for the texture slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
-        let inline samplerState' (name : ^Name) (state : Option<SamplerState>) (sg : ISg) =
+        let inline samplerState' (name : ^Name) (state : SamplerState) (sg : ISg) =
             sg |> samplerState name ~~state
 
         // ================================================================================================================

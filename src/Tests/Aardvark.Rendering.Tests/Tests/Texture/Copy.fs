@@ -384,7 +384,7 @@ module TextureCopy =
             use signature = runtime.CreateFramebufferSignature([DefaultSemantic.Colors, format], samples)
 
             let sampler =
-                Some { SamplerState.Default with Filter = TextureFilter.MinMagPoint }
+                { SamplerState.Default with Filter = TextureFilter.MinMagPoint }
 
             use attachment = runtime.CreateTexture2D(data.Size, format, samples = samples)
             use framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, attachment.GetOutputView()])

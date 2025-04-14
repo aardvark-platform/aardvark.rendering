@@ -66,7 +66,7 @@ module FramebufferSignature =
             use task =
                 Sg.fullScreenQuad
                 |> Sg.diffuseTexture' (PixTexture2d(input, false))
-                |> Sg.samplerState' DefaultSemantic.DiffuseColorTexture (Some samplerState)
+                |> Sg.samplerState' DefaultSemantic.DiffuseColorTexture samplerState
                 |> Sg.shader {
                     do! DefaultSurfaces.diffuseTexture
                 }
