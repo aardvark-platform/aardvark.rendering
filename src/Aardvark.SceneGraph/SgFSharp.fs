@@ -116,7 +116,7 @@ module SgFSharp =
         let renderObjectSet (s : #aset<IRenderObject>) =
             Sg.RenderObjectNode(s) :> ISg
 
-        /// Applies the given activation function to the the given scene graph.
+        /// Applies the given activation function to the given scene graph.
         /// An activation function is invoked when the render objects of the scene graph are prepared.
         /// The resulting IDisposable is disposed when the render objects are disposed.
         let onActivation (f : unit -> IDisposable) (sg : ISg) =
@@ -696,7 +696,7 @@ module SgFSharp =
             let view = BufferView(~~(ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
             Sg.InstanceAttributeApplicator(sym, view, sg) :> ISg
 
-        /// Provides a instance attribute with the given name by supplying a single value.
+        /// Provides an instance attribute with the given name by supplying a single value.
         /// The name can be a string, Symbol, or TypedSymbol.
         /// The value has to be compatible with V4f.
         let inline instanceBufferValue (name : ^Name) (value : aval< ^Value>) (sg : ISg) =
@@ -704,7 +704,7 @@ module SgFSharp =
             let view = BufferView(SingleValueBuffer value, typeof< ^Value>)
             Sg.InstanceAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
 
-        /// Provides a instance attribute with the given name by supplying a single value.
+        /// Provides an instance attribute with the given name by supplying a single value.
         /// The name can be a string, Symbol, or TypedSymbol.
         /// The value has to be compatible with V4f.
         let inline instanceBufferValue' (name : ^Name) (value : ^Value) (sg : ISg) =
