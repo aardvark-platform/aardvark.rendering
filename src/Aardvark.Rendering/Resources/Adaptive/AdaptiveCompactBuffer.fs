@@ -63,7 +63,6 @@ module CompactBufferImplementation =
 
             // Process deltas
             x.Transact (fun _ ->
-                removals.Clear()
 
                 for o in ops do
                     match o with
@@ -75,7 +74,8 @@ module CompactBufferImplementation =
 
                 // Process removals after sets to prevent potential reaquiring of resources
                 for r in removals do
-                    x.Remove r
+                    x.Remove r    
+                removals.Clear()
             )
 
             x.Update(t)
