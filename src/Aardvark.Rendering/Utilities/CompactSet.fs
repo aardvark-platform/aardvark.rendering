@@ -18,17 +18,12 @@ module CompactASetExtensions =
             let mutable keys : 'T[] = Array.empty
 
             let reader = input.GetReader()
-            let added = List()
-            let removed = List()
-            let deltas = List<'T * ElementOperation<int>>()
-            let free = Queue<int>()
 
             AMap.custom (fun token indices ->
-                added.Clear()
-                removed.Clear()
-                deltas.Clear()
-
                 let ops = reader.GetChanges token
+
+                let added = List(ops.Count)
+                let removed = List(ops.Count)
 
                 for o in ops do
                     match o with
@@ -41,6 +36,9 @@ module CompactASetExtensions =
 
                 // If we remove more values than we add, we have to move some elements from the end (potentially all of them).
                 let moving = HashSet([newCount .. newCount - (delta + 1)])
+
+                let free = Queue<int>(removed.Count)
+                let deltas = List<'T * ElementOperation<int>>(added.Count + removed.Count + moving.Count)
 
                 // Remove
                 for key in removed do

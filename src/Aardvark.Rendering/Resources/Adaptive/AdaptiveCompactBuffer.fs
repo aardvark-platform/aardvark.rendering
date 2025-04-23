@@ -25,7 +25,6 @@ module CompactBufferImplementation =
         let count = ASet.count input
         let compact = ASet.compact input
         let reader = compact.GetReader()
-        let removals = List()
 
         member inline private x.Transact([<InlineIfLambda>] action: unit -> 'T) =
             if x.ProcessDeltasInTransaction then transact action
@@ -64,6 +63,8 @@ module CompactBufferImplementation =
             // Process deltas
             x.Transact (fun _ ->
 
+                let removals = List(ops.Count)
+
                 for o in ops do
                     match o with
                     | value, Set index ->
@@ -74,8 +75,7 @@ module CompactBufferImplementation =
 
                 // Process removals after sets to prevent potential reaquiring of resources
                 for r in removals do
-                    x.Remove r    
-                removals.Clear()
+                    x.Remove r
             )
 
             x.Update(t)
