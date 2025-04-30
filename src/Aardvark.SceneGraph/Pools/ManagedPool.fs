@@ -163,7 +163,7 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
     static let zero : byte[] = Array.zeroCreate 4096
 
     
-    let cmp = { new IEqualityComparer<obj> with
+    static let cmp = { new IEqualityComparer<obj> with
 
                    // NOTE: SymbolDict enumeration only guaranteed to be equal when created "identical" (order of inserts, resizes, capacity, ...)
                    //       GetHashCode -> build sum of key and value hashes
