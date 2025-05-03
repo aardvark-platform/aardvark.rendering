@@ -217,9 +217,11 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                 if not isDisposed then
 
                     // release potentially pending UnsharedObjects
-                    let actions = Interlocked.Exchange(&onMakeCurrent, null)
-                    if actions <> null then
-                        x.Use(fun () -> 
+                    x.Use(fun () -> 
+                        GLVM.hglCleanup((unbox<IGraphicsContextInternal> handle).Context.Handle)
+                    
+                        let actions = Interlocked.Exchange(&onMakeCurrent, null)
+                        if actions <> null then
                                 for a in actions do
                                     a()            
                             )
