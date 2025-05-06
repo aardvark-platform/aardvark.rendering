@@ -22,7 +22,7 @@ nuget Aardvark.Base.Fonts                           ~> 5.3.6
 
 nuget Aardvark.Assembler                            ~> 0.1.0
 
-nuget Aardvark.FontProvider                         ~> 0.1.0
+nuget Aardvark.FontProvider                         ~> 0.1.1
 
 nuget FShade.Core                                   ~> 5.6.0
 nuget FShade                                        ~> 5.6.0
