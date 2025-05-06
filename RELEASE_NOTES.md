@@ -1,3 +1,5 @@
+### 5.5.17
+- [GL] fixed quadbuffer stereo rendering
 - [GL] Fixed blend modes not being toggled properly per attachment
 - [Vulkan] Fixed VK_ERROR_OUT_OF_POOL_MEMORY error on some platforms when using raytracing
 - [Vulkan] Added check for format features when creating a render pass
