@@ -371,7 +371,10 @@ module private OpenGL =
             override this.Handle =
                 handle :> obj
             override this.CreateSwapchain(size: V2i) =
-                createSwapchain runtime signature handle glfw win size
+                if cfg.stereo then 
+                    createStereoSwapchain runtime signature handle glfw win size
+                else 
+                    createSwapchain runtime signature handle glfw win size
             override this.Dispose() =
                 signature.Dispose()
                 ctx.Dispose()
