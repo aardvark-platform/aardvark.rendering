@@ -1,3 +1,6 @@
+- [GL] Removed UnmanagedFunctions.wrap usage
+- [Vulkan] Fixed ImageSamplerArrayResource leaking deltas
+
 ### 5.5.17  
 - [GL] fixed quadbuffer stereo rendering
 - [GL] Fixed blend modes not being toggled properly per attachment

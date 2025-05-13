@@ -747,14 +747,6 @@ module Resources =
             pending.Add r |> ignore
             images.[i] <- r
 
-        // Save deltas to process later
-        let removals = List(count)
-        let additions = List(count)
-
-        let replace i r =
-            removals.Add((images.[i], i))
-            additions.Add((r, i))
-
         // Set every slot to empty initially
         do for i = 0 to count - 1 do
             set i empty
@@ -777,14 +769,18 @@ module Resources =
 
                 // Process additions, moves and removals
                 // Positive deltas are processed first, removals lead to the empty image sampler being set.
-                removals.Clear()
-                additions.Clear()
+                let removals = List()
+                let additions = List()
 
                 let deltas = reader.GetChanges token
                 for i, op in deltas do
-                    match op with
-                    | Set r -> replace i r
-                    | Remove -> replace i empty
+                    let r =
+                        match op with
+                        | Set r -> r
+                        | Remove -> empty
+
+                    removals.Add(struct (images.[i], i))
+                    additions.Add(struct (r, i))
 
                 for r, i in additions do
                     set i r
