@@ -442,13 +442,6 @@ module OpenGl =
             ptr
 
     /// <summary>
-    /// wraps the given ptr as function efficiently
-    ///
-    /// </summary>
-    let private wrap (ptr : nativeint) =
-        UnmanagedFunctions.wrap ptr
-
-    /// <summary>
     /// contains function-pointers for all needed OpenGL entry-points.
     /// </summary>
     module Pointers =

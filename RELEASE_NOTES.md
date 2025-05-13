@@ -1,7 +1,3 @@
-- [GL] Fixed blend modes not being toggled properly per attachment
-- [Vulkan] Fixed VK_ERROR_OUT_OF_POOL_MEMORY error on some platforms when using raytracing
-- [Vulkan] Added check for format features when creating a render pass
-
 ### 5.6.0-prerelease0002
 - Switched to Aardvark.Data.Assimp
 - [Vulkan] Fixed infinite recursion in external memory allocation
@@ -15,6 +11,15 @@
 ### 5.6.0-prerelease0001
 - [Vulkan] Improved queue submission
 - [Vulkan] Integrated VMA for memory management
+
+- [GL] Removed UnmanagedFunctions.wrap usage
+- [Vulkan] Fixed ImageSamplerArrayResource leaking deltas
+
+### 5.5.17  
+- [GL] fixed quadbuffer stereo rendering
+- [GL] Fixed blend modes not being toggled properly per attachment
+- [Vulkan] Fixed VK_ERROR_OUT_OF_POOL_MEMORY error on some platforms when using raytracing
+- [Vulkan] Added check for format features when creating a render pass
 
 ### 5.5.16
 - now using `glEnablei/glDisablei` for BlendModes.

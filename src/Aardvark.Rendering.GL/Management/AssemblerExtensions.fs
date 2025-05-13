@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.GL
 
+open System.Security
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Assembler
@@ -1559,6 +1560,9 @@ module rec ChangeableProgram =
         interface System.IDisposable with
             member x.Dispose() = x.Dispose()
 
+    [<SuppressUnmanagedCodeSecurity; UnmanagedFunctionPointer(CallingConvention.Cdecl)>]
+    type private EntryPointDel = delegate of unit -> unit
+
     type FragmentProgram() as this =
         inherit AdaptiveObject()
 
@@ -1608,7 +1612,7 @@ module rec ChangeableProgram =
 
 
 
-        let mutable run : option<unit -> unit> = None
+        let mutable run : EntryPointDel option = None
         let prologBlock =
             let epilog = epilog.Value
             let block = memory.Alloc (nativeint prologSize)
@@ -1690,13 +1694,13 @@ module rec ChangeableProgram =
 
         member x.Run() =
             match run with
-            | Some run -> run()
+            | Some run -> run.Invoke()
             | None ->
                 if x.IsDisposed then raise <| System.ObjectDisposedException "FragmentProgram"
                 let ptr = NativePtr.read entryPointer
-                let r = UnmanagedFunctions.wrap ptr
+                let r = Marshal.GetDelegateForFunctionPointer<EntryPointDel>(ptr)
                 run <- Some r
-                r()
+                r.Invoke()
 
         member x.Run(token : AdaptiveToken) =
             x.Update token
