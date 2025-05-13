@@ -65,16 +65,20 @@ module ShaderModule =
     let ofGLSLWithTarget (target : GLSLang.Target) (slot : FShade.ShaderSlot) (info : FShade.GLSL.GLSLShader) (device : Device) =
         let siface = info.iface.shaders.[slot]
         let defines = [slot.Conditional]
+        let config = device.DebugConfig
 
-        match GLSLang.GLSLang.tryCompileWithTarget target (glslangStage slot) siface.shaderEntry defines info.code with
+        match GLSLang.GLSLang.tryCompileWithTarget target (glslangStage slot) siface.shaderEntry config.GenerateShaderDebugInfo defines info.code with
         | Some binary, _ ->
-            let binary = GLSLang.GLSLang.optimizeDefault binary
+            let binary =
+                if not config.OptimizeShaders then binary
+                else GLSLang.GLSLang.optimizeDefault binary
+
             let handle = device |> createRaw binary
             let result = new ShaderModule(device, handle, slot, binary)
             result
 
         | None, err ->
-            if not device.DebugConfig.PrintShaderCode then
+            if not config.PrintShaderCode then
                 ShaderCodeReporting.logLines "Failed to compile shader" info.code
 
             let err = ShaderCodeReporting.normalizeLineEndings err

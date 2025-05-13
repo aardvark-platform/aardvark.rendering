@@ -188,7 +188,7 @@ module ComputeProgram =
         device.GetCached(cache, shader, fun shader ->
             match device.ShaderCachePath with
             | Some shaderCachePath ->
-                let fileName = ShaderProgram.FileCacheName.ofString shader.csId
+                let fileName = ShaderProgram.FileCacheName.ofEffectId device shader.csId
                 let file = Path.Combine(shaderCachePath, fileName + ".compute")
 
                 match tryRead file device with

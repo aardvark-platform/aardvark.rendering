@@ -339,13 +339,31 @@ module ShaderProgram =
             let hash = pickler.ComputeHash value
             hash.Hash |> Guid |> string
 
-        let ofEffectKey (key : EffectCacheKey) =
-            let colors = key.layout.ColorAttachments |> Map.map (fun _ att -> string att.Name)
-            let depth = key.layout.DepthStencilAttachment
-            if key.layout.LayerCount > 1 then
-                getHash (key.effect.Id, key.topology, colors, depth, key.layout.LayerCount, key.layout.PerLayerUniforms, FShadeConfig.depthRange)
-            else
-                getHash (key.effect.Id, colors, depth, FShadeConfig.depthRange)
+        type private ShaderSignature =
+            { id         : string
+              debug      : bool
+              optimized  : bool
+              outputs    : Map<int, string * TextureFormat>
+              layered    : Set<string>
+              layerCount : int
+              depthRange : Range1d }
+
+        let ofEffectKey (device: Device) (key: EffectCacheKey) =
+            let signature =
+                let outputs = key.layout.ColorAttachments |> Map.map (fun _ att -> string att.Name, att.Format)
+
+                { id         = key.effect.Id
+                  debug      = device.DebugConfig.GenerateShaderDebugInfo
+                  optimized  = device.DebugConfig.OptimizeShaders
+                  outputs    = outputs
+                  layered    = key.layout.PerLayerUniforms
+                  layerCount = key.layout.LayerCount
+                  depthRange = FShadeConfig.depthRange }
+
+            getHash signature
+
+        let ofEffectId (device: Device) (id: string) =
+            getHash (id, device.DebugConfig.GenerateShaderDebugInfo, device.DebugConfig.OptimizeShaders)
 
         let ofString (value : string) =
             getHash value
@@ -590,7 +608,7 @@ module ShaderProgram =
             match device.ShaderCachePath with
             | Some shaderCachePath ->
                 let cacheFile =
-                    let name = FileCacheName.ofEffectKey key
+                    let name = FileCacheName.ofEffectKey device key
                     Path.Combine(shaderCachePath, name + ".effect")
 
                 match tryRead None cacheFile device with

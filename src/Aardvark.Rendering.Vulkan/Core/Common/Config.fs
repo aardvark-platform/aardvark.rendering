@@ -123,6 +123,12 @@ type DebugConfig =
 
         /// Verbosity of the logger to be used to print instance and device information.
         PlatformInformationVerbosity : int
+
+        /// Generate SPIR-V debug information (required to inspect source code in Nsight Graphics).
+        GenerateShaderDebugInfo : bool
+
+        /// Optimize shaders after compiling.
+        OptimizeShaders : bool
     }
 
     member internal x.DebugReportEnabled =
@@ -143,14 +149,16 @@ type DebugConfig =
           VerifyShaderCacheIntegrity    = false
           PlatformInformationVerbosity  = 4
           PrintShaderCode               = false
-          PrintRenderTaskRecompile      = false }
+          PrintRenderTaskRecompile      = false
+          GenerateShaderDebugInfo       = false
+          OptimizeShaders               = true }
 
     /// Enables validation layers, printing warnings and errors.
     static member Minimal =
         { DebugConfig.None with
             DebugReport                  = Some DebugReportConfig.Minimal
             ValidationLayer              = Some ValidationLayerConfig.Standard
-            PlatformInformationVerbosity = 2}
+            PlatformInformationVerbosity = 2 }
 
     /// Enables validation layers, printing everything except debug messages.
     /// Also prints shader code and render task recompilation.
@@ -165,7 +173,9 @@ type DebugConfig =
         { DebugConfig.Normal with
             DebugReport                = Some DebugReportConfig.Full
             ValidationLayer            = Some ValidationLayerConfig.Full
-            VerifyShaderCacheIntegrity = true }
+            VerifyShaderCacheIntegrity = true
+            GenerateShaderDebugInfo    = true
+            OptimizeShaders            = false }
 
     interface IDebugConfig
 

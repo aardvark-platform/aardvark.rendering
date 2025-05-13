@@ -79,7 +79,7 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
         ]
 
     let wantedExtensions =
-        if instance.DebugConfig.DebugPrintEnabled then
+        if instance.DebugConfig.DebugPrintEnabled || instance.DebugConfig.GenerateShaderDebugInfo then
             List.ofSeq wantedExtensions @ [KHRShaderNonSemanticInfo.Name]
         else
             List.ofSeq wantedExtensions

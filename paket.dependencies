@@ -30,7 +30,7 @@ nuget FShade.Debug                                  ~> 5.6.0
 
 nuget Unofficial.OpenVR					            ~> 1.1.0
 nuget CommonMark.NET                                ~> 0.15.1
-nuget GLSLangSharp                                  ~> 0.4.14
+nuget GLSLangSharp                                  ~> 0.5.0
 
 nuget Unofficial.LibTessDotNet                      ~> 2.0.2
 nuget Aardvark.Data.Assimp                          ~> 1.0.1
