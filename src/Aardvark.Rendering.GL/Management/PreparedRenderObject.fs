@@ -816,6 +816,12 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass, renderObject : Rend
     abstract member Compile : info : CompilerInfo * stream : ICommandStream * prev : Option<PreparedCommand> -> NativeStats
     abstract member EntryState : Option<PreparedPipelineState>
     abstract member ExitState : Option<PreparedPipelineState>
+    abstract member Signature : IFramebufferSignature option
+
+    member x.IsCompatibleWith(signature: IFramebufferSignature) =
+        match x.Signature with
+        | Some s -> s.IsCompatibleWith signature
+        | _ -> true
     
     member x.AddCleanup(clean : unit -> unit) =
         cleanup <- clean :: cleanup
@@ -1188,6 +1194,7 @@ type EpilogCommand(ctx : Context) =
 
     override x.EntryState = None
     override x.ExitState = None
+    override x.Signature = None
 
 type NopCommand(ctx : Context, pass : RenderPass) =
     inherit PreparedCommand(ctx, pass) 
@@ -1197,6 +1204,7 @@ type NopCommand(ctx : Context, pass : RenderPass) =
     override x.Compile(_,_,_) = NativeStats.Zero
     override x.EntryState = None
     override x.ExitState = None
+    override x.Signature = None
 
 type PreparedObjectCommand(state : PreparedPipelineState, info : PreparedObjectInfo, renderPass : RenderPass) =
     inherit PreparedCommand(state.pContext, renderPass, Some info.oOriginal)
@@ -1230,10 +1238,12 @@ type PreparedObjectCommand(state : PreparedPipelineState, info : PreparedObjectI
 
     override x.EntryState = Some state
     override x.ExitState = Some state
+    override x.Signature = Some state.pFramebufferSignature
 
 type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : RenderPass) =
     inherit PreparedCommand(ctx, renderPass)
-    
+
+    let signature = cmds |> List.tryPick _.Signature
     let first   = List.tryHead cmds
     let last    = List.tryLast cmds
 
@@ -1253,6 +1263,7 @@ type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : Rend
 
     override x.EntryState = first |> Option.bind (fun first -> first.EntryState)
     override x.ExitState = last |> Option.bind (fun last -> last.ExitState)
+    override x.Signature = signature
 
 
 module PreparedCommand =
@@ -1295,6 +1306,9 @@ module PreparedCommand =
                     new MultiCommand(x.Context, l |> List.map (ofRenderObject owned fboSignature x), pass) :> PreparedCommand
 
             | :? PreparedCommand as cmd ->
+                if not <| cmd.IsCompatibleWith fboSignature then
+                    failf $"Prepared command has framebuffer signature\n\n{cmd.Signature.Value.Layout}\n\nbut expected\n\n{fboSignature.Layout}"
+
                 if not owned then cmd.AddReference()
                 cmd
 

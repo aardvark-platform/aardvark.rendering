@@ -1751,6 +1751,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
     override x.EntryState = Some state
     override x.ExitState = Some state
+    override x.Signature = Some state.pFramebufferSignature
 
 
 [<StructuredFormatDisplay("AsString")>]

@@ -2254,4 +2254,5 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
 
     override x.EntryState = inner.EntryState
     override x.ExitState = inner.ExitState
+    override x.Signature = inner.Signature
 

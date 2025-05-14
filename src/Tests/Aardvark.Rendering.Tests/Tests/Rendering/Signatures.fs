@@ -4,6 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Semantics
 open Aardvark.Application
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
@@ -23,7 +24,11 @@ module FramebufferSignature =
         let Output4 = Sym.ofString "Output4"
 
     module private Shader =
-        open FShade
+
+        let output0White (v : Effects.Vertex) =
+            fragment {
+                return {| Output0 = V4d.One |}
+            }
 
         let output1White (v : Effects.Vertex) =
             fragment {
@@ -367,6 +372,45 @@ module FramebufferSignature =
             finally
                 runtime.DeleteTexture colorBuffer
 
+        let renderPreparedWithIncompatibleSignature (runtime: IRuntime) =
+            use signaturePrepared =
+                runtime.CreateFramebufferSignature [
+                    Semantic.Output0, TextureFormat.Rgba8
+                ]
+
+            use preparedObject =
+                let sg =
+                    Sg.fullScreenQuad
+                    |> Sg.shader {
+                        do! Shader.output0White
+                    }
+
+                let ro = Seq.head <| sg.RenderObjects(Ag.Scope.Root).Content.GetValue()
+                runtime.PrepareRenderObject(signaturePrepared, ro)
+
+            use signature =
+                runtime.CreateFramebufferSignature [
+                    Semantic.Output0, TextureFormat.Rgba8
+                    Semantic.Output1, TextureFormat.Rgba8
+                ]
+
+            use output0 = runtime.CreateTexture2D(V2i(256), TextureFormat.Rgba8)
+            use output1 = runtime.CreateTexture2D(V2i(256), TextureFormat.Rgba8)
+
+            use framebuffer =
+                runtime.CreateFramebuffer(signature, [
+                    Semantic.Output0, output0.GetOutputView()
+                    Semantic.Output1, output1.GetOutputView()
+                ])
+
+            use task =
+                Sg.renderObjectSet (ASet.single preparedObject)
+                |> Sg.compile runtime signature
+
+            try
+                task.Run(framebuffer)
+            with e ->
+                Expect.stringContains e.Message "framebuffer signature" "Unexpected exception"
 
     let tests (backend : Backend) =
         [
@@ -378,7 +422,9 @@ module FramebufferSignature =
                 "Render combined",     Cases.renderCombined
                 "Render multisampled", Cases.renderToMultisampled
 
-            "Render to cube array layered",             Cases.renderToCubeArrayLayered false
+            "Render to cube array layered",              Cases.renderToCubeArrayLayered false
             "Render to cube array layered (dynamic)",    Cases.renderToCubeArrayLayered true
+
+            "Render prepared object with incompatible signature", Cases.renderPreparedWithIncompatibleSignature
         ]
         |> prepareCases backend "Framebuffer signatures"

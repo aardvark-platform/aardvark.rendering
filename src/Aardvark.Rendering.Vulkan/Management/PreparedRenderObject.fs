@@ -12,6 +12,7 @@ open TypeMeta
 // #nowarn "51"
 
 type PreparedRenderObject(device         : Device,
+                          signature      : RenderPass,
                           original       : RenderObject,
                           resources      : list<IResourceLocation>,
                           program        : IResourceLocation<ShaderProgram>,
@@ -26,6 +27,7 @@ type PreparedRenderObject(device         : Device,
 
     inherit Resource(device)
 
+    member x.Signature = signature
     member x.Original = original
     member x.Resources = resources
     member x.PipelineLayout = pipelineLayout
@@ -99,6 +101,10 @@ open Uniforms.Patterns
 
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
+
+    static let validateRenderObjectSignature (renderPass: RenderPass) (prepared: PreparedRenderObject) =
+        if not <| prepared.Signature.IsCompatibleWith renderPass then
+            failf $"Prepared render object has framebuffer signature\n\n{prepared.Signature.Layout}\n\nbut expected\n\n{renderPass.Layout}"
 
     static let createSamplerState (this : ResourceManager) (name : Symbol) (uniforms : IUniformProvider) (state : FShade.SamplerState)  =
         match uniforms.TryGetUniform(Ag.Scope.Root, Sym.ofString $"{DefaultSemantic.SamplerStateModifier}_{name}") with
@@ -393,7 +399,7 @@ type DevicePreparedRenderObjectExtensions private() =
             //for r in resources do r.Acquire()
 
             new PreparedRenderObject(
-                this.Device, ro,
+                this.Device, renderPass, ro,
                 CSharpList.toList resources,
                 program,
                 programLayout,
@@ -513,11 +519,14 @@ type DevicePreparedRenderObjectExtensions private() =
             new PreparedMultiRenderObject(all)
 
         | :? PreparedRenderObject as o ->
+            validateRenderObjectSignature renderPass o
             o.AddReference()
             new PreparedMultiRenderObject([o])
 
         | :? PreparedMultiRenderObject as mo ->
-            for o in mo.Children do o.AddReference()
+            for o in mo.Children do
+                validateRenderObjectSignature renderPass o
+                o.AddReference()
             mo
 
         | _ ->
