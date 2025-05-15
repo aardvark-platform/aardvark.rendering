@@ -7,7 +7,7 @@ open System.Threading
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Rendering
-open EXTValidationFeatures
+open EXTLayerSettings
 open Vulkan11
 
 #nowarn "9"
@@ -200,7 +200,7 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                 let! pLayers = layers
                 let! pExtensions = extensions
                 let version = apiVersion.ToVulkan()
-                
+
                 let! pApplicationInfo =
                     VkApplicationInfo(
                         appName,
@@ -210,50 +210,29 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                         version
                     )
 
-                let enabledValidationFeatures, disabledValidationFeatures =
-                    match debug.ValidationLayer with
-                    | Some cfg when validationEnabled ->
-                        [|
-                            if cfg.BestPracticesValidation then
-                                 yield VkValidationFeatureEnableEXT.BestPractices
+                use layerSettings =
+                    let validationSetting name value =
+                        { Layer = "VK_LAYER_KHRONOS_validation"; Name = name; Values = [| value |] }
 
-                            if cfg.SynchronizationValidation then
-                                yield VkValidationFeatureEnableEXT.SynchronizationValidation
+                    new LayerSettings([
+                        match debug.ValidationLayer with
+                        | Some cfg when validationEnabled ->
+                            validationSetting "validate_best_practices" cfg.BestPracticesValidation
+                            validationSetting "validate_sync" cfg.SynchronizationValidation
+                            validationSetting "gpuav_enable" (cfg.ShaderBasedValidation = ShaderValidation.GpuAssisted)
+                            validationSetting "printf_enable" (cfg.ShaderBasedValidation = ShaderValidation.DebugPrint)
+                            validationSetting "thread_safety" cfg.ThreadSafetyValidation
+                            validationSetting "object_lifetime" cfg.ObjectLifetimesValidation
 
-                            match cfg.ShaderBasedValidation with
-                            | ShaderValidation.GpuAssisted ->
-                                yield VkValidationFeatureEnableEXT.GpuAssisted
+                        | _ -> ()
+                    ])
 
-                            | ShaderValidation.DebugPrint ->
-                                yield VkValidationFeatureEnableEXT.DebugPrintf
-
-                            | _ ->
-                                ()
-                        |],
-
-                        [|
-                            if not cfg.ThreadSafetyValidation then
-                                VkValidationFeatureDisableEXT.ThreadSafety
-
-                            if not cfg.ObjectLifetimesValidation then
-                                VkValidationFeatureDisableEXT.ObjectLifetimes
-                        |]
-
-                    | _ ->
-                        [||], [||]
-
-                let! pEnabledValidationFeatures = enabledValidationFeatures
-                let! pDisabledValidationFeatures = disabledValidationFeatures
-
-                let! pValidationFeatures =
-                    VkValidationFeaturesEXT(
-                        uint32 enabledValidationFeatures.Length, pEnabledValidationFeatures,
-                        uint32 disabledValidationFeatures.Length, pDisabledValidationFeatures
-                    )
+                let! pLayerSettingsCreateInfo =
+                    VkLayerSettingsCreateInfoEXT(uint32 layerSettings.Count, layerSettings.Pointer)
 
                 let pNext =
-                    if enabledValidationFeatures.Length > 0 || disabledValidationFeatures.Length > 0 then
-                        NativePtr.toNativeInt pValidationFeatures
+                    if layerSettings.Count > 0 then
+                        pLayerSettingsCreateInfo.Address
                     else
                         0n
 
@@ -265,11 +244,12 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                         uint32 layers.Length, pLayers,
                         uint32 extensions.Length, pExtensions
                     )
+
                 let! pInstance = VkInstance.Zero
-                
+
                 let res = VkRaw.vkCreateInstance(pInfo, NativePtr.zero, pInstance)
                 let instance = NativePtr.read pInstance
-                if res = VkResult.Success then 
+                if res = VkResult.Success then
                     return Some (instance, apiVersion)
                 elif apiVersion.Minor > 0 then
                     return tryCreate (Version(apiVersion.Major, apiVersion.Minor - 1, apiVersion.Build))
@@ -278,8 +258,8 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
             }
 
         match tryCreate apiVersion with
-            | Some instance -> instance
-            | None -> failf "could not create instance"
+        | Some instance -> instance
+        | None -> failf "could not create instance"
 
     let devices =
         native {
