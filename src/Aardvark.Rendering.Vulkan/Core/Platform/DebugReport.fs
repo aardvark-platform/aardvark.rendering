@@ -46,10 +46,18 @@ type DebugSummary =
     member x.HasErrors =
         x.ErrorMessages |> List.isEmpty |> not
 
+/// Colors used for debug markers
+module DebugColor =
+    let private palette = ColorBrewer.Scheme.Qualitative.Set2.[5]
+    let RenderTask = C4f palette.[0]
+    let ClearTask = C4f palette.[1]
+    let ComputeTask = C4f palette.[2]
+    let RaytracingTask = C4f palette.[3]
+    let Swapchain = C4f palette.[4]
+
 [<AutoOpen>]
 module private DebugReportHelpers =
     open System.Security.Cryptography
-    open System.IO
 
     module DebugReportVerbosity =
         let toMessageSeverity =

@@ -13,6 +13,8 @@ module internal Utilities =
     let inline internal (&&&=) (x: byref<'T>) (y: 'T) = x <- x &&& y
     let inline internal (|||=) (x: byref<'T>) (y: 'T) = x <- x ||| y
 
+    let inline (|??) x y = if isNull x then y else x
+
     module VkResult =
         open KHRSurface
         open KHRSwapchain

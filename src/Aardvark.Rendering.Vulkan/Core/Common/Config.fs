@@ -108,6 +108,9 @@ type DebugConfig =
         /// None if the debug report is disabled.
         DebugReport : DebugReportConfig option
 
+        /// Output debug markers that can be viewed in debugging tools like RenderDoc or NVIDIA Nsight.
+        DebugMarkers : bool
+
         /// Features to be enabled in the Vulkan validation layer.
         /// None if the validation layer is disabled.
         ValidationLayer : ValidationLayerConfig option
@@ -145,6 +148,7 @@ type DebugConfig =
     /// Disables all debugging functionality.
     static member None =
         { DebugReport                   = None
+          DebugMarkers                  = false
           ValidationLayer               = None
           VerifyShaderCacheIntegrity    = false
           PlatformInformationVerbosity  = 4
@@ -172,6 +176,7 @@ type DebugConfig =
     static member Full =
         { DebugConfig.Normal with
             DebugReport                = Some DebugReportConfig.Full
+            DebugMarkers               = true
             ValidationLayer            = Some ValidationLayerConfig.Full
             VerifyShaderCacheIntegrity = true
             GenerateShaderDebugInfo    = true

@@ -6,8 +6,10 @@ open FSharp.NativeInterop
 open System
 open System.Runtime.CompilerServices
 open Vulkan11
+open EXTDebugUtils
 
 #nowarn "9"
+#nowarn "51"
 
 /// Represents a command that can be enqueued in a command buffer.
 [<AbstractClass>]
@@ -168,6 +170,39 @@ module ``Common Commands`` =
 
                         buffer.AppendCommand()
                         VkRaw.vkCmdSetDeviceMask(buffer.Handle, buffer.Device.PhysicalDevice.DeviceMask)
+            }
+
+        static member InsertLabel (name: string, color: C4f) =
+            { new Command() with
+                member _.Compatible = QueueFlags.All
+                member _.Enqueue buffer =
+                    if buffer.DeviceInterface.Instance.DebugMarkersEnabled then
+                        buffer.AppendCommand()
+                        CStr.using name (fun pName ->
+                            let mutable labelInfo = VkDebugUtilsLabelEXT(pName, v4f color)
+                            VkRaw.vkCmdInsertDebugUtilsLabelEXT(buffer.Handle, &&labelInfo)
+                        )
+            }
+
+        static member BeginLabel (name: string, color: C4f) =
+            { new Command() with
+                member _.Compatible = QueueFlags.All
+                member _.Enqueue buffer =
+                    if buffer.DeviceInterface.Instance.DebugMarkersEnabled then
+                        buffer.AppendCommand()
+                        CStr.using name (fun pName ->
+                            let mutable labelInfo = VkDebugUtilsLabelEXT(pName, v4f color)
+                            VkRaw.vkCmdBeginDebugUtilsLabelEXT(buffer.Handle, &&labelInfo)
+                        )
+            }
+
+        static member EndLabel() =
+            { new Command() with
+                member _.Compatible = QueueFlags.All
+                member _.Enqueue buffer =
+                    if buffer.DeviceInterface.Instance.DebugMarkersEnabled then
+                        buffer.AppendCommand()
+                        VkRaw.vkCmdEndDebugUtilsLabelEXT(buffer.Handle)
             }
 
 [<AutoOpen>]

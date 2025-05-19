@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open Aardvark.Base
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 
@@ -122,9 +123,15 @@ module CStr =
     //        gc.Free()
 
 
-    let malloc (str : string) =
+    let inline malloc (str : string) =
         Marshal.StringToHGlobalAnsi str |> NativePtr.ofNativeInt<byte>
 
-    let toString (str : cstr) =
-        Marshal.PtrToStringAnsi(str |> NativePtr.toNativeInt)
+    let inline free (str : cstr) =
+        Marshal.FreeHGlobal str.Address
 
+    let inline using (str : string) ([<InlineIfLambda>] action : cstr -> 'T) =
+        let ptr = malloc str
+        try action ptr finally free ptr
+
+    let inline toString (str : cstr) =
+        Marshal.PtrToStringAnsi(str |> NativePtr.toNativeInt)

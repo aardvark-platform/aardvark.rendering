@@ -239,6 +239,8 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             let mutable backbuffer  : Image = Unchecked.defaultof<_>
 
             device.perform {
+                do! Command.BeginLabel("Swapchain", DebugColor.Swapchain)
+
                 update() 
                 let framebuffer = framebuffer.Value
                 let colorView = framebuffer.Attachments.[DefaultSemantic.Colors]
@@ -338,10 +340,13 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                     // finally the backbuffer needs to be in layout PresentSrcKhr
                     do! Command.TransformLayout(backbuffer, VkImageLayout.PresentSrcKhr)
 
+                    do! Command.EndLabel()
+
                     // present the backbuffer
                     return! x.TryPresent
 
                 else
+                    do! Command.EndLabel()
                     return false
             }
         )

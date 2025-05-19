@@ -12,7 +12,6 @@ open Microsoft.FSharp.NativeInterop
 open FSharp.Data.Traceable
 open FSharp.Data.Adaptive
 open System.Collections.Generic
-open System.Threading.Tasks
 
 #nowarn "9"
 // #nowarn "51"
@@ -2239,7 +2238,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         updateResources token renderToken (fun resourcesChanged ->
 
             if viewportChanged || commandChanged || resourcesChanged || framebufferChanged then
-                
+
                 if device.DebugConfig.PrintRenderTaskRecompile then
                     let cause =
                         String.concat "; " [
@@ -2266,6 +2265,8 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                 inner.End()
 
             dt.perform {
+                do! Command.BeginLabel(x.Name |?? "Render Task", DebugColor.RenderTask)
+
                 for q in vulkanQueries do
                     do! Command.Begin q
 
@@ -2290,5 +2291,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
                 for q in vulkanQueries do
                     do! Command.End q
+
+                do! Command.EndLabel()
             }
         )

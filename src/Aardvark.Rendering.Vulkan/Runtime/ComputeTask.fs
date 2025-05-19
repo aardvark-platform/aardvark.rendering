@@ -519,7 +519,7 @@ module internal ComputeTaskInternals =
             interface IPreparedCommand with
                 member x.Run(_, t, rt) = task.Run(t, rt)
 
-        type private DeviceCmd(inner : CommandBuffer) =
+        type private DeviceCmd(inner : CommandBuffer, name : string) =
             let family = inner.QueueFamily
             let hasGraphics = family.Flags.HasFlag QueueFlags.Graphics
 
@@ -527,6 +527,8 @@ module internal ComputeTaskInternals =
                 let vulkanQueries = renderToken.GetVulkanQueries(onlyTimeQueries = not hasGraphics)
 
                 deviceToken.perform {
+                    do! Command.BeginLabel(name |?? "Compute Task", DebugColor.ComputeTask)
+
                     for q in vulkanQueries do
                         do! Command.Begin q
 
@@ -534,6 +536,8 @@ module internal ComputeTaskInternals =
 
                     for q in vulkanQueries do
                         do! Command.End q
+
+                    do! Command.EndLabel()
                 }
 
             interface IPreparedCommand with
@@ -543,15 +547,15 @@ module internal ComputeTaskInternals =
             { new IPreparedCommand with
                 member x.Run(_,_, _) = () }
 
-        let ofCompiled (getSecondaryCommandBuffer : unit -> CommandBuffer) = function
+        let ofCompiled (getSecondaryCommandBuffer : unit -> CommandBuffer) (taskName : string) = function
             | CompiledCommand.Host (HostCommand.Upload (src, dst, dstOffset, size)) ->
-                new UploadCmd(src, dst, uint64 dstOffset, uint64 size) :> IPreparedCommand
+                UploadCmd(src, dst, uint64 dstOffset, uint64 size) :> IPreparedCommand
 
             | CompiledCommand.Host (HostCommand.Download (src, srcOffset, dst, size)) ->
-                new DownloadCmd(src, srcOffset, dst, size) :> IPreparedCommand
+                DownloadCmd(src, srcOffset, dst, size) :> IPreparedCommand
 
             | CompiledCommand.Host (HostCommand.Execute task) ->
-                new ExecuteCmd(task) :> IPreparedCommand
+                ExecuteCmd(task) :> IPreparedCommand
 
             | CompiledCommand.Device stream ->
                 if stream.IsEmpty then
@@ -563,7 +567,7 @@ module internal ComputeTaskInternals =
                     stream.Run(inner.Handle)
                     inner.End()
 
-                    new DeviceCmd(inner) :> IPreparedCommand
+                    DeviceCmd(inner, taskName) :> IPreparedCommand
 
     type ComputeTask(manager : ResourceManager, input : alist<ComputeCommand>) as this =
         inherit AdaptiveObject()
@@ -620,7 +624,7 @@ module internal ComputeTaskInternals =
                         secondaryAvailable.Enqueue cmd
 
                     for c in compiler.State.Commands do
-                        let p = c |> PreparedCommand.ofCompiled getSecondaryCommandBuffer
+                        let p = c |> PreparedCommand.ofCompiled getSecondaryCommandBuffer this.Name
                         prepared.Add p
 
                 action()

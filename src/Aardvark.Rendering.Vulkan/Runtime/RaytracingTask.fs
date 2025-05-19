@@ -229,6 +229,8 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
             let vulkanQueries = renderToken.GetVulkanQueries(onlyTimeQueries = true)
 
             dt.perform {
+                do! Command.BeginLabel(x.Name |?? "Raytracing Task", DebugColor.RaytracingTask)
+
                 for q in vulkanQueries do
                     do! Command.Begin q
 
@@ -236,6 +238,8 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
                 for q in vulkanQueries do
                     do! Command.End q
+
+                do! Command.EndLabel()
             }
         )
 
