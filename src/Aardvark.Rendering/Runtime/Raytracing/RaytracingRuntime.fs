@@ -11,6 +11,9 @@ type IRaytracingTask =
     inherit IDisposable
     inherit IAdaptiveObject
 
+    /// The name of the task. Can be null.
+    abstract member Name : string with get, set
+
     /// Updates the resources of the task without running it.
     abstract member Update : token: AdaptiveToken * renderToken: RenderToken -> unit
 

@@ -211,6 +211,8 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
                 inner.End()
         )
 
+    member val Name : string = null with get, set
+
     member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
         x.EvaluateIfNeeded token () (fun token ->
             use _ = renderToken.Use()
@@ -245,6 +247,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
         )
 
     interface IRaytracingTask with
+        member x.Name with get() = x.Name and set name = x.Name <- name
         member x.Update(t, rt) = x.Update(t, rt)
         member x.Run(t, rt) = x.Run(t, rt)
 

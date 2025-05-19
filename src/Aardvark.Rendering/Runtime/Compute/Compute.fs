@@ -12,6 +12,7 @@ open Microsoft.FSharp.NativeInterop
 type IComputeTask =
     inherit IDisposable
     inherit IAdaptiveObject
+    abstract member Name : string with get, set
     abstract member Runtime : IComputeRuntime
     abstract member Update : token: AdaptiveToken * renderToken: RenderToken -> unit
     abstract member Run : token: AdaptiveToken * renderToken: RenderToken -> unit

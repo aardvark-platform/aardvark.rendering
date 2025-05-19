@@ -414,11 +414,20 @@ module Utilities =
         { new SimpleRenderWindow(win, view |> AVal.map Array.singleton, proj |> AVal.map Array.singleton) with
             override x.Compile(win, sg) =
                 let sg, overlay = sg |> hookSg cfg.showHelp win
-                sg
-                |> Sg.viewTrafo view
-                |> Sg.projTrafo proj
-                |> Sg.andAlso overlay
-                |> Sg.compile win.Runtime win.FramebufferSignature
+
+                let mainTask =
+                    sg
+                    |> Sg.viewTrafo view
+                    |> Sg.projTrafo proj
+                    |> Sg.compile win.Runtime win.FramebufferSignature
+
+                let overlayTask =
+                    overlay
+                    |> Sg.compile win.Runtime win.FramebufferSignature
+
+                mainTask.Name <- "Window (Scene)"
+                overlayTask.Name <- "Window (Overlay)"
+                RenderTask.ofList [mainTask; overlayTask]
 
             override x.Release() = 
                
@@ -537,8 +546,10 @@ module Utilities =
                 |> Sg.uniform "LightLocation" (view |> AVal.map (fun t -> t.Backward.C3.XYZ))
                 |> Sg.compile runtime signature
 
-            let clearTask =
-                runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+            stereoTask.Name <- "Window (Scene)"
+
+            let clearTask = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+            clearTask.Name <- "Window (Clear)"
 
             let task =
                 Sg.fullScreenQuad
@@ -549,6 +560,8 @@ module Utilities =
                     }
                     |> Sg.andAlso overlay
                     |> Sg.compile runtime win.FramebufferSignature
+
+            task.Name <- "Window (Stereo Resolve)"
 
             let dummy =
                 { new AbstractRenderTask() with

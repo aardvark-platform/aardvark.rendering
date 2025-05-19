@@ -15,6 +15,8 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
         | Some format -> format |> VkFormat.toTextureFormat |> TextureFormat.toAspect
         | _ -> TextureAspect.None
 
+    member val Name : string = null with get, set
+
     member x.Run(caller : AdaptiveToken, renderToken : RenderToken, outputs : OutputDescription) =
         x.EvaluateAlways caller (fun caller ->
             let fbo = unbox<Framebuffer> outputs.framebuffer
@@ -52,6 +54,7 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
         )
 
     interface IRenderTask with
+        member x.Name with get() = x.Name and set name = x.Name <- name
         member x.Id = id
         member x.Update(c, t) = ()
         member x.Run(c,t,o) = x.Run(c,t,o)

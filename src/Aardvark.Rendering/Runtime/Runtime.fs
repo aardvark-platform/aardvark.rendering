@@ -61,6 +61,7 @@ type IRenderTask =
     abstract member Run : AdaptiveToken * RenderToken * OutputDescription -> unit
     abstract member FrameId : uint64
     abstract member Use : (unit -> 'a) -> 'a
+    abstract member Name : string with get, set
 
 
 and IRuntime =

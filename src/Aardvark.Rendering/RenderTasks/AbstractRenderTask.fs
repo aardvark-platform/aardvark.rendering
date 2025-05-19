@@ -67,6 +67,7 @@ type AbstractRenderTask() =
                 x.Release()
         )
 
+    member val Name : string = null with get, set
     member x.FrameId = frameId
     member x.Run(token : AdaptiveToken, renderToken : RenderToken, out : OutputDescription) =
         x.EvaluateAlways token (fun token ->
@@ -110,3 +111,4 @@ type AbstractRenderTask() =
         member x.Update(token, renderToken) = x.Update(token, renderToken)
         member x.Run(token, renderToken, out) = x.Run(token, renderToken, out)
         member x.Use f = x.Use f
+        member x.Name with get() = x.Name and set name = x.Name <- name

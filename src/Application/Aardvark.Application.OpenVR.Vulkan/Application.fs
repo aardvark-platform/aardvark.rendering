@@ -266,6 +266,7 @@ type VulkanVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
         
         let list = AList.ofList [ hiddenTask; userCmd ]
         task <- app.Runtime.CompileRender(renderPass, RuntimeCommand.Ordered list)
+        task.Name <- "Window"
         loaded <- true
 
         VrTexture.Vulkan(fTex, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))

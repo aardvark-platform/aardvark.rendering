@@ -17,3 +17,4 @@ type EmptyRenderTask private() =
         member x.Runtime = None
         member x.FrameId = 0UL
         member x.Use f = f()
+        member x.Name with get() = null and set _ = ()

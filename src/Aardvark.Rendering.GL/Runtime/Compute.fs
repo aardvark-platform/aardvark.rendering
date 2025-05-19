@@ -622,6 +622,8 @@ module internal ComputeTaskInternals =
 
             action()
 
+        member val Name : string = null with get, set
+
         member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
             x.EvaluateIfNeeded token () (fun token ->
                 update token renderToken ignore
@@ -642,6 +644,7 @@ module internal ComputeTaskInternals =
             )
 
         interface IComputeTask with
+            member x.Name with get() = x.Name and set name = x.Name <- name
             member x.Runtime = manager.Context.Runtime
             member x.Update(token, renderToken) = x.Update(token, renderToken)
             member x.Run(token, renderToken) = x.Run(token, renderToken)

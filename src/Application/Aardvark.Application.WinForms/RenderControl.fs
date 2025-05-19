@@ -171,7 +171,8 @@ type RenderControl() as this =
 
     member x.RenderTask 
         with get() = match renderTask with | Some t -> t | _ -> Unchecked.defaultof<_>
-        and set t = 
+        and set (t: IRenderTask) =
+            if isNull t.Name then t.Name <- "Window"
             renderTask <- Some t
             match impl with
                 | Some i -> i.RenderTask <- t

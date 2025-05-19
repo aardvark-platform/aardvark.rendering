@@ -131,9 +131,11 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
                 |> Sg.writeBuffers' (Set.ofList [WriteBuffer.Stencil])
 
         hiddenTask <- runtime.CompileRender(framebufferSignature, sg.RenderObjects(Ag.Scope.Root))
+        hiddenTask.Name <- "Window (Hidden)"
         
     let compileClear () =
         clearTask <- runtime.CompileClear(framebufferSignature, clearColor, AVal.constant 1.0)
+        clearTask.Name <- "Window (Clear)"
 
     member x.Version = version :> aval<_>
     member x.Texture = tex
@@ -146,7 +148,8 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
 
     
     member x.RenderTask
-        with set (t : IRenderTask) = 
+        with set (t : IRenderTask) =
+            if isNull t.Name then t.Name <- "Window"
             userTask <- t
         and get () = userTask
 
