@@ -61,7 +61,11 @@ module internal ``DeviceChooserConsole Utilities`` =
 type DeviceChooserConsole() =
     inherit DeviceChooser()
 
-    override _.IgnoreCache = ``DeviceChooserConsole Utilities``.Keyboard.altDown()
+    override _.IgnoreCache =
+        try ``DeviceChooserConsole Utilities``.Keyboard.altDown()
+        with exn ->
+            Log.warn $"Keyboard.altDown() failed: {exn.Message}"
+            false
 
     override _.Choose(devices) =
         Log.line "Multiple GPUs detected (please select one)"
