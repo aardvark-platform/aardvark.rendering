@@ -131,11 +131,11 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
                 |> Sg.writeBuffers' (Set.ofList [WriteBuffer.Stencil])
 
         hiddenTask <- runtime.CompileRender(framebufferSignature, sg.RenderObjects(Ag.Scope.Root))
-        hiddenTask.Name <- "Window (Hidden)"
+        hiddenTask.Name <- "Window Task (Hidden)"
         
     let compileClear () =
         clearTask <- runtime.CompileClear(framebufferSignature, clearColor, AVal.constant 1.0)
-        clearTask.Name <- "Window (Clear)"
+        clearTask.Name <- "Window Task (Clear)"
 
     member x.Version = version :> aval<_>
     member x.Texture = tex
@@ -149,7 +149,7 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
     
     member x.RenderTask
         with set (t : IRenderTask) =
-            if isNull t.Name then t.Name <- "Window"
+            if isNull t.Name then t.Name <- "Window Task"
             userTask <- t
         and get () = userTask
 
@@ -211,6 +211,7 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
     override x.Render() =
         if loaded then
             Operators.using ctx.ResourceLock (fun _ ->
+                ctx.PushDebugGroup("Swapchain")
   
                 let output = OutputDescription.ofFramebuffer fbo
 
@@ -225,10 +226,11 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
                 if samples > 1 then
                     runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 0], fTexl, V2i.Zero, V2i.Zero, cTex.Size.XY)
                     runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 1], fTexr, V2i.Zero, V2i.Zero, cTex.Size.XY)
+                    ctx.PopDebugGroup()
                 else
-                    failwith "not implemented"
                     //runtime.Copy(cTex.[TextureAspect.Color, 0, *], fTex.[TextureAspect.Color, 0, *])
-
+                    ctx.PopDebugGroup()
+                    failwith "not implemented"
             )
                 
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)

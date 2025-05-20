@@ -95,7 +95,9 @@ type RenderControl() as self =
         c.ForceCursor <- true
         setCursor c currentCursor
         match renderTask with
-            | Some task -> cr.RenderTask <- task
+            | Some task ->
+                if isNull task.Name then task.Name <- "Window Task"
+                cr.RenderTask <- task
             | None -> ()
         cr.SubSampling <- subsampling
             

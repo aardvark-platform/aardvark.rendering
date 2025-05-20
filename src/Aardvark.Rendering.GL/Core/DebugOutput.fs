@@ -105,101 +105,73 @@ type internal DebugOutputMode =
     | Disabled
     | Enabled of synchronous: bool
 
-type internal DebugOutput =
-    { Mode     : DebugOutputMode
-      Callback : PinnedDelegate
-      Errors   : System.Collections.Generic.List<string> }
+type internal DebugOutput private (context: OpenTK.ContextHandle) =
+    let mutable mode = DebugOutputMode.Disabled
+    let errors = ResizeArray<string>()
+    let mutable callback = null
 
-    member x.GetErrors() =
-        lock x.Errors (fun _ -> x.Errors.ToArray())
-
-    member x.Dispose() = x.Callback.Dispose()
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
-
-module internal DebugOutput =
-
-    module private DebugSeverityControl =
-
-        let ofVerbosity (verbosity : DebugOutputSeverity)=
-            [
-                DebugSeverityControl.DebugSeverityHigh
-
-                if verbosity <= DebugOutputSeverity.Medium then
-                    DebugSeverityControl.DebugSeverityMedium
-
-                if verbosity <= DebugOutputSeverity.Low then
-                    DebugSeverityControl.DebugSeverityLow
-
-                if verbosity <= DebugOutputSeverity.Notification then
-                    DebugSeverityControl.DebugSeverityNotification
-            ]
-
-    let private enableMessages (severities : List<DebugSeverityControl>) =
-
-        let enable (enabled : bool) (severity : DebugSeverityControl) =
-            let arr : uint32[] = null
-            GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, enabled)
-            GL.Check "glDebugMessageControl failed"
-
-        enable false DebugSeverityControl.DontCare
-        severities |> List.iter (enable true)
-       
-    let tryInitialize (verbosity : DebugOutputSeverity) =
+    static member TryInitialize() =
         let ctx = GraphicsContext.CurrentContext |> unbox<IGraphicsContextInternal>
 
-        match ctx.TryGetAddress("glDebugMessageCallback") with
-        | Some ptr ->
-            // Setup callback
-            Report.BeginTimed(4, "[GL] setting up debug callback")
-
-            let errors = System.Collections.Generic.List<string>()
-
-            let glDebugMessageCallback = Marshal.GetDelegateForFunctionPointer(ptr, typeof<GLDebugMessageCallbackDel>) |> unbox<GLDebugMessageCallbackDel>
-            let callback = Marshal.PinDelegate <| DebugProc (debugCallback errors)
-            glDebugMessageCallback.Invoke(callback.Pointer, ctx.Context.Handle)
-
-            Report.End(4) |> ignore
-
-            // Set messages
-            Report.BeginTimed(4, "[GL] debug message control")
-
-            enableMessages <| DebugSeverityControl.ofVerbosity verbosity
-
-            Report.End(4) |> ignore
-
-            Some { Mode = DebugOutputMode.Disabled; Callback = callback; Errors = errors }
-
-        | _ ->
+        if ExtensionHelpers.isSupported (Version(4, 3)) "GL_KHR_debug" then
+            Some <| DebugOutput(ctx.Context)
+        else
             None
 
-    let isEnabled (debug : DebugOutput) =
-        match debug.Mode with
-        | DebugOutputMode.Enabled _ -> true | _ -> false
+    member _.Mode = mode
+    member inline this.IsEnabled = this.Mode <> DebugOutputMode.Disabled
+    member inline this.IsSynchronous = match this.Mode with | DebugOutputMode.Enabled s -> s | _ -> false
 
-    let isSynchronous (debug : DebugOutput) =
-        match debug.Mode with
-        | DebugOutputMode.Enabled s -> s | _ -> false
+    member _.GetErrors() =
+        lock errors (fun _ -> errors.ToArray())
 
-    let enable (synchronous : bool) (debug : DebugOutput) =
-        if not <| isEnabled debug then
+    member this.Enable(synchronous: bool, verbosity: DebugOutputSeverity) =
+        if not this.IsEnabled then
             GL.Enable(EnableCap.DebugOutput)
             GL.Check "cannot enable debug output"
 
-        if synchronous && not <| isSynchronous debug then
+            callback <- DebugProc (debugCallback errors)
+            GL.DebugMessageCallback(callback, context.Handle)
+            GL.Check "failed to set debug message callback"
+
+        if synchronous && not <| this.IsSynchronous then
             GL.Enable(EnableCap.DebugOutputSynchronous)
             GL.Check "cannot enable synchronous debug output"
 
-        { debug with Mode = DebugOutputMode.Enabled synchronous }
+        let severities =
+            [
+                DebugSeverityControl.DebugSeverityHigh, true
+                DebugSeverityControl.DebugSeverityMedium, (verbosity <= DebugOutputSeverity.Medium)
+                DebugSeverityControl.DebugSeverityLow, (verbosity <= DebugOutputSeverity.Low)
+                DebugSeverityControl.DebugSeverityNotification, (verbosity <= DebugOutputSeverity.Notification)
+            ]
 
-    let disable (debug : DebugOutput) =
-        if isEnabled debug then
+        for severity, enabled in severities do
+            GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, (null: uint32[]), enabled)
+            GL.Check "failed to set debug message control"
+
+        mode <- DebugOutputMode.Enabled synchronous
+
+    member this.Disable() =
+        if this.IsEnabled then
             GL.Disable(EnableCap.DebugOutput)
             GL.Check "cannot disable debug output"
+            callback <- null
 
-            if isSynchronous debug then
+            if this.IsSynchronous then
                 GL.Disable(EnableCap.DebugOutputSynchronous)
                 GL.Check "cannot disable synchronous debug output"
 
-        { debug with Mode = DebugOutputMode.Disabled }
+        mode <- DebugOutputMode.Disabled
+
+    member _.Print(typ: DebugType, severity: DebugSeverity, id: int, message: string) =
+        GL.DebugMessageInsert(DebugSourceExternal.DebugSourceApplication, typ, id, severity, -1, message)
+        GL.Check "cannot insert debug message"
+
+    member _.PushGroup(message: string) =
+        GL.PushDebugGroup(DebugSourceExternal.DebugSourceApplication, 0, -1, message)
+        GL.Check "cannot push debug group"
+
+    member _.PopGroup() =
+        GL.PopDebugGroup()
+        GL.Check "cannot pop debug group"

@@ -252,6 +252,8 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     let sharedMemoryManager = SharedMemoryManager(fun _ -> this.ResourceLock)
 
+    let debugMarkersEnabled = (runtime.DebugConfig :?> DebugConfig).DebugMarkers
+
     let getOrQuery (description : string) (var : byref<'T option>) (query : unit -> 'T) =
         match var with
         | None ->
@@ -519,6 +521,23 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
     /// Returns all errors reported by the debug output on the resource context handles.
     member x.GetDebugErrors() =
         resourceContexts |> Array.collect (fun h -> h.GetDebugErrors())
+
+    member x.PrintDebug(typ: DebugType, severity: DebugSeverity, id: int, message: string) =
+        match ContextHandle.Current with
+        | ValueSome ctx -> ctx.PrintDebug(typ, severity, id, message)
+        | _ -> ()
+
+    member x.PushDebugGroup(message: string) =
+        if debugMarkersEnabled then
+            match ContextHandle.Current with
+            | ValueSome ctx -> ctx.PushDebugGroup(message)
+            | _ -> ()
+
+    member x.PopDebugGroup() =
+        if debugMarkersEnabled then
+            match ContextHandle.Current with
+            | ValueSome ctx -> ctx.PopDebugGroup()
+            | _ -> ()
 
     /// <summary>
     /// releases all resources created by the context

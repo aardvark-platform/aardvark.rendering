@@ -159,6 +159,9 @@ type DebugConfig =
         /// None if the debug output is disabled.
         DebugOutput : DebugOutputConfig option
 
+        /// Output debug markers that can be viewed in debugging tools like RenderDoc or NVIDIA Nsight.
+        DebugMarkers : bool
+
         /// Determines if and how OpenGL error flags are checked and reported.
         ErrorFlagCheck : ErrorFlagCheck
 
@@ -183,6 +186,7 @@ type DebugConfig =
     static member None =
         { DebugOutput                       = None
           ErrorFlagCheck                    = ErrorFlagCheck.Disabled
+          DebugMarkers                      = false
           DebugRenderTasks                  = false
           DebugComputeTasks                 = false
           PrintShaderCode                   = false

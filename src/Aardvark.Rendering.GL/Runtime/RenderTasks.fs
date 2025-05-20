@@ -135,6 +135,7 @@ module RenderTasks =
             use __ = GlobalResourceLock.lock()
 
             GL.Check "[RenderTask.Run] Entry"
+            ctx.PushDebugGroup(x.Name ||? "Render Task")
 
             let fbo = desc.framebuffer // TODO: fix outputdesc
             signature |> FramebufferSignature.validateCompability fbo
@@ -168,6 +169,8 @@ module RenderTasks =
                 GL.BindVertexArray 0
                 GL.BindBuffer(BufferTarget.DrawIndirectBuffer, 0)
             )
+
+            ctx.PopDebugGroup()
 
     [<AbstractClass>]
     type AbstractSubTask() =

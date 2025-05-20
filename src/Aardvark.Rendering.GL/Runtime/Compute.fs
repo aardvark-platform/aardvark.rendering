@@ -612,15 +612,19 @@ module internal ComputeTaskInternals =
         let resources = new ResourceInputSet()
         let compiler = new CommandCompiler(this, manager, resources, input, debug)
 
-        let update (token : AdaptiveToken) (renderToken : RenderToken) (action : unit -> 'T) =
+        let update (token : AdaptiveToken) (renderToken : RenderToken) (action : unit -> unit) =
             use __ = renderToken.Use()
             use __ = ctx.ResourceLock
             use __ = GlobalResourceLock.lock()
+
+            ctx.PushDebugGroup(this.Name ||? "Compute Task")
 
             resources.Update(token, renderToken)
             compiler.Update(token)
 
             action()
+
+            ctx.PopDebugGroup()
 
         member val Name : string = null with get, set
 

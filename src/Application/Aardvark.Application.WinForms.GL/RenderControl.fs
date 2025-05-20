@@ -278,6 +278,7 @@ type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int)
                 match task with
                 | Some t ->
                     use __ = ctx.RenderingLock contextHandle
+                    ctx.PushDebugGroup("Swapchain")
                     let fbo, blit = getFramebuffer fboSize screenSize samples
 
                     if initial then
@@ -319,6 +320,7 @@ type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int)
                     blit()
 
                     x.SwapBuffers()
+                    ctx.PopDebugGroup()
                     //System.Threading.Thread.Sleep(200)
                     frameWatch.Stop()
                     if not first then

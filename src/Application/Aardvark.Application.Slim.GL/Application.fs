@@ -197,6 +197,7 @@ module private OpenGL =
             // TODO: It may be possible to simplify this
             override this.Run(task : IRenderTask, queries : IQuery list)  =
                 use __ = runtime.Context.RenderingLock ctx
+                ctx.PushDebugGroup("Swapchain")
 
                 let output = OutputDescription.ofFramebuffer framebuffer
 
@@ -246,6 +247,7 @@ module private OpenGL =
                 GL.DeleteTexture temp
 
                 glfw.SwapBuffers(win)
+                ctx.PopDebugGroup()
                 true
 
             override this.Size =
@@ -268,6 +270,7 @@ module private OpenGL =
                 ()
             override this.Run(task : IRenderTask, queries : IQuery list)  =
                 use __ = runtime.Context.RenderingLock ctx
+                ctx.PushDebugGroup("Swapchain")
 
                 let output = OutputDescription.ofFramebuffer defaultFramebuffer
 
@@ -282,6 +285,7 @@ module private OpenGL =
                 task.Run(AdaptiveToken.Top, rt, output)
 
                 glfw.SwapBuffers(win)
+                ctx.PopDebugGroup()
                 true
 
             override this.Size =

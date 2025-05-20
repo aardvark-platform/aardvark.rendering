@@ -182,23 +182,20 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                 GL.SetDefaultStates()
 
             debugOutput <-
-                match debug.DebugOutput with
-                | Some cfg when debugOutput.IsNone ->
-                    match DebugOutput.tryInitialize cfg.Verbosity with
+                if debug.DebugOutput.IsNone && not debug.DebugMarkers then None
+                else
+                    match DebugOutput.TryInitialize() with
                     | Some dbg ->
-                        let dbg = dbg |> DebugOutput.enable cfg.Synchronous
-
-                        let str = "debug output enabled"
-                        GL.DebugMessageInsert(DebugSourceExternal.DebugSourceApplication, DebugType.DebugTypeOther, 1234,
-                                              DebugSeverity.DebugSeverityLow, str.Length, str)
+                        debug.DebugOutput |> Option.iter (fun cfg ->
+                            dbg.Enable(cfg.Synchronous, cfg.Verbosity)
+                            dbg.Print(DebugType.DebugTypeOther, DebugSeverity.DebugSeverityLow, 1234, "Debug output enabled")
+                        )
 
                         Some dbg
 
                     | _ ->
                         Log.warn "Failed to initialize debug output"
                         None
-                | _ ->
-                    debugOutput
         )
 
     /// Returns all errors reported by the debug output.
@@ -206,6 +203,21 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         match debugOutput with
         | Some dbg -> dbg.GetErrors()
         | _ -> [||]
+
+    member x.PrintDebug(typ: DebugType, severity: DebugSeverity, id: int, message: string) =
+        match debugOutput with
+        | Some dbg -> dbg.Print(typ, severity, id, message)
+        | _ -> ()
+
+    member x.PushDebugGroup(message: string) =
+        match debugOutput with
+        | Some dbg -> dbg.PushGroup(message)
+        | _ -> ()
+
+    member x.PopDebugGroup() =
+        match debugOutput with
+        | Some dbg -> dbg.PopGroup()
+        | _ -> ()
 
     member x.Dispose() =
         let mutable lockTaken = false
@@ -227,7 +239,6 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                             )
                     
                     isDisposed <- true
-                    debugOutput |> Option.iter (fun dbg -> dbg.Dispose())
                     onDisposed.Trigger()
             else
                 Log.warn "[GL] ContextHandle.Dispose() timed out"

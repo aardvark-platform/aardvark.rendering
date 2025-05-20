@@ -1258,7 +1258,7 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
         with get () = renderTask
         and set (v: IRenderTask) = 
             x.Invoke(fun () ->
-                if isNull v.Name then v.Name <- "Window"
+                if isNull v.Name then v.Name <- "Window Task"
                 renderTaskSub.Dispose() 
                 renderTask.Dispose()
                 renderTask <- v

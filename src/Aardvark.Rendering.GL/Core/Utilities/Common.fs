@@ -24,6 +24,12 @@ module private ErrorUtilities =
         failf' Exception fmt
 
 [<AutoOpen>]
+module internal BaseUtilities =
+
+    // TODO: Handle Nullable and move to Aardvark.Base
+    let inline (||?) x y = if isNull x then y else x
+
+[<AutoOpen>]
 module TypeSizeExtensions =
     type Type with
         /// <summary>
