@@ -7,6 +7,17 @@ open FSharp.Data.Adaptive.Operators
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 
+type IAdaptiveFramebufferOutput =
+    inherit IAdaptiveResource<IFramebufferOutput>
+    abstract member Format : aval<TextureFormat>
+    abstract member Samples : aval<int>
+    abstract member Size : aval<V2i>
+
+type IAdaptiveRenderbuffer =
+    inherit IAdaptiveFramebufferOutput
+    inherit IAdaptiveResource<IRenderbuffer>
+    abstract member Runtime : ITextureRuntime
+
 [<AutoOpen>]
 module private AdaptiveRenderbufferTypes =
 
@@ -46,26 +57,34 @@ module private AdaptiveRenderbufferTypes =
                 handle <- Some tex
                 tex
 
-    [<AbstractClass>]
-    type AbstractAdaptiveFramebufferOutput(resource : IAdaptiveResource) =
+        interface IAdaptiveRenderbuffer with
+            member x.Runtime = runtime
+            member x.Format = format
+            member x.Samples = samples
+            member x.Size = size
+            member x.GetValue(t) = x.GetValue(t) :> IFramebufferOutput
+            member x.GetValue(t, rt) = x.GetValue(t, rt) :> IFramebufferOutput
+
+    type AdaptiveTextureAttachment<'T when 'T :> IBackendTexture>(texture : IAdaptiveResource<'T>, slice : aval<int>, level : aval<int>) =
         inherit AdaptiveResource<IFramebufferOutput>()
 
-        override x.Create() = resource.Acquire()
-        override x.Destroy() = resource.Release()
+        let format = texture |> AVal.mapNonAdaptive _.Format
+        let samples = texture |> AVal.mapNonAdaptive _.Samples
+        let size = texture |> AVal.mapNonAdaptive _.Size.XY
 
-    type AdaptiveTextureAttachment<'a when 'a :> ITexture>(texture : IAdaptiveResource<'a>, slice : aval<int>, level : aval<int>) =
-        inherit AbstractAdaptiveFramebufferOutput(texture)
+        override x.Create() = texture.Acquire()
+        override x.Destroy() = texture.Release()
+
         override x.Compute(token : AdaptiveToken, t : RenderToken) =
-            let tex = unbox<IBackendTexture> <| texture.GetValue(token, t)
+            let tex = texture.GetValue(token, t)
             let slice = slice.GetValue token
             let level = level.GetValue token
             tex.GetOutputView(level, slice)
 
-    type AdaptiveRenderbufferAttachment<'a when 'a :> IRenderbuffer>(renderbuffer : IAdaptiveResource<'a>) =
-        inherit AbstractAdaptiveFramebufferOutput(renderbuffer)
-        override x.Compute(token : AdaptiveToken, t : RenderToken) =
-            let rb = renderbuffer.GetValue(token, t)
-            rb :> IFramebufferOutput
+        interface IAdaptiveFramebufferOutput with
+            member x.Format = format
+            member x.Samples = samples
+            member x.Size = size
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -78,7 +97,7 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
     ///<param name="samples">The number of samples.</param>
     [<Extension>]
     static member CreateRenderbuffer(this : ITextureRuntime, size : aval<V2i>, format : TextureFormat, samples : aval<int>) =
-        AdaptiveRenderbuffer(this, ~~format, samples, size) :> IAdaptiveResource<_>
+        AdaptiveRenderbuffer(this, ~~format, samples, size) :> IAdaptiveRenderbuffer
 
     ///<summary>Creates an adaptive renderbuffer.</summary>
     ///<param name="this">The runtime.</param>
@@ -88,7 +107,7 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
     [<Extension>]
     static member CreateRenderbuffer(this : ITextureRuntime, size : aval<V2i>, format : TextureFormat,
                                      [<Optional; DefaultParameterValue(1)>] samples : int) =
-        AdaptiveRenderbuffer(this, ~~format, ~~samples, size) :> IAdaptiveResource<_>
+        AdaptiveRenderbuffer(this, ~~format, ~~samples, size) :> IAdaptiveRenderbuffer
 
 
     ///<summary>Creates a framebuffer attachment from the given adaptive texture.</summary>
@@ -96,29 +115,23 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
     ///<param name="slice">The slice of the texture to use as output. If negative, all slices are used.</param>
     ///<param name="level">The mip level of the texture to use as output.</param>
     [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>, slice : aval<int>, level : aval<int>) =
-        AdaptiveTextureAttachment(texture, slice, level) :> IAdaptiveResource<_>
+    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#IBackendTexture>, slice : aval<int>, level : aval<int>) =
+        AdaptiveTextureAttachment(texture, slice, level) :> IAdaptiveFramebufferOutput
 
     ///<summary>Creates a framebuffer attachment from the given adaptive texture.
     /// If the input texture is mipmapped, the first level is used.</summary>
     ///<param name="texture">The input texture.</param>
     ///<param name="slice">The slice of the texture to use as output. If negative, all slices are used.</param>
     [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>, slice : aval<int>) =
-        AdaptiveTextureAttachment(texture, slice, ~~0) :> IAdaptiveResource<_>
+    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#IBackendTexture>, slice : aval<int>) =
+        AdaptiveTextureAttachment(texture, slice, ~~0) :> IAdaptiveFramebufferOutput
 
     ///<summary>Creates a framebuffer attachment from the given adaptive texture.</summary>
     ///<param name="texture">The input texture.</param>
     ///<param name="slice">The slice of the texture to use as output. If negative, all slices are used. Default is -1.</param>
     ///<param name="level">The mip level of the texture to use as output. Default is 0.</param>
     [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>,
+    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#IBackendTexture>,
                                           [<Optional; DefaultParameterValue(-1)>] slice : int,
                                           [<Optional; DefaultParameterValue(0)>] level : int) =
-        AdaptiveTextureAttachment(texture, ~~slice, ~~level) :> IAdaptiveResource<_>
-
-    ///<summary>Creates a framebuffer attachment from the given adaptive renderbuffer.</summary>
-    ///<param name="renderbuffer">The input renderbuffer.</param>
-    [<Extension>]
-    static member CreateRenderbufferAttachment(_ : ITextureRuntime, renderbuffer : IAdaptiveResource<#IRenderbuffer>) =
-        AdaptiveRenderbufferAttachment(renderbuffer) :> IAdaptiveResource<_>
+        AdaptiveTextureAttachment(texture, ~~slice, ~~level) :> IAdaptiveFramebufferOutput

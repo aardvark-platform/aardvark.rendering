@@ -4,7 +4,13 @@ open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
 
-type AdaptiveAccelerationStructure(runtime : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>, usage : AccelerationStructureUsage) =
+type IAdaptiveAccelerationStructure =
+    inherit IAdaptiveResource<IAccelerationStructure>
+    abstract member Runtime : IAccelerationStructureRuntime
+    abstract member Geometry : aval<TraceGeometry>
+    abstract member Usage : AccelerationStructureUsage
+
+type internal AdaptiveAccelerationStructure(runtime : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>, usage : AccelerationStructureUsage) =
     inherit AdaptiveResource<IAccelerationStructure>()
 
     let mutable handle : Option<IAccelerationStructure> = None
@@ -40,13 +46,18 @@ type AdaptiveAccelerationStructure(runtime : IAccelerationStructureRuntime, geom
             rt.CreatedResource(ResourceKind.AccelerationStructure)
             create data
 
+    interface IAdaptiveAccelerationStructure with
+        member x.Runtime = runtime
+        member x.Geometry = geometry
+        member x.Usage = usage
+
 
 [<AbstractClass; Sealed; Extension>]
 type IAccelerationStructureRuntimeAdaptiveExtensions private() =
 
     [<Extension>]
     static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>, usage : AccelerationStructureUsage) =
-        AdaptiveAccelerationStructure(this, geometry, usage) :> IAdaptiveResource<_>
+        AdaptiveAccelerationStructure(this, geometry, usage) :> IAdaptiveAccelerationStructure
 
     [<Extension>]
     static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>) =

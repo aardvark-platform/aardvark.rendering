@@ -5,6 +5,19 @@ open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 
+type IAdaptiveFramebuffer =
+    inherit IAdaptiveResource<IFramebuffer>
+    abstract member Runtime : IFramebufferRuntime
+    abstract member Signature : IFramebufferSignature
+    abstract member Size : aval<V2i>
+    abstract member Attachments : Map<Symbol, aval<IFramebufferOutput>>
+
+type IAdaptiveFramebufferCube =
+    inherit IAdaptiveResource<CubeMap<IFramebuffer>>
+    abstract member Runtime : IFramebufferRuntime
+    abstract member Signature : IFramebufferSignature
+    abstract member Attachments : CubeMap<Map<Symbol, aval<IFramebufferOutput>>>
+
 [<AutoOpen>]
 module private AdaptiveFramebufferTypes =
 
@@ -12,6 +25,11 @@ module private AdaptiveFramebufferTypes =
         inherit AdaptiveResource<IFramebuffer>()
 
         let mutable handle = None
+
+        let size =
+            match Seq.tryHead attachments with
+            | Some (KeyValue(_, att)) -> att |> AVal.mapNonAdaptive _.Size
+            | _ -> AVal.constant V2i.Zero
 
         let compare x y =
             let x = x |> Map.toList |> List.map snd
@@ -47,6 +65,12 @@ module private AdaptiveFramebufferTypes =
             | None ->
                 t.CreatedResource(ResourceKind.Framebuffer)
                 create signature att
+
+        interface IAdaptiveFramebuffer with
+            member x.Runtime = runtime
+            member x.Signature = signature
+            member x.Size = size
+            member x.Attachments = attachments
 
 
     type AdaptiveFramebufferCube(runtime : IFramebufferRuntime, signature : IFramebufferSignature, attachments : CubeMap<Map<Symbol, aval<IFramebufferOutput>>>) =
@@ -106,6 +130,11 @@ module private AdaptiveFramebufferTypes =
                         create face level signature att
             )
 
+        interface IAdaptiveFramebufferCube with
+            member x.Runtime = runtime
+            member x.Signature = signature
+            member x.Attachments = attachments
+
 [<AbstractClass; Sealed; Extension>]
 type IFramebufferRuntimeAdaptiveExtensions private() =
 
@@ -123,7 +152,7 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
                                     attachments : Map<Symbol, #aval<IFramebufferOutput>>) =
 
         let atts = attachments |> Map.map (fun _ x -> x :> aval<_>)
-        AdaptiveFramebuffer(this, signature, atts) :> IAdaptiveResource<_>
+        AdaptiveFramebuffer(this, signature, atts) :> IAdaptiveFramebuffer
 
     /// <summary>
     /// Creates a framebuffer with the given adaptive attachments.
@@ -160,17 +189,16 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
     [<Extension>]
     static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<V2i>, writeOnly : Set<Symbol>) =
 
-        let inline createAttachment (sem : Symbol) (format : TextureFormat) =
+        let inline createAttachment (sem : Symbol) (format : TextureFormat) : aval<IFramebufferOutput> =
             if signature.LayerCount > 1 then
                 let tex = this.CreateTexture2DArray(size, format, samples = signature.Samples, count = signature.LayerCount)
-                this.CreateTextureAttachment(tex) :> aval<_>
+                this.CreateTextureAttachment(tex)
             else
                 if writeOnly |> Set.contains sem then
-                    let rb = this.CreateRenderbuffer(size, format, signature.Samples)
-                    this.CreateRenderbufferAttachment(rb) :> aval<_>
+                    this.CreateRenderbuffer(size, format, signature.Samples)
                 else
                     let tex = this.CreateTexture2D(size, format, samples = signature.Samples)
-                    this.CreateTextureAttachment(tex, 0) :> aval<_>
+                    this.CreateTextureAttachment(tex, 0)
 
         let atts = SymDict.empty
 
@@ -201,7 +229,7 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
     [<Extension>]
     static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, attachments : CubeMap<Map<Symbol, #aval<IFramebufferOutput>>>) =
         let atts = attachments |> CubeMap.map (Map.map (fun _ x -> x :> aval<_>))
-        AdaptiveFramebufferCube(this, signature, atts) :> IAdaptiveResource<_>
+        AdaptiveFramebufferCube(this, signature, atts) :> IAdaptiveFramebufferCube
 
     /// <summary>
     /// Creates a framebuffer with the given sequence of adaptive attachments.

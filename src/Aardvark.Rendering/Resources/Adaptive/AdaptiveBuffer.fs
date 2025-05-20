@@ -11,6 +11,9 @@ open System.Runtime.CompilerServices
 type IAdaptiveBuffer =
     inherit IAdaptiveResource<IBackendBuffer>
 
+    /// Runtime of the resource.
+    abstract member Runtime : IBufferRuntime
+
     /// The size of the buffer in bytes.
     abstract member Size : nativeint
 
@@ -174,6 +177,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
         x.ComputeHandle(false)
 
     interface IAdaptiveBuffer with
+        member x.Runtime = runtime
         member x.Size = x.Size
         member x.Resize(sizeInBytes, forceImmediate) = x.Resize(sizeInBytes, forceImmediate)
         member x.Write(data, offset, sizeInBytes) = x.Write(data, offset, sizeInBytes) 

@@ -6,6 +6,16 @@ open FSharp.Data.Adaptive.Operators
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 
+type IAdaptiveTexture =
+    inherit IAdaptiveResource<IBackendTexture>
+    abstract member Runtime : ITextureRuntime
+    abstract member Dimension : TextureDimension
+    abstract member Size : aval<V3i>
+    abstract member Format : aval<TextureFormat>
+    abstract member Levels : aval<int>
+    abstract member Samples : aval<int>
+    abstract member Count : aval<int>
+
 [<AutoOpen>]
 module private AdaptiveTextureTypes =
 
@@ -27,6 +37,12 @@ module private AdaptiveTextureTypes =
 
         let mutable handle : Option<IBackendTexture * 'Params> = None
 
+        abstract member Dimension : TextureDimension
+        abstract member Size : aval<V3i>
+        abstract member Format : aval<TextureFormat>
+        abstract member Levels : aval<int>
+        abstract member Samples : aval<int>
+        abstract member Count : aval<int>
         abstract member GetParams : AdaptiveToken -> 'Params
         abstract member CreateTexture : ITextureRuntime * 'Params -> IBackendTexture
 
@@ -61,10 +77,26 @@ module private AdaptiveTextureTypes =
                 t.CreatedResource(ResourceKind.Texture)
                 x.CreateHandle(runtime, textureParams)
 
+        interface IAdaptiveTexture with
+            member x.Runtime = runtime
+            member x.Dimension = x.Dimension
+            member x.Size = x.Size
+            member x.Format = x.Format
+            member x.Levels = x.Levels
+            member x.Samples = x.Samples
+            member x.Count = x.Count
+
 
     type AdaptiveTexture(runtime : ITextureRuntime, dimension : TextureDimension,
                          size : aval<V3i>, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>) =
         inherit AbstractAdaptiveTexture<TextureParams>(runtime)
+
+        override x.Dimension = dimension
+        override x.Size = size
+        override x.Format = format
+        override x.Levels = levels
+        override x.Samples = samples
+        override x.Count = AVal.constant 1
 
         override x.GetParams(token : AdaptiveToken) =
             {
@@ -80,6 +112,13 @@ module private AdaptiveTextureTypes =
     type AdaptiveTextureArray(runtime : ITextureRuntime, dimension : TextureDimension,
                               size : aval<V3i>, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, count : aval<int>) =
         inherit AbstractAdaptiveTexture<TextureArrayParams>(runtime)
+
+        override x.Dimension = dimension
+        override x.Size = size
+        override x.Format = format
+        override x.Levels = levels
+        override x.Samples = samples
+        override x.Count = count
 
         override x.GetParams(token : AdaptiveToken) =
             let texture : TextureParams =
@@ -113,7 +152,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     [<Extension>]
     static member CreateTexture(this : ITextureRuntime, size : aval<V3i>, dimension : TextureDimension,
                                 format : TextureFormat, levels : aval<int>, samples : aval<int>) =
-        AdaptiveTexture(this, dimension, size, ~~format, levels = levels, samples = samples) :> IAdaptiveResource<_>
+        AdaptiveTexture(this, dimension, size, ~~format, levels = levels, samples = samples) :> IAdaptiveTexture
 
     ///<summary>Creates an adaptive texture.</summary>
     ///<param name="this">The runtime.</param>
@@ -126,7 +165,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     static member CreateTexture(this : ITextureRuntime, size : aval<V3i>, dimension : TextureDimension, format : TextureFormat,
                                 [<Optional; DefaultParameterValue(1)>] levels : int,
                                 [<Optional; DefaultParameterValue(1)>] samples : int) =
-        AdaptiveTexture(this, dimension, size, ~~format, levels = ~~levels, samples = ~~samples) :> IAdaptiveResource<_>
+        AdaptiveTexture(this, dimension, size, ~~format, levels = ~~levels, samples = ~~samples) :> IAdaptiveTexture
 
     // ================================================================================================================
     // All dimensions (array)
@@ -143,7 +182,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     [<Extension>]
     static member CreateTextureArray(this : ITextureRuntime, size : aval<V3i>, dimension : TextureDimension,
                                      format : TextureFormat, levels : aval<int>, samples : aval<int>, count : aval<int>) =
-        AdaptiveTextureArray(this, dimension, size, ~~format, levels = levels, samples = samples, count = count) :> IAdaptiveResource<_>
+        AdaptiveTextureArray(this, dimension, size, ~~format, levels = levels, samples = samples, count = count) :> IAdaptiveTexture
 
 
     ///<summary>Creates an adaptive texture array.</summary>
@@ -159,7 +198,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
                                      [<Optional; DefaultParameterValue(1)>] levels : int,
                                      [<Optional; DefaultParameterValue(1)>] samples : int,
                                      count : aval<int>) =
-        AdaptiveTextureArray(this, dimension, size, ~~format, levels = ~~levels, samples = ~~samples, count = count) :> IAdaptiveResource<_>
+        AdaptiveTextureArray(this, dimension, size, ~~format, levels = ~~levels, samples = ~~samples, count = count) :> IAdaptiveTexture
 
 
     ///<summary>Creates an adaptive texture array.</summary>
@@ -175,7 +214,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
                                      [<Optional; DefaultParameterValue(1)>] levels : int,
                                      [<Optional; DefaultParameterValue(1)>] samples : int,
                                      count : int) =
-        AdaptiveTextureArray(this, dimension, size, ~~format, levels = ~~levels, samples = ~~samples, count = ~~count) :> IAdaptiveResource<_>
+        AdaptiveTextureArray(this, dimension, size, ~~format, levels = ~~levels, samples = ~~samples, count = ~~count) :> IAdaptiveTexture
 
     // ================================================================================================================
     // 1D Textures
@@ -189,7 +228,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     [<Extension>]
     static member CreateTexture1D(this : ITextureRuntime, size : aval<int>, format : TextureFormat, levels : aval<int>) =
         let size = size |> AVal.mapNonAdaptive (fun s -> V3i(s, 1, 1))
-        AdaptiveTexture(this, TextureDimension.Texture1D, size, ~~format, levels = levels, samples = ~~1) :> IAdaptiveResource<_>
+        AdaptiveTexture(this, TextureDimension.Texture1D, size, ~~format, levels = levels, samples = ~~1) :> IAdaptiveTexture
 
     ///<summary>Creates an adaptive 1D texture.</summary>
     ///<param name="this">The runtime.</param>
@@ -215,7 +254,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     static member CreateTexture1DArray(this : ITextureRuntime,
                                        size : aval<int>, format : TextureFormat, levels : aval<int>, count : aval<int>) =
         let size = size |> AVal.mapNonAdaptive (fun s -> V3i(s, 1, 1))
-        AdaptiveTextureArray(this, TextureDimension.Texture1D, size, ~~format, levels = levels, samples = ~~1, count = count) :> IAdaptiveResource<_>
+        AdaptiveTextureArray(this, TextureDimension.Texture1D, size, ~~format, levels = levels, samples = ~~1, count = count) :> IAdaptiveTexture
 
     ///<summary>Creates an adaptive 1D texture array.</summary>
     ///<param name="this">The runtime.</param>
@@ -257,7 +296,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     static member CreateTexture2D(this : ITextureRuntime,
                                   size : aval<V2i>, format : TextureFormat, levels : aval<int>, samples : aval<int>) =
         let size = size |> AVal.mapNonAdaptive (fun s -> V3i(s, 1))
-        AdaptiveTexture(this, TextureDimension.Texture2D, size, ~~format, levels = levels, samples = samples) :> IAdaptiveResource<_>
+        AdaptiveTexture(this, TextureDimension.Texture2D, size, ~~format, levels = levels, samples = samples) :> IAdaptiveTexture
 
     ///<summary>Creates an adaptive 2D texture.</summary>
     ///<param name="this">The runtime.</param>
@@ -287,7 +326,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     static member CreateTexture2DArray(this : ITextureRuntime,
                                        size : aval<V2i>, format : TextureFormat, levels : aval<int>, samples : aval<int>, count : aval<int>) =
         let size = size |> AVal.mapNonAdaptive (fun s -> V3i(s, 1))
-        AdaptiveTextureArray(this, TextureDimension.Texture2D, size, ~~format, levels = levels, samples = samples, count = count) :> IAdaptiveResource<_>
+        AdaptiveTextureArray(this, TextureDimension.Texture2D, size, ~~format, levels = levels, samples = samples, count = count) :> IAdaptiveTexture
 
     ///<summary>Creates an adaptive 2D texture array.</summary>
     ///<param name="this">The runtime.</param>
@@ -331,7 +370,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     [<Extension>]
     static member CreateTexture3D(this : ITextureRuntime,
                                   size : aval<V3i>, format : TextureFormat, levels : aval<int>) =
-        AdaptiveTexture(this, TextureDimension.Texture3D, size, ~~format, levels = levels, samples = ~~1) :> IAdaptiveResource<_>
+        AdaptiveTexture(this, TextureDimension.Texture3D, size, ~~format, levels = levels, samples = ~~1) :> IAdaptiveTexture
 
     ///<summary>Creates an adaptive 3D texture.</summary>
     ///<param name="this">The runtime.</param>
@@ -357,7 +396,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     static member CreateTextureCube(this : ITextureRuntime,
                                     size : aval<int>, format : TextureFormat, levels : aval<int>) =
         let size = size |> AVal.mapNonAdaptive (fun s -> V3i(s, s, 1))
-        AdaptiveTexture(this, TextureDimension.TextureCube, size, ~~format, levels = levels, samples = ~~1) :> IAdaptiveResource<_>
+        AdaptiveTexture(this, TextureDimension.TextureCube, size, ~~format, levels = levels, samples = ~~1) :> IAdaptiveTexture
 
     ///<summary>Creates an adaptive cube texture.</summary>
     ///<param name="this">The runtime.</param>
@@ -384,7 +423,7 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     static member CreateTextureCubeArray(this : ITextureRuntime,
                                          size : aval<int>, format : TextureFormat, levels : aval<int>, count : aval<int>) =
         let size = size |> AVal.mapNonAdaptive (fun s -> V3i(s, s, 1))
-        AdaptiveTextureArray(this, TextureDimension.TextureCube, size, ~~format, levels = levels, samples = ~~1, count = count) :> IAdaptiveResource<_>
+        AdaptiveTextureArray(this, TextureDimension.TextureCube, size, ~~format, levels = levels, samples = ~~1, count = count) :> IAdaptiveTexture
 
     ///<summary>Creates an adaptive cube texture array.</summary>
     ///<param name="this">The runtime.</param>
