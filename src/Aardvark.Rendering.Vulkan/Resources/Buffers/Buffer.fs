@@ -279,7 +279,7 @@ module BufferCommands =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =
 
-    let private emptySize = 256UL
+    let private emptySize = 32UL
 
     let private createInternal (concurrent: bool) (export: bool) (usage: VkBufferUsageFlags)
                                (alignment: uint64) (size: uint64) (memory: IDeviceMemory) =
@@ -323,14 +323,14 @@ module Buffer =
 
     let private emptyBuffers = ConcurrentDictionary<_, Lazy<Buffer>>()
 
-    let empty (export: bool) (usage: VkBufferUsageFlags) (memory: IDeviceMemory) =
-        let key = (memory, export, usage)
+    let empty (export: bool) (usage: VkBufferUsageFlags) (alignment: uint64) (memory: IDeviceMemory) =
+        let key = (memory, export, usage, alignment)
 
         let buffer =
-            emptyBuffers.GetOrAdd(key, fun (memory, export, usage) ->
+            emptyBuffers.GetOrAdd(key, fun (memory, export, usage, alignment) ->
                 lazy (
                     let device = memory.Device
-                    let buffer = memory |> createInternal true export usage 0UL emptySize
+                    let buffer = memory |> createInternal true export usage alignment 0UL
 
                     device.OnDispose.Add (fun () ->
                         emptyBuffers.TryRemove key |> ignore
@@ -348,7 +348,7 @@ module Buffer =
         if size > 0UL then
             memory |> createInternal concurrent export usage alignment size
         else
-            memory |> empty export usage
+            memory |> empty export usage alignment
 
     let inline create (usage: VkBufferUsageFlags) (size: uint64) (memory: IDeviceMemory) =
         create' false false usage 0UL size memory
@@ -422,7 +422,7 @@ module Buffer =
                 ab.Data |> NativeInt.pin (copyFromHost buffer)
                 buffer
             else
-                memory |> empty export usage
+                memory |> empty export usage alignment
 
         | :? INativeBuffer as nb ->
             if nb.SizeInBytes <> 0n then
@@ -431,7 +431,7 @@ module Buffer =
                 nb.Use (copyFromHost buffer)
                 buffer
             else
-                memory |> empty export usage
+                memory |> empty export usage alignment
 
         | :? ExportedBuffer when export ->
             ofBuffer' false usage alignment buffer memory

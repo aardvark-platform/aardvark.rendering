@@ -73,7 +73,7 @@ module IndirectBuffer =
 
                     buffer
                 else
-                    Buffer.empty false flags device.DeviceMemory
+                    Buffer.empty false flags 0UL device.DeviceMemory
 
             | :? INativeBuffer as nb ->
                 if nb.SizeInBytes <> 0n then
@@ -89,7 +89,7 @@ module IndirectBuffer =
 
                     buffer
                 else
-                    Buffer.empty false flags device.DeviceMemory
+                    Buffer.empty false flags 0UL device.DeviceMemory
 
             | :? Buffer as bb ->
                 if swap then
