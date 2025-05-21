@@ -41,6 +41,8 @@ type Runtime(device : Device) as this =
 
     member x.DebugConfig = debug
 
+    member x.DebugLabelsEnabled = instance.DebugLabelsEnabled
+
     member x.CreateStreamingTexture (mipMaps : bool) : IStreamingTexture =
         raise <| NotImplementedException()
 
@@ -518,6 +520,8 @@ type Runtime(device : Device) as this =
         member x.ContextLock = x.ContextLock
 
         member x.DebugConfig = x.DebugConfig
+
+        member x.DebugLabelsEnabled = x.DebugLabelsEnabled
 
         member x.DeviceCount = x.DeviceCount
 

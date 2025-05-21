@@ -65,6 +65,7 @@ type IBackendBuffer =
     inherit IDisposable
     abstract member Runtime : IBufferRuntime
     abstract member Handle : obj
+    abstract member Name : string with get, set
 
 and IExportedBackendBuffer =
     inherit IBackendBuffer

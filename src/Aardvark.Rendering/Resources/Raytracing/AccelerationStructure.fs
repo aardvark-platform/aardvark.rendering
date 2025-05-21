@@ -130,6 +130,7 @@ type IAccelerationStructure =
 
     abstract member Usage : AccelerationStructureUsage
     abstract member GeometryCount : int
+    abstract member Name : string with get, set
 
 type IAccelerationStructureRuntime =
 

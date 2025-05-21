@@ -7,6 +7,8 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Rendering.GL
 
+#nowarn "51"
+
 type OpenGLException =
     inherit Exception
     val Error: ErrorCode
@@ -110,6 +112,14 @@ type internal DebugOutput private (context: OpenTK.ContextHandle) =
     let errors = ResizeArray<string>()
     let mutable callback = null
 
+    let maxDebugMessageLength = GL.GetInteger(unbox<GetPName> 0x9143)
+    let maxDebugGroupStackDepth = GL.GetInteger(unbox<GetPName> 0x826C)
+    let maxLabelLength = GL.GetInteger(unbox<GetPName> 0x82E8)
+    let mutable debugGroupStackDepth = 1
+
+    let strlen str =
+        if isNull str then 0 else String.length str
+
     static member TryInitialize() =
         let ctx = GraphicsContext.CurrentContext |> unbox<IGraphicsContextInternal>
 
@@ -165,13 +175,39 @@ type internal DebugOutput private (context: OpenTK.ContextHandle) =
         mode <- DebugOutputMode.Disabled
 
     member _.Print(typ: DebugType, severity: DebugSeverity, id: int, message: string) =
-        GL.DebugMessageInsert(DebugSourceExternal.DebugSourceApplication, typ, id, severity, -1, message)
+        let length = message |> strlen |> min (maxDebugMessageLength - 1)
+        GL.DebugMessageInsert(DebugSourceExternal.DebugSourceApplication, typ, id, severity, length, message)
         GL.Check "cannot insert debug message"
 
     member _.PushGroup(message: string) =
-        GL.PushDebugGroup(DebugSourceExternal.DebugSourceApplication, 0, -1, message)
-        GL.Check "cannot push debug group"
+        if debugGroupStackDepth < maxDebugGroupStackDepth - 1 then
+            let length = message |> strlen |> min (maxDebugMessageLength - 1)
+            GL.PushDebugGroup(DebugSourceExternal.DebugSourceApplication, 0, length, message)
+            GL.Check "cannot push debug group"
+
+        &debugGroupStackDepth += 1
 
     member _.PopGroup() =
-        GL.PopDebugGroup()
-        GL.Check "cannot pop debug group"
+        if debugGroupStackDepth > 1 then
+            if debugGroupStackDepth < maxDebugGroupStackDepth - 1 then
+                GL.PopDebugGroup()
+                GL.Check "cannot pop debug group"
+
+            &debugGroupStackDepth -= 1
+        else
+            Log.warn $"Cannot pop debug group (stack depth is {debugGroupStackDepth})"
+
+    member _.SetObjectLabel(id: ObjectLabelIdentifier, name: int, label: string) =
+        let length = label |> strlen |> min (maxLabelLength - 1)
+        GL.ObjectLabel(id, name, length, label)
+        GL.Check "cannot set object label"
+
+    member _.GetObjectLabel(id: ObjectLabelIdentifier, name: int) =
+        let mutable length = 0
+        let mutable result = String.Empty
+
+        GL.GetObjectLabel(id, name, maxLabelLength - 1, &&length, &result)
+        GL.Check "cannot get object label length"
+
+        if length > 0 then result.Substring(0, length)
+        else null

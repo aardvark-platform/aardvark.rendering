@@ -17,6 +17,7 @@ type IAdaptiveRenderbuffer =
     inherit IAdaptiveFramebufferOutput
     inherit IAdaptiveResource<IRenderbuffer>
     abstract member Runtime : ITextureRuntime
+    abstract member Name : string with get, set
 
 [<AutoOpen>]
 module private AdaptiveRenderbufferTypes =
@@ -25,6 +26,19 @@ module private AdaptiveRenderbufferTypes =
         inherit AdaptiveResource<IRenderbuffer>()
 
         let mutable handle : Option<IRenderbuffer> = None
+        let mutable name = null
+
+        let create size format samples =
+            let rb = runtime.CreateRenderbuffer(size, format, samples)
+            rb.Name <- name
+            handle <- Some rb
+            rb
+
+        member x.Name
+            with get() = name
+            and set value =
+                name <- value
+                handle |> Option.iter _.set_Name(name)
 
         override x.Create() = ()
         override x.Destroy() =
@@ -47,15 +61,11 @@ module private AdaptiveRenderbufferTypes =
             | Some h ->
                 t.ReplacedResource(ResourceKind.Renderbuffer)
                 runtime.DeleteRenderbuffer(h)
-                let tex = runtime.CreateRenderbuffer(size, format, samples)
-                handle <- Some tex
-                tex
+                create size format samples
 
             | None ->
                 t.CreatedResource(ResourceKind.Renderbuffer)
-                let tex = runtime.CreateRenderbuffer(size, format, samples)
-                handle <- Some tex
-                tex
+                create size format samples
 
         interface IAdaptiveRenderbuffer with
             member x.Runtime = runtime
@@ -64,6 +74,7 @@ module private AdaptiveRenderbufferTypes =
             member x.Size = size
             member x.GetValue(t) = x.GetValue(t) :> IFramebufferOutput
             member x.GetValue(t, rt) = x.GetValue(t, rt) :> IFramebufferOutput
+            member x.Name with get() = x.Name and set name = x.Name <- name
 
     type AdaptiveTextureAttachment<'T when 'T :> IBackendTexture>(texture : IAdaptiveResource<'T>, slice : aval<int>, level : aval<int>) =
         inherit AdaptiveResource<IFramebufferOutput>()

@@ -30,6 +30,13 @@ type Renderbuffer =
         val mutable public Format : TextureFormat
         val mutable public Samples : int
         val mutable public SizeInBytes : int64
+        val mutable private name : string
+
+        member x.Name
+            with get() = x.name
+            and set name =
+                x.name <- name
+                x.Context.SetObjectLabel(ObjectLabelIdentifier.Renderbuffer, x.Handle, name)
 
         abstract member Destroy : unit -> unit
         default x.Destroy() =
@@ -51,10 +58,11 @@ type Renderbuffer =
 
         interface IRenderbuffer with
             member x.Handle = x.Handle :> obj
+            member x.Name with get() = x.Name and set name = x.Name <- name
             member x.Dispose() = x.Dispose()
 
         new (ctx : Context, handle : int, size : V2i, format : TextureFormat, samples : int, sizeInBytes : int64) =
-            { Context = ctx; Handle = handle; Size = size; Format = format; Samples = samples; SizeInBytes = sizeInBytes }
+            { Context = ctx; Handle = handle; Size = size; Format = format; Samples = samples; SizeInBytes = sizeInBytes; name = null }
 
         new (ctx : Context, handle : int, size : V2i, format : TextureFormat, samples : int) =
             let sizeInBytes = ResourceCounts.texSizeInBytes TextureDimension.Texture2D size.XYI format samples 1 1

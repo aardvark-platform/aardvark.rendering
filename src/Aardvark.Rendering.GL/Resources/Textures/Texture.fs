@@ -68,6 +68,15 @@ type Texture =
         val mutable public MipMapLevels : int
         val mutable public SizeInBytes : int64
         val mutable public IsArray : bool
+        val mutable private name : string
+
+        abstract member Name : string with get, set
+        default x.Name
+            with get() = x.name
+            and set name =
+                if x.Context <> null then
+                    x.name <- name
+                    x.Context.SetObjectLabel(ObjectLabelIdentifier.Texture, x.Handle, name)
 
         member x.IsMultisampled = x.Multisamples > 1
 
@@ -98,6 +107,7 @@ type Texture =
             member x.Count = x.Count
             member x.Format = x.Format
             member x.Samples = x.Multisamples
+            member x.Name with get() = x.Name and set name = x.Name <- name
             member x.Dispose() = x.Dispose()
 
         new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int,
@@ -111,7 +121,8 @@ type Texture =
               Count = count
               IsArray = isArray
               Format = format
-              SizeInBytes = sizeInBytes }
+              SizeInBytes = sizeInBytes
+              name = null }
 
         new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int,
             size : V3i, count : int, isArray : bool, format : TextureFormat) =

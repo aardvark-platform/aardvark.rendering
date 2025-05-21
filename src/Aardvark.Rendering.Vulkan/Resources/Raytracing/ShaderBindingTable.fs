@@ -303,7 +303,7 @@ module private ShaderBindingSubtable =
             finally
                 NativePtr.free pSrc
 
-    let createWithCount (device : Device) (count : int) (data : SubtableData<'T>) =
+    let createWithCount (device : Device) (name : string) (count : int) (data : SubtableData<'T>) =
         let requestedSize = count * data.Handles.SizeAligned
         let size = max requestedSize data.Handles.SizeAligned
         let baseAlignment = uint64 device.PhysicalDevice.Limits.Raytracing.Value.ShaderGroupBaseAlignment
@@ -311,14 +311,17 @@ module private ShaderBindingSubtable =
         let buffer = device.DeviceMemory.CreateBuffer(bufferUsage, uint64 size, baseAlignment)
         let table = new ShaderBindingSubtable<'T>(buffer, data.Lookup, uint64 data.Handles.SizeAligned)
 
+        if device.DebugLabelsEnabled then
+            buffer.Name <- $"{name} (Shader Binding Table)"
+
         if not (table |> tryUpdate data) then
             failwith "[Raytracing] Failed to update shader binding table"
 
         table
 
-    let create (device : Device) (data : SubtableData<'T>) =
+    let create (device : Device) (name : string) (data : SubtableData<'T>) =
         let count = int <| Fun.NextPowerOfTwo data.Count
-        data |> createWithCount device count
+        data |> createWithCount device name count
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -338,18 +341,18 @@ module ShaderBindingTable =
 
         let mutable recreated = false
 
-        let updateOrRecreate (data : SubtableData<'T>) (table : ShaderBindingSubtable<'T>) =
+        let updateOrRecreate (name : string) (data : SubtableData<'T>) (table : ShaderBindingSubtable<'T>) =
             if ShaderBindingSubtable.tryUpdate data table then
                 table.AddReference()
                 table
             else
                 recreated <- true
-                ShaderBindingSubtable.create device data
+                ShaderBindingSubtable.create device name data
 
-        let raygenTable   = table.RaygenTable   |> updateOrRecreate tableData.RaygenData
-        let missTable     = table.MissTable     |> updateOrRecreate tableData.MissData
-        let callableTable = table.CallableTable |> updateOrRecreate tableData.CallableData
-        let hitGroupTable = table.HitGroupTable |> updateOrRecreate tableData.HitGroupData
+        let raygenTable   = table.RaygenTable   |> updateOrRecreate "Raygen" tableData.RaygenData
+        let missTable     = table.MissTable     |> updateOrRecreate "Miss" tableData.MissData
+        let callableTable = table.CallableTable |> updateOrRecreate "Callable" tableData.CallableData
+        let hitGroupTable = table.HitGroupTable |> updateOrRecreate "Hit Group" tableData.HitGroupData
 
         // At least one subtable had to be recreated.
         // Build a new table with the new subtables, old subtables are re-used.
@@ -378,9 +381,9 @@ module ShaderBindingTable =
         let tableData =
             TableData.create shaderHandles shaderGroups hitConfigs pipeline
 
-        let raygenTable   = tableData.RaygenData   |> ShaderBindingSubtable.create device
-        let missTable     = tableData.MissData     |> ShaderBindingSubtable.create device
-        let callableTable = tableData.CallableData |> ShaderBindingSubtable.create device
-        let hitGroupTable = tableData.HitGroupData |> ShaderBindingSubtable.create device
+        let raygenTable   = tableData.RaygenData   |> ShaderBindingSubtable.create device "Raygen"
+        let missTable     = tableData.MissData     |> ShaderBindingSubtable.create device "Miss"
+        let callableTable = tableData.CallableData |> ShaderBindingSubtable.create device "Callable"
+        let hitGroupTable = tableData.HitGroupData |> ShaderBindingSubtable.create device "Hit Group"
 
         new ShaderBindingTable(raygenTable, missTable, hitGroupTable, callableTable)

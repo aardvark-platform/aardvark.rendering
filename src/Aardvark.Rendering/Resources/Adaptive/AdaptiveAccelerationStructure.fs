@@ -9,16 +9,25 @@ type IAdaptiveAccelerationStructure =
     abstract member Runtime : IAccelerationStructureRuntime
     abstract member Geometry : aval<TraceGeometry>
     abstract member Usage : AccelerationStructureUsage
+    abstract member Name : string with get, set
 
 type internal AdaptiveAccelerationStructure(runtime : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>, usage : AccelerationStructureUsage) =
     inherit AdaptiveResource<IAccelerationStructure>()
 
     let mutable handle : Option<IAccelerationStructure> = None
+    let mutable name = null
 
     let create (data : TraceGeometry) =
         let accel = runtime.CreateAccelerationStructure(data, usage, true)
+        accel.Name <- name
         handle <- Some accel
         accel
+
+    member x.Name
+        with get() = name
+        and set value =
+            name <- value
+            handle |> Option.iter _.set_Name(name)
 
     override x.Create() = ()
     override x.Destroy() =
@@ -50,6 +59,7 @@ type internal AdaptiveAccelerationStructure(runtime : IAccelerationStructureRunt
         member x.Runtime = runtime
         member x.Geometry = geometry
         member x.Usage = usage
+        member x.Name with get() = x.Name and set name = x.Name <- name
 
 
 [<AbstractClass; Sealed; Extension>]

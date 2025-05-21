@@ -469,42 +469,49 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     let instanceAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>>()
     let geometryAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>>()
 
-    let createManagedBuffer t u s =
+    let createManagedBuffer n t u s =
         let b = runtime.CreateManagedBuffer(t, u, s)
         b.Acquire()
+        b.Name <- n
         b
 
     let indexBuffer =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
-        createManagedBuffer indexType usage indexBufferStorage
+        let name = if runtime.DebugLabelsEnabled then "Index Buffer (ManagedTracePool)" else null
+        createManagedBuffer name indexType usage indexBufferStorage
 
     let vertexBuffers =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
         signature.VertexAttributeTypes |> Map.map (fun s t ->
-            createManagedBuffer t usage (vertexBufferStorage s)
+            let name = if runtime.DebugLabelsEnabled then $"{s} (ManagedTracePool Buffer)" else null
+            createManagedBuffer name t usage (vertexBufferStorage s)
         )
 
     let faceAttributeBuffers =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
         signature.FaceAttributeTypes |> Map.map (fun s t ->
-            createManagedBuffer t usage (faceAttributeBufferStorage s)
+            let name = if runtime.DebugLabelsEnabled then $"{s} (ManagedTracePool Buffer)" else null
+            createManagedBuffer name t usage (faceAttributeBufferStorage s)
         )
 
     let geometryAttributeBuffers =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
         geometryAttributeTypes |> Map.map (fun s t ->
-            createManagedBuffer t usage (geometryAttributeBufferStorage s)
+            let name = if runtime.DebugLabelsEnabled then $"{s} (ManagedTracePool Buffer)" else null
+            createManagedBuffer name t usage (geometryAttributeBufferStorage s)
         )
 
     let instanceAttributeBuffers =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
         instanceAttributeTypes |> Map.map (fun s t ->
-            createManagedBuffer t usage (instanceAttributeBufferStorage s)
+            let name = if runtime.DebugLabelsEnabled then $"{s} (ManagedTracePool Buffer)" else null
+            createManagedBuffer name t usage (instanceAttributeBufferStorage s)
         )
 
     let geometryBuffer =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
-        createManagedBuffer typeof<TraceGeometryInfo> usage geometryBufferStorage
+        let name = if runtime.DebugLabelsEnabled then $"Geometry Buffer (ManagedTracePool)" else null
+        createManagedBuffer name typeof<TraceGeometryInfo> usage geometryBufferStorage
 
     let accelerationStructures =
         Dict<AdaptiveTraceGeometry * AccelerationStructureUsage, aval<IAccelerationStructure>>()
@@ -736,6 +743,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                 | _ ->
                     let data = obj.Geometry |> AdaptiveTraceGeometry.toAVal
                     let accel = runtime.CreateAccelerationStructure(data, obj.Usage)
+                    if runtime.DebugLabelsEnabled then accel.Name <- "TraceObject (ManagedTracePool)"
                     accelerationStructures.[key] <- accel
                     accel :> aval<_>
 

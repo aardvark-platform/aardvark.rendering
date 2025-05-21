@@ -182,7 +182,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                 GL.SetDefaultStates()
 
             debugOutput <-
-                if debug.DebugOutput.IsNone && not debug.DebugMarkers then None
+                if debug.DebugOutput.IsNone && not debug.DebugLabels then None
                 else
                     match DebugOutput.TryInitialize() with
                     | Some dbg ->
@@ -218,6 +218,16 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         match debugOutput with
         | Some dbg -> dbg.PopGroup()
         | _ -> ()
+
+    member _.SetObjectLabel(id: ObjectLabelIdentifier, name: int, label: string) =
+        match debugOutput with
+        | Some dbg -> dbg.SetObjectLabel(id, name, label)
+        | _ -> ()
+
+    member _.GetObjectLabel(id: ObjectLabelIdentifier, name: int) =
+        match debugOutput with
+        | Some dbg -> dbg.GetObjectLabel(id, name)
+        | _ -> null
 
     member x.Dispose() =
         let mutable lockTaken = false

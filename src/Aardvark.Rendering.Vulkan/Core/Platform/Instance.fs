@@ -166,7 +166,7 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
     let debug = DebugConfig.unbox debug
 
     let extensions =
-        if debug.DebugReportEnabled || debug.ValidationLayerEnabled || debug.DebugMarkers then
+        if debug.DebugReportEnabled || debug.ValidationLayerEnabled || debug.DebugLabels then
             List.ofSeq extensions @ [Instance.Extensions.Debug]
         else
             extensions |> List.ofSeq |> List.filter ((<>) Instance.Extensions.Debug)
@@ -345,7 +345,7 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
     member x.EnabledExtensions = instanceExtensions
 
     member x.DebugReportEnabled = debugUtilsEnabled
-    member x.DebugMarkersEnabled = debugUtilsEnabled && debug.DebugMarkers
+    member x.DebugLabelsEnabled = debugUtilsEnabled && debug.DebugLabels
     member x.DebugConfig = debug
 
     member x.Handle = instance

@@ -93,6 +93,10 @@
     <Compile Include="Pipeline\DrawCalls.fs" />
     <Compile Include="Pipeline\PipelineState.fs" />
     <Compile Include="Pipeline\RenderObject.fs" />
+    <Compile Include="Pipeline\Raytracing\TraceGeometry.fs" />
+    <Compile Include="Pipeline\Raytracing\AdaptiveTraceGeometry.fs" />
+    <Compile Include="Pipeline\Raytracing\TraceInstance.fs" />
+    <Compile Include="Pipeline\Raytracing\RaytracingPipelineState.fs" />
     <Compile Include="Runtime\Lod\Lod.fs" />
     <Compile Include="Runtime\Lod\LodTree.fs" />
     <Compile Include="Runtime\Lod\LodRuntime.fs" />
@@ -101,10 +105,6 @@
     <Compile Include="Runtime\Compute\Compute.fs" />
     <Compile Include="Runtime\Compute\ComputeExtensions.fs" />
     <Compile Include="Runtime\Compute\MutableInputBinding.fs" />
-    <Compile Include="Pipeline\Raytracing\TraceGeometry.fs" />
-    <Compile Include="Pipeline\Raytracing\AdaptiveTraceGeometry.fs" />
-    <Compile Include="Pipeline\Raytracing\TraceInstance.fs" />
-    <Compile Include="Pipeline\Raytracing\RaytracingPipelineState.fs" />
     <Compile Include="Runtime\Raytracing\RaytracingRuntime.fs" />
     <Compile Include="Runtime\Raytracing\TraceToExtensions.fs" />
     <Compile Include="Runtime\Runtime.fs" />

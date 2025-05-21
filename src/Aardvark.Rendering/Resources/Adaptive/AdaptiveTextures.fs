@@ -15,6 +15,7 @@ type IAdaptiveTexture =
     abstract member Levels : aval<int>
     abstract member Samples : aval<int>
     abstract member Count : aval<int>
+    abstract member Name : string with get, set
 
 [<AutoOpen>]
 module private AdaptiveTextureTypes =
@@ -36,6 +37,13 @@ module private AdaptiveTextureTypes =
         inherit AdaptiveResource<IBackendTexture>()
 
         let mutable handle : Option<IBackendTexture * 'Params> = None
+        let mutable name = null
+
+        member x.Name
+            with get() = name
+            and set value =
+                name <- value
+                handle |> Option.iter (fst >> _.set_Name(name))
 
         abstract member Dimension : TextureDimension
         abstract member Size : aval<V3i>
@@ -48,6 +56,7 @@ module private AdaptiveTextureTypes =
 
         member private x.CreateHandle(runtime : ITextureRuntime, textureParams : 'Params) =
             let tex = x.CreateTexture(runtime, textureParams)
+            tex.Name <- name
             handle <- Some (tex, textureParams)
             tex
 
@@ -85,6 +94,7 @@ module private AdaptiveTextureTypes =
             member x.Levels = x.Levels
             member x.Samples = x.Samples
             member x.Count = x.Count
+            member x.Name with get() = x.Name and set name = x.Name <- name
 
 
     type AdaptiveTexture(runtime : ITextureRuntime, dimension : TextureDimension,

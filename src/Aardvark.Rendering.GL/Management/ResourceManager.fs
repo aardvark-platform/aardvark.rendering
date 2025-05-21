@@ -240,10 +240,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.Context = ctx
 
-    member x.CreateBuffer(data : aval<#IBuffer>) =
+    member private x.CreateBuffer(name : string, data : aval<#IBuffer>) =
         bufferCache.GetOrCreate<#IBuffer>(data, fun () -> {
-            create = fun b      -> bufferManager.Create b
-            update = fun h b    -> bufferManager.Update(h, b)
+            create = fun b      -> bufferManager.Create(name, b)
+            update = fun h b    -> bufferManager.Update(name, h, b)
             delete = fun h      -> bufferManager.Delete h
             unwrap = fun b      -> BufferManager.TryUnwrap b
             info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
@@ -251,14 +251,30 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Buffer
         })
 
-    member x.CreateBuffer(data : aval<Array>) =
-        let buffer = data |> AdaptiveResource.mapNonAdaptive ArrayBuffer
-        x.CreateBuffer(buffer)
+    member x.CreateStorageBuffer(name : string, data : aval<#IBuffer>) =
+        let name = if ctx.Runtime.DebugLabelsEnabled then $"{name} (Storage Buffer)" else null
+        x.CreateBuffer(name, data)
 
-    member private x.CreateTexture(data : aval<#ITexture>, properties : TextureProperties) : IResource<Texture, TextureBinding> =
+    member x.CreateStorageBuffer(name : Symbol, data : aval<#IBuffer>) =
+        let name = if ctx.Runtime.DebugLabelsEnabled then $"{name} (Storage Buffer)" else null
+        x.CreateBuffer(name, data)
+
+    member x.CreateStorageBuffer(name : Symbol, data : aval<Array>) =
+        let buffer = data |> AdaptiveResource.mapNonAdaptive ArrayBuffer
+        x.CreateStorageBuffer(name, buffer)
+
+    member x.CreateVertexBuffer(name : Symbol, data : aval<#IBuffer>) =
+        let name = if ctx.Runtime.DebugLabelsEnabled then $"{name} (Vertex Buffer)" else null
+        x.CreateBuffer(name, data)
+
+    member x.CreateIndexBuffer(data : aval<#IBuffer>) =
+        let name = if ctx.Runtime.DebugLabelsEnabled then $"Index Buffer" else null
+        x.CreateBuffer(name, data)
+
+    member private x.CreateTexture(name : string, data : aval<#ITexture>, properties : TextureProperties) : IResource<Texture, TextureBinding> =
         textureCache.GetOrCreate(data, [properties :> obj], fun () -> {
-            create = fun b      -> textureManager.Create(b, properties)
-            update = fun h b    -> textureManager.Update(h, b, properties)
+            create = fun b      -> textureManager.Create(name, b, properties)
+            update = fun h b    -> textureManager.Update(name, h, b, properties)
             delete = fun h      -> textureManager.Delete h
             unwrap = fun _      -> ValueNone
             info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
@@ -266,14 +282,15 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Texture
         })
 
-    member x.CreateTexture(data : aval<#ITexture>, samplerType : FShade.GLSL.GLSLSamplerType) : IResource<Texture, TextureBinding> =
-        x.CreateTexture(data, samplerType.Properties)
+    member x.CreateTexture(name : Symbol, data : aval<#ITexture>, samplerType : FShade.GLSL.GLSLSamplerType) : IResource<Texture, TextureBinding> =
+        let name = if ctx.DebugLabelsEnabled then $"{name} (Sampled Texture)" else null
+        x.CreateTexture(name, data, samplerType.Properties)
 
     // Workaround for some APIs accepting texture levels as sampler input (e.g. GPGPU image reduce).
     // GL cannot directly bind specific texture levels and ranges to samplers.
     // We would have to use texture views, which are not guaranteed to be supported (MacOS does not obviously).
     // Here we just bind the whole texture as usual and do some sanity checks.
-    member x.CreateTexture(data : aval<ITextureLevel>, samplerType : FShade.GLSL.GLSLSamplerType) =
+    member x.CreateTexture(name : Symbol, data : aval<ITextureLevel>, samplerType : FShade.GLSL.GLSLSamplerType) =
         let data =
             data |> AdaptiveResource.mapNonAdaptive (fun l ->
                 if l.Level <> 0 then
@@ -286,7 +303,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 l.Texture
             )
 
-        x.CreateTexture(data, samplerType.Properties)
+        let name = if ctx.DebugLabelsEnabled then $"{name} (Sampled Texture)" else null
+        x.CreateTexture(name, data, samplerType.Properties)
 
     member x.CreateIndirectBuffer(indexed : bool, data : aval<IndirectBuffer>) =
         
@@ -310,6 +328,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             | _ -> 
                 buffer
 
+        let name = if ctx.DebugLabelsEnabled then "Indirect Buffer" else null
+
         indirectBufferCache.GetOrCreate<IndirectBuffer>(data, [indexed :> obj], fun () -> {
             create = fun b ->
                 let (buffer, own) =
@@ -323,7 +343,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
                     | _ ->
                         let layoutedData = if b.Indexed <> indexed then transformIndirectData b.Buffer else b.Buffer
-                        bufferManager.Create(layoutedData), true
+                        bufferManager.Create(name, layoutedData), true
 
                 GLIndirectBuffer(buffer, b.Count, b.Stride, indexed, own)
 
@@ -342,7 +362,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                         if not h.OwnResource then
                             failwith "[GL] cannot change IndirectBuffer type"
                         let layoutedData = if b.Indexed <> indexed then transformIndirectData b.Buffer else b.Buffer
-                        bufferManager.Update(h.Buffer, layoutedData)
+                        bufferManager.Update(name, h.Buffer, layoutedData)
 
                 if h.Buffer = buffer && h.Count = b.Count && h.Stride = b.Stride then // OwnResource and Indexed cannot change
                     h // return old to remain reference equal -> will be counted as InPlaceUpdate (no real performance difference)
@@ -392,7 +412,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
         iface, programHandle
 
-    member x.CreateTextureArray(slotCount : int, textureArray : aval<ITexture[]>, samplerType : FShade.GLSL.GLSLSamplerType) : IResource<Texture, TextureBinding>[] =
+    member x.CreateTextureArray(name : Symbol, slotCount : int, textureArray : aval<ITexture[]>, samplerType : FShade.GLSL.GLSLSamplerType) : IResource<Texture, TextureBinding>[] =
         let innerCache = textureArrayCache.Invoke(textureArray)
         let properties = samplerType.Properties
 
@@ -407,7 +427,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                                 nullTexture
                         )
 
-                    x.CreateTexture(arr, properties)
+                    let name = if ctx.DebugLabelsEnabled then $"{name}[{i}] (Sampled Image)" else null
+                    x.CreateTexture(name, arr, properties)
                 )
             )
         ).Value
@@ -552,8 +573,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 }
         )
 
-    member private x.CreateImageBinding(input : aval<#ITexture>, level : aval<int>, layers : aval<Range1i>, properties : TextureProperties) =
-        use textureResource = x.CreateTexture(input, properties)
+    member private x.CreateImageBinding(name : Symbol, input : aval<#ITexture>, level : aval<int>, layers : aval<Range1i>, properties : TextureProperties) =
+        let name = if ctx.DebugLabelsEnabled then $"{name} (Storage Image)" else null
+        use textureResource = x.CreateTexture(name, input, properties)
 
         imageBindingCache.GetOrCreate(
             [textureResource :> obj; level :> obj; layers :> obj],
@@ -590,16 +612,16 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 }
         )
 
-    member x.CreateImageBinding(input : aval<ITexture>, imageType : FShade.GLSL.GLSLImageType) =
+    member x.CreateImageBinding(name : Symbol, input : aval<ITexture>, imageType : FShade.GLSL.GLSLImageType) =
         let level = AVal.constant 0
         let layers = AVal.constant <| Range1i()
-        x.CreateImageBinding(input, level, layers, imageType.Properties)
+        x.CreateImageBinding(name, input, level, layers, imageType.Properties)
 
-    member x.CreateImageBinding(input : aval<ITextureLevel>, imageType : FShade.GLSL.GLSLImageType) =
+    member x.CreateImageBinding(name : Symbol, input : aval<ITextureLevel>, imageType : FShade.GLSL.GLSLImageType) =
         let texture = input |> AdaptiveResource.mapNonAdaptive (fun l -> l.Texture)
         let level = input |> AVal.mapNonAdaptive (fun l -> l.Level)
         let layers = input |> AVal.mapNonAdaptive (fun l -> l.Slices)
-        x.CreateImageBinding(texture, level, layers, imageType.Properties)
+        x.CreateImageBinding(name, texture, level, layers, imageType.Properties)
 
     member x.CreateVertexInputBinding(bindings : struct (int * AdaptiveAttribute)[], index : IndexBinding option) =
         vertexInputCache.GetOrCreate(

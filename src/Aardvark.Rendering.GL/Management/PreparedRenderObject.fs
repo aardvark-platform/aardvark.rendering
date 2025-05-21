@@ -204,10 +204,10 @@ module PreparedPipelineState =
                         failf "storage buffer '%A' is null" bufferName
 
                     | CastUniformResource (buffer : aval<IBuffer>) ->
-                        x.CreateBuffer(buffer)
+                        x.CreateStorageBuffer(bufferName, buffer)
 
                     | CastUniformResource (array : aval<Array>) ->
-                        x.CreateBuffer(array)
+                        x.CreateStorageBuffer(bufferName, array)
 
                     | Some value ->
                         failf "invalid type '%A' for storage buffer '%A' (expected a subtype of IBuffer or Array)" value.ContentType bufferName
@@ -246,10 +246,10 @@ module PreparedPipelineState =
                     failf "texture '%A' is null" textureName
 
                 | CastUniformResource (texture : aval<ITexture>) ->
-                    x.CreateTexture(texture, samplerType)
+                    x.CreateTexture(textureName, texture, samplerType)
 
                 | CastUniformResource (level : aval<ITextureLevel>) ->
-                    x.CreateTexture(level, samplerType)
+                    x.CreateTexture(textureName, level, samplerType)
 
                 | Some t ->
                     failf "invalid type '%A' for texture '%A' (expected a subtype of ITexture or ITextureLevel)" t.ContentType textureName
@@ -273,7 +273,7 @@ module PreparedPipelineState =
 
                         | Some (:? aval<ITexture[]> as textureArray) ->
                             let sampler = createSampler textureName samplerState
-                            let textureArray = x.CreateTextureArray(sam.samplerCount, textureArray, sam.samplerType)
+                            let textureArray = x.CreateTextureArray(textureName, sam.samplerCount, textureArray, sam.samplerType)
                             let arrayBinding = x.CreateTextureBinding(slotRange, textureArray, sampler)
                             Some <| ArrayBinding (arrayBinding |> addResource resources)
 
@@ -338,10 +338,10 @@ module PreparedPipelineState =
                         failf "storage image '%A' is null" imageName
 
                     | CastUniformResource (texture : aval<ITexture>) ->
-                        x.CreateImageBinding(texture, image.imageType)
+                        x.CreateImageBinding(imageName, texture, image.imageType)
 
                     | CastUniformResource (level : aval<ITextureLevel>) ->
-                        x.CreateImageBinding(level, image.imageType)
+                        x.CreateImageBinding(imageName, level, image.imageType)
 
                     | Some i ->
                         failf "invalid type '%A' for storage image '%A' (expected a subtype of ITexture or ITextureLevel)" i.ContentType imageName
@@ -998,11 +998,12 @@ module PreparedObjectInfo =
                 iface.inputs
                 |> List.choose (fun v ->
                     if v.paramLocation >= 0 then
+                        let semantic = Symbol.Create v.paramName
                         let expectedType = getExpectedType v.paramType
 
                         let attribute =
                             let view, frequency =
-                                match rj.TryGetAttribute(Symbol.Create v.paramName) with
+                                match rj.TryGetAttribute(semantic) with
                                 | Some (view, perInstance) ->
                                     view, (if perInstance then AttributeFrequency.PerInstances 1 else AttributeFrequency.PerVertex)
                                 | _ ->
@@ -1028,7 +1029,7 @@ module PreparedObjectInfo =
                                 AdaptiveAttribute.Value (b.Value, format)
 
                             | _ ->
-                                let resource = x.CreateBuffer view.Buffer |> addResource resources
+                                let resource = x.CreateVertexBuffer(semantic, view.Buffer) |> addResource resources
 
                                 let buffer = {
                                     Type = view.ElementType
@@ -1063,7 +1064,7 @@ module PreparedObjectInfo =
                 | Some view ->
                     Some {
                         IndexType = getIndexType view.ElementType
-                        Buffer    = x.CreateBuffer view.Buffer |> addResource resources
+                        Buffer    = x.CreateIndexBuffer view.Buffer |> addResource resources
                     }
 
                 | None -> None

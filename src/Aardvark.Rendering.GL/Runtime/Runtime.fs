@@ -35,6 +35,8 @@ type Runtime(debug : IDebugConfig) =
 
     member x.DebugConfig = debug
 
+    member x.DebugLabelsEnabled = debug.DebugLabels
+
     member x.ShaderCachePath
         with get() = ctx.ShaderCachePath
         and set(value) = ctx.ShaderCachePath <- value
@@ -98,6 +100,7 @@ type Runtime(debug : IDebugConfig) =
         member x.ShaderDepthRange = x.ShaderDepthRange
         member x.SupportsLayeredShaderInputs = x.SupportsLayeredShaderInputs
         member x.DebugConfig = x.DebugConfig
+        member x.DebugLabelsEnabled = x.DebugLabelsEnabled
         member x.ContextLock = x.ContextLock
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =

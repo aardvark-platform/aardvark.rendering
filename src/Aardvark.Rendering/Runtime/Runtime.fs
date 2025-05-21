@@ -73,6 +73,9 @@ and IRuntime =
 
     abstract member DebugConfig : IDebugConfig
 
+    /// Returns whether debug labels and markers are enabled.
+    abstract member DebugLabelsEnabled : bool
+
     abstract member OnDispose : IEvent<unit>
 
     /// Compiles an effect for the given framebuffer signature and topology.

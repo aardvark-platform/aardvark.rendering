@@ -33,6 +33,8 @@ module GeometryPoolUtilities =
 
         let mutable isEmpty = true
 
+        member _.ScratchBuffer = scratchBuffer
+
         override x.Destroy() =
             if scratchBuffer.IsValid then
                 base.Destroy()
@@ -109,7 +111,10 @@ module GeometryPoolUtilities =
 
                 let s = capacity * elemSize
                 let handle = device.CreateStreamingBuffer(lock, usage, s)
-            
+                if device.DebugLabelsEnabled then
+                    handle.Name <- $"{sem} (GeometryPool Buffer)"
+                    handle.ScratchBuffer.Name <- $"{sem} (GeometryPool Scratch Buffer)"
+
                 elemSize, t, AVal.init (handle :> IBuffer)
             )
 
@@ -137,6 +142,9 @@ module GeometryPoolUtilities =
                             for (_, (elemSize,_,b)) in Map.toSeq buffers do
                                 let old = b.Value |> unbox<StreamingBuffer>
                                 let n = device.CreateStreamingBuffer(lock, usage, elemSize * newCapacity)
+                                if old.Name <> null then
+                                    n.Name <- old.Name
+                                    n.ScratchBuffer.Name <- old.ScratchBuffer.Name
 
                                 if copySize > 0UL && not old.IsEmpty then
                                     let copy = Command.Copy(old, n, elemSize * copySize)

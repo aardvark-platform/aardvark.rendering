@@ -580,25 +580,25 @@ module Resources =
                     let desc = Descriptor.CombinedImageSampler(slot, i, v, s, v.Image.SamplerLayout)
                     cache.[i] <- { Version = images.[i].version; Descriptor = desc }
 
-    type BufferResource(owner : IResourceCache, key : list<obj>, device : Device, usage : VkBufferUsageFlags, input : aval<IBuffer>) =
+    type BufferResource(owner : IResourceCache, key : list<obj>, name : string, device : Device, usage : VkBufferUsageFlags, input : aval<IBuffer>) =
         inherit MutableResourceLocation<IBuffer, Buffer>(
             owner, key,
             input,
             {
-                mcreate          = fun (b : IBuffer) -> device.CreateBuffer(usage, b)
-                mdestroy         = fun b -> b.Dispose()
+                mcreate          = fun (b : IBuffer) -> let r = device.CreateBuffer(usage, b) in (if name <> null && r.Name = null then r.Name <- name); r
+                mdestroy         = _.Dispose()
                 mtryUpdate       = fun (b : Buffer) (v : IBuffer) -> Buffer.tryUpdate v b
             }
         )
 
-    type IndirectBufferResource(owner : IResourceCache, key : list<obj>, device : Device, indexed : bool, input : aval<Aardvark.Rendering.IndirectBuffer>) =
+    type IndirectBufferResource(owner : IResourceCache, key : list<obj>, name : string, device : Device, indexed : bool, input : aval<Aardvark.Rendering.IndirectBuffer>) =
         inherit ImmutableResourceLocation<Aardvark.Rendering.IndirectBuffer, IndirectBuffer>(
             owner, key,
             input,
             {
-                icreate = fun (b : Aardvark.Rendering.IndirectBuffer) -> device.CreateIndirectBuffer(indexed, b)
-                idestroy = fun b -> b.Dispose()
-                ieagerDestroy = false
+                icreate         = fun b -> let r = device.CreateIndirectBuffer(indexed, b) in (if name <> null && r.Name = null then r.Name <- name); r
+                idestroy        = _.Dispose()
+                ieagerDestroy   = false
             }
         )
 
@@ -607,11 +607,14 @@ module Resources =
         inherit AbstractResourceLocation<UniformBuffer>(owner, key)
 
         let mutable handle : UniformBuffer = Unchecked.defaultof<_>
+        let name = if device.DebugLabelsEnabled then $"{layout.ubName} (Uniform Buffer)" else null
+
 
         member x.Handle = handle
 
         override x.Create() =
             handle <- device.CreateUniformBuffer(layout)
+            handle.Name <- name
 
         override x.Destroy() =
             if handle <> Unchecked.defaultof<_> then
@@ -629,14 +632,14 @@ module Resources =
             else
                 { handle = handle; version = 0 }
 
-    type ImageResource(owner : IResourceCache, key : list<obj>, device : Device, properties : ImageProperties, input : aval<ITexture>) =
+    type ImageResource(owner : IResourceCache, key : list<obj>, name : string, device : Device, properties : ImageProperties, input : aval<ITexture>) =
         inherit ImmutableResourceLocation<ITexture, Image>(
             owner, key,
             input,
             {
-                icreate = fun (t : ITexture) -> device.CreateImage(t, properties)
-                idestroy = fun t -> t.Dispose()
-                ieagerDestroy = true
+                icreate         = fun t -> let r = device.CreateImage(t, properties) in (if name <> null && r.Name = null then r.Name <- name); r
+                idestroy        = _.Dispose()
+                ieagerDestroy   = true
             }
         )
 
@@ -1483,7 +1486,7 @@ module Resources =
     module Raytracing =
         open Aardvark.Rendering.Raytracing
 
-        type AccelerationStructureResource(owner : IResourceCache, key : list<obj>, device : Device,
+        type AccelerationStructureResource(owner : IResourceCache, key : list<obj>, name : string, device : Device,
                                            instanceBuffer : IResourceLocation<Buffer>, instanceCount : aval<int>, usage : AccelerationStructureUsage) =
             inherit AbstractResourceLocation<AccelerationStructure>(owner, key)
 
@@ -1492,6 +1495,7 @@ module Resources =
 
             let create (data : AccelerationStructureData) =
                 let acc = AccelerationStructure.create device true usage data
+                if name <> null then acc.Name <- name
                 handle <- Some acc
                 inc &version
                 { handle = acc; version = version }
@@ -1755,119 +1759,153 @@ type ResourceManager(device : Device) =
 
     member x.Device = device
 
-    member private x.CreateBuffer(input : aval<IBuffer>, usage : VkBufferUsageFlags) =
+    member private x.CreateBuffer(name : string, input : aval<IBuffer>, usage : VkBufferUsageFlags) =
         bufferCache.GetOrCreate([input :> obj; usage :> obj], fun cache key ->
-            new BufferResource(cache, key, device, usage, input) :> IResourceLocation<Buffer>
+            BufferResource(cache, key, name, device, usage, input) :> IResourceLocation<Buffer>
         )
 
-    member private x.CreateBuffer(input : aval<IBackendBuffer>) =
+    member private x.CreateBuffer(input : aval<#IBuffer>, usage : VkBufferUsageFlags) =
         bufferCache.GetOrCreate([input :> obj], fun cache key ->
-            new BufferResource(cache, key, device, VkBufferUsageFlags.None, input |> AdaptiveResource.cast) :> IResourceLocation<Buffer>
+            BufferResource(cache, key, null, device, usage, input |> AdaptiveResource.cast) :> IResourceLocation<Buffer>
         )
 
-    member x.CreateVertexBuffer(input : aval<IBuffer>) =
-        x.CreateBuffer(input, VertexBufferUsage)
+    member x.CreateVertexBuffer(name : Symbol, input : aval<IBuffer>) =
+        let name = if device.DebugLabelsEnabled then $"{name} (Vertex Buffer)" else null
+        x.CreateBuffer(name, input, VertexBufferUsage)
 
-    member x.CreateStorageBuffer(input : aval<IBuffer>) =
-        x.CreateBuffer(input, StorageBufferUsage)
+    member x.CreateStorageBuffer(name : Symbol, input : aval<IBuffer>) =
+        let name = if device.DebugLabelsEnabled then $"{name} (Storage Buffer)" else null
+        x.CreateBuffer(name, input, StorageBufferUsage)
 
-    member x.CreateStorageBuffer(input : aval<Array>) =
+    member x.CreateStorageBuffer(name : Symbol, input : aval<Array>) =
         bufferCache.GetOrCreate([input :> obj], fun cache key ->
             let buffer = input |> AdaptiveResource.map (fun arr -> ArrayBuffer arr :> IBuffer)
-            new BufferResource(cache, key, device, StorageBufferUsage, buffer) :> IResourceLocation<Buffer>
+            let name = if device.DebugLabelsEnabled then $"{name} (Storage Buffer)" else null
+            BufferResource(cache, key, name, device, StorageBufferUsage, buffer) :> IResourceLocation<Buffer>
         )
 
     member x.CreateIndexBuffer(input : aval<IBuffer>) =
-        x.CreateBuffer(input, IndexBufferUsage)
+        let name = if device.Instance.DebugLabelsEnabled then "Index Buffer" else null
+        x.CreateBuffer(name, input, IndexBufferUsage)
 
     member x.CreateIndirectBuffer(indexed : bool, input : aval<Aardvark.Rendering.IndirectBuffer>) =
         indirectBufferCache.GetOrCreate(
             [indexed :> obj; input :> obj],
-            fun cache key -> new IndirectBufferResource(cache, key, device, indexed, input)
+            let name = if device.Instance.DebugLabelsEnabled then "Indirect Buffer" else null
+            fun cache key -> IndirectBufferResource(cache, key, name, device, indexed, input)
         )
 
-    member x.CreateImage(properties : ImageProperties, input : aval<ITexture>) =
-        imageCache.GetOrCreate([properties :> obj; input :> obj], fun cache key -> new ImageResource(cache, key, device, properties, input))
+    member private x.CreateImage(name : string, properties : ImageProperties, input : aval<ITexture>) =
+        imageCache.GetOrCreate(
+            [properties :> obj; input :> obj],
+            fun cache key -> ImageResource(cache, key, name, device, properties, input)
+        )
 
-    member x.CreateImage(properties : ImageProperties, input : aval<ITextureLevel>) =
+    member private x.CreateImage(name : string, properties : ImageProperties, input : aval<ITextureLevel>) =
         let input = input |> AdaptiveResource.mapNonAdaptive (fun l -> l.Texture :> ITexture)
-        imageCache.GetOrCreate([properties :> obj; input :> obj], fun cache key -> new ImageResource(cache, key, device, properties, input))
+        imageCache.GetOrCreate(
+            [properties :> obj; input :> obj],
+            fun cache key -> ImageResource(cache, key, name, device, properties, input)
+        )
+
+    member x.CreateStorageImage(name : Symbol, properties : ImageProperties, input : aval<ITexture>) =
+        let name = if device.DebugLabelsEnabled then $"{name} (Storage Image)" else null
+        x.CreateImage(name, properties, input)
+
+    member x.CreateStorageImage(name : Symbol, properties : ImageProperties, input : aval<ITextureLevel>) =
+        let name = if device.DebugLabelsEnabled then $"{name} (Storage Image)" else null
+        x.CreateImage(name, properties, input)
 
     member x.CreateImageView(samplerType : FShade.GLSL.GLSLSamplerType, input : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
         imageViewCache.GetOrCreate(
             [samplerType :> obj; input :> obj; levels :> obj; slices :> obj],
-            fun cache key -> new ImageViewResource(cache, key, device, samplerType, input, levels, slices)
+            fun cache key -> ImageViewResource(cache, key, device, samplerType, input, levels, slices)
         )
 
     member x.CreateImageView(samplerType : FShade.GLSL.GLSLSamplerType, input : IResourceLocation<Image>) =
-        imageViewCache.GetOrCreate([samplerType :> obj; input :> obj], fun cache key -> new ImageViewResource(cache, key, device, samplerType, input))
+        imageViewCache.GetOrCreate([samplerType :> obj; input :> obj], fun cache key -> ImageViewResource(cache, key, device, samplerType, input))
 
     member x.CreateImageView(imageType : FShade.GLSL.GLSLImageType, input : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
         imageViewCache.GetOrCreate(
             [imageType :> obj; input :> obj; levels :> obj; slices :> obj],
-            fun cache key -> new StorageImageViewResource(cache, key, device, imageType, input, levels, slices)
+            fun cache key -> StorageImageViewResource(cache, key, device, imageType, input, levels, slices)
         )
 
     member x.CreateImageView(imageType : FShade.GLSL.GLSLImageType, input : IResourceLocation<Image>) =
-        imageViewCache.GetOrCreate([imageType :> obj; input :> obj], fun cache key -> new StorageImageViewResource(cache, key, device, imageType, input))
+        imageViewCache.GetOrCreate([imageType :> obj; input :> obj], fun cache key -> StorageImageViewResource(cache, key, device, imageType, input))
 
     member x.CreateSampler(data : aval<SamplerState>) =
-        samplerCache.GetOrCreate([data :> obj], fun cache key -> new SamplerResource(cache, key, device, data))
+        samplerCache.GetOrCreate([data :> obj], fun cache key -> SamplerResource(cache, key, device, data))
 
     member x.CreateDynamicSamplerState(state : SamplerState, modifier : aval<SamplerState -> SamplerState>) =
         samplerStateCache.GetOrCreate(
             [state :> obj; modifier :> obj],
-            fun cache key -> new DynamicSamplerStateResource(cache, key, state, modifier)
+            fun cache key -> DynamicSamplerStateResource(cache, key, state, modifier)
         )
 
-    member x.CreateImageSampler(samplerType : FShade.GLSL.GLSLSamplerType,
-                                texture : aval<ITexture>, samplerDesc : aval<SamplerState>) =
-        let image = x.CreateImage(samplerType.Properties, texture)
+    member private x.CreateImageSampler(name : string, samplerType : FShade.GLSL.GLSLSamplerType,
+                                        texture : aval<ITexture>, samplerDesc : aval<SamplerState>) =
+        let image = x.CreateImage(name, samplerType.Properties, texture)
         let view = x.CreateImageView(samplerType, image)
         let sampler = x.CreateSampler(samplerDesc)
 
         imageSamplerCache.GetOrCreate(
             [view :> obj; sampler :> obj],
-            fun cache key -> new ImageSamplerResource(cache, key, view, sampler)
+            fun cache key -> ImageSamplerResource(cache, key, view, sampler)
         )
 
-    member x.CreateImageSampler(samplerType : FShade.GLSL.GLSLSamplerType,
-                                level : aval<ITextureLevel>, samplerDesc : aval<SamplerState>) =
-        let levels = level |> AVal.mapNonAdaptive (fun l -> l.Levels)
-        let slices = level |> AVal.mapNonAdaptive (fun l -> l.Slices)
-        let image = x.CreateImage(samplerType.Properties, level)
+    member private x.CreateImageSampler(name : string, samplerType : FShade.GLSL.GLSLSamplerType,
+                                        level : aval<ITextureLevel>, samplerDesc : aval<SamplerState>) =
+        let levels = level |> AVal.mapNonAdaptive _.Levels
+        let slices = level |> AVal.mapNonAdaptive _.Slices
+        let image = x.CreateImage(name, samplerType.Properties, level)
         let view = x.CreateImageView(samplerType, image, levels, slices)
         let sampler = x.CreateSampler(samplerDesc)
 
         imageSamplerCache.GetOrCreate(
             [view :> obj; sampler :> obj],
-            fun cache key -> new ImageSamplerResource(cache, key, view, sampler)
+            fun cache key -> ImageSamplerResource(cache, key, view, sampler)
         )
 
-    member x.CreateImageSamplerArray(count : int, samplerType : FShade.GLSL.GLSLSamplerType,
+    member x.CreateImageSampler(textureName : Symbol, samplerType : FShade.GLSL.GLSLSamplerType,
+                                texture : aval<ITexture>, samplerDesc : aval<SamplerState>) =
+        let name = if device.DebugLabelsEnabled then $"{textureName} (Sampled Image)" else null
+        x.CreateImageSampler(name, samplerType, texture, samplerDesc)
+
+    member x.CreateImageSampler(textureName : Symbol, samplerType : FShade.GLSL.GLSLSamplerType,
+                                level : aval<ITextureLevel>, samplerDesc : aval<SamplerState>) =
+        let name = if device.DebugLabelsEnabled then $"{textureName} (Sampled Image)" else null
+        x.CreateImageSampler(name, samplerType, level, samplerDesc)
+
+    member x.CreateNullImageSampler(samplerType : FShade.GLSL.GLSLSamplerType) =
+        x.CreateImageSampler(null, samplerType, nullTextureConst, AVal.constant SamplerState.Default)
+
+    member x.CreateImageSamplerArray(textureName : Symbol, count : int, samplerType : FShade.GLSL.GLSLSamplerType,
                                      textures : aval<array<int * aval<ITexture>>>, samplerDesc : aval<SamplerState>) =
 
-        let empty = x.CreateImageSampler(samplerType, nullTextureConst, AVal.constant SamplerState.Default)
+        let empty = x.CreateNullImageSampler(samplerType)
 
         let map =
             imageSamplerMapCache.GetOrAdd(textures, fun _ ->
-                textures |> AMap.ofAVal |> AMap.map (fun _ texture ->
-                    x.CreateImageSampler(samplerType, texture, samplerDesc)
+                textures |> AMap.ofAVal |> AMap.map (fun i texture ->
+                    let name = if device.DebugLabelsEnabled then $"{textureName}[{i}] (Sampled Image)" else null
+                    x.CreateImageSampler(name, samplerType, texture, samplerDesc)
                 )
             )
 
         x.CreateImageSamplerArray(count, empty, map)
 
-    member x.CreateImageSamplerArray(count : int, samplerType : FShade.GLSL.GLSLSamplerType,
+    member x.CreateImageSamplerArray(textureName : Symbol, count : int, samplerType : FShade.GLSL.GLSLSamplerType,
                                      textures : aval<ITexture[]>, samplerDesc : aval<SamplerState>) =
 
-        let empty = x.CreateImageSampler(samplerType, nullTextureConst, AVal.constant SamplerState.Default)
+        let empty = x.CreateNullImageSampler(samplerType)
 
         let map =
             imageSamplerMapCache.GetOrAdd(textures, fun _ ->
                 textures |> AVal.map (Array.choosei (fun i texture ->
                     if i < count then
-                        Some (i, x.CreateImageSampler(samplerType, AVal.constant texture, samplerDesc))
+                        let name = if device.DebugLabelsEnabled then $"{textureName}[{i}] (Sampled Image)" else null
+                        Some (i, x.CreateImageSampler(name, samplerType, AVal.constant texture, samplerDesc))
                     else
                         None
                 ))
@@ -1881,7 +1919,7 @@ type ResourceManager(device : Device) =
 
     member x.CreateImageSamplerArray(count : int, empty : IResourceLocation<ImageSampler>, input : amap<int, IResourceLocation<ImageSampler>>) =
         imageSamplerArrayCache.GetOrCreate(
-            [count :> obj, empty :> obj; input :> obj], fun cache key -> new ImageSamplerArrayResource(cache, key, count, empty, input)
+            [count :> obj, empty :> obj; input :> obj], fun cache key -> ImageSamplerArrayResource(cache, key, count, empty, input)
         )
 
     member x.CreateShaderProgram(pass : RenderPass, program : ShaderProgram) =
@@ -1918,7 +1956,7 @@ type ResourceManager(device : Device) =
                 let _, module_ = compile.Invoke(pass, top)
                 use initialProgram = device.CreateShaderProgram(AVal.force module_)
 
-                let program = new DynamicShaderProgramResource(cache, key, device, initialProgram.PipelineLayout, module_)
+                let program = DynamicShaderProgramResource(cache, key, device, initialProgram.PipelineLayout, module_)
                 program.Acquire()
                 program
         )
@@ -1981,16 +2019,16 @@ type ResourceManager(device : Device) =
         )
 
     member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : IAdaptiveDescriptor[]) =
-        descriptorSetCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetResource(cache, key, layout, bindings))
+        descriptorSetCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> DescriptorSetResource(cache, key, layout, bindings))
 
     member x.CreateVertexInputState(program : PipelineInfo, mode : aval<Map<Symbol, VertexInputDescription>>) =
-        vertexInputCache.GetOrCreate([program :> obj; mode :> obj], fun cache key -> new VertexInputStateResource(cache, key, program, mode))
+        vertexInputCache.GetOrCreate([program :> obj; mode :> obj], fun cache key -> VertexInputStateResource(cache, key, program, mode))
 
     member inline x.CreateVertexInputState(program : PipelineInfo, mode : Map<Symbol, VertexInputDescription>) =
         x.CreateVertexInputState(program, AVal.constant mode)
 
     member x.CreateInputAssemblyState(mode : IndexedGeometryMode, program : IResourceLocation<ShaderProgram>) =
-        inputAssemblyCache.GetOrCreate([mode :> obj; program :> obj], fun cache key -> new InputAssemblyStateResource(cache, key, mode, program))
+        inputAssemblyCache.GetOrCreate([mode :> obj; program :> obj], fun cache key -> InputAssemblyStateResource(cache, key, mode, program))
 
     member x.CreateDepthStencilState(depthTest : aval<DepthTest>, depthWrite : aval<bool>,
                                      stencilModeF : aval<StencilMode>, stencilMaskF : aval<StencilMask>,
@@ -1999,10 +2037,10 @@ type ResourceManager(device : Device) =
             [depthTest :> obj; depthWrite :> obj;
              stencilModeF :> obj; stencilMaskF :> obj;
              stencilModeB :> obj; stencilMaskB :> obj],
-            fun cache key -> new DepthStencilStateResource(cache, key,
-                                                           depthTest, depthWrite,
-                                                           stencilModeF, stencilMaskF,
-                                                           stencilModeB, stencilMaskB)
+            fun cache key -> DepthStencilStateResource(cache, key,
+                                                       depthTest, depthWrite,
+                                                       stencilModeF, stencilMaskF,
+                                                       stencilModeB, stencilMaskB)
         )
 
     member x.CreateRasterizerState(depthClamp : aval<bool>, depthBias : aval<DepthBias>,
@@ -2010,7 +2048,7 @@ type ResourceManager(device : Device) =
                                    conservativeRaster : aval<bool>) =
         rasterizerStateCache.GetOrCreate(
             [depthClamp :> obj; depthBias :> obj; cull :> obj; front :> obj, fill :> obj; conservativeRaster :> obj],
-            fun cache key -> new RasterizerStateResource(cache, key, depthClamp, depthBias, cull, front, fill, conservativeRaster)
+            fun cache key -> RasterizerStateResource(cache, key, depthClamp, depthBias, cull, front, fill, conservativeRaster)
         )
 
     member x.CreateColorBlendState(pass : RenderPass,
@@ -2037,15 +2075,13 @@ type ResourceManager(device : Device) =
             fun cache key ->
                 let writeMasks = getAttachmentStates globalMask attachmentMask
                 let blendModes = getAttachmentStates globalBlend attachmentBlend
-
-                new ColorBlendStateResource(cache, key, writeMasks, blendModes, blendConstant)
+                ColorBlendStateResource(cache, key, writeMasks, blendModes, blendConstant)
         )
 
     member x.CreateMultisampleState(pass : RenderPass, multisample : aval<bool>) =
         multisampleCache.GetOrCreate(
             [pass.Samples :> obj; multisample :> obj],
-            fun cache key ->
-                new MultisampleStateResource(cache, key, pass.Samples, multisample)
+            fun cache key -> MultisampleStateResource(cache, key, pass.Samples, multisample)
         )
 
     member x.CreatePipeline(program         : IResourceLocation<ShaderProgram>,
@@ -2060,7 +2096,7 @@ type ResourceManager(device : Device) =
         pipelineCache.GetOrCreate(
             [ program :> obj; pass :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; depthStencil :> obj; multisample :> obj ],
             fun cache key ->
-                new PipelineResource(
+                PipelineResource(
                     cache, key,
                     pass,
                     program,
@@ -2074,7 +2110,8 @@ type ResourceManager(device : Device) =
 
         )
 
-    member x.CreateAccelerationStructure(instances : aset<Raytracing.ITraceInstance>,
+    member x.CreateAccelerationStructure(name : Symbol,
+                                         instances : aset<Raytracing.ITraceInstance>,
                                          sbt : IResourceLocation<Raytracing.ShaderBindingTable>,
                                          usage : Raytracing.AccelerationStructureUsage) =
 
@@ -2082,9 +2119,16 @@ type ResourceManager(device : Device) =
             [ instances :> obj; sbt :> obj; usage :> obj ],
             fun cache key ->
                 let instanceBuffer = InstanceBuffer.create x.Device sbt instances
-                let buffer = x.CreateBuffer(instanceBuffer)
+                let buffer = x.CreateBuffer(instanceBuffer, VkBufferUsageFlags.None)
+                let name =
+                    if device.DebugLabelsEnabled then
+                        let name = Sym.toString name
+                        instanceBuffer.Name <- $"Instance Buffer ({name})"
+                        name
+                    else
+                        null
 
-                new AccelerationStructureResource(cache, key, device, buffer, instanceBuffer.Count, usage)
+                AccelerationStructureResource(cache, key, name, device, buffer, instanceBuffer.Count, usage)
         )
 
     member x.CreateRaytracingPipeline(program           : Raytracing.RaytracingProgram,
@@ -2093,7 +2137,7 @@ type ResourceManager(device : Device) =
         raytracingPipelineCache.GetOrCreate(
             [ program :> obj; maxRecursionDepth :> obj ],
             fun cache key ->
-                new RaytracingPipelineResource(
+                RaytracingPipelineResource(
                     cache, key,
                     program, maxRecursionDepth
                 )
@@ -2105,29 +2149,29 @@ type ResourceManager(device : Device) =
         shaderBindingTableCache.GetOrCreate(
             [ pipeline :> obj; hitConfigs :> obj ],
             fun cache key ->
-                new ShaderBindingTableResource(
+                ShaderBindingTableResource(
                     cache, key, pipeline, hitConfigs
                 )
         )
 
 
     member x.CreateDrawCall(indexed : bool, calls : aval<list<DrawCallInfo>>) =
-        drawCallCache.GetOrCreate([indexed :> obj; calls :> obj], fun cache key -> new DirectDrawCallResource(cache, key, indexed, calls))
+        drawCallCache.GetOrCreate([indexed :> obj; calls :> obj], fun cache key -> DirectDrawCallResource(cache, key, indexed, calls))
 
     member x.CreateDrawCall(indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
-        drawCallCache.GetOrCreate([indexed :> obj; calls :> obj], fun cache key -> new IndirectDrawCallResource(cache, key, indexed, calls))
+        drawCallCache.GetOrCreate([indexed :> obj; calls :> obj], fun cache key -> IndirectDrawCallResource(cache, key, indexed, calls))
 
     member x.CreateVertexBufferBinding(buffers : list<IResourceLocation<Buffer> * int64>) =
-        bufferBindingCache.GetOrCreate([buffers :> obj], fun cache key -> new BufferBindingResource(cache, key, buffers))
+        bufferBindingCache.GetOrCreate([buffers :> obj], fun cache key -> BufferBindingResource(cache, key, buffers))
 
     member x.CreateDescriptorSetBinding(bindPoint : VkPipelineBindPoint, layout : PipelineLayout, bindings : IResourceLocation<DescriptorSet>[]) =
         descriptorBindingCache.GetOrCreate(
             [bindPoint :> obj; layout :> obj; bindings :> obj],
-            fun cache key -> new DescriptorSetBindingResource(cache, key, bindPoint, layout, bindings)
+            fun cache key -> DescriptorSetBindingResource(cache, key, bindPoint, layout, bindings)
         )
 
     member x.CreateIndexBufferBinding(binding : IResourceLocation<Buffer>, t : VkIndexType) =
-        indexBindingCache.GetOrCreate([binding :> obj; t :> obj], fun cache key -> new IndexBufferBindingResource(cache, key, t, binding))
+        indexBindingCache.GetOrCreate([binding :> obj; t :> obj], fun cache key -> IndexBufferBindingResource(cache, key, t, binding))
 
     member x.CreateIsActive(value : aval<bool>) =
         isActiveCache.GetOrCreate([value :> obj], fun cache key -> IsActiveResource(cache, key, value))

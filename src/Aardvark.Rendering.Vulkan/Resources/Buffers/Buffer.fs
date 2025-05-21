@@ -24,6 +24,14 @@ type Buffer =
         val public Usage : VkBufferUsageFlags
         val public Size : uint64
         val public DeviceAddress : VkDeviceAddress
+        val mutable private name : string
+
+        abstract member Name : string with get, set
+        default x.Name
+            with get() = x.name
+            and set name =
+                x.name <- name
+                x.Device.SetObjectName(VkObjectType.Buffer, x.Handle.Handle, name)
 
         override x.Destroy() =
             if x.Handle.IsValid then
@@ -37,8 +45,15 @@ type Buffer =
             member x.Buffer = x
             member x.Offset = 0n
             member x.SizeInBytes = nativeint x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
+            member x.Name with get() = x.Name and set name = x.Name <- name
 
-        new(device: Device, handle: VkBuffer, memory: DevicePtr, size, usage: VkBufferUsageFlags) =
+        internal new (device: Device, handle: VkBuffer, memory: DevicePtr, size, usage: VkBufferUsageFlags, address: VkDeviceAddress, name: string) =
+            { inherit Resource<_>(device, handle); Memory = memory; Size = size; Usage = usage; DeviceAddress = address; name = name }
+
+        internal new (other: Buffer) =
+            new Buffer(other.Device, other.Handle, other.Memory, other.Size, other.Usage, other.DeviceAddress, other.Name)
+
+        new (device: Device, handle: VkBuffer, memory: DevicePtr, size, usage: VkBufferUsageFlags) =
             let address =
                 if usage.HasFlag VkBufferUsageFlags.ShaderDeviceAddressBitKhr then
                     let mutable info = VkBufferDeviceAddressInfoKHR(handle)
@@ -46,7 +61,7 @@ type Buffer =
                 else
                     0UL
 
-            { inherit Resource<_>(device, handle); Memory = memory; Size = size; Usage = usage; DeviceAddress = address }
+            new Buffer(device, handle, memory, size, usage, address, null)
     end
 
 type internal ExportedBuffer =
@@ -88,6 +103,10 @@ type BufferDecorator =
     class
         inherit Buffer
         val private Parent : Buffer
+
+        override x.Name
+            with get() = x.Parent.Name
+            and set name = x.Parent.Name <- name
 
         override x.Destroy() =
             x.Parent.Dispose()
@@ -330,7 +349,15 @@ module Buffer =
             emptyBuffers.GetOrAdd(key, fun (memory, export, usage, alignment) ->
                 lazy (
                     let device = memory.Device
-                    let buffer = memory |> createInternal true export usage alignment 0UL
+                    let buffer =
+                        let b = memory |> createInternal true export usage alignment 0UL
+                        b.Name <- "Empty"
+
+                        { new Buffer(b) with
+                            override x.Name
+                                with get() = base.Name
+                                and set name = ()
+                        }
 
                     device.OnDispose.Add (fun () ->
                         emptyBuffers.TryRemove key |> ignore

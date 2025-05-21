@@ -16,6 +16,16 @@ type AccelerationStructure =
         val ResultBuffer : Buffer
         val ScratchBuffer : Buffer
         val DeviceAddress : VkDeviceAddress
+        val mutable private name : string
+
+        member x.Name
+            with get() = x.name
+            and set name =
+                x.name <- name
+                if name <> null then
+                    x.ResultBuffer.Name <- $"{name} (Result Buffer)"
+                    x.ScratchBuffer.Name <- $"{name} (Scratch Buffer)"
+                x.Device.SetObjectName(VkObjectType.AccelerationStructureKhr, x.Handle.Handle, name)
 
         member x.GeometryCount =
             match x.Data with
@@ -42,11 +52,13 @@ type AccelerationStructure =
               AllowUpdate = allowUpdate
               ResultBuffer = resultBuffer
               ScratchBuffer = scratchBuffer
-              DeviceAddress = address }
+              DeviceAddress = address
+              name = null }
 
         interface IAccelerationStructure with
             member x.Usage = x.Usage
             member x.GeometryCount = x.GeometryCount
+            member x.Name with get() = x.Name and set name = x.Name <- name
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

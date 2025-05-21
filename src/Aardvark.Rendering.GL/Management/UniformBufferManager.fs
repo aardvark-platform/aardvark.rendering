@@ -27,7 +27,9 @@ type UniformBufferManager(ctx : Context) =
                 GL.Dispatch.NamedBufferStorage(handle, size, 0n, BufferStorageFlags.DynamicStorageBit)
                 GL.Check "could not allocate uniform buffer"
 
-                new Buffer(ctx, size, handle)
+                let b = new Buffer(ctx, size, handle)
+                if ctx.DebugLabelsEnabled then b.Name <- "Uniform Buffer"
+                b
 
         let free (buffer : Buffer) (size : nativeint) =
             if buffer.Handle <> 0 then

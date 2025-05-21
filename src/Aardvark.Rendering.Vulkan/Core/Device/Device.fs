@@ -8,7 +8,7 @@ open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Rendering
 open KHRSwapchain
-open EXTMemoryBudget
+open EXTDebugUtils
 open Vulkan11
 
 #nowarn "9"
@@ -263,6 +263,7 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
 
     member x.Instance = instance
     member x.DebugConfig = instance.DebugConfig
+    member x.DebugLabelsEnabled = instance.DebugLabelsEnabled
 
     member internal x.QueueFamilyCount = uint32 queueFamilies.Length
     member internal x.QueueFamilyIndices = pAllQueueFamilyIndices
@@ -300,6 +301,13 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
 
     /// Memory for resources that are read by the CPU to readback data from the GPU.
     member x.ReadbackMemory = readbackMemory
+
+    member x.SetObjectName(typ: VkObjectType, handle: uint64, name: string) =
+        if instance.DebugConfig.DebugLabels then
+            CStr.using name (fun pName ->
+                let mutable info = VkDebugUtilsObjectNameInfoEXT(typ, handle, pName)
+                VkRaw.vkSetDebugUtilsObjectNameEXT(device, &&info) |> check "failed to set object name"
+            )
 
     member x.OnDispose = onDisposeObservable :> IObservable<_>
 

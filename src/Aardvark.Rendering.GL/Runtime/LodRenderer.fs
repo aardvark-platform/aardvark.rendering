@@ -1558,7 +1558,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                     )
                     ArrayBuffer data :> IBuffer
             )
-        manager.CreateBuffer data
+        manager.CreateStorageBuffer("TreeActive", data)
 
     let modelViewProjBuffer =
         let data = 
@@ -1582,7 +1582,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                     )
                     ArrayBuffer data :> IBuffer
             )
-        manager.CreateBuffer data
+        manager.CreateStorageBuffer("ModelViewProjTrafos", data)
             
     let allocWatch = System.Diagnostics.Stopwatch()
     let uploadWatch = System.Diagnostics.Stopwatch()

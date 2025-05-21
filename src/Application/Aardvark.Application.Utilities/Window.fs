@@ -442,16 +442,6 @@ module Utilities =
 
         let samples = cfg.samples
 
-        
-        let monoSignature =
-            runtime.CreateFramebufferSignature(
-                SymDict.ofList [
-                    DefaultSemantic.Colors, TextureFormat.Rgba8
-                    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
-                ],
-                samples
-            )  
-
         let signature =
             runtime.CreateFramebufferSignature(
                 SymDict.ofList [
@@ -473,18 +463,18 @@ module Utilities =
                     "ViewProjTrafoInv"; 
                     "ModelViewProjTrafoInv"
                 ]
-            )  
+            )
 
         let s = win.Sizes |> AVal.map (fun s -> s / V2i(2,1))
 
-        let colors =
-            runtime.CreateTexture2DArray(s, TextureFormat.Rgba8, samples = samples, count = 2)
+        let colors = runtime.CreateTexture2DArray(s, TextureFormat.Rgba8, samples = samples, count = 2)
+        colors.Name <- "Color Attachment (Window)"
 
-        let depth =
-            runtime.CreateTexture2DArray(s, TextureFormat.Depth24Stencil8, samples = samples, count = 2)
+        let depth = runtime.CreateTexture2DArray(s, TextureFormat.Depth24Stencil8, samples = samples, count = 2)
+        depth.Name <- "Depth / Stencil Attachment (Window)"
 
-        let resolved =
-            runtime.CreateTexture2DArray(s, TextureFormat.Rgba8, count = 2)
+        let resolved = runtime.CreateTexture2DArray(s, TextureFormat.Rgba8, count = 2)
+        colors.Name <- "Resolved Color Attachment (Window)"
 
         let framebuffer =
             runtime.CreateFramebuffer(signature, [

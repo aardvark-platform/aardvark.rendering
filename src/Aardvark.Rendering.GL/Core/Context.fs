@@ -252,7 +252,7 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     let sharedMemoryManager = SharedMemoryManager(fun _ -> this.ResourceLock)
 
-    let debugMarkersEnabled = (runtime.DebugConfig :?> DebugConfig).DebugMarkers
+    let debugLabelsEnabled = (runtime.DebugConfig :?> DebugConfig).DebugLabels
 
     let getOrQuery (description : string) (var : byref<'T option>) (query : unit -> 'T) =
         match var with
@@ -374,6 +374,8 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
         getOrQuery "max framebuffer samples" &maxFramebufferSamples (fun _ ->
             GL.GetInteger(unbox<GetPName> 0x9318)
         )
+
+    member x.DebugLabelsEnabled = debugLabelsEnabled
 
     member internal x.ImportMemoryBlock(external : IExternalMemoryBlock) =
         sharedMemoryManager.Import external
@@ -528,16 +530,28 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
         | _ -> ()
 
     member x.PushDebugGroup(message: string) =
-        if debugMarkersEnabled then
+        if debugLabelsEnabled then
             match ContextHandle.Current with
             | ValueSome ctx -> ctx.PushDebugGroup(message)
             | _ -> ()
 
     member x.PopDebugGroup() =
-        if debugMarkersEnabled then
+        if debugLabelsEnabled then
             match ContextHandle.Current with
             | ValueSome ctx -> ctx.PopDebugGroup()
             | _ -> ()
+
+    member x.SetObjectLabel(id: ObjectLabelIdentifier, name: int, label: string) =
+        if debugLabelsEnabled && name > 0 then
+            use __ = x.ResourceLock
+            ContextHandle.Current.Value.SetObjectLabel(id, name, label)
+
+    member x.GetObjectLabel(id: ObjectLabelIdentifier, name: int) =
+        if debugLabelsEnabled && name > 0 then
+            use __ = x.ResourceLock
+            ContextHandle.Current.Value.GetObjectLabel(id, name)
+        else
+            null
 
     /// <summary>
     /// releases all resources created by the context

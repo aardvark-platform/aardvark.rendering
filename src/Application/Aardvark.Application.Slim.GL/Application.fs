@@ -176,11 +176,11 @@ module private OpenGL =
 
     let createStereoSwapchain (runtime : Runtime) (signature : IFramebufferSignature) (ctx : Aardvark.Rendering.GL.ContextHandle)
                               (glfw : Glfw) (win : nativeptr<WindowHandle>) (size : V2i) =
-        let colors =
-            runtime.CreateTexture2DArray(size, TextureFormat.Rgba8, samples = signature.Samples, count = 2) |> unbox<Texture>
+        let colors = runtime.CreateTexture2DArray(size, TextureFormat.Rgba8, samples = signature.Samples, count = 2) |> unbox<Texture>
+        colors.Name <- "Colors Attachment (Stereo Swapchain)"
 
-        let depth =
-            runtime.CreateTexture2DArray(size, TextureFormat.Depth24Stencil8, samples = signature.Samples, count = 2) |> unbox<Texture>
+        let depth = runtime.CreateTexture2DArray(size, TextureFormat.Depth24Stencil8, samples = signature.Samples, count = 2) |> unbox<Texture>
+        depth.Name <- "Depth / Stencil Attachment (Stereo Swapchain)"
 
         let framebuffer =
             runtime.CreateFramebuffer(signature, [

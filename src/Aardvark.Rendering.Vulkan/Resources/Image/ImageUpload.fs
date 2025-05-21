@@ -345,7 +345,7 @@ module ImageUploadExtensions =
                     | ValueSome p -> p
                     | _ -> failf "cannot prepare null texture without properties"
 
-                device |> Image.empty properties
+                device |> Image.getNull properties
 
             | :? PixTexture3d as t ->
                 device |> ofPixVolume t.PixVolume t.TextureParams export

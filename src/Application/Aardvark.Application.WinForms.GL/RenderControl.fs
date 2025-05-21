@@ -88,8 +88,10 @@ type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int)
                     ()
 
                 let c = ctx.CreateTexture2D(realSize, 1, TextureFormat.Rgba8, samples)
+                c.Name <- "Color Attachment (Render Control)"
                 let d = ctx.CreateTexture2D(realSize, 1, TextureFormat.Depth24Stencil8, samples)
-                let f = 
+                d.Name <- "Depth / Stencil Attachment (Render Control)"
+                let f =
                     ctx.CreateFramebuffer(
                         fboSignature,
                         [ 0, DefaultSemantic.Colors, c.GetOutputView() ],
@@ -99,6 +101,7 @@ type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int)
                 let f0 =
                     if samples > 1 then
                         let c0 = ctx.CreateTexture2D(realSize, 1, TextureFormat.Rgba8, 1)
+                        c0.Name <- "Resolved Color Attachment (Render Control)"
                         let f0 =
                             ctx.CreateFramebuffer(
                                 fboSignature,
@@ -224,13 +227,14 @@ type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int)
 
     member x.RenderTask
         with get() = task.Value
-        and set t =
+        and set (t: IRenderTask) =
             match task with
                 | Some old ->
                     if taskSubscription <> null then taskSubscription.Dispose()
                     old.Dispose()
                 | None -> ()
 
+            t.Name <- "Render Control Task"
             task <- Some t
             if onPaintRender then
                 taskSubscription <- t.AddMarkingCallback x.ForceRedraw

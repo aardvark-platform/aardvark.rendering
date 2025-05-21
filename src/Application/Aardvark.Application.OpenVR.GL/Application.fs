@@ -178,9 +178,16 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
 
 
             let nTex = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Rgba8, samples)
+            nTex.Name <- "Color Attachment (Window)"
+
             let nDepth = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Depth24Stencil8, samples)
+            nDepth.Name <- "Depth / Stencil Attachment (Window)"
+
             let nfTexl = ctx.CreateTexture2D(info.framebufferSize, 1, TextureFormat.Rgba8, 1)
+            nfTexl.Name <- "Resolved Left Color Attachment (Window)"
+
             let nfTexr = ctx.CreateTexture2D(info.framebufferSize, 1, TextureFormat.Rgba8, 1)
+            nfTexr.Name <- "Resolved Right Color Attachment (Window)"
 
             let nFbo =
                 runtime.CreateFramebuffer(
@@ -190,8 +197,6 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
                         DefaultSemantic.DepthStencil, nDepth.[TextureAspect.Depth, 0, *] :> IFramebufferOutput
                     ]
                 )
-            
-
 
             dTex <- nDepth
             cTex <- nTex

@@ -113,6 +113,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                     VkFormat.toTextureFormat description.colorFormat,
                     VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                 )
+            image.Name <- "Color Attachment (Swapchain)"
             // hacky-hack
             dt.Enqueue (Command.TransformLayout(image, VkImageLayout.ColorAttachmentOptimal))
 
@@ -129,6 +130,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                             VkFormat.toTextureFormat depthFormat,
                             VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                         )
+                    image.Name <- "Depth / Stencil Attachment (Swapchain)"
                     // hacky-hack
                     dt.Enqueue (Command.TransformLayout(image, VkImageLayout.DepthStencilAttachmentOptimal))
 
@@ -157,6 +159,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         VkFormat.toTextureFormat description.colorFormat,
                         VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                     )
+                image.Name <- "Resolved Color Attachment (Swapchain)"
                 // hacky-hack
                 dt.Enqueue (Command.TransformLayout(image, VkImageLayout.TransferDstOptimal))
                 //let view = device.CreateImageView(image, 0, 1, 0, 1, VkComponentMapping.Identity)

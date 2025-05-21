@@ -119,9 +119,17 @@ type Image =
         val public Memory : DevicePtr
         val public PeerHandles : VkImage[]
         val public SamplerLayout : VkImageLayout
+        val mutable private name : string
 
         // ISSUE: This is not safe, generally it's not possible to track the layout
         val mutable public Layout : VkImageLayout
+
+        abstract member Name : string with get, set
+        default x.Name
+            with get() = x.name
+            and set name =
+                x.name <- name
+                x.Device.SetObjectName(VkObjectType.Image, x.Handle.Handle, name)
 
         override x.Destroy() =
             if x.Device.Handle <> 0n && x.Handle.IsValid then
@@ -152,6 +160,7 @@ type Image =
             member x.MipMapLevels = x.MipMapLevels
             member x.Samples = x.Samples
             member x.Size = x.Size
+            member x.Name with get() = x.Name and set name = x.Name <- name
 
         interface IRenderbuffer with
             member x.Runtime = x.Device.Runtime :> ITextureRuntime
@@ -159,6 +168,7 @@ type Image =
             member x.Samples = x.Samples
             member x.Format = x.TextureFormat
             member x.Handle = x.Handle :> obj
+            member x.Name with get() = x.Name and set name = x.Name <- name
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
@@ -181,23 +191,28 @@ type Image =
         override x.ToString() =
             sprintf "0x%08X" x.Handle.Handle
 
-        new(device: Device, handle: VkImage, size: V3i, levels: int, layers: int, samples: int,
-            dimension: TextureDimension, format: VkFormat, memory: DevicePtr, layout: VkImageLayout,
-            [<Optional; DefaultParameterValue(VkImageLayout.ShaderReadOnlyOptimal)>] samplerLayout,
-            [<Optional; DefaultParameterValue(null : VkImage[])>] peerHandles) =
+        internal new (device: Device, handle: VkImage, size: V3i, levels: int, layers: int, samples: int,
+                      dimension: TextureDimension, format: VkFormat, memory: DevicePtr, layout: VkImageLayout,
+                      samplerLayout, peerHandles, name) =
             {
                 inherit Resource<_>(device, handle);
-                Size = size
-                MipMapLevels = levels
-                Layers = layers
-                Samples = samples
-                Dimension = dimension
-                Format = format
-                Memory = memory
-                Layout = layout
-                SamplerLayout = samplerLayout
-                PeerHandles = if isNull peerHandles then [||] else peerHandles
+                Size = size; MipMapLevels = levels; Layers = layers; Samples = samples
+                Dimension = dimension; Format = format; Memory = memory; Layout = layout
+                SamplerLayout = samplerLayout; PeerHandles = peerHandles; name = name
             }
+
+        internal new (other: Image) =
+            new Image(
+                other.Device, other.Handle,other.Size, other.MipMapLevels, other.Layers, other.Samples,
+                other.Dimension, other.Format, other.Memory, other.Layout, other.SamplerLayout, other.PeerHandles, other.Name
+            )
+
+        new (device: Device, handle: VkImage, size: V3i, levels: int, layers: int, samples: int,
+             dimension: TextureDimension, format: VkFormat, memory: DevicePtr, layout: VkImageLayout,
+             [<Optional; DefaultParameterValue(VkImageLayout.ShaderReadOnlyOptimal)>] samplerLayout: VkImageLayout,
+             [<Optional; DefaultParameterValue(null : VkImage[])>] peerHandles: VkImage[]) =
+            let peerHandles = if isNull peerHandles then [||] else peerHandles
+            new Image(device, handle, size, levels, layers, samples, dimension, format, memory, layout, samplerLayout, peerHandles, null)
     end
 
 and internal ExportedImage =
@@ -1131,7 +1146,7 @@ module Image =
         create' false ImageExport.Disable dimension usage format mipMapLevels count samples size device
 
     /// Returns an uninitialized image with size 8 in each dimension, used as NullTexture counter-part
-    let internal empty =
+    let internal getNull =
         let store = ConcurrentDictionary<Device * ImageProperties, Image>()
 
         fun (properties : ImageProperties) (device : Device) ->
@@ -1140,7 +1155,15 @@ module Image =
                     let size = V3i 8
                     let format = VkFormat.ofTextureFormat properties.Format
                     let samples = if properties.IsMultisampled then 2 else 1
-                    let image = device |> create properties.Dimension defaultUsage format 1 1 samples size
+                    let image =
+                        let img = device |> create properties.Dimension defaultUsage format 1 1 samples size
+                        img.Name <- "Null"
+
+                        { new Image(img) with
+                            override x.Name
+                                with get() = base.Name
+                                and set name = ()
+                        }
 
                     device.perform {
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)

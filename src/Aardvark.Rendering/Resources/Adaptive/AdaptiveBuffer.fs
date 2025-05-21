@@ -14,6 +14,9 @@ type IAdaptiveBuffer =
     /// Runtime of the resource.
     abstract member Runtime : IBufferRuntime
 
+    /// The name of the buffer.
+    abstract member Name : string with get, set
+
     /// The size of the buffer in bytes.
     abstract member Size : nativeint
 
@@ -105,6 +108,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
                     [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
     inherit AdaptiveResource<IBackendBuffer>()
 
+    let mutable name = null
     let mutable size = sizeInBytes
     let mutable handle : ValueOption<IBackendBuffer> = ValueNone
     let usage = usage ||| BufferUsage.Read
@@ -116,12 +120,14 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
         match handle with
         | ValueNone ->
             let h = x.CreateHandle(size, usage, storage)
+            h.Name <- name
             handle <- ValueSome h
             h
 
         | ValueSome old ->
             if old.SizeInBytes <> size then
                 let resized = x.CreateHandle(size, usage, storage)
+                resized.Name <- name
 
                 if not discard then
                     runtime.Copy(old, 0n, resized, 0n, min old.SizeInBytes size)
@@ -132,6 +138,13 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
 
             else
                 old
+
+    /// The name of the buffer.
+    member x.Name
+        with get() = name
+        and set value =
+            name <- value
+            handle |> ValueOption.iter _.set_Name(name)
 
     /// The size of the buffer in bytes.
     member x.Size = size
@@ -178,6 +191,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
 
     interface IAdaptiveBuffer with
         member x.Runtime = runtime
+        member x.Name with get() = x.Name and set name = x.Name <- name
         member x.Size = x.Size
         member x.Resize(sizeInBytes, forceImmediate) = x.Resize(sizeInBytes, forceImmediate)
         member x.Write(data, offset, sizeInBytes) = x.Write(data, offset, sizeInBytes) 

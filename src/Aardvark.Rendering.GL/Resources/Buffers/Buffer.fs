@@ -34,6 +34,14 @@ type Buffer =
         val mutable public Handle : int
         val mutable public Context : Context
         val mutable public SizeInBytes : nativeint
+        val mutable private name : string
+
+        abstract member Name : string with get, set
+        default x.Name
+            with get() = x.name
+            and set name =
+                x.name <- name
+                x.Context.SetObjectLabel(ObjectLabelIdentifier.Buffer, x.Handle, name)
 
         abstract member Destroy : unit -> unit
         default x.Destroy() =
@@ -55,10 +63,11 @@ type Buffer =
             member x.Buffer = x
             member x.Offset = 0n
             member x.SizeInBytes = x.SizeInBytes
+            member x.Name with get() = x.Name and set name = x.Name <- name
             member x.Dispose() = x.Dispose()
 
         new(ctx : Context, size : nativeint, handle : int) =
-            { Context = ctx; SizeInBytes = size; Handle = handle }
+            { Context = ctx; SizeInBytes = size; Handle = handle; name = null }
     end
 
 type internal SharedBuffer(ctx, size, handle, external : IExportedBackendBuffer, memory : SharedMemoryBlock) =

@@ -176,7 +176,7 @@ module ``Common Commands`` =
             { new Command() with
                 member _.Compatible = QueueFlags.All
                 member _.Enqueue buffer =
-                    if buffer.DeviceInterface.Instance.DebugMarkersEnabled then
+                    if buffer.DeviceInterface.Instance.DebugLabelsEnabled then
                         buffer.AppendCommand()
                         CStr.using name (fun pName ->
                             let mutable labelInfo = VkDebugUtilsLabelEXT(pName, v4f color)
@@ -188,7 +188,7 @@ module ``Common Commands`` =
             { new Command() with
                 member _.Compatible = QueueFlags.All
                 member _.Enqueue buffer =
-                    if buffer.DeviceInterface.Instance.DebugMarkersEnabled then
+                    if buffer.DeviceInterface.Instance.DebugLabelsEnabled then
                         buffer.AppendCommand()
                         CStr.using name (fun pName ->
                             let mutable labelInfo = VkDebugUtilsLabelEXT(pName, v4f color)
@@ -200,7 +200,7 @@ module ``Common Commands`` =
             { new Command() with
                 member _.Compatible = QueueFlags.All
                 member _.Enqueue buffer =
-                    if buffer.DeviceInterface.Instance.DebugMarkersEnabled then
+                    if buffer.DeviceInterface.Instance.DebugLabelsEnabled then
                         buffer.AppendCommand()
                         VkRaw.vkCmdEndDebugUtilsLabelEXT(buffer.Handle)
             }

@@ -159,8 +159,8 @@ type DebugConfig =
         /// None if the debug output is disabled.
         DebugOutput : DebugOutputConfig option
 
-        /// Output debug markers that can be viewed in debugging tools like RenderDoc or NVIDIA Nsight.
-        DebugMarkers : bool
+        /// Output debug markers and labels that can be viewed in debugging tools like RenderDoc or NVIDIA Nsight.
+        DebugLabels : bool
 
         /// Determines if and how OpenGL error flags are checked and reported.
         ErrorFlagCheck : ErrorFlagCheck
@@ -186,7 +186,7 @@ type DebugConfig =
     static member None =
         { DebugOutput                       = None
           ErrorFlagCheck                    = ErrorFlagCheck.Disabled
-          DebugMarkers                      = false
+          DebugLabels                       = false
           DebugRenderTasks                  = false
           DebugComputeTasks                 = false
           PrintShaderCode                   = false
@@ -204,6 +204,7 @@ type DebugConfig =
         { DebugConfig.Minimal with
             DebugOutput     = Some DebugOutputConfig.Normal
             ErrorFlagCheck  = ErrorFlagCheck.ThrowOnError
+            DebugLabels     = true
             PrintShaderCode = true }
 
     /// All messages are reported via debug output, render and compute tasks print their OpenGL calls.

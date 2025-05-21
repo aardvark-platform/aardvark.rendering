@@ -5,17 +5,21 @@ open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.GL
-open FSharp.Data.Adaptive
 
 type internal RefCountedTexture(ctx, create : unit -> Texture, destroy : unit -> unit) =
     inherit Texture(ctx, 0, TextureDimension.Texture2D, 0, 0, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
     let mutable refCount = 0
-    let mutable handle = Unchecked.defaultof<_>
+    let mutable handle = Unchecked.defaultof<Texture>
 
-    member x.Acquire() =
+    override x.Name
+        with get() = if refCount > 0 then handle.Name else null
+        and set name = if refCount > 0 then handle.Name <- name
+
+    member x.Acquire(name: string) =
         if Interlocked.Increment &refCount = 1 then
             let b = Operators.using ctx.ResourceLock (fun _ -> create())
+            if name <> null && b.Name = null then b.Name <- name
             x.IsArray <- b.IsArray
             x.Handle <- b.Handle
             x.Dimension <- b.Dimension
@@ -45,12 +49,12 @@ type internal TextureManager(ctx : Context) =
             )
         )
 
-    member x.Create(data : ITexture, properties : TextureProperties) =
+    member x.Create(name : string, data : ITexture, properties : TextureProperties) =
         let shared = data |> get properties
-        shared.Acquire()
+        shared.Acquire(name)
         shared :> Texture
 
-    member x.Update(texture : Texture, data : ITexture, properties : TextureProperties) : Texture =
+    member x.Update(name : string, texture : Texture, data : ITexture, properties : TextureProperties) : Texture =
         match texture with
         | :? RefCountedTexture as texture ->
             let newShared = data |> get properties
@@ -58,13 +62,13 @@ type internal TextureManager(ctx : Context) =
                 texture :> Texture
             else
                 texture.Release()
-                newShared.Acquire()
+                newShared.Acquire(name)
                 newShared :> Texture
         | _ ->
             if texture.Handle <> 0 then
                 ctx.Delete texture
 
-            x.Create(data, properties)
+            x.Create(name, data, properties)
 
     member x.Delete(texture : Texture) =
         if texture.Handle <> 0 then

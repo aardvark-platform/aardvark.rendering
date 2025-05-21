@@ -216,25 +216,29 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
     let toDict f = Map.toSeq >> Seq.map f >> SymDict.ofSeq
 
-    let createManagedBuffer t u s =
+    let createManagedBuffer n t u s =
         let b = runtime.CreateManagedBuffer(t, u, s)
         b.Acquire()
+        b.Name <- n
         b
 
     let indexBuffer =
         let usage = indexBufferUsage ||| BufferUsage.Index ||| BufferUsage.ReadWrite
-        createManagedBuffer signature.IndexType usage indexBufferStorage
+        let name = if runtime.DebugLabelsEnabled then "Index Buffer (ManagedPool)" else null
+        createManagedBuffer name signature.IndexType usage indexBufferStorage
 
     let vertexBuffers =
         let usage = vertexBufferUsage ||| BufferUsage.Vertex ||| BufferUsage.ReadWrite
         signature.VertexAttributeTypes |> toDict (fun (k, t) ->
-            k, createManagedBuffer t usage (vertexBufferStorage k)
+            let name = if runtime.DebugLabelsEnabled then $"{k} (ManagedPool Buffer)" else null
+            k, createManagedBuffer name t usage (vertexBufferStorage k)
         )
 
     let instanceBuffers =
         let usage = instanceBufferUsage ||| BufferUsage.Vertex ||| BufferUsage.ReadWrite
         signature.InstanceAttributeTypes |> toDict (fun (k, t) ->
-            k, createManagedBuffer t usage (instanceBufferStorage k)
+            let name = if runtime.DebugLabelsEnabled then $"{k} (ManagedPool Buffer)" else null
+            k, createManagedBuffer name t usage (instanceBufferStorage k)
         )
 
     let vertexBufferTypes = Map.toArray signature.VertexAttributeTypes |> Array.map (fun (a,b) -> struct(a, b))
@@ -578,6 +582,9 @@ module ``Pool Semantics`` =
                     BufferUsage.Indirect ||| BufferUsage.ReadWrite,
                     storage
                 )
+
+            if runtime.DebugLabelsEnabled then
+                buffer.Name <- "Indirect Buffer (ManagedPool)"
 
             (buffer.Count, buffer) ||> AdaptiveResource.map2 (
                 IndirectBuffer.ofBuffer true sizeof<DrawCallInfo>

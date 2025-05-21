@@ -4,17 +4,21 @@ open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Rendering
 open Aardvark.Rendering.GL
-open FSharp.Data.Adaptive
 
 type internal RefCountedBuffer(ctx, create : unit -> Buffer, destroy : unit -> unit) =
     inherit Buffer(ctx, 0n, 0)
 
     let mutable refCount = 0
-    let mutable handle = Unchecked.defaultof<_>
+    let mutable handle = Unchecked.defaultof<Buffer>
 
-    member x.Acquire() =
+    override x.Name
+        with get() = if refCount > 0 then handle.Name else null
+        and set name = if refCount > 0 then handle.Name <- name
+
+    member x.Acquire(name: string) =
         if Interlocked.Increment &refCount = 1 then
             let b = Operators.using ctx.ResourceLock (fun _ -> create())
+            if name <> null && b.Name = null then b.Name <- name
             x.Handle <- b.Handle
             x.SizeInBytes <- b.SizeInBytes
             handle <- b
@@ -38,12 +42,12 @@ type internal BufferManager(ctx : Context) =
             )
         )
 
-    member x.Create(data : IBuffer) =
+    member x.Create(name : string, data : IBuffer) =
         let shared = get data
-        shared.Acquire()
+        shared.Acquire(name)
         shared :> Buffer
 
-    member x.Update(b : Buffer, data : IBuffer) : Buffer =
+    member x.Update(name : string, b : Buffer, data : IBuffer) : Buffer =
         match b with
         | :? RefCountedBuffer as b  ->
             let newShared = get data
@@ -51,11 +55,11 @@ type internal BufferManager(ctx : Context) =
                 b :> Buffer
             else
                 b.Release()
-                newShared.Acquire()
+                newShared.Acquire(name)
                 newShared :> Buffer
         | _ ->
             if b.Handle = 0 then
-                x.Create(data)
+                x.Create(name, data)
             else
                 ctx.Upload(b, data)
                 b

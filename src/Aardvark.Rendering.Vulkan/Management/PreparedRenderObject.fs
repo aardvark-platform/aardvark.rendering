@@ -131,10 +131,10 @@ type DevicePreparedRenderObjectExtensions private() =
                                 failf "storage buffer '%A' is null" bufferName
 
                             | CastUniformResource (buffer : aval<IBuffer>) ->
-                                this.CreateStorageBuffer(buffer)
+                                this.CreateStorageBuffer(bufferName, buffer)
 
                             | CastUniformResource (array : aval<Array>) ->
-                                this.CreateStorageBuffer(array)
+                                this.CreateStorageBuffer(bufferName, array)
 
                             | Some value ->
                                 failf "invalid type '%A' for storage buffer '%A' (expected a subtype of IBuffer or Array)" value.ContentType bufferName
@@ -155,12 +155,12 @@ type DevicePreparedRenderObjectExtensions private() =
 
                                 | Some (:? aval<(int * aval<ITexture>)[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
-                                    let is = this.CreateImageSamplerArray(sam.samplerCount, sam.samplerType, tex, s)
+                                    let is = this.CreateImageSamplerArray(textureName, sam.samplerCount, sam.samplerType, tex, s)
                                     Some is
 
                                 | Some (:? aval<ITexture[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
-                                    let is = this.CreateImageSamplerArray(sam.samplerCount, sam.samplerType, tex, s)
+                                    let is = this.CreateImageSamplerArray(textureName, sam.samplerCount, sam.samplerType, tex, s)
                                     Some is
 
                                 | Some t ->
@@ -188,12 +188,12 @@ type DevicePreparedRenderObjectExtensions private() =
 
                                             | CastUniformResource (texture : aval<ITexture>) ->
                                                 let desc = createSamplerState this textureName uniforms samplerState
-                                                let sampler = this.CreateImageSampler(sam.samplerType, texture, desc)
+                                                let sampler = this.CreateImageSampler(textureName, sam.samplerType, texture, desc)
                                                 i, sampler
 
                                             | CastUniformResource (level : aval<ITextureLevel>) ->
                                                 let desc = createSamplerState this textureName uniforms samplerState
-                                                let sampler = this.CreateImageSampler(sam.samplerType, level, desc)
+                                                let sampler = this.CreateImageSampler(textureName, sam.samplerType, level, desc)
                                                 i, sampler
 
                                             | Some t ->
@@ -203,7 +203,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 failf "could not find texture '%A'" textureName
                                         )
 
-                                    let empty = this.CreateImageSampler(sam.samplerType, nullTextureConst, AVal.constant SamplerState.Default)
+                                    let empty = this.CreateNullImageSampler(sam.samplerType)
                                     this.CreateImageSamplerArray(sam.samplerCount, empty, list)
                             )
 
@@ -218,14 +218,14 @@ type DevicePreparedRenderObjectExtensions private() =
                                 failf "storage image '%A' is null" imageName
 
                             | CastUniformResource (texture : aval<ITexture>) ->
-                                let img = this.CreateImage(image.imageType.Properties, texture)
+                                let img = this.CreateStorageImage(imageName, image.imageType.Properties, texture)
                                 let view = this.CreateImageView(image.imageType, img)
                                 view
 
                             | CastUniformResource (level : aval<ITextureLevel>) ->
-                                let levels = level |> AVal.mapNonAdaptive (fun l -> l.Levels)
-                                let slices = level |> AVal.mapNonAdaptive (fun l -> l.Slices)
-                                let img = this.CreateImage(image.imageType.Properties, level)
+                                let levels = level |> AVal.mapNonAdaptive _.Levels
+                                let slices = level |> AVal.mapNonAdaptive _.Slices
+                                let img = this.CreateStorageImage(imageName, image.imageType.Properties, level)
                                 let view = this.CreateImageView(image.imageType, img, levels, slices)
                                 view
 
@@ -288,7 +288,7 @@ type DevicePreparedRenderObjectExtensions private() =
                         | Some attr -> attr
                         | _ -> failf "could not get attribute '%A'" semantic
 
-                    let buffer = this.CreateVertexBuffer view.Buffer
+                    let buffer = this.CreateVertexBuffer(semantic, view.Buffer)
 
                     let stride =
                         if view.IsSingleValue then 0

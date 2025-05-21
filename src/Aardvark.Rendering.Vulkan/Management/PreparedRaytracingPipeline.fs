@@ -124,8 +124,8 @@ type DevicePreparedRaytracingPipelineExtensions private() =
             resources.Add(shaderBindingTable)
 
             let accelerationStructures =
-                state.Scenes |> Map.map (fun _ s ->
-                    this.CreateAccelerationStructure(s.Instances, shaderBindingTable, s.Usage) :> IAdaptiveValue
+                state.Scenes |> Map.map (fun name scene ->
+                    this.CreateAccelerationStructure(name, scene.Instances, shaderBindingTable, scene.Usage) :> IAdaptiveValue
                 )
                 |> UniformProvider.ofMap
 

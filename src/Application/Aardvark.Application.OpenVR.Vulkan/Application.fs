@@ -202,6 +202,7 @@ type VulkanVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
                 TextureFormat.Rgba8,
                 VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
             )
+        nImg.Name <- "Color Attachment (Window)"
 
         let nfImg =
             device.CreateImage(
@@ -211,9 +212,7 @@ type VulkanVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
                 TextureFormat.Rgba8,
                 VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
             )
-
-        
-            
+        nfImg.Name <- "Resolved Color Attachment (Window)"
 
         let nDepth =
             device.CreateImage(
@@ -223,6 +222,7 @@ type VulkanVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
                 TextureFormat.Depth24Stencil8,
                 VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferDstBit
             )
+        nDepth.Name <- "Depth / Stencil Attachment (Window)"
             
         let cView = device.CreateOutputImageView(nImg, 0, 1, 0, 2)
         let dView = device.CreateOutputImageView(nDepth, 0, 1, 0, 2)
@@ -235,7 +235,6 @@ type VulkanVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
                     DefaultSemantic.DepthStencil, dView
                 ]
             )
-
 
         dImg <- nDepth
         cImg <- nImg
