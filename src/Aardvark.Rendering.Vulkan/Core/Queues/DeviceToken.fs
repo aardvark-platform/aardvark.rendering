@@ -82,8 +82,8 @@ type DeviceToken internal (family: IDeviceQueueFamily, getCurrentQueue: unit -> 
         refCount <- refCount + 1
 
     member internal x.RemoveRef() =
-        if refCount = 1 then x.Sync()
-        else refCount <- refCount - 1
+        refCount <- refCount - 1
+        if refCount = 0 then x.Sync()
 
     member x.Dispose() =
         x.RemoveRef()
