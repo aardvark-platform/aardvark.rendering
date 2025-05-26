@@ -2,7 +2,6 @@
 
 open System
 open Aardvark.Base
-open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 
 /// Describes the signature of a color attachment.
@@ -35,7 +34,7 @@ and IFramebuffer =
     inherit IDisposable
     abstract member Signature : IFramebufferSignature
     abstract member Size : V2i
-    abstract member GetHandle : IAdaptiveObject -> obj
+    abstract member Handle : uint64
     abstract member Attachments : Map<Symbol, IFramebufferOutput>
 
 

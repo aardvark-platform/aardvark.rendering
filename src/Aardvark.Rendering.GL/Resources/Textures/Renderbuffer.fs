@@ -57,7 +57,7 @@ type Renderbuffer =
             member x.Samples = x.Samples
 
         interface IRenderbuffer with
-            member x.Handle = x.Handle :> obj
+            member x.Handle = uint64 x.Handle
             member x.Name with get() = x.Name and set name = x.Name <- name
             member x.Dispose() = x.Dispose()
 

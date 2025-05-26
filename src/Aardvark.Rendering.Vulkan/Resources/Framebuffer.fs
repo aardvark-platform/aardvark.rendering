@@ -26,7 +26,7 @@ type Framebuffer =
 
         interface IFramebuffer with
             member x.Signature = x.RenderPass :> IFramebufferSignature
-            member x.GetHandle _ = x.Handle :> obj
+            member x.Handle = x.Handle.Handle
             member x.Size = x.Size
             member x.Attachments = x.Attachments |> Map.map (fun _ v -> v :> IFramebufferOutput)
 

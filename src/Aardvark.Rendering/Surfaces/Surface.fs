@@ -6,7 +6,7 @@ open FSharp.Data.Adaptive
 
 type IBackendSurface =
     inherit IDisposable
-    abstract member Handle : obj
+    abstract member Handle : uint64
 
 type DynamicSurface = EffectInputLayout * aval<Imperative.Module>
 

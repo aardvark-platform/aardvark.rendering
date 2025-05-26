@@ -69,7 +69,7 @@ type Program =
         ()
 
     interface IBackendSurface with
-        member x.Handle = x.Handle :> obj
+        member x.Handle = uint64 x.Handle
         member x.Dispose() = x.Dispose()
 
 [<AutoOpen>]

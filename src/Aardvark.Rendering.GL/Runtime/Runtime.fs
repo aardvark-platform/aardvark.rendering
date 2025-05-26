@@ -335,7 +335,7 @@ type Runtime(debug : IDebugConfig) =
         dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
 
         use __ = ctx.ResourceLock
-        GL.Dispatch.NamedBufferSubData(unbox<int> dst.Handle, dstOffset, sizeInBytes, src)
+        GL.Dispatch.NamedBufferSubData(int dst.Handle, dstOffset, sizeInBytes, src)
         GL.Check "could not upload buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
@@ -344,7 +344,7 @@ type Runtime(debug : IDebugConfig) =
         src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
 
         use __ = ctx.ResourceLock
-        GL.Dispatch.GetNamedBufferSubData(unbox<int> src.Handle, srcOffset, sizeInBytes, dst)
+        GL.Dispatch.GetNamedBufferSubData(int src.Handle, srcOffset, sizeInBytes, dst)
         GL.Check "could not download buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
@@ -354,7 +354,7 @@ type Runtime(debug : IDebugConfig) =
         dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
 
         use __ = ctx.ResourceLock
-        GL.Dispatch.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, sizeInBytes)
+        GL.Dispatch.CopyNamedBufferSubData(int src.Handle, int dst.Handle, srcOffset, dstOffset, sizeInBytes)
         GL.Check "could not copy buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
@@ -680,7 +680,7 @@ type Runtime(debug : IDebugConfig) =
                 | TextureAspect.DepthStencil -> FramebufferAttachment.DepthStencilAttachment
                 | _                          -> FramebufferAttachment.ColorAttachment0
 
-            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, binding, texture.Handle |> unbox<int>, 0)
+            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, binding, int texture.Handle, 0)
             GL.Check "could not attach framebuffer texture"
 
             if binding <> FramebufferAttachment.ColorAttachment0 then

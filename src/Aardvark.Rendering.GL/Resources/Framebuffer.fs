@@ -63,7 +63,7 @@ type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Cont
     interface IFramebuffer with
         member x.Signature = signature
         member x.Size = x.Size
-        member x.GetHandle caller = x.Handle :> obj
+        member x.Handle = uint64 x.Handle
         member x.Attachments = outputBySem
         member x.Dispose() = x.Dispose()
 

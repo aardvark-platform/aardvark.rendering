@@ -59,7 +59,7 @@ type Buffer =
 
         interface IBackendBuffer with
             member x.Runtime = x.Context.Runtime :> IBufferRuntime
-            member x.Handle = x.Handle :> obj
+            member x.Handle = uint64 x.Handle
             member x.Buffer = x
             member x.Offset = 0n
             member x.SizeInBytes = x.SizeInBytes

@@ -153,7 +153,7 @@ type Image =
 
         interface IBackendTexture with
             member x.Runtime = x.Device.Runtime :> ITextureRuntime
-            member x.Handle = x.Handle :> obj
+            member x.Handle = x.Handle.Handle
             member x.Count = x.Count
             member x.Dimension = x.Dimension
             member x.Format = x.TextureFormat
@@ -167,7 +167,7 @@ type Image =
             member x.Size = x.Size.XY
             member x.Samples = x.Samples
             member x.Format = x.TextureFormat
-            member x.Handle = x.Handle :> obj
+            member x.Handle = x.Handle.Handle
             member x.Name with get() = x.Name and set name = x.Name <- name
 
         interface IDisposable with

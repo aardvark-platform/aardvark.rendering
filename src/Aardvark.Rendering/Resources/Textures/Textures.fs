@@ -60,7 +60,7 @@ type IBackendTexture =
     abstract member Count : int
     abstract member MipMapLevels : int
     abstract member Size : V3i
-    abstract member Handle : obj
+    abstract member Handle : uint64
     abstract member Name : string with get, set
 
 /// Interface for textures that are backed by exported memory.
@@ -99,7 +99,7 @@ and ITextureSubResource =
 and IRenderbuffer =
     inherit IFramebufferOutput
     inherit IDisposable
-    abstract member Handle : obj
+    abstract member Handle : uint64
     abstract member Name : string with get, set
 
 and ITextureRuntime =

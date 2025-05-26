@@ -269,7 +269,7 @@ type ShaderProgram(device : Device, shaders : array<ShaderModule>, layout : Pipe
                 createInfos.[i] <- Unchecked.defaultof<_>
 
     interface IBackendSurface with
-        member x.Handle = x :> obj
+        member x.Handle = layout.Handle.Handle
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderProgram =
