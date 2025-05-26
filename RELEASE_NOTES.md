@@ -1,3 +1,11 @@
+### 5.6.0-prerelease0003
+- Added validation for framebuffer signatures of prepared render objects
+- Added debug labels for render tasks, textures, buffers, and render buffers
+- [Vulkan] Fixed reference counting in device token
+- [Vulkan] Fixed alignment and size issues with empty buffers
+- [Vulkan] Added debug config flag for generating shader debug info
+- [Vulkan] Replaced obsolete VK_EXT_validation_features with VK_EXT_layer_settings
+
 ### 5.6.0-prerelease0002
 - Switched to Aardvark.Data.Assimp
 - [Vulkan] Fixed infinite recursion in external memory allocation
