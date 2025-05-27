@@ -192,7 +192,7 @@ module ManagedBufferImplementation =
 
             let handles = 
                 types |> Map.map (fun sem t ->
-                    let s = t.GLSize
+                    let s = t.CLRSize
                     let mutable virtualCapacity = total.Bytes |> Alignment.next pageSize
                 
                     let d = GL.IsEnabled(EnableCap.DebugOutput)
@@ -398,7 +398,7 @@ module ManagedBufferImplementation =
             let total = Memory.total ctx
 
             types |> Map.map (fun sem t ->
-                let s = nativeint t.GLSize
+                let s = nativeint t.CLRSize
                 let b = GL.Dispatch.CreateBuffer()
                 GL.Check "could not generate buffer"
                 new ResizeGeometryPoolBuffer(this, ctx, b, rw, 0n), s, t

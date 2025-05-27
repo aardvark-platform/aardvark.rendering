@@ -332,7 +332,7 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
 
     let buffers = 
         types |> Map.map (fun sem t ->
-            let s = nativeint t.GLSize
+            let s = nativeint t.CLRSize
             ctx.CreateSparseBuffer(beforeRender, afterRender),t,s
         )
         

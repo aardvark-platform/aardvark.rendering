@@ -29,17 +29,6 @@ module internal BaseUtilities =
     // TODO: Remove when updated to Aardvark.Base >= 5.3.13
     let inline (||?) x y = if isNull x then y else x
 
-[<AutoOpen>]
-module TypeSizeExtensions =
-    type Type with
-        /// <summary>
-        /// gets the byte-size of a type according to the
-        /// OpenGL implementation.
-        /// </summary>
-        member x.GLSize =
-            // TODO: improve for non-standard types (e.g. M23f)
-            System.Runtime.InteropServices.Marshal.SizeOf(x)
-
 
 // profileMask:
 // GL_CONTEXT_CORE_PROFILE_BIT          1

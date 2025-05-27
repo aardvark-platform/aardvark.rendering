@@ -131,7 +131,7 @@ module BufferExtensions =
         /// to treat the buffer internally
         /// </summary>
         member x.CreateBuffer(data : Array, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
-            let size = nativeint (data.GetType().GetElementType().GLSize) * nativeint data.Length
+            let size = nativeint (data.GetType().GetElementType().CLRSize) * nativeint data.Length
 
             data |> NativeInt.pin (fun src ->
                 x.CreateBuffer(src, size, storage)
