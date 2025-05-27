@@ -69,10 +69,6 @@ type RasterizerState =
         ConservativeRaster  : aval<bool>
     }
 
-    [<Obsolete("Use FrontFacing with reversed winding order instead. See: https://github.com/aardvark-platform/aardvark.rendering/issues/101")>]
-    member x.FrontFace =
-        raise <| NotSupportedException("Use FrontFacing with reversed winding order instead. See: https://github.com/aardvark-platform/aardvark.rendering/issues/101")
-
     static member Default =
         {
             CullMode            = AVal.constant CullMode.None

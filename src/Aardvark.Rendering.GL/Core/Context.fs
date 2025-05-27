@@ -264,10 +264,6 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
             value
         | Some v -> v
 
-    [<Obsolete("Use overload with createContext that accepts an optional parent context.")>]
-    new (runtime : IRuntime, createContext : unit -> ContextHandle) =
-        new Context(runtime, fun (_ : ContextHandle option) -> createContext())
-
     /// <summary>
     /// Creates custom OpenGl context. Usage:
     /// let customCtx = app.Context.CreateContext()

@@ -416,19 +416,6 @@ module TextureCopy =
                 PixImage.compare V2i.Zero expected result
             )
 
-        let texture2DResolveMultisamplesWithTrafo (trafo : ImageTrafo) (runtime : IRuntime) =
-            let data = PixImage.random8ui <| V2i(256)
-
-            renderToMultisampled runtime TextureFormat.Rgba8 8 data (fun src ->
-                use dst = runtime.CreateTexture2D(src.Size.XY, TextureFormat.Rgba8, samples = 1)
-
-                runtime.ResolveMultisamples(src.GetOutputView(), dst, trafo = trafo)
-                let result = runtime.Download(dst).AsPixImage<uint8>()
-                let expected = data.Transformed(trafo).AsPixImage<uint8>()
-
-                PixImage.compare V2i.Zero expected result
-            )
-
         let texture2DMultisampled (resolve : bool) (runtime : IRuntime) =
             let data = PixImage.random32f <| V2i(256)
             let size = data.Size
@@ -663,11 +650,6 @@ module TextureCopy =
             "2D multisampled depth subwindow",  Cases.texture2DMultisampledDepthSubwindow
 
             "2D resolve multisamples",          Cases.texture2DResolveMultisamples
-
-            // Only supported by GL and probably only NVIDIA?
-            if backend <> Backend.Vulkan then
-                "2D resolve multisamples mirror X", Cases.texture2DResolveMultisamplesWithTrafo ImageTrafo.MirrorX
-                "2D resolve multisamples mirror Y", Cases.texture2DResolveMultisamplesWithTrafo ImageTrafo.MirrorY
 
             "Cube mipmapped",                   Cases.textureCubeMipmapped
             "Cube array mipmapped",             Cases.textureCubeArrayMipmapped

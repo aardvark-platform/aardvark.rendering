@@ -17,12 +17,6 @@ type Surface =
     | Backend of surface: IBackendSurface
     | None
 
-    [<Obsolete("Use Surface.Effect instead.")>]
-    static member FShadeSimple(effect: Effect) = Surface.Effect effect
-
-    [<Obsolete("Use Surface.Dynamic instead.")>]
-    static member FShade(compile: IFramebufferSignature -> IndexedGeometryMode -> DynamicSurface) = Surface.Dynamic compile
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Surface =
 

@@ -134,16 +134,6 @@ module Management =
             if v % align = 0n then v
             else v + (align - v % align)
 
-        [<Obsolete("use TryGetGreaterOrEqualV")>]
-        member x.TryGetGreaterOrEqual(size : nativeint) =
-            let query = Block(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1n, size, true)
-            let (struct(_, _, hasR), _, _, r) = store.FindNeighboursV(query)
-            if hasR then
-                store.Remove r |> ignore
-                Some r
-            else
-                None
-
         member x.TryGetGreaterOrEqualV(size : nativeint) =
             let query = Block(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1n, size, true)
             let (struct(_, _, hasR), _, _, r) = store.FindNeighboursV(query)
@@ -152,25 +142,6 @@ module Management =
                 ValueSome r
             else
                 ValueNone
-
-        [<Obsolete("use TryGetAlignedV")>]
-        member x.TryGetAligned(align : nativeint, size : nativeint) =
-            let min = Block(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1n, size, true)
-            let view = store.GetViewBetween(min, null)
-
-            let mutable foundSlot = false
-            let mutable e = view.GetEnumerator()
-            while not foundSlot && e.MoveNext() do
-                let b = e.Current
-                let o = next align b.Offset
-                let s = b.Size - (o - b.Offset)
-                foundSlot <- s >= size
-
-            if foundSlot then
-                store.Remove e.Current |> ignore
-                Some e.Current
-            else
-                None
 
         member x.TryGetAlignedV(align : nativeint, size : nativeint) =
             let min = Block(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1n, size, true)

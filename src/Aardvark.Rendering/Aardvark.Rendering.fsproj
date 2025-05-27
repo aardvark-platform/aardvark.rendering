@@ -27,7 +27,6 @@
     <Compile Include="Utilities\Locks\LockedSet.fs" />
     <Compile Include="Utilities\TaskUtilities.fs" />
     <Compile Include="Utilities\ConstantVal.fs" />
-    <Compile Include="Utilities\PrimitiveValueConverter.fs" />
     <Compile Include="Utilities\GPUVendor.fs" />
     <Compile Include="Utilities\Timer.fs" />
     <Compile Include="Utilities\Memory.fs" />

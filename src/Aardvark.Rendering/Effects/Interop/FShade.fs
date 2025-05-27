@@ -523,10 +523,6 @@ module FShadeInterop =
 [<Extension; AbstractClass; Sealed>]
 type RuntimeFShadeInteropExtensions() =
 
-    [<Extension; Obsolete("Use Effect.link or Effect.Link() instead.")>]
-    static member AssembleModule (runtime: IRuntime, effect: Effect, signature: IFramebufferSignature, topology: IndexedGeometryMode) =
-        Effect.link signature topology false effect
-
     [<Extension>]
     static member Link (effect: Effect, signature: IFramebufferSignature,
                         [<Optional; DefaultParameterValue(IndexedGeometryMode.TriangleList)>] topology: IndexedGeometryMode,

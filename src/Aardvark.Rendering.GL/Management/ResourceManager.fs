@@ -652,11 +652,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 }
         )
 
-    [<Obsolete>]
-    member x.CreateVertexInputBinding(bindings : (int * AdaptiveAttribute)[], index : IndexBinding option) =
-        let bindings = bindings |> Array.map (fun (i, a) -> struct (i, a))
-        x.CreateVertexInputBinding(bindings, index)
-
     member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, uniforms : IUniformProvider) =
         uniformBufferManager.CreateUniformBuffer(layout, scope, uniforms)
  

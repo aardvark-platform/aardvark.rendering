@@ -762,23 +762,6 @@ type ITextureRuntimeExtensions private() =
                                       [<Optional; DefaultParameterValue(V2i())>] size : V2i) =
         runtime.ResolveMultisamples(src, dst.[dst.Format.Aspect, 0], srcOffset, dstOffset, size)
 
-    // Note: Blitting multisampled data in GL requires the source and target region dimensions to be identical.
-    // NVIDIA only seems to care about the absolute dimensions, so mirroring is possible. May not be supported on other hardware / systems.
-    // For Vulkan mirroring and resolving is just not possible.
-    [<Extension; Obsolete("Use overload without image transformation.")>]
-    static member ResolveMultisamples(runtime : ITextureRuntime, src : IFramebufferOutput, dst : IBackendTexture, trafo : ImageTrafo) =
-        let size = min src.Size dst.Size.XY
-
-        let srcRegion = Box2i.FromMinAndSize(V2i.Zero, size)
-        let dstRegion =
-            match trafo with
-            | ImageTrafo.Identity -> srcRegion
-            | ImageTrafo.MirrorX -> Box2i(V2i(srcRegion.Max.X, srcRegion.Min.Y), V2i(srcRegion.Min.X, srcRegion.Max.Y))
-            | ImageTrafo.MirrorY -> Box2i(V2i(srcRegion.Min.X, srcRegion.Max.Y), V2i(srcRegion.Max.X, srcRegion.Min.Y))
-            | _ -> raise <| ArgumentException("Transformation must be MirrorX, MirrorY, or Identity.")
-
-        runtime.Blit(src, srcRegion, dst.[dst.Format.Aspect, 0], dstRegion)
-
 
 [<AbstractClass; Sealed; Extension>]
 type ITextureSubResourceExtensions private() =

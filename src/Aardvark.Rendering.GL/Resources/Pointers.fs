@@ -280,11 +280,6 @@ module PointerContextExtensions =
             NativePtr.write ptr value
             VertexInputBindingHandle ptr
 
-        [<Obsolete>]
-        member x.CreateVertexInputBinding (index : Option<Buffer>, attributes : (int * Attribute)[]) =
-            let attributes = attributes |> Array.map (fun (i, a) -> struct (i, a))
-            x.CreateVertexInputBinding(index, attributes)
-
         member x.Update(ptr : VertexInputBindingHandle, index : Option<Buffer>, attributes : struct (int * Attribute)[]) =
             let mutable value = NativePtr.read ptr.Pointer
             let struct (buffers, values) = Attribute.bindings attributes
@@ -320,11 +315,6 @@ module PointerContextExtensions =
 
             value.IndexBuffer <- index
             NativePtr.write ptr.Pointer value
-
-        [<Obsolete>]
-        member x.Update(ptr : VertexInputBindingHandle, index : Option<Buffer>, attributes : (int * Attribute)[]) =
-            let attributes = attributes |> Array.map (fun (i, a) -> struct (i, a))
-            x.Update(ptr, index, attributes)
 
         member x.Delete(ptr : VertexInputBindingHandle) =
             let v = NativePtr.read ptr.Pointer

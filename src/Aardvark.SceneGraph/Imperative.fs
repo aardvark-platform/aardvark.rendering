@@ -605,10 +605,6 @@ type Air private() =
     static member FrontFacing(order : aval<WindingOrder>) =
         modify (fun s -> { s with rasterizerState = { s.rasterizerState with FrontFacing = order }})
 
-    [<Obsolete("Use FrontFacing with reversed winding order instead. See: https://github.com/aardvark-platform/aardvark.rendering/issues/101")>]
-    static member FrontFace(order : aval<WindingOrder>) =
-        Air.FrontFacing(order |> AVal.mapNonAdaptive WindingOrder.reverse)
-
     static member CullMode(mode : aval<CullMode>) =
         modify (fun s -> { s with rasterizerState = { s.rasterizerState with CullMode = mode }})
 
@@ -620,8 +616,6 @@ type Air private() =
 
     static member CullMode mode           = Air.CullMode(AVal.constant mode)
     static member FrontFacing mode        = Air.FrontFacing(AVal.constant mode)
-    [<Obsolete("Use FrontFacing with reversed winding order instead. See: https://github.com/aardvark-platform/aardvark.rendering/issues/101")>]
-    static member FrontFace mode          = Air.FrontFacing(AVal.constant (WindingOrder.reverse mode))
     static member FillMode mode           = Air.FillMode(AVal.constant mode)
     static member Multisample mode        = Air.Multisample(AVal.constant mode)
     static member ConservativeRaster mode = Air.ConservativeRaster(AVal.constant mode)
