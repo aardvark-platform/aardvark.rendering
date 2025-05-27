@@ -51,7 +51,6 @@
     <Compile Include="Imperative.fs" />
     <Compile Include="SgCSharp.fs" />
     <Compile Include="RuntimeExtensions.fs" />
-    <Compile Include="RenderTaskExtensions.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
