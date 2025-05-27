@@ -4,7 +4,6 @@ open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
-open Microsoft.FSharp.NativeInterop
 
 type ShaderModule =
     class
@@ -81,7 +80,7 @@ module ShaderModule =
             if not config.PrintShaderCode then
                 ShaderCodeReporting.logLines "Failed to compile shader" info.code
 
-            let err = ShaderCodeReporting.normalizeLineEndings err
+            let err = String.normalizeLineEndings err
             failf $"{slot} shader compilation failed:{nl}{nl}{err}"
 
     let ofGLSL (slot : FShade.ShaderSlot) (info : FShade.GLSL.GLSLShader) (device : Device) =

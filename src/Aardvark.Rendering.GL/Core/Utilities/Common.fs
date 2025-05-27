@@ -26,7 +26,7 @@ module private ErrorUtilities =
 [<AutoOpen>]
 module internal BaseUtilities =
 
-    // TODO: Handle Nullable and move to Aardvark.Base
+    // TODO: Remove when updated to Aardvark.Base >= 5.3.13
     let inline (||?) x y = if isNull x then y else x
 
 [<AutoOpen>]

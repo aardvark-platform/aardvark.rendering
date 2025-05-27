@@ -161,7 +161,7 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
 
                 return formats
                     |> Seq.map (fun fmt -> fmt.format, fmt.colorSpace)
-                    |> Map.ofSeqDupl
+                    |> Map.ofSeqWithDuplicates
             }
     let availableFormats =
         supportedFormats |> Map.toSeq |> Seq.map fst |> Set.ofSeq

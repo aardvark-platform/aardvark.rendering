@@ -228,7 +228,7 @@ module ProgramExtensions =
             | Success _ ->
                 let log =
                     if String.IsNullOrEmpty log then $"shader did not compile but error log was empty{nl}"
-                    else ShaderCodeReporting.normalizeLineEndings log
+                    else String.normalizeLineEndings log
 
                 Error log
 
@@ -363,14 +363,14 @@ module ProgramExtensions =
                 else
                     let log =
                         if String.IsNullOrEmpty log then $"program could not be linked but error log was empty{nl}"
-                        else ShaderCodeReporting.normalizeLineEndings log
+                        else String.normalizeLineEndings log
 
                     Error log
 
             else
                 let log =
                     if String.IsNullOrEmpty log then $"program could not be linked but error log was empty{nl}"
-                    else ShaderCodeReporting.normalizeLineEndings log
+                    else String.normalizeLineEndings log
 
                 Error log
 

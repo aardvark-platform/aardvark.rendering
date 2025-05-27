@@ -100,7 +100,7 @@ type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits 
     override x.ImageTrafo = imageTrafo
     override x.Samples = samples
     override x.ChooseColorFormat(available : Set<VkFormat>) =
-        let map = available |> Seq.map (fun fmt -> VkFormat.toColFormat fmt, fmt) |> Map.ofSeqDupl
+        let map = available |> Seq.map (fun fmt -> VkFormat.toColFormat fmt, fmt) |> Map.ofSeqWithDuplicates
         match probeColor map format bits with
             | Some fmt -> fmt
             | _ ->

@@ -9,10 +9,7 @@ open Aardvark.Base
 [<AutoOpen>]
 module internal Utilities =
 
-    // TODO: Remove for Aardvark.Base >= 5.3.9
-    let inline internal (&&&=) (x: byref<'T>) (y: 'T) = x <- x &&& y
-    let inline internal (|||=) (x: byref<'T>) (y: 'T) = x <- x ||| y
-
+    // TODO: Remove for Aardvark.Base >= 5.3.13 and use (||?)
     let inline (|??) x y = if isNull x then y else x
 
     module VkResult =
@@ -45,25 +42,6 @@ module internal Utilities =
             )
 
             result
-
-    // TODO: Remove for Aardvark.Base >= 5.3.9
-    module NativePtr =
-        let inline stackUseArr ([<InlineIfLambda>] mapping: 'T -> 'U) (data: 'T[]) =
-            let ptr = NativePtr.stackalloc<'U> data.Length
-            for i = 0 to data.Length - 1 do ptr.[i] <- mapping data.[i]
-            ptr
-
-    // TODO: Remove for Aardvark.Base >= 5.3.9
-    module Map =
-        let ofSeqDupl (s : seq<'a * 'b>) =
-            let mutable res = Map.empty
-            for (k,v) in s do
-                match Map.tryFind k res with
-                    | Some set ->
-                        res <- Map.add k (Set.add v set) res
-                    | None ->
-                        res <- Map.add k (Set.singleton v) res
-            res
 
 [<AutoOpen>]
 module BaseLibExtensions = 
@@ -102,36 +80,3 @@ module BaseLibExtensions =
 
         member x.ToExtent() =
             VkExtent3D(uint32 x.X, uint32 x.Y, uint32 x.Z)
-
-    // TODO: Remove for Aardvark.Base >= 5.3.9
-    module Array =
-        let choosei (f : int -> 'a -> Option<'b>) (a : 'a[]) =
-            let res = System.Collections.Generic.List<'b>()
-            for i in 0 .. a.Length - 1 do
-                match f i a.[i] with
-                    | Some v -> res.Add v
-                    | None -> ()
-
-            res.ToArray()
-
-        let collecti (f : int -> 'a -> #seq<'b>) (a : 'a[]) =
-            let mutable i = 0
-            let res = System.Collections.Generic.List<'b>()
-            for v in a do
-                res.AddRange(f i v)
-                i <- i + 1
-
-            res.ToArray()
-
-    // TODO: Remove for Aardvark.Base >= 5.3.9
-    module List =
-        let choosei (f : int -> 'a -> Option<'b>) (a : list<'a>) =
-            let res = System.Collections.Generic.List<'b>()
-            let mutable i = 0
-            for v in a do
-                match f i v with
-                    | Some v -> res.Add v
-                    | None -> ()
-                i <- i + 1
-
-            res |> CSharpList.toList
