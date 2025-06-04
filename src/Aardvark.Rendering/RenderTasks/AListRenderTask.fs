@@ -15,7 +15,7 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
 
     let updateSignature() =
         signature <-
-            Seq.toArray tasks
+            Seq.asArray tasks
             |> Array.choose (fun (t : IRenderTask) -> t.FramebufferSignature)
             |> FramebufferSignature.combineMany
 

@@ -185,7 +185,7 @@ module TraceObjectFSharp =
         /// The name can be a string or Symbol.
         static member inline vertexAttribute (name : ^Name, values : seq<BufferView>) =
             let sym = name |> Symbol.convert Symbol.Converters.untyped
-            let values = Array.ofSeq values
+            let values = Seq.asArray values
 
             fun (obj : TraceObject) ->
                 (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
@@ -213,7 +213,7 @@ module TraceObjectFSharp =
         /// The name can be a string or Symbol.
         static member inline faceAttribute (name : ^Name, values : seq<BufferView>) =
             let sym = name |> Symbol.convert Symbol.Converters.untyped
-            let values = Array.ofSeq values
+            let values = Seq.asArray values
 
             fun (obj : TraceObject) ->
                 (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
@@ -236,7 +236,7 @@ module TraceObjectFSharp =
         /// The name can be a string or Symbol, or TypedSymbol<'T>.
         static member inline geometryAttribute (name : ^Name, values : aval<'T> seq) =
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
-            let values = Array.ofSeq values
+            let values = Seq.asArray values
 
             fun (obj : TraceObject) ->
                 (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
@@ -247,7 +247,7 @@ module TraceObjectFSharp =
         /// The name can be a string or Symbol, or TypedSymbol<'T>.
         static member inline geometryAttribute (name : ^Name, values : seq<'T>) =
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
-            let values = values |> Array.ofSeq |> Array.map (~~~)
+            let values = values |> Seq.asArray |> Array.map (~~~)
 
             fun (obj : TraceObject) ->
                 (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->

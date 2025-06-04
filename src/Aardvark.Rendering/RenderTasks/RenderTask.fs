@@ -43,7 +43,7 @@ module RenderTask =
         new AdaptiveRenderTask(AVal.map f m) :> IRenderTask
 
     let ofSeq (s : seq<IRenderTask>) =
-        new SequentialRenderTask(Seq.toArray s) :> IRenderTask
+        new SequentialRenderTask(Seq.asArray s) :> IRenderTask
 
     let ofList (s : list<IRenderTask>) =
         new SequentialRenderTask(List.toArray s) :> IRenderTask

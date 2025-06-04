@@ -64,7 +64,7 @@ type internal LayerSettings(settings: LayerSetting[]) =
         |> NativePtr.ofNativeInt<VkLayerSettingEXT>
 
     new (settings: LayerSetting seq) =
-        new LayerSettings (Array.ofSeq settings)
+        new LayerSettings (Seq.asArray settings)
 
     member _.Count = settings.Length
 

@@ -34,7 +34,7 @@ type CubeMap<'a> =
     /// represent a mip level, face indices within a level are determined by
     /// the CubeSide enumeration.
     new(data : seq<'a>) =
-        let arr = Array.ofSeq data
+        let arr = Seq.asArray data
 
         if arr.Length % 6 <> 0 then
             failwithf "length of data must be a multiple of 6 (is %d)" arr.Length
