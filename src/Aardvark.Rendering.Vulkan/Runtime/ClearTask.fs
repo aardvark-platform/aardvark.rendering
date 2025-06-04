@@ -32,7 +32,7 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
             let vulkanQueries = renderToken.GetVulkanQueries()
 
             dt.perform {
-                do! Command.BeginLabel(x.Name |?? "Clear Task", DebugColor.ClearTask)
+                do! Command.BeginLabel(x.Name ||? "Clear Task", DebugColor.ClearTask)
 
                 for q in vulkanQueries do
                     do! Command.Begin q

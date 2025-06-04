@@ -2265,7 +2265,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                 inner.End()
 
             dt.perform {
-                do! Command.BeginLabel(x.Name |?? "Render Task", DebugColor.RenderTask)
+                do! Command.BeginLabel(x.Name ||? "Render Task", DebugColor.RenderTask)
 
                 for q in vulkanQueries do
                     do! Command.Begin q

@@ -9,9 +9,6 @@ open Aardvark.Base
 [<AutoOpen>]
 module internal Utilities =
 
-    // TODO: Remove for Aardvark.Base >= 5.3.13 and use (||?)
-    let inline (|??) x y = if isNull x then y else x
-
     module VkResult =
         open KHRSurface
         open KHRSwapchain

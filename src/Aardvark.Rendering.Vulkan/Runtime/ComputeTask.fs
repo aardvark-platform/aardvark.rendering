@@ -527,7 +527,7 @@ module internal ComputeTaskInternals =
                 let vulkanQueries = renderToken.GetVulkanQueries(onlyTimeQueries = not hasGraphics)
 
                 deviceToken.perform {
-                    do! Command.BeginLabel(name |?? "Compute Task", DebugColor.ComputeTask)
+                    do! Command.BeginLabel(name ||? "Compute Task", DebugColor.ComputeTask)
 
                     for q in vulkanQueries do
                         do! Command.Begin q

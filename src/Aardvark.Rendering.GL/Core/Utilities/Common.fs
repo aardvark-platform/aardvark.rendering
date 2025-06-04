@@ -23,13 +23,6 @@ module private ErrorUtilities =
     let inline failf fmt =
         failf' Exception fmt
 
-[<AutoOpen>]
-module internal BaseUtilities =
-
-    // TODO: Remove when updated to Aardvark.Base >= 5.3.13
-    let inline (||?) x y = if isNull x then y else x
-
-
 // profileMask:
 // GL_CONTEXT_CORE_PROFILE_BIT          1
 // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
