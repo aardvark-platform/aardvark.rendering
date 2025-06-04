@@ -283,9 +283,9 @@ module ManagedBufferImplementation =
             hasFrees.Set() |> ignore
 
         member x.TryGetBufferView(sem : Symbol) =
-            match Map.tryFind sem handles with
-                | Some (b,t,_) -> BufferView(AVal.constant (b :> IBuffer), t) |> Some
-                | _ -> None
+            match Map.tryFindV sem handles with
+            | ValueSome (b,t,_) -> BufferView(b, t) |> ValueSome
+            | _ -> ValueNone
 
         member x.Dispose() =
             use __ = ctx.ResourceLock
@@ -500,9 +500,9 @@ module ManagedBufferImplementation =
             hasFrees.Set() |> ignore
 
         member x.TryGetBufferView(sem : Symbol) =
-            match Map.tryFind sem handles with
-                | Some (b,s,t) -> BufferView(AVal.constant (b :> IBuffer), t) |> Some
-                | _ -> None
+            match Map.tryFindV sem handles with
+            | ValueSome (b,_,t) -> BufferView(b, t) |> ValueSome
+            | _ -> ValueNone
 
         member x.Dispose() =
             use __ = ctx.ResourceLock

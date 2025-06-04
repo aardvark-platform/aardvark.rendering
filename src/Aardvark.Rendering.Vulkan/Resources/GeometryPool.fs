@@ -237,7 +237,7 @@ module GeometryPoolUtilities =
         member x.Count = count
 
         member x.TryGetBufferView(sem : Symbol) =
-            Map.tryFind sem views
+            Map.tryFindV sem views
 
         member x.Dispose() =
             buffers |> Map.iter (fun _ (_,_,b) ->

@@ -398,9 +398,9 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
             hasFrees.Set() |> ignore
 
     member x.TryGetBufferView(sem : Symbol) =
-        match Map.tryFind sem buffers with
-            | Some (b,t,_) -> BufferView(AVal.constant (b :> IBuffer), t) |> Some
-            | _ -> None
+        match Map.tryFindV sem buffers with
+        | ValueSome (b,t,_) -> BufferView(b, t) |> ValueSome
+        | _ -> ValueNone
 
     member x.Dispose() =
         try

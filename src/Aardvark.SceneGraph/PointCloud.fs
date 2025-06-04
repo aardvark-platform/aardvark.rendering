@@ -547,8 +547,8 @@ module PointCloudRenderObjectSemantics =
                 |> Map.toSeq
                 |> Seq.choose (fun (sem,_) ->
                     match pool.TryGetBufferView sem with
-                        | Some view -> Some (sem, view)
-                        | None -> None
+                        | ValueSome view -> Some (sem, view)
+                        | ValueNone -> None
                    )
                 |> Map.ofSeq
                 |> AttributeProvider.ofMap
