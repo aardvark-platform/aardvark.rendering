@@ -205,19 +205,19 @@ module Instancing =
 
                     let objectModel =
                         match o.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "ModelTrafo") with
-                            | Some (:? aval<Trafo3d> as inner) -> inner
-                            | _ -> AVal.constant Trafo3d.Identity
+                        | ValueSome (:? aval<Trafo3d> as inner) -> inner
+                        | _ -> AVal.constant Trafo3d.Identity
 
                     let uniforms =
-                        match Map.tryFind "ModelTrafo" uniforms with
-                            | Some m ->
-                                let fw, bw = instanceTrafoCache.Invoke(objectModel, m.Buffer)
-                                uniforms
-                                |> Map.remove "ModelTrafo"
-                                |> Map.add "InstanceTrafo" fw
-                                |> Map.add "InstanceTrafoInv" bw
-                            | None ->
-                                uniforms
+                        match Map.tryFindV "ModelTrafo" uniforms with
+                        | ValueSome m ->
+                            let fw, bw = instanceTrafoCache.Invoke(objectModel, m.Buffer)
+                            uniforms
+                            |> Map.remove "ModelTrafo"
+                            |> Map.add "InstanceTrafo" fw
+                            |> Map.add "InstanceTrafoInv" bw
+                        | ValueNone ->
+                            uniforms
 
 
                     let att =
@@ -226,9 +226,9 @@ module Instancing =
                                 o.InstanceAttributes.Dispose()
 
                             member x.TryGetAttribute sem =
-                                match Map.tryFind (string sem) uniforms with
-                                    | Some v -> Some v
-                                    | _ -> o.InstanceAttributes.TryGetAttribute sem
+                                match Map.tryFindV (string sem) uniforms with
+                                | ValueSome v -> ValueSome v
+                                | _ -> o.InstanceAttributes.TryGetAttribute sem
 
                             member x.All = Seq.empty
                         }
@@ -239,7 +239,7 @@ module Instancing =
                                 o.VertexAttributes.Dispose()
 
                             member x.TryGetAttribute sem =
-                                if Map.containsKey (string sem) uniforms then None
+                                if Map.containsKey (string sem) uniforms then ValueNone
                                 else o.VertexAttributes.TryGetAttribute sem
 
                             member x.All = Seq.empty

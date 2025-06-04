@@ -38,19 +38,21 @@ module Uniforms =
     module Patterns =
         open System
 
-        let (|NullUniform|_|) (value : IAdaptiveValue option) =
+        [<return: Struct>]
+        let (|NullUniform|_|) (value : IAdaptiveValue voption) =
             match value with
-            | Some value when Object.ReferenceEquals(value, null) ->
-                Some ()
+            | ValueSome value when Object.ReferenceEquals(value, null) ->
+                ValueSome ()
             | _ ->
-                None
+                ValueNone
 
-        let (|CastUniformResource|_|) (value : IAdaptiveValue option) =
+        [<return: Struct>]
+        let (|CastUniformResource|_|) (value : IAdaptiveValue voption) =
             match value with
-            | Some value when typeof<'T>.IsAssignableFrom value.ContentType ->
-                Some (AdaptiveResource.cast<'T> value)
+            | ValueSome value when typeof<'T>.IsAssignableFrom value.ContentType ->
+                ValueSome (AdaptiveResource.cast<'T> value)
             | _ ->
-                None
+                ValueNone
 
     [<AutoOpen>]
     module private Helpers =
@@ -86,9 +88,9 @@ module Uniforms =
 
         let inline (?) (p : IUniformProvider) (name : string) : Trafo =
             match p.TryGetUniform(Ag.Scope.Root, Symbol.Create name) with
-                | Some (:? aval<Trafo3d> as m) -> Single m
-                | Some (:? aval<Trafo3d[]> as m) -> Layered m
-                | _ -> raise <| NotFoundException name
+            | ValueSome (:? aval<Trafo3d> as m) -> Single m
+            | ValueSome (:? aval<Trafo3d[]> as m) -> Layered m
+            | _ -> raise <| NotFoundException name
 
     let private table : Dictionary<string, IUniformProvider -> IAdaptiveValue> =
 
@@ -110,9 +112,9 @@ module Uniforms =
 
     let tryGetDerivedUniform (name : string) (p : IUniformProvider) =
         match table.TryGetValue name with
-            | (true, getter) ->
-                //Log.line "Provider %d: %s" (p.GetHashCode()) name
-                try getter p |> Some
-                with NotFoundException f -> None
-            | _ ->
-                None
+        | (true, getter) ->
+            //Log.line "Provider %d: %s" (p.GetHashCode()) name
+            try getter p |> ValueSome
+            with NotFoundException f -> ValueNone
+        | _ ->
+            ValueNone

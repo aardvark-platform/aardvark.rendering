@@ -89,8 +89,8 @@ type MutableComputeInputBinding internal(shader : IComputeShader) =
     member x.TryGetValue(name : string) =
         lock x (fun _ ->
             match cvals.TryGetValue(name) with
-            | (true, cval) -> Some cval
-            | _ -> None
+            | (true, cval) -> ValueSome cval
+            | _ -> ValueNone
         )
 
     member x.Shader = shader

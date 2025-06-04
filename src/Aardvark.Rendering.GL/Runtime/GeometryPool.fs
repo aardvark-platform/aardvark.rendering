@@ -1489,10 +1489,10 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
         let viewProj =
             match Uniforms.tryGetDerivedUniform "ModelViewProjTrafo" s.pUniformProvider with
-            | Some (:? aval<Trafo3d> as mvp) -> mvp
+            | ValueSome (:? aval<Trafo3d> as mvp) -> mvp
             | _ ->
                 match s.pUniformProvider.TryGetUniform(Ag.Scope.Root, Symbol.Create "ModelViewProjTrafo") with
-                | Some (:? aval<Trafo3d> as mvp) -> mvp
+                | ValueSome (:? aval<Trafo3d> as mvp) -> mvp
                 | _ -> AVal.constant Trafo3d.Identity
 
         let res =

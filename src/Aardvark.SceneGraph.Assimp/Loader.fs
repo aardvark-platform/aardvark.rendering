@@ -36,31 +36,31 @@ module Loader =
 
         interface IUniformProvider with
             member x.TryGetUniform(_, sem) =
-                match Map.tryFind sem x.textures with
-                    | Some tex -> AVal.constant tex.texture :> IAdaptiveValue |> Some
-                    | _ ->
-                        let singleValueTexture (c : C4f) =
-                            let img = PixImage<float32>(Col.Format.RGBA, V2i.II)
-                            
-                            img.GetMatrix<C4f>().Set(c) |> ignore
-                            let mip = PixImageMipMap [| img :> PixImage |]
-                            PixTexture2d(mip, false) :> ITexture |> AVal.constant :> IAdaptiveValue |> Some
+                match Map.tryFindV sem x.textures with
+                | ValueSome tex -> AVal.constant tex.texture :> IAdaptiveValue |> ValueSome
+                | _ ->
+                    let singleValueTexture (c : C4f) =
+                        let img = PixImage<float32>(Col.Format.RGBA, V2i.II)
 
-                        match string sem with
-                            | "DiffuseColorTexture" -> singleValueTexture x.diffuse
-                            | "SpecularColorTexture" -> singleValueTexture x.specular
-                            | "NormalMapTexture" -> singleValueTexture (C4f(0.5f, 0.5f, 1.0f, 1.0f))
+                        img.GetMatrix<C4f>().Set(c) |> ignore
+                        let mip = PixImageMipMap [| img :> PixImage |]
+                        PixTexture2d(mip, false) :> ITexture |> AVal.constant :> IAdaptiveValue |> ValueSome
 
-                            | "AmbientColor" -> AVal.constant x.ambient :> IAdaptiveValue |> Some
-                            | "DiffuseColor" -> AVal.constant x.diffuse :> IAdaptiveValue |> Some
-                            | "EmissiveColor" -> AVal.constant x.emissive :> IAdaptiveValue |> Some
-                            | "ReflectiveColor" -> AVal.constant x.reflective :> IAdaptiveValue |> Some
-                            | "SpecularColor" -> AVal.constant x.specular :> IAdaptiveValue |> Some
-                            | "Shininess" -> AVal.constant x.shininess :> IAdaptiveValue |> Some
-                            | "BumpScale" -> AVal.constant x.bumpScale :> IAdaptiveValue |> Some
+                    match string sem with
+                        | "DiffuseColorTexture" -> singleValueTexture x.diffuse
+                        | "SpecularColorTexture" -> singleValueTexture x.specular
+                        | "NormalMapTexture" -> singleValueTexture (C4f(0.5f, 0.5f, 1.0f, 1.0f))
+
+                        | "AmbientColor" -> AVal.constant x.ambient :> IAdaptiveValue |> ValueSome
+                        | "DiffuseColor" -> AVal.constant x.diffuse :> IAdaptiveValue |> ValueSome
+                        | "EmissiveColor" -> AVal.constant x.emissive :> IAdaptiveValue |> ValueSome
+                        | "ReflectiveColor" -> AVal.constant x.reflective :> IAdaptiveValue |> ValueSome
+                        | "SpecularColor" -> AVal.constant x.specular :> IAdaptiveValue |> ValueSome
+                        | "Shininess" -> AVal.constant x.shininess :> IAdaptiveValue |> ValueSome
+                        | "BumpScale" -> AVal.constant x.bumpScale :> IAdaptiveValue |> ValueSome
 
 
-                            | _ -> None
+                        | _ -> ValueNone
 
             member x.Dispose() = ()
 
@@ -83,15 +83,15 @@ module Loader =
             member x.TryGetAttribute(sem) =
                 match x.geometry.IndexedAttributes.TryGetValue sem with
                 | (true, arr) ->
-                    Some <| BufferView(arr)
+                    ValueSome <| BufferView(arr)
 
                 | _ ->
                     match x.geometry.SingleAttributes.TryGetValue sem with
                     | (true, value) ->
-                        Some <| BufferView(SingleValueBuffer.create value)
+                        ValueSome <| BufferView(SingleValueBuffer.create value)
 
                     | _ ->
-                        Some <| BufferView(SingleValueBuffer<V4f>.Zero)
+                        ValueSome <| BufferView(SingleValueBuffer<V4f>.Zero)
 
             member x.Dispose() = ()
 

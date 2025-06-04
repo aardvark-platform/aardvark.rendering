@@ -20,28 +20,28 @@ module BoundingBoxExtensions =
     type RenderObject with
         member x.GetBoundingBox() =
             match bbCache.TryGetValue x with
-                | (true, v) -> v
-                | _ ->
-                    let v = 
-                        match x.VertexAttributes.TryGetAttribute DefaultSemantic.Positions with
-                            | Some v ->
-                                v.Buffer |> AVal.bind (fun buffer ->
-                                    match buffer with
-                                        | :? ArrayBuffer as pos ->
-                                            let trafo : aval<Trafo3d> = x.AttributeScope?ModelTrafo()
+            | (true, v) -> v
+            | _ ->
+                let v =
+                    match x.VertexAttributes.TryGetAttribute DefaultSemantic.Positions with
+                    | ValueSome v ->
+                        v.Buffer |> AVal.bind (fun buffer ->
+                            match buffer with
+                            | :? ArrayBuffer as pos ->
+                                let trafo : aval<Trafo3d> = x.AttributeScope?ModelTrafo()
 
-                                            AVal.map (fun trafo ->
-                                                let box = Box3d.op_Explicit (Box3f(pos.Data |> unbox<V3f[]>))
-                                                box
-                                            ) trafo
+                                AVal.map (fun trafo ->
+                                    let box = Box3d.op_Explicit (Box3f(pos.Data |> unbox<V3f[]>))
+                                    box
+                                ) trafo
 
-                                        | _ ->
-                                            failwithf "invalid positions in renderjob: %A" x
-                                )
                             | _ ->
-                                failwithf "no positions in renderjob: %A" x
-                    bbCache.Add(x,v)
-                    v
+                                failwithf "invalid positions in renderjob: %A" x
+                        )
+                    | _ ->
+                        failwithf "no positions in renderjob: %A" x
+                bbCache.Add(x,v)
+                v
 
     let rec private objBB (o : IRenderObject) =
         match o with

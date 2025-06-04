@@ -24,11 +24,9 @@ type AbstractRenderTask() =
     let tryGetRuntimeValue (name : string) =
         runtimeValueCache.GetOrCreate(name, fun name ->
             // TODO: different runtime-types
-            match Map.tryFind name runtimeUniforms with
-                | Some f ->
-                    currentOutput |> AVal.map f :> IAdaptiveValue |> Some
-                | None ->
-                    None
+            match Map.tryFindV name runtimeUniforms with
+            | ValueSome f -> currentOutput |> AVal.map f :> IAdaptiveValue |> ValueSome
+            | ValueNone -> ValueNone
         )
 
     let transaction = new Transaction()
@@ -36,10 +34,9 @@ type AbstractRenderTask() =
     let hookProvider (provider : IUniformProvider) =
         { new IUniformProvider with
             member x.TryGetUniform(scope, name) =
-                match tryGetRuntimeValue (string name)  with
-                    | Some v -> Some v
-                    | _ ->
-                        provider.TryGetUniform(scope, name)
+                match tryGetRuntimeValue (string name) with
+                | ValueSome v -> ValueSome v
+                | _ -> provider.TryGetUniform(scope, name)
 
             member x.Dispose() =
                 provider.Dispose()

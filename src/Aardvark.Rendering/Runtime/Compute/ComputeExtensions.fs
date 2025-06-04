@@ -124,13 +124,13 @@ module ``UniformProvider Compute Extensions`` =
                 member x.Dispose() = inputs.Dispose()
                 member x.TryGetUniform(scope, name) =
                     match inputs.TryGetUniform(scope, name) with
-                    | None ->
+                    | ValueNone ->
                         let name = name.ToString()
                         if name.StartsWith "cs_" then
                             let sem = Sym.ofString <| name.Substring(3)
                             inputs.TryGetUniform(scope, sem)
                         else
-                            None
+                            ValueNone
 
                     | res -> res
             }

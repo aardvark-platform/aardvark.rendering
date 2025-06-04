@@ -21,14 +21,14 @@ type IGroup =
 module Providers =
 
     type SingleUniformHolder(name : Symbol, value : IAdaptiveValue) =
-        let value = Some value
+        let value = ValueSome value
 
         interface IUniformProvider with
-            member x.TryGetUniform (s,n) = if n = name then value else None
+            member x.TryGetUniform (s,n) = if n = name then value else ValueNone
             member x.Dispose() = ()
 
     type ScopeDependentUniformHolder(values : Map<Symbol, Scope -> IAdaptiveValue>) =
-        let cache = Dictionary<Scope * Symbol, Option<IAdaptiveValue>>()
+        let cache = Dictionary<struct (Scope * Symbol), IAdaptiveValue voption>()
 
         interface IUniformProvider with
             member x.Dispose() = cache.Clear()
@@ -37,16 +37,16 @@ module Providers =
                 | (true, v) -> v
                 | _ ->
                     let v =
-                        match Map.tryFind name values with
-                        | Some f -> f scope |> Some
-                        | None -> None
+                        match Map.tryFindV name values with
+                        | ValueSome f -> f scope |> ValueSome
+                        | ValueNone -> ValueNone
                     cache.[(scope, name)] <- v
                     v
 
         new(l) = new ScopeDependentUniformHolder(Map.ofList l)
 
     type RuntimeDependentUniformHolder(values : Map<Symbol, IRuntime -> IAdaptiveValue>) =
-        let cache = Dictionary<IRuntime * Symbol, Option<IAdaptiveValue>>()
+        let cache = Dictionary<struct (IRuntime * Symbol), IAdaptiveValue voption>()
 
         interface IUniformProvider with
             member x.Dispose() = cache.Clear()
@@ -57,9 +57,9 @@ module Providers =
                 | (true, v) -> v
                 | _ ->
                     let v =
-                        match Map.tryFind name values with
-                        | Some f -> f runtime |> Some
-                        | None -> None
+                        match Map.tryFindV name values with
+                        | ValueSome f -> f runtime |> ValueSome
+                        | ValueNone -> ValueNone
                     cache.[(runtime, name)] <- v
                     v
 
@@ -68,30 +68,29 @@ module Providers =
 
     type AttributeProvider(scope : Scope, attName : string) =
         let mutable scope = scope
-        let mutable cache : Option<Map<Symbol, BufferView>> = None
+        let mutable cache : Map<Symbol, BufferView> voption = ValueNone
 
         let getMap() =
             match cache with
-                | Some c -> c
-                | None -> 
-                    match scope.TryGetInherited attName with
-                        | Some (:? Map<Symbol, BufferView> as map) ->
-                            cache <- Some map
-                            map
-                        | _ ->
-                            failwithf "could not get atttribute map %A for %A" attName scope
+            | ValueSome c -> c
+            | ValueNone ->
+                match scope.TryGetInheritedV attName with
+                | ValueSome (:? Map<Symbol, BufferView> as map) ->
+                    cache <- ValueSome map
+                    map
+                | _ ->
+                    failwithf "could not get atttribute map %A for %A" attName scope
 
         interface IAttributeProvider with
-
             member x.Dispose() =
-                cache <- None
+                cache <- ValueNone
                 scope <- Ag.Scope.Root
 
             member x.All =
                 getMap() |> Map.toSeq
 
             member x.TryGetAttribute(s : Symbol) =
-                getMap() |> Map.tryFind s
+                getMap() |> Map.tryFindV s
 
 
     type SimpleAttributeProvider(ig : IndexedGeometry) =
@@ -104,23 +103,21 @@ module Providers =
             seq {
                 for k in ig.IndexedAttributes.Keys do
                     match x.TryGetAttribute(k) with
-                        | Some att -> yield k, att
-                        | _ -> ()
+                    | ValueSome att -> yield k, att
+                    | _ -> ()
             }
 
         member x.TryGetAttribute(s :  Symbol) =
             match cache.TryGetValue s with
-                | (true, v) -> Some v
+            | (true, v) -> ValueSome v
+            | _ ->
+                match ig.IndexedAttributes.TryGetValue s with
+                | (true, att) ->
+                    let v = BufferView att
+                    cache.[s] <- v
+                    ValueSome v
                 | _ ->
-                    match ig.IndexedAttributes.TryGetValue s with
-                        | (true, att) -> 
-                            let t = att.GetType().GetElementType()
-                            let v = BufferView(AVal.constant (ArrayBuffer att :> IBuffer), t)
-
-                            cache.[s] <- v
-                            Some v
-                        | _ -> 
-                            None
+                    ValueNone
 
         interface IAttributeProvider with
             member x.All = x.All
@@ -138,42 +135,42 @@ module Providers =
             
             let contains (s : Symbol) =
                 let nullResource = 
-                    attributeProviders |> List.tryPick (fun p ->
+                    attributeProviders |> List.tryPickV (fun p ->
                         match p.TryGetAttribute s with
-                         | Some v -> Some (not v.IsSingleValue) //v.Buffer |> AVal.map (not << NullResources.isNullResource) |> Some
-                         | None -> None
+                         | ValueSome v -> ValueSome (not v.IsSingleValue) //v.Buffer |> AVal.map (not << NullResources.isNullResource) |> Some
+                         | ValueNone -> ValueNone
                     )
                 match nullResource with
-                    | Some v -> v
-                    | None -> false
+                | ValueSome v -> v
+                | ValueNone -> false
 
             let str = s.ToString()
             match cache.TryGetValue s with
-                | (true, m) -> 
-                    Some m
+            | (true, m) ->
+                ValueSome m
 
-                | _ -> 
-                    match uniforms |> List.tryPick (fun u -> u.TryGetUniform (scope,s)) with
-                        | Some u -> 
-                            let cs = u
-                            cache.Add(s, cs)
-                            Some cs
-                        | None -> 
-                            match scope.TryGetAttributeValue<IAdaptiveValue> (str) with
-                            | Some v -> 
-                                let cs = v
-                                cache.Add(s, cs)
-                                Some cs
-                            | _ ->
-                                if str.StartsWith("Has") then
-                                    let baseName = str.Substring(3).ToSymbol()
-                                    let sourceUniform = x.TryGetUniform(dynamicScope, baseName)
-                                    match sourceUniform with    
-                                        | Some v -> 
-                                            NullResources.isValidResourceAdaptive v :> IAdaptiveValue |> Some 
-                                        | None -> 
-                                            baseName |> contains |> AVal.constant :> IAdaptiveValue |> Some
-                                else None
+            | _ ->
+                match uniforms |> List.tryPickV (fun u -> u.TryGetUniform (scope,s)) with
+                | ValueSome u ->
+                    let cs = u
+                    cache.Add(s, cs)
+                    ValueSome cs
+                | ValueNone ->
+                    match scope.TryGetAttributeValueV<IAdaptiveValue> (str) with
+                    | ValueSome v ->
+                        let cs = v
+                        cache.Add(s, cs)
+                        ValueSome cs
+                    | _ ->
+                        if str.StartsWith("Has") then
+                            let baseName = str.Substring(3).ToSymbol()
+                            let sourceUniform = x.TryGetUniform(dynamicScope, baseName)
+                            match sourceUniform with
+                            | ValueSome v ->
+                                NullResources.isValidResourceAdaptive v :> IAdaptiveValue |> ValueSome
+                            | ValueNone ->
+                                baseName |> contains |> AVal.constant :> IAdaptiveValue |> ValueSome
+                        else ValueNone
 
         interface IUniformProvider with
 

@@ -12,7 +12,7 @@ type UniformMap =
 
     interface IUniformProvider with
         member x.Dispose() = ()
-        member x.TryGetUniform(_, name) = x.Values.TryFind name
+        member x.TryGetUniform(_, name) = x.Values |> Map.tryFindV name
 
     static member Empty = UniformMapEmpty.Empty
 

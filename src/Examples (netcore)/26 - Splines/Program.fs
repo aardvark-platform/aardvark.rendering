@@ -410,7 +410,7 @@ module Sg =
                     member x.Dispose() = oa.Dispose()
                     member x.All = oa.All
                     member x.TryGetAttribute(sem : Symbol) =
-                        if sem = DefaultSemantic.Positions then Some posView
+                        if sem = DefaultSemantic.Positions then ValueSome posView
                         else oa.TryGetAttribute sem
                 }
 

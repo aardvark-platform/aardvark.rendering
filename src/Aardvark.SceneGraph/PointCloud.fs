@@ -469,24 +469,24 @@ module PointCloudRenderObjectSemantics =
 
             let view : aval<Trafo3d> = 
                 match config.customView with
-                    | Some view -> view
-                    | None -> 
-                        match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ViewTrafo") with
-                            | Some (:? aval<Trafo3d> as v) -> v
-                            | _ -> scope?ViewTrafo
+                | Some view -> view
+                | None ->
+                    match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ViewTrafo") with
+                    | ValueSome (:? aval<Trafo3d> as v) -> v
+                    | _ -> scope?ViewTrafo
 
             let proj : aval<Trafo3d> = 
                 match config.customProjection with
-                    | Some proj -> proj
-                    | None -> 
-                        match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ProjTrafo") with
-                            | Some (:? aval<Trafo3d> as v) -> v
-                            | _ -> scope?ProjTrafo
+                | Some proj -> proj
+                | None ->
+                    match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ProjTrafo") with
+                    | ValueSome (:? aval<Trafo3d> as v) -> v
+                    | _ -> scope?ProjTrafo
 
             let size : aval<V2i> = 
                 match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ViewportSize") with
-                    | Some (:? aval<V2i> as v) -> v
-                    | _ -> scope?ViewportSize
+                | ValueSome (:? aval<V2i> as v) -> v
+                | _ -> scope?ViewportSize
                     
 
             

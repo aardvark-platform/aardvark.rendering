@@ -205,10 +205,8 @@ type ShapeCache(r : IRuntime) =
             member x.All = Seq.empty
             member x.TryGetAttribute(sem) =
                 match pool.TryGetBufferView sem with
-                    | Some bufferView ->
-                        Some bufferView
-                    | None ->
-                        None
+                | Some bufferView -> ValueSome bufferView
+                | None -> ValueNone
 
             member x.Dispose() = ()
         }

@@ -7,14 +7,14 @@ open FSharp.Data.Adaptive
 [<AllowNullLiteral>]
 type IUniformProvider =
     inherit IDisposable
-    abstract member TryGetUniform : scope : Ag.Scope * name : Symbol -> Option<IAdaptiveValue>
+    abstract member TryGetUniform : scope : Ag.Scope * name : Symbol -> IAdaptiveValue voption
 
 type UniformProvider private() =
 
     static let empty =
         { new IUniformProvider with
             member x.Dispose() = ()
-            member x.TryGetUniform(_,_) = None
+            member x.TryGetUniform(_,_) = ValueNone
         }
 
     static member Empty = empty
@@ -24,47 +24,38 @@ type UniformProvider private() =
             member x.Dispose() = l.Dispose(); r.Dispose()
             member x.TryGetUniform(scope : Ag.Scope, name : Symbol) =
                 match l.TryGetUniform(scope, name) with
-                | Some m -> Some m
-                | None -> r.TryGetUniform(scope, name)
+                | ValueSome m -> ValueSome m
+                | ValueNone -> r.TryGetUniform(scope, name)
         }
 
     static member ofDict (values : SymbolDict<IAdaptiveValue>) =
         { new IUniformProvider with
             member x.Dispose() = ()
-            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) =
-                match values.TryGetValue name with
-                | (true, v) -> Some v
-                | _ -> None
+            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) = SymDict.tryFindV name values
         }
 
     static member ofDict (values : Dict<Symbol, IAdaptiveValue>) =
         { new IUniformProvider with
             member x.Dispose() = ()
-            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) =
-                match values.TryGetValue name with
-                | (true, v) -> Some v
-                | _ -> None
+            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) = Dict.tryFindV name values
         }
 
     static member ofDict (values : System.Collections.Generic.Dictionary<Symbol, IAdaptiveValue>) =
         { new IUniformProvider with
             member x.Dispose() = ()
-            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) =
-                match values.TryGetValue name with
-                | (true, v) -> Some v
-                | _ -> None
+            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) = Dictionary.tryFindV name values
         }
 
     static member ofMap (values : Map<Symbol, IAdaptiveValue>) =
         { new IUniformProvider with
             member x.Dispose() = ()
-            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) = Map.tryFind name values
+            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) = Map.tryFindV name values
         }
 
     static member ofMap (values : MapExt<Symbol, IAdaptiveValue>) =
         { new IUniformProvider with
             member x.Dispose() = ()
-            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) = MapExt.tryFind name values
+            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) = MapExt.tryFindV name values
         }
 
     static member ofList (values : list<Symbol * IAdaptiveValue>) =

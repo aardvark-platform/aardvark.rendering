@@ -108,7 +108,7 @@ type DevicePreparedRenderObjectExtensions private() =
 
     static let createSamplerState (this : ResourceManager) (name : Symbol) (uniforms : IUniformProvider) (state : FShade.SamplerState)  =
         match uniforms.TryGetUniform(Ag.Scope.Root, Sym.ofString $"{DefaultSemantic.SamplerStateModifier}_{name}") with
-        | Some (:? aval<SamplerState -> SamplerState> as modifier) ->
+        | ValueSome (:? aval<SamplerState -> SamplerState> as modifier) ->
             this.CreateDynamicSamplerState(state.SamplerState, modifier) :> aval<_>
         | _ ->
             AVal.constant state.SamplerState
@@ -136,7 +136,7 @@ type DevicePreparedRenderObjectExtensions private() =
                             | CastUniformResource (array : aval<Array>) ->
                                 this.CreateStorageBuffer(bufferName, array)
 
-                            | Some value ->
+                            | ValueSome value ->
                                 failf "invalid type '%A' for storage buffer '%A' (expected a subtype of IBuffer or Array)" value.ContentType bufferName
 
                             | _ ->
@@ -153,17 +153,17 @@ type DevicePreparedRenderObjectExtensions private() =
                                 | NullUniform ->
                                     failf "texture array '%A' is null" textureName
 
-                                | Some (:? aval<(int * aval<ITexture>)[]> as tex) ->
+                                | ValueSome (:? aval<(int * aval<ITexture>)[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
                                     let is = this.CreateImageSamplerArray(textureName, sam.samplerCount, sam.samplerType, tex, s)
                                     Some is
 
-                                | Some (:? aval<ITexture[]> as tex) ->
+                                | ValueSome (:? aval<ITexture[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
                                     let is = this.CreateImageSamplerArray(textureName, sam.samplerCount, sam.samplerType, tex, s)
                                     Some is
 
-                                | Some t ->
+                                | ValueSome t ->
                                     failf "invalid type '%A' for texture array '%A' (expected ITexture[] or (int * aval<ITexture>)[])" t.ContentType textureName
 
                                 | _ ->
@@ -196,7 +196,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 let sampler = this.CreateImageSampler(textureName, sam.samplerType, level, desc)
                                                 i, sampler
 
-                                            | Some t ->
+                                            | ValueSome t ->
                                                 failf "invalid type '%A' for texture '%A' (expected a subtype of ITexture or ITextureLevel)" t.ContentType textureName
 
                                             | _ ->
@@ -229,10 +229,10 @@ type DevicePreparedRenderObjectExtensions private() =
                                 let view = this.CreateImageView(image.imageType, img, levels, slices)
                                 view
 
-                            | Some i ->
+                            | ValueSome i ->
                                 failf "invalid type '%A' for storage image '%A' (expected a subtype of ITexture or ITextureLevel)" i.ContentType imageName
 
-                            | None ->
+                            | ValueNone ->
                                 failf "could not find storage image '%A'" imageName
 
                         AdaptiveDescriptor.StorageImage(b.Binding, viewSam) :> IAdaptiveDescriptor
@@ -245,10 +245,10 @@ type DevicePreparedRenderObjectExtensions private() =
                             | NullUniform ->
                                 failf "acceleration structure '%A' is null" name
 
-                            | Some (:? IResourceLocation<Raytracing.AccelerationStructure> as accel) ->
+                            | ValueSome (:? IResourceLocation<Raytracing.AccelerationStructure> as accel) ->
                                 accel
 
-                            | Some a ->
+                            | ValueSome a ->
                                 failf "invalid type '%A' for acceleration structure '%A'" a.ContentType name
 
                             | _ ->
@@ -283,9 +283,9 @@ type DevicePreparedRenderObjectExtensions private() =
                     let semantic = Sym.ofString p.paramSemantic
                     let expectedType = getExpectedType p.paramType
 
-                    let view, perInstance =
+                    let struct (view, perInstance) =
                         match ro.TryGetAttribute semantic with
-                        | Some attr -> attr
+                        | ValueSome attr -> attr
                         | _ -> failf "could not get attribute '%A'" semantic
 
                     let buffer = this.CreateVertexBuffer(semantic, view.Buffer)

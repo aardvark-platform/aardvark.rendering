@@ -1405,12 +1405,12 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
     let rootUniformsLock = obj()
     let mutable rootUniforms : HashMap<ILodTreeNode, MapExt<string, IAdaptiveValue>> = HashMap.empty
     let tryGetRootUniforms (node : ILodTreeNode) =
-        lock rootUniformsLock (fun () -> HashMap.tryFind node rootUniforms)
+        lock rootUniformsLock (fun () -> HashMap.tryFindV node rootUniforms)
     let updateRootUniforms f =
         lock rootUniformsLock (fun () -> rootUniforms <- f(rootUniforms))
     let toFreeUniforms : ref<HashSet<ILodTreeNode>> = ref HashSet.empty
         
-    let rootUniformCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, System.Collections.Concurrent.ConcurrentDictionary<string, Option<IAdaptiveValue>>>()
+    let rootUniformCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, System.Collections.Concurrent.ConcurrentDictionary<string, IAdaptiveValue voption>>()
     let rootTrafoCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, aval<Trafo3d>>()
     let rootTrafoWorldCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, aval<Trafo3d>>()
     
@@ -1421,34 +1421,34 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
         let root = root.Root
         rootTrafoCache.GetOrAdd(root, fun root ->
             match tryGetRootUniforms root with
-            | Some table -> 
-                match MapExt.tryFind "ModelTrafo" table with
-                | Some (:? aval<Trafo3d> as m) -> (m |> AVal.map ( fun m -> root.DataTrafo * m )) %* config.model
+            | ValueSome table ->
+                match MapExt.tryFindV "ModelTrafo" table with
+                | ValueSome (:? aval<Trafo3d> as m) -> (m |> AVal.map ( fun m -> root.DataTrafo * m )) %* config.model
                 | _ -> config.model |> AVal.map ( fun m -> root.DataTrafo * m )
-            | None ->
+            | ValueNone ->
                 Log.error "bad trafo"
                 config.model |> AVal.map ( fun m -> root.DataTrafo * m )
         )
-    let getRootUniform (name : string) (root : ILodTreeNode) : Option<IAdaptiveValue> =
+    let getRootUniform (name : string) (root : ILodTreeNode) : IAdaptiveValue voption =
         let root = root.Root
         let rootCache = rootUniformCache.GetOrAdd(root, fun root -> System.Collections.Concurrent.ConcurrentDictionary())
         rootCache.GetOrAdd(name, fun name ->
             match name with
-            | "ModelTrafos"              -> getRootTrafo root :> IAdaptiveValue |> Some
-            | "ModelTrafosInv"           -> getRootTrafo root |> AVal.map (fun t -> t.Inverse) :> IAdaptiveValue |> Some
+            | "ModelTrafos"              -> getRootTrafo root :> IAdaptiveValue |> ValueSome
+            | "ModelTrafosInv"           -> getRootTrafo root |> AVal.map (fun t -> t.Inverse) :> IAdaptiveValue |> ValueSome
 
-            | "ModelViewTrafos"          -> AVal.map2 (fun a b -> a * b) (getRootTrafo root) config.view :> IAdaptiveValue |> Some
-            | "ModelViewTrafosInv"       -> getRootTrafo root %* config.view |> AVal.map (fun t -> t.Inverse) :> IAdaptiveValue |> Some
+            | "ModelViewTrafos"          -> AVal.map2 (fun a b -> a * b) (getRootTrafo root) config.view :> IAdaptiveValue |> ValueSome
+            | "ModelViewTrafosInv"       -> getRootTrafo root %* config.view |> AVal.map (fun t -> t.Inverse) :> IAdaptiveValue |> ValueSome
 
-            | "ModelViewProjTrafos"      -> getRootTrafo root %* config.view %* config.proj :> IAdaptiveValue |> Some
-            | "ModelViewProjTrafosInv"   -> getRootTrafo root %* config.view %* config.proj |> AVal.map (fun t -> t.Inverse) :> IAdaptiveValue |> Some
+            | "ModelViewProjTrafos"      -> getRootTrafo root %* config.view %* config.proj :> IAdaptiveValue |> ValueSome
+            | "ModelViewProjTrafosInv"   -> getRootTrafo root %* config.view %* config.proj |> AVal.map (fun t -> t.Inverse) :> IAdaptiveValue |> ValueSome
 
-            | "NormalMatrices"           -> getRootTrafo root |> AVal.map (fun t -> M33d.op_Explicit t.Backward.Transposed):> IAdaptiveValue |> Some
-            | "NormalMatricesInv"        -> getRootTrafo root |> AVal.map (fun t -> M33d.op_Explicit t.Forward.Transposed):> IAdaptiveValue |> Some
+            | "NormalMatrices"           -> getRootTrafo root |> AVal.map (fun t -> M33d.op_Explicit t.Backward.Transposed):> IAdaptiveValue |> ValueSome
+            | "NormalMatricesInv"        -> getRootTrafo root |> AVal.map (fun t -> M33d.op_Explicit t.Forward.Transposed):> IAdaptiveValue |> ValueSome
             | _ -> 
                 match tryGetRootUniforms root with
-                | Some table -> MapExt.tryFind name table
-                | None -> None
+                | ValueSome table -> MapExt.tryFindV name table
+                | ValueNone -> ValueNone
         )
 
     let getRootId (root : ILodTreeNode) =   
@@ -1492,7 +1492,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
         let buffers =
             iface.storageBuffers |> MapExt.map (fun name buffer ->
                 match config.state.GlobalUniforms.TryGetUniform(Ag.Scope.Root, Sym.ofString name) with
-                | Some buffer -> buffer
+                | ValueSome buffer -> buffer
                 | _ ->
                     let typ = GLSLType.toType buffer.ssbType
                     let conv = Aardvark.Base.PrimitiveValueConverter.convert typ
@@ -1506,10 +1506,10 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                             let data = System.Array.CreateInstance(typ, 1 + maxId)
                             ids |> HashMap.iter (fun root id ->
                                 match getRootUniform name root with
-                                | Some v ->
+                                | ValueSome v ->
                                     let vc = v.GetValueUntyped(t) |> conv
                                     data.SetValue(vc, id)
-                                | None ->
+                                | ValueNone ->
                                     ()
                             )
                             ArrayBuffer data :> IBuffer
@@ -1547,13 +1547,13 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                     let data : int[] = Array.zeroCreate (1 + maxId)
                     ids |> HashMap.iter (fun root id ->
                         match getRootUniform "TreeActive" root with
-                        | Some v ->
+                        | ValueSome v ->
                             match v.GetValueUntyped(t) with
                             | :? bool as b ->
                                 data.[id] <- (if b then 1 else 0)
                             | _ ->
                                 data.[id] <- 1
-                        | None ->
+                        | ValueNone ->
                             data.[id] <- 1
                     )
                     ArrayBuffer data :> IBuffer
@@ -1571,13 +1571,13 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                     let data : M44f[] = Array.zeroCreate (1 + maxId)
                     ids |> HashMap.iter (fun root id ->
                         match getRootUniform "ModelViewProjTrafos" root with
-                        | Some v ->
+                        | ValueSome v ->
                             match v.GetValueUntyped(t) with
                             | :? Trafo3d as b ->
                                 data.[id] <- M44f.op_Explicit b.Forward
                             | _ ->
                                 failwith "bad anarchy"
-                        | None ->
+                        | ValueNone ->
                                 failwith "bad anarchy"
                     )
                     ArrayBuffer data :> IBuffer

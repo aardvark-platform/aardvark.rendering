@@ -155,9 +155,9 @@ type private AirAttributeProvider(local : Map<Symbol, BufferView>, inh : IAttrib
     interface IAttributeProvider with
         member x.All = Seq.empty
         member x.TryGetAttribute(sem) =
-            match Map.tryFind sem local with
-                | Some v -> Some v
-                | None -> inh.TryGetAttribute sem
+            match Map.tryFindV sem local with
+            | ValueSome v -> ValueSome v
+            | ValueNone -> inh.TryGetAttribute sem
 
         member x.Dispose() = ()
 
@@ -170,11 +170,11 @@ type private AirUniformProvider(local : Map<Symbol, IAdaptiveValue>, trafos : li
     interface IUniformProvider with
         member x.TryGetUniform(scope, sem) =
             if sem = mt then
-                model.Value :> IAdaptiveValue |> Some
+                model.Value :> IAdaptiveValue |> ValueSome
             else
-                match Map.tryFind sem local with
-                    | Some u -> Some u
-                    | None -> inh.TryGetUniform(scope, sem)
+                match Map.tryFindV sem local with
+                | ValueSome u -> ValueSome u
+                | ValueNone -> inh.TryGetUniform(scope, sem)
 
         member x.Dispose() = ()
 

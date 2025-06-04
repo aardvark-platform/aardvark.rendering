@@ -992,44 +992,44 @@ module private RuntimeCommands =
                 let view = u.TryGetUniform(Ag.Scope.Root, Symbol.Create "ViewTrafo")
                 let proj = u.TryGetUniform(Ag.Scope.Root, Symbol.Create "ProjTrafo")
                 match view, proj with
-                    | Some (:? aval<Trafo3d> as v), Some (:? aval<Trafo3d> as p) ->
-                        AVal.custom (fun t ->
-                            let v = v.GetValue t
-                            let p = p.GetValue t
-                            let box = box.GetValue t
-                            let pp = box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj
-                            pp.Z
-                        )
+                | ValueSome (:? aval<Trafo3d> as v), ValueSome (:? aval<Trafo3d> as p) ->
+                    AVal.custom (fun t ->
+                        let v = v.GetValue t
+                        let p = p.GetValue t
+                        let box = box.GetValue t
+                        let pp = box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj
+                        pp.Z
+                    )
 
-                    | Some (:? aval<Trafo3d[]> as v), Some (:? aval<Trafo3d> as p) ->
-                        AVal.custom (fun t ->
-                            let v = v.GetValue t
-                            let p = p.GetValue t
-                            let box = box.GetValue t
-                            let pp = Array.map (fun (v : Trafo3d) -> box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj) v
-                            pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
-                        )
+                | ValueSome (:? aval<Trafo3d[]> as v), ValueSome (:? aval<Trafo3d> as p) ->
+                    AVal.custom (fun t ->
+                        let v = v.GetValue t
+                        let p = p.GetValue t
+                        let box = box.GetValue t
+                        let pp = Array.map (fun (v : Trafo3d) -> box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj) v
+                        pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
+                    )
 
-                    | Some (:? aval<Trafo3d> as v), Some (:? aval<Trafo3d[]> as p) ->
-                        AVal.custom (fun t ->
-                            let v = v.GetValue t
-                            let p = p.GetValue t
-                            let box = box.GetValue t
-                            let pp = Array.map (fun (p : Trafo3d) -> box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj) p
-                            pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
-                        )
+                | ValueSome (:? aval<Trafo3d> as v), ValueSome (:? aval<Trafo3d[]> as p) ->
+                    AVal.custom (fun t ->
+                        let v = v.GetValue t
+                        let p = p.GetValue t
+                        let box = box.GetValue t
+                        let pp = Array.map (fun (p : Trafo3d) -> box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj) p
+                        pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
+                    )
 
-                    | Some (:? aval<Trafo3d[]> as v), Some (:? aval<Trafo3d[]> as p) ->
-                        AVal.custom (fun t ->
-                            let v = v.GetValue t
-                            let p = p.GetValue t
-                            let box = box.GetValue t
-                            let pp = Array.map2 (fun (v : Trafo3d) (p : Trafo3d) -> box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj) v p
-                            pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
-                        )
+                | ValueSome (:? aval<Trafo3d[]> as v), ValueSome (:? aval<Trafo3d[]> as p) ->
+                    AVal.custom (fun t ->
+                        let v = v.GetValue t
+                        let p = p.GetValue t
+                        let box = box.GetValue t
+                        let pp = Array.map2 (fun (v : Trafo3d) (p : Trafo3d) -> box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj) v p
+                        pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
+                    )
 
-                    | _ ->
-                        failwithf "[Vulkan] no ViewProjTrafo for object"
+                | _ ->
+                    failwithf "[Vulkan] no ViewProjTrafo for object"
 
             commands.Add(cmd, depth)
 
@@ -1829,11 +1829,11 @@ module private RuntimeCommands =
                     instanceInputs |> Map.map (fun name _ ->
                         let name = Symbol.Create name
                         match g.SingleAttributes.TryGetValue name with
-                            | (true, (:? IAdaptiveValue as a)) -> a
-                            | _ -> 
-                                match pipeline.ppUniforms.TryGetUniform(Ag.Scope.Root, name) with
-                                    | Some a -> a
-                                    | None -> failwithf "[Vulkan] could not get uniform %A" name
+                        | (true, (:? IAdaptiveValue as a)) -> a
+                        | _ ->
+                            match pipeline.ppUniforms.TryGetUniform(Ag.Scope.Root, name) with
+                            | ValueSome a -> a
+                            | ValueNone -> failwithf "[Vulkan] could not get uniform %A" name
                     )
                 
                 instanceManager.NewSlot(uniforms)

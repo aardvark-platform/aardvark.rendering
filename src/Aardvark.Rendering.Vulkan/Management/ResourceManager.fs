@@ -1986,13 +1986,13 @@ type ResourceManager(device : Device) =
             |> List.map (fun (f) ->
                 let name = f.ufName
 
-                let field, value =
+                let struct (field, value) =
                     match Uniforms.tryGetDerivedUniform f.ufName uniforms with
-                    | Some r -> f, r
-                    | None ->
+                    | ValueSome r -> f, r
+                    | ValueNone ->
                         match uniforms.TryGetUniform(scope, Symbol.Create name) with
-                        | Some v -> f, v
-                        | None ->
+                        | ValueSome v -> f, v
+                        | ValueNone ->
                             failf "could not find uniform '%s'" name
 
                 if Object.ReferenceEquals(value, null) then

@@ -114,16 +114,16 @@ and RenderObject private (id : RenderObjectId,
         else string x.AttributeScope
 
     /// Tries to retrieve the buffer view of the given attribute and returns if it is and per-instance attribute.
-    member x.TryGetAttribute(name : Symbol) =
+    member x.TryGetAttribute(name : Symbol) : struct (BufferView * bool) voption =
         match x.VertexAttributes.TryGetAttribute name with
-        | Some value -> Some (value, false)
+        | ValueSome value -> ValueSome (value, false)
         | _  ->
             if x.InstanceAttributes <> null then
                 match x.InstanceAttributes.TryGetAttribute name with
-                | Some value -> Some (value, true)
-                | _ -> None
+                | ValueSome value -> ValueSome (value, true)
+                | _ -> ValueNone
             else
-                None
+                ValueNone
 
     override x.GetHashCode() = int x.Id
     override x.Equals o =

@@ -474,8 +474,8 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
             member x.All = vertexBuffers |> Seq.map (fun v -> (v.Key, BufferView(v.Value, v.Value.ElementType)))
             member x.TryGetAttribute(sem : Symbol) =
                 match vertexBuffers.TryGetValue sem with
-                | (true, v) -> Some (BufferView(v, v.ElementType))
-                | _ -> None
+                | (true, v) -> ValueSome (BufferView(v, v.ElementType))
+                | _ -> ValueNone
         }
 
     member x.InstanceAttributes =
@@ -484,8 +484,8 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
             member x.All = instanceBuffers |> Seq.map (fun v -> (v.Key, BufferView(v.Value, v.Value.ElementType)))
             member x.TryGetAttribute(sem : Symbol) =
                 match instanceBuffers.TryGetValue sem with
-                | (true, v) -> Some (BufferView(v, v.ElementType))
-                | _ -> None
+                | (true, v) -> ValueSome (BufferView(v, v.ElementType))
+                | _ -> ValueNone
         }
 
     member x.IndexBuffer =

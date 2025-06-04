@@ -209,7 +209,7 @@ module PreparedPipelineState =
                     | CastUniformResource (array : aval<Array>) ->
                         x.CreateStorageBuffer(bufferName, array)
 
-                    | Some value ->
+                    | ValueSome value ->
                         failf "invalid type '%A' for storage buffer '%A' (expected a subtype of IBuffer or Array)" value.ContentType bufferName
 
                     | _ ->
@@ -225,17 +225,17 @@ module PreparedPipelineState =
             let createSampler (textureName : Symbol) (samplerState : FShade.SamplerState) =
                 let samplerModifier =
                     match uniforms.TryGetUniform(scope, Sym.ofString $"{DefaultSemantic.SamplerStateModifier}_{textureName}") with
-                    | Some (:? aval<SamplerState -> SamplerState> as mode) ->
-                        Some mode
+                    | ValueSome (:? aval<SamplerState -> SamplerState> as mode) ->
+                        ValueSome mode
                     | _ ->
-                        None
+                        ValueNone
 
                 let sampler =
                     match samplerModifier with
-                    | Some modifier ->
+                    | ValueSome modifier ->
                         let samplerState = x.GetSamplerStateDescription(samplerState)
                         x.GetDynamicSamplerState(samplerState, modifier)
-                    | None ->
+                    | ValueNone ->
                         x.GetStaticSamplerState(samplerState)
 
                 x.CreateSampler(sampler)
@@ -251,7 +251,7 @@ module PreparedPipelineState =
                 | CastUniformResource (level : aval<ITextureLevel>) ->
                     x.CreateTexture(textureName, level, samplerType)
 
-                | Some t ->
+                | ValueSome t ->
                     failf "invalid type '%A' for texture '%A' (expected a subtype of ITexture or ITextureLevel)" t.ContentType textureName
 
                 | _ ->
@@ -271,13 +271,13 @@ module PreparedPipelineState =
                         | NullUniform ->
                             failf "texture array '%A' is null" textureName
 
-                        | Some (:? aval<ITexture[]> as textureArray) ->
+                        | ValueSome (:? aval<ITexture[]> as textureArray) ->
                             let sampler = createSampler textureName samplerState
                             let textureArray = x.CreateTextureArray(textureName, sam.samplerCount, textureArray, sam.samplerType)
                             let arrayBinding = x.CreateTextureBinding(slotRange, textureArray, sampler)
                             Some <| ArrayBinding (arrayBinding |> addResource resources)
 
-                        | Some t ->
+                        | ValueSome t ->
                             failf "invalid type '%A' for texture array '%A' (expected ITexture[])" t.ContentType textureName
 
                         | _ ->
@@ -343,10 +343,10 @@ module PreparedPipelineState =
                     | CastUniformResource (level : aval<ITextureLevel>) ->
                         x.CreateImageBinding(imageName, level, image.imageType)
 
-                    | Some i ->
+                    | ValueSome i ->
                         failf "invalid type '%A' for storage image '%A' (expected a subtype of ITexture or ITextureLevel)" i.ContentType imageName
 
-                    | None ->
+                    | ValueNone ->
                         failf "could not find storage image '%A'" imageName
 
                 struct (image.imageBinding, binding |> addResource resources)
@@ -1004,7 +1004,7 @@ module PreparedObjectInfo =
                         let attribute =
                             let view, frequency =
                                 match rj.TryGetAttribute(semantic) with
-                                | Some (view, perInstance) ->
+                                | ValueSome (view, perInstance) ->
                                     view, (if perInstance then AttributeFrequency.PerInstances 1 else AttributeFrequency.PerVertex)
                                 | _ ->
                                     failf "could not get attribute '%s'" v.paramName

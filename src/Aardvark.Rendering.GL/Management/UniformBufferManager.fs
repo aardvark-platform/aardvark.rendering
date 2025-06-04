@@ -59,11 +59,11 @@ type UniformBufferManager(ctx : Context) =
 
                 let value =
                     match Uniforms.tryGetDerivedUniform name uniforms with
-                    | Some v -> v
-                    | None ->
+                    | ValueSome v -> v
+                    | ValueNone ->
                         match uniforms.TryGetUniform(scope, Symbol.Create name) with
-                        | Some v -> v
-                        | None -> failf "could not find uniform '%s'" name
+                        | ValueSome v -> v
+                        | ValueNone -> failf "could not find uniform '%s'" name
 
                 if Object.ReferenceEquals(value, null) then
                     failf "uniform '%s' is null" name

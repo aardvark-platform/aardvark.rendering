@@ -185,38 +185,38 @@ module Sg =
                 { new IAttributeProvider with
                     member x.All = old.All
                     member x.TryGetAttribute sem =
-                        if sem = Path.Attributes.TrafoOffsetAndScale then trafos |> Some
-                        elif sem = Path.Attributes.PathColor then colors |> Some
-                        elif sem = Path.Attributes.ShapeTrafoR0 then trafoR0 |> Some
-                        elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> Some
+                        if sem = Path.Attributes.TrafoOffsetAndScale then trafos |> ValueSome
+                        elif sem = Path.Attributes.PathColor then colors |> ValueSome
+                        elif sem = Path.Attributes.ShapeTrafoR0 then trafoR0 |> ValueSome
+                        elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> ValueSome
                         else old.TryGetAttribute sem
                     member x.Dispose() = old.Dispose()
                 }
 
             let aa =
                 match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "Antialias") with
-                    | Some (:? aval<bool> as aa) -> aa
-                    | _ -> AVal.constant false
+                | ValueSome (:? aval<bool> as aa) -> aa
+                | _ -> AVal.constant false
 
             let fill =
                 match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "FillGlyphs") with
-                    | Some (:? aval<bool> as aa) -> aa
-                    | _ -> AVal.constant true
+                | ValueSome (:? aval<bool> as aa) -> aa
+                | _ -> AVal.constant true
 
             let bias =
                 match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "DepthBias") with
-                    | Some (:? aval<float> as bias) -> bias
-                    | _ -> AVal.constant defaultDepthBias
+                | ValueSome (:? aval<float> as bias) -> bias
+                | _ -> AVal.constant defaultDepthBias
 
             shapes.Uniforms <-
                 let old = shapes.Uniforms
                 { new IUniformProvider with
                     member x.TryGetUniform(scope : Ag.Scope, sem : Symbol) =
                         match string sem with
-                            | "Antialias" -> aa :> IAdaptiveValue |> Some
-                            | "FillGlyphs" -> fill :> IAdaptiveValue |> Some
-                            | "DepthBias" -> bias :> IAdaptiveValue |> Some
-                            | _ -> old.TryGetUniform(scope, sem)
+                        | "Antialias" -> aa :> IAdaptiveValue |> ValueSome
+                        | "FillGlyphs" -> fill :> IAdaptiveValue |> ValueSome
+                        | "DepthBias" -> bias :> IAdaptiveValue |> ValueSome
+                        | _ -> old.TryGetUniform(scope, sem)
 
                     member x.Dispose() =
                         old.Dispose()
@@ -331,9 +331,9 @@ module Sg =
                 { new IAttributeProvider with
                     member x.All = old.All
                     member x.TryGetAttribute sem =
-                        if sem = Path.Attributes.ShapeTrafoR0 then trafoR0 |> Some
-                        elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> Some
-                        elif sem = Path.Attributes.PathColor then colors |> Some
+                        if sem = Path.Attributes.ShapeTrafoR0 then trafoR0 |> ValueSome
+                        elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> ValueSome
+                        elif sem = Path.Attributes.PathColor then colors |> ValueSome
                         else old.TryGetAttribute sem
                     member x.Dispose() = old.Dispose()
                 }
@@ -341,18 +341,18 @@ module Sg =
 
             let aa =
                 match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "Antialias") with
-                    | Some (:? aval<bool> as aa) -> aa
-                    | _ -> AVal.constant false
+                | ValueSome (:? aval<bool> as aa) -> aa
+                | _ -> AVal.constant false
 
             let fill =
                 match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "FillGlyphs") with
-                    | Some (:? aval<bool> as aa) -> aa
-                    | _ -> AVal.constant true
+                | ValueSome (:? aval<bool> as aa) -> aa
+                | _ -> AVal.constant true
 
             let bias =
                 match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "DepthBias") with
-                    | Some (:? aval<float> as bias) -> bias
-                    | _ -> AVal.constant defaultDepthBias
+                | ValueSome (:? aval<float> as bias) -> bias
+                | _ -> AVal.constant defaultDepthBias
 
             shapes.Uniforms <-
                 let old = shapes.Uniforms
@@ -360,18 +360,18 @@ module Sg =
                 { new IUniformProvider with
                     member x.TryGetUniform(scope, sem) =
                         match string sem with
-                            | "Antialias" -> aa :> IAdaptiveValue |> Some
-                            | "FillGlyphs" -> fill :> IAdaptiveValue |> Some
-                            | "DepthBias" -> bias :> IAdaptiveValue |> Some
-                            | "ModelTrafo" ->
-                                match old.TryGetUniform(scope, sem) with
-                                    | Some (:? aval<Trafo3d> as m) ->
-                                        AVal.map2 (*) ownTrafo m :> IAdaptiveValue |> Some
-                                    | _ ->
-                                        ownTrafo :> IAdaptiveValue |> Some
-
+                        | "Antialias" -> aa :> IAdaptiveValue |> ValueSome
+                        | "FillGlyphs" -> fill :> IAdaptiveValue |> ValueSome
+                        | "DepthBias" -> bias :> IAdaptiveValue |> ValueSome
+                        | "ModelTrafo" ->
+                            match old.TryGetUniform(scope, sem) with
+                            | ValueSome (:? aval<Trafo3d> as m) ->
+                                AVal.map2 (*) ownTrafo m :> IAdaptiveValue |> ValueSome
                             | _ ->
-                                old.TryGetUniform(scope, sem)
+                                ownTrafo :> IAdaptiveValue |> ValueSome
+
+                        | _ ->
+                            old.TryGetUniform(scope, sem)
 
                     member x.Dispose() =
                         old.Dispose()
@@ -429,24 +429,24 @@ module Sg =
                 { new IUniformProvider with
                     member x.TryGetUniform(scope, sem) =
                         match string sem with
-                            | "BoundaryColor" -> t.BoundaryColor |> AVal.constant :> IAdaptiveValue |> Some
-                            | "ModelTrafo" ->
-                                let scaleTrafo =
-                                    bounds |> AVal.map (fun bounds ->
-                                        if bounds.IsValid then
-                                            Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
-                                            Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
-                                        else
-                                            Trafo3d.Scale(0.0)
-                                    )
+                        | "BoundaryColor" -> t.BoundaryColor |> AVal.constant :> IAdaptiveValue |> ValueSome
+                        | "ModelTrafo" ->
+                            let scaleTrafo =
+                                bounds |> AVal.map (fun bounds ->
+                                    if bounds.IsValid then
+                                        Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
+                                        Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
+                                    else
+                                        Trafo3d.Scale(0.0)
+                                )
 
-                                match old.TryGetUniform(scope, sem) with
-                                    | Some (:? aval<Trafo3d> as m) ->
-                                        AVal.map2 (*) scaleTrafo m :> IAdaptiveValue |> Some
-                                    | _ ->
-                                        scaleTrafo :> IAdaptiveValue |> Some
+                            match old.TryGetUniform(scope, sem) with
+                            | ValueSome (:? aval<Trafo3d> as m) ->
+                                AVal.map2 (*) scaleTrafo m :> IAdaptiveValue |> ValueSome
+                            | _ ->
+                                scaleTrafo :> IAdaptiveValue |> ValueSome
 
-                            | _ -> old.TryGetUniform(scope, sem)
+                        | _ -> old.TryGetUniform(scope, sem)
 
                     member x.Dispose() =
                         old.Dispose()
