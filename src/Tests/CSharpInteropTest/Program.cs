@@ -13,6 +13,11 @@ using System.Collections.Generic;
 
 namespace CSharpInteropTest
 {
+    internal interface IMyBackendTexture : IBackendTexture
+    {
+
+    }
+
     class Program
     {
         static void Main(string[] args)
@@ -82,6 +87,9 @@ namespace CSharpInteropTest
                     .VertexIndices(geo.IndexArray)
                     .WriteBuffers(buffers)
                     .WriteBuffers(WriteBuffer.Stencil);
+
+            ChangeableValue<IMyBackendTexture> adaptiveTex = null;
+            adaptiveTex.GetOutputView();
         }
     }
 }

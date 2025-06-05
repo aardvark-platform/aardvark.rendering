@@ -192,13 +192,13 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
         let inline createAttachment (sem : Symbol) (format : TextureFormat) : aval<IFramebufferOutput> =
             if signature.LayerCount > 1 then
                 let tex = this.CreateTexture2DArray(size, format, samples = signature.Samples, count = signature.LayerCount)
-                this.CreateTextureAttachment(tex)
+                tex.GetOutputView()
             else
                 if writeOnly |> Set.contains sem then
                     this.CreateRenderbuffer(size, format, signature.Samples)
                 else
                     let tex = this.CreateTexture2D(size, format, samples = signature.Samples)
-                    this.CreateTextureAttachment(tex, 0)
+                    tex.GetOutputView()
 
         let atts = SymDict.empty
 
@@ -259,7 +259,7 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
                     this.CreateTextureCube(size, format, levels)
                 )
 
-            this.CreateTextureAttachment(tex, int face, level) :> aval<_>
+            tex.GetOutputView(level, int face) :> aval<_>
 
         let attachments =
             CubeMap.init levels (fun face level ->
