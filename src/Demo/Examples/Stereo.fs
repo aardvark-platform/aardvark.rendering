@@ -315,8 +315,8 @@ module Stereo =
 
         let framebuffer =
             runtime.CreateFramebuffer(signature, [
-                DefaultSemantic.Colors, runtime.CreateTextureAttachment(colors)
-                DefaultSemantic.DepthStencil, runtime.CreateTextureAttachment(depth)
+                DefaultSemantic.Colors, colors.GetOutputView()
+                DefaultSemantic.DepthStencil, depth.GetOutputView()
             ])
 
         let cameraView = 

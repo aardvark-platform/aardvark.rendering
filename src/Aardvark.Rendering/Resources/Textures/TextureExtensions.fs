@@ -1053,7 +1053,7 @@ type IBackendTextureExtensions private() =
     /// Creates an output view of the texture with the given level and slice.
     /// In case the texture is an array or a cube and slice is negative, all items or faces are selected as texture layers.
     ///</summary>
-    ///<param name="texture">The texture.</param>
+    ///<param name="texture">The texture of the output view.</param>
     ///<param name="aspect">The aspect of the texture.</param>
     ///<param name="level">The level for the output view. Default is 0.</param>
     ///<param name="slice">The slice for the output view or -1 for all slices. Default is -1.</param>
@@ -1070,7 +1070,7 @@ type IBackendTextureExtensions private() =
     /// Creates an output view of the texture with the given level and slice.
     /// In case the texture is an array or a cube and slice is negative, all items or faces are selected as texture layers.
     ///</summary>
-    ///<param name="texture">The texture.</param>
+    ///<param name="texture">The texture of the output view.</param>
     ///<param name="level">The level for the output view. Default is 0.</param>
     ///<param name="slice">The slice for the output view or -1 for all slices. Default is -1.</param>
     [<Extension>]

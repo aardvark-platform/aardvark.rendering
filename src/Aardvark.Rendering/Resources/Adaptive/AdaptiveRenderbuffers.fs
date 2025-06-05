@@ -76,7 +76,7 @@ module private AdaptiveRenderbufferTypes =
             member x.GetValue(t, rt) = x.GetValue(t, rt) :> IFramebufferOutput
             member x.Name with get() = x.Name and set name = x.Name <- name
 
-    type AdaptiveTextureAttachment<'T when 'T :> IBackendTexture>(texture : IAdaptiveResource<'T>, slice : aval<int>, level : aval<int>) =
+    type AdaptiveTextureAttachment<'T when 'T :> IBackendTexture>(texture : aval<'T>, aspect : aval<TextureAspect>, level : aval<int>, slice : aval<int>) =
         inherit AdaptiveResource<IFramebufferOutput>()
 
         let format = texture |> AVal.mapNonAdaptive _.Format
@@ -88,9 +88,10 @@ module private AdaptiveRenderbufferTypes =
 
         override x.Compute(token : AdaptiveToken, t : RenderToken) =
             let tex = texture.GetValue(token, t)
-            let slice = slice.GetValue token
+            let aspect = aspect.GetValue token
             let level = level.GetValue token
-            tex.GetOutputView(level, slice)
+            let slice = slice.GetValue token
+            tex.GetOutputView(aspect, level, slice)
 
         interface IAdaptiveFramebufferOutput with
             member x.Format = format
@@ -120,29 +121,68 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
                                      [<Optional; DefaultParameterValue(1)>] samples : int) =
         AdaptiveRenderbuffer(this, ~~format, ~~samples, size) :> IAdaptiveRenderbuffer
 
-
-    ///<summary>Creates a framebuffer attachment from the given adaptive texture.</summary>
-    ///<param name="texture">The input texture.</param>
-    ///<param name="slice">The slice of the texture to use as output. If negative, all slices are used.</param>
-    ///<param name="level">The mip level of the texture to use as output.</param>
+    ///<summary>
+    /// Creates an output view of the texture with the given level and slice.
+    /// In case the texture is an array or a cube and slice is negative, all items or faces are selected as texture layers.
+    ///</summary>
+    ///<param name="texture">The texture of the output view.</param>
+    ///<param name="aspect">The aspect of the texture.</param>
+    ///<param name="level">The level for the output view.</param>
+    ///<param name="slice">The slice for the output view or -1 for all slices.</param>
     [<Extension>]
+    static member GetOutputView(texture : aval<#IBackendTexture>, aspect : aval<TextureAspect>, level : aval<int>, slice : aval<int>) =
+        AdaptiveTextureAttachment(texture, aspect, level, slice) :> IAdaptiveFramebufferOutput
+
+    ///<summary>
+    /// Creates an output view of the texture with the given level and slice.
+    /// In case the texture is an array or a cube and slice is negative, all items or faces are selected as texture layers.
+    ///</summary>
+    ///<param name="texture">The texture of the output view.</param>
+    ///<param name="aspect">The aspect of the texture.</param>
+    ///<param name="level">The level for the output view. Default is 0.</param>
+    ///<param name="slice">The slice for the output view or -1 for all slices. Default is -1.</param>
+    [<Extension>]
+    static member GetOutputView(texture : aval<#IBackendTexture>, aspect : TextureAspect,
+                                [<Optional; DefaultParameterValue(0)>] level : int,
+                                [<Optional; DefaultParameterValue(-1)>] slice : int) =
+        AdaptiveTextureAttachment(texture, ~~aspect, ~~level, ~~slice) :> IAdaptiveFramebufferOutput
+
+    ///<summary>
+    /// Creates an output view of the texture with the given level and slice.
+    /// In case the texture is an array or a cube and slice is negative, all items or faces are selected as texture layers.
+    ///</summary>
+    ///<param name="texture">The texture of the output view.</param>
+    ///<param name="level">The level for the output view.</param>
+    ///<param name="slice">The slice for the output view or -1 for all slices.</param>
+    [<Extension>]
+    static member GetOutputView(texture : aval<#IBackendTexture>, level : aval<int>, slice : aval<int>) =
+        let aspect = texture |> AVal.mapNonAdaptive _.Format.Aspect
+        AdaptiveTextureAttachment(texture, aspect, level, slice) :> IAdaptiveFramebufferOutput
+
+    ///<summary>
+    /// Creates an output view of the texture with the given level and slice.
+    /// In case the texture is an array or a cube and slice is negative, all items or faces are selected as texture layers.
+    ///</summary>
+    ///<param name="texture">The texture of the output view.</param>
+    ///<param name="level">The level for the output view. Default is 0.</param>
+    ///<param name="slice">The slice for the output view or -1 for all slices. Default is -1.</param>
+    [<Extension>]
+    static member GetOutputView(texture : aval<#IBackendTexture>,
+                                [<Optional; DefaultParameterValue(0)>] level : int,
+                                [<Optional; DefaultParameterValue(-1)>] slice : int) =
+        let aspect = texture |> AVal.mapNonAdaptive _.Format.Aspect
+        AdaptiveTextureAttachment(texture, aspect, ~~level, ~~slice) :> IAdaptiveFramebufferOutput
+
+    [<Extension; System.Obsolete("Use texture.GetOutputView() instead. Note that slice and level parameter positions are switched.")>]
     static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#IBackendTexture>, slice : aval<int>, level : aval<int>) =
-        AdaptiveTextureAttachment(texture, slice, level) :> IAdaptiveFramebufferOutput
+        texture.GetOutputView(level, slice)
 
-    ///<summary>Creates a framebuffer attachment from the given adaptive texture.
-    /// If the input texture is mipmapped, the first level is used.</summary>
-    ///<param name="texture">The input texture.</param>
-    ///<param name="slice">The slice of the texture to use as output. If negative, all slices are used.</param>
-    [<Extension>]
+    [<Extension; System.Obsolete("Use texture.GetOutputView() instead. Note that slice and level parameter positions are switched.")>]
     static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#IBackendTexture>, slice : aval<int>) =
-        AdaptiveTextureAttachment(texture, slice, ~~0) :> IAdaptiveFramebufferOutput
+        texture.GetOutputView(~~0, slice)
 
-    ///<summary>Creates a framebuffer attachment from the given adaptive texture.</summary>
-    ///<param name="texture">The input texture.</param>
-    ///<param name="slice">The slice of the texture to use as output. If negative, all slices are used. Default is -1.</param>
-    ///<param name="level">The mip level of the texture to use as output. Default is 0.</param>
-    [<Extension>]
+    [<Extension; System.Obsolete("Use texture.GetOutputView() instead. Note that slice and level parameter positions are switched.")>]
     static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#IBackendTexture>,
                                           [<Optional; DefaultParameterValue(-1)>] slice : int,
                                           [<Optional; DefaultParameterValue(0)>] level : int) =
-        AdaptiveTextureAttachment(texture, ~~slice, ~~level) :> IAdaptiveFramebufferOutput
+        texture.GetOutputView(level, slice)
