@@ -44,27 +44,20 @@ module AdaptiveGeometryCustom =
             buffer
 
     let ofIndexedGeometry (instanceAttributes : list<Symbol * IAdaptiveValue>) (ig : IndexedGeometry) =
-        let anyAtt = (ig.IndexedAttributes |> Seq.head).Value
+        let indexBuffer =
+            if ig.IsIndexed then BufferView.ofArray ig.IndexArray
+            else Unchecked.defaultof<_>
 
-        let faceVertexCount, index =
-            match ig.IndexArray with
-                | null -> anyAtt.Length, None
-                | index -> index.Length, Some (BufferView.ofArray index)
+        let vertexAttributes =
+            ig.IndexedAttributes |> SymDict.map (fun _ arr ->
+                let res = ArrayResource(arr)
+                BufferView(res, arr.GetType().GetElementType())
+            )
 
-        let vertexCount =
-            anyAtt.Length
-
-        {
-            FaceVertexCount = faceVertexCount
-            VertexCount = vertexCount
-            Indices = index
-            VertexAttributes =
-                ig.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ arr ->
-                    let res = ArrayResource(arr)
-                    BufferView(res, arr.GetType().GetElementType())
-                )
-            InstanceAttributes = Map.ofList instanceAttributes
-        }
+        AdaptiveGeometry(
+            ig.FaceVertexCount, ig.VertexCount, indexBuffer,
+            vertexAttributes, Dictionary.ofList instanceAttributes
+        )
 
 [<AutoOpen>]
 module Shader =

@@ -3,35 +3,11 @@
 open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.SceneGraph
-open Aardvark.Base.Monads.State
 
 open System
-open System.Threading
 open System.Collections.Generic
 open System.Runtime.CompilerServices
-
-#nowarn "9"
-#nowarn "51"
-
-[<ReferenceEquality; NoComparison>]
-type AdaptiveGeometry =
-    {
-        FaceVertexCount    : int
-        VertexCount        : int
-        Indices            : Option<BufferView>
-        VertexAttributes   : Map<Symbol, BufferView>
-        InstanceAttributes : Map<Symbol, IAdaptiveValue>
-    }
-
-/// NOTE: temporary data structure to avoid conflicts and will be reworked in 5.6 (probably become record)
-[<NoComparison>]
-type PooledGeometry (faceVertexCount : int, vertexCount : int, indices : voption<BufferView>, vertexAttributes : SymbolDict<BufferView>, instanceAttributes : SymbolDict<IAdaptiveValue>) =
-    member x.FaceVertexCount = faceVertexCount
-    member x.VertexCount = vertexCount
-    member x.Indices = indices
-    member x.VertexAttributes = vertexAttributes
-    member x.InstanceAttributes = instanceAttributes
+open System.Runtime.InteropServices
 
 type GeometrySignature =
     {
@@ -39,83 +15,6 @@ type GeometrySignature =
         VertexAttributeTypes   : Map<Symbol, Type>
         InstanceAttributeTypes : Map<Symbol, Type>
     }
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module GeometrySignature =
-
-    let create (indexType : Type) (vertexAttributeTypes : Map<Symbol, Type>) (instanceAttributeTypes : Map<Symbol, Type>) =
-        { IndexType              = indexType
-          VertexAttributeTypes   = vertexAttributeTypes
-          InstanceAttributeTypes = instanceAttributeTypes }
-
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module AdaptiveGeometry =
-
-    let ofIndexedGeometry (instanceAttributes : list<Symbol * IAdaptiveValue>) (ig : IndexedGeometry) =
-        let anyAtt = (ig.IndexedAttributes |> Seq.head).Value
-
-        let faceVertexCount, index =
-            match ig.IndexArray with
-                | null -> anyAtt.Length, None
-                | index -> index.Length, Some (BufferView.ofArray index)
-
-        let vertexCount =
-            anyAtt.Length
-
-        {
-            FaceVertexCount = faceVertexCount
-            VertexCount = vertexCount
-            Indices = index
-            VertexAttributes = ig.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ -> BufferView.ofArray)
-            InstanceAttributes = Map.ofList instanceAttributes
-        }
-
-
-type private LayoutManager<'a when 'a : equality>(cmp : IEqualityComparer<'a>)=
-
-    let manager = MemoryManager.createNop()
-    let store = Dictionary<'a, managedptr>(cmp)
-    let cnts = Dictionary<managedptr, struct('a * ref<int>)>()
-
-    member x.Alloc(key : 'a, size : int) =
-        match store.TryGetValue key with
-        | (true, v) ->
-            let struct(_,r) = cnts.[v]
-            Interlocked.Increment &r.contents |> ignore
-            v
-        | _ ->
-            let v = manager.Alloc (nativeint size)
-            let r = ref 1
-            cnts.[v] <- (key,r)
-            store.[key] <- (v)
-            v
-
-
-    member x.TryAlloc(key : 'a, size : int) =
-        match store.TryGetValue key with
-        | (true, v) ->
-            let struct(_,r) = cnts.[v]
-            Interlocked.Increment &r.contents |> ignore
-            false, v
-        | _ ->
-            let v = manager.Alloc (nativeint size)
-            let r = ref 1
-            cnts.[v] <- (key,r)
-            store.[key] <- (v)
-            true, v
-
-    member x.Free(value : managedptr) =
-        match cnts.TryGetValue value with
-        | (true, (k,r)) ->
-            if Interlocked.Decrement &r.contents = 0 then
-                manager.Free value
-                cnts.Remove value |> ignore
-                store.Remove k |> ignore
-        | _ ->
-            ()
-
-    new() = LayoutManager(null)
 
 type internal PoolResources =
     {
@@ -126,7 +25,7 @@ type internal PoolResources =
         Disposables : List<IDisposable>
     }
 
-and ManagedDrawCall internal(call : DrawCallInfo, poolResources : voption<PoolResources>) =
+and ManagedDrawCall internal(call: DrawCallInfo, poolResources: PoolResources voption) =
     static let empty = new ManagedDrawCall(DrawCallInfo())
 
     static member Empty = empty
@@ -135,16 +34,14 @@ and ManagedDrawCall internal(call : DrawCallInfo, poolResources : voption<PoolRe
 
     member internal x.Resources = poolResources
 
-    new (call : DrawCallInfo) =
+    new (call: DrawCallInfo) =
         new ManagedDrawCall(call, ValueNone)
 
-    internal new (call : DrawCallInfo, poolResources : PoolResources) =
+    internal new (call: DrawCallInfo, poolResources: PoolResources) =
         new ManagedDrawCall(call, ValueSome poolResources)
 
     member x.Dispose() =
-        poolResources |> ValueOption.iter (fun r ->
-            r.Pool.Free(x)
-        )
+        poolResources |> ValueOption.iter (_.Pool.Free(x))
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -162,59 +59,11 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
     static let zero : byte[] = Array.zeroCreate 4096
 
-    
-    static let cmp = { new IEqualityComparer<obj> with
+    let indexManager = LayoutManager<struct (BufferView * int)>()
+    let vertexManager = LayoutManager<IDictionary<Symbol, BufferView>>(Dictionary.StructuralComparer.Instance)
+    let instanceManager = LayoutManager<IDictionary<Symbol, IAdaptiveValue>>(Dictionary.StructuralComparer.Instance)
 
-                   // NOTE: SymbolDict enumeration only guaranteed to be equal when created "identical" (order of inserts, resizes, capacity, ...)
-                   //       GetHashCode -> build sum of key and value hashes
-                   //       Equals -> lookup each
-
-                   // NOTE2: Implementing a SymbolDict (SymbolMap?) that keeps it entries sorted by hash might also be an option
-
-                   member x.Equals(a, b) : bool =
-                        if Object.ReferenceEquals(a, b) then
-                            true
-                        else 
-                            match a with
-                            | :? SymbolDict<BufferView> as d1 ->
-                                match b with 
-                                | :? SymbolDict<BufferView> as d2 ->
-                                    if d1.Count <> d2.Count then
-                                        false
-                                    else
-                                        let mutable e1 = d1.GetEnumerator()
-                                        let mutable equal = true
-                                        while equal && e1.MoveNext() do
-                                            let kva = e1.Current
-                                            equal <- 
-                                                match d2.TryGetValue kva.Key with
-                                                | (true, vb) -> 
-                                                    kva.Value.Equals(vb)
-                                                | _ -> false
-                                        equal
-
-                                | _ -> false
-                            | _ -> a.Equals(b)
-
-                   member x.GetHashCode (obj: obj): int = 
-                       match obj with 
-                       | :? SymbolDict<BufferView> as d ->
-                                let mutable symHashSum = 0
-                                let mutable valHashSum = 0
-                                let mutable e = d.GetEnumerator()
-                                while (e.MoveNext()) do
-                                    let v = e.Current
-                                    symHashSum <- symHashSum + v.Key.GetHashCode()
-                                    valHashSum <- valHashSum + v.Value.GetHashCode()
-                                Aardvark.Base.HashCode.Combine(symHashSum, valHashSum)
-                       | _ -> obj.GetHashCode()
-                }
-
-    let indexManager = LayoutManager<struct(obj * int)>(null)
-    let vertexManager = LayoutManager<obj>(cmp)
-    let instanceManager = LayoutManager<obj>(cmp)
-
-    let toDict f = Map.toSeq >> Seq.map f >> SymDict.ofSeq
+    let toDict f = Map.toArray >> Array.map f >> Dictionary.ofArrayV
 
     let createManagedBuffer n t u s =
         let b = runtime.CreateManagedBuffer(t, u, s)
@@ -304,19 +153,11 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
     ///<summary>Adds the given geometry to the pool and returns a managed draw call.</summary>
     ///<param name="geometry">The geometry to add.</param>
-    member x.Add(geometry : AdaptiveGeometry) =
-        x.Add(geometry, 0, geometry.FaceVertexCount)
-
-    ///<summary>Adds the given geometry to the pool and returns a managed draw call.</summary>
-    ///<param name="geometry">The geometry to add.</param>
-    member x.Add(geometry : PooledGeometry) =
-        x.Add(geometry, 0, geometry.FaceVertexCount)
-
-    ///<summary>Adds the given geometry to the pool and returns a managed draw call.</summary>
-    ///<param name="geometry">The geometry to add.</param>
-    ///<param name="indexOffset">An offset added to the FirstIndex field of the resulting draw call.</param>
-    ///<param name="faceVertexCount">The face vertex count of the resulting draw call.</param>
-    member x.Add(geometry : AdaptiveGeometry, indexOffset : int, faceVertexCount : int) =
+    ///<param name="indexOffset">An offset added to the FirstIndex field of the resulting draw call. Default is zero.</param>
+    ///<param name="faceVertexCount">The face vertex count of the resulting draw call. Ignored if greater than <see cref="geometry.FaceVertexCount"/>, default is <see cref="Int32.MaxValue"/>.</param>
+    member x.Add(geometry : AdaptiveGeometry,
+                 [<Optional; DefaultParameterValue(0)>] indexOffset : int,
+                 [<Optional; DefaultParameterValue(Int32.MaxValue)>] faceVertexCount : int) =
         let faceVertexCount = min faceVertexCount geometry.FaceVertexCount
 
         if faceVertexCount <= 0 then
@@ -329,88 +170,10 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
                 let vertexPtr = vertexManager.Alloc(geometry.VertexAttributes, vertexCount)
                 let vertexRange = Range1l(int64 vertexPtr.Offset, int64 vertexPtr.Offset + int64 vertexCount - 1L)
-                for (k,_) in vertexBufferTypes do
-                    let target = vertexBuffers.[k]
-                    match Map.tryFind k geometry.VertexAttributes with
-                    | Some v ->
-                        try
-                            target.Add(v, vertexRange) |> ds.Add
-                        with
-                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                            failf "cannot convert vertex attribute '%A' from %A to %A" k exn.Source exn.Target
-
-                    | None ->
-                        target.Set(zero, vertexRange)
-
-                let instancePtr = instanceManager.Alloc(geometry.InstanceAttributes, 1)
-                let instanceIndex = int instancePtr.Offset
-                for (k,_) in uniformTypes do
-                    let target = instanceBuffers.[k]
-                    match Map.tryFind k geometry.InstanceAttributes with
-                    | Some v ->
-                        try
-                            target.Add(v, instanceIndex) |> ds.Add
-                        with
-                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                            failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
-
-                    | None ->
-                        target.Set(zero, Range1l(int64 instanceIndex, int64 instanceIndex))
-
-                let isNew, indexPtr = indexManager.TryAlloc((geometry.Indices, fvc), fvc)
-                let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
-                match geometry.Indices with
-                | Some v -> indexBuffer.Add(v, indexRange) |> ds.Add
-                | None ->
-                    if isNew then
-                        let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> signature.IndexType
-                        let data = Array.init fvc id |> conv
-                        indexBuffer.Set(data, indexRange)
-
-                let resources =
-                    {
-                        Pool        = x
-                        IndexPtr    = indexPtr
-                        VertexPtr   = vertexPtr
-                        InstancePtr = instancePtr
-                        Disposables = ds
-                    }
-
-                let call =
-                    DrawCallInfo(
-                        FaceVertexCount = faceVertexCount,
-                        FirstIndex = int indexPtr.Offset + indexOffset,
-                        FirstInstance = int instancePtr.Offset,
-                        InstanceCount = 1,
-                        BaseVertex = int vertexPtr.Offset
-                    )
-
-                let mdc = new ManagedDrawCall(call, resources)
-                drawCalls.Add(mdc) |> ignore
-                mdc
-            )
-
-    ///<summary>Adds the given geometry to the pool and returns a managed draw call.</summary>
-    ///<param name="geometry">The geometry to add.</param>
-    ///<param name="indexOffset">An offset added to the FirstIndex field of the resulting draw call.</param>
-    ///<param name="faceVertexCount">The face vertex count of the resulting draw call.</param>
-    member x.Add(geometry : PooledGeometry, indexOffset : int, faceVertexCount : int) =
-        let faceVertexCount = min faceVertexCount geometry.FaceVertexCount
-
-        if faceVertexCount <= 0 then
-            ManagedDrawCall.Empty
-        else
-            lock x (fun () ->
-                let ds = List()
-                let fvc = geometry.FaceVertexCount
-                let vertexCount = geometry.VertexCount
-
-                let vertexPtr = vertexManager.Alloc(geometry.VertexAttributes, vertexCount)
-                let vertexRange = Range1l(int64 vertexPtr.Offset, int64 vertexPtr.Offset + int64 vertexCount - 1L)
-                for (k,_) in vertexBufferTypes do
+                for k, _ in vertexBufferTypes do
                     let target = vertexBuffers.[k]
                     match geometry.VertexAttributes.TryGetValue k with
-                    | (true, v) ->
+                    | true, v ->
                         try
                             target.Add(v, vertexRange) |> ds.Add
                         with
@@ -422,10 +185,10 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
                 let instancePtr = instanceManager.Alloc(geometry.InstanceAttributes, 1)
                 let instanceIndex = int instancePtr.Offset
-                for (k,_) in uniformTypes do
+                for k, _ in uniformTypes do
                     let target = instanceBuffers.[k]
                     match geometry.InstanceAttributes.TryGetValue k with
-                    | (true, v) ->
+                    | true, v ->
                         try
                             target.Add(v, instanceIndex) |> ds.Add
                         with
@@ -435,15 +198,22 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                     | _ ->
                         target.Set(zero, Range1l(int64 instanceIndex, int64 instanceIndex))
 
-                let isNew, indexPtr = indexManager.TryAlloc((geometry.Indices, fvc), fvc)
-                let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
-                match geometry.Indices with
-                | ValueSome v -> indexBuffer.Add(v, indexRange) |> ds.Add
-                | ValueNone ->
-                    if isNew then
-                        let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> signature.IndexType
-                        let data = Array.init fvc id |> conv
-                        indexBuffer.Set(data, indexRange)
+                let indexPtr =
+                    if geometry.IsIndexed then
+                        let indexPtr = indexManager.Alloc((geometry.Indices, 0), fvc)
+                        let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
+                        indexBuffer.Add(geometry.Indices, indexRange) |> ds.Add
+                        indexPtr
+                    else
+                        let isNew, indexPtr = indexManager.TryAlloc((Unchecked.defaultof<_>, fvc), fvc)
+                        let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
+
+                        if isNew then
+                            let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> signature.IndexType
+                            let data = Array.init fvc id |> conv
+                            indexBuffer.Set(data, indexRange)
+
+                        indexPtr
 
                 let resources =
                     {
@@ -549,7 +319,6 @@ type IRuntimePoolExtensions private() =
 
 [<AutoOpen>]
 module ManagedPoolSg =
-    open System.Runtime.InteropServices
 
     module Sg =
         type PoolNode(pool : ManagedPool, calls : aset<ManagedDrawCall>, mode : IndexedGeometryMode,
@@ -597,9 +366,7 @@ module ``Pool Semantics`` =
 
             let calls =
                 scope.IsActive
-                |> ASet.bind (fun isActive ->
-                    if isActive then p.Calls else ASet.empty
-                )
+                |> ASet.bind (fun isActive -> if isActive then p.Calls else ASet.empty)
                 |> DrawCallBuffer.create pool.Runtime p.Storage
 
             let mutable ro = Unchecked.defaultof<RenderObject>
