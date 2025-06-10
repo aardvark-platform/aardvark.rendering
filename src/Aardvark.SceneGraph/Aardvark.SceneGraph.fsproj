@@ -33,6 +33,8 @@
     <Compile Include="Semantics\Adapter.fs" />
     <Compile Include="Semantics\Delay.fs" />
     <Compile Include="Semantics\Environment.fs" />
+    <Compile Include="Pools\ManagedPoolUtilities.fs" />
+    <Compile Include="Pools\AdaptiveGeometry.fs" />
     <Compile Include="Pools\ManagedPool.fs" />
     <Compile Include="Pools\ManagedTracePool.fs" />
     <Compile Include="HighLevelSceneGraph\LodTree.fs" />
