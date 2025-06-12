@@ -514,8 +514,7 @@ let main argv =
 
             let aabbs =
                 sphereOffsets |> Array.map (fun offset ->
-                    BoundingBoxes.ofCenterAndRadius offset 0.2
-                    |> BoundingBoxes.flags GeometryFlags.Opaque
+                    BoundingBoxes.FromCenterAndRadius(offset, 0.2, GeometryFlags.Opaque)
                 )
                 |> TraceGeometry.AABBs
 
@@ -532,7 +531,7 @@ let main argv =
 
             TraceObject.ofGeometry aabbs
             |> TraceObject.geometryAttribute (GeometryAttribute.Colors, colors)
-            |> TraceObject.hitGroups (HitGroup.Sphere |> List.replicate 6)
+            |> TraceObject.hitGroups (HitGroup.Sphere |> Array.replicate 6)
             |> TraceObject.transform trafo
             |> TraceObject.mask 0x80
 

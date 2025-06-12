@@ -99,12 +99,8 @@ module Culling =
             |> makeSg IndexedGeometryMode.TriangleStrip
 
         let private makeTraceGeometry vertices indices =
-            TraceGeometry.ofTriangleMesh
-                { Vertices   = VertexData.ofArray vertices
-                  Indices    = Some <| IndexData.ofArray indices
-                  Transform  = Trafo3d.Identity
-                  Primitives = 2u
-                  Flags      = GeometryFlags.None }
+            let mesh = TriangleMesh(vertices, indices, Trafo3d.Identity)
+            TraceGeometry.Triangles [| mesh |]
 
         let alternatingTrace =
             makeTraceGeometry

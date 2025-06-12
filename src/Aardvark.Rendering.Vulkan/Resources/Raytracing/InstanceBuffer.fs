@@ -14,10 +14,10 @@ module internal InstanceBuffer =
     [<AutoOpen>]
     module private Helpers =
 
-        let private getFlags (frontFace : WindingOrder option) (geometryMode : GeometryMode) =
+        let private getFlags (frontFace : WindingOrder voption) (geometryMode : GeometryMode) =
             let c =
                 frontFace |> (function
-                    | Some order ->
+                    | ValueSome order ->
                         if order = WindingOrder.CounterClockwise then
                             VkGeometryInstanceFlagsKHR.TriangleFrontCounterclockwiseBit
                         else

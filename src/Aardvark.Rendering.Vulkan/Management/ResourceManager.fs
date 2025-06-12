@@ -1582,7 +1582,7 @@ module Resources =
 
 
         type ShaderBindingTableResource(owner : IResourceCache, key : list<obj>,
-                                        pipeline : IResourceLocation<RaytracingPipeline>, hitConfigs : aval<Set<HitConfig>>) =
+                                        pipeline : IResourceLocation<RaytracingPipeline>, hitConfigs : aval<Set<Symbol[]>>) =
             inherit AbstractResourceLocationWithPointer<ShaderBindingTable, ShaderBindingTableHandle>(owner, key)
 
             let mutable handle : Option<ShaderBindingTable> = None
@@ -2144,7 +2144,7 @@ type ResourceManager(device : Device) =
         )
 
     member x.CreateShaderBindingTable(pipeline : IResourceLocation<Raytracing.RaytracingPipeline>,
-                                      hitConfigs : aval<Set<Raytracing.HitConfig>>) =
+                                      hitConfigs : aval<Set<Symbol[]>>) =
 
         shaderBindingTableCache.GetOrCreate(
             [ pipeline :> obj; hitConfigs :> obj ],

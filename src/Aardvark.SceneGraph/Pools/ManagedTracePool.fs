@@ -33,7 +33,6 @@ type TraceGeometryInfo =
         [<FieldOffset(16)>] InstanceAttributeIndex : int32
     }
 
-
 [<AutoOpen>]
 module FShadeInterop =
     open FShade
@@ -47,16 +46,16 @@ module FShadeInterop =
     module TraceGeometryInfo =
 
         [<ReflectedDefinition; Inline>]
-        let ofGeometryInstance (input : RaytracingInputTypes.GeometryInstance) =
+        let ofGeometryInstance (input: RaytracingInputTypes.GeometryInstance) =
             let id = input.instanceCustomIndex + input.geometryIndex
             uniform.GeometryInfos.[id]
 
         [<ReflectedDefinition; Inline>]
-        let ofRayIntersection (input : RayIntersectionInput) =
+        let ofRayIntersection (input: RayIntersectionInput) =
             ofGeometryInstance input.geometry
 
         [<ReflectedDefinition; Inline>]
-        let ofRayHit (input : RayHitInput<'T, 'U>) =
+        let ofRayHit (input: RayHitInput<'T, 'U>) =
             ofGeometryInstance input.geometry
 
 
@@ -79,327 +78,17 @@ type TraceObjectSignature =
         InstanceAttributeTypes : Map<Symbol, Type>
     }
 
-[<CLIMutable>]
-type TraceObject =
-    {
-        /// Geometry data of the instance.
-        Geometry : AdaptiveTraceGeometry
-
-        /// Usage flag of the underlying acceleration structure.
-        Usage    : AccelerationStructureUsage
-
-        /// Vertex attributes of each geometry (ignored for AABBs).
-        VertexAttributes   : Map<Symbol, BufferView> list
-
-        /// Face attributes of each geometry (ignored for AABBs).
-        FaceAttributes     : Map<Symbol, BufferView> list
-
-        /// Attributes of each geometry.
-        GeometryAttributes : Map<Symbol, IAdaptiveValue> list
-
-        /// Attributes of the instance.
-        InstanceAttributes : Map<Symbol, IAdaptiveValue>
-
-        /// The hit groups for each geometry of the instance.
-        HitGroups    : aval<HitConfig>
-
-        /// The transformation of the instance.
-        Transform    : aval<Trafo3d>
-
-        /// The winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the instance.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
-        FrontFace    : aval<WindingOrder option>
-
-        /// Optionally overrides flags set in the geometry.
-        GeometryMode : aval<GeometryMode>
-
-        /// Visibility mask that is compared against the mask specified by TraceRay().
-        Mask         : aval<VisibilityMask>
-    }
-
-[<AutoOpen>]
-module TraceObjectFSharp =
-    open FSharp.Data.Adaptive.Operators
-
-    // TODO: Remove once this is moved to base
-    module TraceObjectUtilities =
-
-        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-        module Map =
-            let mapKeys (mapping : 'T -> 'U) (map : Map<'T, 'V>) =
-                if typeof<'T> <> typeof<'U> then
-                    map |> Map.toList |> List.map (fun (k, v) -> mapping k, v) |> Map.ofList
-                else
-                    unbox map
-
-        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-        module List =
-            let updateByIndex (index : int) (mapping : 'T -> 'T) (list : 'T list) =
-                list |> List.mapi (fun i v -> if i <> index then v else mapping v)
-
-        let inline (~~~) (value : 'T) : IAdaptiveValue =
-            if typeof<IAdaptiveValue>.IsAssignableFrom typeof<'T> then
-                unbox value
-            else
-                ~~value
-
-    open TraceObjectUtilities
-
-    type TraceObject with
-
-        /// Creates an empty trace object from the given adaptive trace geometry.
-        static member inline ofAdaptiveGeometry (geometry : AdaptiveTraceGeometry) =
-            { Geometry           = geometry
-              Usage              = AccelerationStructureUsage.Static
-              VertexAttributes   = Map.empty |> List.replicate geometry.Count
-              FaceAttributes     = Map.empty |> List.replicate geometry.Count
-              GeometryAttributes = Map.empty |> List.replicate geometry.Count
-              InstanceAttributes = Map.empty
-              HitGroups          = AVal.constant []
-              Transform          = AVal.constant Trafo3d.Identity
-              FrontFace          = AVal.constant None
-              GeometryMode       = AVal.constant GeometryMode.Default
-              Mask               = AVal.constant VisibilityMask.All }
-
-        /// Creates an empty trace object from the given trace geometry.
-        static member inline ofGeometry (geometry : TraceGeometry) =
-            geometry |> AdaptiveTraceGeometry.constant |> TraceObject.ofAdaptiveGeometry
-
-        /// Applies the usage mode for the given trace object.
-        static member inline usage (usage : AccelerationStructureUsage) (obj : TraceObject) =
-            { obj with Usage = usage }
-
-        /// Sets vertex attributes for the given trace object.
-        /// The names can be string or Symbol.
-        static member inline vertexAttributes (attributes : Map< ^Name, BufferView> seq) =
-            let conv = Symbol.convert Symbol.Converters.untyped
-            let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
-            fun (obj : TraceObject) -> { obj with VertexAttributes = attributes }
-
-        /// Sets vertex attributes for the given trace object with a single geometry.
-        /// The names can be string or Symbol.
-        static member inline vertexAttributes (attributes : Map< ^Name, BufferView>) =
-            TraceObject.vertexAttributes [attributes]
-
-        /// Sets a vertex attribute for the given trace object.
-        /// The name can be a string or Symbol.
-        static member inline vertexAttribute (name : ^Name, values : seq<BufferView>) =
-            let sym = name |> Symbol.convert Symbol.Converters.untyped
-            let values = Seq.asArray values
-
-            fun (obj : TraceObject) ->
-                (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
-                    { inst with VertexAttributes = inst.VertexAttributes |> List.updateByIndex geometry (Map.add sym value)}
-                )
-
-        /// Sets a vertex attribute for the given trace object with a single geometry.
-        /// The name can be a string or Symbol.
-        static member inline vertexAttribute (name : ^Name, values : BufferView) =
-            TraceObject.vertexAttribute (name, [values])
-
-        /// Sets face attributes for the given trace object.
-        /// The names can be string or Symbol.
-        static member inline faceAttributes (attributes : Map< ^Name, BufferView> seq) =
-            let conv = Symbol.convert Symbol.Converters.untyped
-            let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
-            fun (obj : TraceObject) -> { obj with FaceAttributes = attributes }
-
-        /// Sets face attributes for the given trace object with a single geometry.
-        /// The names can be string or Symbol.
-        static member inline faceAttributes (attributes : Map< ^Name, BufferView>) =
-            TraceObject.faceAttributes [attributes]
-
-        /// Sets a face attribute for the given trace object.
-        /// The name can be a string or Symbol.
-        static member inline faceAttribute (name : ^Name, values : seq<BufferView>) =
-            let sym = name |> Symbol.convert Symbol.Converters.untyped
-            let values = Seq.asArray values
-
-            fun (obj : TraceObject) ->
-                (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
-                    { inst with FaceAttributes = inst.FaceAttributes |> List.updateByIndex geometry (Map.add sym value)}
-                )
-
-        /// Sets a face attribute for the given trace object with a single geometry.
-        /// The name can be a string or Symbol.
-        static member inline faceAttribute (name : ^Name, values : BufferView) =
-            TraceObject.faceAttribute (name, [values])
-
-        /// Sets geometry attributes for the given trace object.
-        /// The names can be string or Symbol.
-        static member inline geometryAttributes (attributes : Map< ^Name, IAdaptiveValue> seq) (obj : TraceObject) =
-            let conv = Symbol.convert Symbol.Converters.untyped
-            let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
-            { obj with GeometryAttributes = attributes }
-
-        /// Sets a geometry attribute for the given trace object.
-        /// The name can be a string or Symbol, or TypedSymbol<'T>.
-        static member inline geometryAttribute (name : ^Name, values : aval<'T> seq) =
-            let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
-            let values = Seq.asArray values
-
-            fun (obj : TraceObject) ->
-                (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
-                    { inst with GeometryAttributes = inst.GeometryAttributes |> List.updateByIndex geometry (Map.add sym value)}
-                )
-
-        /// Sets a geometry attribute for the given trace object.
-        /// The name can be a string or Symbol, or TypedSymbol<'T>.
-        static member inline geometryAttribute (name : ^Name, values : seq<'T>) =
-            let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
-            let values = values |> Seq.asArray |> Array.map (~~~)
-
-            fun (obj : TraceObject) ->
-                (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
-                    { inst with GeometryAttributes = inst.GeometryAttributes |> List.updateByIndex geometry (Map.add sym value)}
-                )
-
-        /// Sets instance attributes for the given trace object.
-        /// The names can be string or Symbol.
-        static member inline instanceAttributes (attributes : Map< ^Name, IAdaptiveValue>) (obj : TraceObject) =
-            let conv = Symbol.convert Symbol.Converters.untyped
-            let attributes = attributes |> Map.toList |> List.map (fun (k, v) -> conv k, v) |> Map.ofList
-            { obj with InstanceAttributes = attributes }
-
-        /// Sets an instance attribute for the given trace object.
-        /// The name can be a string or Symbol, or TypedSymbol<'T>.
-        static member inline instanceAttribute (name : ^Name, value : aval<'T>) =
-            let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
-            fun (obj : TraceObject) -> { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
-
-        /// Sets an instance attribute for the given trace object.
-        /// The name can be a string or Symbol, or TypedSymbol<'T>.
-        static member inline instanceAttribute (name : ^Name, value : 'T) =
-            let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
-            fun (obj : TraceObject) -> { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym ~~~value }
-
-        /// Sets the hit groups for the given trace object.
-        static member inline hitGroups (hitConfig : aval<HitConfig>) =
-            fun (obj : TraceObject) -> { obj with HitGroups = hitConfig }
-
-        /// Sets the hit groups for the given trace object.
-        static member inline hitGroups (hitConfig : HitConfig) =
-            TraceObject.hitGroups ~~hitConfig
-
-        /// Sets the hit group for the given trace object with a single geometry.
-        static member inline hitGroup (group : aval<Symbol>) =
-            let groups = group |> AVal.map List.singleton
-            TraceObject.hitGroups groups
-
-        /// Sets the hit group for the given trace object with a single geometry.
-        static member inline hitGroup (group : Symbol) =
-            TraceObject.hitGroups [group]
-
-        /// Sets the transform for the given trace object.
-        static member inline transform (trafo : aval<Trafo3d>) =
-            fun (obj : TraceObject) -> { obj with Transform = trafo }
-
-        /// Sets the transform for the given trace object.
-        static member inline transform (trafo : Trafo3d) =
-            TraceObject.transform ~~trafo
-
-        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given trace object.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
-        static member inline frontFace (front : aval<WindingOrder option>) =
-            fun (obj : TraceObject) -> { obj with FrontFace = front }
-
-        /// Sets the winding order of triangles considered to be front-facing for the given trace object.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
-        static member inline frontFace (front : aval<WindingOrder>) =
-            TraceObject.frontFace (front |> AVal.mapNonAdaptive Some)
-
-        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given trace object.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
-        static member inline frontFace (front : WindingOrder option) =
-            TraceObject.frontFace ~~front
-
-        /// Sets the winding order of triangles considered to be front-facing for the given trace object.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
-        static member inline frontFace (front : WindingOrder) =
-            TraceObject.frontFace (Some front)
-
-        /// Sets the geometry mode for the given trace object.
-        static member inline geometryMode (mode : aval<GeometryMode>) =
-            fun (obj : TraceObject) -> { obj with GeometryMode = mode }
-
-        /// Sets the geometry mode for the given trace object.
-        static member inline geometryMode (mode : GeometryMode) =
-            TraceObject.geometryMode ~~mode
-
-        /// Sets the visibility mask for the given trace object.
-        static member inline mask (value : aval<VisibilityMask>) =
-            fun (obj : TraceObject) -> { obj with Mask = value }
-
-        /// Sets the visibility mask for the given trace object.
-        static member inline mask (value : aval<uint8>) =
-            TraceObject.mask (value |> AVal.mapNonAdaptive VisibilityMask)
-
-        /// Sets the visibility mask for the given trace object.
-        static member inline mask (value : aval<int8>) =
-            TraceObject.mask (value |> AVal.mapNonAdaptive VisibilityMask)
-
-        /// Sets the visibility mask for the given trace object.
-        static member inline mask (value : aval<uint32>) =
-            TraceObject.mask (value |> AVal.mapNonAdaptive VisibilityMask)
-
-        /// Sets the visibility mask for the given trace object.
-        static member inline mask (value : aval<int32>) =
-            TraceObject.mask (value |> AVal.mapNonAdaptive VisibilityMask)
-
-        /// Sets the visibility mask for the given trace object.
-        static member inline mask (value : VisibilityMask) =
-            TraceObject.mask (AVal.constant value)
-
-        /// Sets the visibility mask for the given trace object.
-        static member inline mask (value : uint8) =
-            TraceObject.mask (VisibilityMask value)
-
-        /// Sets the visibility mask for the given trace object.
-        static member inline mask (value : int8) =
-            TraceObject.mask (VisibilityMask value)
-
-        /// Sets the visibility mask for the given trace object.
-        static member inline mask (value : uint32) =
-            TraceObject.mask (VisibilityMask value)
-
-        /// Sets the visibility mask for the given trace object.
-        static member inline mask (value : int32) =
-            TraceObject.mask (VisibilityMask value)
-
-        /// Creates a trace object from the given indexed geometry.
-        static member ofIndexedGeometry (flags : aval<GeometryFlags>) =
-            fun (trafo : aval<Trafo3d>) (geometry : IndexedGeometry) ->
-                let g = geometry.ToNonStripped()
-
-                let attributes =
-                    g.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ -> BufferView.ofArray)
-
-                let ag =
-                    TriangleMesh.ofIndexedGeometry g
-                    |> AdaptiveTriangleMesh.constant
-                    |> AdaptiveTriangleMesh.transform trafo
-                    |> AdaptiveTriangleMesh.flags flags
-                    |> AdaptiveTraceGeometry.ofTriangleMesh
-
-                TraceObject.ofAdaptiveGeometry ag
-                |> TraceObject.vertexAttributes [| attributes |]
-
-        /// Creates a trace object from the given indexed geometry.
-        static member inline ofIndexedGeometry (flags : GeometryFlags) =
-            fun (trafo : Trafo3d) -> TraceObject.ofIndexedGeometry ~~flags ~~trafo
-
-
 [<AutoOpen>]
 module private ManagedTracePoolUtils =
 
     type IndexType with
-        member x.Type =
-            match x with
+        member inline this.Type =
+            match this with
             | IndexType.UInt16 -> typeof<uint16>
             | _                -> typeof<uint32>
 
     type IManagedBuffer with
-        member x.Add(data : IndexData<aval<IBuffer>>, range : Range1l) =
+        member inline x.Add(data: AdaptiveIndexData, range: Range1l) =
             let view = BufferView(data.Buffer, data.Type.Type, int data.Offset)
             x.Add(view, range)
 
@@ -415,7 +104,7 @@ type internal TracePoolResources =
         Disposables           : List<IDisposable>
     }
 
-and ManagedTraceObject internal(index : int, geometry : aval<IAccelerationStructure>, obj : TraceObject, poolResources : TracePoolResources) =
+and ManagedTraceObject internal(index: int, geometry: aval<IAccelerationStructure>, obj: TraceObject, poolResources: TracePoolResources) =
 
     let customIndex = AVal.constant <| uint32 index
 
@@ -442,12 +131,12 @@ and ManagedTraceObject internal(index : int, geometry : aval<IAccelerationStruct
         member x.Mask         = obj.Mask
         member x.CustomIndex  = customIndex
 
-and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
-                     indexBufferStorage : BufferStorage,
-                     vertexBufferStorage : Symbol -> BufferStorage,
-                     faceAttributeBufferStorage : Symbol -> BufferStorage,
-                     geometryAttributeBufferStorage : Symbol -> BufferStorage,
-                     instanceAttributeBufferStorage : Symbol -> BufferStorage,
+and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
+                     indexBufferStorage: BufferStorage,
+                     vertexBufferStorage: Symbol -> BufferStorage,
+                     faceAttributeBufferStorage: Symbol -> BufferStorage,
+                     geometryAttributeBufferStorage: Symbol -> BufferStorage,
+                     instanceAttributeBufferStorage: Symbol -> BufferStorage,
                      geometryBufferStorage : BufferStorage) =
 
     static let failf fmt =
@@ -459,15 +148,18 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     static let zero : byte[] = ManagedPool.Zero
 
     let indexType = signature.IndexType.Type
-    let instanceAttributeTypes = signature.InstanceAttributeTypes
-    let geometryAttributeTypes = signature.GeometryAttributeTypes
+    let faceAttributeTypes = signature.FaceAttributeTypes |> Seq.map (fun (KeyValue(k, v)) -> struct (k, v)) |> Seq.toArray
+    let instanceAttributeTypes = signature.InstanceAttributeTypes |> Seq.map (fun (KeyValue(k, v)) -> struct (k, v)) |> Seq.toArray
+    let geometryAttributeTypes = signature.GeometryAttributeTypes |> Seq.map (fun (KeyValue(k, v)) -> struct (k, v)) |> Seq.toArray
 
-    let indexManager             = LayoutManager<Option<IndexData<aval<IBuffer>>> * int>()
-    let vertexManager            = LayoutManager<Map<Symbol, BufferView>>()
+    let indexManager             = LayoutManager<struct (AdaptiveIndexData * int)>()
+    let vertexManager            = LayoutManager<IDictionary<Symbol, BufferView>>(Dictionary.StructuralComparer.Instance)
     let geometryManager          = LayoutManager<int32[] * int32[] * int32[] * int32[] * int32>()
-    let faceAttributeManager     = LayoutManager<Map<Symbol, BufferView>>()
-    let instanceAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>>()
-    let geometryAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>>()
+    let faceAttributeManager     = LayoutManager<IDictionary<Symbol, BufferView>>(Dictionary.StructuralComparer.Instance)
+    let instanceAttributeManager = LayoutManager<IDictionary<Symbol, IAdaptiveValue>>(Dictionary.StructuralComparer.Instance)
+    let geometryAttributeManager = LayoutManager<IDictionary<Symbol, IAdaptiveValue>>(Dictionary.StructuralComparer.Instance)
+
+    let toDict f = Map.toArray >> Array.map f >> Dictionary.ofArrayV
 
     let createManagedBuffer n t u s =
         let b = runtime.CreateManagedBuffer(t, u, s)
@@ -482,30 +174,30 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
 
     let vertexBuffers =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
-        signature.VertexAttributeTypes |> Map.map (fun s t ->
+        signature.VertexAttributeTypes |> toDict (fun (s, t) ->
             let name = if runtime.DebugLabelsEnabled then $"{s} (ManagedTracePool Buffer)" else null
-            createManagedBuffer name t usage (vertexBufferStorage s)
+            s, createManagedBuffer name t usage (vertexBufferStorage s)
         )
 
     let faceAttributeBuffers =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
-        signature.FaceAttributeTypes |> Map.map (fun s t ->
+        signature.FaceAttributeTypes |> toDict (fun (s, t) ->
             let name = if runtime.DebugLabelsEnabled then $"{s} (ManagedTracePool Buffer)" else null
-            createManagedBuffer name t usage (faceAttributeBufferStorage s)
+            s, createManagedBuffer name t usage (faceAttributeBufferStorage s)
         )
 
     let geometryAttributeBuffers =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
-        geometryAttributeTypes |> Map.map (fun s t ->
+        signature.GeometryAttributeTypes |> toDict (fun (s, t) ->
             let name = if runtime.DebugLabelsEnabled then $"{s} (ManagedTracePool Buffer)" else null
-            createManagedBuffer name t usage (geometryAttributeBufferStorage s)
+            s, createManagedBuffer name t usage (geometryAttributeBufferStorage s)
         )
 
     let instanceAttributeBuffers =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
-        instanceAttributeTypes |> Map.map (fun s t ->
+        signature.InstanceAttributeTypes |> toDict (fun (s, t) ->
             let name = if runtime.DebugLabelsEnabled then $"{s} (ManagedTracePool Buffer)" else null
-            createManagedBuffer name t usage (instanceAttributeBufferStorage s)
+            s, createManagedBuffer name t usage (instanceAttributeBufferStorage s)
         )
 
     let geometryBuffer =
@@ -514,11 +206,11 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
         createManagedBuffer name typeof<TraceGeometryInfo> usage geometryBufferStorage
 
     let accelerationStructures =
-        Dict<AdaptiveTraceGeometry * AccelerationStructureUsage, aval<IAccelerationStructure>>()
+        Dictionary<struct (AdaptiveTraceGeometry * AccelerationStructureUsage), aval<IAccelerationStructure>>()
 
     let objects = HashSet<ManagedTraceObject>()
 
-    let free (obj : ManagedTraceObject) =
+    let free (obj: ManagedTraceObject) =
         obj.Geometry.Release()
         for d in obj.Resources.Disposables do d.Dispose()
 
@@ -543,13 +235,13 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
         for KeyValue(_, b) in geometryAttributeBuffers do b.Clear()
         for KeyValue(_, b) in instanceAttributeBuffers do b.Clear()
 
-    new (runtime : IRuntime, signature : TraceObjectSignature,
-         [<Optional; DefaultParameterValue(BufferStorage.Device)>] indexBufferStorage : BufferStorage,
-         [<Optional; DefaultParameterValue(BufferStorage.Device)>] vertexBufferStorage : BufferStorage,
-         [<Optional; DefaultParameterValue(BufferStorage.Device)>] faceAttributeBufferStorage : BufferStorage,
-         [<Optional; DefaultParameterValue(BufferStorage.Device)>] geometryAttributeBufferStorage : BufferStorage,
-         [<Optional; DefaultParameterValue(BufferStorage.Host)>] instanceAttributeBufferStorage : BufferStorage,
-         [<Optional; DefaultParameterValue(BufferStorage.Device)>] geometryBufferStorage : BufferStorage) =
+    new (runtime: IRuntime, signature : TraceObjectSignature,
+         [<Optional; DefaultParameterValue(BufferStorage.Device)>] indexBufferStorage: BufferStorage,
+         [<Optional; DefaultParameterValue(BufferStorage.Device)>] vertexBufferStorage: BufferStorage,
+         [<Optional; DefaultParameterValue(BufferStorage.Device)>] faceAttributeBufferStorage: BufferStorage,
+         [<Optional; DefaultParameterValue(BufferStorage.Device)>] geometryAttributeBufferStorage: BufferStorage,
+         [<Optional; DefaultParameterValue(BufferStorage.Host)>] instanceAttributeBufferStorage: BufferStorage,
+         [<Optional; DefaultParameterValue(BufferStorage.Device)>] geometryBufferStorage: BufferStorage) =
         new ManagedTracePool(
             runtime, signature, indexBufferStorage,
             (fun _ -> vertexBufferStorage),
@@ -563,7 +255,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     member x.Signature = signature
     member x.Count = objects.Count
 
-    member internal x.Free(obj : ManagedTraceObject) =
+    member internal x.Free(obj: ManagedTraceObject) =
         lock x (fun _ ->
             if objects.Remove(obj) then
                 free obj
@@ -572,7 +264,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                     clear()
         )
 
-    member x.Add(obj : TraceObject) =
+    member x.Add(obj: TraceObject) =
         if obj.Geometry.Count = 0 then
             failf "trace object does not contain any geometry"
 
@@ -584,9 +276,9 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
             let gptrs = List()
 
             let geometryCount      = obj.Geometry.Count
-            let vertexAttributes   = obj.VertexAttributes |> List.toArray
-            let faceAttributes     = obj.FaceAttributes |> List.toArray
-            let geometryAttributes = obj.GeometryAttributes |> List.toArray
+            let vertexAttributes   = obj.VertexAttributes
+            let faceAttributes     = obj.FaceAttributes
+            let geometryAttributes = obj.GeometryAttributes
             let instanceAttributes = obj.InstanceAttributes
 
             // Geometry attributes
@@ -596,17 +288,17 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                     let geometryAttributePtr = geometryAttributeManager.Alloc(geometryAttributes, 1)
                     let geometryAttributeIndex = int geometryAttributePtr.Offset
 
-                    for KeyValue(k, _) in geometryAttributeTypes do
+                    for k, _ in geometryAttributeTypes do
                         let target = geometryAttributeBuffers.[k]
-                        match geometryAttributes |> Map.tryFind k with
-                        | Some v ->
+                        match geometryAttributes.TryGetValue k with
+                        | true, v ->
                             try
                                 target.Add(v, geometryAttributeIndex) |> ds.Add
                             with
                             | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                                 failf "cannot convert geometry attribute '%A' from %A to %A" k exn.Source exn.Target
 
-                        | None ->
+                        | _ ->
                             target.Set(zero, Range1l.FromMinAndSize(int64 geometryAttributeIndex, 0L))
 
                     gptrs.Add(geometryAttributePtr)
@@ -617,17 +309,17 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
             let instanceAttributePtr   = instanceAttributeManager.Alloc(instanceAttributes, 1)
             let instanceAttributeIndex = int instanceAttributePtr.Offset
 
-            for KeyValue(k, _) in instanceAttributeTypes do
+            for k, _ in instanceAttributeTypes do
                 let target = instanceAttributeBuffers.[k]
-                match instanceAttributes |> Map.tryFind k with
-                | Some v ->
+                match instanceAttributes.TryGetValue k with
+                | true, v ->
                     try
                         target.Add(v, instanceAttributeIndex) |> ds.Add
                     with
                     | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                         failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
 
-                | None ->
+                | _ ->
                     target.Set(zero, Range1l.FromMinAndSize(int64 instanceAttributeIndex, 0L))
 
             // Geometry data
@@ -644,15 +336,15 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
 
                             for KeyValue(k, _) in signature.VertexAttributeTypes do
                                 let target = vertexBuffers.[k]
-                                match Map.tryFind k vertexAttributes with
-                                | Some v ->
+                                match vertexAttributes.TryGetValue k with
+                                | true, v ->
                                     try
                                         target.Add(v, vertexRange) |> ds.Add
                                     with
                                     | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                                         failf "cannot convert vertex attribute '%A' from %A to %A" k exn.Source exn.Target
 
-                                | None ->
+                                | _ ->
                                     target.Set(zero, vertexRange)
 
                             vptrs.Add(vertexPtr)
@@ -660,19 +352,28 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                         )
 
                     let indexOffsets =
-                        meshes |> Array.mapi (fun i m ->
+                        meshes |> Array.map (fun m ->
                             let fvc = int m.Primitives * 3
 
-                            let isNew, indexPtr = indexManager.TryAlloc((m.Indices, fvc), fvc)
-                            let indexRange = Range1l.FromMinAndSize(int64 indexPtr.Offset, int64 fvc - 1L)
+                            let indexPtr =
+                                if m.IsIndexed then
+                                    if m.Indices.Type <> signature.IndexType then
+                                        failf $"Expected indices of type {signature.IndexType} but got {m.Indices.Type}"
 
-                            match m.Indices with
-                            | Some idx -> indexBuffer.Add(idx, indexRange) |> ds.Add
-                            | None ->
-                                if isNew then
-                                    let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> indexType
-                                    let data = Array.init fvc id |> conv
-                                    indexBuffer.Set(data, indexRange)
+                                    let indexPtr = indexManager.Alloc((m.Indices, 0), fvc)
+                                    let indexRange = Range1l.FromMinAndSize(int64 indexPtr.Offset, int64 fvc - 1L)
+                                    indexBuffer.Add(m.Indices, indexRange) |> ds.Add
+                                    indexPtr
+                                else
+                                    let isNew, indexPtr = indexManager.TryAlloc((null, fvc), fvc)
+                                    let indexRange = Range1l.FromMinAndSize(int64 indexPtr.Offset, int64 fvc - 1L)
+
+                                    if isNew then
+                                        let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> indexType
+                                        let data = Array.init fvc id |> conv
+                                        indexBuffer.Set(data, indexRange)
+
+                                    indexPtr
 
                             iptrs.Add(indexPtr)
                             int32 indexPtr.Offset
@@ -685,17 +386,17 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                             let faceAttributePtr = faceAttributeManager.Alloc(faceAttributes, faceCount)
                             let faceAttributeRange = Range1l.FromMinAndSize(int64 faceAttributePtr.Offset, int64 faceCount - 1L)
 
-                            for KeyValue(k, _) in signature.FaceAttributeTypes do
+                            for k, _ in faceAttributeTypes do
                                 let target = faceAttributeBuffers.[k]
-                                match Map.tryFind k faceAttributes with
-                                | Some v ->
+                                match faceAttributes.TryGetValue k with
+                                | true, v ->
                                     try
                                         target.Add(v, faceAttributeRange) |> ds.Add
                                     with
                                     | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
                                         failf "cannot convert face attribute '%A' from %A to %A" k exn.Source exn.Target
 
-                                | None ->
+                                | _ ->
                                     target.Set(zero, faceAttributeRange)
 
                             fptrs.Add(faceAttributePtr)
@@ -736,12 +437,12 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                     geometryIndex, geometryPtr
 
             let accel =
-                let key = (obj.Geometry, obj.Usage)
+                let key = struct (obj.Geometry, obj.Usage)
 
                 match accelerationStructures.TryGetValue(key) with
-                | (true, accel) -> accel
+                | true, accel -> accel
                 | _ ->
-                    let data = obj.Geometry |> AdaptiveTraceGeometry.toAVal
+                    let data = obj.Geometry.ToAdaptiveValue()
                     let accel = runtime.CreateAccelerationStructure(data, obj.Usage)
                     if runtime.DebugLabelsEnabled then accel.Name <- "TraceObject (ManagedTracePool)"
                     accelerationStructures.[key] <- accel
@@ -773,41 +474,45 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     member x.IndexBuffer =
         indexBuffer |> AdaptiveResource.cast<IBuffer>
 
-    member x.TryGetVertexAttribute(semantic : Symbol) =
-        vertexBuffers |> Map.tryFind semantic
-        |> Option.map AdaptiveResource.cast<IBuffer>
+    member x.TryGetVertexAttribute(semantic: Symbol) =
+        match vertexBuffers.TryGetValue semantic with
+        | true, buffer -> ValueSome <| AdaptiveResource.cast<IBuffer> buffer
+        | _ -> ValueNone
 
-    member x.GetVertexAttribute(semantic : Symbol) =
+    member x.GetVertexAttribute(semantic: Symbol) =
         match x.TryGetVertexAttribute semantic with
-        | Some attr -> attr
-        | None -> failf "could not find vertex attribute '%A'" semantic
+        | ValueSome attr -> attr
+        | ValueNone -> failf "could not find vertex attribute '%A'" semantic
 
-    member x.TryGetFaceAttribute(semantic : Symbol) =
-        faceAttributeBuffers |> Map.tryFind semantic
-        |> Option.map AdaptiveResource.cast<IBuffer>
+    member x.TryGetFaceAttribute(semantic: Symbol) =
+        match faceAttributeBuffers.TryGetValue semantic with
+        | true, buffer -> ValueSome <| AdaptiveResource.cast<IBuffer> buffer
+        | _ -> ValueNone
 
-    member x.GetFaceAttribute(semantic : Symbol) =
+    member x.GetFaceAttribute(semantic: Symbol) =
         match x.TryGetFaceAttribute semantic with
-        | Some attr -> attr
-        | None -> failf "could not find face attribute '%A'" semantic
+        | ValueSome attr -> attr
+        | ValueNone -> failf "could not find face attribute '%A'" semantic
 
-    member x.TryGetGeometryAttribute(semantic : Symbol) =
-        geometryAttributeBuffers |> Map.tryFind semantic
-        |> Option.map AdaptiveResource.cast<IBuffer>
+    member x.TryGetGeometryAttribute(semantic: Symbol) =
+        match geometryAttributeBuffers.TryGetValue semantic with
+        | true, buffer -> ValueSome <| AdaptiveResource.cast<IBuffer> buffer
+        | _ -> ValueNone
 
-    member x.GetGeometryAttribute(semantic : Symbol) =
+    member x.GetGeometryAttribute(semantic: Symbol) =
         match x.TryGetGeometryAttribute semantic with
-        | Some attr -> attr
-        | None -> failf "could not find geometry attribute '%A'" semantic
+        | ValueSome attr -> attr
+        | ValueNone -> failf "could not find geometry attribute '%A'" semantic
 
-    member x.TryGetInstanceAttribute(semantic : Symbol) =
-        instanceAttributeBuffers |> Map.tryFind semantic
-        |> Option.map AdaptiveResource.cast<IBuffer>
+    member x.TryGetInstanceAttribute(semantic: Symbol) =
+        match instanceAttributeBuffers.TryGetValue semantic with
+        | true, buffer -> ValueSome <| AdaptiveResource.cast<IBuffer> buffer
+        | _ -> ValueNone
 
-    member x.GetInstanceAttribute(semantic : Symbol) =
+    member x.GetInstanceAttribute(semantic: Symbol) =
         match x.TryGetInstanceAttribute semantic with
-        | Some attr -> attr
-        | None -> failf "could not find instance attribute '%A'" semantic
+        | ValueSome attr -> attr
+        | ValueNone -> failf "could not find instance attribute '%A'" semantic
 
     member x.Dispose() =
         lock x (fun _ ->
@@ -831,13 +536,11 @@ module ManagedTracePoolSceneExtensions =
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module RaytracingSceneDescription =
 
-        let ofPool (pool : ManagedTracePool) (objects : aset<TraceObject>) =
+        let ofPool (pool: ManagedTracePool) (objects: aset<TraceObject>) =
             let reader = objects.GetReader()
-            let deltas = List<SetOperation<ManagedTraceObject>>()
-
             let mtos = Dict<TraceObject, ManagedTraceObject>()
 
-            let add (o : TraceObject) =
+            let add (deltas : List<_>) (o : TraceObject) =
                 match mtos.TryGetValue o with
                 | (true, _) -> ()
                 | _ ->
@@ -845,7 +548,7 @@ module ManagedTracePoolSceneExtensions =
                     mtos.Add(o, mto)
                     deltas.Add(SetOperation.add mto)
 
-            let rem (o : TraceObject) =
+            let rem (deltas : List<_>) (o : TraceObject) =
                 match mtos.TryRemove o with
                 | (true, mto) ->
                     deltas.Add(SetOperation.rem mto)
@@ -854,14 +557,13 @@ module ManagedTracePoolSceneExtensions =
 
             let objects =
                 ASet.custom (fun t _ ->
-                    deltas.Clear()
-
+                    let deltas = List<_>()
                     let ops = reader.GetChanges(t)
 
                     for o in ops do
                         match o with
-                        | Add(_, value) -> add value
-                        | Rem(_, value) -> rem value
+                        | Add(_, value) -> add deltas value
+                        | Rem(_, value) -> rem deltas value
 
                     HashSetDelta.ofSeq deltas
                 )

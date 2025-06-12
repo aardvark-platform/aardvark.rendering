@@ -75,11 +75,11 @@ module private PreparedRaytracingPipelineInternals =
 
         interface IAdaptiveValue with
             member x.IsConstant = false
-            member x.ContentType = typeof<Set<HitConfig>>
+            member x.ContentType = typeof<Set<Symbol[]>>
             member x.GetValueUntyped(c) = x.GetValue(c) :> obj
             member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
 
-        interface IAdaptiveValue<Set<HitConfig>> with
+        interface IAdaptiveValue<Set<Symbol[]>> with
             member x.GetValue(c) = x.GetValue(c)
 
 
