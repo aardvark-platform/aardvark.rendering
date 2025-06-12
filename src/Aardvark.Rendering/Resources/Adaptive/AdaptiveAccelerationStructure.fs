@@ -3,6 +3,7 @@
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 
 type IAdaptiveAccelerationStructure =
     inherit IAdaptiveResource<IAccelerationStructure>
@@ -66,9 +67,6 @@ type internal AdaptiveAccelerationStructure(runtime : IAccelerationStructureRunt
 type IAccelerationStructureRuntimeAdaptiveExtensions private() =
 
     [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>, usage : AccelerationStructureUsage) =
+    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>,
+                                              [<Optional; DefaultParameterValue(AccelerationStructureUsage.Static)>] usage : AccelerationStructureUsage) =
         AdaptiveAccelerationStructure(this, geometry, usage) :> IAdaptiveAccelerationStructure
-
-    [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>) =
-        this.CreateAccelerationStructure(geometry, AccelerationStructureUsage.Static)

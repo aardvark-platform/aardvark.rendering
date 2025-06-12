@@ -33,8 +33,6 @@ type GeometryMode =
     | Transparent = 2
 
 
-type HitConfig = Symbol list
-
 /// Interface for instances in a raytracing scene.
 type ITraceInstance =
 
@@ -42,14 +40,14 @@ type ITraceInstance =
     abstract member Geometry     : aval<IAccelerationStructure>
 
     /// The hit groups for each geometry of the instance.
-    abstract member HitGroups    : aval<HitConfig>
+    abstract member HitGroups    : aval<Symbol[]>
 
     /// The transformation of the instance.
     abstract member Transform    : aval<Trafo3d>
 
     /// The winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the instance.
     /// Only has an effect if TraceRay() is called with one of the cull flags.
-    abstract member FrontFace    : aval<WindingOrder option>
+    abstract member FrontFace    : aval<WindingOrder voption>
 
     /// Optionally overrides flags set in the geometry.
     abstract member GeometryMode : aval<GeometryMode>
@@ -68,14 +66,14 @@ type TraceInstance =
         Geometry     : aval<IAccelerationStructure>
 
         /// The hit groups for each geometry of the instance.
-        HitGroups    : aval<HitConfig>
+        HitGroups    : aval<Symbol[]>
 
         /// The transformation of the instance.
         Transform    : aval<Trafo3d>
 
         /// The winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the instance.
         /// Only has an effect if TraceRay() is called with one of the cull flags.
-        FrontFace    : aval<WindingOrder option>
+        FrontFace    : aval<WindingOrder voption>
 
         /// Optionally overrides flags set in the geometry.
         GeometryMode : aval<GeometryMode>
@@ -105,9 +103,9 @@ module TraceInstanceFSharp =
         /// Creates an empty trace instance from the given acceleration structure.
         static member inline ofAccelerationStructure (geometry : aval<IAccelerationStructure>) =
             { Geometry     = geometry
-              HitGroups    = AVal.constant []
+              HitGroups    = AVal.constant Array.empty
               Transform    = AVal.constant Trafo3d.Identity
-              FrontFace    = AVal.constant None
+              FrontFace    = AVal.constant ValueNone
               GeometryMode = AVal.constant GeometryMode.Default
               Mask         = AVal.constant VisibilityMask.All
               CustomIndex  = AVal.constant 0u }
@@ -117,38 +115,38 @@ module TraceInstanceFSharp =
             TraceInstance.ofAccelerationStructure ~~geometry
 
         /// Sets hit groups for the given trace instance.
-        static member inline hitGroups (hitConfig : aval<HitConfig>) =
+        static member inline hitGroups (hitConfig : aval<Symbol[]>) =
             fun (inst : TraceInstance) -> { inst with HitGroups = hitConfig }
 
         /// Sets hit groups for the given trace instance.
-        static member inline hitGroups (hitConfig : HitConfig) =
+        static member inline hitGroups (hitConfig : Symbol[]) =
             TraceInstance.hitGroups ~~hitConfig
 
         /// Sets a hit group for the given trace instance with a single geometry.
         static member inline hitGroup (group : aval<Symbol>) =
-            let groups = group |> AVal.map List.singleton
+            let groups = group |> AVal.map Array.singleton
             TraceInstance.hitGroups groups
 
         /// Sets a hit group for the given trace instance with a single geometry.
         static member inline hitGroup (group : Symbol) =
-            TraceInstance.hitGroups [group]
+            TraceInstance.hitGroups [|group|]
 
         /// Sets hit groups for the given trace instance.
-        static member inline hitGroups (hitConfig : aval<string list>) =
-            fun (inst : TraceInstance) -> { inst with HitGroups = hitConfig |> AVal.map (List.map Sym.ofString) }
+        static member inline hitGroups (hitConfig : aval<string[]>) =
+            fun (inst : TraceInstance) -> { inst with HitGroups = hitConfig |> AVal.map (Array.map Sym.ofString) }
 
         /// Sets hit groups for the given trace instance.
-        static member inline hitGroups (hitConfig : string list) =
+        static member inline hitGroups (hitConfig : string[]) =
             TraceInstance.hitGroups ~~hitConfig
 
         /// Sets a hit group for the given trace instance with a single geometry.
         static member inline hitGroup (group : aval<string>) =
-            let groups = group |> AVal.map List.singleton
+            let groups = group |> AVal.map Array.singleton
             TraceInstance.hitGroups groups
 
         /// Sets a hit group for the given trace instance with a single geometry.
         static member inline hitGroup (group : string) =
-            TraceInstance.hitGroups [group]
+            TraceInstance.hitGroups [|group|]
 
         /// Sets the transform for the given trace instance.
         static member inline transform (trafo : aval<Trafo3d>) =
@@ -160,13 +158,23 @@ module TraceInstanceFSharp =
 
         /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given instance.
         /// Only has an effect if TraceRay() is called with one of the cull flags.
-        static member inline frontFace (front : aval<WindingOrder option>) =
+        static member inline frontFace (front : aval<WindingOrder voption>) =
             fun (inst : TraceInstance) -> { inst with FrontFace = front }
+
+        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given instance.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        static member inline frontFace (front : aval<WindingOrder option>) =
+            TraceInstance.frontFace (front |> AVal.mapNonAdaptive Option.toValueOption)
 
         /// Sets the winding order of triangles considered to be front-facing for the given instance.
         /// Only has an effect if TraceRay() is called with one of the cull flags.
         static member inline frontFace (front : aval<WindingOrder>) =
-            TraceInstance.frontFace (front |> AVal.mapNonAdaptive Some)
+            TraceInstance.frontFace (front |> AVal.mapNonAdaptive ValueSome)
+
+        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given instance.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        static member inline frontFace (front : WindingOrder voption) =
+            TraceInstance.frontFace ~~front
 
         /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given instance.
         /// Only has an effect if TraceRay() is called with one of the cull flags.
@@ -176,7 +184,7 @@ module TraceInstanceFSharp =
         /// Sets the winding order of triangles considered to be front-facing for the given instance.
         /// Only has an effect if TraceRay() is called with one of the cull flags.
         static member inline frontFace (front : WindingOrder) =
-            TraceInstance.frontFace (Some front)
+            TraceInstance.frontFace (ValueSome front)
 
         /// Sets the geometry mode for the given trace instance.
         static member inline geometryMode (mode : aval<GeometryMode>) =

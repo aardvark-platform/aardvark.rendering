@@ -154,7 +154,7 @@ module AccelerationStructure =
                 (nm, om) ||> Array.safeForall2 (fun n o ->
                     n.Flags = o.Flags &&
                     n.Primitives = o.Primitives &&
-                    Option.isSome n.Indices = Option.isSome o.Indices
+                    isNull n.Indices = isNull o.Indices
                 )
 
             | TraceGeometry.AABBs nbb, TraceGeometry.AABBs obb ->

@@ -47,7 +47,7 @@ type ShaderBindingTable =
         inherit Resource<ShaderBindingTableHandle>
         val public RaygenTable   : ShaderBindingSubtable<Symbol>
         val public MissTable     : ShaderBindingSubtable<Symbol>
-        val public HitGroupTable : ShaderBindingSubtable<HitConfig>
+        val public HitGroupTable : ShaderBindingSubtable<Symbol[]>
         val public CallableTable : ShaderBindingSubtable<Symbol>
 
         override x.Destroy() =
@@ -58,7 +58,7 @@ type ShaderBindingTable =
 
         new(raygenTable : ShaderBindingSubtable<Symbol>,
             missTable : ShaderBindingSubtable<Symbol>,
-            hitGroupTable : ShaderBindingSubtable<HitConfig>,
+            hitGroupTable : ShaderBindingSubtable<Symbol[]>,
             callableTable : ShaderBindingSubtable<Symbol>) =
 
             let handle =
@@ -208,23 +208,23 @@ module private ShaderBindingTableUtilities =
             let lookup = pipeline.Description.Program.ShaderBindingTableLayout.CallableIndices
             shaderGroups |> Array.filter GroupEntry.isCallable |> withLookup lookup shaderHandles
 
-        let hitGroups (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (configs : Set<HitConfig>) (pipeline : RaytracingPipeline) =
+        let hitGroups (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (configs : Set<Symbol[]>) (pipeline : RaytracingPipeline) =
             let rayOffsets =
                 pipeline.Description.Program.ShaderBindingTableLayout.RayOffsets
 
             let rayTypes =
-                Map.toList rayOffsets
-                |> List.sortBy snd
-                |> List.map fst
+                Map.toArray rayOffsets
+                |> Array.sortBy snd
 
             let configs =
-                Set.toList configs
+                Set.toArray configs
 
+            // TODO: Optimize
             let groups =
                 configs
-                |> List.map (fun cfg ->
-                    cfg |> List.collect (fun name ->
-                        rayTypes |> List.choose (fun rt ->
+                |> Array.map (fun cfg ->
+                    cfg |> Array.collect (fun name ->
+                        rayTypes |> Array.choose (fun (rt, _) ->
                             match shaderGroups |> Array.tryFind (GroupEntry.isHitGroup name rt) with
                             | None -> Log.warn "[Raytracing] Missing hit group %A for ray type %A" name rt; None
                             | x -> x
@@ -233,17 +233,17 @@ module private ShaderBindingTableUtilities =
                 )
 
             let entries =
-                groups |> List.concat |> List.map GroupEntry.index |> List.toArray
+                groups |> Array.concat |> Array.map GroupEntry.index
 
             let indices =
                 (0, groups)
-                ||> List.scan (fun cnt entries -> cnt + List.length entries)
-                |> List.take configs.Length
+                ||> Array.scan (fun cnt entries -> cnt + entries.Length)
+                |> Array.take configs.Length
 
             let lookup =
                 (configs, indices)
-                ||> List.zip
-                |> Map.ofList
+                ||> Array.zip
+                |> Map.ofArray
 
             { Entries   = MultiEntry (entries, lookup)
               Handles   = shaderHandles }
@@ -253,12 +253,12 @@ module private ShaderBindingTableUtilities =
         { RaygenData   : SubtableData<Symbol>
           MissData     : SubtableData<Symbol>
           CallableData : SubtableData<Symbol>
-          HitGroupData : SubtableData<HitConfig> }
+          HitGroupData : SubtableData<Symbol[]> }
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module TableData =
 
-        let create (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (hitConfigs : Set<HitConfig>) (pipeline : RaytracingPipeline) =
+        let create (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (hitConfigs : Set<Symbol[]>) (pipeline : RaytracingPipeline) =
             { RaygenData   = SubtableData.raygen shaderHandles shaderGroups
               MissData     = SubtableData.miss shaderHandles shaderGroups pipeline
               CallableData = SubtableData.callable shaderHandles shaderGroups pipeline
@@ -327,7 +327,7 @@ module private ShaderBindingSubtable =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderBindingTable =
 
-    let updateOrRecreate (hitConfigs : Set<HitConfig>) (pipeline : RaytracingPipeline) (table : ShaderBindingTable) =
+    let updateOrRecreate (hitConfigs : Set<Symbol[]>) (pipeline : RaytracingPipeline) (table : ShaderBindingTable) =
         let device = pipeline.Device
 
         let shaderGroups =
@@ -369,7 +369,7 @@ module ShaderBindingTable =
             hitGroupTable.Dispose()
             table
 
-    let create (hitConfigs : Set<HitConfig>) (pipeline : RaytracingPipeline) =
+    let create (hitConfigs : Set<Symbol[]>) (pipeline : RaytracingPipeline) =
         let device = pipeline.Device
 
         let shaderGroups =

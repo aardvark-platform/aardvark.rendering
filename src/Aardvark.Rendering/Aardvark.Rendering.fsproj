@@ -63,6 +63,7 @@
     <Compile Include="Resources\Framebuffer\FramebufferExtensions.fs" />
     <Compile Include="Resources\Framebuffer\FramebufferExtensionsCSharp.fs" />
     <Compile Include="Resources\Framebuffer\OutputDescription.fs" />
+    <Compile Include="Resources\Raytracing\TraceGeometry.fs" />
     <Compile Include="Resources\Raytracing\AccelerationStructure.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveResource.fs" />
     <Compile Include="Resources\Adaptive\BufferView.fs" />
@@ -92,8 +93,6 @@
     <Compile Include="Pipeline\DrawCalls.fs" />
     <Compile Include="Pipeline\PipelineState.fs" />
     <Compile Include="Pipeline\RenderObject.fs" />
-    <Compile Include="Pipeline\Raytracing\TraceGeometry.fs" />
-    <Compile Include="Pipeline\Raytracing\AdaptiveTraceGeometry.fs" />
     <Compile Include="Pipeline\Raytracing\TraceInstance.fs" />
     <Compile Include="Pipeline\Raytracing\RaytracingPipelineState.fs" />
     <Compile Include="Runtime\Lod\Lod.fs" />
