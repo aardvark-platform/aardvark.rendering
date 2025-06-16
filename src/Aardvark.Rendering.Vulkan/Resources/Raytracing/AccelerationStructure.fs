@@ -66,10 +66,13 @@ module AccelerationStructure =
 
     module private Array =
 
-        let inline safeForall2 (predicate : 'T1 -> 'T2 -> bool) (a : 'T1[]) (b : 'T2[]) =
+        let inline safeForall2 ([<InlineIfLambda>] predicate : 'T1 -> 'T2 -> bool) (a : 'T1[]) (b : 'T2[]) =
             let mutable result = true
-            for i = 0 to min a.Length b.Length do
-                result <- result && predicate a.[i] b.[i]
+            let mutable i = 0
+            let n = min a.Length b.Length
+            while result && i < n do
+                result <- predicate a.[i] b.[i]
+                &i += 1
             result
 
     [<AutoOpen>]
