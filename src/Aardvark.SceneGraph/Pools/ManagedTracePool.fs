@@ -38,10 +38,13 @@ module FShadeInterop =
     open FShade
 
     module DefaultSemantic =
-        let TraceGeometryBuffer = Sym.ofString "TraceGeometryBuffer"
+        let GeometryInfo = Sym.ofString "GeometryInfo"
+        let Indices      = Sym.ofString "Indices"
 
     type UniformScope with
-        member x.GeometryInfos : TraceGeometryInfo[] = uniform?StorageBuffer?TraceGeometryBuffer
+        member x.GeometryInfos : TraceGeometryInfo[] = uniform?StorageBuffer?GeometryInfo
+        member x.Indices       : uint[]              = uniform?StorageBuffer?Indices
+        member x.Indices16     : uint16[]            = uniform?StorageBuffer?Indices
 
     module TraceGeometryInfo =
 
@@ -57,6 +60,24 @@ module FShadeInterop =
         [<ReflectedDefinition; Inline>]
         let ofRayHit (input: RayHitInput<'T, 'U>) =
             ofGeometryInstance input.geometry
+
+        /// Retrieves the 32-bit indices for the given ray hit.
+        [<ReflectedDefinition>]
+        let getIndices (info: TraceGeometryInfo) (input: RayHitInput<'T, 'U>) =
+            let firstIndex = info.FirstIndex + 3 * input.geometry.primitiveId
+
+            V3i(uniform.Indices.[firstIndex],
+                uniform.Indices.[firstIndex + 1],
+                uniform.Indices.[firstIndex + 2]) + info.BaseVertex
+
+        /// Retrieves the 16-bit indices for the given ray hit.
+        [<ReflectedDefinition>]
+        let getIndices16 (info: TraceGeometryInfo) (input: RayHitInput<'T, 'U>) =
+            let firstIndex = info.FirstIndex + 3 * input.geometry.primitiveId
+
+            V3i(int uniform.Indices16.[firstIndex],
+                int uniform.Indices16.[firstIndex + 1],
+                int uniform.Indices16.[firstIndex + 2]) + info.BaseVertex
 
 
 [<CLIMutable>]
@@ -172,7 +193,7 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
         let name = if runtime.DebugLabelsEnabled then "Index Buffer (ManagedTracePool)" else null
         createManagedBuffer name indexType usage indexBufferStorage
 
-    let vertexBuffers =
+    let vertexAttributeBuffers =
         let usage = BufferUsage.Write ||| BufferUsage.Storage
         signature.VertexAttributeTypes |> toDict (fun (s, t) ->
             let name = if runtime.DebugLabelsEnabled then $"{s} (ManagedTracePool Buffer)" else null
@@ -205,6 +226,28 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
         let name = if runtime.DebugLabelsEnabled then $"Geometry Buffer (ManagedTracePool)" else null
         createManagedBuffer name typeof<TraceGeometryInfo> usage geometryBufferStorage
 
+    let uniforms =
+        let d = Dictionary<Symbol, IAdaptiveValue>()
+        d.[DefaultSemantic.GeometryInfo] <- geometryBuffer
+        d.[DefaultSemantic.Indices] <- indexBuffer
+
+        let add kind buffers =
+            for (KeyValue(name, buffer)) in buffers do
+                if d.ContainsKey name then failf $"Cannot add {kind} attribute '{name}' to uniform provider as an attribute with that name already exists."
+                d.[name] <- buffer
+
+        vertexAttributeBuffers   |> add "vertex"
+        faceAttributeBuffers     |> add "face"
+        geometryAttributeBuffers |> add "geometry"
+        instanceAttributeBuffers |> add "instance"
+
+        { new IUniformProvider with
+            member _.Dispose() = ()
+            member _.TryGetUniform(_, name) =
+                match d.TryGetValue name with
+                | true, value -> ValueSome value
+                | _ -> ValueNone }
+
     let accelerationStructures =
         Dictionary<struct (AdaptiveTraceGeometry * AccelerationStructureUsage), aval<IAccelerationStructure>>()
 
@@ -230,7 +273,7 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
         geometryBuffer.Clear()
         accelerationStructures.Clear()
         objects.Clear()
-        for KeyValue(_, b) in vertexBuffers do b.Clear()
+        for KeyValue(_, b) in vertexAttributeBuffers do b.Clear()
         for KeyValue(_, b) in faceAttributeBuffers do b.Clear()
         for KeyValue(_, b) in geometryAttributeBuffers do b.Clear()
         for KeyValue(_, b) in instanceAttributeBuffers do b.Clear()
@@ -335,7 +378,7 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
                             let vertexRange = Range1l.FromMinAndSize(int64 vertexPtr.Offset, int64 vertexCount - 1L)
 
                             for KeyValue(k, _) in signature.VertexAttributeTypes do
-                                let target = vertexBuffers.[k]
+                                let target = vertexAttributeBuffers.[k]
                                 match vertexAttributes.TryGetValue k with
                                 | true, v ->
                                     try
@@ -357,9 +400,6 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
 
                             let indexPtr =
                                 if m.IsIndexed then
-                                    if m.Indices.Type <> signature.IndexType then
-                                        failf $"Expected indices of type {signature.IndexType} but got {m.Indices.Type}"
-
                                     let indexPtr = indexManager.Alloc((m.Indices, 0), fvc)
                                     let indexRange = Range1l.FromMinAndSize(int64 indexPtr.Offset, int64 fvc - 1L)
                                     indexBuffer.Add(m.Indices, indexRange) |> ds.Add
@@ -475,7 +515,7 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
         indexBuffer |> AdaptiveResource.cast<IBuffer>
 
     member x.TryGetVertexAttribute(semantic: Symbol) =
-        match vertexBuffers.TryGetValue semantic with
+        match vertexAttributeBuffers.TryGetValue semantic with
         | true, buffer -> ValueSome <| AdaptiveResource.cast<IBuffer> buffer
         | _ -> ValueNone
 
@@ -514,13 +554,15 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
         | ValueSome attr -> attr
         | ValueNone -> failf "could not find instance attribute '%A'" semantic
 
+    member _.Uniforms = uniforms
+
     member x.Dispose() =
         lock x (fun _ ->
             clear()
 
             indexBuffer.Release()
             geometryBuffer.Release()
-            for KeyValue(_, b) in vertexBuffers do b.Release()
+            for KeyValue(_, b) in vertexAttributeBuffers do b.Release()
             for KeyValue(_, b) in faceAttributeBuffers do b.Release()
             for KeyValue(_, b) in geometryAttributeBuffers do b.Release()
             for KeyValue(_, b) in instanceAttributeBuffers do b.Release()

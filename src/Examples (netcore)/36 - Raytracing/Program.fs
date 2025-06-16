@@ -5,7 +5,6 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Assimp
 open Aardvark.SceneGraph.Raytracing
 open Aardvark.Application
-open Aardvark.Application.Slim
 open FSharp.Data.Adaptive
 
 [<AutoOpen>]
@@ -36,18 +35,15 @@ module Effect =
 
         type UniformScope with
             member x.OutputBuffer : Image2d<Formats.rgba32f> = uniform?OutputBuffer
-            member x.RecursionDepth : int = uniform?RecursionDepth
-
-            member x.Positions      : V3d[]                 = uniform?StorageBuffer?Positions
-            member x.Normals        : V3d[]                 = uniform?StorageBuffer?Normals
-            member x.Indices        : int[]                 = uniform?StorageBuffer?Indices
-            member x.TextureCoords  : V2d[]                 = uniform?StorageBuffer?TextureCoords
-            member x.ModelMatrices  : M44d[]                = uniform?StorageBuffer?ModelMatrices
-            member x.NormalMatrices : M33d[]                = uniform?StorageBuffer?NormalMatrices
-            member x.FaceColors     : V3d[]                 = uniform?StorageBuffer?FaceColors
-            member x.Colors         : V3d[]                 = uniform?StorageBuffer?Colors
-
-            member x.SphereOffsets  : V3d[]                 = uniform?StorageBuffer?SphereOffsets
+            member x.RecursionDepth : int    = uniform?RecursionDepth
+            member x.Positions      : V3d[]  = uniform?StorageBuffer?Positions
+            member x.Normals        : V3d[]  = uniform?StorageBuffer?Normals
+            member x.TextureCoords  : V2d[]  = uniform?StorageBuffer?DiffuseColorCoordinates
+            member x.ModelMatrices  : M44d[] = uniform?StorageBuffer?ModelMatrix
+            member x.NormalMatrices : M33d[] = uniform?StorageBuffer?NormalMatrix
+            member x.FaceColors     : V3d[]  = uniform?StorageBuffer?FaceColors
+            member x.Colors         : V3d[]  = uniform?StorageBuffer?Colors
+            member x.SphereOffsets  : V3d[]  = uniform?StorageBuffer?SphereOffsets
 
         type Payload =
             {
@@ -142,15 +138,6 @@ module Effect =
             v0 * barycentricCoords.X + v1 * barycentricCoords.Y + v2 * barycentricCoords.Z
 
         [<ReflectedDefinition>]
-        let getIndices (info : TraceGeometryInfo) (input : RayHitInput<'T, 'U>) =
-            let firstIndex = info.FirstIndex + 3 * input.geometry.primitiveId
-            let baseVertex = info.BaseVertex
-
-            V3i(uniform.Indices.[firstIndex],
-                uniform.Indices.[firstIndex + 1],
-                uniform.Indices.[firstIndex + 2]) + baseVertex
-
-        [<ReflectedDefinition>]
         let getPosition (indices : V3i) (input : RayHitInput<'T, V2d>) =
             let p0 = uniform.Positions.[indices.X]
             let p1 = uniform.Positions.[indices.Y]
@@ -213,7 +200,7 @@ module Effect =
         let chitFaceColor (input : RayHitInput<Payload>) =
             closestHit {
                 let info = TraceGeometryInfo.ofRayHit input
-                let indices = getIndices info input
+                let indices = TraceGeometryInfo.getIndices info input
 
                 let position =
                     let p = getPosition indices input
@@ -232,7 +219,7 @@ module Effect =
         let chitTextured (input : RayHitInput<Payload>) =
             closestHit {
                 let info = TraceGeometryInfo.ofRayHit input
-                let indices = getIndices info input
+                let indices = TraceGeometryInfo.getIndices info input
 
                 let position =
                     let p = getPosition indices input
@@ -300,7 +287,7 @@ module Effect =
         }
 
 [<EntryPoint>]
-let main argv =
+let main _argv =
     Aardvark.Init()
 
     let rnd = RandomSystem()
@@ -433,33 +420,6 @@ let main argv =
 
         [| o1; o2; o3; o4; o5; o6 |]
 
-    let indices =
-        geometryPool.IndexBuffer
-
-    let positions =
-        geometryPool.GetVertexAttribute DefaultSemantic.Positions
-
-    let textureCoordinates =
-        geometryPool.GetVertexAttribute DefaultSemantic.DiffuseColorCoordinates
-
-    let normals =
-        geometryPool.GetVertexAttribute DefaultSemantic.Normals
-
-    let modelMatrices =
-        geometryPool.GetInstanceAttribute InstanceAttribute.ModelMatrix
-
-    let normalMatrices =
-        geometryPool.GetInstanceAttribute InstanceAttribute.NormalMatrix
-
-    let faceColors =
-        geometryPool.GetFaceAttribute FaceAttribute.Colors
-
-    let colors =
-        geometryPool.GetGeometryAttribute GeometryAttribute.Colors
-
-    let geometryInfos =
-        geometryPool.GeometryBuffer
-
     let lightLocation =
         let startTime = System.DateTime.Now
         win.Time |> AVal.map (fun t ->
@@ -471,24 +431,18 @@ let main argv =
         cameraView |> AVal.map CameraView.location
 
     let uniforms =
-        uniformMap {
-            buffer  DefaultSemantic.TraceGeometryBuffer geometryInfos
-            value   "RecursionDepth"                    4
-            value   "ViewTrafo"                         viewTrafo
-            value   "ProjTrafo"                         projTrafo
-            value   "CameraLocation"                    cameraLocation
-            buffer  "Positions"                         positions
-            buffer  "Normals"                           normals
-            buffer  "Indices"                           indices
-            buffer  "TextureCoords"                     textureCoordinates
-            buffer  "ModelMatrices"                     modelMatrices
-            buffer  "NormalMatrices"                    normalMatrices
-            buffer  "FaceColors"                        faceColors
-            buffer  "Colors"                            colors
-            buffer  "SphereOffsets"                     (sphereOffsets |> Array.map V4f)
-            texture "TextureFloor"                      DefaultTextures.checkerboard
-            value   "LightLocation"                     lightLocation
-        }
+        let custom =
+            uniformMap {
+                value   "RecursionDepth" 4
+                value   "ViewTrafo"      viewTrafo
+                value   "ProjTrafo"      projTrafo
+                value   "CameraLocation" cameraLocation
+                buffer  "SphereOffsets"  (sphereOffsets |> Array.map V4f)
+                texture "TextureFloor"   DefaultTextures.checkerboard
+                value   "LightLocation"  lightLocation
+            }
+
+        UniformProvider.union geometryPool.Uniforms custom
 
     let staticObjects =
         ASet.ofList [model; floor]
