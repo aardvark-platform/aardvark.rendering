@@ -8,7 +8,6 @@ open Microsoft.FSharp.NativeInterop
 
 open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
 open KHRRayTracingPipeline
 open KHRBufferDeviceAddress
@@ -189,9 +188,9 @@ module private ShaderBindingTableUtilities =
         let private withLookup (lookup : Map<Symbol, int>) (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) =
             let entries =
                 shaderGroups
-                |> Array.choose (fun e -> lookup |> Map.tryFind (GroupEntry.name e) |> Option.map (fun i -> e, i))
-                |> Array.sortBy snd
-                |> Array.map (fst >> GroupEntry.index)
+                |> Array.choose (fun e -> lookup |> Map.tryFind (GroupEntry.name e) |> Option.map (fun i -> struct (e, i)))
+                |> Array.sortBy sndv
+                |> Array.map (fstv >> GroupEntry.index)
 
             { Entries   = MultiEntry (entries, lookup)
               Handles   = shaderHandles }
@@ -216,37 +215,20 @@ module private ShaderBindingTableUtilities =
                 Map.toArray rayOffsets
                 |> Array.sortBy snd
 
-            let configs =
-                Set.toArray configs
+            let entries = ResizeArray(configs.Count * rayTypes.Length)
+            let mutable lookup = Map.empty
 
-            // TODO: Optimize
-            let groups =
-                configs
-                |> Array.map (fun cfg ->
-                    cfg |> Array.collect (fun name ->
-                        rayTypes |> Array.choose (fun (rt, _) ->
-                            match shaderGroups |> Array.tryFind (GroupEntry.isHitGroup name rt) with
-                            | None -> Log.warn "[Raytracing] Missing hit group %A for ray type %A" name rt; None
-                            | x -> x
-                        )
-                    )
-                )
+            for cfg in configs do
+                lookup <- lookup |> Map.add cfg entries.Count
 
-            let entries =
-                groups |> Array.concat |> Array.map GroupEntry.index
+                for name in cfg do
+                    for rt, _ in rayTypes do
+                        match shaderGroups |> Array.tryFindV (GroupEntry.isHitGroup name rt) with
+                        | ValueSome entry -> entries.Add(entry.Index)
+                        | _ -> Log.warn "[Raytracing] Missing hit group %A for ray type %A" name rt
 
-            let indices =
-                (0, groups)
-                ||> Array.scan (fun cnt entries -> cnt + entries.Length)
-                |> Array.take configs.Length
-
-            let lookup =
-                (configs, indices)
-                ||> Array.zip
-                |> Map.ofArray
-
-            { Entries   = MultiEntry (entries, lookup)
-              Handles   = shaderHandles }
+            { Entries = MultiEntry (entries.ToArray(), lookup)
+              Handles = shaderHandles }
 
 
     type TableData =
