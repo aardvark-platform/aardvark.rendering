@@ -32,7 +32,7 @@ type PreparedGeometry =
         pgOriginal      : Geometry
         pgDescriptors   : INativeResourceLocation<DescriptorSetBinding>
         pgAttributes    : INativeResourceLocation<VertexBufferBinding>
-        pgIndex         : Option<INativeResourceLocation<IndexBufferBinding>>
+        pgIndex         : INativeResourceLocation<IndexBufferBinding> voption
         pgCall          : INativeResourceLocation<DrawCall>
         pgResources     : list<IResourceLocation>
     }
@@ -128,13 +128,13 @@ type ResourceManagerExtensions private() =
 
         let isIndexed, ibo =
             match g.indices with
-                | Some ib ->
-                    let b = this.CreateIndexBuffer ib.Buffer
-                    let ibb = this.CreateIndexBufferBinding(b, VkIndexType.ofType ib.ElementType)
-                    resources.Add ibb
-                    true, ibb |> Some
-                | None ->
-                    false, None
+            | Some ib ->
+                let b = this.CreateIndexBuffer ib.Buffer
+                let ibb = this.CreateIndexBufferBinding(b, VkIndexType.ofType ib.ElementType)
+                resources.Add ibb
+                true, ibb |> ValueSome
+            | None ->
+                false, ValueNone
 
         let call = this.CreateDrawCall(isIndexed, g.call)
 
@@ -708,8 +708,8 @@ module private RuntimeCommands =
         let id = Interlocked.Increment(&currentId)
         let stream = new VKVM.CommandStream()
 
-        let mutable prev : Option<PreparedCommand> = None
-        let mutable next : Option<PreparedCommand> = None
+        let mutable prev : PreparedCommand voption = ValueNone
+        let mutable next : PreparedCommand voption = ValueNone
 
         let mutable isDisposed = false
 
@@ -725,10 +725,10 @@ module private RuntimeCommands =
                 check(); 
                 next <- n
                 match n with
-                    | Some n ->
-                        stream.Next <- Some n.Stream
-                    | None ->
-                        stream.Next <- None
+                | ValueSome n ->
+                    stream.Next <- ValueSome n.Stream
+                | ValueNone ->
+                    stream.Next <- ValueNone
 
         interface ILinked<PreparedCommand> with
             member x.Prev 
@@ -758,8 +758,8 @@ module private RuntimeCommands =
             isDisposed <- true
             x.Free()
             stream.Dispose()
-            prev <- None
-            next <- None
+            prev <- ValueNone
+            next <- ValueNone
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
@@ -775,7 +775,7 @@ module private RuntimeCommands =
     and RenderObjectCommand(compiler : Compiler, o : IRenderObject) =
         inherit PreparedCommand()
 
-        let mutable prepared : Option<PreparedMultiRenderObject> = None
+        let mutable prepared : PreparedMultiRenderObject voption = ValueNone
 
         let boundingBox =
             lazy (
@@ -810,18 +810,18 @@ module private RuntimeCommands =
 
         override x.GroupKey =
             match prepared with
-            | Some p -> [ p.First.Pipeline :> obj; p.Id :> obj ]
-            | None -> failwith "inconsistent state"
+            | ValueSome p -> [ p.First.Pipeline :> obj; p.Id :> obj ]
+            | ValueNone -> failwith "inconsistent state"
 
         override x.Free() =
             match prepared with
-            | Some o ->
+            | ValueSome o ->
                 for o in o.Children do
                     for r in o.Resources do compiler.resources.Remove r
 
                 o.Dispose()
-                prepared <- None
-            | None ->
+                prepared <- ValueNone
+            | ValueNone ->
                 ()
 
         override x.Compile(_, stream) =
@@ -835,43 +835,43 @@ module private RuntimeCommands =
                 stream.IndirectBindDescriptorSets(o.DescriptorSets.Pointer) |> ignore
 
                 match o.IndexBuffer with
-                | Some ib ->
+                | ValueSome ib ->
                     stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
-                | None ->
+                | ValueNone ->
                     ()
 
                 stream.IndirectBindVertexBuffers(o.VertexBuffers.Pointer) |> ignore
                 stream.IndirectDraw(compiler.stats, o.IsActive.Pointer, o.DrawCalls.Pointer) |> ignore
 
-            prepared <- Some o
+            prepared <- ValueSome o
 
     and [<AbstractClass>] CommandBucket() =
         inherit AdaptiveObject()
 
-        let mutable prev : Option<CommandBucket> = None
-        let mutable next : Option<CommandBucket> = None
+        let mutable prev : CommandBucket voption = ValueNone
+        let mutable next : CommandBucket voption = ValueNone
 
         member x.Prev
             with get() = prev
             and set v = 
                 prev <- v
                 let first = x.First
-                let prev = prev |> Option.map (fun p -> p.Last)
+                let prev = prev |> ValueOption.map (fun p -> p.Last)
                 first.Prev <- prev
                 match prev with
-                | Some p -> p.Next <- Some first
-                | None -> ()
+                | ValueSome p -> p.Next <- ValueSome first
+                | ValueNone -> ()
 
         member x.Next
             with get() = next
             and set v = 
                 next <- v
                 let last = x.Last
-                let next = next |> Option.map (fun n -> n.First)
+                let next = next |> ValueOption.map (fun n -> n.First)
                 last.Next <- next
                 match next with
-                | Some n -> n.Prev <- Some last
-                | None -> ()
+                | ValueSome n -> n.Prev <- ValueSome last
+                | ValueNone -> ()
 
         abstract member First : PreparedCommand
         abstract member Last : PreparedCommand
@@ -914,22 +914,22 @@ module private RuntimeCommands =
             match ref.Prev with
             | ValueNone -> ()
             | ValueSome v ->
-                v.Value.Next <- Some cmd
-                cmd.Prev <- Some v.Value
+                v.Value.Next <- ValueSome cmd
+                cmd.Prev <- ValueSome v.Value
             match ref.Next with
             | ValueNone -> ()
             | ValueSome next ->
-                next.Value.Prev <- Some cmd
-                cmd.Next <- Some next.Value
+                next.Value.Prev <- ValueSome cmd
+                cmd.Next <- ValueSome next.Value
 
             match trie.Last with
             | ValueNone -> failwith "[Vulkan] empty CommandBucket"
             | ValueSome l ->
-                let next = x.Next |> Option.map (fun n -> n.First)
+                let next = x.Next |> ValueOption.map (fun n -> n.First)
                 l.Value.Next <- next
                 match next with
-                | None -> ()
-                | Some n -> n.Prev <- Some l.Value
+                | ValueNone -> ()
+                | ValueSome n -> n.Prev <- ValueSome l.Value
 
         override x.Remove(cmd : PreparedCommand) =
             let res = trie.TryRemove(cmd.GroupKey)
@@ -938,17 +938,17 @@ module private RuntimeCommands =
             | ValueSome (prev,next) ->
                 match prev,next with
                 | ValueSome prev, ValueSome next ->
-                    prev.Value.Next <- Some next.Value
-                    next.Value.Prev <- Some prev.Value
+                    prev.Value.Next <- ValueSome next.Value
+                    next.Value.Prev <- ValueSome prev.Value
                 | ValueSome last, ValueNone  ->
-                    let next = x.Next |> Option.map (fun n -> n.First)
+                    let next = x.Next |> ValueOption.map (fun n -> n.First)
                     last.Value.Next <- next
                     match next with
-                    | None -> ()
-                    | Some n -> n.Prev <- Some last.Value
+                    | ValueNone -> ()
+                    | ValueSome n -> n.Prev <- ValueSome last.Value
                 | ValueNone, ValueSome next ->
-                    firstCommand.Next <- Some next.Value
-                    next.Value.Prev <- Some firstCommand
+                    firstCommand.Next <- ValueSome next.Value
+                    next.Value.Prev <- ValueSome firstCommand
                 | _ -> ()
                 true
 
@@ -977,8 +977,8 @@ module private RuntimeCommands =
                 override x.Compile(_,_) = ()
             }
 
-        do firstCommand.Next <- Some lastCommand
-           lastCommand.Prev <- Some firstCommand
+        do firstCommand.Next <- ValueSome lastCommand
+           lastCommand.Prev <- ValueSome firstCommand
 
         override x.First = firstCommand
         override x.Last = lastCommand
@@ -1052,12 +1052,12 @@ module private RuntimeCommands =
             let mutable p = firstCommand
 
             for (c,_) in boxes do
-                p.Next <- Some (c :> PreparedCommand)
-                c.Prev <- Some p
+                p.Next <- ValueSome (c :> PreparedCommand)
+                c.Prev <- ValueSome p
                 p <- c
 
-            p.Next <- Some lastCommand
-            lastCommand.Prev <- Some p
+            p.Next <- ValueSome lastCommand
+            lastCommand.Prev <- ValueSome p
 
 
     /// Rendering a set of IRenderObjects using an optimized order (grouped by Pipeline)
@@ -1067,8 +1067,8 @@ module private RuntimeCommands =
         let mutable reader = objects.GetReader()
 
         let trie = SortedDictionaryExt<Aardvark.Rendering.RenderPass, CommandBucket>(Comparer<Aardvark.Rendering.RenderPass>.Default)
-        let mutable firstBucket : Option<CommandBucket> = None
-        let mutable lastBucket : Option<CommandBucket> = None
+        let mutable firstBucket : CommandBucket voption = ValueNone
+        let mutable lastBucket : CommandBucket voption = ValueNone
 
         let getBucket(pass : Aardvark.Rendering.RenderPass) =
             trie |> SortedDictionary.setWithNeighbours pass (fun l s r ->
@@ -1083,18 +1083,18 @@ module private RuntimeCommands =
                             Log.warn "[Vulkan] renderpass order %A not implemented" o
                             new UnorderedCommandBucket() :> CommandBucket
 
-                    let prev = l |> Option.map snd
-                    let next = r |> Option.map snd
+                    let prev = match l with Some (_, b) -> ValueSome b | _ -> ValueNone
+                    let next = match r with Some (_, b) -> ValueSome b | _ -> ValueNone
 
                     bucket.Prev <- prev
                     match prev with
-                    | Some p -> p.Next <- Some bucket
-                    | None -> firstBucket <- Some bucket
+                    | ValueSome p -> p.Next <- ValueSome bucket
+                    | ValueNone -> firstBucket <- ValueSome bucket
 
                     bucket.Next <- next
                     match next with
-                    | Some n -> n.Prev <- Some bucket
-                    | None -> lastBucket <- Some bucket
+                    | ValueSome n -> n.Prev <- ValueSome bucket
+                    | ValueNone -> lastBucket <- ValueSome bucket
 
                     bucket
             )
@@ -1171,9 +1171,9 @@ module private RuntimeCommands =
             // rebuild the top-level stream
             stream.Clear()
             match firstBucket with
-            | Some first ->
+            | ValueSome first ->
                 stream.Call(first.First.Stream) |> ignore
-            | None ->
+            | ValueNone ->
                 ()
 
 
@@ -1288,12 +1288,12 @@ module private RuntimeCommands =
             cmd.Outputs.Clear()
 
             match cmd.Prev with
-            | Some p -> p.Next <- cmd.Next
-            | None -> first.Next <- cmd.Next |> Option.map (fun c -> c.Stream)
+            | ValueSome p -> p.Next <- cmd.Next
+            | ValueNone -> first.Next <- cmd.Next |> ValueOption.map (fun c -> c.Stream)
 
             match cmd.Next with
-            | Some n -> n.Prev <- cmd.Prev
-            | None -> ()
+            | ValueSome n -> n.Prev <- cmd.Prev
+            | ValueNone -> ()
 
             cmd.Dispose()
 
@@ -1310,18 +1310,18 @@ module private RuntimeCommands =
 
                 match l with
                 | Some(_,l) ->
-                    l.Next <- Some cmd
-                    cmd.Prev <- Some l
+                    l.Next <- ValueSome cmd
+                    cmd.Prev <- ValueSome l
                 | None ->
-                    first.Next <- Some cmd.Stream
-                    cmd.Prev <- None
+                    first.Next <- ValueSome cmd.Stream
+                    cmd.Prev <- ValueNone
 
                 match r with
                 | Some(_,r) ->
-                    cmd.Next <- Some r
-                    r.Prev <- Some cmd
+                    cmd.Next <- ValueSome r
+                    r.Prev <- ValueSome cmd
                 | None ->
-                    cmd.Next <- None
+                    cmd.Next <- ValueNone
 
                 cmd
             ) |> ignore
@@ -1395,37 +1395,37 @@ module private RuntimeCommands =
     and StructuralIfThenElseCommand(compiler : Compiler, condition : aval<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
         inherit PreparedCommand()
 
-        let mutable cache : Option<bool * PreparedCommand> = None
+        let mutable cache : (bool * PreparedCommand) voption = ValueNone
 
         override x.Free() =
             match cache with
-                | Some (_,c) -> 
-                    c.Dispose()
-                    cache <- None
-                | None ->
-                    ()
+            | ValueSome (_,c) ->
+                c.Dispose()
+                cache <- ValueNone
+            | ValueNone ->
+                ()
 
         override x.Compile(token, stream) =
             let cond = condition.GetValue token
             let newCmd = if cond then ifTrue else ifFalse
 
             match cache with
-                | Some(o,cmd) when o = cond ->
-                    // if the cached condition-value matches the stream must be up-to-date.
-                    cmd.Update(token)
+            | ValueSome(o,cmd) when o = cond ->
+                // if the cached condition-value matches the stream must be up-to-date.
+                cmd.Update(token)
 
-                | _ ->
-                    // otherwise the old stream shall be disposed
-                    cache |> Option.iter (snd >> dispose)
+            | _ ->
+                // otherwise the old stream shall be disposed
+                cache |> ValueOption.iter (snd >> dispose)
 
-                    // the new one needs to be compiled (and cached)
-                    let newCmd = compiler.Compile(newCmd)
-                    newCmd.Update(token)
-                    cache <- Some(cond, newCmd)
-                    
-                    // the stream also needs to be updated
-                    stream.Clear()
-                    stream.Call(newCmd.Stream) |> ignore
+                // the new one needs to be compiled (and cached)
+                let newCmd = compiler.Compile(newCmd)
+                newCmd.Update(token)
+                cache <- ValueSome(cond, newCmd)
+
+                // the stream also needs to be updated
+                stream.Clear()
+                stream.Call(newCmd.Stream) |> ignore
 
     /// Rendering a single Geometry using the given PreparedPipelineState
     and GeometryCommand(compiler : Compiler, pipeline : PreparedPipelineState, geometry : Geometry, async : bool) =
@@ -1436,20 +1436,20 @@ module private RuntimeCommands =
             NativePtr.write ptr 1
             ptr
 
-        let mutable prepared : Option<PreparedGeometry> = None
+        let mutable prepared : PreparedGeometry voption = ValueNone
 
         member x.Prepared = prepared
 
         override x.Free() =
             match prepared with
-                | Some pg ->
-                    if async then
-                        for r in pg.pgResources do r.Release()
-                    else
-                        for r in pg.pgResources do compiler.resources.Remove r
-                    prepared <- None
-                | None ->
-                    ()
+            | ValueSome pg ->
+                if async then
+                    for r in pg.pgResources do r.Release()
+                else
+                    for r in pg.pgResources do compiler.resources.Remove r
+                prepared <- ValueNone
+            | ValueNone ->
+                ()
 
         override x.Compile(_, stream) =
             // never gets re-executed so the stream does not need to be cleared
@@ -1457,7 +1457,7 @@ module private RuntimeCommands =
             let uniforms = compiler.task.HookProvider (UniformProvider.ofMap geometry.uniforms)
 
             let pg = compiler.manager.PrepareGeometry(pipeline, geometry, uniforms)
-            prepared <- Some pg
+            prepared <- ValueSome pg
 
             if async then
                 let updateResources = pg.pgResources |> List.filter (fun r -> r.ReferenceCount = 0)
@@ -1469,10 +1469,10 @@ module private RuntimeCommands =
             stream.IndirectBindDescriptorSets(pg.pgDescriptors.Pointer) |> ignore
 
             match pg.pgIndex with
-                | Some index ->
-                    stream.IndirectBindIndexBuffer(index.Pointer) |> ignore
-                | None ->
-                    ()
+            | ValueSome index ->
+                stream.IndirectBindIndexBuffer(index.Pointer) |> ignore
+            | ValueNone ->
+                ()
 
             stream.IndirectBindVertexBuffers(pg.pgAttributes.Pointer) |> ignore
             stream.IndirectDraw(compiler.stats, alwaysActive, pg.pgCall.Pointer) |> ignore
@@ -1489,28 +1489,28 @@ module private RuntimeCommands =
 
         // caches
         let cache = Dict<Geometry, GeometryCommand>()
-        let mutable preparedPipeline = None
+        let mutable preparedPipeline = ValueNone
 
 
         let getPipeline (stream : VKVM.CommandStream) =
             match preparedPipeline with
-                | None -> 
-                    // create and cache the PreparedPipelineState
-                    let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, { state with GlobalUniforms = compiler.task.HookProvider state.GlobalUniforms })
-                    compiler.resources.Add pipeline.ppPipeline
-                    preparedPipeline <- Some pipeline
+            | ValueNone ->
+                // create and cache the PreparedPipelineState
+                let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, { state with GlobalUniforms = compiler.task.HookProvider state.GlobalUniforms })
+                compiler.resources.Add pipeline.ppPipeline
+                preparedPipeline <- ValueSome pipeline
 
-                    // adjust the first-command to bind the pipeline
-                    first.IndirectBindPipeline(VkPipelineBindPoint.Graphics, pipeline.ppPipeline.Pointer) |> ignore
+                // adjust the first-command to bind the pipeline
+                first.IndirectBindPipeline(VkPipelineBindPoint.Graphics, pipeline.ppPipeline.Pointer) |> ignore
 
-                    // the main-stream just needs to call the first stream
-                    stream.Clear()
-                    stream.Call(first) |> ignore
+                // the main-stream just needs to call the first stream
+                stream.Clear()
+                stream.Call(first) |> ignore
 
-                    pipeline
-                
-                | Some pipeline ->
-                    pipeline
+                pipeline
+
+            | ValueSome pipeline ->
+                pipeline
             
         let add (token : AdaptiveToken) (pipeline : PreparedPipelineState) (g : Geometry) =
             // create and update a GeometryCommand
@@ -1522,45 +1522,45 @@ module private RuntimeCommands =
                             
             // append it after the current last-command
             let stream = cmd.Stream
-            last.Next <- Some stream
+            last.Next <- ValueSome stream
             last <- stream
             
         let remove (g : Geometry) =
             // try to remove the GeometryCommand associated with this Geometry
             match cache.TryRemove g with
-                | (true, cmd) ->
-                    // unlink the stream
-                    let stream = cmd.Stream
+            | (true, cmd) ->
+                // unlink the stream
+                let stream = cmd.Stream
 
-                    // if the stream had no next (was last) its Prev will be the new last
-                    match stream.Next with
-                        | Some n -> () // no linking necessary since the setter of Next maintains Prev too.
-                        | None -> last <- stream.Prev.Value
+                // if the stream had no next (was last) its Prev will be the new last
+                match stream.Next with
+                | ValueSome n -> () // no linking necessary since the setter of Next maintains Prev too.
+                | ValueNone -> last <- stream.Prev.Value
 
-                    // if the stream had a Prev pointing to it this Prev now needs to point
-                    // to the stream's next
-                    match stream.Prev with
-                        | Some s -> s.Next <- stream.Next
-                        | None -> 
-                            // since 'first' cannot be removed (its not associated with a Geometry) this case should be unreachable
-                            failf "INVALID: GeometryCommand did not have a proper Prev"
+                // if the stream had a Prev pointing to it this Prev now needs to point
+                // to the stream's next
+                match stream.Prev with
+                | ValueSome s -> s.Next <- stream.Next
+                | ValueNone ->
+                    // since 'first' cannot be removed (its not associated with a Geometry) this case should be unreachable
+                    failf "INVALID: GeometryCommand did not have a proper Prev"
 
 
-                    cmd.Dispose()
+                cmd.Dispose()
 
-                | _ ->
-                    // if no GeometryCommand exists a Geometry is removed that has never been added!
-                    failf "removing a Geometry from a GroupedCommand that has never been added"
+            | _ ->
+                // if no GeometryCommand exists a Geometry is removed that has never been added!
+                failf "removing a Geometry from a GroupedCommand that has never been added"
 
         override x.Free() =
             reader <- Unchecked.defaultof<_>
             first.Dispose()
             match preparedPipeline with
-                | Some p ->
-                    compiler.resources.Remove p.ppPipeline
-                    preparedPipeline <- None
-                | None ->
-                    ()
+            | ValueSome p ->
+                compiler.resources.Remove p.ppPipeline
+                preparedPipeline <- ValueNone
+            | ValueNone ->
+                ()
 
             for cmd in cache.Values do cmd.Dispose()
             cache.Clear()
@@ -1574,22 +1574,22 @@ module private RuntimeCommands =
     and BindPipelineCommand(compiler : Compiler, surface : Aardvark.Rendering.Surface, state : PipelineState) =
         inherit PreparedCommand()
         
-        let mutable preparedPipeline : Option<PreparedPipelineState> = None
+        let mutable preparedPipeline : PreparedPipelineState voption = ValueNone
             
         member x.PreparedPipeline = preparedPipeline
 
         override x.Free() =
             match preparedPipeline with
-                | Some p -> 
-                    compiler.resources.Remove p.ppPipeline
-                    preparedPipeline <- None
-                | None -> 
-                    ()
+            | ValueSome p ->
+                compiler.resources.Remove p.ppPipeline
+                preparedPipeline <- ValueNone
+            | ValueNone ->
+                ()
 
         override x.Compile(_, stream : VKVM.CommandStream) =
             let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, { state with GlobalUniforms = compiler.task.HookProvider state.GlobalUniforms })
             compiler.resources.Add pipeline.ppPipeline
-            preparedPipeline <- Some pipeline
+            preparedPipeline <- ValueSome pipeline
 
             stream.Clear()
             stream.IndirectBindPipeline(VkPipelineBindPoint.Graphics, pipeline.ppPipeline.Pointer) |> ignore
@@ -1665,41 +1665,41 @@ module private RuntimeCommands =
 
         let realActivate (cmd : GeometryCommand) =
             match cmd.Prepared with
-                | Some pg ->
-                    for r in pg.pgResources do
-                        compiler.resources.Add r
-                | None ->
-                    failf "invalid GeometryCommand (not prepared)"
+            | ValueSome pg ->
+                for r in pg.pgResources do
+                    compiler.resources.Add r
+            | ValueNone ->
+                failf "invalid GeometryCommand (not prepared)"
 
             if not (activeSet.Add cmd) then Log.error "double add"
 
-            cmd.Next <- None
-            cmd.Prev <- Some last
+            cmd.Next <- ValueNone
+            cmd.Prev <- ValueSome last
 
-            last.Next <- Some (cmd :> PreparedCommand)
+            last.Next <- ValueSome (cmd :> PreparedCommand)
             last <- cmd
 
         let realDeactivate (cmd : GeometryCommand) =
             match cmd.Prepared with
-                | Some pg ->
-                    for r in pg.pgResources do compiler.resources.Remove r
-                | None ->
-                    failf "invalid GeometryCommand (not prepared)"
+            | ValueSome pg ->
+                for r in pg.pgResources do compiler.resources.Remove r
+            | ValueNone ->
+                failf "invalid GeometryCommand (not prepared)"
 
             if not (activeSet.Remove cmd) then Log.error "double free"
                 
             let prev = 
                 match cmd.Prev with
-                    | Some p -> p
-                    | None -> failf "asdasdasdasd"
+                | ValueSome p -> p
+                | ValueNone -> failf "asdasdasdasd"
 
             match cmd.Next with
-                | Some n -> 
-                    prev.Next <- Some n
-                    n.Prev <- Some prev
-                | None -> 
-                    prev.Next <- None
-                    last <- prev
+            | ValueSome n ->
+                prev.Next <- ValueSome n
+                n.Prev <- ValueSome prev
+            | ValueNone ->
+                prev.Next <- ValueNone
+                last <- prev
 
         let flush() =
             Log.line "flush"
@@ -1759,7 +1759,7 @@ module private RuntimeCommands =
         let first = new VKVM.CommandStream()
         let drawStream = new VKVM.CommandStream()
         
-        do first.Next <- Some drawStream
+        do first.Next <- ValueSome drawStream
 
 
         // caches
@@ -2133,7 +2133,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
     let stats = NativePtr.alloc 1
     let resources = ResourceLocationSet()
-    let mutable lastFramebuffer = None
+    let mutable lastFramebuffer = ValueNone
 
     let compiler =
         {
@@ -2180,7 +2180,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         updateResources token renderToken ignore
 
         // Make sure that command buffer gets recompiled with updated commands on next render.
-        lastFramebuffer <- None
+        lastFramebuffer <- ValueNone
 
     override x.Use(f : unit -> 'r) =
         f()
@@ -2224,11 +2224,11 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                 true
 
         let framebufferChanged =
-            if lastFramebuffer <> Some fbo then
-                lastFramebuffer <- Some fbo
-                true
-            else
+            if lastFramebuffer |> ValueOption.contains fbo then
                 false
+            else
+                lastFramebuffer <- ValueSome fbo
+                true
 
         use dt = device.Token
 

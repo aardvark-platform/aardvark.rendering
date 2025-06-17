@@ -243,7 +243,7 @@ module RenderTasks =
         let compile (l : option<PreparedCommand>) (self : PreparedCommand) (ass : IAssemblerStream) =
             let asm =  AssemblerCommandStream(ass) :> ICommandStream
             let stream = if debug then DebugCommandStream(asm) :> ICommandStream else asm
-            self.Compile(scope, stream, l) |> ignore // TODO: stats
+            self.Compile(scope, stream, Option.toValueOption l) |> ignore // TODO: stats, Aardvark.Assembler voption
 
         let mutable program = new Aardvark.Assembler.FragmentProgram<PreparedCommand>(compile)
 
@@ -308,28 +308,28 @@ module RenderTasks =
                                 | _, :? EpilogCommand -> -1
                                 | _ -> 
                                     match l.EntryState, r.EntryState with
-                                        | None, None -> compare l.Id r.Id
-                                        | None, Some _ -> -1
-                                        | Some _, None -> 1
-                                        | Some ls, Some rs ->
-                                            let cmp = compare ls.pProgram.Id rs.pProgram.Id
+                                    | ValueNone, ValueNone -> compare l.Id r.Id
+                                    | ValueNone, ValueSome _ -> -1
+                                    | ValueSome _, ValueNone -> 1
+                                    | ValueSome ls, ValueSome rs ->
+                                        let cmp = compare ls.pProgram.Id rs.pProgram.Id
+                                        if cmp <> 0 then cmp
+                                        else // efficient texture sorting requires that slots are ordered [Global, PerMaterial, PerInstance] -> currently alphabetic based on SamplerName !
+                                            let mutable cmp = 0
+                                            let mutable i = 0
+                                            let texCnt = min ls.pTextureBindings.Length rs.pTextureBindings.Length
+                                            while cmp = 0 && i < texCnt do
+                                                let struct (sltl, bndl) = ls.pTextureBindings.[i]
+                                                let struct (sltr, bndr) = ls.pTextureBindings.[i]
+                                                if (sltl <> sltr) then
+                                                    cmp <- compare l.Id r.Id
+                                                else
+                                                    let leftTexId = match bndl with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
+                                                    let rigthTexId = match bndr with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
+                                                    cmp <- compare leftTexId rigthTexId
+                                                i <- i + 1
                                             if cmp <> 0 then cmp
-                                            else // efficient texture sorting requires that slots are ordered [Global, PerMaterial, PerInstance] -> currently alphabetic based on SamplerName !
-                                                let mutable cmp = 0
-                                                let mutable i = 0
-                                                let texCnt = min ls.pTextureBindings.Length rs.pTextureBindings.Length
-                                                while cmp = 0 && i < texCnt do
-                                                    let struct (sltl, bndl) = ls.pTextureBindings.[i]
-                                                    let struct (sltr, bndr) = ls.pTextureBindings.[i]
-                                                    if (sltl <> sltr) then
-                                                        cmp <- compare l.Id r.Id
-                                                    else 
-                                                        let leftTexId = match bndl with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
-                                                        let rigthTexId = match bndr with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
-                                                        cmp <- compare leftTexId rigthTexId
-                                                    i <- i + 1
-                                                if cmp <> 0 then cmp
-                                                else compare l.Id r.Id
+                                            else compare l.Id r.Id
                     }
 
                 // create the new program

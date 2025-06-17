@@ -18,7 +18,7 @@ type PreparedRenderObject(device         : Device,
                           program        : IResourceLocation<ShaderProgram>,
                           pipelineLayout : PipelineLayout,
                           pipeline       : INativeResourceLocation<VkPipeline>,
-                          indexBuffer    : Option<INativeResourceLocation<IndexBufferBinding>>,
+                          indexBuffer    : INativeResourceLocation<IndexBufferBinding> voption,
                           descriptorSets : INativeResourceLocation<DescriptorSetBinding>,
                           vertexBuffers  : INativeResourceLocation<VertexBufferBinding>,
                           drawCalls      : INativeResourceLocation<DrawCall>,
@@ -369,9 +369,9 @@ type DevicePreparedRenderObjectExtensions private() =
                     let buffer = this.CreateIndexBuffer(view.Buffer)
                     let res = this.CreateIndexBufferBinding(buffer, VkIndexType.ofType view.ElementType)
                     resources.Add res
-                    Some res
+                    ValueSome res
                 | None ->
-                    None
+                    ValueNone
 
             let calls =
                 match ro.DrawCalls with

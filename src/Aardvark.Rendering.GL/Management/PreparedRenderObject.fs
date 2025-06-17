@@ -702,16 +702,16 @@ module PreparedPipelineStateAssembler =
             let mutable j = 0
             for struct (id, ub) in me.pUniformBuffers do
                 let mutable i = j
-                let mutable old = None
+                let mutable old = ValueNone
                 // compare with prev state in parallel / assuming bindings are sorted
                 while i < prev.pUniformBuffers.Length do
                     let struct (slt, bnd) = prev.pUniformBuffers.[i]
-                    if slt = id then old <- Some bnd
+                    if slt = id then old <- ValueSome bnd
                     if slt < id then i <- i + 1; j <- j + 1
                     else i <- 9999 // break
 
                 match old with
-                | Some old when old = ub -> 
+                | ValueSome old when old = ub ->
                     () // the same UniformBuffer has already been bound
                 | _ -> 
                     x.BindUniformBufferView(id, ub)
@@ -720,16 +720,16 @@ module PreparedPipelineStateAssembler =
             let mutable j = 0
             for struct (id, ssb) in me.pStorageBuffers do
                 let mutable i = j
-                let mutable old = None
+                let mutable old = ValueNone
                 // compare with prev state in parallel / assuming bindings are sorted
                 while i < prev.pStorageBuffers.Length do
                     let struct (slt, bnd) = prev.pStorageBuffers.[i]
-                    if slt = id then old <- Some bnd
+                    if slt = id then old <- ValueSome bnd
                     if slt < id then i <- i + 1; j <- j + 1
                     else i <- 9999 // break
 
                 match old with
-                | Some old when old = ssb -> 
+                | ValueSome old when old = ssb ->
                     // the same UniformBuffer has already been bound
                     ()
                 | _ -> 
@@ -740,28 +740,28 @@ module PreparedPipelineStateAssembler =
             let mutable j = 0
             for struct (slotRange, binding) in me.pTextureBindings do
                 let mutable i = j
-                let mutable old = None
+                let mutable old = ValueNone
                 // compare with prev state in parallel / assuming bindings are sorted
                 while i < prev.pTextureBindings.Length do
                     let struct (slt, bnd) = prev.pTextureBindings.[i]
-                    if slt = slotRange then old <- Some bnd // ranges must perfectly match / does not support overlap of arrays or single textures
+                    if slt = slotRange then old <- ValueSome bnd // ranges must perfectly match / does not support overlap of arrays or single textures
                     if slt.Max < slotRange.Min then i <- i + 1; j <- j + 1
                     else i <- Int32.MaxValue // break
                     
                 match old with
-                | Some old when old = binding -> () // could use more sophisticated compare to detect array overlaps 
+                | ValueSome old when old = binding -> () // could use more sophisticated compare to detect array overlaps
                 | _ -> 
                     match binding with 
                     | SingleBinding (tex, sam) ->
                         x.SetActiveTexture(slotRange.Min)
                         x.BindTexture(tex)
                         match old with
-                        | Some old ->
+                        | ValueSome old ->
                             match old with 
                             | SingleBinding (otex, osam) when Object.ReferenceEquals(osam, sam) -> ()
                             | _ ->
                                 x.BindSampler(slotRange.Min, sam); icnt <- icnt + 1
-                        | None -> x.BindSampler(slotRange.Min, sam); icnt <- icnt + 1
+                        | ValueNone -> x.BindSampler(slotRange.Min, sam); icnt <- icnt + 1
                         icnt <- icnt + 2
                     | ArrayBinding ta ->
                         x.BindTexturesAndSamplers(ta) // internally will use 2 OpenGL calls glBindTextures and glBindSamplers
@@ -769,10 +769,10 @@ module PreparedPipelineStateAssembler =
 
             NativeStats(InstructionCount = icnt)
 
-        member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState, prev : Option<PreparedPipelineState>) : NativeStats =
+        member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState, prev : PreparedPipelineState voption) : NativeStats =
             match prev with
-                | Some prev -> x.SetPipelineState(s, me, prev)
-                | None -> x.SetPipelineState(s, me)
+            | ValueSome prev -> x.SetPipelineState(s, me, prev)
+            | ValueNone -> x.SetPipelineState(s, me)
 
 
 [<AbstractClass>]
@@ -783,28 +783,28 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass, renderObject : Rend
 
     let mutable cleanup : list<unit -> unit> = []
     
-    let mutable resourceStats = None
-    let mutable resources = None
+    let mutable resourceStats = ValueNone
+    let mutable resources = ValueNone
     
     let getResources (x : PreparedCommand) =
         lock x (fun () ->
             match resources with
-            | Some res -> res
+            | ValueSome res -> res
             | _ -> 
                 let all = x.GetResources() |> Seq.toArray
-                resources <- Some all
+                resources <- ValueSome all
                 all
         )
 
     let getStats (x : PreparedCommand) =
         lock x (fun () ->
             match resourceStats with
-            | Some s -> s
+            | ValueSome s -> s
             | _ ->
                 let res = getResources x
                 let cnt = res.Length
                 let counts = res |> Seq.countBy (fun r -> r.Kind) |> Map.ofSeq
-                resourceStats <- Some (cnt, counts)
+                resourceStats <- ValueSome (cnt, counts)
                 (cnt, counts)
         )
 
@@ -813,14 +813,14 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass, renderObject : Rend
         
     abstract member GetResources : unit -> seq<IResource>
     abstract member Release : unit -> unit
-    abstract member Compile : info : CompilerInfo * stream : ICommandStream * prev : Option<PreparedCommand> -> NativeStats
-    abstract member EntryState : Option<PreparedPipelineState>
-    abstract member ExitState : Option<PreparedPipelineState>
-    abstract member Signature : IFramebufferSignature option
+    abstract member Compile : info : CompilerInfo * stream : ICommandStream * prev : PreparedCommand voption -> NativeStats
+    abstract member EntryState : PreparedPipelineState voption
+    abstract member ExitState : PreparedPipelineState voption
+    abstract member Signature : IFramebufferSignature voption
 
     member x.IsCompatibleWith(signature: IFramebufferSignature) =
         match x.Signature with
-        | Some s -> s.IsCompatibleWith signature
+        | ValueSome s -> s.IsCompatibleWith signature
         | _ -> true
     
     member x.AddCleanup(clean : unit -> unit) =
@@ -858,8 +858,8 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass, renderObject : Rend
                     cleanup |> List.iter (fun f -> f())
                     x.Release()
                     cleanup <- []
-                    resourceStats <- None
-                    resources <- None
+                    resourceStats <- ValueNone
+                    resources <- ValueNone
             )
 
     interface IRenderObject with
@@ -880,10 +880,10 @@ type PreparedObjectInfo =
         oFramebufferSignature : IFramebufferSignature
         oBeginMode : IResource<GLBeginMode, GLBeginMode>
         oAttributeBuffers : IResource<Buffer>[]
-        oIndexBinding : IndexBinding option
+        oIndexBinding : IndexBinding voption
         oIsActive : IResource<bool, int>
         oDrawCallInfos : IResource<DrawCallInfoList, DrawCallInfoList>
-        oIndirectBuffer : Option<IResource<GLIndirectBuffer, IndirectDrawArgs>>
+        oIndirectBuffer : IResource<GLIndirectBuffer, IndirectDrawArgs> voption
         oVertexInputBinding : IResource<VertexInputBindingHandle, int>
     }
 
@@ -898,14 +898,14 @@ type PreparedObjectInfo =
             b.Dispose()
 
         match x.oIndexBinding with
-        | Some b -> b.Dispose()
+        | ValueSome b -> b.Dispose()
         | _ -> ()
 
         x.oIsActive.Dispose()
 
         match x.oIndirectBuffer with
-        | Some i -> i.Dispose()
-        | None -> x.oDrawCallInfos.Dispose()
+        | ValueSome i -> i.Dispose()
+        | ValueNone -> x.oDrawCallInfos.Dispose()
 
         x.oVertexInputBinding.Dispose()
 
@@ -919,14 +919,14 @@ type PreparedObjectInfo =
                 yield b :> _
 
             match x.oIndexBinding with
-            | Some b -> yield b.Buffer :>_
+            | ValueSome b -> yield b.Buffer :>_
             | _ -> ()
 
             yield x.oIsActive :> _
 
             match x.oIndirectBuffer with
-            | Some i -> yield i :> _
-            | None -> yield x.oDrawCallInfos :> _
+            | ValueSome i -> yield i :> _
+            | ValueNone -> yield x.oDrawCallInfos :> _
 
             yield x.oVertexInputBinding :> _
         }
@@ -942,11 +942,12 @@ module PreparedObjectInfo =
     [<AutoOpen>]
     module private Utilities =
 
+        [<return: Struct>]
         let (|AttributeType|_|) (t : Type) =
             match t with
-            | ColorOf(_, t) | VectorOf(_, t) | MatrixOf(_, t) -> Some t
-            | Numeric -> Some t
-            | _ -> None
+            | ColorOf(_, t) | VectorOf(_, t) | MatrixOf(_, t) -> ValueSome t
+            | Numeric -> ValueSome t
+            | _ -> ValueNone
 
         let getExpectedType (t : GLSLType) =
             try
@@ -1062,12 +1063,12 @@ module PreparedObjectInfo =
             let index =
                 match rj.Indices with
                 | Some view ->
-                    Some {
+                    ValueSome {
                         IndexType = getIndexType view.ElementType
                         Buffer    = x.CreateIndexBuffer view.Buffer |> addResource resources
                     }
 
-                | None -> None
+                | None -> ValueNone
 
             GL.Check "[Prepare] Indices"
 
@@ -1075,10 +1076,10 @@ module PreparedObjectInfo =
                 match rj.DrawCalls with
                 | Indirect indir ->
                     let buffer = x.CreateIndirectBuffer(Option.isSome rj.Indices, indir) |> addResource resources
-                    Some buffer
+                    ValueSome buffer
 
                 | _ ->
-                    None
+                    ValueNone
 
             GL.Check "[Prepare] Indirect Buffer"
 
@@ -1126,18 +1127,18 @@ module PreparedObjectInfoAssembler =
             let beginMode = me.oBeginMode
 
             match me.oIndirectBuffer with
-            | Some indirect ->
+            | ValueSome indirect ->
                 match me.oIndexBinding with
-                | Some b ->
+                | ValueSome b ->
                     x.DrawElementsIndirect(s.runtimeStats, isActive, beginMode, int b.IndexType, indirect)
-                | None ->
+                | ValueNone ->
                     x.DrawArraysIndirect(s.runtimeStats, isActive, beginMode, indirect)
 
-            | None ->
+            | ValueNone ->
                 match me.oIndexBinding with
-                | Some b ->
+                | ValueSome b ->
                     x.DrawElements(s.runtimeStats, isActive, beginMode, int b.IndexType, me.oDrawCallInfos)
-                | None ->
+                | ValueNone ->
                     x.DrawArrays(s.runtimeStats, isActive, beginMode, me.oDrawCallInfos)
 
             NativeStats(InstructionCount = 2)
@@ -1156,26 +1157,26 @@ module PreparedObjectInfoAssembler =
             let beginMode = me.oBeginMode
 
             match me.oIndirectBuffer with
-            | Some indirect ->
+            | ValueSome indirect ->
                 match me.oIndexBinding with
-                | Some b ->
+                | ValueSome b ->
                     x.DrawElementsIndirect(s.runtimeStats, isActive, beginMode, int b.IndexType, indirect)
-                | None ->
+                | ValueNone ->
                     x.DrawArraysIndirect(s.runtimeStats, isActive, beginMode, indirect)
 
-            | None ->
+            | ValueNone ->
                 match me.oIndexBinding with
-                | Some b ->
+                | ValueSome b ->
                     x.DrawElements(s.runtimeStats, isActive, beginMode, int b.IndexType, me.oDrawCallInfos)
-                | None ->
+                | ValueNone ->
                     x.DrawArrays(s.runtimeStats, isActive, beginMode, me.oDrawCallInfos)
 
             NativeStats(InstructionCount = icnt + 1)
 
-        member x.Render(s : CompilerInfo, me : PreparedObjectInfo, prev : Option<PreparedObjectInfo>) : NativeStats =
+        member x.Render(s : CompilerInfo, me : PreparedObjectInfo, prev : PreparedObjectInfo voption) : NativeStats =
             match prev with
-                | Some prev -> x.Render(s, me, prev)
-                | None -> x.Render(s, me)
+            | ValueSome prev -> x.Render(s, me, prev)
+            | ValueNone -> x.Render(s, me)
     
             
 type EpilogCommand(ctx : Context) =
@@ -1193,9 +1194,9 @@ type EpilogCommand(ctx : Context) =
             stream.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
         NativeStats(InstructionCount = 13)
 
-    override x.EntryState = None
-    override x.ExitState = None
-    override x.Signature = None
+    override x.EntryState = ValueNone
+    override x.ExitState = ValueNone
+    override x.Signature = ValueNone
 
 type NopCommand(ctx : Context, pass : RenderPass) =
     inherit PreparedCommand(ctx, pass) 
@@ -1203,9 +1204,9 @@ type NopCommand(ctx : Context, pass : RenderPass) =
     override x.GetResources() = Seq.empty
     override x.Release() = ()
     override x.Compile(_,_,_) = NativeStats.Zero
-    override x.EntryState = None
-    override x.ExitState = None
-    override x.Signature = None
+    override x.EntryState = ValueNone
+    override x.ExitState = ValueNone
+    override x.Signature = ValueNone
 
 type PreparedObjectCommand(state : PreparedPipelineState, info : PreparedObjectInfo, renderPass : RenderPass) =
     inherit PreparedCommand(state.pContext, renderPass, Some info.oOriginal)
@@ -1222,31 +1223,30 @@ type PreparedObjectCommand(state : PreparedPipelineState, info : PreparedObjectI
             yield! info.Resources
         }
 
-    override x.Compile(s : CompilerInfo, stream : ICommandStream, prev : Option<PreparedCommand>) : NativeStats =
+    override x.Compile(s : CompilerInfo, stream : ICommandStream, prev : PreparedCommand voption) : NativeStats =
         let prevInfo =
             match prev with
-                | Some (:? PreparedObjectCommand as p) -> Some p.Info
-                | _ -> None
+            | ValueSome (:? PreparedObjectCommand as p) -> ValueSome p.Info
+            | _ -> ValueNone
 
         let prevState =
             match prev with
-            | Some p -> p.ExitState
-            | _ -> None
-
+            | ValueSome p -> p.ExitState
+            | _ -> ValueNone
             
         let stats = stream.SetPipelineState(s, state, prevState)
         stats + stream.Render(s, info, prevInfo)
 
-    override x.EntryState = Some state
-    override x.ExitState = Some state
-    override x.Signature = Some state.pFramebufferSignature
+    override x.EntryState = ValueSome state
+    override x.ExitState = ValueSome state
+    override x.Signature = ValueSome state.pFramebufferSignature
 
 type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : RenderPass) =
     inherit PreparedCommand(ctx, renderPass)
 
-    let signature = cmds |> List.tryPick _.Signature
-    let first   = List.tryHead cmds
-    let last    = List.tryLast cmds
+    let signature = cmds |> List.tryPickV _.Signature
+    let first   = List.tryHeadV cmds
+    let last    = List.tryLast cmds |> Option.toValueOption
 
     override x.Release() =
         cmds |> List.iter (fun c -> c.Dispose())
@@ -1259,11 +1259,11 @@ type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : Rend
         let mutable s = NativeStats.Zero
         for c in cmds do
             s <- s + c.Compile(info, stream, prev)
-            prev <- Some c
+            prev <- ValueSome c
         s
 
-    override x.EntryState = first |> Option.bind (fun first -> first.EntryState)
-    override x.ExitState = last |> Option.bind (fun last -> last.ExitState)
+    override x.EntryState = first |> ValueOption.bind (fun first -> first.EntryState)
+    override x.ExitState = last |> ValueOption.bind (fun last -> last.ExitState)
     override x.Signature = signature
 
 
@@ -1335,10 +1335,10 @@ module rec Command =
     type Command() =
         inherit AdaptiveObject()
 
-        let mutable next : option<Command> = None
-        let mutable prev : option<Command> = None
+        let mutable next : Command voption = ValueNone
+        let mutable prev : Command voption = ValueNone
 
-        let mutable program : option<FragmentProgram> = None
+        let mutable program : FragmentProgram voption = ValueNone
 
         abstract member Free : CompilerInfo -> unit
         abstract member PerformUpdate : token : AdaptiveToken * program : FragmentProgram * info : CompilerInfo -> unit
@@ -1350,10 +1350,10 @@ module rec Command =
             x.EvaluateIfNeeded token () (fun token ->
                 let p = 
                     match program with
-                    | Some p -> p
-                    | None -> 
+                    | ValueSome p -> p
+                    | ValueNone ->
                         let p = new FragmentProgram()
-                        program <- Some p
+                        program <- ValueSome p
                         p
 
                 p.Update(token)
@@ -1362,12 +1362,12 @@ module rec Command =
 
         member x.Run() =
             match program with
-            | Some p -> p.Run()
-            | None -> ()
+            | ValueSome p -> p.Run()
+            | ValueNone -> ()
 
             match next with
-            | Some n -> n.Run()
-            | None -> ()
+            | ValueSome n -> n.Run()
+            | ValueNone -> ()
 
         member x.Prev
             with get() = prev
@@ -1391,26 +1391,26 @@ module rec Command =
                 and set p = x.Next <- p
 
     type SingleObjectCommand (dirty : System.Collections.Generic.HashSet<SingleObjectCommand>, signature : IFramebufferSignature, manager : ResourceManager, o : IRenderObject, debug : bool) =
-        let mutable fragment : option<ProgramFragment> = None
+        let mutable fragment : ProgramFragment voption = ValueNone
         let mutable o = o
-        let mutable prepared = None
+        let mutable prepared = ValueNone
 
-        let mutable prev : option<SingleObjectCommand> = None
-        let mutable next : option<SingleObjectCommand> = None
+        let mutable prev : SingleObjectCommand voption = ValueNone
+        let mutable next : SingleObjectCommand voption = ValueNone
 
         let compile (info : CompilerInfo) (s : IAssemblerStream) (p : IAdaptivePinning) =
             let cmd = 
                 match prepared with
-                | None ->
+                | ValueNone ->
                     let cmd = PreparedCommand.ofRenderObject signature manager o
                     for r in cmd.Resources do
                         info.resources.Add r
-                    prepared <- Some cmd
+                    prepared <- ValueSome cmd
                     cmd
-                | Some cmd -> 
+                | ValueSome cmd ->
                     cmd
 
-            let pp = prev |> Option.bind (fun p -> p.PreparedCommand)
+            let pp = prev |> ValueOption.bind (fun p -> p.PreparedCommand)
             let cs = s |> CommandStream.create debug
             cmd.Compile(info, cs, pp) |> ignore
 
@@ -1428,63 +1428,63 @@ module rec Command =
             and set n =
                 next <- n
                 match n with
-                | Some n -> n.Prev <- Some x
-                | None -> ()
+                | ValueSome n -> n.Prev <- ValueSome x
+                | ValueNone -> ()
 
                 match fragment with
-                | Some f ->     
+                | ValueSome f ->
                     match n with
-                    | Some n -> f.Next <- n.Fragment
-                    | None -> f.Next <- None
-                | None -> 
+                    | ValueSome n -> f.Next <- n.Fragment
+                    | ValueNone -> f.Next <- ValueNone
+                | ValueNone ->
                     ()
 
 
         member x.Free(info : CompilerInfo) =
             match prepared with
-            | Some prep ->
+            | ValueSome prep ->
                 for r in prep.Resources do info.resources.Remove r
                 prep.Dispose()
-                prepared <- None
-            | None ->
+                prepared <- ValueNone
+            | ValueNone ->
                 ()
 
             match fragment with
-            | Some f -> 
+            | ValueSome f ->
                 f.Dispose()
-                fragment <- None
-            | None -> ()
+                fragment <- ValueNone
+            | ValueNone -> ()
 
             match prev, next with
-            | Some p, _     -> p.Next <- next
-            | None, Some n  -> n.Prev <- None
+            | ValueSome p, _         -> p.Next <- next
+            | ValueNone, ValueSome n -> n.Prev <- ValueNone
             | _ -> ()
 
-            prev <- None
-            next <- None
+            prev <- ValueNone
+            next <- ValueNone
 
         member x.Compile(info : CompilerInfo, p : FragmentProgram) =
             let fragment = 
                 match fragment with
-                    | Some f -> 
-                        f.Mutate (compile info)
-                        f
-                    | None ->
-                        let f = p.NewFragment (compile info)
-                        fragment <- Some f
-                        f
+                | ValueSome f ->
+                    f.Mutate (compile info)
+                    f
+                | ValueNone ->
+                    let f = p.NewFragment (compile info)
+                    fragment <- ValueSome f
+                    f
             
             match prev with
-            | Some p -> 
+            | ValueSome p ->
                 match p.Fragment with
-                | Some pf -> pf.Next <- Some fragment
-                | None -> ()
-            | None -> 
-                p.First <- Some fragment
+                | ValueSome pf -> pf.Next <- ValueSome fragment
+                | ValueNone -> ()
+            | ValueNone ->
+                p.First <- ValueSome fragment
 
             match next with
-            | Some n -> fragment.Next <- n.Fragment
-            | None -> fragment.Next <- None
+            | ValueSome n -> fragment.Next <- n.Fragment
+            | ValueNone -> fragment.Next <- ValueNone
 
         interface ILinked<SingleObjectCommand> with
             member x.Next
@@ -1550,7 +1550,7 @@ module rec Command =
 
             )
 
-        let mutable epilog : option<ProgramFragment> = None
+        let mutable epilog : ProgramFragment voption = ValueNone
 
         override x.PerformUpdate(token, program, info) =
             let ops = reader.GetChanges token
@@ -1559,10 +1559,10 @@ module rec Command =
             
             let epilog =
                 match epilog with
-                | Some e -> e
-                | None ->
+                | ValueSome e -> e
+                | ValueNone ->
                     let e = compileEpilog program info
-                    epilog <- Some e
+                    epilog <- ValueSome e
                     e
 
 
@@ -1584,15 +1584,15 @@ module rec Command =
                         )
 
                     match ref.Prev with
-                    | ValueSome p -> p.Value.Next <- Some ref.Value
+                    | ValueSome p -> p.Value.Next <- ValueSome ref.Value
                     | ValueNone -> program.First <- ref.Value.Fragment
 
                     match ref.Next with
-                    | ValueSome n -> ref.Value.Next <- Some n.Value
+                    | ValueSome n -> ref.Value.Next <- ValueSome n.Value
                     | ValueNone -> 
                         match ref.Value.Fragment with
-                        | Some f -> f.Next <- Some epilog  
-                        | None -> ()
+                        | ValueSome f -> f.Next <- ValueSome epilog
+                        | ValueNone -> ()
 
 
             for v in removes do
@@ -1606,15 +1606,15 @@ module rec Command =
                         match l with
                         | ValueSome l ->    
                             match r with
-                            | ValueSome r -> l.Value.Next <- Some r.Value
+                            | ValueSome r -> l.Value.Next <- ValueSome r.Value
                             | ValueNone -> 
                                 match l.Value.Fragment with
-                                | Some f -> f.Next <- Some epilog
-                                | None -> ()
+                                | ValueSome f -> f.Next <- ValueSome epilog
+                                | ValueNone -> ()
                         | ValueNone ->
                             match r with
                             | ValueSome r -> program.First <- r.Value.Fragment
-                            | ValueNone -> program.First <- None
+                            | ValueNone -> program.First <- ValueNone
                     | ValueNone ->
                         ()
 
@@ -1630,15 +1630,15 @@ module rec Command =
             program.First <- 
                 match trie.First with
                 | ValueSome f -> f.Value.Fragment
-                | ValueNone -> None
+                | ValueNone -> ValueNone
 
             match trie.Last with
             | ValueSome l -> 
                 match l.Value.Fragment with
-                | Some f -> f.Next <- Some epilog
-                | None -> ()
+                | ValueSome f -> f.Next <- ValueSome epilog
+                | ValueNone -> ()
             | ValueNone ->
-                epilog.Prev <- None
+                epilog.Prev <- ValueNone
 
 
         override x.Free(info : CompilerInfo) =
@@ -1646,10 +1646,10 @@ module rec Command =
             // Thus, disposing those does not fix the prev pointer of the epilog, leaving it
             // invalid -> exception when trying to dispose epilog afterwards
             match epilog with
-            | Some e -> 
+            | ValueSome e ->
                 e.Dispose()
-                epilog <- None
-            | None ->
+                epilog <- ValueNone
+            | ValueNone ->
                 ()
 
             for cmd in cache.Values do
@@ -1705,12 +1705,12 @@ module rec Command =
                                 )
 
                             match r with
-                            | Some (_, (r, _)) -> fragment.Next <- Some r
-                            | None -> fragment.Next <- None
+                            | Some (_, (r, _)) -> fragment.Next <- ValueSome r
+                            | None -> fragment.Next <- ValueNone
 
                             match l with
-                            | Some (_, (lf,_)) -> lf.Next <- Some fragment
-                            | None -> program.First <- Some fragment
+                            | Some (_, (lf,_)) -> lf.Next <- ValueSome fragment
+                            | None -> program.First <- ValueSome fragment
 
                             fragment
 
@@ -1752,7 +1752,7 @@ module rec Command =
     type ClearCommand(signature : IFramebufferSignature, values : aval<ClearValues>) =
         inherit Command()
 
-        let mutable fragment : option<ProgramFragment> = None
+        let mutable fragment : ProgramFragment voption = ValueNone
 
         let compile (info : CompilerInfo) (values : ClearValues) (s : IAssemblerStream) (p : IAdaptivePinning) =
             
@@ -1805,28 +1805,28 @@ module rec Command =
             let values = values.GetValue token
 
             match fragment with
-            | Some f ->
+            | ValueSome f ->
                 f.Mutate (compile info values)
-            | None ->
+            | ValueNone ->
                 let f = program.NewFragment (compile info values)
-                fragment <- Some f
-                program.First <- Some f
+                fragment <- ValueSome f
+                program.First <- ValueSome f
 
             program.Update(token)
 
         override x.Free(info : CompilerInfo) =
             match fragment with
-            | Some f -> 
+            | ValueSome f ->
                 f.Dispose()
-                fragment <- None
-            | None ->
+                fragment <- ValueNone
+            | ValueNone ->
                 ()
 
     type IfThenElseCommand(condition : aval<bool>, ifTrue : Command, ifFalse : Command) =
         inherit Command()
 
         let condition = AVal.map (function true -> 1 | false -> 0) condition
-        let mutable fragment : option<ProgramFragment> = None
+        let mutable fragment : ProgramFragment voption = ValueNone
 
 
         override x.PerformUpdate(token : AdaptiveToken, program : FragmentProgram, info : CompilerInfo) =
@@ -1834,7 +1834,7 @@ module rec Command =
             ifFalse.Update(token, info)
 
             match fragment with
-            | None ->
+            | ValueNone ->
                 let f = 
                     program.NewFragment(fun s p ->
                         let f = s.NewLabel()
@@ -1852,18 +1852,18 @@ module rec Command =
                         s.Mark(e)
                         
                     )
-                program.First <- Some f
-                fragment <- Some f
+                program.First <- ValueSome f
+                fragment <- ValueSome f
 
-            | Some _ ->
+            | ValueSome _ ->
                 ()
 
             program.Update(token)
 
         override x.Free(info : CompilerInfo) =
             match fragment with
-            | Some f -> f.Dispose()
-            | None -> ()
+            | ValueSome f -> f.Dispose()
+            | ValueNone -> ()
             ifTrue.Free info
             ifFalse.Free info
 

@@ -268,9 +268,9 @@ module PointerContextExtensions =
         member x.ToStencilMode(mode : StencilMode) =
             toGLStencilMode mode
 
-        member x.CreateVertexInputBinding (index : Option<Buffer>, attributes : struct (int * Attribute)[]) =
+        member x.CreateVertexInputBinding (index : Buffer voption, attributes : struct (int * Attribute)[]) =
             let struct (buffers, values) = Attribute.bindings attributes
-            let index = match index with | Some i -> i.Handle | _ -> 0
+            let index = match index with | ValueSome i -> i.Handle | _ -> 0
 
             let pBuffers = NativePtr.allocArray buffers
             let pValues = NativePtr.allocArray values
@@ -280,10 +280,10 @@ module PointerContextExtensions =
             NativePtr.write ptr value
             VertexInputBindingHandle ptr
 
-        member x.Update(ptr : VertexInputBindingHandle, index : Option<Buffer>, attributes : struct (int * Attribute)[]) =
+        member x.Update(ptr : VertexInputBindingHandle, index : Buffer voption, attributes : struct (int * Attribute)[]) =
             let mutable value = NativePtr.read ptr.Pointer
             let struct (buffers, values) = Attribute.bindings attributes
-            let index = match index with | Some i -> i.Handle | _ -> 0
+            let index = match index with | ValueSome i -> i.Handle | _ -> 0
 
             let mutable value = value
 

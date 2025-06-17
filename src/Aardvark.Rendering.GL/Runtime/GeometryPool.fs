@@ -1163,7 +1163,7 @@ module GeometryPoolData =
 
 
 
-        member x.CompileRender(s : ICommandStream, before : ICommandStream -> unit, mvp : nativeptr<M44f>, indexType : Option<_>, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) : NativeStats =
+        member x.CompileRender(s : ICommandStream, before : ICommandStream -> unit, mvp : nativeptr<M44f>, indexType : _ voption, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) : NativeStats =
 
             let mutable icnt = 0 // counting dynamic
 
@@ -1214,7 +1214,7 @@ module GeometryPoolData =
                     s.Enable(int EnableCap.SampleAlphaToOne)
 
                 match indexType with
-                    | Some indexType ->
+                    | ValueSome indexType ->
                         s.DrawElementsIndirect(runtimeStats, isActive, mode, int indexType, indirectHandle)
                     | _ ->
                         s.DrawArraysIndirect(runtimeStats, isActive, mode, indirectHandle)
@@ -1263,11 +1263,11 @@ module GeometryPoolData =
 
 open GeometryPoolData
 
-type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<InstanceBuffer>, vb : Block<VertexBuffer>, ib : Option<Block<Buffer>>, textures : MapExt<int, TextureSlot>) =
+type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<InstanceBuffer>, vb : Block<VertexBuffer>, ib : Block<Buffer> voption, textures : MapExt<int, TextureSlot>) =
     let fvc =
         match signature.indexType, ib with
-            | Some it, Some ib -> int ib.Size / Marshal.SizeOf it
-            | _ -> int vb.Size
+        | Some it, ValueSome ib -> int ib.Size / Marshal.SizeOf it
+        | _ -> int vb.Size
 
     static let getIndexType =
         LookupTable.lookup [
@@ -1285,7 +1285,7 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
         Mem (
             int64 ub.Size * ub.Memory.Value.ElementSize +
             int64 vb.Size * vb.Memory.Value.ElementSize +
-            (match ib with | Some ib -> int64 ib.Size | _ -> 0L)
+            (match ib with | ValueSome ib -> int64 ib.Size | _ -> 0L)
         )
 
     member x.IndexType = indexType
@@ -1328,7 +1328,7 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
             )
 
         match ib with
-            | Some ib ->
+            | ValueSome ib ->
                 let gc = GCHandle.Alloc(g.IndexArray, GCHandleType.Pinned)
                 try
                     let ptr = ctx.MapBufferRange(ib.Memory.Value, ib.Offset, ib.Size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapUnsynchronizedBit)
@@ -1336,7 +1336,7 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
                     ctx.UnmapBuffer(ib.Memory.Value)
                 finally
                     gc.Free()
-            | None ->
+            | ValueNone ->
                 ()
 
         ub.Memory.Value.Upload(int ub.Offset, int ub.Size, instanceValues)
@@ -1348,7 +1348,7 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
 
     member x.DrawCallInfo =
         match ib with
-            | Some ib ->
+            | ValueSome ib ->
                 DrawCallInfo(
                     FaceVertexCount = fvc,
                     FirstIndex = int ib.Offset / Marshal.SizeOf(signature.indexType.Value),
@@ -1357,7 +1357,7 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
                     BaseVertex = int vb.Offset
                 )
 
-            | None ->
+            | ValueNone ->
                 DrawCallInfo(
                     FaceVertexCount = fvc,
                     FirstIndex = int vb.Offset,
@@ -1400,8 +1400,8 @@ type GeometryPool private(ctx : Context) =
 
         let ib =
             match signature.indexType with
-                | Some t -> indexManager.Alloc(t, indexCount) |> Some
-                | None -> None
+                | Some t -> indexManager.Alloc(t, indexCount) |> ValueSome
+                | None -> ValueNone
 
         let textures =
             tm |> MapExt.choose (fun _ d ->
@@ -1451,8 +1451,8 @@ type GeometryPool private(ctx : Context) =
         slot.Textures |> MapExt.iter (fun _ t -> t.Dispose())
 
         match slot.IndexBuffer with
-            | Some ib -> indexManager.Free ib
-            | None -> ()
+            | ValueSome ib -> indexManager.Free ib
+            | ValueNone -> ()
 
 type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds : nativeptr<int>, activeBuffer : nativeptr<int>, modelViewProjs : nativeptr<int>, state : PreparedPipelineState, pass : RenderPass) as this =
     inherit PreparedCommand(ctx, pass)
@@ -1465,7 +1465,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
         slot.InstanceBuffer.Memory.Value,
         slot.VertexBuffer.Memory.Value,
         textures,
-        slot.IndexBuffer |> Option.map (fun b -> slot.IndexType.Value, b.Memory.Value)
+        slot.IndexBuffer |> ValueOption.map (fun b -> slot.IndexType.Value, b.Memory.Value)
 
     static let beginMode =
         LookupTable.lookup [
@@ -1520,7 +1520,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let totalMemory = ref 0L
     let avgRenderTime = AverageWindow(10)
 
-    let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, textures : array<int * int * int>, ib : IndirectBuffer) (s : ICommandStream) : NativeStats =
+    let compile (indexType : DrawElementsType voption, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, textures : array<int * int * int>, ib : IndirectBuffer) (s : ICommandStream) : NativeStats =
         let stats = NativeStats(InstructionCount = 1)
         s.BindVertexAttributes(contextHandle, a)
         for (slot, t, sam) in textures do
@@ -1534,7 +1534,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let indirects = Dict<_, IndirectBuffer>()
     let isOutdated = NativePtr.allocArray [| 1 |]
     let updateFun = Marshal.PinDelegate(new System.Action(this.Update))
-    let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * array<int*int*int> * IndirectBuffer> = []
+    let mutable oldCalls : list<DrawElementsType voption * nativeptr<GLBeginMode> * VertexInputBindingHandle * array<int*int*int> * IndirectBuffer> = []
     let program =
         new FragmentProgram<_>(fun a (s : IAssemblerStream) -> compile a (AssemblerCommandStream s :> ICommandStream) |> ignore)
         //new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
@@ -1632,8 +1632,8 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
             let calls =
                 Dict.toList indirects |> List.map (fun ((mode, ib, vb, textures, typeAndIndex), db) ->
-                    let indexType = typeAndIndex |> Option.map fst
-                    let index = typeAndIndex |> Option.map snd
+                    let indexType = typeAndIndex |> ValueOption.map fst
+                    let index = typeAndIndex |> ValueOption.map snd
                     db.Flush()
 
                     let attributes : struct (int * Attribute) list =
@@ -1702,7 +1702,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
         )
 
-    override x.Compile(info : CompilerInfo, stream : ICommandStream, last : Option<PreparedCommand>) =
+    override x.Compile(info : CompilerInfo, stream : ICommandStream, last : PreparedCommand voption) =
         lock puller (fun () ->
             if tasks.Add info.task then
                 assert (info.task.OutOfDate)
@@ -1710,7 +1710,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
         )
 
         let mvpRes = mvpResource
-        let lastState = last |> Option.bind (fun l -> l.ExitState)
+        let lastState = last |> ValueOption.bind (fun l -> l.ExitState)
 
         stream.ConditionalCall(isOutdated, updateFun.Pointer)
 
@@ -1749,9 +1749,9 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     override x.GetResources() =
         Seq.append (Seq.singleton (mvpResource :> IResource)) state.Resources
 
-    override x.EntryState = Some state
-    override x.ExitState = Some state
-    override x.Signature = Some state.pFramebufferSignature
+    override x.EntryState = ValueSome state
+    override x.ExitState = ValueSome state
+    override x.Signature = ValueSome state.pFramebufferSignature
 
 
 [<StructuredFormatDisplay("AsString")>]

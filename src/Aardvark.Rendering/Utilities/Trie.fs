@@ -4,8 +4,8 @@ open Aardvark.Base
 open System.Collections.Generic
 
 type ILinked<'a when 'a :> ILinked<'a>> =
-    abstract member Prev : Option<'a> with get, set
-    abstract member Next : Option<'a> with get, set
+    abstract member Prev : 'a voption with get, set
+    abstract member Next : 'a voption with get, set
 
 [<AutoOpen>]
 module private TrieDictionaryImplementation =
@@ -88,15 +88,15 @@ module private TrieDictionaryImplementation =
     type private Linked<'a> =
         {
             mutable Value : 'a
-            mutable Prev : option<Linked<'a>>
-            mutable Next : option<Linked<'a>>
+            mutable Prev : Linked<'a> voption
+            mutable Next : Linked<'a> voption
         }
 
     type UnsortedTrieDict<'k, 'v>() =
         inherit TrieDictionary<'k, 'v>()
 
-        let mutable first : option<Linked<'v>> = None
-        let mutable last : option<Linked<'v>> = None
+        let mutable first : Linked<'v> voption = ValueNone
+        let mutable last : Linked<'v> voption = ValueNone
 
         let store = Dict<'k, Linked<'v>>()
 
@@ -105,13 +105,13 @@ module private TrieDictionaryImplementation =
             | (true, node) ->
                 let l =
                     match node.Prev with
-                    | Some p -> ValueSome p.Value
-                    | None -> ValueNone
+                    | ValueSome p -> ValueSome p.Value
+                    | ValueNone -> ValueNone
 
                 let r =
                     match node.Next with
-                    | Some p -> ValueSome p.Value
-                    | None -> ValueNone
+                    | ValueSome p -> ValueSome p.Value
+                    | ValueNone -> ValueNone
 
                 match action l (ValueSome node.Value) r with
                 | ValueSome n ->
@@ -119,33 +119,33 @@ module private TrieDictionaryImplementation =
                     l, ValueSome n, r
                 | ValueNone ->
                     match node.Prev with
-                    | Some p -> p.Next <- node.Next
-                    | None -> first <- node.Next
+                    | ValueSome p -> p.Next <- node.Next
+                    | ValueNone -> first <- node.Next
 
                     match node.Next with
-                    | Some n -> n.Prev <- node.Prev
-                    | None -> last <- node.Prev
+                    | ValueSome n -> n.Prev <- node.Prev
+                    | ValueNone -> last <- node.Prev
 
-                    node.Prev <- None
-                    node.Next <- None
+                    node.Prev <- ValueNone
+                    node.Next <- ValueNone
                     store.Remove key |> ignore
 
                     l, ValueNone, r
             | _ ->
                 let l =
                     match last with
-                    | Some last -> ValueSome last.Value
-                    | None -> ValueNone
+                    | ValueSome last -> ValueSome last.Value
+                    | ValueNone -> ValueNone
 
                 match action l ValueNone ValueNone with
                 | ValueSome v ->
-                    let n = { Value = v; Prev = last; Next = None }
+                    let n = { Value = v; Prev = last; Next = ValueNone }
                     store.[key] <- n
                     match last with
-                    | Some l -> l.Next <- Some n
-                    | None -> first <- Some n
+                    | ValueSome l -> l.Next <- ValueSome n
+                    | ValueNone -> first <- ValueSome n
 
-                    last <- Some n
+                    last <- ValueSome n
 
                     l, ValueSome v, ValueNone
                 | ValueNone ->
@@ -165,11 +165,11 @@ module private TrieDictionaryImplementation =
             match store.TryRemove key with
             | (true, node) ->
                 match node.Prev with
-                | Some p -> p.Next <- node.Next
-                | None -> first <- node.Next
+                | ValueSome p -> p.Next <- node.Next
+                | ValueNone -> first <- node.Next
                 match node.Next with
-                | Some n -> n.Prev <- node.Prev
-                | None -> last <- node.Prev
+                | ValueSome n -> n.Prev <- node.Prev
+                | ValueNone -> last <- node.Prev
 
                 ValueSome node.Value
             | _ ->
@@ -183,13 +183,13 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
     let mutable prev : TrieNode<'a> = null
     let mutable next : TrieNode<'a> = null
 
-    let mutable value : Option<'a> = None
+    let mutable value : 'a voption = ValueNone
     let mutable firstChild : TrieNode<'a> = null
     let mutable lastChild  : TrieNode<'a> = null
     let children : TrieDictionary<obj, TrieNode<'a>> =
         match parent.GetComparer level with
-        | Some cmp -> SortedTrieDict<obj, TrieNode<'a>>(cmp) :> _
-        | None -> UnsortedTrieDict<obj, TrieNode<'a>>() :> _
+        | ValueSome cmp -> SortedTrieDict<obj, TrieNode<'a>>(cmp) :> _
+        | ValueNone -> UnsortedTrieDict<obj, TrieNode<'a>>() :> _
 
 
     member x.Key = key
@@ -198,14 +198,14 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
         match firstChild with
         | null ->
             match value with
-            | Some v -> Some v
-            | None -> failwith "encountered empty Trie"
+            | ValueSome v -> ValueSome v
+            | ValueNone -> failwith "encountered empty Trie"
         | v -> v.First
 
     member x.Last =
         match value with
-        | Some v -> Some v
-        | None ->
+        | ValueSome v -> ValueSome v
+        | ValueNone ->
             match lastChild with
             | null -> failwith "encountered empty Trie"
             | n -> n.Last
@@ -220,36 +220,36 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
 
     member x.Count =
         match value with
-            | None -> children.Count
-            | _ -> 1 + children.Count
+        | ValueNone -> children.Count
+        | _ -> 1 + children.Count
 
     member x.IsEmpty =
         match value with
-            | None -> children.Count = 0
-            | _ -> false
+        | ValueNone -> children.Count = 0
+        | _ -> false
 
     member internal x.Add(key : list<obj>, l : TrieRef<'a>, r : TrieRef<'a>, newValue : 'a) =
         match key with
             | [] ->
                 match value with
-                | Some o ->
+                | ValueSome o ->
                     let p = o.Prev
                     let n = o.Next
 
                     newValue.Prev <- p
                     newValue.Next <- n
                     match p with
-                    | None -> parent.First <- Some newValue
-                    | Some p -> p.Next <- Some newValue
+                    | ValueNone -> parent.First <- ValueSome newValue
+                    | ValueSome p -> p.Next <- ValueSome newValue
 
                     match n with
-                    | None -> parent.Last <- Some newValue
-                    | Some n -> n.Prev <- Some newValue
+                    | ValueNone -> parent.Last <- ValueSome newValue
+                    | ValueSome n -> n.Prev <- ValueSome newValue
 
-                    o.Next <- None
-                    o.Prev <- None
-                    value <- Some newValue
-                | None ->
+                    o.Next <- ValueNone
+                    o.Prev <- ValueNone
+                    value <- ValueSome newValue
+                | ValueNone ->
                     let l = TrieRef<'a>.Last l
                     let r = TrieRef<'a>.First r
 
@@ -257,13 +257,13 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
                     newValue.Next <- r
 
                     match l with
-                    | None -> parent.First <- Some newValue
-                    | Some p -> p.Next <- Some newValue
+                    | ValueNone -> parent.First <- ValueSome newValue
+                    | ValueSome p -> p.Next <- ValueSome newValue
 
                     match r with
-                    | None -> parent.Last <- Some newValue
-                    | Some n -> n.Prev <- Some newValue
-                    value <- Some newValue
+                    | ValueNone -> parent.Last <- ValueSome newValue
+                    | ValueSome n -> n.Prev <- ValueSome newValue
+                    value <- ValueSome newValue
 
             | k :: rest ->
                 match children.TryGetValue k with
@@ -272,8 +272,8 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
                         match c.Prev with
                             | null ->
                                 match value with
-                                    | Some v -> Value v
-                                    | None -> l
+                                | ValueSome v -> Value v
+                                | ValueNone -> l
                             | p ->
                                 Node p
 
@@ -316,8 +316,8 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
                         match lc with
                         | ValueSome l ->
                             match value with
-                            | Some v -> Value v
-                            | None -> Node l
+                            | ValueSome v -> Value v
+                            | ValueNone -> Node l
                         | ValueNone ->
                             l
 
@@ -332,21 +332,21 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
         match key with
             | [] ->
                 match value with
-                    | Some v ->
+                    | ValueSome v ->
                         let p = v.Prev
                         let n = v.Next
 
                         match p with
-                            | Some p -> p.Next <- n
-                            | None -> parent.First <- n
+                            | ValueSome p -> p.Next <- n
+                            | ValueNone -> parent.First <- n
 
                         match n with
-                            | Some n -> n.Prev <- p
-                            | None -> parent.Last <- p
+                            | ValueSome n -> n.Prev <- p
+                            | ValueNone -> parent.Last <- p
 
-                        value <- None
+                        value <- ValueNone
                         true
-                    | None ->
+                    | ValueNone ->
                         false
             | k :: rest ->
                 match children.TryGetValue k with
@@ -381,8 +381,8 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
     override x.ToString() =
         let self =
             match value with
-                | Some v -> [sprintf "v:%A" v]
-                | None -> []
+            | ValueSome v -> [sprintf "v:%A" v]
+            | ValueNone -> []
 
         let children =
             x.Children |> List.map (fun n -> sprintf "%A: %s" n.Key (n.ToString()))
@@ -396,39 +396,39 @@ and [<CompilationRepresentation(CompilationRepresentationFlags.UseNullAsTrueValu
 
     static member Last (x : TrieRef<'a>) =
         match x with
-            | TrieRef.Nothing -> None
-            | TrieRef.Value a -> Some a
+            | TrieRef.Nothing -> ValueNone
+            | TrieRef.Value a -> ValueSome a
             | TrieRef.Node t -> t.Last
 
     static member First (x : TrieRef<'a>) =
         match x with
-            | TrieRef.Nothing -> None
-            | TrieRef.Value a -> Some a
+            | TrieRef.Nothing -> ValueNone
+            | TrieRef.Value a -> ValueSome a
             | TrieRef.Node t -> t.First
 
-and [<StructuredFormatDisplay("{AsString}")>] Trie<'a when 'a :> ILinked<'a>>(comparers : option<IComparer<obj>>[]) =
-    let mutable first : Option<'a> = None
-    let mutable last  : Option<'a> = None
+and [<StructuredFormatDisplay("{AsString}")>] Trie<'a when 'a :> ILinked<'a>>(comparers : IComparer<obj> voption[]) =
+    let mutable first : 'a voption = ValueNone
+    let mutable last  : 'a voption = ValueNone
     let mutable root : TrieNode<'a> = null
 
     new() = Trie<'a>([||])
 
-    member internal x.GetComparer(level : int) : option<IComparer<obj>> =
+    member internal x.GetComparer(level : int) : IComparer<obj> voption =
         if level >= 0 && level < comparers.Length then comparers.[level]
-        else None
+        else ValueNone
 
     member x.Clear() =
         root <- null
-        first <- None
-        last <- None
+        first <- ValueNone
+        last <- ValueNone
 
     member x.First
-        with get() : Option<'a> = first
-        and set (f : Option<'a>) = first <- f
+        with get() : 'a voption = first
+        and set (f : 'a voption) = first <- f
 
     member x.Last
-        with get() : Option<'a> = last
-        and set (l : Option<'a>) = last <- l
+        with get() : 'a voption = last
+        and set (l : 'a voption) = last <- l
 
     member x.Add(key : list<obj>, value : 'a) =
         match root with
@@ -459,7 +459,7 @@ and [<StructuredFormatDisplay("{AsString}")>] Trie<'a when 'a :> ILinked<'a>>(co
     member x.Values =
         seq {
             let mutable c = first
-            while Option.isSome c do
+            while ValueOption.isSome c do
                 let v = c.Value
                 yield v
                 c <- v.Next

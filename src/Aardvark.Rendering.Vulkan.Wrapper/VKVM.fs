@@ -804,8 +804,8 @@ module VKVM =
         let mutable count = 0u
         let mutable position = 0n
 
-        let mutable prev : Option<CommandStream> = None
-        let mutable next : Option<CommandStream> = None
+        let mutable prev : CommandStream voption = ValueNone
+        let mutable next : CommandStream voption = ValueNone
 
         let mutable handle = 
             let handle = NativePtr.alloc 1
@@ -878,19 +878,19 @@ module VKVM =
 
         member x.Next
             with get() = next
-            and set (n : Option<CommandStream>) =
+            and set (n : CommandStream voption) =
                 match n with
-                    | Some n ->
-                        n.Prev <- Some x
-                        next <- Some n
-                        x.HandleNext <- n.Handle
-                    | None ->
-                        match next with
-                            | Some n -> 
-                                n.Prev <- None
-                                next <- None
-                            | None -> ()
-                        x.HandleNext <- NativePtr.zero
+                | ValueSome n ->
+                    n.Prev <- ValueSome x
+                    next <- ValueSome n
+                    x.HandleNext <- n.Handle
+                | ValueNone ->
+                    match next with
+                    | ValueSome n ->
+                        n.Prev <- ValueNone
+                        next <- ValueNone
+                    | ValueNone -> ()
+                    x.HandleNext <- NativePtr.zero
 
         member x.Clear() =
             if count > 0u then

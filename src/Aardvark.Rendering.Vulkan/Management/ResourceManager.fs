@@ -188,23 +188,23 @@ type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : li
                                                 input : aval<'Input>, desc : ImmutableResourceDescription<'Input, 'Handle>) =
     inherit AbstractResourceLocation<'Handle>(owner, key)
 
-    let mutable handle : Option<'Input * 'Handle> = None
+    let mutable handle : ValueOption<'Input * 'Handle> = ValueNone
     let mutable version = 0
 
     let recreate (user : IResourceUser) (token : AdaptiveToken) (renderToken : RenderToken) =
         let n = input.GetValue(user, token, renderToken)
 
         match handle with
-        | Some(o, h) when Unchecked.equals o n -> h
-        | Some(_, h) ->
+        | ValueSome(o, h) when Unchecked.equals o n -> h
+        | ValueSome(_, h) ->
             desc.idestroy h
             let r = desc.icreate n
-            handle <- Some(n,r)
+            handle <- ValueSome(n,r)
             inc &version
             r
-        | None ->
+        | ValueNone ->
             let r = desc.icreate n
-            handle <- Some(n,r)
+            handle <- ValueSome(n,r)
             inc &version
             r
 
@@ -215,8 +215,8 @@ type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : li
                 // At this point, we may already have updated (i.e. OutOfDate = false).
                 // In that case we would be destroying the new handle.
                 if x.OutOfDate then
-                    handle |> Option.iter (snd >> desc.idestroy)
-                    handle <- None
+                    handle |> ValueOption.iter (snd >> desc.idestroy)
+                    handle <- ValueNone
             finally
                 Monitor.Exit x
 
@@ -234,10 +234,10 @@ type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : li
     override x.Destroy() =
         input.Outputs.Remove x |> ignore
         match handle with
-        | Some (_, h) ->
+        | ValueSome (_, h) ->
             desc.idestroy h
-            handle <- None
-        | None ->
+            handle <- ValueNone
+        | ValueNone ->
             ()
         input.Release()
 
@@ -247,42 +247,42 @@ type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : li
             { handle = handle; version = version }
         else
             match handle with
-            | Some(_,h) -> { handle = h; version = version }
-            | None -> failwith "[Resource] inconsistent state"
+            | ValueSome(_,h) -> { handle = h; version = version }
+            | ValueNone -> failwith "[Resource] inconsistent state"
 
 type MutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list<obj>,
                                               input : aval<'Input>, desc : MutableResourceDescription<'Input, 'Handle>) =
     inherit AbstractResourceLocation<'Handle>(owner, key)
 
-    let mutable handle : Option<'Input * 'Handle> = None
+    let mutable handle : ValueOption<'Input * 'Handle> = ValueNone
     let mutable version = 0
 
     let recreate (n : 'Input) =
         match handle with
-        | Some(_, h) ->
+        | ValueSome(_, h) ->
             desc.mdestroy h
             let r = desc.mcreate n
-            handle <- Some(n,r)
+            handle <- ValueSome(n,r)
             r
-        | None ->
+        | ValueNone ->
             let r = desc.mcreate n
-            handle <- Some(n,r)
+            handle <- ValueSome(n,r)
             r
 
     let update (user : IResourceUser) (token : AdaptiveToken) (renderToken : RenderToken) =
         let n = input.GetValue(user, token, renderToken)
 
         match handle with
-        | None ->
+        | ValueNone ->
             inc &version
             recreate n
 
-        | Some(oa, oh) when Unchecked.equals oa n ->
+        | ValueSome(oa, oh) when Unchecked.equals oa n ->
             oh
 
-        | Some(_, oh) ->
+        | ValueSome(_, oh) ->
             if desc.mtryUpdate oh n then
-                handle <- Some(n, oh)
+                handle <- ValueSome(n, oh)
                 oh
             else
                 inc &version
@@ -294,10 +294,10 @@ type MutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list
     override x.Destroy() =
         input.Outputs.Remove x |> ignore
         match handle with
-        | Some(_, h) ->
+        | ValueSome(_, h) ->
             desc.mdestroy h
-            handle <- None
-        | None ->
+            handle <- ValueNone
+        | ValueNone ->
             ()
         input.Release()
 
@@ -307,8 +307,8 @@ type MutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list
             { handle = handle; version = version }
         else
             match handle with
-            | Some(_, h) -> { handle = h; version = version }
-            | None -> failwith "[Resource] inconsistent state"
+            | ValueSome(_, h) -> { handle = h; version = version }
+            | ValueNone -> failwith "[Resource] inconsistent state"
 
 [<AbstractClass>]
 type AbstractPointerResource<'T when 'T : unmanaged>(owner : IResourceCache, key : list<obj>) =
@@ -658,7 +658,7 @@ module Resources =
                                      state : SamplerState, modifier : aval<SamplerState -> SamplerState>) =
         inherit AbstractResourceLocation<SamplerState>(owner, key)
 
-        let mutable cache = None
+        let mutable cache = ValueNone
 
         override x.Create() =
             modifier.Acquire()
@@ -669,10 +669,10 @@ module Resources =
         override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
                 let f = modifier.GetValue(user, token, renderToken)
-                cache <- Some (f state)
+                cache <- ValueSome (f state)
 
             match cache with
-            | Some s -> { handle = s; version = 0 }
+            | ValueSome s -> { handle = s; version = 0 }
             | _ -> failwith "[Resource] inconsistent state"
 
     type ImageSamplerResource(owner : IResourceCache, key : list<obj>,
@@ -680,7 +680,7 @@ module Resources =
                               sampler : IResourceLocation<Sampler>) =
         inherit AbstractResourceLocation<ImageSampler>(owner, key)
 
-        let mutable cache = None
+        let mutable cache = ValueNone
 
         override x.Create() =
             imageView.Acquire()
@@ -694,10 +694,10 @@ module Resources =
             if x.OutOfDate then
                 let v = imageView.Update(user, token, renderToken)
                 let s = sampler.Update(user, token, renderToken)
-                cache <- Some (v, s)
+                cache <- ValueSome (v, s)
 
             match cache with
-            | Some (v, s) -> { handle = (v.handle, s.handle); version = v.version + s.version }
+            | ValueSome (v, s) -> { handle = (v.handle, s.handle); version = v.version + s.version }
             | _ -> failwith "[Resource] inconsistent state"
 
 
@@ -1335,7 +1335,7 @@ module Resources =
         inherit AbstractPointerResource<DescriptorSetBinding>(owner, key)
 
         let mutable setVersions = Array.init sets.Length (fun _ -> -1)
-        let mutable target : Option<DescriptorSetBinding> = None
+        let mutable target : DescriptorSetBinding voption = ValueNone
 
         override x.Create() =
             base.Create()
@@ -1346,18 +1346,18 @@ module Resources =
             for s in sets do s.Release()
             setVersions <- Array.init sets.Length (fun _ -> -1)
             match target with
-                | Some t -> t.Dispose(); target <- None
-                | None -> ()
+            | ValueSome t -> t.Dispose(); target <- ValueNone
+            | ValueNone -> ()
 
         override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             let mutable changed = false
             let target =
                 match target with
-                    | Some t -> t
-                    | None ->
-                        let t = new DescriptorSetBinding(bindPoint, layout.Handle, 0, sets.Length)
-                        target <- Some t
-                        t
+                | ValueSome t -> t
+                | ValueNone ->
+                    let t = new DescriptorSetBinding(bindPoint, layout.Handle, 0, sets.Length)
+                    target <- ValueSome t
+                    t
 
             for i in 0 .. sets.Length - 1 do
                 let info = sets.[i].Update(user, token, renderToken)
@@ -1398,7 +1398,7 @@ module Resources =
     type AbstractImageViewResource(owner : IResourceCache, key : list<obj>, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
         inherit AbstractResourceLocation<ImageView>(owner, key)
 
-        let mutable handle : Option<ImageView> = None
+        let mutable handle : ImageView voption = ValueNone
         let mutable version = 0
 
         abstract member CreateImageView : image: Image * levels: Range1i * slices: Range1i * mapping: VkComponentMapping -> ImageView
@@ -1409,8 +1409,8 @@ module Resources =
             slices.Acquire()
 
         override x.Destroy() =
-            handle |> Option.iter Disposable.dispose
-            handle <- None
+            handle |> ValueOption.iter Disposable.dispose
+            handle <- ValueNone
             slices.Release()
             levels.Release()
             image.Release()
@@ -1425,15 +1425,15 @@ module Resources =
 
                 let isIdentical =
                     match handle with
-                    | Some h -> h.Image = image.handle && h.MipLevelRange = levels && h.ArrayRange = slices
-                    | None -> false
+                    | ValueSome h -> h.Image = image.handle && h.MipLevelRange = levels && h.ArrayRange = slices
+                    | ValueNone -> false
 
                 if isIdentical then
                     { handle = handle.Value; version = version }
                 else
                     match handle with
-                    | Some h -> h.Dispose()
-                    | None -> ()
+                    | ValueSome h -> h.Dispose()
+                    | ValueNone -> ()
 
                     let mapping =
                         if VkFormat.toColFormat image.handle.Format = Col.Format.Gray then
@@ -1442,14 +1442,14 @@ module Resources =
                             VkComponentMapping.Identity
 
                     let h = x.CreateImageView(image.handle, levels, slices, mapping)
-                    handle <- Some h
+                    handle <- ValueSome h
                     inc &version
 
                     { handle = h; version = version }
             else
                 match handle with
-                | Some h -> { handle = h; version = version }
-                | None -> failwith "[Resource] inconsistent state"
+                | ValueSome h -> { handle = h; version = version }
+                | ValueNone -> failwith "[Resource] inconsistent state"
 
     type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device,
                            samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
@@ -1490,13 +1490,13 @@ module Resources =
                                            instanceBuffer : IResourceLocation<Buffer>, instanceCount : aval<int>, usage : AccelerationStructureUsage) =
             inherit AbstractResourceLocation<AccelerationStructure>(owner, key)
 
-            let mutable handle : Option<AccelerationStructure> = None
+            let mutable handle : AccelerationStructure voption = ValueNone
             let mutable version = 0
 
             let create (data : AccelerationStructureData) =
                 let acc = AccelerationStructure.create device true usage data
                 if name <> null then acc.Name <- name
-                handle <- Some acc
+                handle <- ValueSome acc
                 inc &version
                 { handle = acc; version = version }
 
@@ -1505,10 +1505,10 @@ module Resources =
 
             override x.Destroy() =
                 match handle with
-                | Some h ->
+                | ValueSome h ->
                     h.Dispose()
-                    handle <- None
-                | None -> ()
+                    handle <- ValueNone
+                | ValueNone -> ()
 
                 instanceBuffer.Release()
 
@@ -1519,9 +1519,9 @@ module Resources =
                     let data = AccelerationStructureData.Instances { Buffer = buffer; Count = uint32 count }
 
                     match handle with
-                    | None -> create data
+                    | ValueNone -> create data
 
-                    | Some old ->
+                    | ValueSome old ->
                         if old |> AccelerationStructure.tryUpdate data then
                             { handle = old; version = version }
                         else
@@ -1529,15 +1529,15 @@ module Resources =
                             create data
                 else
                     match handle with
-                    | Some h -> { handle = h; version = version }
-                    | None -> failwith "[Resource] inconsistent state"
+                    | ValueSome h -> { handle = h; version = version }
+                    | ValueNone -> failwith "[Resource] inconsistent state"
 
 
         type RaytracingPipelineResource(owner : IResourceCache, key : list<obj>,
                                         program : RaytracingProgram, maxRecursionDepth : aval<int>) =
             inherit AbstractResourceLocationWithPointer<RaytracingPipeline, VkPipeline>(owner, key)
 
-            let mutable handle : Option<RaytracingPipelineDescription * RaytracingPipeline> = None
+            let mutable handle : (RaytracingPipelineDescription * RaytracingPipeline) voption = ValueNone
             let mutable version = 0
 
             let device = program.Device
@@ -1546,15 +1546,15 @@ module Resources =
                 device.Runtime.MaxRayRecursionDepth
 
             let destroy() =
-                handle |> Option.iter (snd >> Disposable.dispose)
-                handle <- None
+                handle |> ValueOption.iter (snd >> Disposable.dispose)
+                handle <- ValueNone
 
             let create description =
                 inc &version
-                let basePipeline = handle |> Option.map snd
+                let basePipeline = handle |> ValueOption.map snd
                 let pipeline = description |> RaytracingPipeline.create device basePipeline
-                handle <- Some (description, pipeline)
-                basePipeline |> Option.iter Disposable.dispose
+                handle <- ValueSome (description, pipeline)
+                basePipeline |> ValueOption.iter Disposable.dispose
                 { handle = pipeline; version = version }
 
             override x.Create() =
@@ -1570,39 +1570,39 @@ module Resources =
                     let description = { Program = program; MaxRecursionDepth = uint32 depth }
 
                     match handle with
-                    | Some (o, p) when description = o ->
+                    | ValueSome (o, p) when description = o ->
                         { handle = p; version = version }
                     | _ ->
                         create description
 
                 else
                     match handle with
-                    | Some (_, h) -> { handle = h; version = version }
-                    | None -> failwith "[Resource] inconsistent state"
+                    | ValueSome (_, h) -> { handle = h; version = version }
+                    | ValueNone -> failwith "[Resource] inconsistent state"
 
 
         type ShaderBindingTableResource(owner : IResourceCache, key : list<obj>,
                                         pipeline : IResourceLocation<RaytracingPipeline>, hitConfigs : aval<Set<Symbol[]>>) =
             inherit AbstractResourceLocationWithPointer<ShaderBindingTable, ShaderBindingTableHandle>(owner, key)
 
-            let mutable handle : Option<ShaderBindingTable> = None
+            let mutable handle : ShaderBindingTable voption = ValueNone
             let mutable version = 0
 
             let destroy() =
-                handle |> Option.iter Disposable.dispose
-                handle <- None
+                handle |> ValueOption.iter Disposable.dispose
+                handle <- ValueNone
 
             let create hitConfigs pipeline =
                 inc &version
                 let table = ShaderBindingTable.create hitConfigs pipeline
-                handle <- Some table
+                handle <- ValueSome table
                 { handle = table; version = version }
 
             let update hitConfigs pipeline table =
                 let updated = table |> ShaderBindingTable.updateOrRecreate hitConfigs pipeline
                 if updated <> table then
                     inc &version
-                    handle <- Some updated
+                    handle <- ValueSome updated
                 { handle = updated; version = version }
 
             override x.Create() =
@@ -1620,12 +1620,12 @@ module Resources =
                     let configs = hitConfigs.GetValue(user, token, renderToken)
 
                     match handle with
-                    | Some tbl -> tbl |> update configs pipeline.handle
+                    | ValueSome tbl -> tbl |> update configs pipeline.handle
                     | _ -> create configs pipeline.handle
                 else
                     match handle with
-                    | Some tbl -> { handle = tbl; version = version }
-                    | None -> failwith "[Resource] inconsistent state"
+                    | ValueSome tbl -> { handle = tbl; version = version }
+                    | ValueNone -> failwith "[Resource] inconsistent state"
 
 
 module internal ResourceCaches =

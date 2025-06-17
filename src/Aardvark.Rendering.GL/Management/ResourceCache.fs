@@ -26,7 +26,7 @@ type internal Resource<'Handle, 'View when 'View : unmanaged>(kind : ResourceKin
     inherit AdaptiveObject()
     static let handleType = typeof<'Handle>
 
-    let mutable current = None
+    let mutable current = ValueNone
     let handle = AVal.init Unchecked.defaultof<'Handle>
     let pointer : nativeptr<'View> = NativePtr.alloc 1
 
@@ -45,7 +45,7 @@ type internal Resource<'Handle, 'View when 'View : unmanaged>(kind : ResourceKin
 
         onDispose.Trigger()
         x.Destroy handle.Value
-        current <- None
+        current <- ValueNone
         info <- ResourceInfo.Zero
         NativePtr.free pointer
 
@@ -66,14 +66,14 @@ type internal Resource<'Handle, 'View when 'View : unmanaged>(kind : ResourceKin
 
     let id = ResourceId.New()
 
-    abstract member Create : AdaptiveToken * RenderToken * Option<'Handle> -> 'Handle
+    abstract member Create : AdaptiveToken * RenderToken * 'Handle voption -> 'Handle
     abstract member Destroy : 'Handle -> unit
     abstract member GetInfo : 'Handle -> ResourceInfo
     abstract member View : 'Handle -> 'View
 
 
     member x.HandleType = handleType
-    member x.IsDisposed = Option.isNone current
+    member x.IsDisposed = ValueOption.isNone current
 
     member x.Info = info
 
@@ -92,15 +92,15 @@ type internal Resource<'Handle, 'View when 'View : unmanaged>(kind : ResourceKin
             setHandle x h
 
             match current with
-            | Some old when Unchecked.equals old h ->
+            | ValueSome old when Unchecked.equals old h ->
                 t.InPlaceResourceUpdate(kind)
 
-            | Some old ->
-                current <- Some h
+            | ValueSome old ->
+                current <- ValueSome h
                 t.ReplacedResource(kind)
 
-            | None ->
-                current <- Some h
+            | ValueNone ->
+                current <- ValueSome h
                 t.CreatedResource(kind)
 
 
@@ -180,12 +180,12 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
     let tryGetParent (key : list<obj>) =
         match parent with
         | Some v -> v.TryGet key
-        | None -> None
+        | None -> ValueNone
 
     member x.TryGet(key : list<obj>) =
         match store.TryGetValue(key) with
-        | (true, v) -> Some v.Value
-        | _ -> None
+        | (true, v) -> ValueSome v.Value
+        | _ -> ValueNone
 
     member x.GetOrCreateLocal(key : list<obj>, create : unit -> Resource<'Handle, 'View>) =
         let resource =
@@ -201,21 +201,21 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
 
     member x.GetOrCreate(key : list<obj>, create : unit -> Resource<'Handle, 'View>) =
         match tryGetParent key with
-        | Some r ->
+        | ValueSome r ->
             r.AddRef()
             r :> IResource<_,_>
-        | None ->
+        | ValueNone ->
             x.GetOrCreateLocal(key, create)
 
     member x.GetOrCreate<'Data>(dataMod : aval<'Data>, additionalKeys : list<obj>, creator : unit -> ResourceDescription<'Data, 'Handle, 'View>) =
         let key = (dataMod :> obj)::additionalKeys
         match tryGetParent key with
-        | Some v ->
+        | ValueSome v ->
             match dataMod with
             | :? ILockedResource as r ->
                 x.GetOrCreateLocal(key, fun () ->
                     v.AddRef()
-                    let mutable oldData = None
+                    let mutable oldData = ValueNone
                     { new Resource<'Handle, 'View>(v.Kind) with
                         member x.View (h : 'Handle) =
                             v.View(h)
@@ -223,14 +223,14 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
                         member x.GetInfo(h : 'Handle) =
                             v.GetInfo h
 
-                        member x.Create(token : AdaptiveToken, rt : RenderToken, old : Option<'Handle>) =
+                        member x.Create(token : AdaptiveToken, rt : RenderToken, old : 'Handle voption) =
                             let newData = dataMod.GetValue token
 
                             match oldData with
-                            | Some d -> releaseLock d
-                            | None -> ()
+                            | ValueSome d -> releaseLock d
+                            | ValueNone -> ()
 
-                            oldData <- Some newData
+                            oldData <- ValueSome newData
                             acquireLock newData
 
                             if old.IsNone then
@@ -241,8 +241,8 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
 
                         member x.Destroy(h : 'Handle) =
                             match oldData with
-                            | Some d -> releaseLock d; oldData <- None
-                            | None -> ()
+                            | ValueSome d -> releaseLock d; oldData <- ValueNone
+                            | ValueNone -> ()
 
                             dataMod.Release()
                             lock v (fun () ->
@@ -256,11 +256,11 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
                 v.AddRef()
                 v :> IResource<_,_>
 
-        | None ->
+        | ValueNone ->
             x.GetOrCreateLocal(key, fun _ ->
                 let desc = creator()
                 let mutable ownsHandle = false
-                let mutable oldData = None
+                let mutable oldData = ValueNone
 
                 let resource =
                     { new Resource<'Handle, 'View>(desc.kind) with
@@ -270,21 +270,21 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
                         member x.GetInfo (h : 'Handle) =
                             desc.info h
 
-                        member x.Create(token : AdaptiveToken, rt : RenderToken, old : Option<'Handle>) =
+                        member x.Create(token : AdaptiveToken, rt : RenderToken, old : 'Handle voption) =
                             if old.IsNone then
                                 dataMod.Acquire()
 
                             let data = dataMod.GetValue(token, rt)
 
                             match oldData with
-                            | Some d -> releaseLock d
-                            | None -> ()
+                            | ValueSome d -> releaseLock d
+                            | ValueNone -> ()
 
                             acquireLock data
-                            oldData <- Some data
+                            oldData <- ValueSome data
 
                             match old with
-                            | Some old ->
+                            | ValueSome old ->
                                 match data |> tryGetHandle desc.unwrap with
                                 | ValueSome handle ->
                                     if ownsHandle then desc.delete old
@@ -300,7 +300,7 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
                                         ownsHandle <- true
                                         newHandle
 
-                            | None ->
+                            | ValueNone ->
                                 match data |> tryGetHandle desc.unwrap with
                                 | ValueSome handle ->
                                     ownsHandle <- false
@@ -312,7 +312,7 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
 
                         member x.Destroy(h : 'Handle) =
                             match oldData with
-                            | Some d -> releaseLock d
+                            | ValueSome d -> releaseLock d
                             | _ -> ()
 
                             dataMod.Release()

@@ -39,7 +39,7 @@ module RaytracingPipeline =
         | None -> VkRayTracingShaderGroupTypeKHR.TrianglesHitGroup
         | _ -> VkRayTracingShaderGroupTypeKHR.ProceduralHitGroup
 
-    let create (device : Device) (basePipeline : RaytracingPipeline option) (description : RaytracingPipelineDescription) =
+    let create (device : Device) (basePipeline : RaytracingPipeline voption) (description : RaytracingPipelineDescription) =
         let groups =
             description.Program.Groups |> List.toArray
 
@@ -80,8 +80,8 @@ module RaytracingPipeline =
 
                 let basePipeline, derivativeFlag =
                     match basePipeline with
-                    | None -> VkPipeline.Null, VkPipelineCreateFlags.None
-                    | Some x -> x.Handle, VkPipelineCreateFlags.DerivativeBit
+                    | ValueNone -> VkPipeline.Null, VkPipelineCreateFlags.None
+                    | ValueSome x -> x.Handle, VkPipelineCreateFlags.DerivativeBit
 
                 let maxRecursion =
                     match device.PhysicalDevice.Limits.Raytracing with

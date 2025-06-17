@@ -459,10 +459,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     member x.View a = a
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (token : AdaptiveToken, renderToken : RenderToken, old : Option<TextureArrayBinding>) =
+                    member x.Create (token : AdaptiveToken, renderToken : RenderToken, old : TextureArrayBinding voption) =
                         let bindingHandle =
                             match old with
-                            | Some o -> o
+                            | ValueSome o -> o
                             | _ ->
                                 for (t, s) in bindings do
                                     t.AddRef()
@@ -522,10 +522,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     member x.View a = a
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (token : AdaptiveToken, renderToken : RenderToken, old : Option<TextureArrayBinding>) =
+                    member x.Create (token : AdaptiveToken, renderToken : RenderToken, old : TextureArrayBinding voption) =
                         let bindingHandle =
                             match old with
-                            | Some o -> o
+                            | ValueSome o -> o
                             | _ ->
                                 sampler.AddRef()
 
@@ -585,7 +585,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     member x.GetInfo _ = ResourceInfo.Zero
                     member x.Create (t, rt, old) =
                         match old with
-                        | None -> textureResource.AddRef()
+                        | ValueNone -> textureResource.AddRef()
                         | _ -> ()
 
                         textureResource.Update(t, rt)
@@ -623,7 +623,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let layers = input |> AVal.mapNonAdaptive (fun l -> l.Slices)
         x.CreateImageBinding(name, texture, level, layers, imageType.Properties)
 
-    member x.CreateVertexInputBinding(bindings : struct (int * AdaptiveAttribute)[], index : IndexBinding option) =
+    member x.CreateVertexInputBinding(bindings : struct (int * AdaptiveAttribute)[], index : IndexBinding voption) =
         vertexInputCache.GetOrCreate(
             [ bindings :> obj; index :> obj ],
             fun () ->
@@ -631,20 +631,20 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     member x.View a = 0
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (t : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBindingHandle>) =
+                    member x.Create (t : AdaptiveToken, rt : RenderToken, old : VertexInputBindingHandle voption) =
                         let attributes =
                             bindings |> Array.map (fun struct (i, a) -> struct (i, a.GetValue(t, rt)))
 
                         let index =
                             match index with
-                            | Some i -> i.Buffer.Handle.GetValue(t, rt) |> Some
-                            | _ -> None
+                            | ValueSome i -> i.Buffer.Handle.GetValue(t, rt) |> ValueSome
+                            | _ -> ValueNone
 
                         match old with
-                        | Some old ->
+                        | ValueSome old ->
                             ctx.Update(old, index, attributes)
                             old
-                        | None ->
+                        | ValueNone ->
                             ctx.CreateVertexInputBinding(index, attributes)
 
                     member x.Destroy vao =

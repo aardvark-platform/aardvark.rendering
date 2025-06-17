@@ -1450,8 +1450,8 @@ module rec ChangeableProgram =
             let jumpEnd = lOffset + lSize
             int (rOffset - jumpEnd)
 
-        let mutable prev : option<ProgramFragment> = None
-        let mutable next : option<ProgramFragment> = None
+        let mutable prev : ProgramFragment voption = ValueNone
+        let mutable next : ProgramFragment voption = ValueNone
 
         member private x.WriteJumpTo(jumpTarget : nativeint) =
             parent.Use(block, fun ptr offset size ->
@@ -1493,8 +1493,8 @@ module rec ChangeableProgram =
 
             let jumpTarget =
                 match next with
-                | Some n -> n.Offset
-                | None -> parent.Epilog.Offset
+                | ValueSome n -> n.Offset
+                | ValueNone -> parent.Epilog.Offset
 
             let newSize =
                 nativeint ms.Length +
@@ -1505,8 +1505,8 @@ module rec ChangeableProgram =
                 let n = parent.Alloc(newSize)
                 block <- n
                 match prev with
-                | Some p -> p.WriteJumpTo block.Offset
-                | None -> ()
+                | ValueSome p -> p.WriteJumpTo block.Offset
+                | ValueNone -> ()
 
             ass.Jump(jumpDistance block.Offset block.Size jumpTarget)
             let arr = ms.ToMemory()
@@ -1521,11 +1521,11 @@ module rec ChangeableProgram =
             if not x.IsDisposed then
                 for p in pinned do p.Dispose()
                 match prev, next with
-                | Some p, _     -> p.Next <- next
-                | None, Some n  -> n.Prev <- None
+                | ValueSome p, _         -> p.Next <- next
+                | ValueNone, ValueSome n -> n.Prev <- ValueNone
                 | _ -> ()
-                prev <- None
-                next <- None
+                prev <- ValueNone
+                next <- ValueNone
                 parent.Free block
 
         member x.Offset =
@@ -1549,10 +1549,10 @@ module rec ChangeableProgram =
                 next <- n
                 let jumpTarget =
                     match n with
-                    | Some n ->
-                        n.Prev <- Some x
+                    | ValueSome n ->
+                        n.Prev <- ValueSome x
                         n.Offset
-                    | None ->
+                    | ValueNone ->
                         parent.Epilog.Offset
 
                 x.WriteJumpTo jumpTarget
@@ -1612,7 +1612,7 @@ module rec ChangeableProgram =
 
 
 
-        let mutable run : EntryPointDel option = None
+        let mutable run : EntryPointDel voption = ValueNone
         let prologBlock =
             let epilog = epilog.Value
             let block = memory.Alloc (nativeint prologSize)
@@ -1634,14 +1634,14 @@ module rec ChangeableProgram =
             NativePtr.write ptr (memory.UnsafePointer + prologBlock.Offset)
             ptr
 
-        let mutable prologFragment = None
+        let mutable prologFragment = ValueNone
 
         let getProlog() =
             match prologFragment with
-            | Some f -> f
-            | None ->
+            | ValueSome f -> f
+            | ValueNone ->
                 let f = new ProgramFragment(this, prologBlock, System.Collections.Generic.List())
-                prologFragment <- Some f
+                prologFragment <- ValueSome f
                 f
 
             //new CodeFragment(this, block)
@@ -1651,7 +1651,7 @@ module rec ChangeableProgram =
             let o = NativePtr.read entryPointer
             if o <> ptr then
                 NativePtr.write entryPointer ptr
-                run <- None
+                run <- ValueNone
 
         member x.IsDisposed =
             entryPointer = NativePtr.zero
@@ -1662,7 +1662,7 @@ module rec ChangeableProgram =
                 memory.Dispose()
                 NativePtr.free entryPointer
                 entryPointer <- NativePtr.zero
-                run <- None
+                run <- ValueNone
 
         member internal x.Epilog : Block<nativeint> = epilog.Value
 
@@ -1694,12 +1694,12 @@ module rec ChangeableProgram =
 
         member x.Run() =
             match run with
-            | Some run -> run.Invoke()
-            | None ->
+            | ValueSome run -> run.Invoke()
+            | ValueNone ->
                 if x.IsDisposed then raise <| System.ObjectDisposedException "FragmentProgram"
                 let ptr = NativePtr.read entryPointer
                 let r = Marshal.GetDelegateForFunctionPointer<EntryPointDel>(ptr)
-                run <- Some r
+                run <- ValueSome r
                 r.Invoke()
 
         member x.Run(token : AdaptiveToken) =

@@ -103,16 +103,16 @@ type UniformBufferManager(ctx : Context) =
                         use __ = ctx.ResourceLock
                         let handle =
                             match old with
-                                | Some old -> old
-                                | None ->
-                                    block <- manager.Alloc(nativeint alignedSize)
-                                    store <- System.Runtime.InteropServices.Marshal.AllocHGlobal alignedSize
-                                    //buffer.Commitment(block.Offset, block.Size, true)
+                            | ValueSome old -> old
+                            | ValueNone ->
+                                block <- manager.Alloc(nativeint alignedSize)
+                                store <- System.Runtime.InteropServices.Marshal.AllocHGlobal alignedSize
+                                //buffer.Commitment(block.Offset, block.Size, true)
 
-                                    // record BufferView statistic: use block.Size instead of alignedSize -> allows to see overhead due to chunked buffers and alignment
-                                    BufferMemoryUsage.addUniformBufferView ctx (int64 block.Size)
+                                // record BufferView statistic: use block.Size instead of alignedSize -> allows to see overhead due to chunked buffers and alignment
+                                BufferMemoryUsage.addUniformBufferView ctx (int64 block.Size)
 
-                                    UniformBufferView(block.Memory.Value, block.Offset, nativeint block.Size)
+                                UniformBufferView(block.Memory.Value, block.Offset, nativeint block.Size)
 
                         for (value, writer) in writers do
                             writer.Write(token, value, store)
