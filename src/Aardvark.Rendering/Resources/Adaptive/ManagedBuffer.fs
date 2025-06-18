@@ -67,7 +67,7 @@ type ManagedBufferExtensions private() =
     /// <param name="data">The data to write.</param>
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
     [<Extension>]
-    static member Set(this : IManagedBuffer, data : byte[], range : Range1l) =
+    static member inline Set(this : IManagedBuffer, data : byte[], range : Range1l) =
         data |> NativePtr.pinArr (fun src ->
             this.Set(src.Address, nativeint data.Length, range)
         )
@@ -79,7 +79,7 @@ type ManagedBufferExtensions private() =
     /// <param name="value">The value to write.</param>
     /// <param name="index">The index in the buffer to write to.</param>
     [<Extension>]
-    static member Set<'T when 'T : unmanaged>(this : IManagedBuffer, value : 'T, index : int64) =
+    static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, value : 'T, index : int64) =
         value |> NativePtr.pin (fun src ->
             this.Set(src.Address, nativeint sizeof<'T>, Range1l(index, index))
         )
@@ -102,7 +102,7 @@ type ManagedBufferExtensions private() =
     /// <param name="values">The values to write.</param>
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
     [<Extension>]
-    static member Set<'T when 'T : unmanaged>(this : IManagedBuffer, values : 'T[], range : Range1l) =
+    static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, values : 'T[], range : Range1l) =
         values |> NativePtr.pinArr (fun src ->
             this.Set(src.Address, nativeint values.Length * nativeint sizeof<'T>, range)
         )
@@ -115,7 +115,7 @@ type ManagedBufferExtensions private() =
     /// <param name="values">The values to write.</param>
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
     [<Extension>]
-    static member Set(this : IManagedBuffer, values : Array, range : Range1l) =
+    static member inline Set(this : IManagedBuffer, values : Array, range : Range1l) =
         let elementSize = values.GetType().GetElementType().GetCLRSize()
         let sizeInBytes = nativeint values.Length * nativeint elementSize
 
@@ -189,8 +189,8 @@ module internal ManagedBufferImplementation =
                 Disposable.empty
             else
                 if view.Buffer.IsConstant then
-                    let data = BufferView.download 0 (int count) view
-                    let converted : 'T[] = data |> PrimitiveValueConverter.convertArray view.ElementType |> AVal.force
+                    let data = view.Buffer.GetValue().ToArray(view.ElementType, uint64 count, uint64 view.Offset, uint64 view.Stride)
+                    let converted : 'T[] = data |> PrimitiveValueConverter.arrayConverter view.ElementType
                     x.Set(converted, range)
                     Disposable.empty
                 else
