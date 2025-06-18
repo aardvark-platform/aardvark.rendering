@@ -341,7 +341,7 @@ let main _argv =
                     GeometryAttribute.Colors, typeof<V4f>
                 ]
 
-            { IndexType              = IndexType.UInt32
+            { IndexType              = IndexType.Int32
               VertexAttributeTypes   = vertexAttributes
               FaceAttributeTypes     = faceAttributes
               InstanceAttributeTypes = instanceAttributes

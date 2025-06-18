@@ -133,19 +133,19 @@ module private NativeAccelerationStructureData =
                 else
                     vertexData.Stride
 
-            let indexDataAddress =
-                if isNull indexData then VkDeviceOrHostAddressConstKHR()
-                else
-                    // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03712
-                    let alignment = if indexData.Type = IndexType.UInt16 then 2UL else 4UL
-                    getBufferAddress alignment indexData.Offset indexData.Buffer
-
             let indexType =
                 if isNull indexData then VkIndexType.NoneKhr
                 else
                     match indexData.Type with
-                    | IndexType.UInt16 -> VkIndexType.Uint16
+                    | IndexType.Int16 | IndexType.UInt16 -> VkIndexType.Uint16
                     | _ -> VkIndexType.Uint32
+
+            let indexDataAddress =
+                if isNull indexData then VkDeviceOrHostAddressConstKHR()
+                else
+                    // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03712
+                    let alignment = if indexType = VkIndexType.Uint16 then 2UL else 4UL
+                    getBufferAddress alignment indexData.Offset indexData.Buffer
 
             let transformDataAddress =
                 // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03810

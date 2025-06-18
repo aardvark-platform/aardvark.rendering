@@ -7,8 +7,10 @@ open System
 open System.Runtime.InteropServices
 
 type IndexType =
-    | UInt16 = 0
-    | UInt32 = 1
+    | Int16  = 0
+    | UInt16 = 1
+    | Int32  = 2
+    | UInt32 = 3
 
 /// Flags controlling trace properties of geometry.
 [<Flags>]
@@ -75,9 +77,11 @@ type IndexData(indexType: IndexType, buffer: IBuffer, [<Optional; DefaultParamet
 
         let indexType =
             match buffer.ElementType with
-            | Int16 | UInt16 -> IndexType.UInt16
-            | Int32 | UInt32 -> IndexType.UInt32
-            | t -> failwithf "Unsupported index type '%A'" t
+            | Int16  -> IndexType.Int16
+            | UInt16 -> IndexType.UInt16
+            | Int32  -> IndexType.Int32
+            | UInt32 -> IndexType.UInt32
+            | t -> raise <| NotSupportedException($"Unsupported index type '{t}'.")
 
         IndexData(indexType, buffer)
 

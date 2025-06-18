@@ -105,7 +105,9 @@ module private ManagedTracePoolUtils =
     type IndexType with
         member inline this.Type =
             match this with
+            | IndexType.Int16  -> typeof<int16>
             | IndexType.UInt16 -> typeof<uint16>
+            | IndexType.Int32  -> typeof<int32>
             | _                -> typeof<uint32>
 
     type IManagedBuffer with
