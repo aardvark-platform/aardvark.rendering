@@ -11,6 +11,7 @@ module ``Buffer Tests`` =
             BufferCopy.tests
             BufferUpload.tests
             BufferDownload.tests
+            BufferToArray.tests
             AttributeBuffer.tests
         ]
 

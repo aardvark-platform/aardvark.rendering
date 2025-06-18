@@ -40,11 +40,11 @@
     <Compile Include="Resources\Buffers\ExternalMemory.fs" />
     <Compile Include="Resources\Buffers\Buffers.fs" />
     <Compile Include="Resources\Buffers\BufferSlicing.fs" />
-    <Compile Include="Resources\Buffers\BufferExtensions.fs" />
     <Compile Include="Resources\Buffers\ArrayBuffer.fs" />
     <Compile Include="Resources\Buffers\SingleValueBuffer.fs" />
     <Compile Include="Resources\Buffers\NativeMemoryBuffer.fs" />
     <Compile Include="Resources\Buffers\IndirectBuffer.fs" />
+    <Compile Include="Resources\Buffers\BufferExtensions.fs" />
     <Compile Include="Resources\Textures\Formats.fs" />
     <Compile Include="Resources\Textures\Compression.fs" />
     <Compile Include="Resources\Textures\Layouts.fs" />
