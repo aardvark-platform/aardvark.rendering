@@ -3,10 +3,8 @@
 open Aardvark.Base
 
 open System
-open System.Collections
 open System.Collections.Generic
 open System.Threading
-open FSharp.Data.Adaptive
 
 module ``Managed Pool Internal Utilities`` =
 
@@ -47,62 +45,6 @@ module ``Managed Pool Internal Utilities`` =
 
 [<AutoOpen>]
 module internal ManagedPoolUtilities =
-
-    type private HashMapDictionary<'K, 'V>(map: HashMap<'K, 'V>) =
-        let keys = map.GetKeys()
-        let values = lazy (map.ToValueSeq() |> HashSet.ofSeq)
-        let pairs = map.ToKeyValueSeq()
-        let comparer = DefaultEqualityComparer<'V>.Instance
-
-        member _.Map = map
-
-        override _.Equals (obj: obj) =
-            match obj with
-            | :? HashMapDictionary<'K, 'V> as other -> map.Equals(other.Map)
-            | :? HashMap<'K, 'V> as other -> map.Equals(other)
-            | _ -> false
-
-        override _.GetHashCode() = Unchecked.hash map
-
-        interface IEquatable<HashMapDictionary<'K, 'V>> with
-            member _.Equals(other) = map.Equals(other.Map)
-
-        interface IEquatable<HashMap<'K, 'V>> with
-            member _.Equals(other) = map.Equals(other)
-
-        interface IDictionary<'K, 'V> with
-            member _.Item with get sym = map.[sym]  and set _ _ = raise <| NotSupportedException()
-            member _.Keys = keys
-            member _.Values = values.Value
-            member _.ContainsKey(key) = map.ContainsKey key
-            member _.TryGetValue(key, value) =
-                match map.TryFindV key with
-                | ValueSome v -> value <- v; true
-                | _ -> false
-            member _.Add(_, _) = raise <| NotSupportedException()
-            member _.Remove _ = raise <| NotSupportedException()
-
-        interface ICollection<KeyValuePair<'K, 'V>> with
-            member _.IsReadOnly = true
-            member _.Count = map.Count
-            member _.Contains(item) =
-                match map.TryFindV item.Key with
-                | ValueSome v -> comparer.Equals(item.Value, v)
-                | _ -> false
-            member _.CopyTo(array, startIndex) =
-                pairs |> Seq.iteri (fun i kvp -> array.[startIndex + i] <- kvp)
-            member _.Add _ = raise <| NotSupportedException()
-            member _.Remove _ = raise <| NotSupportedException()
-            member _.Clear() = raise <| NotSupportedException()
-
-        interface IEnumerable with
-            member _.GetEnumerator() = pairs.GetEnumerator()
-
-        interface IEnumerable<KeyValuePair<'K, 'V>> with
-            member _.GetEnumerator() = pairs.GetEnumerator()
-
-    module HashMap =
-        let asDictionary (map: HashMap<'K, 'V>) : IDictionary<'K, 'V> = HashMapDictionary map
 
     module Dictionary =
         open ``Managed Pool Internal Utilities``
