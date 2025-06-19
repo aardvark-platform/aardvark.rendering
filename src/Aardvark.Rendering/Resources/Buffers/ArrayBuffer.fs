@@ -1,35 +1,31 @@
 ﻿namespace Aardvark.Rendering
 
+open Aardvark.Base
 open System
-open System.Runtime.InteropServices
 
-type ArrayBuffer(data : Array) =
+type ArrayBuffer(data: Array) =
     let elementType = data.GetType().GetElementType()
-    let mutable gchandle = Unchecked.defaultof<_>
 
-    member x.Data = data
-    member x.ElementType = elementType
+    member _.Data = data
+    member _.ElementType = elementType
+    member _.SizeInBytes = nativeint data.Length * nativeint elementType.CLRSize
 
-    interface IBuffer
+    member inline this.Use([<InlineIfLambda>] action: nativeint -> 'T) =
+        this.Data |> NativeInt.pin action
+
+    member inline this.Equals(other: ArrayBuffer) =
+        obj.ReferenceEquals(this.Data, other.Data)
+
+    override _.GetHashCode() = data.GetHashCode()
+
+    override this.Equals(obj) =
+        match obj with
+        | :? ArrayBuffer as other -> this.Equals other
+        | _ -> false
+
+    interface IEquatable<ArrayBuffer> with
+        member this.Equals(other) = this.Equals other
 
     interface INativeBuffer with
-        member x.SizeInBytes = nativeint data.Length * nativeint (Marshal.SizeOf elementType)
-        member x.Use (f : nativeint -> 'a) =
-            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-            try f (gc.AddrOfPinnedObject())
-            finally gc.Free()
-
-        member x.Pin() =
-            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-            gchandle <- gc
-            gc.AddrOfPinnedObject()
-
-        member x.Unpin() =
-            gchandle.Free()
-            gchandle <- Unchecked.defaultof<_>
-
-    override x.GetHashCode() = data.GetHashCode()
-    override x.Equals o =
-        match o with
-        | :? ArrayBuffer as o -> Object.ReferenceEquals(o.Data, data)
-        | _ -> false
+        member this.SizeInBytes = this.SizeInBytes
+        member this.Use(action) = this.Use action

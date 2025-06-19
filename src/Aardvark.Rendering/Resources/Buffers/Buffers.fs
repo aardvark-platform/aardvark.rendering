@@ -55,9 +55,7 @@ type IBuffer =
 type INativeBuffer =
     inherit IBuffer
     abstract member SizeInBytes : nativeint
-    abstract member Use : (nativeint -> 'a) -> 'a
-    abstract member Pin : unit -> nativeint
-    abstract member Unpin : unit -> unit
+    abstract member Use : action: (nativeint -> 'T) -> 'T
 
 type IBackendBuffer =
     inherit IBuffer

@@ -17,8 +17,6 @@ module BufferToArray =
 
         interface INativeBuffer with
             member _.SizeInBytes = nativeBuffer.SizeInBytes
-            member _.Pin() = nativeBuffer.Pin()
-            member _.Unpin() = nativeBuffer.Unpin()
             member _.Use(f) = nativeBuffer.Use(f)
 
     module Cases =
