@@ -1,3 +1,19 @@
+### 5.6.0-prerelease0004
+- Changed type of Handle property in resource interfaces to uint64
+- Removed obsolete code
+- Removed RenderTask.cache and RenderTask.postProcess
+- Changed return type of IUniformProvider.TryGetUniform and IAttributeProvider.TryGetAttribute to ValueOption
+- Changed return type of IGeometryPool.TryGetBufferView to ValueOption
+- Replaced CreateTextureAttachment() with GetOutputView()
+- Removed INativeBuffer Pin() and Unpin()
+- Optimized constant path in IManagedBuffer.Add
+- Added IBuffer.ToArray
+- [ManagedPool] Reworked handling of attribute dictionaries (PooledGeometry is removed)
+- [ManagedTracePool] Added uniform provider for storage buffers
+- [Raytracing] Various optimizations and API adjustments
+- [Raytracing] Added IndexType.Int16 and IndexType.Int32
+- [GL] Removed Type.GLSize
+
 ### 5.6.0-prerelease0003
 - Added validation for framebuffer signatures of prepared render objects
 - Added debug labels for render tasks, textures, buffers, and render buffers
