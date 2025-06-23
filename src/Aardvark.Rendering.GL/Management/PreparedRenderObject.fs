@@ -1245,14 +1245,14 @@ type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : Rend
     inherit PreparedCommand(ctx, renderPass)
 
     let signature = cmds |> List.tryPickV _.Signature
-    let first   = List.tryHeadV cmds
-    let last    = List.tryLast cmds |> Option.toValueOption
+    let first = List.tryHeadV cmds
+    let last  = List.tryLastV cmds
 
     override x.Release() =
-        cmds |> List.iter (fun c -> c.Dispose())
-        
+        cmds |> List.iter (_.Dispose())
+
     override x.GetResources() =
-        cmds |> Seq.collect (fun c -> c.Resources)
+        cmds |> Seq.collect (_.Resources)
 
     override x.Compile(info, stream, prev) =
         let mutable prev = prev
@@ -1262,8 +1262,8 @@ type MultiCommand(ctx : Context, cmds : list<PreparedCommand>, renderPass : Rend
             prev <- ValueSome c
         s
 
-    override x.EntryState = first |> ValueOption.bind (fun first -> first.EntryState)
-    override x.ExitState = last |> ValueOption.bind (fun last -> last.ExitState)
+    override x.EntryState = first |> ValueOption.bind (_.EntryState)
+    override x.ExitState = last |> ValueOption.bind (_.ExitState)
     override x.Signature = signature
 
 
