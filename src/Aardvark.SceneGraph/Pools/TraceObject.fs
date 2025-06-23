@@ -53,6 +53,25 @@ type TraceObject(geometry: AdaptiveTraceGeometry,
     /// Visibility mask that is compared against the mask specified by TraceRay().
     member val Mask               = mask                           with get, set
 
+    new (geometry: AdaptiveTraceGeometry,
+         usage: AccelerationStructureUsage,
+         vertexAttributes: IDictionary<Symbol, BufferView>,
+         faceAttributes: IDictionary<Symbol, BufferView>,
+         geometryAttributes: IDictionary<Symbol, IAdaptiveValue>,
+         instanceAttributes: IDictionary<Symbol, IAdaptiveValue>,
+         hitGroup: aval<Symbol>,
+         transform: aval<Trafo3d>,
+         frontFace: aval<WindingOrder voption>,
+         geometryMode: aval<GeometryMode>,
+         mask: aval<VisibilityMask>) =
+
+        TraceObject(
+            geometry, usage,
+            [| vertexAttributes |], [| faceAttributes |], [| geometryAttributes |], instanceAttributes,
+            hitGroup |> AVal.map Array.singleton,
+            transform, frontFace, geometryMode, mask
+        )
+
 [<AutoOpen>]
 module TraceObjectFSharp =
 
