@@ -168,6 +168,10 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
             failwith ("[ManagedTracePool] " + str)
         ) fmt
 
+    static let validateAttributes (name: string) (geometryCount: int) (attributeArray: Array) =
+        if attributeArray.Length < geometryCount then
+            failf $"trace object contains {geometryCount} geometries but only {attributeArray.Length} {name} attribute entries."
+
     static let zero : byte[] = ManagedPool.Zero
 
     let indexType = signature.IndexType.Type
@@ -325,6 +329,10 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
             let faceAttributes     = obj.FaceAttributes
             let geometryAttributes = obj.GeometryAttributes
             let instanceAttributes = obj.InstanceAttributes
+
+            validateAttributes "vertex" geometryCount vertexAttributes
+            validateAttributes "face" geometryCount faceAttributes
+            validateAttributes "geometry" geometryCount geometryAttributes
 
             // Geometry attributes
             let geometryAttributeIndices =
