@@ -133,7 +133,7 @@ module ImageUploadExtensions =
                             let blocks = compression |> CompressionMode.numberOfBlocks data.Size
                             blocks * blockSize
 
-                        let buffer = device.ReadbackMemory.CreateImageBuffer(texture.Format, data.Size, alignedSize.XY, uint64 data.SizeInBytes)
+                        let buffer = device.ReadbackMemory.CreateImageBuffer(texture.Format, data.Size, alignedSize.XY, data.SizeInBytes)
 
                         buffer.Memory.Mapped (fun dst ->
                             data.Use (fun src ->

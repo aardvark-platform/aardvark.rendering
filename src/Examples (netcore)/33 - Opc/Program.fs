@@ -198,7 +198,7 @@ type PatchLodTree(globalCenter : V3d, opc : OpcPaths, root : option<ILodTreeNode
                         with get(slice : int, level : int) = 
                             { new INativeTextureData with
                                 member x.Size = V3i(img.Size, 1)
-                                member x.SizeInBytes = img.Volume.Data.LongLength
+                                member x.SizeInBytes = uint64 img.Volume.Data.LongLength
                                 member x.Use (action : nativeint -> 'a) =
                                     let gc = GCHandle.Alloc(img.Volume.Data, GCHandleType.Pinned)
                                     try action (gc.AddrOfPinnedObject())

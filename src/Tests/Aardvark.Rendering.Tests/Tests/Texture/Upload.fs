@@ -53,7 +53,7 @@ module TextureUpload =
                     data |> Array.map (Array.map (fun pi ->
                         { new INativeTextureData with
                             member x.Size = V3i(pi.Size, 1)
-                            member x.SizeInBytes = int64 <| pi.Array.Length * sizeof<'T>
+                            member x.SizeInBytes = uint64 <| pi.Array.Length * sizeof<'T>
                             member x.Use (f : nativeint -> 'U) = NativeInt.pin f pi.Array }
                     ))
 

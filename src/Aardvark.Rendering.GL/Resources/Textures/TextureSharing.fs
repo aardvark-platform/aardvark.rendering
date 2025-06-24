@@ -32,30 +32,30 @@ type ContextTextureSharingExtensions =
             match texture.Dimension with
             | TextureDimension.Texture1D ->
                 if texture.IsArray then
-                    GL.Dispatch.TexStorageMem2D(target, texture.MipMapLevels, internalFormat, texture.Size.X, texture.Count, sharedMemory.Handle, memory.Offset)
+                    GL.Dispatch.TexStorageMem2D(target, texture.MipMapLevels, internalFormat, texture.Size.X, texture.Count, sharedMemory.Handle, int64 memory.Offset)
                 else
-                    GL.Dispatch.TexStorageMem1D(target, texture.MipMapLevels, internalFormat, texture.Size.X, sharedMemory.Handle, memory.Offset)
+                    GL.Dispatch.TexStorageMem1D(target, texture.MipMapLevels, internalFormat, texture.Size.X, sharedMemory.Handle, int64 memory.Offset)
 
             | TextureDimension.Texture2D
             | TextureDimension.TextureCube ->
                 if (texture.IsArray) then
                     if texture.Samples > 1 then
                         GL.Dispatch.TexStorageMem3DMultisample(target, texture.Samples, internalFormat, texture.Size.X, texture.Size.Y, texture.Count,
-                                                               true, sharedMemory.Handle, memory.Offset)
+                                                               true, sharedMemory.Handle, int64 memory.Offset)
                     else
                         GL.Dispatch.TexStorageMem3D(target, texture.MipMapLevels, internalFormat, texture.Size.X, texture.Size.Y, texture.Count,
-                                                    sharedMemory.Handle, memory.Offset)
+                                                    sharedMemory.Handle, int64 memory.Offset)
                 else
                     if texture.Samples > 1 then
                         GL.Dispatch.TexStorageMem2DMultisample(target, texture.Samples, internalFormat, texture.Size.X, texture.Size.Y,
-                                                               true, sharedMemory.Handle, memory.Offset)
+                                                               true, sharedMemory.Handle, int64 memory.Offset)
                     else
                         GL.Dispatch.TexStorageMem2D(target, texture.MipMapLevels, internalFormat, texture.Size.X, texture.Size.Y,
-                                                    sharedMemory.Handle, memory.Offset)
+                                                    sharedMemory.Handle, int64 memory.Offset)
 
             | TextureDimension.Texture3D ->
                 GL.Dispatch.TexStorageMem3D(target, texture.MipMapLevels, internalFormat, texture.Size.X, texture.Size.Y, texture.Size.Z,
-                                            sharedMemory.Handle, memory.Offset)
+                                            sharedMemory.Handle, int64 memory.Offset)
 
             | _ ->
                 GL.DeleteTexture handle
@@ -66,6 +66,6 @@ type ContextTextureSharingExtensions =
 
             this.SetDefaultTextureParams(target, texture.Format, texture.MipMapLevels)
 
-            ResourceCounts.addTexture this memory.Size
+            ResourceCounts.addTexture this (int64 memory.Size)
             new SharedTexture(this, handle, texture, sharedMemory)
         )

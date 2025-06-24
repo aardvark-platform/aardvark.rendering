@@ -83,8 +83,8 @@ and [<RequireQualifiedAccess>]
     // ================================================================================================================
 
     static member Set(buffer : IBufferRange, value : uint32) =
-        if buffer.Offset % 4n <> 0n then raise <| ArgumentException($"Start of buffer range must be a multiple of 4 (is {buffer.Offset}).")
-        if buffer.SizeInBytes % 4n <> 0n then raise <| ArgumentException($"Size of buffer range must be a multiple of 4 (is {buffer.SizeInBytes}).")
+        if buffer.Offset % 4UL <> 0UL then raise <| ArgumentException($"Start of buffer range must be a multiple of 4 (is {buffer.Offset}).")
+        if buffer.SizeInBytes % 4UL <> 0UL then raise <| ArgumentException($"Size of buffer range must be a multiple of 4 (is {buffer.SizeInBytes}).")
         ComputeCommand.SetBufferCmd(buffer, value)
 
     static member inline Set(buffer : IBufferRange<int32>, value : int32) =

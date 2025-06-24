@@ -31,7 +31,7 @@ type ISparseTexture<'a when 'a : unmanaged> =
 
 type INativeTextureData =
     abstract member Size : V3i
-    abstract member SizeInBytes : int64
+    abstract member SizeInBytes : uint64
     abstract member Use : (nativeint -> 'a) -> 'a
 
 [<AllowNullLiteral>]

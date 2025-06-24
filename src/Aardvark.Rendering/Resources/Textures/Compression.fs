@@ -3,6 +3,7 @@
 open System.Threading.Tasks
 open Aardvark.Base
 open FSharp.NativeInterop
+open System
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 
@@ -766,7 +767,7 @@ module BlockCompression =
         | _ ->
             Log.warn "Flipping %A compressed data not supported" mode
             let sizeInBytes = blockBytes * int64 blocks.X * int64 blocks.Y
-            Marshal.Copy(src, dst, sizeInBytes)
+            Buffer.MemoryCopy(src, dst, sizeInBytes, sizeInBytes)
 
     let decode (mode : CompressionMode) (offset : V2i) (size : V2i) (src : nativeint) (dst : nativeint) (dstInfo : VolumeInfo) =
         assert (Vec.allSmaller offset 4)

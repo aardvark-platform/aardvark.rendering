@@ -43,8 +43,8 @@ type Buffer =
             member x.Runtime = x.Device.Runtime :> IBufferRuntime
             member x.Handle = x.Handle.Handle
             member x.Buffer = x
-            member x.Offset = 0n
-            member x.SizeInBytes = nativeint x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
+            member x.Offset = 0UL
+            member x.SizeInBytes = x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
             member x.Name with get() = x.Name and set name = x.Name <- name
 
         internal new (device: Device, handle: VkBuffer, memory: DevicePtr, size, usage: VkBufferUsageFlags, address: VkDeviceAddress, name: string) =
@@ -75,8 +75,8 @@ type internal ExportedBuffer =
         new(device, handle, memory: DevicePtr, size, usage) =
             let externalMemory =
                 { Block  = memory.ExternalBlock
-                  Offset = int64 memory.Offset
-                  Size   = int64 memory.Size }
+                  Offset = memory.Offset
+                  Size   = memory.Size }
 
             { inherit Buffer(device, handle, memory, size, usage); ExternalMemory = externalMemory }
     end
@@ -155,7 +155,7 @@ module BufferCommands =
                                           srcStage : VkPipelineStageFlags, srcAccess : VkAccessFlags,
                                           dstStage : VkPipelineStageFlags, dstAccess : VkAccessFlags,
                                           srcQueue : uint32, dstQueue : uint32)  =
-            cmd.BufferBarrier(buffer, srcStage, srcAccess, dstStage, dstAccess, srcQueue, dstQueue, 0UL, uint64 buffer.Size)
+            cmd.BufferBarrier(buffer, srcStage, srcAccess, dstStage, dstAccess, srcQueue, dstQueue, 0UL, buffer.Size)
 
     type Command with
 
@@ -167,7 +167,7 @@ module BufferCommands =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
-                    let copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
+                    let copyInfo = VkBufferCopy(srcOffset, dstOffset, size)
                     cmd.AppendCommand()
                     copyInfo |> NativePtr.pin (fun pInfo -> VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, 1u, pInfo))
                     cmd.AddResource src
@@ -262,7 +262,7 @@ module BufferCommands =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Size, 0u)
+                    VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, 0UL, b.Size, 0u)
                     cmd.AddResource b
             }
         static member SetBuffer(b : Buffer, offset : uint64, size : uint64, value : byte[]) =
@@ -452,7 +452,7 @@ module Buffer =
                 memory |> empty export usage alignment
 
         | :? INativeBuffer as nb ->
-            if nb.SizeInBytes <> 0n then
+            if nb.SizeInBytes <> 0UL then
                 let size = uint64 nb.SizeInBytes
                 let buffer = create' false export usage alignment size memory
                 nb.Use (copyFromHost buffer)

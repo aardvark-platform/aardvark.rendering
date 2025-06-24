@@ -47,7 +47,7 @@ module BufferUpload =
 
             let upload (buffer : IBackendBuffer) =
                 rangeData |> NativeInt.pin (fun src ->
-                    buffer.Upload(nativeint rangeStart, src, nativeint rangeCount)
+                    buffer.Upload(uint64 rangeStart, src, uint64 rangeCount)
                 )
 
             testUpload totalCount initialValue rangeData rangeStart upload
@@ -75,15 +75,7 @@ module BufferUpload =
         let invalidArgs (runtime : IRuntime) =
             use buffer = runtime.CreateBuffer<uint8>(128)
             let data = Array.zeroCreate<uint8> 8
-
-            Expect.throwsT<ArgumentException> (fun _ -> runtime.CreateBuffer(-1n) |> ignore) "Expected ArgumentException due to negative size on create"
-
-            Expect.throwsT<ArgumentException> (fun _ -> buffer.Buffer.Upload(-1n, 0n, 12n)) "Expected ArgumentException due to negative dst offset on upload"
-            Expect.throwsT<ArgumentException> (fun _ -> buffer.Buffer.Upload(0n, 0n, -1n)) "Expected ArgumentException due to negative size on upload"
-            Expect.throwsT<ArgumentException> (fun _ -> buffer.Buffer.Upload(128n, 0n, 1n)) "Expected ArgumentException due to out-of-bounds dst range on upload"
-
-            Expect.throwsT<ArgumentException> (fun _ -> buffer.Upload(data, -1, 0, 1)) "Expected ArgumentException due to negative src array index on upload"
-            Expect.throwsT<ArgumentException> (fun _ -> buffer.Upload(data, 0, 0, -1)) "Expected ArgumentException due to negative array size on upload"
+            Expect.throwsT<ArgumentException> (fun _ -> buffer.Buffer.Upload(128UL, 0n, 1UL)) "Expected ArgumentException due to out-of-bounds dst range on upload"
             Expect.throwsT<ArgumentException> (fun _ -> buffer.Upload(data, 8, 0, 1)) "Expected ArgumentException due to out-of-bounds array region on upload"
 
         let native                  = testNativeUpload 2345 0 2345

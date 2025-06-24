@@ -73,6 +73,6 @@ let main argv =
     let runManuallyInMain = true
 
     if runManuallyInMain then
-        runTestsSynchronously true allTests
+        runTestsSynchronously false allTests
     else
         runTestsWithCLIArgs [ CLIArguments.No_Spinner ] argv allTests

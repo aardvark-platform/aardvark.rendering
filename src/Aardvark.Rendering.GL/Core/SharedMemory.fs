@@ -61,10 +61,10 @@ module internal SharedMemory =
 
                         match external.Handle with
                         | :? Win32Handle as h ->
-                            GL.Dispatch.ImportMemoryWin32Handle(mo, external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueWin32Ext, h.Handle)
+                            GL.Dispatch.ImportMemoryWin32Handle(mo, int64 external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueWin32Ext, h.Handle)
                         | :? PosixHandle as h ->
                             h.UseHandle (fun fd -> // Importing into the memory object invalidates the fd
-                                GL.Dispatch.ImportMemoryFd(mo, external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueFdExt, fd)
+                                GL.Dispatch.ImportMemoryFd(mo, int64 external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueFdExt, fd)
                             )
                         | h ->
                             failwithf "[GL] Unknown memory handle %A" <| h.GetType()

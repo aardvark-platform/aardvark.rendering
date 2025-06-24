@@ -15,7 +15,9 @@ module ``IBackendTexture Slicing Extensions`` =
                 x.Count
 
         /// <summary> Gets the size of the given texture level.
-        /// <paramref name="level"/> is clamped to [0, levels - 1].</summary>
+        /// <paramref name="level"/> is clamped to [0, levels - 1].
+        /// </summary>
+        /// <param name="level">The texture level.</param>
         member x.GetSize(level : int) =
             let level = level |> clamp 0 (x.MipMapLevels - 1)
             Fun.MipmapLevelSize(x.Size, level)

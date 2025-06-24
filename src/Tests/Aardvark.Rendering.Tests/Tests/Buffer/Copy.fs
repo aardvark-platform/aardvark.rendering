@@ -47,7 +47,7 @@ module BufferCopy =
 
         let private testNativeCopy (totalCount : int) (srcStart : int) (dstStart : int) (rangeCount : int) =
             let copy (src : IBackendBuffer) (dst : IBackendBuffer) =
-                src.CopyTo(nativeint srcStart, dst, nativeint dstStart, nativeint rangeCount)
+                src.CopyTo(uint64 srcStart, dst, uint64 dstStart, uint64 rangeCount)
 
             testCopy totalCount Rnd.uint8 srcStart dstStart rangeCount copy
 
@@ -60,16 +60,10 @@ module BufferCopy =
             testCopy totalCount getRandomValue srcStart dstStart rangeCount copy
 
         let invalidArgs (runtime : IRuntime) =
-            use src = runtime.CreateBuffer(128n)
-            use dst = runtime.CreateBuffer(128n)
-
-            Expect.throwsT<ArgumentException> (fun _ -> runtime.CreateBuffer(-1n) |> ignore) "Expected ArgumentException due to negative size on create"
-
-            Expect.throwsT<ArgumentException> (fun _ -> src.CopyTo(-1n, dst, 0n, 0n)) "Expected ArgumentException due to negative src offset on copy"
-            Expect.throwsT<ArgumentException> (fun _ -> src.CopyTo(0n, dst, -1n, 0n)) "Expected ArgumentException due to negative dst offset on copy"
-            Expect.throwsT<ArgumentException> (fun _ -> src.CopyTo(0n, dst, 0n, -1n)) "Expected ArgumentException due to negative size on copy"
-            Expect.throwsT<ArgumentException> (fun _ -> src.CopyTo(128n, dst, 0n, 1n)) "Expected ArgumentException due to out-of-bounds src range on copy"
-            Expect.throwsT<ArgumentException> (fun _ -> src.CopyTo(0n, dst, 128n, 1n)) "Expected ArgumentException due to out-of-bounds dst range on copy"
+            use src = runtime.CreateBuffer(128UL)
+            use dst = runtime.CreateBuffer(128UL)
+            Expect.throwsT<ArgumentException> (fun _ -> src.CopyTo(128UL, dst, 0UL, 1UL)) "Expected ArgumentException due to out-of-bounds src range on copy"
+            Expect.throwsT<ArgumentException> (fun _ -> src.CopyTo(0UL, dst, 128UL, 1UL)) "Expected ArgumentException due to out-of-bounds dst range on copy"
 
         let native                  = testNativeCopy 2345 0 0 2345
         let nativeSubrange          = testNativeCopy 2345 57 89 345

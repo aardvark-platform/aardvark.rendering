@@ -151,7 +151,7 @@ type Texture =
 type internal SharedTexture(ctx : Context, handle : int, external : IExportedBackendTexture, memory : SharedMemoryBlock) =
     inherit Texture(ctx, handle,
                     external.Dimension, external.MipMapLevels, external.Samples, external.Size,
-                    external.Count, external.IsArray, external.Format, external.Memory.Size)
+                    external.Count, external.IsArray, external.Format, int64 external.Memory.Size)
 
     member x.External = external
     member x.Memory = memory

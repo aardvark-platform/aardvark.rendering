@@ -3,7 +3,7 @@
 open Aardvark.Base
 open System
 
-type NativeMemoryBuffer(ptr: nativeint, sizeInBytes: nativeint) =
+type NativeMemoryBuffer(ptr: nativeint, sizeInBytes: uint64) =
     member _.Ptr = ptr
     member _.SizeInBytes = sizeInBytes
 

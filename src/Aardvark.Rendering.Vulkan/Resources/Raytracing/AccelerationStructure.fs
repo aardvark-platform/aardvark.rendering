@@ -118,7 +118,7 @@ module AccelerationStructure =
                 let! pInfo =
                     VkAccelerationStructureCreateInfoKHR(
                         VkAccelerationStructureCreateFlagsKHR.None,
-                        resultBuffer.Handle, 0UL, uint64 resultBuffer.Size,
+                        resultBuffer.Handle, 0UL, resultBuffer.Size,
                         typ, 0UL
                     )
 

@@ -75,7 +75,7 @@ module MutableInputBinding =
             ) "Type check failed"
 
         let buffers (runtime : IRuntime) =
-            use backendBuffer = runtime.CreateBuffer(128n)
+            use backendBuffer = runtime.CreateBuffer(128UL)
             let array = [| 12; 13 |]
             let arrayBuffer = ArrayBuffer array
             runtime |> flushTest'<IBuffer> true backendBuffer backendBuffer arrayBuffer arrayBuffer

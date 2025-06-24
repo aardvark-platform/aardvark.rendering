@@ -34,7 +34,7 @@ module BufferDownload =
         let private testNativeDownload (totalCount : int) (rangeStart : int) (rangeCount : int) =
             let download (buffer : IBackendBuffer) (dst : uint8[]) =
                 dst |> NativeInt.pin (fun dst ->
-                    buffer.Download(nativeint rangeStart, dst, nativeint rangeCount)
+                    buffer.Download(uint64 rangeStart, dst, uint64 rangeCount)
                 )
 
             testDownload totalCount Rnd.uint8 rangeStart rangeCount download
@@ -57,14 +57,11 @@ module BufferDownload =
             use buffer = runtime.CreateBuffer<uint8>(128)
             let data = Array.zeroCreate<uint8> 8
 
-            Expect.throwsT<ArgumentException> (fun _ -> runtime.CreateBuffer(-1n) |> ignore) "Expected ArgumentException due to negative size on create"
             Expect.throwsT<ArgumentException> (fun _ -> buffer.[-1 .. 2] |> ignore) "Expected ArgumentException due to negative index on slice"
             Expect.throwsT<ArgumentException> (fun _ -> buffer.[3 .. 2] |> ignore) "Expected ArgumentException due to invalid slice"
             Expect.throwsT<ArgumentException> (fun _ -> buffer.[3 .. 128] |> ignore) "Expected ArgumentException due to out-of-bounds slice"
 
-            Expect.throwsT<ArgumentException> (fun _ -> buffer.Buffer.Download(-1n, 0n, 12n)) "Expected ArgumentException due to negative src offset on download"
-            Expect.throwsT<ArgumentException> (fun _ -> buffer.Buffer.Download(0n, 0n, -1n)) "Expected ArgumentException due to negative size on download"
-            Expect.throwsT<ArgumentException> (fun _ -> buffer.Buffer.Download(128n, 0n, 1n)) "Expected ArgumentException due to out-of-bounds src range on download"
+            Expect.throwsT<ArgumentException> (fun _ -> buffer.Buffer.Download(128UL, 0n, 1UL)) "Expected ArgumentException due to out-of-bounds src range on download"
 
             Expect.throwsT<ArgumentException> (fun _ -> buffer.Download(data, 0, -1, 1)) "Expected ArgumentException due to negative dst array index on download"
             Expect.throwsT<ArgumentException> (fun _ -> buffer.Download(data, 0, 0, -1)) "Expected ArgumentException due to negative array size on download"

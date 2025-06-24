@@ -169,7 +169,7 @@ and CopyEngine(family: DeviceQueueFamily) =
                                     uint32 familyIndex,
                                     dstQueue,
                                     buffer,
-                                    uint64 offset, uint64 size
+                                    offset, size
                                 )
                             |],
                             [||]

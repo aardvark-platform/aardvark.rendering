@@ -15,7 +15,7 @@ type IExternalMemoryHandle =
 type IExternalMemoryBlock =
     inherit IDisposable
     abstract member Handle : IExternalMemoryHandle
-    abstract member SizeInBytes : int64
+    abstract member SizeInBytes : uint64
 
 [<AutoOpen>]
 module NativePlatformHandles =
@@ -73,10 +73,10 @@ type ExternalMemory =
         Block : IExternalMemoryBlock
 
         /// Start offset of the memory region (in bytes).
-        Offset : int64
+        Offset : uint64
 
         /// Size of the memory region (in bytes).
-        Size : int64
+        Size : uint64
     }
 
 /// Interface for resources that may be backed by exported memory.

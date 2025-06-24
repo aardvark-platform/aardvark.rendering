@@ -390,11 +390,11 @@ module internal ComputeTaskInternals =
 
                         do! CompilerState.assemble (fun _ s ->
                             if GL.ARB_direct_state_access then
-                                s.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, src.Offset, dst.Offset, size)
+                                s.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, nativeint src.Offset, nativeint dst.Offset, nativeint size)
                             else
                                 s.BindBuffer(BufferTarget.CopyReadBuffer, srcBuffer.Handle)
                                 s.BindBuffer(BufferTarget.CopyWriteBuffer, dstBuffer.Handle)
-                                s.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, src.Offset, dst.Offset, size)
+                                s.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, nativeint src.Offset, nativeint dst.Offset, nativeint size)
                         )
 
                     | ComputeCommand.DownloadBufferCmd (src, dst) ->
@@ -404,20 +404,20 @@ module internal ComputeTaskInternals =
                             match dst with
                             | HostMemory.Unmanaged ptr ->
                                 if GL.ARB_direct_state_access then
-                                    s.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.SizeInBytes, ptr)
+                                    s.GetNamedBufferSubData(srcBuffer.Handle, nativeint src.Offset, nativeint src.SizeInBytes, ptr)
                                 else
                                     s.BindBuffer(BufferTarget.CopyReadBuffer, srcBuffer.Handle)
-                                    s.GetBufferSubData(BufferTarget.CopyReadBuffer, src.Offset, src.SizeInBytes, ptr)
+                                    s.GetBufferSubData(BufferTarget.CopyReadBuffer, nativeint src.Offset, nativeint src.SizeInBytes, ptr)
 
                             | HostMemory.Managed (arr, index) ->
-                                let struct (offset, sizeInBytes) = arr.Range(index, src.SizeInBytes)
+                                let struct (offset, sizeInBytes) = arr.Range(index, nativeint src.SizeInBytes)
                                 let pDst = p.AddPinnable(arr, offset)
 
                                 if GL.ARB_direct_state_access then
-                                    s.GetNamedBufferSubDataPtr(srcBuffer.Handle, src.Offset, sizeInBytes, pDst)
+                                    s.GetNamedBufferSubDataPtr(srcBuffer.Handle, nativeint src.Offset, sizeInBytes, pDst)
                                 else
                                     s.BindBuffer(BufferTarget.CopyReadBuffer, srcBuffer.Handle)
-                                    s.GetBufferSubDataPtr(BufferTarget.CopyReadBuffer, src.Offset, sizeInBytes, pDst)
+                                    s.GetBufferSubDataPtr(BufferTarget.CopyReadBuffer, nativeint src.Offset, sizeInBytes, pDst)
                         )
 
                     | ComputeCommand.UploadBufferCmd (src, dst) ->
@@ -427,20 +427,20 @@ module internal ComputeTaskInternals =
                             match src with
                             | HostMemory.Unmanaged ptr ->
                                 if GL.ARB_direct_state_access then
-                                    s.NamedBufferSubData(dstBuffer.Handle, dst.Offset, dst.SizeInBytes, ptr)
+                                    s.NamedBufferSubData(dstBuffer.Handle, nativeint dst.Offset, nativeint dst.SizeInBytes, ptr)
                                 else
                                     s.BindBuffer(BufferTarget.CopyWriteBuffer, dstBuffer.Handle)
-                                    s.BufferSubData(BufferTarget.CopyWriteBuffer, dst.Offset, dst.SizeInBytes, ptr)
+                                    s.BufferSubData(BufferTarget.CopyWriteBuffer, nativeint dst.Offset, nativeint dst.SizeInBytes, ptr)
 
                             | HostMemory.Managed (arr, index) ->
-                                let struct (offset, sizeInBytes) = arr.Range(index, dst.SizeInBytes)
+                                let struct (offset, sizeInBytes) = arr.Range(index, nativeint dst.SizeInBytes)
                                 let pSrc = p.AddPinnable(arr, offset)
 
                                 if GL.ARB_direct_state_access then
-                                    s.NamedBufferSubDataPtr(dstBuffer.Handle, dst.Offset, sizeInBytes, pSrc)
+                                    s.NamedBufferSubDataPtr(dstBuffer.Handle, nativeint dst.Offset, sizeInBytes, pSrc)
                                 else
                                     s.BindBuffer(BufferTarget.CopyWriteBuffer, dstBuffer.Handle)
-                                    s.BufferSubDataPtr(BufferTarget.CopyWriteBuffer, dst.Offset, sizeInBytes, pSrc)
+                                    s.BufferSubDataPtr(BufferTarget.CopyWriteBuffer, nativeint dst.Offset, sizeInBytes, pSrc)
                         )
 
                     | ComputeCommand.SetBufferCmd (range, value) ->
@@ -452,14 +452,14 @@ module internal ComputeTaskInternals =
                             if GL.ARB_direct_state_access then
                                 s.ClearNamedBufferSubData(
                                     buffer.Handle, PixelInternalFormat.R32ui,
-                                    range.Offset, range.SizeInBytes, PixelFormat.RedInteger, PixelType.UnsignedInt,
+                                    nativeint range.Offset, nativeint range.SizeInBytes, PixelFormat.RedInteger, PixelType.UnsignedInt,
                                     pValue
                                 )
                             else
                                 s.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
                                 s.ClearBufferSubData(
                                     BufferTarget.CopyWriteBuffer, PixelInternalFormat.R32ui,
-                                    range.Offset, range.SizeInBytes, PixelFormat.RedInteger, PixelType.UnsignedInt,
+                                    nativeint range.Offset, nativeint range.SizeInBytes, PixelFormat.RedInteger, PixelType.UnsignedInt,
                                     pValue
                                 )
                         )

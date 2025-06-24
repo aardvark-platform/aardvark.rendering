@@ -6,9 +6,9 @@ open Aardvark.Base
 
 module private BufferInternals =
 
-    let inline byteSize<'T> (count : int) = nativeint count * nativeint sizeof<'T>
+    let inline byteSize<'T> (count : int) = uint64 count * uint64 sizeof<'T>
 
-    type BufferRange(buffer : IBackendBuffer, offset : nativeint, sizeInBytes : nativeint) =
+    type BufferRange(buffer : IBackendBuffer, offset : uint64, sizeInBytes : uint64) =
         interface IBufferRange with
             member x.Buffer = buffer
             member x.Offset = offset
@@ -34,7 +34,7 @@ module private BufferInternals =
             member x.Count = count
 
     type Buffer<'T when 'T : unmanaged>(buffer : IBackendBuffer) =
-        inherit BufferRange<'T>(buffer, 0, int (buffer.SizeInBytes / nativeint sizeof<'T>))
+        inherit BufferRange<'T>(buffer, 0, int (buffer.SizeInBytes / uint64 sizeof<'T>))
 
         interface IBuffer<'T> with
             member x.Dispose() = buffer.Dispose()
@@ -55,7 +55,7 @@ module private BufferSlicing =
             let max = start + size - LanguagePrimitives.GenericOne<'T>
             argumentOutOfRange $"[Buffer] subrange [{start}, {max}] out of bounds (max size = {totalSize})."
 
-    let range (offset : nativeint) (sizeInBytes : nativeint) (range : IBufferRange) =
+    let range (offset : uint64) (sizeInBytes : uint64) (range : IBufferRange) =
         (offset, sizeInBytes) ||> checkRange range.SizeInBytes
         BufferRange(range.Buffer, range.Offset + offset, sizeInBytes) :> IBufferRange
 
@@ -76,8 +76,8 @@ module private BufferSlicing =
         let sa = nativeint sizeof<'T>
         let firstByte = sa * nativeint origin
         let lastByte = sa * (nativeint origin + nativeint delta * nativeint (count - 1))
-        if firstByte < 0n || firstByte >= vector.Buffer.SizeInBytes then argumentOutOfRange "[Buffer] range out of bounds"
-        if lastByte < 0n || lastByte >= vector.Buffer.SizeInBytes then argumentOutOfRange "[Buffer] range out of bounds"
+        if firstByte < 0n || firstByte >= nativeint vector.Buffer.SizeInBytes then argumentOutOfRange "[Buffer] range out of bounds"
+        if lastByte < 0n || lastByte >= nativeint vector.Buffer.SizeInBytes then argumentOutOfRange "[Buffer] range out of bounds"
 
         BufferVector<'T>(vector.Buffer, origin, delta, count) :> IBufferVector<_>
 
@@ -94,14 +94,14 @@ type BufferSlicingExtensions private() =
     ///<param name="offset">Offset (in bytes) at which the subrange starts.</param>
     ///<param name="sizeInBytes">Size (in bytes) of the subrange.</param>
     [<Extension>]
-    static member Range(range : IBufferRange, offset : nativeint, sizeInBytes : nativeint) =
+    static member Range(range : IBufferRange, offset : uint64, sizeInBytes : uint64) =
         range |> BufferSlicing.range offset sizeInBytes
 
     ///<summary>Gets a subrange starting at the given offset.</summary>
     ///<param name="range">The buffer range to subdivide.</param>
     ///<param name="offset">Offset (in bytes) at which the subrange starts.</param>
     [<Extension>]
-    static member Range(range : IBufferRange, offset : nativeint) =
+    static member Range(range : IBufferRange, offset : uint64) =
         if offset > range.SizeInBytes then
             raise <| ArgumentException($"[Buffer] subrange start {offset} out of bounds (size = {range.SizeInBytes}).")
 

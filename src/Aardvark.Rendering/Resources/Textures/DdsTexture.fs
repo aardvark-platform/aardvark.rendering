@@ -349,7 +349,7 @@ module DdsTexture =
                     | TextureDimension.TextureCube -> count * 6
                     | _ -> count
 
-                let mutable totalSize = 0n
+                let mutable totalSize = 0UL
 
                 let metaData =
                     let bytesPerBlock =
@@ -359,11 +359,11 @@ module DdsTexture =
                         Array.init levels (fun level ->
                             let size = Fun.MipmapLevelSize(size, level)
                             let blocks = max 1 ((size + 3) / 4)
-                            let sizeInBytes = nativeint blocks.X * nativeint blocks.Y * nativeint blocks.Z * bytesPerBlock
+                            let sizeInBytes = uint64 blocks.X * uint64 blocks.Y * uint64 blocks.Z * uint64 bytesPerBlock
                             let offset = totalSize
                             totalSize <- totalSize + sizeInBytes
 
-                            (size, blocks, nativeint offset, sizeInBytes)
+                            size, blocks, offset, sizeInBytes
                         )
                     )
 
@@ -376,8 +376,8 @@ module DdsTexture =
 
                             { new INativeTextureData with
                                 member x.Size = size
-                                member x.SizeInBytes = int64 sizeInBytes
-                                member x.Use(f) = data |> NativePtr.pinArr (fun ptr -> f (ptr.Address + offset)) }
+                                member x.SizeInBytes = sizeInBytes
+                                member x.Use(f) = data |> NativePtr.pinArr (fun ptr -> f (ptr.Address + nativeint offset)) }
                         )
                     )
 

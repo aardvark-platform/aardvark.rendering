@@ -32,7 +32,7 @@ type internal ExternalMemoryBlock(handle: IExternalMemoryHandle, memory: VkDevic
 
     interface IExternalMemoryBlock with
         member this.Handle = this.Handle
-        member this.SizeInBytes = int64 this.SizeInBytes
+        member this.SizeInBytes = this.SizeInBytes
         member this.Dispose() = this.Dispose()
 
 module internal ExternalMemory =

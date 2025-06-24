@@ -160,8 +160,8 @@ module ComputeBuffers =
             let result = buffer.Download()
             Expect.equal result (value |> Array.replicate buffer.Count) "Result mismatch"
 
-            Expect.throwsT<ArgumentException> (fun _ -> set (buffer.Range(1n, 128n))) "Unexpected behavior for misaligned offset"
-            Expect.throwsT<ArgumentException> (fun _ -> set (buffer.Range(0n, 127n))) "Unexpected behavior for misaligned size"
+            Expect.throwsT<ArgumentException> (fun _ -> set (buffer.Range(1UL, 128UL))) "Unexpected behavior for misaligned offset"
+            Expect.throwsT<ArgumentException> (fun _ -> set (buffer.Range(0UL, 127UL))) "Unexpected behavior for misaligned size"
 
         let adaptiveReverseAndIncrement (runtime : IRuntime) =
             let src = Array.init 5 (ignore >> Rnd.int32)

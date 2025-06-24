@@ -329,7 +329,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
         let cnt = data.GetLength(0) * data.GetLength(1)
         use buffer = runtime.CreateBuffer<'a>(cnt)
         let gc = GCHandle.Alloc(data, GCHandleType.Pinned) 
-        try buffer.Upload(gc.AddrOfPinnedObject(), nativeint sizeof<'a> * nativeint cnt)
+        try buffer.Upload(gc.AddrOfPinnedObject(), uint64 sizeof<'a> * uint64 cnt)
         finally gc.Free()
         action buffer
 
@@ -598,7 +598,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
                 let res : 'a[,] = Array2D.zeroCreate (src.GetLength 0) (src.GetLength 1)
                 let gc = GCHandle.Alloc(res, GCHandleType.Pinned)
                 try
-                    bdst.Buffer.Download(0n, gc.AddrOfPinnedObject(), nativeint sizeof<'a> * nativeint cnt)
+                    bdst.Buffer.Download(0UL, gc.AddrOfPinnedObject(), uint64 sizeof<'a> * uint64 cnt)
                     res
                 finally
                     gc.Free()

@@ -133,13 +133,13 @@ type Runtime(debug : IDebugConfig) =
         member x.CompileRender (signature, set : aset<IRenderObject>) = x.CompileRender(signature, set)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
-        member x.CreateBuffer(size : nativeint, _ : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, storage) :> IBackendBuffer
-        member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
-        member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+        member x.CreateBuffer(size : uint64, _ : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, storage) :> IBackendBuffer
+        member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : uint64, size : uint64) = x.Upload(src, dst, dstOffset, size)
+        member x.Download(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, size : uint64) = x.Download(src, srcOffset, dst, size)
+        member x.Copy(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, size : uint64) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
 
-        member x.DownloadAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) : unit -> unit =
+        member x.DownloadAsync(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, size : uint64) : unit -> unit =
             raise <| NotImplementedException()
 
         member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
@@ -327,34 +327,33 @@ type Runtime(debug : IDebugConfig) =
         src |> ResourceValidation.Textures.validateWindow level offset size
         ctx.Download(src, level, slice, offset, size, target, format)
 
-    member x.CreateBuffer(size : nativeint, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
-        size |> ResourceValidation.Buffers.validateSize
-        ctx.CreateBuffer(size, storage)
+    member x.CreateBuffer(size : uint64, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
+        ctx.CreateBuffer(nativeint size, storage)
 
-    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
+    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : uint64, sizeInBytes : uint64) =
         dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
 
         use __ = ctx.ResourceLock
-        GL.Dispatch.NamedBufferSubData(int dst.Handle, dstOffset, sizeInBytes, src)
+        GL.Dispatch.NamedBufferSubData(int dst.Handle, nativeint dstOffset, nativeint sizeInBytes, src)
         GL.Check "could not upload buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
-    member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, sizeInBytes : nativeint) =
+    member x.Download(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, sizeInBytes : uint64) =
         src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
 
         use __ = ctx.ResourceLock
-        GL.Dispatch.GetNamedBufferSubData(int src.Handle, srcOffset, sizeInBytes, dst)
+        GL.Dispatch.GetNamedBufferSubData(int src.Handle, nativeint srcOffset, nativeint sizeInBytes, dst)
         GL.Check "could not download buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
-    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
+    member x.Copy(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, sizeInBytes : uint64) =
         src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
         dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
 
         use __ = ctx.ResourceLock
-        GL.Dispatch.CopyNamedBufferSubData(int src.Handle, int dst.Handle, srcOffset, dstOffset, sizeInBytes)
+        GL.Dispatch.CopyNamedBufferSubData(int src.Handle, int dst.Handle, nativeint srcOffset, nativeint dstOffset, nativeint sizeInBytes)
         GL.Check "could not copy buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()

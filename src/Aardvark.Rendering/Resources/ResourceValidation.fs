@@ -276,16 +276,10 @@ module ResourceValidation =
                  ) format
 
         /// Raises an ArgumentException if the given range is out of bounds for the given buffer.
-        let validateRange (offset : nativeint) (sizeInBytes : nativeint) (buffer : IBackendBuffer) =
-            if offset < 0n then Utils.failf "offset must not be negative"
-            if sizeInBytes < 0n then Utils.failf "size must not be negative"
+        let validateRange (offset : uint64) (sizeInBytes : uint64) (buffer : IBackendBuffer) =
             let e = offset + sizeInBytes
             if e > buffer.SizeInBytes then
                 Utils.failf "range out of bounds { offset = %A; size = %A } (size: %A)" offset sizeInBytes buffer.SizeInBytes
-
-        /// Raises an ArgumentException if the given size is negative.
-        let validateSize (sizeInBytes : nativeint) =
-            if sizeInBytes < 0n then Utils.failf "size must not be negative"
 
     module Framebuffers =
 

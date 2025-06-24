@@ -38,7 +38,7 @@ module AttributeSemantics =
                 let elementSize = System.Runtime.InteropServices.Marshal.SizeOf view.ElementType
                 view.Buffer |> AVal.map (fun b ->
                     match b with
-                        | :? INativeBuffer as b -> int ((b.SizeInBytes - nativeint view.Offset) / nativeint elementSize)
+                        | :? INativeBuffer as b -> int ((b.SizeInBytes - uint64 view.Offset) / uint64 elementSize)
                         | _ -> failwithf "[Sg] could not determine buffer-size: %A" b
                 )
 

@@ -8,7 +8,7 @@ type ArrayBuffer(data: Array) =
 
     member _.Data = data
     member _.ElementType = elementType
-    member _.SizeInBytes = nativeint data.Length * nativeint elementType.CLRSize
+    member _.SizeInBytes = uint64 data.Length * uint64 elementType.CLRSize
 
     member inline this.Use([<InlineIfLambda>] action: nativeint -> 'T) =
         this.Data |> NativeInt.pin action

@@ -18,14 +18,14 @@ type IAdaptiveBuffer =
     abstract member Name : string with get, set
 
     /// The size of the buffer in bytes.
-    abstract member Size : nativeint
+    abstract member Size : uint64
 
     /// <summary>
     /// Resizes the buffer.
     /// </summary>
     /// <param name="sizeInBytes">The new size in bytes.</param>
     /// <param name="forceImmediate">Indicates if the buffer is resized immediately or lazily.</param>
-    abstract member Resize : sizeInBytes: nativeint *
+    abstract member Resize : sizeInBytes: uint64 *
                              [<Optional; DefaultParameterValue(false)>] forceImmediate: bool -> unit
 
     /// <summary>
@@ -34,7 +34,7 @@ type IAdaptiveBuffer =
     /// <param name="data">The data to write.</param>
     /// <param name="offset">The offset (in bytes) into the buffer.</param>
     /// <param name="sizeInBytes">The number of bytes to write to the buffer.</param>
-    abstract member Write : data: nativeint * offset: nativeint * sizeInBytes: nativeint -> unit
+    abstract member Write : data: nativeint * offset: uint64 * sizeInBytes: uint64 -> unit
 
 [<AbstractClass; Sealed; Extension>]
 type AdaptiveBufferExtensions private() =
@@ -47,7 +47,7 @@ type AdaptiveBufferExtensions private() =
     /// <param name="offset">The offset (in bytes) into the buffer.</param>
     /// <param name="sizeInBytes">The number of bytes to write to the buffer.</param>
     [<Extension>]
-    static member Write(this : IAdaptiveBuffer, data : Array, offset : nativeint, sizeInBytes : nativeint) =
+    static member Write(this : IAdaptiveBuffer, data : Array, offset : uint64, sizeInBytes : uint64) =
         data |> NativeInt.pin (fun src ->
             this.Write(src, offset, sizeInBytes)
         )
@@ -61,13 +61,13 @@ type AdaptiveBufferExtensions private() =
     /// <param name="start">The first index of the data array to write.</param>
     /// <param name="length">The number of elements to write.</param>
     [<Extension>]
-    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T[], offset : nativeint, start : int, length : int) =
+    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T[], offset : uint64, start : int, length : int) =
         assert (start >= 0 && start < data.Length)
         assert (start + length <= data.Length)
 
         if length > 0 then
             (start, data) ||> NativePtr.pinArri (fun src ->
-                let size = nativeint (length * sizeof<'T>)
+                let size = uint64 length * uint64 sizeof<'T>
                 this.Write(src.Address, offset, size)
         )
 
@@ -78,7 +78,7 @@ type AdaptiveBufferExtensions private() =
     /// <param name="data">The array to write.</param>
     /// <param name="offset">The offset (in bytes) into the buffer.</param>
     [<Extension>]
-    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T[], offset : nativeint) =
+    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T[], offset : uint64) =
         this.Write(data, offset, 0, data.Length)
 
     /// <summary>
@@ -88,9 +88,9 @@ type AdaptiveBufferExtensions private() =
     /// <param name="data">The value to write.</param>
     /// <param name="offset">The offset (in bytes) into the buffer.</param>
     [<Extension>]
-    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T, offset : nativeint) =
+    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T, offset : uint64) =
         data |> NativePtr.pin (fun src ->
-            this.Write(src.Address, offset, nativeint sizeof<'T>)
+            this.Write(src.Address, offset, uint64 sizeof<'T>)
         )
 
     /// <summary>
@@ -99,11 +99,11 @@ type AdaptiveBufferExtensions private() =
     /// <param name="this">The buffer to clear.</param>
     [<Extension>]
     static member Clear(this : IAdaptiveBuffer) =
-        this.Resize(0n, true)
+        this.Resize(0UL, true)
 
 
 /// Adaptive buffer that can be resized and written to in an imperative fashion.
-type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
+type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : uint64,
                     [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                     [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
     inherit AdaptiveResource<IBackendBuffer>()
@@ -113,7 +113,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
     let mutable handle : ValueOption<IBackendBuffer> = ValueNone
     let usage = usage ||| BufferUsage.Read
 
-    abstract member CreateHandle : size: nativeint * usage: BufferUsage * storage: BufferStorage -> IBackendBuffer
+    abstract member CreateHandle : size: uint64 * usage: BufferUsage * storage: BufferStorage -> IBackendBuffer
     default _.CreateHandle(size, usage, storage) = runtime.CreateBuffer(size, usage, storage)
 
     member private x.ComputeHandle(discard : bool) =
@@ -130,7 +130,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
                 resized.Name <- name
 
                 if not discard then
-                    runtime.Copy(old, 0n, resized, 0n, min old.SizeInBytes size)
+                    runtime.Copy(old, 0UL, resized, 0UL, min old.SizeInBytes size)
 
                 runtime.DeleteBuffer(old)
                 handle <- ValueSome resized
@@ -154,7 +154,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
     /// </summary>
     /// <param name="sizeInBytes">The new size in bytes.</param>
     /// <param name="forceImmediate">Indicates if the buffer is resized immediately or lazily</param>
-    member x.Resize(sizeInBytes : nativeint, [<Optional; DefaultParameterValue(false)>] forceImmediate : bool) =
+    member x.Resize(sizeInBytes : uint64, [<Optional; DefaultParameterValue(false)>] forceImmediate : bool) =
         lock x (fun _ ->
             if sizeInBytes <> x.Size then
                 size <- sizeInBytes
@@ -171,7 +171,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
     /// <param name="data">The data to write.</param>
     /// <param name="offset">The offset (in bytes) into the buffer.</param>
     /// <param name="sizeInBytes">The number of bytes to write to the buffer.</param>
-    member x.Write(data : nativeint, offset : nativeint, sizeInBytes : nativeint) =
+    member x.Write(data : nativeint, offset : uint64, sizeInBytes : uint64) =
         lock x (fun _ ->
             assert (offset + sizeInBytes <= x.Size)
             let handle = x.ComputeHandle(false)
@@ -184,7 +184,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
     override x.Destroy() =
         handle |> ValueOption.iter Disposable.dispose
         handle <- ValueNone
-        size <- 0n
+        size <- 0UL
 
     override x.Compute(_, _) =
         x.ComputeHandle(false)

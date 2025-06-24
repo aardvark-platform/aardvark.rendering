@@ -76,10 +76,9 @@ module IndirectBuffer =
                     Buffer.empty false flags 0UL device.DeviceMemory
 
             | :? INativeBuffer as nb ->
-                if nb.SizeInBytes <> 0n then
-                    let size = uint64 nb.SizeInBytes
-                    let count = int (nb.SizeInBytes / nativeint sizeof<DrawCallInfo>)
-                    let buffer = Buffer.create flags size device.DeviceMemory
+                if nb.SizeInBytes <> 0UL then
+                    let count = int (nb.SizeInBytes / uint64 sizeof<DrawCallInfo>)
+                    let buffer = Buffer.create flags nb.SizeInBytes device.DeviceMemory
 
                     nb.Use (fun src ->
                         Buffer.write buffer (fun dst ->

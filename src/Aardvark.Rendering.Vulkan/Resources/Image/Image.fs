@@ -234,8 +234,8 @@ and internal ExportedImage =
 
             let externalMemory =
                 { Block  = memory.ExternalBlock
-                  Offset = int64 memory.Offset
-                  Size   = int64 memory.Size }
+                  Offset = memory.Offset
+                  Size   = memory.Size }
 
             {
                 inherit Image(device, handle, size, levels, layers, samples, dimension, format, memory, layout, samplerLayout, peerHandles)

@@ -24,7 +24,7 @@ type IManagedBuffer =
     /// <param name="data">The data to write.</param>
     /// <param name="sizeInBytes">The size (in bytes) of the provided data.</param>
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
-    abstract member Set : data: nativeint * sizeInBytes: nativeint * range: Range1l -> unit
+    abstract member Set : data: nativeint * sizeInBytes: uint64 * range: Range1l -> unit
 
     /// <summary>
     /// Adds a writer that adaptively writes the values in the buffer view to the buffer. The buffer is resized if necessary.
@@ -69,7 +69,7 @@ type ManagedBufferExtensions private() =
     [<Extension>]
     static member inline Set(this : IManagedBuffer, data : byte[], range : Range1l) =
         data |> NativePtr.pinArr (fun src ->
-            this.Set(src.Address, nativeint data.Length, range)
+            this.Set(src.Address, uint64 data.Length, range)
         )
 
     /// <summary>
@@ -81,7 +81,7 @@ type ManagedBufferExtensions private() =
     [<Extension>]
     static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, value : 'T, index : int64) =
         value |> NativePtr.pin (fun src ->
-            this.Set(src.Address, nativeint sizeof<'T>, Range1l(index, index))
+            this.Set(src.Address, uint64 sizeof<'T>, Range1l(index, index))
         )
 
     /// <summary>
@@ -104,7 +104,7 @@ type ManagedBufferExtensions private() =
     [<Extension>]
     static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, values : 'T[], range : Range1l) =
         values |> NativePtr.pinArr (fun src ->
-            this.Set(src.Address, nativeint values.Length * nativeint sizeof<'T>, range)
+            this.Set(src.Address, uint64 values.Length * uint64 sizeof<'T>, range)
         )
 
     /// <summary>
@@ -117,7 +117,7 @@ type ManagedBufferExtensions private() =
     [<Extension>]
     static member inline Set(this : IManagedBuffer, values : Array, range : Range1l) =
         let elementSize = values.GetType().GetElementType().GetCLRSize()
-        let sizeInBytes = nativeint values.Length * nativeint elementSize
+        let sizeInBytes = uint64 values.Length * uint64 elementSize
 
         values |> NativeInt.pin (fun src ->
             this.Set(src, sizeInBytes, range)
@@ -127,17 +127,17 @@ type ManagedBufferExtensions private() =
 module internal ManagedBufferImplementation =
 
     type ManagedBuffer<'T when 'T : unmanaged>(runtime : IBufferRuntime, usage : BufferUsage, storage : BufferStorage) =
-        inherit AdaptiveBuffer(runtime, 0n, usage, storage)
+        inherit AdaptiveBuffer(runtime, 0UL, usage, storage)
 
-        static let elementSize = sizeof<'T> |> nativeint
+        static let elementSize = uint64 sizeof<'T>
 
         let writers = Dict<obj, AbstractWriter>()
         let pending = LockedSet<AbstractWriter>()
 
         member inline private x.Allocate(range : Range1l) =
-            let min = nativeint (range.Max + 1L) * elementSize
+            let min = uint64 (range.Max + 1L) * elementSize
             if x.Size < min then
-                x.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
+                x.Resize(uint64 <| Fun.NextPowerOfTwo(int64 min)) //TODO: unsigned
 
         member private x.AddRange(writer : AbstractWriter, input : obj, range : Range1l) =
             transact (fun _ ->
@@ -165,21 +165,21 @@ module internal ManagedBufferImplementation =
                     )
             }
 
-        member x.Set(data : nativeint, sizeInBytes : nativeint, range : Range1l) =
+        member x.Set(data : nativeint, sizeInBytes : uint64, range : Range1l) =
             let count = range.Size + 1L
 
             if count > 0L then
                 x.Allocate range
 
-                let mutable remaining = nativeint count * elementSize
-                let mutable offset = nativeint range.Min * elementSize
+                let mutable remaining = uint64 count * elementSize
+                let mutable offset = uint64 range.Min * elementSize
 
                 while remaining >= sizeInBytes do
                     x.Write(data, offset, sizeInBytes)
                     offset <- offset + sizeInBytes
                     remaining <- remaining - sizeInBytes
 
-                if remaining > 0n then
+                if remaining > 0UL then
                     x.Write(data, offset, remaining)
 
         member x.Add(view : BufferView, range : Range1l) =
@@ -244,13 +244,13 @@ module internal ManagedBufferImplementation =
             member x.Add(view : BufferView, range) = x.Add(view, range)
             member x.Add(value : IAdaptiveValue, index) = x.Add(value, index)
 
-    and [<AbstractClass>] private AbstractWriter(input : IAdaptiveValue, elementSize : nativeint) =
+    and [<AbstractClass>] private AbstractWriter(input : IAdaptiveValue, elementSize : uint64) =
         inherit AdaptiveObject()
 
         do input.Acquire()
         let regions = ReferenceCountingSet<Range1l>()
 
-        abstract member Write : AdaptiveToken * nativeint -> unit
+        abstract member Write : AdaptiveToken * uint64 -> unit
 
         // Adds the given range as target region and returns if it was newly added.
         member x.AddRange(range : Range1l) : bool =
@@ -268,7 +268,7 @@ module internal ManagedBufferImplementation =
         member x.Write(token : AdaptiveToken) =
             x.EvaluateIfNeeded token () (fun token ->
                 for region in regions do
-                    let offset = nativeint region.Min * elementSize
+                    let offset = uint64 region.Min * elementSize
                     x.Write(token, offset)
             )
 
@@ -285,14 +285,14 @@ module internal ManagedBufferImplementation =
 
 
     and private SingleWriter<'T when 'T : unmanaged>(buffer : ManagedBuffer<'T>, data : aval<'T>) =
-        inherit AbstractWriter(data, nativeint sizeof<'T>)
+        inherit AbstractWriter(data, uint64 sizeof<'T>)
 
         override x.Write(token, offset) =
             let value = data.GetValue(token)
             buffer.Write(value, offset)
 
     and private ArrayWriter<'T when 'T : unmanaged>(buffer : ManagedBuffer<'T>, data : aval<'T[]>) =
-        inherit AbstractWriter(data, nativeint sizeof<'T>)
+        inherit AbstractWriter(data, uint64 sizeof<'T>)
 
         override x.Write(token, offset) =
             let value = data.GetValue(token)

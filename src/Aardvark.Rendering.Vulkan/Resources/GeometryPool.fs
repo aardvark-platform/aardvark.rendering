@@ -62,7 +62,7 @@ module GeometryPoolUtilities =
                                 member x.Compatible = QueueFlags.All
                                 member x.Enqueue(cmd) =
                                     cmd.AppendCommand()
-                                    let mutable copyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
+                                    let mutable copyInfo = VkBufferCopy(offset, offset, size)
                                     VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer.Handle, handle, 1u, &&copyInfo)
                             }
                         )

@@ -263,8 +263,8 @@ module private RuntimeCommands =
 
             interface IBufferRange with
                 member x.Buffer = buffer :> _
-                member x.Offset = nativeint offset
-                member x.SizeInBytes = nativeint size
+                member x.Offset = uint64 offset
+                member x.SizeInBytes = uint64 size
 
         type UniformWriter(offset : nativeint, target : Map<string, int * IAdaptiveValue * UniformWriters.IWriter>) =
             inherit AdaptiveObject()

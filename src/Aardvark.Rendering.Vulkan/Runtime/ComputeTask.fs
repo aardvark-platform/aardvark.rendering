@@ -164,7 +164,7 @@ module internal ComputeTaskInternals =
                         VkBufferMemoryBarrier(
                             srcAccess, dstAccess,
                             VkQueueFamilyIgnored, VkQueueFamilyIgnored,
-                            buffer.Handle, 0UL, uint64 buffer.Size
+                            buffer.Handle, 0UL, buffer.Size
                         )
 
                     x.PipelineBarrier(
@@ -273,9 +273,9 @@ module internal ComputeTaskInternals =
                         let regions =
                             [|
                                 VkBufferCopy(
-                                    uint64 src.Offset,
-                                    uint64 dst.Offset,
-                                    uint64 (min src.SizeInBytes dst.SizeInBytes)
+                                    src.Offset,
+                                    dst.Offset,
+                                    min src.SizeInBytes dst.SizeInBytes
                                 )
                             |]
 
@@ -284,16 +284,16 @@ module internal ComputeTaskInternals =
 
                     | ComputeCommand.DownloadBufferCmd (src, dst) ->
                         let srcBuffer = src.Buffer |> unbox<Buffer>
-                        do! CompilerState.downloadBuffer srcBuffer (uint64 src.Offset) dst (uint64 src.SizeInBytes)
+                        do! CompilerState.downloadBuffer srcBuffer src.Offset dst src.SizeInBytes
 
                     | ComputeCommand.UploadBufferCmd (src, dst) ->
                         let dstBuffer = dst.Buffer |> unbox<Buffer>
-                        do! CompilerState.uploadBuffer src dstBuffer (uint64 dst.Offset) (uint64 dst.SizeInBytes)
+                        do! CompilerState.uploadBuffer src dstBuffer dst.Offset dst.SizeInBytes
 
                     | ComputeCommand.SetBufferCmd (range, value) ->
                         let buffer = unbox<Buffer> range.Buffer
                         let! stream = CompilerState.stream
-                        stream.FillBuffer(buffer.Handle, uint64 range.Offset, uint64 range.SizeInBytes, value) |> ignore
+                        stream.FillBuffer(buffer.Handle, range.Offset, range.SizeInBytes, value) |> ignore
 
                     | ComputeCommand.SyncBufferCmd (buffer, srcAccess, dstAccess) ->
                         let buffer = unbox<Buffer> buffer
@@ -549,7 +549,7 @@ module internal ComputeTaskInternals =
 
         let ofCompiled (getSecondaryCommandBuffer : unit -> CommandBuffer) (taskName : string) = function
             | CompiledCommand.Host (HostCommand.Upload (src, dst, dstOffset, size)) ->
-                UploadCmd(src, dst, uint64 dstOffset, uint64 size) :> IPreparedCommand
+                UploadCmd(src, dst, dstOffset, uint64 size) :> IPreparedCommand
 
             | CompiledCommand.Host (HostCommand.Download (src, srcOffset, dst, size)) ->
                 DownloadCmd(src, srcOffset, dst, size) :> IPreparedCommand

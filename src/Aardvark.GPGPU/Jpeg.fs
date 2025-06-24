@@ -1472,19 +1472,19 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         //Array.Resize(&result, finalLength)
         result
 
-    member x.DownloadChunked(chunkSize : nativeint) =
+    member x.DownloadChunked(chunkSize : uint64) =
         let numberOfBits : int = bitCountBuffer.[0]
         let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
         
-        let mem = Marshal.AllocHGlobal (2n * chunkSize)
+        let mem = Marshal.AllocHGlobal (nativeint (2UL * chunkSize))
 
         let mutable ping = mem
-        let mutable pong = mem + chunkSize
-        let mutable offset = 0n
-        let mutable remaining = nativeint byteCount
+        let mutable pong = mem + nativeint chunkSize
+        let mutable offset = 0UL
+        let mutable remaining = uint64 byteCount
         let mutable wait = id
         let mutable copySize = min remaining chunkSize
-        runtime.Download(outputBuffer.Buffer, 0n, ping, copySize)
+        runtime.Download(outputBuffer.Buffer, 0UL, ping, copySize)
 
 
 
@@ -1492,14 +1492,14 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         // header is already written
         let mutable dst = dstStart + nativeint header.Length
 
-        while remaining > 0n do
+        while remaining > 0UL do
             wait()
             Fun.Swap(&ping, &pong)
             let pongSize = copySize
             offset <- offset + copySize
             remaining <- remaining - copySize
             copySize <- min remaining chunkSize
-            if copySize > 0n then
+            if copySize > 0UL then
                 wait <- runtime.DownloadAsync(outputBuffer.Buffer, offset, ping, copySize)
             else
                 wait <- id

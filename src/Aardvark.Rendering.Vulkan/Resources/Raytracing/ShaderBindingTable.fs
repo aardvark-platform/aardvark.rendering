@@ -20,7 +20,7 @@ type ShaderBindingSubtable<'T when 'T : comparison> =
 
         member x.AddressRegion =
             VkStridedDeviceAddressRegionKHR(
-                x.DeviceAddress, x.Stride, uint64 x.Size
+                x.DeviceAddress, x.Stride, x.Size
             )
 
         new ( buffer : Buffer, lookup : Map<'T, int>, stride : uint64) =

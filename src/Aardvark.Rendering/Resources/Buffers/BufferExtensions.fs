@@ -25,7 +25,7 @@ type IBackendBufferExtensions private() =
     ///<param name="src">Location of the data to copy.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     [<Extension>]
-    static member inline Upload(dst : IBackendBuffer, dstOffset : nativeint, src : nativeint, sizeInBytes : nativeint) =
+    static member inline Upload(dst : IBackendBuffer, dstOffset : uint64, src : nativeint, sizeInBytes : uint64) =
         dst.Runtime.Upload(src, dst, dstOffset, sizeInBytes)
 
     ///<summary>Copies data from a buffer to host memory.</summary>
@@ -34,7 +34,7 @@ type IBackendBufferExtensions private() =
     ///<param name="dst">Location to copy the data to.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     [<Extension>]
-    static member inline Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, sizeInBytes : nativeint) =
+    static member inline Download(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, sizeInBytes : uint64) =
         src.Runtime.Download(src, srcOffset, dst, sizeInBytes)
 
     ///<summary>Copies data from a buffer to host memory.</summary>
@@ -44,7 +44,7 @@ type IBackendBufferExtensions private() =
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     ///<returns>A function that blocks until the download is complete.</returns>
     [<Extension>]
-    static member inline DownloadAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, sizeInBytes : nativeint) =
+    static member inline DownloadAsync(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, sizeInBytes : uint64) =
         src.Runtime.DownloadAsync(src, srcOffset, dst, sizeInBytes)
 
     ///<summary>Copies data from a buffer to another.</summary>
@@ -54,7 +54,7 @@ type IBackendBufferExtensions private() =
     ///<param name="dstOffset">Offset (in bytes) into the destination buffer.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     [<Extension>]
-    static member inline CopyTo(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
+    static member inline CopyTo(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, sizeInBytes : uint64) =
         src.Runtime.Copy(src, srcOffset, dst, dstOffset, sizeInBytes)
 
 
@@ -80,11 +80,11 @@ type IBufferRangeExtensions private() =
         match range with
         | :? IBufferRange<'T> as range -> range
         | _ ->
-            if range.Offset % nativeint sizeof<'T> <> 0n then
+            if range.Offset % uint64 sizeof<'T> <> 0UL then
                 raise <| ArgumentException($"[Buffer] offset must be a multiple of {sizeof<'T>}.")
 
-            let origin = int (range.Offset / nativeint sizeof<'T>)
-            let count = int (range.SizeInBytes / nativeint sizeof<'T>)
+            let origin = int (range.Offset / uint64 sizeof<'T>)
+            let count = int (range.SizeInBytes / uint64 sizeof<'T>)
             let buffer = range.Buffer.Coerce<'T>()
             buffer |> BufferSlicing.elements origin count
 
@@ -98,7 +98,7 @@ type IBufferRangeExtensions private() =
     ///<param name="src">Location of the data to copy.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     [<Extension>]
-    static member inline Upload(dst : IBufferRange, src : nativeint, sizeInBytes : nativeint) =
+    static member inline Upload(dst : IBufferRange, src : nativeint, sizeInBytes : uint64) =
         dst.Buffer.Upload(dst.Offset, src, sizeInBytes)
 
     ///<summary>Copies elements from an array to a buffer range.</summary>
@@ -172,7 +172,7 @@ type IBufferRangeExtensions private() =
     ///<param name="dst">Location to copy the data to.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     [<Extension>]
-    static member inline Download(src : IBufferRange, dst : nativeint, sizeInBytes : nativeint) =
+    static member inline Download(src : IBufferRange, dst : nativeint, sizeInBytes : uint64) =
         src.Buffer.Download(src.Offset, dst, sizeInBytes)
 
     ///<summary>Copies elements from a buffer range to an array.</summary>
@@ -235,7 +235,7 @@ type IBufferRangeExtensions private() =
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     ///<returns>A function that blocks until the download is complete.</returns>
     [<Extension>]
-    static member inline DownloadAsync(src : IBufferRange, dst : nativeint, sizeInBytes : nativeint) =
+    static member inline DownloadAsync(src : IBufferRange, dst : nativeint, sizeInBytes : uint64) =
         src.Buffer.DownloadAsync(src.Offset, dst, sizeInBytes)
 
     ///<summary>Asynchronously copies elements from a buffer range to an array.</summary>
@@ -328,14 +328,12 @@ type IBufferExtensions private() =
 
     static let copyToArray (elementType: Type) (elementSize: uint64) (stride: uint64) (offset: uint64) (count: uint64) (src: nativeint) =
         let array = Array.CreateInstance(elementType, int64 count)
-        let sizeInBytes = nativeint (count * elementSize)
-        let elementSize = nativeint elementSize
-        let stride = nativeint stride
+        let sizeInBytes = count * elementSize
         let src = src + nativeint offset
 
         if stride = elementSize then
             array |> NativeInt.pin (fun dst ->
-                Buffer.MemoryCopy(src, dst, uint64 sizeInBytes, uint64 sizeInBytes)
+                Buffer.MemoryCopy(src, dst, sizeInBytes, sizeInBytes)
             )
         else
             array |> NativeInt.pin (fun dst ->
@@ -344,9 +342,9 @@ type IBufferExtensions private() =
                 let mutable i = 0UL
 
                 while i < count do
-                    Buffer.MemoryCopy(src, dst, uint64 elementSize, uint64 elementSize)
-                    &src += stride
-                    &dst += elementSize
+                    Buffer.MemoryCopy(src, dst, elementSize, elementSize)
+                    &src += nativeint stride
+                    &dst += nativeint elementSize
                     &i += 1UL
             )
 
@@ -387,26 +385,25 @@ type IBufferExtensions private() =
                     buffer.Data |> NativeInt.pin (copyToArray elementType elementSize stride offset count)
 
         | :? INativeBuffer as buffer ->
-            if copySize > uint64 buffer.SizeInBytes - offset then
+            if copySize > buffer.SizeInBytes - offset then
                 raise <| ArgumentOutOfRangeException($"Cannot copy {copySize} bytes from INativeBuffer with size {buffer.SizeInBytes} starting at offset {offset}.")
 
             buffer.Use(copyToArray elementType elementSize stride offset count)
 
         | :? IBackendBuffer as buffer ->
-            if copySize > uint64 buffer.SizeInBytes - offset then
+            if copySize > buffer.SizeInBytes - offset then
                 raise <| ArgumentOutOfRangeException($"Cannot copy {copySize} bytes from IBackendBuffer with size {buffer.SizeInBytes} starting at offset {offset}.")
 
             if stride = elementSize then
                 let result = Array.CreateInstance(elementType, int64 count)
                 result |> NativeInt.pin (fun dst ->
-                    let sizeInBytes = nativeint (count * elementSize)
-                    buffer.Download(nativeint offset, dst, sizeInBytes)
+                    buffer.Download(offset, dst, count * elementSize)
                 )
                 result
             else
                 let tmp = Marshal.AllocHGlobal(nativeint copySize)
                 try
-                    buffer.Download(nativeint offset, tmp, nativeint copySize)
+                    buffer.Download(offset, tmp, copySize)
                     copyToArray elementType elementSize stride 0UL count tmp
                 finally
                     Marshal.FreeHGlobal tmp

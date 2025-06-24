@@ -81,5 +81,5 @@ module internal InstanceBuffer =
             override x.CreateHandle(size, usage, storage) =
                 let usage = VkBufferUsageFlags.ofBufferUsage usage
                 let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
-                memory.CreateBuffer(usage, uint64 size, 16UL)
+                memory.CreateBuffer(usage, size, 16UL)
         }

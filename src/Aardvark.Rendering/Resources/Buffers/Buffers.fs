@@ -54,7 +54,7 @@ type IBuffer =
 
 type INativeBuffer =
     inherit IBuffer
-    abstract member SizeInBytes : nativeint
+    abstract member SizeInBytes : uint64
     abstract member Use : action: (nativeint -> 'T) -> 'T
 
 type IBackendBuffer =
@@ -71,8 +71,8 @@ and IExportedBackendBuffer =
 
 and IBufferRange =
     abstract member Buffer : IBackendBuffer
-    abstract member Offset : nativeint
-    abstract member SizeInBytes : nativeint
+    abstract member Offset : uint64
+    abstract member SizeInBytes : uint64
 
 and IBufferVector<'T when 'T : unmanaged> =
     abstract member Buffer : IBackendBuffer
@@ -105,7 +105,7 @@ and IBufferRuntime =
     ///<param name="sizeInBytes">The size (in bytes) of the buffer.</param>
     ///<param name="usage">The usage flags of the buffer. Default is BufferUsage.All.</param>
     ///<param name="storage">The type of storage that is preferred. Default is BufferStorage.Device.</param>
-    abstract member CreateBuffer : sizeInBytes : nativeint *
+    abstract member CreateBuffer : sizeInBytes : uint64 *
                                    [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage *
                                    [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage -> IBackendBuffer
 
@@ -114,14 +114,14 @@ and IBufferRuntime =
     ///<param name="dst">The buffer to copy data to.</param>
     ///<param name="dstOffset">Offset (in bytes) into the buffer.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
-    abstract member Upload : src : nativeint * dst : IBackendBuffer * dstOffset : nativeint * sizeInBytes : nativeint -> unit
+    abstract member Upload : src : nativeint * dst : IBackendBuffer * dstOffset : uint64 * sizeInBytes : uint64 -> unit
 
     ///<summary>Copies data from a buffer to host memory.</summary>
     ///<param name="src">The buffer to copy data from.</param>
     ///<param name="srcOffset">Offset (in bytes) into the buffer.</param>
     ///<param name="dst">Location to copy the data to.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
-    abstract member Download : src : IBackendBuffer * srcOffset : nativeint * dst : nativeint * sizeInBytes : nativeint -> unit
+    abstract member Download : src : IBackendBuffer * srcOffset : uint64 * dst : nativeint * sizeInBytes : uint64 -> unit
 
     ///<summary>Asynchronously copies data from a buffer to host memory.</summary>
     ///<param name="src">The buffer to copy data from.</param>
@@ -129,7 +129,7 @@ and IBufferRuntime =
     ///<param name="dst">Location to copy the data to.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     ///<returns>A function that blocks until the download is complete.</returns>
-    abstract member DownloadAsync : src : IBackendBuffer * srcOffset : nativeint * dst : nativeint * sizeInBytes : nativeint -> (unit -> unit)
+    abstract member DownloadAsync : src : IBackendBuffer * srcOffset : uint64 * dst : nativeint * sizeInBytes : uint64 -> (unit -> unit)
 
     ///<summary>Copies data from a buffer to another.</summary>
     ///<param name="src">The buffer to copy data from.</param>
@@ -137,4 +137,4 @@ and IBufferRuntime =
     ///<param name="dst">The buffer to copy data to.</param>
     ///<param name="dstOffset">Offset (in bytes) into the destination buffer.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
-    abstract member Copy : src : IBackendBuffer * srcOffset : nativeint * dst : IBackendBuffer * dstOffset : nativeint * sizeInBytes : nativeint -> unit
+    abstract member Copy : src : IBackendBuffer * srcOffset : uint64 * dst : IBackendBuffer * dstOffset : uint64 * sizeInBytes : uint64 -> unit

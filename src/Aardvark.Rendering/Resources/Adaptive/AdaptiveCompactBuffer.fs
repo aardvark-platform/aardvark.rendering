@@ -18,9 +18,9 @@ module CompactBufferImplementation =
 
     [<AbstractClass>]
     type AbstractCompactBuffer<'Key, 'Value>(runtime : IBufferRuntime, input : aset<'Key>, usage : BufferUsage, storage : BufferStorage) =
-        inherit AdaptiveBuffer(runtime, 0n, usage, storage)
+        inherit AdaptiveBuffer(runtime, 0UL, usage, storage)
 
-        static let elementSize = nativeint sizeof<'Value>
+        static let elementSize = uint64 sizeof<'Value>
 
         let count = ASet.count input
         let compact = ASet.compact input
@@ -31,7 +31,7 @@ module CompactBufferImplementation =
             else action()
 
         member inline private x.GetAlignedSize(count : int) =
-            let count = nativeint <| Fun.NextPowerOfTwo(int64 count)
+            let count = uint64 <| Fun.NextPowerOfTwo(int64 count) // TODO: unsigned
             count * elementSize
 
         /// Indicates whether a transaction is used when processing deltas.
@@ -55,9 +55,9 @@ module CompactBufferImplementation =
             // Grow or shrink buffer if necessary
             let count = count.GetValue(t)
             let alignedSize = x.GetAlignedSize count
-            let requiredSize = nativeint count * elementSize
+            let requiredSize = uint64 count * elementSize
 
-            if x.Size < requiredSize || x.Size > 2n * alignedSize then
+            if x.Size < requiredSize || x.Size > 2UL * alignedSize then
                 x.Resize alignedSize
 
             // Process deltas
@@ -97,7 +97,7 @@ module CompactBufferImplementation =
         override x.Set(input, index) =
             let offset = index * stride
             let value = evaluate input
-            x.Write(value, nativeint offset)
+            x.Write(value, uint64 offset)
 
     type private Writer<'Key, 'Value when 'Value : unmanaged>(
                         buffer : AdaptiveCompactBuffer<'Key, 'Value>,
@@ -105,14 +105,14 @@ module CompactBufferImplementation =
                         input : 'Key, index : int) =
         inherit AdaptiveObject()
 
-        static let elementSize = nativeint sizeof<'Value>
+        static let elementSize = uint64 sizeof<'Value>
 
         let mutable currentIndex = index
 
         member x.Write(token : AdaptiveToken) =
             if currentIndex >= 0 then
                 x.EvaluateIfNeeded token () (fun token ->
-                    let offset = nativeint currentIndex * elementSize
+                    let offset = uint64 currentIndex * elementSize
                     let value = evaluate.Invoke(token, input)
                     buffer.Write(value, offset)
                 )

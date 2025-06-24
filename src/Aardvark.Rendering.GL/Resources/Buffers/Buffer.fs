@@ -61,8 +61,8 @@ type Buffer =
             member x.Runtime = x.Context.Runtime :> IBufferRuntime
             member x.Handle = uint64 x.Handle
             member x.Buffer = x
-            member x.Offset = 0n
-            member x.SizeInBytes = x.SizeInBytes
+            member x.Offset = 0UL
+            member x.SizeInBytes = uint64 x.SizeInBytes
             member x.Name with get() = x.Name and set name = x.Name <- name
             member x.Dispose() = x.Dispose()
 
@@ -115,7 +115,7 @@ module BufferExtensions =
                     handle
                 )
 
-            new Buffer(x, nativeint sizeInBytes, handle)
+            new Buffer(x, sizeInBytes, handle)
 
         /// <summary>
         /// creates a new buffer and initializes its size (allocates GPU memory)
@@ -148,11 +148,11 @@ module BufferExtensions =
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, handle)
                 GL.Check "failed to bind buffer"
 
-                GL.Dispatch.BufferStorageMem(BufferTarget.CopyWriteBuffer, nativeint memory.Size, sharedMemory.Handle, memory.Offset)
+                GL.Dispatch.BufferStorageMem(BufferTarget.CopyWriteBuffer, nativeint memory.Size, sharedMemory.Handle, int64 memory.Offset)
                 GL.Check "failed to import buffer"
 
                 ResourceCounts.addBuffer x (int64 buffer.SizeInBytes)
-                new SharedBuffer(x, buffer.SizeInBytes, handle, buffer, sharedMemory)
+                new SharedBuffer(x, nativeint buffer.SizeInBytes, handle, buffer, sharedMemory)
             )
 
         /// <summary>
@@ -170,7 +170,7 @@ module BufferExtensions =
                 x.CreateBuffer(ab.Data, storage)
 
             | :? INativeBuffer as nb ->
-                nb.Use (fun ptr -> x.CreateBuffer(ptr, nb.SizeInBytes, storage))
+                nb.Use (fun ptr -> x.CreateBuffer(ptr, nativeint nb.SizeInBytes, storage))
 
             | :? IExportedBackendBuffer as b ->
                 x.ImportBuffer b
@@ -184,30 +184,6 @@ module BufferExtensions =
             | _ ->
                 failf $"unsupported buffer type: {data.GetType()}"
 
-        member x.Upload(b : Buffer, data : IBuffer, useNamed : bool) =
-            if b.Handle = 0 then failf "cannot update null buffer"
-            match data with
-            | :? ArrayBuffer as ab ->
-                x.Upload(b, ab.Data, useNamed)
-
-            | :? Buffer as bb ->
-                if bb.Handle <> b.Handle then failf $"cannot change backend buffer handle (old: {b.Handle}, new: {bb.Handle})"
-
-            | :? INativeBuffer as n ->
-                n.Use (fun ptr -> x.Upload(b, ptr, n.SizeInBytes, useNamed))
-
-            | :? IBufferRange as bv when bv != bv.Buffer ->
-                x.Upload(b, bv.Buffer, useNamed)
-
-            | _ when data = Unchecked.defaultof<_> ->
-                failf $"buffer data is null"
-
-            | _ ->
-                failf $"unsupported buffer type: {data.GetType()}"
-
-        member x.Upload(b : Buffer, data : IBuffer) =
-            x.Upload(b, data, true)
-
         // =======================================================================================================================
         //      UploadRange Overloads
         // =======================================================================================================================
@@ -216,23 +192,19 @@ module BufferExtensions =
         /// while leaving the rest of the buffer untouched.
         /// NOTE: Fails when the target-range exceeds the buffer's current size.
         /// </summary>
-        member x.UploadRange(buffer : Buffer, src : nativeint, targetOffset : int, size : int) =
+        member x.UploadRange(buffer : Buffer, src : nativeint, targetOffset : nativeint, size : nativeint) =
             use __ = x.ResourceLock
-            assert (targetOffset >= 0)
-            assert (size >= 0)
+            assert (targetOffset >= 0n)
+            assert (size >= 0n)
             assert (src <> 0n)
 
-            let nativeSize = size |> nativeint
-            let totalSize = targetOffset + size |> nativeint
-
-            if targetOffset < 0 || totalSize > buffer.SizeInBytes then
+            if targetOffset + size > buffer.SizeInBytes then
                 raise <| IndexOutOfRangeException("range uploads may not exceed the buffer's size")
             else
-                let target = GL.Dispatch.MapNamedBufferRange(buffer.Handle, nativeint targetOffset, nativeSize, BufferAccessMask.MapWriteBit)
+                let target = GL.Dispatch.MapNamedBufferRange(buffer.Handle, targetOffset, size, BufferAccessMask.MapWriteBit)
                 GL.Check "failed to map buffer for writing"
                 if target <> 0n then
-                    // TODO: Marshal.Copy should possibly take int64 sizes
-                    Marshal.Copy(src, target, size)
+                    Buffer.MemoryCopy(src, target, uint64 size, uint64 size)
                 else
                     Log.warn "[GL] could not map buffer for writing"
 
@@ -273,24 +245,16 @@ module BufferExtensions =
 
             try
                 let elementType = source.GetType().GetElementType()
-                let elementSize = Marshal.SizeOf(elementType)
-                let targetOffset = targetStartIndex * elementSize
-                let size = count * elementSize
+                let elementSize = nativeint elementType.CLRSize
+                let targetOffset = nativeint targetStartIndex * elementSize
+                let size = nativeint count * elementSize
 
-                let ptr = handle.AddrOfPinnedObject() + nativeint (sourceStartIndex * elementSize)
+                let ptr = handle.AddrOfPinnedObject() + nativeint sourceStartIndex * elementSize
 
                 x.UploadRange(buffer, ptr, targetOffset, size)
 
             finally
                 handle.Free()
-
-        /// <summary>
-        /// uploads a subrange of the given array to a (possibly different) range of the buffer.
-        /// </summary>
-        member x.UploadRange(buffer : Buffer, source : 'a[], sourceStartIndex : int, targetStartIndex : int, count : int) =
-            // TODO: maybe inline this (maybe faster since no reflection stuff needed)
-            x.UploadRange(buffer, source :> Array, sourceStartIndex, targetStartIndex, count)
-
 
 
         // =======================================================================================================================
@@ -301,23 +265,19 @@ module BufferExtensions =
         /// downloads a range of the given buffer to the target specified.
         /// NOTE: Fails when the source-range exceeds the buffer's current size.
         /// </summary>
-        member x.DownloadRange(buffer : Buffer, target : nativeint, sourceOffset : int, size : int) =
+        member x.DownloadRange(buffer : Buffer, target : nativeint, sourceOffset : nativeint, size : nativeint) =
             use __ = x.ResourceLock
-            assert (sourceOffset >= 0)
-            assert (size >= 0)
+            assert (sourceOffset >= 0n)
+            assert (size >= 0n)
             assert (target <> 0n)
 
-            let nativeSize = size |> nativeint
-            let totalSize = sourceOffset + size |> nativeint
-
-            if sourceOffset < 0 || totalSize > buffer.SizeInBytes then
+            if sourceOffset + size > buffer.SizeInBytes then
                 raise <| IndexOutOfRangeException("downloads may not exceed the buffer's size")
             else
-                let src = GL.Dispatch.MapNamedBufferRange(buffer.Handle, nativeint sourceOffset, nativeSize, BufferAccessMask.MapReadBit)
+                let src = GL.Dispatch.MapNamedBufferRange(buffer.Handle, sourceOffset, size, BufferAccessMask.MapReadBit)
                 GL.Check "failed to map buffer for reading"
                 if src <> 0n then
-                    // TODO: Marshal.Copy should possibly take int64 sizes
-                    Marshal.Copy(src, target, size)
+                    Buffer.MemoryCopy(src, target, uint64 size, uint64 size)
                 else
                     Log.warn "[GL] could not map buffer for reading"
 
@@ -340,23 +300,16 @@ module BufferExtensions =
 
             try
                 let elementType = target.GetType().GetElementType()
-                let elementSize = Marshal.SizeOf(elementType)
-                let sourceOffset = sourceStartIndex * elementSize
-                let size = count * elementSize
+                let elementSize = nativeint elementType.CLRSize
+                let sourceOffset = nativeint sourceStartIndex * elementSize
+                let size = nativeint count * elementSize
 
-                let ptr = handle.AddrOfPinnedObject() + nativeint (targetStartIndex * elementSize)
+                let ptr = handle.AddrOfPinnedObject() + nativeint targetStartIndex * elementSize
 
                 x.DownloadRange(buffer, ptr, sourceOffset, size)
 
             finally
                 handle.Free()
-
-        /// <summary>
-        /// downloads a subrange of the given buffer to a (possibly different) range of the array.
-        /// </summary>
-        member x.DownloadRange(buffer : Buffer, target : 'a[], sourceStartIndex : int, targetStartIndex : int, count : int) =
-            // TODO: maybe inline this (maybe faster since no reflection stuff needed)
-            x.DownloadRange(buffer, target :> Array, sourceStartIndex, targetStartIndex, count)
 
         // =======================================================================================================================
         //      Upload Overloads
@@ -367,9 +320,8 @@ module BufferExtensions =
         /// note that performing this operation will cause the buffer's
         /// usage-hint to become "DynamicDraw"
         /// </summary>
-        member x.Upload(buffer : Buffer, src : nativeint, size : nativeint, useNamed : bool) =
+        member x.Upload(buffer : Buffer, src : nativeint, size : nativeint, [<Optional; DefaultParameterValue(true)>] useNamed : bool) =
             use __ = x.ResourceLock
-            assert(size >= 0n)
             assert(src <> 0n)
 
             if buffer.SizeInBytes <> size then
@@ -397,17 +349,13 @@ module BufferExtensions =
                         GL.Check "could not upload buffer"
                     )
 
-        member x.Upload(buffer : Buffer, src : nativeint, size : nativeint) =
-            x.Upload(buffer, src, size, true)
-
-
 
         /// <summary>
         /// uploads a range from the data array to a buffer while possibly resizing the buffer.
         /// note that performing this operation will cause the buffer's
         /// usage-hint to become "DynamicDraw"
         /// </summary>
-        member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, count : int, useNamed : bool) =
+        member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, count : int, [<Optional; DefaultParameterValue(true)>] useNamed : bool) =
             assert(sourceStartIndex >= 0)
             assert(count >= 0)
             assert(sourceStartIndex + count <= source.Length)
@@ -416,7 +364,7 @@ module BufferExtensions =
 
             try
                 let elementType = source.GetType().GetElementType()
-                let elementSize = Marshal.SizeOf(elementType) |> nativeint
+                let elementSize = elementType.CLRSize |> nativeint
                 let size = nativeint count * elementSize
 
                 let ptr = handle.AddrOfPinnedObject() + nativeint sourceStartIndex * elementSize
@@ -426,58 +374,58 @@ module BufferExtensions =
             finally
                 handle.Free()
 
-        member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, count : int) =
-            x.Upload(buffer, source, sourceStartIndex, count, true)
-
-        member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, useNamed : bool) =
+        member inline x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, [<Optional; DefaultParameterValue(true)>] useNamed : bool) =
             x.Upload(buffer, source, sourceStartIndex, source.Length - sourceStartIndex, useNamed)
 
-        member x.Upload(buffer : Buffer, source : Array, useNamed : bool) =
+        member inline x.Upload(buffer : Buffer, source : Array, [<Optional; DefaultParameterValue(true)>] useNamed : bool) =
             x.Upload(buffer, source, 0, source.Length, useNamed)
 
+        member x.Upload(b : Buffer, data : IBuffer, [<Optional; DefaultParameterValue(true)>] useNamed : bool) =
+            if b.Handle = 0 then failf "cannot update null buffer"
+            match data with
+            | :? ArrayBuffer as ab ->
+                x.Upload(b, ab.Data, useNamed)
 
-        member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int) =
-            x.Upload(buffer, source, sourceStartIndex, source.Length - sourceStartIndex, true)
+            | :? Buffer as bb ->
+                if bb.Handle <> b.Handle then failf $"cannot change backend buffer handle (old: {b.Handle}, new: {bb.Handle})"
 
-        member x.Upload(buffer : Buffer, source : Array) =
-            x.Upload(buffer, source, 0, source.Length, true)
+            | :? INativeBuffer as n ->
+                n.Use (fun ptr -> x.Upload(b, ptr, nativeint n.SizeInBytes, useNamed))
 
+            | :? IBufferRange as bv when bv != bv.Buffer ->
+                x.Upload(b, bv.Buffer, useNamed)
+
+            | _ when data = Unchecked.defaultof<_> ->
+                failf $"buffer data is null"
+
+            | _ ->
+                failf $"unsupported buffer type: {data.GetType()}"
 
         // =======================================================================================================================
         //      Download Overloads
         // =======================================================================================================================
 
-        member x.Download(buffer : Buffer, target : Array, targetStartIndex : int, count : int) =
+        member inline x.Download(buffer : Buffer, target : Array, targetStartIndex : int, count : int) =
             x.DownloadRange(buffer, target, 0, targetStartIndex, count)
 
-        member x.Download(buffer : Buffer, target : Array, count : int) =
+        member inline x.Download(buffer : Buffer, target : Array, count : int) =
             x.DownloadRange(buffer, target, 0, 0, count)
 
-        member x.Download(buffer : Buffer, target : Array) =
+        member inline x.Download(buffer : Buffer, target : Array) =
             x.DownloadRange(buffer, target, 0, 0, target.Length)
-
-        member x.Download(buffer : Buffer, target : 'a[], targetStartIndex : int, count : int) =
-            x.DownloadRange(buffer, target :> Array, 0, targetStartIndex, count)
-
-        member x.Download(buffer : Buffer, target : 'a[], count : int) =
-            x.DownloadRange(buffer, target :> Array, 0, 0, count)
-
-        member x.Download(buffer : Buffer, target : 'a[]) =
-            x.DownloadRange(buffer, target :> Array, 0, 0, target.Length)
-
 
         // =======================================================================================================================
         //      Debug Download Overloads
         // =======================================================================================================================
         member x.Download(buffer : Buffer, t : Type) =
-            let elementSize = Marshal.SizeOf t
-            let arr = Array.CreateInstance(t, int buffer.SizeInBytes / elementSize)
+            let elementSize = nativeint t.CLRSize
+            let arr = Array.CreateInstance(t, int64 (buffer.SizeInBytes / elementSize))
             x.DownloadRange(buffer, arr, 0, 0, arr.Length)
             arr
 
         member x.Download<'a>(buffer : Buffer) =
-            let elementSize = sizeof<'a>
-            let arr : 'a[] = Array.zeroCreate (int buffer.SizeInBytes / elementSize)
+            let elementSize = nativeint sizeof<'a>
+            let arr : 'a[] = Array.zeroCreate (int (buffer.SizeInBytes / elementSize))
             x.DownloadRange(buffer, arr, 0, 0, arr.Length)
             arr
 
@@ -522,7 +470,8 @@ module IndirectBufferExtensions =
             x.Copy(b, offset, mine, 0n, size)
             mine
 
-        member x.Clone(b : Buffer) = x.Clone(b, 0n, b.SizeInBytes)
+        member inline x.Clone(b : Buffer, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
+            x.Clone(b, 0n, b.SizeInBytes, storage)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =
