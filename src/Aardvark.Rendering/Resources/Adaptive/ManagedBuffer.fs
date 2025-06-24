@@ -24,7 +24,7 @@ type IManagedBuffer =
     /// <param name="data">The data to write.</param>
     /// <param name="sizeInBytes">The size (in bytes) of the provided data.</param>
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
-    abstract member Set : data: nativeint * sizeInBytes: uint64 * range: Range1l -> unit
+    abstract member Set : data: nativeint * sizeInBytes: uint64 * range: Range1ul -> unit
 
     /// <summary>
     /// Adds a writer that adaptively writes the values in the buffer view to the buffer. The buffer is resized if necessary.
@@ -32,7 +32,7 @@ type IManagedBuffer =
     /// </summary>
     /// <param name="view">The buffer view to write.</param>
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
-    abstract member Add : view: BufferView * range: Range1l -> IDisposable
+    abstract member Add : view: BufferView * range: Range1ul -> IDisposable
 
     /// <summary>
     /// Adds a writer that adaptively writes the given value to the buffer. The buffer is resized if necessary.
@@ -40,7 +40,7 @@ type IManagedBuffer =
     /// </summary>
     /// <param name="value">The adaptive value to write.</param>
     /// <param name="index">The index in the buffer to write to.</param>
-    abstract member Add : value: IAdaptiveValue * index: int64 -> IDisposable
+    abstract member Add : value: IAdaptiveValue * index: uint64 -> IDisposable
 
 type IManagedBuffer<'T when 'T : unmanaged> =
     inherit IManagedBuffer
@@ -57,7 +57,7 @@ type ManagedBufferExtensions private() =
     /// <param name="index">The index in the buffer to write to.</param>
     [<Extension>]
     static member inline Add(this : IManagedBuffer, value : IAdaptiveValue, index : int) =
-        this.Add(value, int64 index)
+        this.Add(value, uint64 index)
 
     /// <summary>
     /// Sets the given offset range to the given data. The buffer is resized if necessary.
@@ -67,7 +67,7 @@ type ManagedBufferExtensions private() =
     /// <param name="data">The data to write.</param>
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
     [<Extension>]
-    static member inline Set(this : IManagedBuffer, data : byte[], range : Range1l) =
+    static member inline Set(this : IManagedBuffer, data : byte[], range : Range1ul) =
         data |> NativePtr.pinArr (fun src ->
             this.Set(src.Address, uint64 data.Length, range)
         )
@@ -79,9 +79,9 @@ type ManagedBufferExtensions private() =
     /// <param name="value">The value to write.</param>
     /// <param name="index">The index in the buffer to write to.</param>
     [<Extension>]
-    static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, value : 'T, index : int64) =
+    static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, value : 'T, index : uint64) =
         value |> NativePtr.pin (fun src ->
-            this.Set(src.Address, uint64 sizeof<'T>, Range1l(index, index))
+            this.Set(src.Address, uint64 sizeof<'T>, Range1ul(index, index))
         )
 
     /// <summary>
@@ -92,7 +92,7 @@ type ManagedBufferExtensions private() =
     /// <param name="index">The index in the buffer to write to.</param>
     [<Extension>]
     static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, value : 'T, index : int) =
-        this.Set(value, int64 index)
+        this.Set(value, uint64 index)
 
     /// <summary>
     /// Sets the given offset range to the given values. The buffer is resized if necessary.
@@ -102,7 +102,7 @@ type ManagedBufferExtensions private() =
     /// <param name="values">The values to write.</param>
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
     [<Extension>]
-    static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, values : 'T[], range : Range1l) =
+    static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, values : 'T[], range : Range1ul) =
         values |> NativePtr.pinArr (fun src ->
             this.Set(src.Address, uint64 values.Length * uint64 sizeof<'T>, range)
         )
@@ -115,7 +115,7 @@ type ManagedBufferExtensions private() =
     /// <param name="values">The values to write.</param>
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
     [<Extension>]
-    static member inline Set(this : IManagedBuffer, values : Array, range : Range1l) =
+    static member inline Set(this : IManagedBuffer, values : Array, range : Range1ul) =
         let elementSize = values.GetType().GetElementType().GetCLRSize()
         let sizeInBytes = uint64 values.Length * uint64 elementSize
 
@@ -134,12 +134,12 @@ module internal ManagedBufferImplementation =
         let writers = Dict<obj, AbstractWriter>()
         let pending = LockedSet<AbstractWriter>()
 
-        member inline private x.Allocate(range : Range1l) =
-            let min = uint64 (range.Max + 1L) * elementSize
+        member inline private x.Allocate(range : Range1ul) =
+            let min = (range.Max + 1UL) * elementSize
             if x.Size < min then
                 x.Resize(uint64 <| Fun.NextPowerOfTwo(int64 min)) //TODO: unsigned
 
-        member private x.AddRange(writer : AbstractWriter, input : obj, range : Range1l) =
+        member private x.AddRange(writer : AbstractWriter, input : obj, range : Range1ul) =
             transact (fun _ ->
                 if writer.AddRange range then
                     // Resize the buffer if necessary
@@ -165,14 +165,12 @@ module internal ManagedBufferImplementation =
                     )
             }
 
-        member x.Set(data : nativeint, sizeInBytes : uint64, range : Range1l) =
-            let count = range.Size + 1L
-
-            if count > 0L then
+        member x.Set(data : nativeint, sizeInBytes : uint64, range : Range1ul) =
+            if range.IsValid then
                 x.Allocate range
 
-                let mutable remaining = uint64 count * elementSize
-                let mutable offset = uint64 range.Min * elementSize
+                let mutable remaining = (range.Size + 1UL) * elementSize
+                let mutable offset = range.Min * elementSize
 
                 while remaining >= sizeInBytes do
                     x.Write(data, offset, sizeInBytes)
@@ -182,14 +180,14 @@ module internal ManagedBufferImplementation =
                 if remaining > 0UL then
                     x.Write(data, offset, remaining)
 
-        member x.Add(view : BufferView, range : Range1l) =
-            let count = range.Size + 1L
-
-            if count <= 0L then
+        member x.Add(view : BufferView, range : Range1ul) =
+            if range.IsInvalid then
                 Disposable.empty
             else
+                let count = range.Size + 1UL
+
                 if view.Buffer.IsConstant then
-                    let data = view.Buffer.GetValue().ToArray(view.ElementType, uint64 count, uint64 view.Offset, uint64 view.Stride)
+                    let data = view.Buffer.GetValue().ToArray(view.ElementType, count, uint64 view.Offset, uint64 view.Stride)
                     let converted : 'T[] = data |> PrimitiveValueConverter.arrayConverter view.ElementType
                     x.Set(converted, range)
                     Disposable.empty
@@ -205,7 +203,7 @@ module internal ManagedBufferImplementation =
                         x.AddRange(writer, view, range)
                     )
 
-        member x.Add(value : IAdaptiveValue, index : int64) =
+        member x.Add(value : IAdaptiveValue, index : uint64) =
             if value.IsConstant then
                 let converted : 'T = value |> PrimitiveValueConverter.convertValue |> AVal.force
                 x.Set(converted, index)
@@ -218,7 +216,7 @@ module internal ManagedBufferImplementation =
                             new SingleWriter<'T>(x, converted)
                         )
 
-                    let range = Range1l(int64 index, int64 index)
+                    let range = Range1ul(index, index)
                     x.AddRange(writer, value, range)
                 )
 
@@ -248,18 +246,18 @@ module internal ManagedBufferImplementation =
         inherit AdaptiveObject()
 
         do input.Acquire()
-        let regions = ReferenceCountingSet<Range1l>()
+        let regions = ReferenceCountingSet<Range1ul>()
 
         abstract member Write : AdaptiveToken * uint64 -> unit
 
         // Adds the given range as target region and returns if it was newly added.
-        member x.AddRange(range : Range1l) : bool =
+        member x.AddRange(range : Range1ul) : bool =
             lock x (fun () ->
                 regions.Add range
             )
 
         /// Removes the given range as target regions and returns true if all ranges are removed.
-        member x.RemoveRange(range : Range1l) : bool =
+        member x.RemoveRange(range : Range1ul) : bool =
             lock x (fun () ->
                 regions.Remove range |> ignore
                 regions.Count = 0
@@ -268,7 +266,7 @@ module internal ManagedBufferImplementation =
         member x.Write(token : AdaptiveToken) =
             x.EvaluateIfNeeded token () (fun token ->
                 for region in regions do
-                    let offset = uint64 region.Min * elementSize
+                    let offset = region.Min * elementSize
                     x.Write(token, offset)
             )
 

@@ -143,3 +143,10 @@ module internal ManagedPoolUtilities =
                     store.Remove k |> ignore
             | _ ->
                 ()
+
+    type Range1ul with
+        static member inline FromManagedPtr(ptr: managedptr, count: int) =
+            if count > 0 then
+                Range1ul.FromMinAndSize(uint64 ptr.Offset, uint64 count - 1UL)
+            else
+                Range1ul.Invalid

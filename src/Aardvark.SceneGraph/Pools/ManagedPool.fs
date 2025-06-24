@@ -169,7 +169,7 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                 let vertexCount = geometry.VertexCount
 
                 let vertexPtr = vertexManager.Alloc(geometry.VertexAttributes, vertexCount)
-                let vertexRange = Range1l(int64 vertexPtr.Offset, int64 vertexPtr.Offset + int64 vertexCount - 1L)
+                let vertexRange = Range1ul.FromManagedPtr(vertexPtr, vertexCount)
                 for k, _ in vertexBufferTypes do
                     let target = vertexBuffers.[k]
                     match geometry.VertexAttributes.TryGetValue k with
@@ -196,17 +196,17 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                             failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
 
                     | _ ->
-                        target.Set(zero, Range1l(int64 instanceIndex, int64 instanceIndex))
+                        target.Set(zero, Range1ul.FromMinAndSize(uint64 instanceIndex, 0UL))
 
                 let indexPtr =
                     if geometry.IsIndexed then
                         let indexPtr = indexManager.Alloc((geometry.Indices, 0), fvc)
-                        let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
+                        let indexRange = Range1ul.FromManagedPtr(indexPtr, fvc)
                         indexBuffer.Add(geometry.Indices, indexRange) |> ds.Add
                         indexPtr
                     else
                         let isNew, indexPtr = indexManager.TryAlloc((Unchecked.defaultof<_>, fvc), fvc)
-                        let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
+                        let indexRange = Range1ul.FromManagedPtr(indexPtr, fvc)
 
                         if isNew then
                             let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> signature.IndexType

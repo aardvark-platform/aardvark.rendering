@@ -111,7 +111,7 @@ module private ManagedTracePoolUtils =
             | _                -> typeof<uint32>
 
     type IManagedBuffer with
-        member inline x.Add(data: AdaptiveIndexData, range: Range1l) =
+        member inline x.Add(data: AdaptiveIndexData, range: Range1ul) =
             let view = BufferView(data.Buffer, data.Type.Type, int data.Offset)
             x.Add(view, range)
 
@@ -352,7 +352,7 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
                                 failf "cannot convert geometry attribute '%A' from %A to %A" k exn.Source exn.Target
 
                         | _ ->
-                            target.Set(zero, Range1l.FromMinAndSize(int64 geometryAttributeIndex, 0L))
+                            target.Set(zero, Range1ul.FromMinAndSize(uint64 geometryAttributeIndex, 0UL))
 
                     gptrs.Add(geometryAttributePtr)
                     int32 geometryAttributePtr.Offset
@@ -373,7 +373,7 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
                         failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
 
                 | _ ->
-                    target.Set(zero, Range1l.FromMinAndSize(int64 instanceAttributeIndex, 0L))
+                    target.Set(zero, Range1ul.FromMinAndSize(uint64 instanceAttributeIndex, 0UL))
 
             // Geometry data
             let geometryIndex, geometryPtr =
@@ -385,7 +385,7 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
                             let vertexCount = int m.Vertices.Count
                             let vertexAttributes = vertexAttributes.[i]
                             let vertexPtr = vertexManager.Alloc(vertexAttributes, vertexCount)
-                            let vertexRange = Range1l.FromMinAndSize(int64 vertexPtr.Offset, int64 vertexCount - 1L)
+                            let vertexRange = Range1ul.FromManagedPtr(vertexPtr, vertexCount)
 
                             for KeyValue(k, _) in signature.VertexAttributeTypes do
                                 let target = vertexAttributeBuffers.[k]
@@ -411,12 +411,12 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
                             let indexPtr =
                                 if m.IsIndexed then
                                     let indexPtr = indexManager.Alloc((m.Indices, 0), fvc)
-                                    let indexRange = Range1l.FromMinAndSize(int64 indexPtr.Offset, int64 fvc - 1L)
+                                    let indexRange = Range1ul.FromManagedPtr(indexPtr, fvc)
                                     indexBuffer.Add(m.Indices, indexRange) |> ds.Add
                                     indexPtr
                                 else
                                     let isNew, indexPtr = indexManager.TryAlloc((null, fvc), fvc)
-                                    let indexRange = Range1l.FromMinAndSize(int64 indexPtr.Offset, int64 fvc - 1L)
+                                    let indexRange = Range1ul.FromManagedPtr(indexPtr, fvc)
 
                                     if isNew then
                                         let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> indexType
@@ -434,7 +434,7 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
                             let faceCount = int m.Primitives
                             let faceAttributes = faceAttributes.[i]
                             let faceAttributePtr = faceAttributeManager.Alloc(faceAttributes, faceCount)
-                            let faceAttributeRange = Range1l.FromMinAndSize(int64 faceAttributePtr.Offset, int64 faceCount - 1L)
+                            let faceAttributeRange = Range1ul.FromManagedPtr(faceAttributePtr, faceCount)
 
                             for k, _ in faceAttributeTypes do
                                 let target = faceAttributeBuffers.[k]
