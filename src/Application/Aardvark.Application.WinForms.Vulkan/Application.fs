@@ -49,6 +49,7 @@ type VulkanApplication(debug: IDebugConfig,
 
             yield Instance.Extensions.ShaderSubgroupVote
             yield Instance.Extensions.ShaderSubgroupBallot
+            yield! Instance.Extensions.Shader8Bit16Bit
             yield Instance.Extensions.GetPhysicalDeviceProperties2
             yield Instance.Extensions.ConservativeRasterization
             yield Instance.Extensions.MemoryBudget

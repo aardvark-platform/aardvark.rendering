@@ -234,12 +234,23 @@ type ShaderFeatures =
         StorageTexelBufferArrayNonUniformIndexing: bool
 
         /// Specifies whether objects in the StorageBuffer, ShaderRecordBufferKHR, or PhysicalStorageBuffer storage class with the
+        /// Block decoration can have 8-bit integer members.
+        StorageBuffer8BitAccess: bool
+
+        /// Specifies whether objects in the StorageBuffer, ShaderRecordBufferKHR, or PhysicalStorageBuffer storage class with the
         /// Block decoration can have 16-bit integer and 16-bit floating-point members.
         StorageBuffer16BitAccess: bool
 
         /// Specifies whether objects in the Uniform storage class with the Block decoration and in the
+        /// StorageBuffer, ShaderRecordBufferKHR, or PhysicalStorageBuffer storage class with the same decoration can have 8-bit integer members.
+        UniformAndStorageBuffer8BitAccess: bool
+
+        /// Specifies whether objects in the Uniform storage class with the Block decoration and in the
         /// StorageBuffer, ShaderRecordBufferKHR, or PhysicalStorageBuffer storage class with the same decoration can have 16-bit integer and 16-bit floating-point members.
         UniformAndStorageBuffer16BitAccess: bool
+
+        /// Specifies whether objects in the PushConstant storage class can have 8-bit integer members.
+        StoragePushConstant8: bool
 
         /// Specifies whether objects in the PushConstant storage class can have 16-bit integer and 16-bit floating-point members.
         StoragePushConstant16: bool
@@ -253,8 +264,14 @@ type ShaderFeatures =
         /// Specifies whether cull distances are supported in shader code.
         CullDistance: bool
 
+        /// Specifies whether 16-bit floats (halves) are supported in shader code.
+        Float16: bool
+
         /// Specifies whether 64-bit floats (doubles) are supported in shader code.
         Float64: bool
+
+        /// Specifies whether 8-bit integers (signed and unsigned) are supported in shader code.
+        Int8: bool
 
         /// Specifies whether 16-bit integers (signed and unsigned) are supported in shader code.
         Int16: bool
@@ -301,13 +318,18 @@ type ShaderFeatures =
             l.line "storage texel buffers:      %A" x.StorageTexelBufferArrayDynamicIndexing
         )
         l.section "non-uniform indexing: " (fun() ->
-            l.line "uniform buffers:           %A" x.UniformBufferArrayNonUniformIndexing
+            l.line "uniform buffers:            %A" x.UniformBufferArrayNonUniformIndexing
             l.line "sampled images:             %A" x.SampledImageArrayNonUniformIndexing
             l.line "storage buffers:            %A" x.StorageBufferArrayNonUniformIndexing
             l.line "storage images:             %A" x.StorageImageArrayNonUniformIndexing
             l.line "input attachments:          %A" x.InputAttachmentArrayNonUniformIndexing
             l.line "uniform texel buffers:      %A" x.UniformTexelBufferArrayNonUniformIndexing
             l.line "storage texel buffers:      %A" x.StorageTexelBufferArrayNonUniformIndexing
+        )
+        l.section "8-bit members: " (fun () ->
+            l.line "storage buffers:            %A" x.StorageBuffer8BitAccess
+            l.line "uniform / storage buffers:  %A" x.UniformAndStorageBuffer8BitAccess
+            l.line "push constants:             %A" x.StoragePushConstant8
         )
         l.section "16-bit members: " (fun () ->
             l.line "storage buffers:            %A" x.StorageBuffer16BitAccess
@@ -318,7 +340,9 @@ type ShaderFeatures =
         l.line "clip distance:                %A" x.ClipDistance
         l.line "cull distance:                %A" x.CullDistance
         l.section "special types: " (fun () ->
+            l.line "float16:                    %A" x.Float16
             l.line "float64:                    %A" x.Float64
+            l.line "int8:                       %A" x.Int8
             l.line "int16:                      %A" x.Int16
             l.line "int64:                      %A" x.Int64
         )
@@ -535,6 +559,8 @@ module DeviceFeatures =
     open KHRRayQuery
     open KHRAccelerationStructure
     open KHRBufferDeviceAddress
+    open KHRShaderFloat16Int8
+    open KHR8bitStorage
     open EXTDescriptorIndexing
     open Vulkan11
 
@@ -560,12 +586,25 @@ module DeviceFeatures =
                 toVkBool features.Samplers.YcbcrConversion
             )
 
+        let s8 =
+            VkPhysicalDevice8BitStorageFeaturesKHR(
+                toVkBool features.Shaders.StorageBuffer8BitAccess,
+                toVkBool features.Shaders.UniformAndStorageBuffer8BitAccess,
+                toVkBool features.Shaders.StoragePushConstant8
+            )
+
         let s16 =
             VkPhysicalDevice16BitStorageFeatures(
                 toVkBool features.Shaders.StorageBuffer16BitAccess,
                 toVkBool features.Shaders.UniformAndStorageBuffer16BitAccess,
                 toVkBool features.Shaders.StoragePushConstant16,
                 toVkBool features.Shaders.StorageInputOutput16
+            )
+
+        let f16i8 =
+            VkPhysicalDeviceFloat16Int8FeaturesKHR(
+                toVkBool features.Shaders.Float16,
+                toVkBool features.Shaders.Int8
             )
 
         let vp =
@@ -698,7 +737,9 @@ module DeviceFeatures =
         |> VkStructChain.add mem
         |> if not memp.IsEmpty then VkStructChain.add memp else id
         |> VkStructChain.add ycbcr
+        |> if not s8.IsEmpty then VkStructChain.add s8 else id
         |> VkStructChain.add s16
+        |> if not f16i8.IsEmpty then VkStructChain.add f16i8 else id
         |> VkStructChain.add vp
         |> VkStructChain.add dp
         |> if not idx.IsEmpty then VkStructChain.add idx else id
@@ -711,7 +752,9 @@ module DeviceFeatures =
     let create (protectedMemoryFeatures : VkPhysicalDeviceProtectedMemoryFeatures)
                (memoryPriorityFeatures : VkPhysicalDeviceMemoryPriorityFeaturesEXT)
                (samplerYcbcrConversionFeatures : VkPhysicalDeviceSamplerYcbcrConversionFeatures)
+               (storage8BitFeatures : VkPhysicalDevice8BitStorageFeaturesKHR)
                (storage16BitFeatures : VkPhysicalDevice16BitStorageFeatures)
+               (float16int8Features : VkPhysicalDeviceFloat16Int8FeaturesKHR)
                (variablePointerFeatures : VkPhysicalDeviceVariablePointersFeatures)
                (shaderDrawParametersFeatures : VkPhysicalDeviceShaderDrawParametersFeatures)
                (descriptorIndexingFeatures : VkPhysicalDeviceDescriptorIndexingFeaturesEXT)
@@ -796,13 +839,18 @@ module DeviceFeatures =
                     InputAttachmentArrayNonUniformIndexing =    toBool descriptorIndexingFeatures.shaderInputAttachmentArrayNonUniformIndexing
                     UniformTexelBufferArrayNonUniformIndexing = toBool descriptorIndexingFeatures.shaderUniformTexelBufferArrayNonUniformIndexing
                     StorageTexelBufferArrayNonUniformIndexing = toBool descriptorIndexingFeatures.shaderStorageTexelBufferArrayNonUniformIndexing
+                    StorageBuffer8BitAccess =                   toBool storage8BitFeatures.storageBuffer8BitAccess
                     StorageBuffer16BitAccess =                  toBool storage16BitFeatures.storageBuffer16BitAccess
+                    UniformAndStorageBuffer8BitAccess =         toBool storage8BitFeatures.uniformAndStorageBuffer8BitAccess
                     UniformAndStorageBuffer16BitAccess =        toBool storage16BitFeatures.uniformAndStorageBuffer16BitAccess
+                    StoragePushConstant8 =                      toBool storage8BitFeatures.storagePushConstant8
                     StoragePushConstant16 =                     toBool storage16BitFeatures.storagePushConstant16
                     StorageInputOutput16 =                      toBool storage16BitFeatures.storageInputOutput16
                     ClipDistance =                              toBool features.shaderClipDistance
                     CullDistance =                              toBool features.shaderCullDistance
+                    Float16 =                                   toBool float16int8Features.shaderFloat16
                     Float64 =                                   toBool features.shaderFloat64
+                    Int8 =                                      toBool float16int8Features.shaderInt8
                     Int16 =                                     toBool features.shaderInt16
                     Int64 =                                     toBool features.shaderInt64
                     ResourceResidency =                         toBool features.shaderResourceResidency

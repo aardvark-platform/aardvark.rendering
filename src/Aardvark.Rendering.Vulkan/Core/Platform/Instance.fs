@@ -38,6 +38,11 @@ module Instance =
 
         let MemoryPriority                  = EXTMemoryPriority.Name
 
+        let Shader8Bit16Bit = [
+            KHR8bitStorage.Name
+            KHRShaderFloat16Int8.Name
+        ]
+
         let Maintenance = [
             KHRMaintenance4.Name
             KHRMaintenance5.Name

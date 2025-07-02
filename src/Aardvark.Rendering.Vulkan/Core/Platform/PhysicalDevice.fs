@@ -8,6 +8,8 @@ open KHRRayTracingPipeline
 open KHRRayQuery
 open KHRAccelerationStructure
 open KHRBufferDeviceAddress
+open KHRShaderFloat16Int8
+open KHR8bitStorage
 open EXTDescriptorIndexing
 open EXTMemoryPriority
 
@@ -54,12 +56,14 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
                 !!ptr
 
         fun (hasExtension: string -> bool) ->
-            let f, pm, memp, ycbcr, s16, vp, sdp, idx, rtp, acc, rq, bda =
+            let f, pm, memp, ycbcr, s8, s16, f16i8, vp, sdp, idx, rtp, acc, rq, bda =
                 use chain = new VkStructChain()
                 let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
                 let pMemPrior   = if hasExtension EXTMemoryPriority.Name then chain.Add<VkPhysicalDeviceMemoryPriorityFeaturesEXT>() else NativePtr.zero
                 let pYcbcr      = chain.Add<VkPhysicalDeviceSamplerYcbcrConversionFeatures>()
+                let p8bit       = if hasExtension KHR8bitStorage.Name then chain.Add<VkPhysicalDevice8BitStorageFeaturesKHR>() else NativePtr.zero
                 let p16bit      = chain.Add<VkPhysicalDevice16BitStorageFeatures>()
+                let pf16i8      = if hasExtension KHRShaderFloat16Int8.Name then chain.Add<VkPhysicalDeviceFloat16Int8FeaturesKHR>() else NativePtr.zero
                 let pVarPtrs    = chain.Add<VkPhysicalDeviceVariablePointersFeatures>()
                 let pDrawParams = chain.Add<VkPhysicalDeviceShaderDrawParametersFeatures>()
                 let pIdx        = if hasExtension EXTDescriptorIndexing.Name then chain.Add<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>() else NativePtr.zero
@@ -70,10 +74,10 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
                 let pFeatures   = chain.Add<VkPhysicalDeviceFeatures2>()
 
                 VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
-                (!!pFeatures).features, !!pMem, !!pMemPrior, !!pYcbcr, !!p16bit, !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx,
-                readOrEmpty pRTP, readOrEmpty pAcc, readOrEmpty pRQ, readOrEmpty pDevAddr
+                (!!pFeatures).features, !!pMem, !!pMemPrior, !!pYcbcr, readOrEmpty p8bit, !!p16bit, readOrEmpty pf16i8,
+                !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx, readOrEmpty pRTP, readOrEmpty pAcc, readOrEmpty pRQ, readOrEmpty pDevAddr
 
-            DeviceFeatures.create pm memp ycbcr s16 vp sdp idx rtp acc rq bda f
+            DeviceFeatures.create pm memp ycbcr s8 s16 f16i8 vp sdp idx rtp acc rq bda f
 
     let features =
         queryFeatures hasExtension
