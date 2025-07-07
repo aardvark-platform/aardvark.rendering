@@ -11,7 +11,7 @@ module Shader =
     open FShade
 
     type UniformScope with
-        member x.Color : V4d = uniform?Color
+        member x.Color : V4f = uniform?Color
 
     let uniformColor (v : Effects.Vertex) =
         fragment {

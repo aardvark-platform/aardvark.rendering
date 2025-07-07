@@ -69,10 +69,10 @@ module Shader =
 
     type InstanceVertex = 
         {
-            [<Semantic("InstanceTrafo")>] mt : M44d
-            [<Semantic("InstanceNormalTrafo")>] nt : M33d
-            [<Position>] p : V4d
-            [<Normal>] n : V3d
+            [<Semantic("InstanceTrafo")>] mt : M44f
+            [<Semantic("InstanceNormalTrafo")>] nt : M33f
+            [<Position>] p : V4f
+            [<Normal>] n : V3f
         }
 
     let instanceShade (v : InstanceVertex) =

@@ -25,7 +25,7 @@ type Runtime(debug : IDebugConfig) =
 
     member x.ContextLock = ctx.ResourceLock :> IDisposable
 
-    member x.ShaderDepthRange = Range1d(-1.0, 1.0)
+    member x.ShaderDepthRange = Range1f(-1.0f, 1.0f)
 
     /// Returns whether the inputs gl_Layer and gl_ViewportIndex can be used
     /// in fragment shaders. If not a custom output / input must be used for

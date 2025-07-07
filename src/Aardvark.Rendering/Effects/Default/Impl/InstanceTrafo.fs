@@ -7,12 +7,12 @@ open FShade
 module InstanceTrafo = 
     
     type InstanceVertex = { 
-        [<Position>]            pos   : V4d 
-        [<Normal>]              n     : V3d 
-        [<BiNormal>]            b     : V3d 
-        [<Tangent>]             t     : V3d 
-        [<InstanceTrafo>]       trafo : M44d
-        [<InstanceTrafoInv>]    trafoInv : M44d
+        [<Position>]            pos   : V4f
+        [<Normal>]              n     : V3f
+        [<BiNormal>]            b     : V3f
+        [<Tangent>]             t     : V3f
+        [<InstanceTrafo>]       trafo : M44f
+        [<InstanceTrafoInv>]    trafoInv : M44f
     }
 
     let internal instanceTrafo (v : InstanceVertex) =

@@ -51,38 +51,38 @@ module CullingShader =
         let instanceCount (i : CullingInfo) =
             int i.Min.W
 
-        let getMinMaxInDirection (v : V3d) (i : CullingInfo) =
-            let mutable l = V3d.Zero
-            let mutable h = V3d.Zero
+        let getMinMaxInDirection (v : V3f) (i : CullingInfo) =
+            let mutable l = V3f.Zero
+            let mutable h = V3f.Zero
 
-            if v.X >= 0.0 then
-                l.X <- float i.Min.X
-                h.X <- float i.Max.X
+            if v.X >= 0.0f then
+                l.X <- float32 i.Min.X
+                h.X <- float32 i.Max.X
             else
-                l.X <- float i.Max.X
-                h.X <- float i.Min.X
+                l.X <- float32 i.Max.X
+                h.X <- float32 i.Min.X
 
-            if v.Y >= 0.0 then
-                l.Y <- float i.Min.Y
-                h.Y <- float i.Max.Y
+            if v.Y >= 0.0f then
+                l.Y <- float32 i.Min.Y
+                h.Y <- float32 i.Max.Y
             else
-                l.Y <- float i.Max.Y
-                h.Y <- float i.Min.Y
+                l.Y <- float32 i.Max.Y
+                h.Y <- float32 i.Min.Y
 
-            if v.Z >= 0.0 then
-                l.Z <- float i.Min.Z
-                h.Z <- float i.Max.Z
+            if v.Z >= 0.0f then
+                l.Z <- float32 i.Min.Z
+                h.Z <- float32 i.Max.Z
             else
-                l.Z <- float i.Max.Z
-                h.Z <- float i.Min.Z
+                l.Z <- float32 i.Max.Z
+                h.Z <- float32 i.Min.Z
 
             (l,h)
 
-        let onlyBelow (plane : V4d) (i : CullingInfo) =
+        let onlyBelow (plane : V4f) (i : CullingInfo) =
             let l, h = i |> getMinMaxInDirection plane.XYZ
-            Vec.dot l plane.XYZ + plane.W < 0.0 && Vec.dot h plane.XYZ + plane.W < 0.0
+            Vec.dot l plane.XYZ + plane.W < 0.0f && Vec.dot h plane.XYZ + plane.W < 0.0f
 
-        let intersectsViewProj (viewProj : M44d) (i : CullingInfo) =
+        let intersectsViewProj (viewProj : M44f) (i : CullingInfo) =
             let r0 = viewProj.R0
             let r1 = viewProj.R1
             let r2 = viewProj.R2
@@ -96,7 +96,7 @@ module CullingShader =
                 true
 
     [<LocalSize(X = 64)>]
-    let culling (infos : DrawInfo[]) (bounds : CullingInfo[]) (isActive : int[]) (count : int) (viewProjs : M44d[]) =
+    let culling (infos : DrawInfo[]) (bounds : CullingInfo[]) (isActive : int[]) (count : int) (viewProjs : M44f[]) =
         compute {
             let id = getGlobalId().X
             if id < count then
@@ -111,31 +111,31 @@ module CullingShader =
 
     type UniformScope with
         member x.Bounds : CullingInfo[] = uniform?StorageBuffer?Bounds
-        member x.ViewProjs : M44d[] = uniform?StorageBuffer?ViewProjs
+        member x.ViewProjs : M44f[] = uniform?StorageBuffer?ViewProjs
 
     type Vertex =
         {
             [<InstanceId>] id : int
             [<VertexId>] vid : int
-            [<Position>] pos : V4d
+            [<Position>] pos : V4f
         }
 
     let data =
         [|
-            V3d.OOO; V3d.IOO
-            V3d.OOI; V3d.IOI
-            V3d.OIO; V3d.IIO
-            V3d.OII; V3d.III
+            V3f.OOO; V3f.IOO
+            V3f.OOI; V3f.IOI
+            V3f.OIO; V3f.IIO
+            V3f.OII; V3f.III
 
-            V3d.OOO; V3d.OIO
-            V3d.OOI; V3d.OII
-            V3d.IOO; V3d.IIO
-            V3d.IOI; V3d.III
+            V3f.OOO; V3f.OIO
+            V3f.OOI; V3f.OII
+            V3f.IOO; V3f.IIO
+            V3f.IOI; V3f.III
 
-            V3d.OOO; V3d.OOI
-            V3d.OIO; V3d.OII
-            V3d.IOO; V3d.IOI
-            V3d.IIO; V3d.III
+            V3f.OOO; V3f.OOI
+            V3f.OIO; V3f.OII
+            V3f.IOO; V3f.IOI
+            V3f.IIO; V3f.III
         |]
 
     let renderBounds (v : Vertex) =
@@ -143,13 +143,13 @@ module CullingShader =
             let bounds = uniform.Bounds.[v.id]
             let rootId = int (bounds.Max.W + 0.5f)
 
-            let off = V3d bounds.CellMin.XYZ
-            let size = V3d bounds.CellMax.XYZ - off
+            let off = V3f bounds.CellMin.XYZ
+            let size = V3f bounds.CellMax.XYZ - off
 
             let p = data.[v.vid]
 
             let wp = off + p * size
-            let p = uniform.ViewProjs.[rootId] * V4d(wp, 1.0)
+            let p = uniform.ViewProjs.[rootId] * V4f(wp, 1.0f)
             return { v with pos = p }
         }
 

@@ -124,17 +124,17 @@ module Eigi =
 
         type Vertex =
             {
-                [<Position>]    pos : V4d
-                [<Normal>]      n : V3d
-                [<BiNormal>]    b : V3d
-                [<Tangent>]     t : V3d
-                [<TexCoord>]    tc : V2d
+                [<Position>]    pos : V4f
+                [<Normal>]      n : V3f
+                [<BiNormal>]    b : V3f
+                [<Tangent>]     t : V3f
+                [<TexCoord>]    tc : V2f
 
-                [<LightDir>]    l : V3d
-                [<CamDir>]      c : V3d
-                [<Color>]       color : V4d
-                [<SpecularColor>] spec : V4d
-                [<SamplePosition>] sp : V2d
+                [<LightDir>]    l : V3f
+                [<CamDir>]      c : V3f
+                [<Color>]       color : V4f
+                [<SpecularColor>] spec : V4f
+                [<SamplePosition>] sp : V2f
             }
 
         // define some samplers
@@ -189,7 +189,7 @@ module Eigi =
         let normalMapping (v : Vertex) =
             fragment {
                 let vn = normalMap.Sample(v.tc).XYZ
-                let tn = vn * 2.0 - V3d.III |> Vec.normalize
+                let tn = vn * 2.0f - V3f.III |> Vec.normalize
                 
                 let n = Vec.normalize v.n
                 let b = Vec.normalize v.b
@@ -217,8 +217,8 @@ module Eigi =
                 let l = Vec.normalize v.l
                 let c = Vec.normalize v.c
 
-                let diffuse     = Vec.dot n l |> clamp 0.0 1.0
-                let spec        = Vec.dot (Vec.reflect l n) (-c) |> clamp 0.0 1.0
+                let diffuse     = Vec.dot n l |> clamp 0.0f 1.0f
+                let spec        = Vec.dot (Vec.reflect l n) (-c) |> clamp 0.0f 1.0f
 
                 let diff    = v.color
                 let specc   = v.spec.XYZ
@@ -227,14 +227,14 @@ module Eigi =
 
                 let color = diff.XYZ * diffuse  +  specc * pow spec shine
 
-                return V4d(color, v.color.W)
+                return V4f(color, v.color.W)
             }
     
         // per-fragment alpha test using the current color
         let alphaTest (v : Vertex) =
             fragment {
-                let dummy = v.sp.X * 0.0000001
-                if v.color.W < 0.05 + dummy then
+                let dummy = v.sp.X * 0.0000001f
+                if v.color.W < 0.05f + dummy then
                     discard()
 
                 return v
@@ -245,29 +245,29 @@ module Eigi =
 
         type Vertex =
             {
-                [<Position>]    pos : V4d
-                [<Normal>]      n : V3d
-                [<BiNormal>]    b : V3d
-                [<Tangent>]     t : V3d
+                [<Position>]    pos : V4f
+                [<Normal>]      n : V3f
+                [<BiNormal>]    b : V3f
+                [<Tangent>]     t : V3f
 
                 [<Semantic("VertexBoneIndices4")>] vbi : V4i
-                [<Semantic("VertexBoneWeights4")>] vbw : V4d
+                [<Semantic("VertexBoneWeights4")>] vbw : V4f
 
             }
 
         type UniformScope with
-            member x.Bones : M44d[] = x?StorageBuffer?Bones
+            member x.Bones : M44f[] = x?StorageBuffer?Bones
             member x.MeshTrafoBone : int = x?MeshTrafoBone
             member x.NumFrames : int = x?NumFrames
             member x.NumBones : int = x?NumBones
-            member x.Framerate : float = x?Framerate
-            member x.Time : float = x?Time
-            member x.FrameRange : V2d = x?FrameRange
-            member x.TimeOffset : float = x?TimeOffset
+            member x.Framerate : float32 = x?Framerate
+            member x.Time : float32 = x?Time
+            member x.FrameRange : V2f = x?FrameRange
+            member x.TimeOffset : float32 = x?TimeOffset
         [<ReflectedDefinition>]
-        let getBoneTransform (i : V4i) (w : V4d) =
-            let mutable res = M44d.Zero
-            let mutable wSum = 0.0
+        let getBoneTransform (i : V4i) (w : V4f) =
+            let mutable res = M44f.Zero
+            let mutable wSum = 0.0f
 
             if i.X >= 0 then 
                 res <- res + w.X * uniform.Bones.[i.X]
@@ -286,19 +286,19 @@ module Eigi =
                 wSum <- wSum + w.W
 
 
-            let id = M44d.Identity
-            if wSum >= 1.0 then res
-            elif wSum <= 0.0 then id
-            else (1.0 - wSum) * id + wSum * res
+            let id = M44f.Identity
+            if wSum >= 1.0f then res
+            elif wSum <= 0.0f then id
+            else (1.0f - wSum) * id + wSum * res
             
         [<ReflectedDefinition>]
-        let lerp (i : int) (f0 : int) (f1 : int) (t : float) =
-            uniform.Bones.[f0 + i] * (1.0 - t) + uniform.Bones.[f1 + i] * t
+        let lerp (i : int) (f0 : int) (f1 : int) (t : float32) =
+            uniform.Bones.[f0 + i] * (1.0f - t) + uniform.Bones.[f1 + i] * t
 
         [<ReflectedDefinition>]
-        let getBoneTransformFrame (i : V4i) (w : V4d) =
-            let mutable res = M44d.Zero
-            let mutable wSum = 0.0
+        let getBoneTransformFrame (i : V4i) (w : V4f) =
+            let mutable res = M44f.Zero
+            let mutable wSum = 0.0f
 
             let frame = (uniform.Time + uniform.TimeOffset) * uniform.Framerate
             let range = uniform.FrameRange
@@ -307,7 +307,7 @@ module Eigi =
 
             let f0 = int (floor frame)
             let f1 = ((f0 + 1) % uniform.NumFrames)
-            let t = frame - float f0
+            let t = frame - float32 f0
             let b0 = f0 * uniform.NumBones
             let b1 = f1 * uniform.NumBones
 
@@ -329,9 +329,9 @@ module Eigi =
                 wSum <- wSum + w.W
 
             let meshTrafo =
-                uniform.Bones.[b0 + uniform.MeshTrafoBone] * (1.0 - t) + uniform.Bones.[b1 + uniform.MeshTrafoBone] * t
+                uniform.Bones.[b0 + uniform.MeshTrafoBone] * (1.0f - t) + uniform.Bones.[b1 + uniform.MeshTrafoBone] * t
 
-            if wSum <= 0.0 then meshTrafo
+            if wSum <= 0.0f then meshTrafo
             else meshTrafo * res
 
         let skinning (v : Vertex) =
@@ -346,7 +346,7 @@ module Eigi =
                     b = mat.TransformDir(v.b)
                     t = mat.TransformDir(v.t) 
                     vbi = V4i(-1,-1,-1,-1)
-                    vbw = V4d.Zero
+                    vbw = V4f.Zero
                 }
             }
                 

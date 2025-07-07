@@ -384,7 +384,7 @@ module IsActiveFlagPerformance =
 
         let bla (v : Effects.Vertex)= 
             fragment {
-                let a : V4d = uniform?Blah
+                let a : V4f = uniform?Blah
                 return a
             }
 

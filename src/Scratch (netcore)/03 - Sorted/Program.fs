@@ -13,22 +13,22 @@ module Shaders =
     type Vertex =
         {
             [<Position>]
-            position : V4d
+            position : V4f
 
             [<Semantic("ObjectSpacePos"); Interpolation(InterpolationMode.Centroid)>]
-            objPos : V3d
+            objPos : V3f
             
             //[<TexCoord>]  
-            //texCoord : V3d
+            //texCoord : V3f
 
             [<Semantic("CameraModel"); Interpolation(InterpolationMode.Flat)>]
-            cam : V3d
+            cam : V3f
 
             [<Semantic("Offset"); Interpolation(InterpolationMode.Flat)>]
-            offsetAndScale : V4d
+            offsetAndScale : V4f
 
             [<Semantic("BoxSize"); Interpolation(InterpolationMode.Flat)>]
-            boxSize : float
+            boxSize : float32
 
             [<Semantic("Level"); Interpolation(InterpolationMode.Flat)>]
             level : int
@@ -38,9 +38,9 @@ module Shaders =
         }
 
     type UniformScope with
-        member x.PaddedTextureSize : V3d = uniform?PaddedTextureSize
+        member x.PaddedTextureSize : V3f = uniform?PaddedTextureSize
         member x.CellSize : int = uniform?CellSize
-        member x.Magic : float = uniform?Magic
+        member x.Magic : float32 = uniform?Magic
 
     let instanceTrafo (v : Vertex) =
         vertex {
@@ -50,29 +50,29 @@ module Shaders =
                 { v with 
                     cam = cam
                     objPos = p
-                    position = V4d(p,1.0)
+                    position = V4f(p, 1.0f)
                     boxSize = v.offsetAndScale.W
                     level = Fun.Log2 v.offsetAndScale.W |> round |> int
-                    //texCoord = p * uniform.PaddedTextureSize + V3d(0.5,0.5,0.5)
+                    //texCoord = p * uniform.PaddedTextureSize + V3f(0.5f,0.5f,0.5f)
                 }
         }
 
-    type Box = { min : V3d; max : V3d }
+    type Box = { min : V3f; max : V3f }
 
-    let intersectsBox (origin : V3d) (invDir : V3d) (box : Box) (tmin : ref<float>) (tmax : ref<float>) =
+    let intersectsBox (origin : V3f) (invDir : V3f) (box : Box) (tmin : ref<float32>) (tmax : ref<float32>) =
         let mutable temp = Unchecked.defaultof<_>
         let mutable t0 = (box.min - origin) * invDir
         let mutable t1 = (box.max - origin) * invDir
 
-        let eps = 0.05
+        let eps = 0.05f
 
-        if invDir.X < 0.0 then temp <- t0.X; t0.X <- t1.X; t1.X <- temp
-        if invDir.Y < 0.0 then temp <- t0.Y; t0.Y <- t1.Y; t1.Y <- temp
+        if invDir.X < 0.0f then temp <- t0.X; t0.X <- t1.X; t1.X <- temp
+        if invDir.Y < 0.0f then temp <- t0.Y; t0.Y <- t1.Y; t1.Y <- temp
          
         if (t0.X > t1.Y + eps || t0.Y > t1.X + eps) then
             false
         else
-            if invDir.Z < 0.0 then temp <- t0.Z; t0.Z <- t1.Z; t1.Z <- temp
+            if invDir.Z < 0.0f then temp <- t0.Z; t0.Z <- t1.Z; t1.Z <- temp
 
             t0.X <- max t0.X t0.Y
             t1.X <- min t1.X t1.Y
@@ -116,24 +116,24 @@ module Shaders =
     //}
 
     [<Inline>]
-    let sgn (v : float) = if v < 0.0 then 1.0 else 0.0
+    let sgn (v : float32) = if v < 0.0f then 1.0f else 0.0f
 
-    let isNonZero (v : float) = abs v >= 0.01
+    let isNonZero (v : float32) = abs v >= 0.01f
 
-    let intersectsBox2 (origin : V3d) (dir : V3d) (box : Box) (tmin : ref<float>) (tmax : ref<float>) =
+    let intersectsBox2 (origin : V3f) (dir : V3f) (box : Box) (tmin : ref<float32>) (tmax : ref<float32>) =
         let len = Vec.length dir
 
         let mutable result = true
-        let mutable l = -10000000.0
-        let mutable h =  10000000.0
+        let mutable l = -10000000.0f
+        let mutable h =  10000000.0f
 
         let mutable t0 = (box.min - origin) / (dir / len)
         let mutable t1 = (box.max - origin) / (dir / len)
-        let mutable temp = 0.0
+        let mutable temp = 0.0f
         
-        if dir.X < 0.0 then temp <- t0.X; t0.X <- t1.X; t1.X <- temp
-        if dir.Y < 0.0 then temp <- t0.Y; t0.Y <- t1.Y; t1.Y <- temp
-        if dir.Z < 0.0 then temp <- t0.Z; t0.Z <- t1.Z; t1.Z <- temp
+        if dir.X < 0.0f then temp <- t0.X; t0.X <- t1.X; t1.X <- temp
+        if dir.Y < 0.0f then temp <- t0.Y; t0.Y <- t1.Y; t1.Y <- temp
+        if dir.Z < 0.0f then temp <- t0.Z; t0.Z <- t1.Z; t1.Z <- temp
         
         if isNonZero dir.X then
             //if t0.X > h || t1.X < l then result <- false
@@ -162,102 +162,102 @@ module Shaders =
         else
             false
 
-    let max1 (v : V3d) =
+    let max1 (v : V3f) =
         let a = v.Abs()
         v / (max a.X (max a.Y a.Z))
            
     [<ReflectedDefinition>]
-    let hsv2rgb (h : float) (s : float) (v : float) =
-        let s = clamp 0.0 1.0 s
-        let v = clamp 0.0 1.0 v
+    let hsv2rgb (h : float32) (s : float32) (v : float32) =
+        let s = clamp 0.0f 1.0f s
+        let v = clamp 0.0f 1.0f v
 
-        let h = h % 1.0
-        let h = if h < 0.0 then h + 1.0 else h
-        let hi = floor ( h * 6.0 ) |> int
-        let f = h * 6.0 - float hi
-        let p = v * (1.0 - s)
-        let q = v * (1.0 - s * f)
-        let t = v * (1.0 - s * ( 1.0 - f ))
+        let h = h % 1.0f
+        let h = if h < 0.0f then h + 1.0f else h
+        let hi = floor ( h * 6.0f ) |> int
+        let f = h * 6.0f - float32 hi
+        let p = v * (1.0f - s)
+        let q = v * (1.0f - s * f)
+        let t = v * (1.0f - s * ( 1.0f - f ))
         match hi with
-            | 1 -> V3d(q,v,p)
-            | 2 -> V3d(p,v,t)
-            | 3 -> V3d(p,q,v)
-            | 4 -> V3d(t,p,v)
-            | 5 -> V3d(v,p,q)
-            | _ -> V3d(v,t,p)
+            | 1 -> V3f(q,v,p)
+            | 2 -> V3f(p,v,t)
+            | 3 -> V3f(p,q,v)
+            | 4 -> V3f(t,p,v)
+            | 5 -> V3f(v,p,q)
+            | _ -> V3f(v,t,p)
 
     type UniformScope with
         member x.GridSize : V3i = uniform?GridSize
         member x.ShowPlanes : bool = uniform?ShowPlanes
-        member x.DebugPlane : V4d = uniform?DebugPlane
+        member x.DebugPlane : V4f = uniform?DebugPlane
 
 
-    let sampleVolume (pt : V3d) =
-        let center = V3d(0.5, 0.5, 0.5)
-        let r = 0.4
+    let sampleVolume (pt : V3f) =
+        let center = V3f(0.5f, 0.5f, 0.5f)
+        let r = 0.4f
         let h = Vec.length (pt - center) - r
         
-        let s = 0.01
-        let alpha = (0.008 / sqrt (2.0 * Constant.Pi * s * s)) * exp (-h*h / (2.0*s*s))
-        let c0 = V4d(pt * alpha, alpha)
+        let s = 0.01f
+        let alpha = (0.008f / sqrt (2.0f * ConstantF.Pi * s * s)) * exp (-h*h / (2.0f*s*s))
+        let c0 = V4f(pt * alpha, alpha)
 
-        let center = V3d(0.55, 0.5, 0.5)
-        let r = 0.2
+        let center = V3f(0.55f, 0.5f, 0.5f)
+        let r = 0.2f
         let h = Vec.length (pt - center) - r
         
-        let s = 0.01
-        let alpha = (0.008 / sqrt (2.0 * Constant.Pi * s * s)) * exp (-h*h / (2.0*s*s))
-        let c1 = V4d(V3d.III * alpha, alpha)
+        let s = 0.01f
+        let alpha = (0.008f / sqrt (2.0f * ConstantF.Pi * s * s)) * exp (-h*h / (2.0f*s*s))
+        let c1 = V4f(V3f.III * alpha, alpha)
 
         c0 + c1
         
 
 
-    let sampleVolumeOfSize (size : V3d) (pt : V3d) =
-        let invSize = 1.0 / size
-        let px = pt * size - V3d(0.5, 0.5, 0.5)
-        let p000 = V3d(floor px.X, floor px.Y, floor px.Z)
-        let p100 = p000 + V3d.IOO
-        let p010 = p000 + V3d.OIO
-        let p110 = p000 + V3d.IIO
-        let p001 = p000 + V3d.OOI
-        let p101 = p000 + V3d.IOI
-        let p011 = p000 + V3d.OII
-        let p111 = p000 + V3d.III
+    let sampleVolumeOfSize (size : V3f) (pt : V3f) =
+        let invSize = 1.0f / size
+        let px = pt * size - V3f(0.5f, 0.5f, 0.5f)
+        let p000 = V3f(floor px.X, floor px.Y, floor px.Z)
+        let p100 = p000 + V3f.IOO
+        let p010 = p000 + V3f.OIO
+        let p110 = p000 + V3f.IIO
+        let p001 = p000 + V3f.OOI
+        let p101 = p000 + V3f.IOI
+        let p011 = p000 + V3f.OII
+        let p111 = p000 + V3f.III
 
-        let v000 = sampleVolume ((p000 + V3d(0.5,0.5,0.5)) / size)
-        let v100 = sampleVolume ((p100 + V3d(0.5,0.5,0.5)) / size)
-        let v010 = sampleVolume ((p010 + V3d(0.5,0.5,0.5)) / size)
-        let v110 = sampleVolume ((p110 + V3d(0.5,0.5,0.5)) / size)
-        let v001 = sampleVolume ((p001 + V3d(0.5,0.5,0.5)) / size)
-        let v101 = sampleVolume ((p101 + V3d(0.5,0.5,0.5)) / size)
-        let v011 = sampleVolume ((p011 + V3d(0.5,0.5,0.5)) / size)
-        let v111 = sampleVolume ((p111 + V3d(0.5,0.5,0.5)) / size)
+        let v000 = sampleVolume ((p000 + V3f(0.5f,0.5f,0.5f)) / size)
+        let v100 = sampleVolume ((p100 + V3f(0.5f,0.5f,0.5f)) / size)
+        let v010 = sampleVolume ((p010 + V3f(0.5f,0.5f,0.5f)) / size)
+        let v110 = sampleVolume ((p110 + V3f(0.5f,0.5f,0.5f)) / size)
+        let v001 = sampleVolume ((p001 + V3f(0.5f,0.5f,0.5f)) / size)
+        let v101 = sampleVolume ((p101 + V3f(0.5f,0.5f,0.5f)) / size)
+        let v011 = sampleVolume ((p011 + V3f(0.5f,0.5f,0.5f)) / size)
+        let v111 = sampleVolume ((p111 + V3f(0.5f,0.5f,0.5f)) / size)
 
         let t = px - p000
 
-        let vx00 = v000 * (1.0 - t.X) + v100 * t.X
-        let vx01 = v001 * (1.0 - t.X) + v101 * t.X
-        let vx10 = v010 * (1.0 - t.X) + v110 * t.X
-        let vx11 = v011 * (1.0 - t.X) + v111 * t.X
-        let vxx0 = vx00 * (1.0 - t.Y) + vx10 * t.Y
-        let vxx1 = vx01 * (1.0 - t.Y) + vx11 * t.Y
-        vxx0 * (1.0 - t.Z) + vxx1 * t.Z
+        let vx00 = v000 * (1.0f - t.X) + v100 * t.X
+        let vx01 = v001 * (1.0f - t.X) + v101 * t.X
+        let vx10 = v010 * (1.0f - t.X) + v110 * t.X
+        let vx11 = v011 * (1.0f - t.X) + v111 * t.X
+        let vxx0 = vx00 * (1.0f - t.Y) + vx10 * t.Y
+        let vxx1 = vx01 * (1.0f - t.Y) + vx11 * t.Y
+        vxx0 * (1.0f - t.Z) + vxx1 * t.Z
     
-    let sampleVolumeOfSizeNearest (size : V3d) (pt : V3d) =
-        let px = pt * size - V3d(0.5, 0.5, 0.5)
+    let sampleVolumeOfSizeNearest (size : V3f) (pt : V3f) =
+        let px = pt * size - V3f(0.5f, 0.5f, 0.5f)
 
-        let p = (V3d(round px.X, round px.Y, round px.Z) + V3d(0.5,0.5,0.5)) / size
+        let p = (V3f(round px.X, round px.Y, round px.Z) + V3f(0.5,0.5,0.5)) / size
 
         sampleVolume p
         
     [<ReflectedDefinition>]
-    let compose (a : V4d) (b : V4d) =
-        a + (1.0 - a.W) * b
+    let compose (a : V4f) (b : V4f) =
+        a + (1.0f - a.W) * b
     
-    let sampleSphere (p0 : V3d) (p1 : V3d) =
-        let c = V3d(0.5, 0.5, 0.5)
-        let r = 0.4
+    let sampleSphere (p0 : V3f) (p1 : V3f) =
+        let c = V3f(0.5f, 0.5f, 0.5f)
+        let r = 0.4f
         let o = p0 - c
         let d = p1 - p0
 
@@ -279,39 +279,39 @@ module Shaders =
         // t = (-b +/- sqrt(b^2 - 4*a*c)) / 2a
 
         let a = Vec.lengthSquared d
-        let b = 2.0 * Vec.dot o d
+        let b = 2.0f * Vec.dot o d
         let c = Vec.lengthSquared o - r*r
 
-        let v = b*b - 4.0*a*c
-        if v >= 0.0 then
+        let v = b*b - 4.0f*a*c
+        if v >= 0.0f then
             let s = sqrt v
-            let mutable t0 = (-b + s) / (2.0 * a)
-            let mutable t1 = (-b - s) / (2.0 * a)
+            let mutable t0 = (-b + s) / (2.0f * a)
+            let mutable t1 = (-b - s) / (2.0f * a)
 
-            let mutable color = V4d.Zero
+            let mutable color = V4f.Zero
 
             if t1 < t0 then
                 let t = t0
                 t0 <- t1
                 t1 <- t
                 
-            let l = 0.0
-            let h =  1.0
+            let l = 0.0f
+            let h =  1.0f
             if t0 >= l && t0 < h then
                 let n = Vec.normalize (o + t0 * d)
                 let d = Vec.normalize d
                 let diffuse = Vec.dot -n d |> abs
-                color <- compose color (V4d(V3d.IOO * diffuse, 1.0) * 0.5)
+                color <- compose color (V4f(V3f.IOO * diffuse, 1.0f) * 0.5f)
 
             if t1 >= l && t1 < h then
                 let n = Vec.normalize (o + t0 * d)
                 let d = Vec.normalize d
                 let diffuse = Vec.dot n d |> abs
-                color <- compose color (V4d(V3d.OIO * diffuse, 1.0) * 0.5)
+                color <- compose color (V4f(V3f.OIO * diffuse, 1.0f) * 0.5f)
 
             color
         else
-            V4d.Zero
+            V4f.Zero
 
         //if h0 < 0.0 && h1 >= 0.0 then
         //    V4d.IOOI * 0.2
@@ -321,7 +321,7 @@ module Shaders =
         //    V4d.Zero
 
         
-    let normalizeRelative (dir : V3d) (v : V3d) =
+    let normalizeRelative (dir : V3f) (v : V3f) =
         //let ld = Vec.length dir
         //let lv = Vec.length v
         //let c = Vec.dot (dir / ld) (v / lv)
@@ -348,12 +348,12 @@ module Shaders =
     //    else
     //        v - m
 
-    let next (t : float) (dt : float) (d : float)  =
-        if d <= 0.0 then
+    let next (t : float32) (dt : float32) (d : float32)  =
+        if d <= 0.0f then
             t + dt
         else
             
-            t + max 1.0 (t * d) * dt
+            t + max 1.0f (t * d) * dt
             //let x0 = 1.0 / d 
 
             //if t < x0 then
@@ -372,28 +372,28 @@ module Shaders =
     // tb * f ** (ceil ((log t - log tb) / log f) - 1.0)
 
     [<GLSLIntrinsic("float({0} * pow(double({1}), double(ceil(log(({2})/({0})) / log(({1}))) - 1.0)))", "GL_ARB_gpu_shader_fp64")>]
-    let blubber (tb : float) (f : float) (t : float) = onlyInShaderCode "blubber"
+    let blubber (tb : float32) (f : float32) (t : float32) = onlyInShaderCode "blubber"
 
 
-    let prev (t : float) (dt : float) (d : float) =
-        if d <= 0.0 then
+    let prev (t : float32) (dt : float32) (d : float32) =
+        if d <= 0.0f then
             let m = t % dt
-            if m = 0.0 then t - dt
+            if m = 0.0f then t - dt
             else t - m
                 
         else
 
-            let x0 = floor (1.0 / (d * dt)) * dt + dt
+            let x0 = floor (1.0f / (d * dt)) * dt + dt
 
             if t <= x0 then
                 let m = t % dt
-                if m > 0.0 then t - m
+                if m > 0.0f then t - m
                 else t - dt
             else
-                let mutable f = 1.0 + d * dt
+                let mutable f = 1.0f + d * dt
 
-                let mutable tLast = 0.0
-                let mutable ti = 0.0
+                let mutable tLast = 0.0f
+                let mutable ti = 0.0f
                 while ti <= t do
                     tLast <- ti
                     ti <- next ti dt d
@@ -408,10 +408,10 @@ module Shaders =
                 //x0 * f ** (ceil a - 1.0)
     
     [<GLSLIntrinsic("gl_FragCoord")>]
-    let frag() : V4d = onlyInShaderCode "frag"
+    let frag() : V4f = onlyInShaderCode "frag"
 
 
-    let nearPoint (farPoint : V3d) (dir : V3d) (box : Box) =
+    let nearPoint (farPoint : V3f) (dir : V3f) (box : Box) =
         let dir = Vec.normalize dir
         // nearPoint + t * dir = farPoint
         
@@ -420,21 +420,21 @@ module Shaders =
         // farPoint.X - t * dir.X = max.X
         // t = (farPoint.X - max.X) / dir.X
 
-        let mutable t = 1000000.0
+        let mutable t = 1000000.0f
 
-        if dir.X > 0.0 then
+        if dir.X > 0.0f then
             t <- (farPoint.X - box.min.X) / dir.X |> min t
-        elif dir.X < 0.0 then
+        elif dir.X < 0.0f then
             t <- (farPoint.X - box.max.X) / dir.X |> min t
             
-        if dir.Y > 0.0 then
+        if dir.Y > 0.0f then
             t <- (farPoint.Y - box.min.Y) / dir.Y |> min t
-        elif dir.Y < 0.0 then
+        elif dir.Y < 0.0f then
             t <- (farPoint.Y - box.max.Y) / dir.Y |> min t
             
-        if dir.Z > 0.0 then
+        if dir.Z > 0.0f then
             t <- (farPoint.Z - box.min.Z) / dir.Z |> min t
-        elif dir.Z < 0.0 then
+        elif dir.Z < 0.0f then
             t <- (farPoint.Z - box.max.Z) / dir.Z |> min t
         
         farPoint - t * dir
@@ -456,17 +456,17 @@ module Shaders =
             // (1,2,3) => (1/3, 2/3, 1)
             // (2,4,6) => (2/6, 4/6, 1)
 
-            let pp = V2d(2.0, 2.0) * (frag().XY / V2d uniform.ViewportSize) + V2d(-1.0, -1.0)
-            let ppx = V2d(2.0, 2.0) * ((frag().XY + V2d.IO) / V2d uniform.ViewportSize) + V2d(-1.0, -1.0)
-            let ppy = V2d(2.0, 2.0) * ((frag().XY + V2d.OI) / V2d uniform.ViewportSize) + V2d(-1.0, -1.0)
+            let pp = V2f(2.0f, 2.0f) * (frag().XY / V2f uniform.ViewportSize) + V2f(-1.0f, -1.0f)
+            let ppx = V2f(2.0f, 2.0f) * ((frag().XY + V2f.IO) / V2f uniform.ViewportSize) + V2f(-1.0f, -1.0f)
+            let ppy = V2f(2.0f, 2.0f) * ((frag().XY + V2f.OI) / V2f uniform.ViewportSize) + V2f(-1.0f, -1.0f)
 
             //let pp = V3d(v.position.XY / v.position.W, -1.0)
             //let ppx = pp + V3d(1.0 / float uniform.ViewportSize.X, 0.0, 0.0)
             //let ppy = pp + V3d(0.0, 1.0 / float uniform.ViewportSize.Y, 0.0)
 
-            let o = uniform.ModelViewProjTrafoInv * V4d(pp.X, pp.Y, -1.0, 1.0)
-            let ox = uniform.ModelViewProjTrafoInv * V4d(ppx.X, ppx.Y, -1.0, 1.0)
-            let oy = uniform.ModelViewProjTrafoInv * V4d(ppy.X, ppy.Y, -1.0, 1.0)
+            let o = uniform.ModelViewProjTrafoInv * V4f(pp.X, pp.Y, -1.0f, 1.0f)
+            let ox = uniform.ModelViewProjTrafoInv * V4f(ppx.X, ppx.Y, -1.0f, 1.0f)
+            let oy = uniform.ModelViewProjTrafoInv * V4f(ppy.X, ppy.Y, -1.0f, 1.0f)
             let o = o.XYZ / o.W
             let ox = ox.XYZ / ox.W
             let oy = oy.XYZ / oy.W
@@ -476,10 +476,10 @@ module Shaders =
 
             let dir = Vec.normalize (o - origin)
             let l = Vec.length dir
-            let size = float uniform.CellSize
-            let invSize = 1.0 / size
+            let size = float32 uniform.CellSize
+            let invSize = 1.0f / size
             
-            let totalTextureSize = size * V3d uniform.GridSize
+            let totalTextureSize = size * V3f uniform.GridSize
 
             // TODO: maybe half pixel???
             let dx = normalizeRelative dir (ox - origin)
@@ -489,30 +489,30 @@ module Shaders =
                        
 
             // transform ray to tc-space
-            let o = o / V3d uniform.GridSize
-            let origin = origin / V3d uniform.GridSize
-            let dir = dir / V3d uniform.GridSize
-            let dx = dx / V3d uniform.GridSize
-            let dy = dy / V3d uniform.GridSize
-            let farPoint = v.objPos / V3d uniform.GridSize
+            let o = o / V3f uniform.GridSize
+            let origin = origin / V3f uniform.GridSize
+            let dir = dir / V3f uniform.GridSize
+            let dx = dx / V3f uniform.GridSize
+            let dy = dy / V3f uniform.GridSize
+            let farPoint = v.objPos / V3f uniform.GridSize
 
-            let invDir = 1.0 / dir
+            let invDir = 1.0f / dir
 
             // boxes in tc-space
             let overall = 
-                { min = V3d.Zero; max = V3d.III }
+                { min = V3f.Zero; max = V3f.III }
 
             let cell = 
                 { 
-                    min = v.offsetAndScale.XYZ / V3d uniform.GridSize
-                    max = (v.offsetAndScale.XYZ + v.offsetAndScale.W * V3d.III) / V3d uniform.GridSize 
+                    min = v.offsetAndScale.XYZ / V3f uniform.GridSize
+                    max = (v.offsetAndScale.XYZ + v.offsetAndScale.W * V3f.III) / V3f uniform.GridSize
                 }
                 
-            let cellColor = V4d(0.5 * (cell.max + V3d.III), 1.0)
+            let cellColor = V4f(0.5f * (cell.max + V3f.III), 1.0f)
 
             let planeColor = 
-                if uniform.ShowPlanes then cellColor * 0.02
-                else V4d.Zero    
+                if uniform.ShowPlanes then cellColor * 0.02f
+                else V4f.Zero
                 
 
             let maxDim = 
@@ -529,7 +529,7 @@ module Shaders =
             if true then //intersectsBox2 origin dir overall &&tminAll &&tmaxAll then
                 
                 //let origin = origin + dir * tminAll
-                let textureSize = V3d uniform.GridSize * size
+                let textureSize = V3f uniform.GridSize * size
                 let dr = textureSize * (dx - dir) |> Vec.length
                 let du = textureSize * (dy - dir) |> Vec.length
                 let nd = uniform.Magic * max dr du
@@ -585,17 +585,17 @@ module Shaders =
 
                         let v = if uniform.ShowPlanes then cellColor * v.W else v
 
-                        let s = max 1.0 (nd * t)
+                        let s = max 1.0f (nd * t)
                         let level = Fun.Log2 s
                     
                         //let v = V4d(hsv2rgb (level / 3.0) 1.0 1.0, 1.0) * v.W
 
                         // if alpha is nonzero
-                        if v.W > 0.0 then
+                        if v.W > 0.0f then
                             let dt = t - lastT
                             // opacity correction
-                            let alpha = 1.0 - (1.0 - v.W) ** (l * dt)
-                            let v = V4d(v.XYZ * (alpha / v.W), alpha)
+                            let alpha = 1.0f - (1.0f - v.W) ** (l * dt)
+                            let v = V4f(v.XYZ * (alpha / v.W), alpha)
                         
                             // compose color
                             color <- compose color v
@@ -619,10 +619,10 @@ module Shaders =
                             
                     return color
                 else
-                    return V4d.OIOI
+                    return V4f.OIOI
                    
             else
-                return V4d.OIOI
+                return V4f.OIOI
                
                     
         }

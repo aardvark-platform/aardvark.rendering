@@ -375,9 +375,9 @@ module private Kernels =
         else V3i(yz.X, yz.Y, x)
 
     [<LocalSize(X = halfScanSize, Y = 1)>]
-    let scanImageKernel2dTexture (add : Expr<V4d -> V4d -> V4d>) (dim : int) (outputImage : Image2d<Formats.rgba32f>) =
+    let scanImageKernel2dTexture (add : Expr<V4f -> V4f -> V4f>) (dim : int) (outputImage : Image2d<Formats.rgba32f>) =
         compute {
-            let mem : V4d[] = allocateShared scanSize
+            let mem : V4f[] = allocateShared scanSize
             let gid = getGlobalId().X
             let group = getWorkGroupId().X
             let inputSize = inputImage2d.Size.[dim]
@@ -525,13 +525,13 @@ module private Kernels =
 
 
     [<LocalSize(X = halfScanSize, Y = 1)>]
-    let scanImageKernel2d (add : Expr<V4d -> V4d -> V4d>) (dimension : int) (inOutImage : Image2d<Formats.rgba32f>) =
+    let scanImageKernel2d (add : Expr<V4f -> V4f -> V4f>) (dimension : int) (inOutImage : Image2d<Formats.rgba32f>) =
         compute {
             let Offset : int = uniform?Arguments?Offset
             let Delta : int = uniform?Arguments?Delta
             let Size : int = uniform?Arguments?Size
             
-            let mem : V4d[] = allocateShared scanSize
+            let mem : V4f[] = allocateShared scanSize
             let gid = getGlobalId().X
             let group = getWorkGroupId().X
             //let inputSize = inOutImage.Size.[dimension]
@@ -590,7 +590,7 @@ module private Kernels =
 
 
     [<LocalSize(X = halfScanSize)>]
-    let fixupImageKernel2d (add : Expr<V4d -> V4d -> V4d>) (dimension : int) (inOutImage : Image2d<Formats.rgba32f>) =
+    let fixupImageKernel2d (add : Expr<V4f -> V4f -> V4f>) (dimension : int) (inOutImage : Image2d<Formats.rgba32f>) =
         compute {
             let inputOffset : int = uniform?Arguments?inputOffset
             let inputDelta : int = uniform?Arguments?inputDelta
@@ -636,15 +636,15 @@ module private ImageIO =
         member x.Image3d : Image3d<Formats.rgba32f> = x?inOutImage
 
 
-    let writeImage2d                                    = <@ fun (c : V3i) (v : V4d) -> uniform.Image2d.[c.XY] <- v @>
+    let writeImage2d                                    = <@ fun (c : V3i) (v : V4f) -> uniform.Image2d.[c.XY] <- v @>
     let readSampler2d                                   = <@ fun (c : V3i) -> inputSampler2d.[c.XY] @>
     let readImage2d                                     = <@ fun (c : V3i) -> uniform.Image2d.[c.XY] @>
-    let addToImage2d (add : Expr<V4d -> V4d -> V4d>)    = <@ fun (c : V3i) (v : V4d) -> uniform.Image2d.[c.XY] <- (%add) v uniform.Image2d.[c.XY] @>
+    let addToImage2d (add : Expr<V4f -> V4f -> V4f>)    = <@ fun (c : V3i) (v : V4f) -> uniform.Image2d.[c.XY] <- (%add) v uniform.Image2d.[c.XY] @>
 
-    let writeImage3d                                    = <@ fun (c : V3i) (v : V4d) -> uniform.Image3d.[c] <- v @>
+    let writeImage3d                                    = <@ fun (c : V3i) (v : V4f) -> uniform.Image3d.[c] <- v @>
     let readSampler3d                                   = <@ fun (c : V3i) -> inputSampler3d.[c] @>
     let readImage3d                                     = <@ fun (c : V3i) -> uniform.Image3d.[c] @>
-    let addToImage3d (add : Expr<V4d -> V4d -> V4d>)    = <@ fun (c : V3i) (v : V4d) -> uniform.Image3d.[c] <- (%add) v uniform.Image3d.[c] @>
+    let addToImage3d (add : Expr<V4f -> V4f -> V4f>)    = <@ fun (c : V3i) (v : V4f) -> uniform.Image3d.[c] <- (%add) v uniform.Image3d.[c] @>
 
 
 
@@ -1174,7 +1174,7 @@ type private Add<'a>() =
 
 type private ScanRange = { offset : int; delta : int; count : int }
 
-type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d>) =
+type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4f -> V4f -> V4f>) =
 
     static let ceilDiv (v : int) (d : int) =
         if v % d = 0 then v / d
@@ -1401,7 +1401,7 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
             new MapReduce<'a, 'b>(runtime, reducer, map, add)
         )
 
-    let getImageScanner2d (add : Expr<V4d -> V4d -> V4d>) = scanImage2dCache.GetOrCreate(add, fun add -> new ScanImage2d(runtime, add))
+    let getImageScanner2d (add : Expr<V4f -> V4f -> V4f>) = scanImage2dCache.GetOrCreate(add, fun add -> new ScanImage2d(runtime, add))
 
     let getImageMapReducer (map : Expr<V3i -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) =
         mapReduceCache.GetOrCreate(map, add, fun map add -> 
@@ -1425,7 +1425,7 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
         let scanner = getScanner add
         scanner.Compile(input, output)
 
-    member x.CompileScan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource) =
+    member x.CompileScan(add : Expr<V4f -> V4f -> V4f>, input : ITextureSubResource, output : ITextureSubResource) =
         let scanner = getImageScanner2d add
         scanner.Compile(input, output)
 
@@ -1454,7 +1454,7 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
         let scanner = getScanner add
         scanner.Run(input, output, renderToken)
 
-    member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource, renderToken : RenderToken) =
+    member x.Scan(add : Expr<V4f -> V4f -> V4f>, input : ITextureSubResource, output : ITextureSubResource, renderToken : RenderToken) =
         let scanner = getImageScanner2d add
         scanner.Run(input, output, renderToken)
 
@@ -1493,7 +1493,7 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
     member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
         x.Scan(add, input, output, RenderToken.Empty)
 
-    member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource) =
+    member x.Scan(add : Expr<V4f -> V4f -> V4f>, input : ITextureSubResource, output : ITextureSubResource) =
         x.Scan(add, input, output, RenderToken.Empty)
 
     member x.Fold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>) =

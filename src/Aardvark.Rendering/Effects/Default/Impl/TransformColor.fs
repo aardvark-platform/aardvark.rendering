@@ -7,10 +7,10 @@ open Microsoft.FSharp.Quotations
 
 module TransformColor = 
 
-    let internal transformColor (f : Expr<V4d -> V4d>) (v : Vertex) =
+    let internal transformColor (f : Expr<V4f -> V4f>) (v : Vertex) =
         fragment {
             return (%f) v.c
         }
 
-    let Effect (f : Expr<V4d -> V4d>) =
+    let Effect (f : Expr<V4f -> V4f>) =
         toEffect (transformColor f)

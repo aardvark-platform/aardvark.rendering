@@ -17,7 +17,7 @@ module NormalMap =
     let internal normalMap (v : Vertex) =
         fragment {
             let texColor = normalSampler.Sample(v.tc).XYZ
-            let texNormal = (2.0 * texColor - V3d.III) |> Vec.normalize
+            let texNormal = (2.0f * texColor - V3f.III) |> Vec.normalize
 
             // make sure tangent space basis is orthonormal -> perform gram-smith normalization
             let n = v.n.Normalized

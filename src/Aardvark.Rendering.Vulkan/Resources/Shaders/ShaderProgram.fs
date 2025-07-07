@@ -42,11 +42,11 @@ module internal FShadeConfig =
         | DepthRange.ZeroToOne ->
             // Depth values produced by shaders are already expected to be in the native Vulkan [0, 1]
             // range. No conversion required, so tell FShade to convert from [-1, 1] to [-1, 1].
-            Range1d(-1.0, 1.0)
+            Range1f(-1.0f, 1.0f)
 
         | DepthRange.MinusOneToOne ->
             // Depth values are not in the valid Vulkan range, so tell FShade to do the conversion.
-            Range1d(0.0, 1.0)
+            Range1f(0.0f, 1.0f)
 
         | r -> failf "unknown depth range %A" r
 
@@ -346,7 +346,7 @@ module ShaderProgram =
               outputs    : Map<int, string * TextureFormat>
               layered    : Set<string>
               layerCount : int
-              depthRange : Range1d }
+              depthRange : Range1f }
 
         let ofEffectKey (device: Device) (key: EffectCacheKey) =
             let signature =

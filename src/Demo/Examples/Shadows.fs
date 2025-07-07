@@ -72,17 +72,17 @@ module Shader =
     open FShade
 
     type Vertex = {
-        [<Position>]        pos     : V4d
-        [<WorldPosition>]   wp      : V4d
-        [<Normal>]          n       : V3d
-        [<BiNormal>]        b       : V3d
-        [<Tangent>]         t       : V3d
-        [<Color>]           c       : V4d
-        [<TexCoord>]        tc      : V2d
+        [<Position>]        pos     : V4f
+        [<WorldPosition>]   wp      : V4f
+        [<Normal>]          n       : V3f
+        [<BiNormal>]        b       : V3f
+        [<Tangent>]         t       : V3f
+        [<Color>]           c       : V4f
+        [<TexCoord>]        tc      : V2f
     }
 
     type UniformScope with
-        member x.LightViewMatrix : M44d = uniform?LightViewMatrix
+        member x.LightViewMatrix : M44f = uniform?LightViewMatrix
         
     let private diffuseSampler =
         sampler2dShadow {
@@ -94,17 +94,17 @@ module Shader =
             comparison ComparisonFunction.LessOrEqual
         }
 
-    let clipPlane = V4d(1.0,1.0,1.0,0.0)
+    let clipPlane = V4f(1.0f,1.0f,1.0f,0.0f)
 
     type ClipVertex = {
-        [<Position>]        pos     : V4d
-        [<WorldPosition>]   wp      : V4d
-        [<Normal>]          n       : V3d
-        [<BiNormal>]        b       : V3d
-        [<Tangent>]         t       : V3d
-        [<Color>]           c       : V4d
-        [<TexCoord>]        tc      : V2d
-        [<ClipDistance>] clipDistances : float[]
+        [<Position>]        pos     : V4f
+        [<WorldPosition>]   wp      : V4f
+        [<Normal>]          n       : V3f
+        [<BiNormal>]        b       : V3f
+        [<Tangent>]         t       : V3f
+        [<Color>]           c       : V4f
+        [<TexCoord>]        tc      : V2f
+        [<ClipDistance>] clipDistances : float32[]
     }
 
     let trafo (v : Vertex) =
@@ -115,7 +115,7 @@ module Shader =
             return {
                 pos = uniform.ViewProjTrafo * wp
                 wp = wp
-                n = (uniform.ViewTrafo * (V4d(v.n,0.0))).XYZ
+                n = (uniform.ViewTrafo * (V4f(v.n,0.0f))).XYZ
                 b = uniform.NormalMatrix * v.b
                 t = uniform.NormalMatrix * v.t
                 c = v.c
@@ -128,9 +128,9 @@ module Shader =
         fragment {
             let lightSpace = uniform.LightViewMatrix * v.wp
             let div = lightSpace.XYZ / lightSpace.W
-            let tc = V3d(0.5, 0.5,0.5) + V3d(0.5, 0.5, 0.5) * div.XYZ
-            let d = max 0.3 (diffuseSampler.Sample(tc.XY, tc.Z - 0.000017))
-            return V4d(v.c.XYZ * d, v.c.W)
+            let tc = V3f(0.5f) + V3f(0.5f) * div.XYZ
+            let d = max 0.3f (diffuseSampler.Sample(tc.XY, tc.Z - 0.000017f))
+            return V4f(v.c.XYZ * d, v.c.W)
         }
 
 
@@ -139,17 +139,17 @@ module Shader =
             let n = v.n |> Vec.normalize
             let c = uniform?lightLocation - v.wp.XYZ |> Vec.normalize
 
-            let ambient = 0.2
-            let diffuse = Vec.dot (uniform.ViewTrafo * V4d(c,0.0)).XYZ n |> max 0.0
+            let ambient = 0.2f
+            let diffuse = Vec.dot (uniform.ViewTrafo * V4f(c,0.0f)).XYZ n |> max 0.0f
 
-            let l = ambient + (1.0 - ambient) * diffuse
+            let l = ambient + (1.0f - ambient) * diffuse
 
-            return V4d(v.c.XYZ * diffuse, v.c.W)
+            return V4f(v.c.XYZ * diffuse, v.c.W)
         }
            
     type InstanceVertex = { 
-        [<Position>]      pos   : V4d 
-        [<InstanceTrafo>] trafo : M44d
+        [<Position>]      pos   : V4f
+        [<InstanceTrafo>] trafo : M44f
     }
 
     let instanceTrafo (v : InstanceVertex) =

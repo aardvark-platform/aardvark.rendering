@@ -55,16 +55,16 @@ module Shader =
         inherit SemanticAttribute(Semantic.Literal.RotationSpeed)
 
     type UniformScope with
-        member x.Rotation : float = x?Rotation
+        member x.Rotation : float32 = x?Rotation
 
     type Vertex = {
-        [<Position>]      pos : V4d
-        [<Normal>]          n : V3d
-        [<RotationSpeed>] spd : float
+        [<Position>]      pos : V4f
+        [<Normal>]          n : V3f
+        [<RotationSpeed>] spd : float32
     }
 
     type Fragment = {
-        [<FragCoord>] coord : V4d
+        [<FragCoord>] coord : V4f
     }
 
     [<AutoOpen>]
@@ -85,35 +85,35 @@ module Shader =
     let resolve (samples : int) (f : Fragment) =
         fragment {
             if samples > 1 then
-                let mutable result = V4d.Zero
+                let mutable result = V4f.Zero
 
                 for i = 0 to samples - 1 do
                     result <- result + diffuseSamplerMS.Read(V2i f.coord.XY, i)
 
-                return result / float samples
+                return result / float32 samples
             else
                 return diffuseSampler.Read(V2i f.coord.XY, 0)
         }
 
     let rotate (v : Vertex) =
         vertex {
-            let angle = uniform.Rotation * v.spd * Constant.PiTimesTwo
+            let angle = uniform.Rotation * v.spd * ConstantF.PiTimesTwo
             let c, s = cos angle, sin angle
 
             let prot =
-                V2d(
+                V2f(
                     v.pos.X * c - v.pos.Y * s,
                     v.pos.X * s + v.pos.Y * c
                 )
 
             let nrot =
-                V2d(
+                V2f(
                     v.n.X * c - v.n.Y * s,
                     v.n.X * s + v.n.Y * c
                 )
 
-            return { v with pos = V4d(prot, v.pos.ZW)
-                            n   = V3d(nrot, v.n.Z) }
+            return { v with pos = V4f(prot, v.pos.ZW)
+                            n   = V3f(nrot, v.n.Z) }
         }
 
 [<EntryPoint>]

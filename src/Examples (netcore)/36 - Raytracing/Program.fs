@@ -36,21 +36,21 @@ module Effect =
         type UniformScope with
             member x.OutputBuffer : Image2d<Formats.rgba32f> = uniform?OutputBuffer
             member x.RecursionDepth : int    = uniform?RecursionDepth
-            member x.Positions      : V3d[]  = uniform?StorageBuffer?Positions
-            member x.Normals        : V3d[]  = uniform?StorageBuffer?Normals
-            member x.TextureCoords  : V2d[]  = uniform?StorageBuffer?DiffuseColorCoordinates
-            member x.ModelMatrices  : M44d[] = uniform?StorageBuffer?ModelMatrix
-            member x.NormalMatrices : M33d[] = uniform?StorageBuffer?NormalMatrix
-            member x.FaceColors     : V3d[]  = uniform?StorageBuffer?FaceColors
-            member x.Colors         : V3d[]  = uniform?StorageBuffer?Colors
-            member x.SphereOffsets  : V3d[]  = uniform?StorageBuffer?SphereOffsets
+            member x.Positions      : V3f[]  = uniform?StorageBuffer?Positions
+            member x.Normals        : V3f[]  = uniform?StorageBuffer?Normals
+            member x.TextureCoords  : V2f[]  = uniform?StorageBuffer?DiffuseColorCoordinates
+            member x.ModelMatrices  : M44f[] = uniform?StorageBuffer?ModelMatrix
+            member x.NormalMatrices : M33f[] = uniform?StorageBuffer?NormalMatrix
+            member x.FaceColors     : V3f[]  = uniform?StorageBuffer?FaceColors
+            member x.Colors         : V3f[]  = uniform?StorageBuffer?Colors
+            member x.SphereOffsets  : V3f[]  = uniform?StorageBuffer?SphereOffsets
 
         type Payload =
             {
-                color       : V3d
-                origin      : V3d
-                direction   : V3d
-                attenuation : float
+                color       : V3f
+                origin      : V3f
+                direction   : V3f
+                attenuation : float32
             }
 
         let private mainScene =
@@ -67,24 +67,24 @@ module Effect =
             }
 
         [<ReflectedDefinition>]
-        let trace (origin : V3d) (offset : V2d) (input : RayGenerationInput) =
-            let pixelCenter = V2d input.work.id.XY + offset
-            let inUV = pixelCenter / V2d input.work.size.XY
-            let d = inUV * 2.0 - 1.0
+        let trace (origin : V3f) (offset : V2f) (input : RayGenerationInput) =
+            let pixelCenter = V2f input.work.id.XY + offset
+            let inUV = pixelCenter / V2f input.work.size.XY
+            let d = inUV * 2.0f - 1.0f
 
-            let target = uniform.ProjTrafoInv * V4d(d, 1.0, 1.0)
-            let direction = uniform.ViewTrafoInv * V4d(target.XYZ.Normalized, 0.0)
+            let target = uniform.ProjTrafoInv * V4f(d, 1.0f, 1.0f)
+            let direction = uniform.ViewTrafoInv * V4f(target.XYZ.Normalized, 0.0f)
 
             let mutable depth = 0
-            let mutable final = V3d.Zero
+            let mutable final = V3f.Zero
 
             let mutable payload =
-                { color       = V3d.Zero
+                { color       = V3f.Zero
                   origin      = origin.XYZ
                   direction   = direction.XYZ
-                  attenuation = 1.0 }
+                  attenuation = 1.0f }
 
-            while depth < uniform.RecursionDepth && payload.attenuation > 0.0 do
+            while depth < uniform.RecursionDepth && payload.attenuation > 0.0f do
                 let attenuation = payload.attenuation
                 payload <- mainScene.TraceRay<Payload>(payload.origin, payload.direction, payload, flags = RayFlags.CullBackFacingTriangles)
                 final <- final + payload.color * attenuation
@@ -94,33 +94,33 @@ module Effect =
 
         let rgenMain (input : RayGenerationInput) =
             raygen {
-                let origin = uniform.ViewTrafoInv * V4d.WAxis
+                let origin = uniform.ViewTrafoInv * V4f.WAxis
 
-                let c1 = input |> trace origin.XYZ (V2d(0.25, 0.25))
-                let c2 = input |> trace origin.XYZ (V2d(0.75, 0.25))
-                let c3 = input |> trace origin.XYZ (V2d(0.25, 0.75))
-                let c4 = input |> trace origin.XYZ (V2d(0.75, 0.75))
-                let final = (c1 + c2 + c3 + c4) / 4.0
+                let c1 = input |> trace origin.XYZ (V2f(0.25f, 0.25f))
+                let c2 = input |> trace origin.XYZ (V2f(0.75f, 0.25f))
+                let c3 = input |> trace origin.XYZ (V2f(0.25f, 0.75f))
+                let c4 = input |> trace origin.XYZ (V2f(0.75f, 0.75f))
+                let final = (c1 + c2 + c3 + c4) / 4.0f
 
-                uniform.OutputBuffer.[input.work.id.XY] <- V4d(final, 1.0)
+                uniform.OutputBuffer.[input.work.id.XY] <- V4f(final, 1.0f)
             }
 
         let missSky (input : RayMissInput) =
-            let top = V3d(0.25, 0.5, 1.0)
-            let bottom = V3d C3d.SlateGray
+            let top = V3f(0.25f, 0.5f, 1.0f)
+            let bottom = V3f C3f.SlateGray
 
             miss {
                 let color =
-                    if input.ray.direction.Z > 0.0 then
+                    if input.ray.direction.Z > 0.0f then
                         input.ray.direction.Z |> lerp bottom top
                     else
                         bottom
 
                 return {
                     color       = color
-                    origin      = V3d.Zero
-                    direction   = V3d.Zero
-                    attenuation = 0.0
+                    origin      = V3f.Zero
+                    direction   = V3f.Zero
+                    attenuation = 0.0f
                 }
             }
 
@@ -128,69 +128,69 @@ module Effect =
             miss { return false }
 
         [<ReflectedDefinition>]
-        let fromBarycentric (v0 : V3d) (v1 : V3d) (v2 : V3d) (coords : V2d) =
-            let barycentricCoords = V3d(1.0 - coords.X - coords.Y, coords.X, coords.Y)
+        let fromBarycentric (v0 : V3f) (v1 : V3f) (v2 : V3f) (coords : V2f) =
+            let barycentricCoords = V3f(1.0f - coords.X - coords.Y, coords.X, coords.Y)
             v0 * barycentricCoords.X + v1 * barycentricCoords.Y + v2 * barycentricCoords.Z
 
         [<ReflectedDefinition>]
-        let fromBarycentric2d (v0 : V2d) (v1 : V2d) (v2 : V2d) (coords : V2d) =
-            let barycentricCoords = V3d(1.0 - coords.X - coords.Y, coords.X, coords.Y)
+        let fromBarycentric2d (v0 : V2f) (v1 : V2f) (v2 : V2f) (coords : V2f) =
+            let barycentricCoords = V3f(1.0f - coords.X - coords.Y, coords.X, coords.Y)
             v0 * barycentricCoords.X + v1 * barycentricCoords.Y + v2 * barycentricCoords.Z
 
         [<ReflectedDefinition>]
-        let getPosition (indices : V3i) (input : RayHitInput<'T, V2d>) =
+        let getPosition (indices : V3i) (input : RayHitInput<'T, V2f>) =
             let p0 = uniform.Positions.[indices.X]
             let p1 = uniform.Positions.[indices.Y]
             let p2 = uniform.Positions.[indices.Z]
             input.hit.attribute |> fromBarycentric p0 p1 p2
 
         [<ReflectedDefinition>]
-        let getNormal (indices : V3i) (input : RayHitInput<'T, V2d>) =
+        let getNormal (indices : V3i) (input : RayHitInput<'T, V2f>) =
             let n0 = uniform.Normals.[indices.X]
             let n1 = uniform.Normals.[indices.Y]
             let n2 = uniform.Normals.[indices.Z]
             input.hit.attribute |> fromBarycentric n0 n1 n2
 
         [<ReflectedDefinition>]
-        let getTextureCoords (indices : V3i) (input : RayHitInput<'T, V2d>) =
+        let getTextureCoords (indices : V3i) (input : RayHitInput<'T, V2f>) =
             let uv0 = uniform.TextureCoords.[indices.X]
             let uv1 = uniform.TextureCoords.[indices.Y]
             let uv2 = uniform.TextureCoords.[indices.Z]
             input.hit.attribute |> fromBarycentric2d uv0 uv1 uv2
 
         [<ReflectedDefinition>]
-        let diffuseLighting (normal : V3d) (position : V3d) =
+        let diffuseLighting (normal : V3f) (position : V3f) =
             let L = uniform.LightLocation - position |> Vec.normalize
-            let NdotL = Vec.dot normal L |> max 0.0
+            let NdotL = Vec.dot normal L |> max 0.0f
 
-            let ambient = 0.1
-            ambient + 0.9 * NdotL
+            let ambient = 0.1f
+            ambient + 0.9f * NdotL
 
         [<ReflectedDefinition>]
-        let specularLighting (shininess : float) (normal : V3d) (position : V3d) =
+        let specularLighting (shininess : float32) (normal : V3f) (position : V3f) =
             let L = uniform.LightLocation - position |> Vec.normalize
             let V = uniform.CameraLocation - position |> Vec.normalize
             let R = Vec.reflect normal -L
-            let VdotR = Vec.dot V R |> max 0.0
-            0.8 * pow VdotR shininess
+            let VdotR = Vec.dot V R |> max 0.0f
+            0.8f * pow VdotR shininess
 
         [<ReflectedDefinition>]
-        let lightingWithShadow (mask : int32) (diffuse : V3d) (reflectiveness : float) (specularAmount : float) (shininess : float)
-                               (position : V3d) (normal : V3d) (input : RayHitInput<Payload>) =
+        let lightingWithShadow (mask : int32) (diffuse : V3f) (reflectiveness : float32) (specularAmount : float32) (shininess : float32)
+                               (position : V3f) (normal : V3f) (input : RayHitInput<Payload>) =
 
             let shadowed =
                 let direction = Vec.normalize (uniform.LightLocation - position)
                 let flags = RayFlags.SkipClosestHitShader ||| RayFlags.TerminateOnFirstHit ||| RayFlags.Opaque ||| RayFlags.CullFrontFacingTriangles
-                mainScene.TraceRay<bool>(position, direction, payload = true, miss = "MissShadow", flags = flags, minT = 0.01, cullMask = mask)
+                mainScene.TraceRay<bool>(position, direction, payload = true, miss = "MissShadow", flags = flags, minT = 0.01f, cullMask = mask)
 
             let color =
                 let diffuse = diffuse * diffuseLighting normal position
 
                 if shadowed then
-                    diffuse * 0.3
+                    diffuse * 0.3f
                 else
                     let specular = specularLighting shininess normal position
-                    diffuse + specularAmount * V3d(specular)
+                    diffuse + specularAmount * V3f(specular)
 
             { color       = color
               origin      = position
@@ -213,7 +213,7 @@ module Effect =
                     (m * n) |> Vec.normalize
 
                 let diffuse = uniform.FaceColors.[info.BasePrimitive + input.geometry.primitiveId]
-                return lightingWithShadow 0xFF diffuse 0.0 1.0 16.0 position normal input
+                return lightingWithShadow 0xFF diffuse 0.0f 1.0f 16.0f position normal input
             }
 
         let chitTextured (input : RayHitInput<Payload>) =
@@ -230,7 +230,7 @@ module Effect =
                     getTextureCoords indices input
 
                 let diffuse = textureFloor.Sample(texCoords).XYZ
-                return lightingWithShadow 0xFF diffuse 0.3 0.5 28.0 position V3d.ZAxis input
+                return lightingWithShadow 0xFF diffuse 0.3f 0.5f 28.0f position V3f.ZAxis input
             }
 
         let chitSphere (input : RayHitInput<Payload>) =
@@ -241,21 +241,21 @@ module Effect =
                 let normal = Vec.normalize (position - center)
 
                 let diffuse = uniform.Colors.[info.GeometryAttributeIndex]
-                return lightingWithShadow 0x7F diffuse 0.4 0.8 28.0 position normal input
+                return lightingWithShadow 0x7F diffuse 0.4f 0.8f 28.0f position normal input
             }
 
-        let intersectionSphere (radius : float) (input : RayIntersectionInput) =
+        let intersectionSphere (radius : float32) (input : RayIntersectionInput) =
             intersection {
                 let origin = input.objectSpace.rayOrigin - uniform.SphereOffsets.[input.geometry.geometryIndex]
                 let direction = input.objectSpace.rayDirection
 
                 let a = Vec.dot direction direction
-                let b = 2.0 * Vec.dot origin direction
+                let b = 2.0f * Vec.dot origin direction
                 let c = (Vec.dot origin origin) - (radius * radius)
 
-                let discriminant = b * b - 4.0 * a * c
-                if discriminant >= 0.0 then
-                    let t = (-b - sqrt discriminant) / (2.0 * a)
+                let discriminant = b * b - 4.0f * a * c
+                if discriminant >= 0.0f then
+                    let t = (-b - sqrt discriminant) / (2.0f * a)
                     Intersection.Report(t) |> ignore
             }
 
@@ -273,7 +273,7 @@ module Effect =
     let private hitGroupSphere =
         hitgroup {
             closestHit chitSphere
-            intersection (intersectionSphere 0.2)
+            intersection (intersectionSphere 0.2f)
         }
 
     let main =

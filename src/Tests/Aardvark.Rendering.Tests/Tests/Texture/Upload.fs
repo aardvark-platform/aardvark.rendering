@@ -39,7 +39,7 @@ module TextureUpload =
                 addressV WrapMode.Clamp
             }
 
-        let diffuseTextureLod (level : float) (v : Effects.Vertex) =
+        let diffuseTextureLod (level : float32) (v : Effects.Vertex) =
             fragment {
                 return diffuseSampler.SampleLevel(v.tc, level)
             }
@@ -544,7 +544,7 @@ module TextureUpload =
                     Sg.fullScreenQuad
                     |> Sg.diffuseTexture' texture
                     |> Sg.shader {
-                        do! Shader.diffuseTextureLod (float level)
+                        do! Shader.diffuseTextureLod (float32 level)
                     }
                     |> Sg.compile runtime signature
 
@@ -759,7 +759,7 @@ module TextureUpload =
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return V4d(diffuseSampler.Read(V2i.Zero, 0))
+                    return V4f(diffuseSampler.Read(V2i.Zero, 0))
                 }
 
             let shader =
@@ -783,7 +783,7 @@ module TextureUpload =
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return V4d(diffuseSampler.Sample(v.tc, 0.0))
+                    return V4f(diffuseSampler.Sample(v.tc, 0.0f))
                 }
 
             let shader =
@@ -871,7 +871,7 @@ module TextureUpload =
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return diffuseSampler.Sample(V3d(v.tc.XY))
+                    return diffuseSampler.Sample(V3f(v.tc))
                 }
 
             let shader =
@@ -1043,7 +1043,7 @@ module TextureUpload =
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return diffuseSampler.Sample(V3d.Zero)
+                    return diffuseSampler.Sample(V3f.Zero)
                 }
 
             let shader =
@@ -1064,7 +1064,7 @@ module TextureUpload =
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return diffuseSampler.Sample(V3d.Zero, 32)
+                    return diffuseSampler.Sample(V3f.Zero, 32)
                 }
 
             let shader =

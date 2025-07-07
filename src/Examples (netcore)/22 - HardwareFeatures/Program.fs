@@ -36,11 +36,11 @@ module Shader =
     open FShade
 
     type InstanceVertex = { 
-        [<Position>]            pos   : V4d 
-        [<Normal>]              n     : V3d 
-        [<BiNormal>]            b     : V3d 
-        [<Tangent>]             t     : V3d 
-        [<InstanceTrafo>]       trafo : M44d
+        [<Position>]            pos   : V4f
+        [<Normal>]              n     : V3f
+        [<BiNormal>]            b     : V3f
+        [<Tangent>]             t     : V3f
+        [<InstanceTrafo>]       trafo : M44f
     }
 
     let orthoInstanceTrafo (v : InstanceVertex) =

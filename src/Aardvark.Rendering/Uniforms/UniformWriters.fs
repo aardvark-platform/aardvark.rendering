@@ -124,8 +124,7 @@ module GLSLType =
         match t with
         | Bool -> 4
         | Int(_,b) -> b / 8
-        | Float(64 | 32) -> 4
-        | Float(w) -> w / 4
+        | Float(w) -> w / 8
         | Vec(d,e) -> d * sizeof e
         | Mat(r,c,e) -> r * c * sizeof e
         | Array(len, e, stride) -> len * stride

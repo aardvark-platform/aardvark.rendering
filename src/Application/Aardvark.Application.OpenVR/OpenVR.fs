@@ -573,7 +573,7 @@ module VrSystemStats =
 
                     do! fun (v : Effects.Vertex) ->
                         fragment {
-                            let c : V4d = uniform?Color
+                            let c : V4f = uniform?Color
                             return c
                         }
                     

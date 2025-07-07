@@ -16,27 +16,27 @@ module StereoShader =
     type Vertex = 
         {
             [<Layer>]           layer   : int
-            [<Position>]        pos     : V4d
-            [<WorldPosition>]   wp      : V4d
-            [<Normal>]          n       : V3d
-            [<BiNormal>]        b       : V3d
-            [<Tangent>]         t       : V3d
-            [<Color>]           c       : V4d
-            [<TexCoord>]        tc      : V2d
+            [<Position>]        pos     : V4f
+            [<WorldPosition>]   wp      : V4f
+            [<Normal>]          n       : V3f
+            [<BiNormal>]        b       : V3f
+            [<Tangent>]         t       : V3f
+            [<Color>]           c       : V4f
+            [<TexCoord>]        tc      : V2f
         }
 
     let flip (v : Vertex) =
         vertex {
             let version : int = uniform?Version
-            let zero = 1.0E-10 * float (version % 2)
-            return { v with pos = V4d(1.0, -1.0, 1.0 + zero, 1.0) * v.pos }
+            let zero = 1.0E-10f * float32 (version % 2)
+            return { v with pos = V4f(1.0f, -1.0f, 1.0f + zero, 1.0f) * v.pos }
         }
 
 
     type HiddenVertex =
         {
             [<Position>]
-            pos : V4d
+            pos : V4f
 
             [<Semantic("EyeIndex"); Interpolation(InterpolationMode.Flat)>]
             eyeIndex : int
@@ -50,7 +50,7 @@ module StereoShader =
             if t.layer <> t.eyeIndex then
                 discard()
 
-            return V4d.IIII
+            return V4f.IIII
         }
 
 type private DummyObject() =

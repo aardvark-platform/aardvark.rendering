@@ -24,6 +24,11 @@ module AttributeBuffer =
 
     module Cases =
 
+        let private requireFeatures (check: Vulkan.DeviceFeatures -> bool) (message: string) (runtime: IRuntime) =
+            match runtime with
+            | :? Vulkan.Runtime as runtime when not <| check runtime.Device.EnabledFeatures -> skiptest message
+            | _ -> ()
+
         // Conversions according to Vk / GL >= 4.2 spec
         let inline private unorm (value : 'T) =
             let bits = uint64 sizeof<'T> * 8UL
@@ -99,61 +104,61 @@ module AttributeBuffer =
 
         let attributeFloat32 (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<float>
+                AttributeShader.Effect<float32>
                 TextureFormat.R32f 43.3f [| 43.3f |]
                 perInstance singleValue false runtime
 
         let attributeFloat32FromV4f (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<float>
+                AttributeShader.Effect<float32>
                 TextureFormat.R32f (V4f(43.3f, 0.0f, 0.0f, 0.0f)) [| 43.3f |]
                 perInstance singleValue false runtime
 
         let attributeFloat32FromInt8Norm (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<float>
+                AttributeShader.Effect<float32>
                 TextureFormat.R32f -128y [| snorm -128y |]
                 perInstance singleValue true runtime
 
         let attributeFloat32FromInt8Scaled (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<float>
+                AttributeShader.Effect<float32>
                 TextureFormat.R32f -32y [| -32.0f |]
                 perInstance singleValue false runtime
 
         let attributeFloat32FromUInt8Norm (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<float>
+                AttributeShader.Effect<float32>
                 TextureFormat.R32f 123uy [| unorm 123uy |]
                 perInstance singleValue true runtime
 
         let attributeFloat32FromUInt8Scaled (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<float>
+                AttributeShader.Effect<float32>
                 TextureFormat.R32f 123uy [| 123.0f |]
                 perInstance singleValue false runtime
 
         let attributeFloat32FromInt16Norm (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<float>
+                AttributeShader.Effect<float32>
                 TextureFormat.R32f -1234s [| snorm -1234s |]
                 perInstance singleValue true runtime
 
         let attributeFloat32FromInt16Scaled (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<float>
+                AttributeShader.Effect<float32>
                 TextureFormat.R32f -1234s [| -1234.0f |]
                 perInstance singleValue false runtime
 
         let attributeFloat32FromUInt16Norm (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<float>
+                AttributeShader.Effect<float32>
                 TextureFormat.R32f 12345us [| unorm 12345us |]
                 perInstance singleValue true runtime
 
         let attributeFloat32FromUInt16Scaled (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<float>
+                AttributeShader.Effect<float32>
                 TextureFormat.R32f 1234us [| 1234.0f |]
                 perInstance singleValue false runtime
 
@@ -164,6 +169,8 @@ module AttributeBuffer =
                 perInstance singleValue false runtime
 
         let attributeInt16 (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
+            runtime |> requireFeatures _.Shaders.StorageInputOutput16 "Device does not support 16bit inputs and outputs"
+
             renderAttribute
                 (AttributeShader.EffectWithView<int16, int32> <@ int32 @>)
                 TextureFormat.R16i -24235s [| -24235s |]
@@ -189,6 +196,8 @@ module AttributeBuffer =
                 perInstance singleValue false runtime
 
         let attributeUInt16 (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
+            runtime |> requireFeatures _.Shaders.StorageInputOutput16 "Device does not support 16-bit inputs and outputs"
+
             renderAttribute
                 (AttributeShader.EffectWithView<uint16, uint32> <@ uint32 @>)
                 TextureFormat.R16ui 24235us [| 24235us |]
@@ -196,6 +205,8 @@ module AttributeBuffer =
 
         // Treat color as integer
         let attributeUInt16FromC3us (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
+            runtime |> requireFeatures _.Shaders.StorageInputOutput16 "Device does not support 16-bit inputs and outputs"
+
             renderAttribute
                 (AttributeShader.EffectWithView<uint16, uint32> <@ uint32 @>)
                 TextureFormat.R16ui C3us.BurlyWood [| C3us.BurlyWood.R |]
@@ -216,55 +227,55 @@ module AttributeBuffer =
 
         let attributeV2f (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<V2d> TextureFormat.Rg32f
+                AttributeShader.Effect<V2f> TextureFormat.Rg32f
                 (V2f(424.0f, 22381.0f)) [| 424.0f; 22381.0f |]
                 perInstance singleValue false runtime
 
         // Double to float conversion (Only GL)
         let attributeV3fFromV3d (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<V3d> TextureFormat.Rgba32f
+                AttributeShader.Effect<V3f> TextureFormat.Rgba32f
                 (V3d(424.0f, 22381.0f, -234.4f)) [| 424.0f; 22381.0f; -234.4f |]
                 perInstance singleValue false runtime
 
         // Treat color as normalized float
         let attributeV3fFromC4bNorm (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<V3d> TextureFormat.Rgba32f
+                AttributeShader.Effect<V3f> TextureFormat.Rgba32f
                 C4b.BurlyWood (C4b.BurlyWood.ToC4fExact().ToArray())
                 perInstance singleValue true runtime
 
         // Treat color as scaled float
         let attributeV3fFromC4bScaled (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<V4d> TextureFormat.Rgba32f
+                AttributeShader.Effect<V4f> TextureFormat.Rgba32f
                 C4b.BurlyWood (C4b.BurlyWood.ToV4f().ToArray())
                 perInstance singleValue false runtime
 
         // Treat color as normalized float
         let attributeV3fFromC3usNorm (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<V3d> TextureFormat.Rgba32f
+                AttributeShader.Effect<V3f> TextureFormat.Rgba32f
                 C3us.BurlyWood (C3us.BurlyWood.ToC3fExact().ToArray())
                 perInstance singleValue true runtime
 
         // Treat color as scaled float
         let attributeV3fFromC3usScaled (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<V4d> TextureFormat.Rgba32f
+                AttributeShader.Effect<V4f> TextureFormat.Rgba32f
                 C4us.BurlyWood (C4us.BurlyWood.ToV4f().ToArray())
                 perInstance singleValue false runtime
 
         // Treat color as normalized float
         let attributeV3fFromC3uiNorm (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<V3d> TextureFormat.Rgba32f
+                AttributeShader.Effect<V3f> TextureFormat.Rgba32f
                 C3ui.BurlyWood (C3ui.BurlyWood.ToC3fExact().ToArray())
                 perInstance singleValue true runtime
 
         let attributeV4f (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<V4d> TextureFormat.Rgba32f
+                AttributeShader.Effect<V4f> TextureFormat.Rgba32f
                 C4f.DeepSkyBlue (C4f.DeepSkyBlue.ToArray())
                 perInstance singleValue false runtime
 
@@ -308,30 +319,30 @@ module AttributeBuffer =
 
         let attributeM23f (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             let value = M23f(Array.init 6 (id >> float32))
-            let view = <@ fun (m : M23d) -> V3d(m.[0, 1], m.[1, 0], m.[1, 2]) @>
+            let view = <@ fun (m : M23f) -> V3f(m.[0, 1], m.[1, 0], m.[1, 2]) @>
 
             renderAttribute
-                (AttributeShader.EffectWithView<M23d, V3d> view)
+                (AttributeShader.EffectWithView<M23f, V3f> view)
                 TextureFormat.Rgba32f
                 value [| 1.0f; 3.0f; 5.0f |]
                 perInstance singleValue false runtime
 
         let attributeM34f (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             let value = M34f(Array.init 12 (id >> float32))
-            let view = <@ fun (m : M34d) -> V3d(m.[0, 1], m.[1, 0], m.[2, 3]) @>
+            let view = <@ fun (m : M34f) -> V3f(m.[0, 1], m.[1, 0], m.[2, 3]) @>
 
             renderAttribute
-                (AttributeShader.EffectWithView<M34d, V3d> view)
+                (AttributeShader.EffectWithView<M34f, V3f> view)
                 TextureFormat.Rgba32f
                 value [| 1.0f; 4.0f; 11.0f |]
                 perInstance singleValue false runtime
 
         let attributeM44f (perInstance : bool) (singleValue : bool) (runtime : IRuntime) =
             let value = M44f(Array.init 16 (id >> float32))
-            let view = <@ fun (m : M44d) -> V4d(m.[0, 1], m.[1, 0], m.[2, 3], m.[3, 2]) @>
+            let view = <@ fun (m : M44f) -> V4f(m.[0, 1], m.[1, 0], m.[2, 3], m.[3, 2]) @>
 
             renderAttribute
-                (AttributeShader.EffectWithView<M44d, V4d> view)
+                (AttributeShader.EffectWithView<M44f, V4f> view)
                 TextureFormat.Rgba32f
                 value [| 1.0f; 4.0f; 11.0f; 14.0f |]
                 perInstance singleValue false runtime

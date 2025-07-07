@@ -24,15 +24,15 @@ module Culling =
 
             let raygenMain (flags : RayFlags) (input : RayGenerationInput) =
                 raygen {
-                    let uv = (V2d input.work.id + 0.5) / V2d input.work.size.XY
-                    let ndc = uv * 2.0 - 1.0
+                    let uv = (V2f input.work.id + 0.5f) / V2f input.work.size.XY
+                    let ndc = uv * 2.0f - 1.0f
 
-                    let origin = V4d.WAxis
-                    let target = V4d(ndc, 1.0, 1.0)
-                    let direction = V4d(target.XYZ.Normalized, 0.0)
+                    let origin = V4f.WAxis
+                    let target = V4f(ndc, 1.0f, 1.0f)
+                    let direction = V4f(target.XYZ.Normalized, 0.0f)
                     let result = mainScene.TraceRay<V3f>(origin.XYZ, direction.XYZ, flags = flags)
 
-                    uniform.OutputBuffer.[input.work.id.XY] <- V4d(result, 1.0f)
+                    uniform.OutputBuffer.[input.work.id.XY] <- V4f(result, 1.0f)
                 }
 
             let missMain (input : RayMissInput) =
@@ -57,7 +57,7 @@ module Culling =
         type Vertex =
             { [<FrontFacing>] isFrontFace : bool }
 
-        let frontFacing (front : V3d) (back : V3d) (v : Vertex) =
+        let frontFacing (front : V3f) (back : V3f) (v : Vertex) =
             fragment {
                 return if v.isFrontFace then front else back
             }
@@ -66,7 +66,7 @@ module Culling =
         open FShade
 
         let constantRed = toEffect <| DefaultSurfaces.constantColor C4f.Red
-        let frontFacingRed = toEffect <| Shader.frontFacing V3d.IOO V3d.OOO
+        let frontFacingRed = toEffect <| Shader.frontFacing V3f.IOO V3f.OOO
 
         let raytracing (flags : RayFlags) =
             let hitgroupMain = hitgroup { closestHit Shader.Raytracing.hitRed }

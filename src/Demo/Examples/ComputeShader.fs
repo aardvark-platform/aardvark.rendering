@@ -22,25 +22,25 @@ module ComputeShader =
         open FShade
 
         [<LocalSize(X = 64)>]
-        let normalized (a : V4d[]) (b : V4d[]) =
+        let normalized (a : V4f[]) (b : V4f[]) =
             compute {
                 let i = getGlobalId().X
-                b.[i] <- V4d(Vec.normalize a.[i].XYZ, 1.0)
+                b.[i] <- V4f(Vec.normalize a.[i].XYZ, 1.0f)
             }
 
 
 
-        let G = 0.01
+        let G = 0.01f
         
         [<LocalSize(X = 64)>]
-        let updateAcceleration (n : int) (pos : V4d[]) (acc : V4d[]) (masses : float[]) =
+        let updateAcceleration (n : int) (pos : V4f[]) (acc : V4f[]) (masses : float32[]) =
             compute {
                 let i = getGlobalId().X
                 if i < n then
                     let p = pos.[i].XYZ
 
                     let mi = masses.[i]
-                    let mutable F = V3d.Zero
+                    let mutable F = V3f.Zero
                     for j in 0 .. n - 1 do
                         if i <> j then
                             let o = pos.[j].XYZ
@@ -48,11 +48,11 @@ module ComputeShader =
                             let diff = o - p
                             let l = Vec.lengthSquared diff
                             let dist = sqrt l
-                            if dist > 0.2 then
+                            if dist > 0.2f then
                                 let dir = diff / dist
                                 F <- F + dir * ((mi * masses.[j] * G) / l)
                             
-                    acc.[i] <- V4d(F / masses.[i], 0.0)
+                    acc.[i] <- V4f(F / masses.[i], 0.0f)
 
             }
 
@@ -68,7 +68,7 @@ module ComputeShader =
             }
             
         [<LocalSize(X = 64)>]
-        let step (n : int) (dt : float) (pos : V4d[]) (vel : V4d[]) (acc : V4d[]) =
+        let step (n : int) (dt : float32) (pos : V4f[]) (vel : V4f[]) (acc : V4f[]) =
             compute {
                 let i = getGlobalId().X
                 if i < n then
@@ -79,64 +79,64 @@ module ComputeShader =
                     let p = p + v * dt //+ a * (0.5 * dt * dt)
                     let v = v + dt * a
 
-                    pos.[i] <- V4d(p, 1.0)
-                    vel.[i] <- V4d(v, 0.0)
+                    pos.[i] <- V4f(p, 1.0f)
+                    vel.[i] <- V4f(v, 0.0f)
             }
 
 
         type Vertex =
             {
-                [<WorldPosition>]           wp : V4d
-                [<Position>]                pos : V4d
-                [<Semantic("Velocity")>]    vel : V3d
-                [<Semantic("Mass")>]        mass  : float
-                [<Color>]                   c  : V4d
-                [<Semantic("Offset")>]      o : V4d
+                [<WorldPosition>]           wp : V4f
+                [<Position>]                pos : V4f
+                [<Semantic("Velocity")>]    vel : V3f
+                [<Semantic("Mass")>]        mass  : float32
+                [<Color>]                   c  : V4f
+                [<Semantic("Offset")>]      o : V4f
             }
 
         [<ReflectedDefinition>]
-        let hsv2rgb (h : float) (s : float) (v : float) =
-            let s = clamp 0.0 1.0 s
-            let v = clamp 0.0 1.0 v
+        let hsv2rgb (h : float32) (s : float32) (v : float32) =
+            let s = clamp 0.0f 1.0f s
+            let v = clamp 0.0f 1.0f v
 
-            let h = h % 1.0
-            let h = if h < 0.0 then h + 1.0 else h
-            let hi = floor ( h * 6.0 ) |> int
-            let f = h * 6.0 - float hi
-            let p = v * (1.0 - s)
-            let q = v * (1.0 - s * f)
-            let t = v * (1.0 - s * ( 1.0 - f ))
+            let h = h % 1.0f
+            let h = if h < 0.0f then h + 1.0f else h
+            let hi = floor ( h * 6.0f ) |> int
+            let f = h * 6.0f - float32 hi
+            let p = v * (1.0f - s)
+            let q = v * (1.0f - s * f)
+            let t = v * (1.0f - s * ( 1.0f - f ))
             match hi with
-                | 1 -> V3d(q,v,p)
-                | 2 -> V3d(p,v,t)
-                | 3 -> V3d(p,q,v)
-                | 4 -> V3d(t,p,v)
-                | 5 -> V3d(v,p,q)
-                | _ -> V3d(v,t,p)
+                | 1 -> V3f(q,v,p)
+                | 2 -> V3f(p,v,t)
+                | 3 -> V3f(p,q,v)
+                | 4 -> V3f(t,p,v)
+                | 5 -> V3f(v,p,q)
+                | _ -> V3f(v,t,p)
 
         let instanceOffset (v : Vertex) =
             vertex {
-                let magic : float = uniform?Magic
-                let scale : float = uniform?Scale 
+                let magic : float32 = uniform?Magic
+                let scale : float32 = uniform?Scale
 
-                let scale1 = scale * (1.0 + Fun.Log2 v.mass)
+                let scale1 = scale * (1.0f + Fun.Log2 v.mass)
 
-                return { v with pos = V4d(scale1 * v.pos.XYZ, v.pos.W) + V4d(v.o.XYZ,magic); c = V4d(hsv2rgb (v.mass / 100.0) 1.0 1.0, 1.0) }
+                return { v with pos = V4f(scale1 * v.pos.XYZ, v.pos.W) + V4f(v.o.XYZ,magic); c = V4f(hsv2rgb (v.mass / 100.0f) 1.0f 1.0f, 1.0f) }
             }
 
         let point (p : Point<Vertex>) =
             line {
-                let t : float = uniform?Magic
+                let t : float32 = uniform?Magic
 
                 
 
                 let vel = p.Value.vel
-                let wp0 =  V4d(p.Value.wp.XYZ - 0.05 * vel, 1.0 + (t * 1.0E-50))
+                let wp0 =  V4f(p.Value.wp.XYZ - 0.05f * vel, 1.0f + (t * 1.0E-50f))
 
-                let color = hsv2rgb (p.Value.mass / 100.0) 1.0 1.0
+                let color = hsv2rgb (p.Value.mass / 100.0f) 1.0f 1.0f
 
-                yield { p.Value with c = V4d(color, 1.0) }
-                yield { p.Value with wp = wp0; pos = uniform.ViewProjTrafo * wp0; c = V4d.OOOI }
+                yield { p.Value with c = V4f(color, 1.0f) }
+                yield { p.Value with wp = wp0; pos = uniform.ViewProjTrafo * wp0; c = V4f.OOOI }
 
             }
 

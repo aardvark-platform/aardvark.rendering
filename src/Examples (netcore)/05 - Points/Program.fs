@@ -16,24 +16,24 @@ module Shader =
     type Vertex = 
         {
             [<Position>]
-            pos : V4d
+            pos : V4f
             [<PointCoord>]
-            tc : V2d
+            tc : V2f
             [<Semantic("DepthRange"); Interpolation(InterpolationMode.Flat)>] 
-            depthRange : float
+            depthRange : float32
             [<FragCoord>] 
-            fc : V4d
-            [<Semantic("PointPixelSize")>] ps : float
-            [<PointSize>] s: float
+            fc : V4f
+            [<Semantic("PointPixelSize")>] ps : float32
+            [<PointSize>] s: float32
         }
 
     type Fragment = 
         {   
             [<Color>]
-            color : V4d
+            color : V4f
 
             [<Depth(DepthWriteMode.OnlyGreater)>] 
-            d : float
+            d : float32
         }
 
     let pointSprite (v : Vertex) = 
@@ -41,23 +41,23 @@ module Shader =
             let mv = uniform.ModelViewTrafo
             let vp = mv * v.pos
 
-            let s = uniform.PointSize / V2d uniform.ViewportSize
+            let s = uniform.PointSize / V2f uniform.ViewportSize
             let opp = uniform.ProjTrafo * vp
             let pp0 = opp.XYZ / opp.W
 
 
             let vpx = 
-                let temp = uniform.ProjTrafoInv * V4d(pp0 + V3d(s.X, 0.0, 0.0), 1.0)
+                let temp = uniform.ProjTrafoInv * V4f(pp0 + V3f(s.X, 0.0f, 0.0f), 1.0f)
                 temp.XYZ / temp.W
      
             let vpy = 
-                let temp = uniform.ProjTrafoInv * V4d(pp0 + V3d(0.0, s.Y, 0.0), 1.0)
+                let temp = uniform.ProjTrafoInv * V4f(pp0 + V3f(0.0f, s.Y, 0.0f), 1.0f)
                 temp.XYZ / temp.W
 
             let worldRadius =
-                0.5 * (Vec.length (vp.XYZ - vpx) + Vec.length (vp.XYZ - vpy))
+                0.5f * (Vec.length (vp.XYZ - vpx) + Vec.length (vp.XYZ - vpy))
 
-            let vpz = vp + V4d(0.0, 0.0, worldRadius, 0.0)
+            let vpz = vp + V4f(0.0f, 0.0f, worldRadius, 0.0f)
             let ppz = uniform.ProjTrafo * vpz
             let ppz = ppz.XYZ / ppz.W
 
@@ -67,30 +67,30 @@ module Shader =
                 uniform.PointSize
  
             let pixelDist = 
-                if ppz.Z < -1.0 then -1.0
+                if ppz.Z < -1.0f then -1.0f
                 else pixelDist
 
-            return { v with ps = floor pixelDist; s = pixelDist; pos = V4d(ppz, 1.0); depthRange = depthRange; }
+            return { v with ps = floor pixelDist; s = pixelDist; pos = V4f(ppz, 1.0f); depthRange = depthRange; }
         }
 
 
     let pointSpriteFragment (v : Vertex) = 
         fragment {
            let mutable cc = v.tc
-           let c = v.tc * 2.0 - V2d.II
-           let f = Vec.dot c c - 1.0
-           if f > 0.0 then discard()
+           let c = v.tc * 2.0f - V2f.II
+           let f = Vec.dot c c - 1.0f
+           if f > 0.0f then discard()
    
-           let t = 1.0 - sqrt (-f)
+           let t = 1.0f - sqrt (-f)
            let depth = v.fc.Z
            let outDepth = depth + v.depthRange * t
 
-           let c = c * (1.0 + 2.0 / v.ps)
+           let c = c * (1.0f + 2.0f / v.ps)
            let f = Vec.dot c c 
-           let diffuse = sqrt (max 0.0 (1.0 - f))
-           let color = V3d.III * diffuse
+           let diffuse = sqrt (max 0.0f (1.0f - f))
+           let color = V3f.III * diffuse
 
-           return { color = V4d(color, 1.0); d = outDepth }
+           return { color = V4f(color, 1.0f); d = outDepth }
         }
 
 

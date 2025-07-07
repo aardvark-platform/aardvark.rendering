@@ -13,12 +13,12 @@ open Aardvark.Application
 open FShade
 type SizeVertex = 
     {
-        [<PointSize>] s : float
+        [<PointSize>] s : float32
     }
 
 let sizeShader (v : SizeVertex) =
     vertex {
-        return { v with s = 8.0 }
+        return { v with s = 8.0f }
     }
 
 [<EntryPoint>]

@@ -37,19 +37,19 @@ module Blending =
         open FShade
 
         let inline output0 (c : ^Color) (v : Effects.Vertex) =
-            let c = v4d c
+            let c = v4f c
             fragment {
                 return {| Output0 = c |}
             }
 
         let inline output1 (c : ^Color) (v : Effects.Vertex) =
-            let c = v4d c
+            let c = v4f c
             fragment {
                 return {| Output1 = c |}
             }
 
         let inline output2 (c : ^Color) (v : Effects.Vertex) =
-            let c = v4d c
+            let c = v4f c
             fragment {
                 return {| Output2 = c |}
             }

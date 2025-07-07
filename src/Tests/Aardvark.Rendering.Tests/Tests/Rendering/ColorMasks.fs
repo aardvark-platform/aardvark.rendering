@@ -19,7 +19,7 @@ module ColorMasks =
 
         let output01White (v : Effects.Vertex) =
             fragment {
-                return {| Output0 = V4d.One; Output1 = V4d.One |}
+                return {| Output0 = V4f.One; Output1 = V4f.One |}
             }
 
     module Cases =

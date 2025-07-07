@@ -391,7 +391,13 @@ module ``Expecto Extensions`` =
                         f()
                         success <- true
                         inc &passed
-                    with exn ->
+                    with
+                    | :? IgnoreException as exn ->
+                        success <- true
+                        Log.line $"Test skipped: {exn.Message}"
+                        skipped.Add name
+
+                    | exn ->
                         Log.error "%A" exn
                         failed.Add name
                 | _ ->
@@ -427,7 +433,7 @@ module ``RenderTo Utilities`` =
             }
 
         type Fragment = {
-            [<FragCoord>] coord : V4d
+            [<FragCoord>] coord : V4f
         }
 
         let resolveSingle (f : Fragment) =

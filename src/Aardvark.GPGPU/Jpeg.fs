@@ -733,12 +733,12 @@ module private JpegKernels =
             Array.init 64 (fun i ->
                 let m = i % 8
                 let x = i / 8
-                cos ( (2.0 * float m + 1.0) * Constant.Pi * float x / 16.0)
+                cos ( (2.0f * float32 m + 1.0f) * ConstantF.Pi * float32 x / 16.0f)
             )
 
-        let y =  V4d(  0.299,       0.587,      0.114,     -128.0 )
-        let cb = V4d( -0.168736,   -0.331264,   0.5,        0.0   )
-        let cr = V4d(  0.5,        -0.418688,  -0.081312,   0.0   )
+        let y =  V4f(  0.299f,       0.587f,      0.114f,     -128.0f )
+        let cb = V4f( -0.168736f,   -0.331264f,   0.5f,        0.0f   )
+        let cr = V4f(  0.5f,        -0.418688f,  -0.081312f,   0.0f   )
 
         let inverseZigZagOrder =
             [|
@@ -779,18 +779,18 @@ module private JpegKernels =
         }
 
     [<Inline>]
-    let ycbcr (v : V3d) =
-        let v = 255.0 * v
-        V3d(
-            Vec.dot Constants.y (V4d(v, 1.0)),
-            Vec.dot Constants.cb (V4d(v, 1.0)),
-            Vec.dot Constants.cr (V4d(v, 1.0))
+    let ycbcr (v : V3f) =
+        let v = 255.0f * v
+        V3f(
+            Vec.dot Constants.y (V4f(v, 1.0f)),
+            Vec.dot Constants.cb (V4f(v, 1.0f)),
+            Vec.dot Constants.cr (V4f(v, 1.0f))
         )
 
     [<Inline>]
-    let quantify (i : int) (v : V3d) =
+    let quantify (i : int) (v : V3f) =
         let ql = V3i.Max(V3i.III, uniform.Quantization.[i].XYZ)
-        let t = v / V3d ql
+        let t = v / V3f ql
         V3i(int (round t.X), int (round t.Y), int (round t.Z))
    
     [<Inline>]
@@ -936,7 +936,7 @@ module private JpegKernels =
     [<LocalSize(X = 8, Y = 8)>]
     let dct (target : V4i[]) =
         compute {
-            let values : V3d[] = allocateShared 64
+            let values : V3f[] = allocateShared 64
             let imageSize : V2i = uniform?ImageSize
             let imageLevel : int = uniform?ImageLevel
 
@@ -949,21 +949,21 @@ module private JpegKernels =
             let cid = Constants.inverseZigZagOrder.[lid]
             let gc = V2i(gc.X, imageSize.Y - 1 - gc.Y)
 
-            let tc = (V2d gc + V2d(0.5, 0.5)) / (V2d imageSize)
+            let tc = (V2f gc + V2f(0.5f, 0.5f)) / (V2f imageSize)
      
 
             // every thread loads the RGB value and stores it in values (as YCbCr)
-            values.[lid] <- ycbcr (inputImage.SampleLevel(tc, float imageLevel).XYZ)
+            values.[lid] <- ycbcr (inputImage.SampleLevel(tc, float32 imageLevel).XYZ)
             barrier()
 
             // figure out the DCT normalization factors
-            let fx = if lc.X = 0 then Constant.Sqrt2Half else 1.0
-            let fy = if lc.Y = 0 then Constant.Sqrt2Half else 1.0
+            let fx = if lc.X = 0 then ConstantF.Sqrt2Half else 1.0f
+            let fy = if lc.Y = 0 then ConstantF.Sqrt2Half else 1.0f
             let f = fx * fy
             
 
             // separated DCT
-            let mutable inner = V3d.Zero
+            let mutable inner = V3f.Zero
             let mutable i = 8 * lc.Y
             for m in 0 .. 7 do
                 inner <- inner + values.[i] * dctFactor m lc.X
@@ -973,7 +973,7 @@ module private JpegKernels =
             values.[lid] <- inner
             barrier()
 
-            let mutable sum = V3d.Zero
+            let mutable sum = V3f.Zero
             let mutable i = lc.X
             for n in 0 .. 7 do
                 sum <- sum + values.[i] * dctFactor n lc.Y
@@ -995,7 +995,7 @@ module private JpegKernels =
             //         //sum <- sum + values.[i] * dctFactor m lc.X * dctFactor n lc.Y
             //         i <- i + 1
 
-            let dct = 0.25 * f * sum
+            let dct = 0.25f * f * sum
 
             // quantify the dct values according to the quantization matrix
             let qdct = quantify lid dct

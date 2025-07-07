@@ -136,9 +136,9 @@ module Shaders =
                             t.[V2i(q,y)] <- V4i w
                 for u = g.Size.X - 1 downto  0 do
                     let d = f(u,s.[V2i(q,y)].X,g.[V2i(s.[V2i(q,y)].X,y)].X)
-                    let d = d |> float |> sqrt |> floor |> float32
+                    let d = d |> float32 |> sqrt |> floor
                     let v = if d < 50.0f then 1.0f else 0.0f
-                    dt.[V2i(u,y)] <- V4d v // d
+                    dt.[V2i(u,y)] <- V4f v // d
                     if u = t.[V2i(q,y)].X then 
                         q <- q - 1
             
@@ -149,7 +149,7 @@ module Shaders =
         compute {
             let id = getGlobalId()
             if id.X < i.Size.X && id.Y < i.Size.Y then
-                b.[id.XY] <- if i.[id.XY].X = 1.0 then V4i 1 else V4i 0
+                b.[id.XY] <- if i.[id.XY].X = 1.0f then V4i 1 else V4i 0
         }
 
 let ceilDiv (a : int) (b : int) =

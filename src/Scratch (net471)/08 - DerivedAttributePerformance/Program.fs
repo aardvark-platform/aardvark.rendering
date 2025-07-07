@@ -12,8 +12,8 @@ module Shader =
 
     type Vertex =
         {
-            [<Position>] pos    : V4d
-            [<WorldPosition>] wp : V4d
+            [<Position>] pos    : V4f
+            [<WorldPosition>] wp : V4f
         }
 
     let niceTrafo (v : Vertex) =

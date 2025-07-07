@@ -248,9 +248,9 @@ type ReflectedReal<'a> =
         div     : Expr<'a -> 'a -> 'a>
         pow     : Expr<'a -> 'a -> 'a>
         
-        muls    : Expr<'a -> float -> 'a>
-        divs    : Expr<'a -> float -> 'a>
-        pows    : Expr<'a -> float -> 'a>
+        muls    : Expr<'a -> float32 -> 'a>
+        divs    : Expr<'a -> float32 -> 'a>
+        pows    : Expr<'a -> float32 -> 'a>
 
         exp     : Expr<'a -> 'a>
         sin     : Expr<'a -> 'a>
@@ -264,9 +264,9 @@ type ReflectedReal<'a> =
         ninf    : Expr<'a>
         abs     : Expr<'a -> 'a>
 
-        fromV4  : Expr<V4d -> 'a>
-        fromFloat  : Expr<float -> 'a>
-        toV4    : Expr<'a -> V4d>
+        fromV4  : Expr<V4f -> 'a>
+        fromFloat  : Expr<float32 -> 'a>
+        toV4    : Expr<'a -> V4f>
         format  : TextureFormat
     }
 
@@ -295,10 +295,10 @@ module ReflectedReal =
             div     = <@ (/) @>
             neg     = <@ (~-) @>
             pow     = <@ ( ** ) @>
-            
-            muls     = <@ (*) @>
-            divs     = <@ (/) @>
-            pows     = <@ ( ** ) @>
+
+            muls     = <@ fun l r -> l * float r @>
+            divs     = <@ fun l r -> l / float r @>
+            pows     = <@ fun l r -> l ** float r @>
 
             min     = <@ min @>
             max     = <@ max @>
@@ -312,9 +312,9 @@ module ReflectedReal =
             log     = <@ log @>
             abs     = <@ abs @>
 
-            fromV4  = <@ fun v -> v.X @>
+            fromV4  = <@ fun v -> float v.X @>
             fromFloat = <@ float @>
-            toV4    = <@ fun v -> V4d(v, 0.0, 0.0, 0.0) @>
+            toV4    = <@ fun v -> V4f(float32 v, 0.0f, 0.0f, 0.0f) @>
             format  = TextureFormat.R32f
         }
 
@@ -329,9 +329,9 @@ module ReflectedReal =
             neg     = <@ (~-) @>
             pow     = <@ ( ** ) @>
             
-            muls     = <@ fun l r -> l * float32 r @>
-            divs     = <@ fun l r -> l / float32 r @>
-            pows     = <@ fun l r -> l ** float32 r @>
+            muls     = <@ (*) @>
+            divs     = <@ (/) @>
+            pows     = <@ ( ** ) @>
 
             exp     = <@ exp @>
             min     = <@ min @>
@@ -346,9 +346,9 @@ module ReflectedReal =
             log     = <@ log @>
             abs     = <@ abs @>
 
-            fromV4  = <@ fun v -> float32 v.X @>
+            fromV4  = <@ fun v -> v.X @>
             fromFloat = <@ float32 @>
-            toV4    = <@ fun v -> V4d(float v, 0.0, 0.0, 0.0) @>
+            toV4    = <@ fun v -> V4f(v, 0.0f, 0.0f, 0.0f) @>
             format  = TextureFormat.R32f
         }
 
@@ -367,9 +367,9 @@ module ReflectedReal =
             pinf    = <@ V2f(fpinf(), fpinf()) @>
             ninf    = <@ V2f(fninf(), fninf()) @>
             
-            muls     = <@ fun l r -> l * float32 r @>
-            divs     = <@ fun l r -> l / float32 r @>
-            pows     = <@ fun l r -> V2f(l.X ** float32 r, l.Y ** float32 r) @>
+            muls     = <@ (*) @>
+            divs     = <@ (/) @>
+            pows     = <@ ( ** ) @>
             
             exp     = <@ fun v -> V2f(exp v.X, exp v.Y) @>
             sin     = <@ fun v -> V2f(sin v.X, sin v.Y) @>
@@ -378,9 +378,9 @@ module ReflectedReal =
             log     = <@ fun v -> V2f(log v.X, log v.Y) @>
             abs     = <@ fun v -> v.Abs() @>
 
-            fromV4  = <@ fun v -> V2f v.XY @>
+            fromV4  = <@ fun v -> v.XY @>
             fromFloat = <@ V2f @>
-            toV4    = <@ fun v -> V4d(float v.X, float v.Y, 0.0, 0.0) @>
+            toV4    = <@ fun v -> V4f(v.XY, 0.0f, 0.0f) @>
             format  = TextureFormat.Rg32f
         }
 
@@ -399,9 +399,9 @@ module ReflectedReal =
             pinf    = <@ V2d(pinf(), pinf()) @>
             ninf    = <@ V2d(ninf(), ninf()) @>
             
-            muls     = <@ fun l r -> l * r @>
-            divs     = <@ fun l r -> l / r @>
-            pows     = <@ fun l r -> V2d(l.X ** r, l.Y ** r) @>
+            muls     = <@ fun l r -> l * V2d r @>
+            divs     = <@ fun l r -> l / V2d r @>
+            pows     = <@ fun l r -> l ** V2d r @>
             
             exp     = <@ fun v -> V2d(exp v.X, exp v.Y) @>
             sin     = <@ fun v -> V2d(sin v.X, sin v.Y) @>
@@ -410,9 +410,9 @@ module ReflectedReal =
             log     = <@ fun v -> V2d(log v.X, log v.Y) @>
             abs     = <@ fun v -> v.Abs() @>
 
-            fromV4  = <@ fun v -> v.XY @>
+            fromV4  = <@ fun v -> V2d v.XY @>
             fromFloat = <@ V2d @>
-            toV4    = <@ fun v -> V4d(v.X, v.Y, 0.0, 0.0) @>
+            toV4    = <@ fun v -> V4f(float32 v.X, float32 v.Y, 0.0f, 0.0f) @>
             format  = TextureFormat.Rg32f
         }
 
@@ -431,9 +431,9 @@ module ReflectedReal =
             pinf    = <@ V3f(fpinf(), fpinf(), fpinf()) @>
             ninf    = <@ V3f(fninf(), fninf(), fninf()) @>
             
-            muls     = <@ fun l r -> l * float32 r @>
-            divs     = <@ fun l r -> l / float32 r @>
-            pows     = <@ fun l r -> V3f(l.X ** float32 r, l.Y ** float32 r, l.Z ** float32 r) @>
+            muls     = <@ (*) @>
+            divs     = <@ (/) @>
+            pows     = <@ ( ** ) @>
             
             exp     = <@ fun v -> V3f(exp v.X, exp v.Y, exp v.Z) @>
             sin     = <@ fun v -> V3f(sin v.X, sin v.Y, sin v.Z) @>
@@ -442,9 +442,9 @@ module ReflectedReal =
             log     = <@ fun v -> V3f(log v.X, log v.Y, log v.Z) @>
             abs     = <@ fun v -> v.Abs() @>
 
-            fromV4  = <@ fun v -> V3f v.XYZ @>
+            fromV4  = <@ fun v -> v.XYZ @>
             fromFloat = <@ V3f @>
-            toV4    = <@ fun v -> V4d(float v.X, float v.Y, float v.Z, 0.0) @>
+            toV4    = <@ fun v -> V4f(v.XYZ, 0.0f) @>
             format  = TextureFormat.Rgb32f
         }
 
@@ -470,14 +470,13 @@ module ReflectedReal =
             log     = <@ fun v -> V3d(log v.X, log v.Y, log v.Z) @>
             abs     = <@ fun v -> v.Abs() @>
             
-            muls     = <@ fun l r -> l * r @>
-            divs     = <@ fun l r -> l / r @>
-            pows     = <@ fun l r -> V3d(l.X ** r, l.Y ** r, l.Z ** r) @>
-            
+            muls     = <@ fun l r -> l * V3d r @>
+            divs     = <@ fun l r -> l / V3d r @>
+            pows     = <@ fun l r -> l ** V3d r @>
 
-            fromV4  = <@ fun v -> v.XYZ @>
+            fromV4  = <@ fun v -> V3d v.XYZ @>
             fromFloat = <@ V3d @>
-            toV4    = <@ fun v -> V4d(v.X, v.Y, v.Z, 0.0) @>
+            toV4    = <@ fun v -> V4f(float32 v.X, float32 v.Y, float32 v.Z, 0.0f) @>
             format  = TextureFormat.Rgb32f
         }
 
@@ -496,9 +495,9 @@ module ReflectedReal =
             pinf    = <@ V4f(fpinf(), fpinf(), fpinf(), fpinf()) @>
             ninf    = <@ V4f(fninf(), fninf(), fninf(), fninf()) @>
             
-            muls     = <@ fun l r -> l * float32 r @>
-            divs     = <@ fun l r -> l / float32 r @>
-            pows     = <@ fun l r -> V4f(l.X ** float32 r, l.Y ** float32 r, l.Z ** float32 r, l.W ** float32 r) @>
+            muls     = <@ (*) @>
+            divs     = <@ (/) @>
+            pows     = <@ ( ** ) @>
             
             exp     = <@ fun v -> V4f(exp v.X, exp v.Y, exp v.Z, exp v.W) @>
             sin     = <@ fun v -> V4f(sin v.X, sin v.Y, sin v.Z, sin v.W) @>
@@ -509,7 +508,7 @@ module ReflectedReal =
 
             fromV4  = <@ fun v -> V4f v @>
             fromFloat = <@ V4f @>
-            toV4  = <@ fun v -> V4d v @>
+            toV4  = <@ fun v -> v @>
             format  = TextureFormat.Rgba32f
         }
 
@@ -527,11 +526,10 @@ module ReflectedReal =
             max     = <@ fun l r -> V4d(max l.X r.X, max l.Y r.Y, max l.Z r.Z, max l.W r.W) @>
             pinf    = <@ V4d(pinf(), pinf(), pinf(), pinf()) @>
             ninf    = <@ V4d(ninf(), ninf(), ninf(), ninf()) @>
-            
-            
-            muls     = <@ fun l r -> l * r @>
-            divs     = <@ fun l r -> l / r @>
-            pows     = <@ fun l r -> V4d(l.X ** r, l.Y ** r, l.Z ** r, l.W ** r) @>
+
+            muls     = <@ fun l r -> l * V4d r @>
+            divs     = <@ fun l r -> l / V4d r @>
+            pows     = <@ fun l r -> l ** V4d r @>
 
             exp     = <@ fun v -> V4d(exp v.X, exp v.Y, exp v.Z, exp v.W) @>
             sin     = <@ fun v -> V4d(sin v.X, sin v.Y, sin v.Z, sin v.W) @>
@@ -540,9 +538,9 @@ module ReflectedReal =
             log     = <@ fun v -> V4d(log v.X, log v.Y, log v.Z, log v.W) @>
             abs     = <@ fun v -> v.Abs() @>
 
-            fromV4  = <@ fun v -> v @>
+            fromV4  = <@ fun v -> V4d v @>
             fromFloat = <@ V4d @>
-            toV4  = <@ fun v -> v @>
+            toV4  = <@ fun v -> V4f v @>
             format  = TextureFormat.Rgba32f
         }
 

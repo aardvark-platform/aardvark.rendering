@@ -20,17 +20,17 @@ module Tessellation =
     module Shader =
         open FShade
 
-        type Vertex = { [<Position>] p : V4d; [<Color>] c : V4d }
+        type Vertex = { [<Position>] p : V4f; [<Color>] c : V4f }
 
         let tess (v : Patch<3 N, Vertex>) =
             tessellation {
 
                 
-                let level = 64.0
+                let level = 64.0f
                 let! coord = tessellateTriangle level (level,level,level)
 
                 let pos = coord.X * v.[0].p + coord.Y * v.[1].p + coord.Z * v.[2].p
-                return { p = pos; c = V4d(0.5 * (pos.XYZ + V3d.III), 1.0) }
+                return { p = pos; c = V4f(0.5f * (pos.XYZ + V3f.III), 1.0f) }
 
             }
 

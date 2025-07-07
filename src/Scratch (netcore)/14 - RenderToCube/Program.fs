@@ -21,7 +21,7 @@ module Shaders =
     let cubeTexture (levels : int) (v : Effects.Vertex) =
         fragment {
             let dist = Vec.distance v.wp.XYZ uniform.CameraLocation
-            let lod = float (levels - 1) * dist / 24.0
+            let lod = float32 (levels - 1) * dist / 24.0f
             return cubeSampler.SampleLevel(Vec.normalize v.n, lod)
         }
 

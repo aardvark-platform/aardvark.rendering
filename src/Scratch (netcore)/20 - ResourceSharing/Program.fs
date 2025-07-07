@@ -11,7 +11,7 @@ module Shader =
     open FShade
 
     type Fragment = {
-        [<TexCoord>] tc : V2d
+        [<TexCoord>] tc : V2f
     }
 
     [<AutoOpen>]
@@ -30,18 +30,18 @@ module Shader =
             }
 
     [<ReflectedDefinition>]
-    let toFragCoords (size : V2i) (tc : V2d) =
-        V2i(tc * V2d size)
+    let toFragCoords (size : V2i) (tc : V2f) =
+        V2i(tc * V2f size)
 
     let resolve (samples : int) (f : Fragment) =
         fragment {
             if samples > 1 then
-                let mutable result = V4d.Zero
+                let mutable result = V4f.Zero
 
                 for i = 0 to samples - 1 do
                     result <- result + diffuseSamplerMS.Read(f.tc |> toFragCoords diffuseSamplerMS.Size, i)
 
-                return result / float samples
+                return result / float32 samples
             else
                 return diffuseSampler.Read(f.tc |> toFragCoords diffuseSampler.Size, 0)
         }

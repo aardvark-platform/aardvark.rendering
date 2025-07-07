@@ -24,7 +24,7 @@ module Shader =
             addressV WrapMode.Wrap
         }
 
-    type Fragment = { [<Color>] color: V4d;  [<Semantic("WPos")>] wpos : V4d }
+    type Fragment = { [<Color>] color: V4f;  [<Semantic("WPos")>] wpos : V4f }
 
     let pass0 (v : Vertex) =
         fragment {
@@ -37,8 +37,8 @@ module Shader =
             if mode = 0 then
                 return colorSampler.Sample(v.tc)
             elif mode = 1 then
-                return posSampler.SampleLevel(v.tc,0.0)
-            else return V4d.IOOI
+                return posSampler.SampleLevel(v.tc,0.0f)
+            else return V4f.IOOI
         }
 
 [<EntryPoint>]

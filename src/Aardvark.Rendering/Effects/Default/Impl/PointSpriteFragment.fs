@@ -8,12 +8,12 @@ module PointSpriteFragment =
 
     let internal pointSpriteFragment (v : Vertex) =
         fragment {
-            let c = 2.0 * v.tc - V2d.II
-            if c.Length > 1.0 then
+            let c = 2.0f * v.tc - V2f.II
+            if c.Length > 1.0f then
                 discard()
 
-            let z = sqrt (1.0 - c.LengthSquared)
-            let n = V3d(c.XY,z)
+            let z = sqrt (1.0f - c.LengthSquared)
+            let n = V3f(c.XY,z)
 
             return { v with n = n } 
         }

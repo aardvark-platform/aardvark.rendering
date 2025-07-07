@@ -151,11 +151,11 @@ module Shader =
         }
 
     type UniformScope with
-        member x.DiffuseColor : V4d = uniform?Material?DiffuseColor
-        member x.Roughness : float = uniform?Material?Roughness
-        member x.Metallicness : float = uniform?Material?Metallicness
-        member x.EmissiveColor : V4d = uniform?Material?EmissiveColor
-        member x.NormalTextureScale : float = uniform?Material?NormalTextureScale
+        member x.DiffuseColor : V4f = uniform?Material?DiffuseColor
+        member x.Roughness : float32 = uniform?Material?Roughness
+        member x.Metallicness : float32 = uniform?Material?Metallicness
+        member x.EmissiveColor : V4f = uniform?Material?EmissiveColor
+        member x.NormalTextureScale : float32 = uniform?Material?NormalTextureScale
 
         member x.HasDiffuseColorTexture : bool = uniform?Material?HasDiffuseColorTexture
         member x.HasRoughnessTexture : bool = uniform?Material?HasRoughnessTexture
@@ -173,25 +173,25 @@ module Shader =
 
     type Vertex =
         {
-            [<Position>]                pos             : V4d
-            [<ViewPosition>]            viewPos         : V4d
-            [<Normal>]                  normal          : V3d
-            [<TexCoord>]                texCoord        : V2d
-            [<RoughnessCoordinate>]     roughCoord      : V2d
-            [<MetallicnessCoordinate>]  metalCoord      : V2d
-            [<EmissiveCoordinate>]      emissCoord      : V2d
-            [<NormalCoordinate>]        normCoord       : V2d
-            [<Tangent>]                 tangent         : V4d
-            [<ViewTangent>]             viewTangent     : V3d
-            [<ViewBiTangent>]           viewBiTangent   : V3d
-            [<ViewLightDirection>]      viewLightDir    : V3d
+            [<Position>]                pos             : V4f
+            [<ViewPosition>]            viewPos         : V4f
+            [<Normal>]                  normal          : V3f
+            [<TexCoord>]                texCoord        : V2f
+            [<RoughnessCoordinate>]     roughCoord      : V2f
+            [<MetallicnessCoordinate>]  metalCoord      : V2f
+            [<EmissiveCoordinate>]      emissCoord      : V2f
+            [<NormalCoordinate>]        normCoord       : V2f
+            [<Tangent>]                 tangent         : V4f
+            [<ViewTangent>]             viewTangent     : V3f
+            [<ViewBiTangent>]           viewBiTangent   : V3f
+            [<ViewLightDirection>]      viewLightDir    : V3f
         }
 
     let trafo (v : Vertex) =
         vertex {
 
             let vp = uniform.ModelViewTrafo * v.pos
-            let vld = (uniform.ViewTrafo * V4d(uniform.LightLocation, 1.0) - vp).XYZ |> Vec.normalize
+            let vld = (uniform.ViewTrafo * V4f(uniform.LightLocation, 1.0f) - vp).XYZ |> Vec.normalize
             let vn = uniform.ModelViewTrafoInv.Transposed.TransformDir v.normal |> Vec.normalize
             let vt = uniform.ModelViewTrafoInv.Transposed.TransformDir v.tangent.XYZ |> Vec.normalize
             let vb = v.tangent.W * Vec.cross vn vt
@@ -209,71 +209,71 @@ module Shader =
 
     let samples24 =
         [|
-            V2d( -0.4612850228120782, -0.8824263018037591 )
-            V2d( 0.2033539719528926, 0.9766070232577696 )
-            V2d( 0.8622755945065503, -0.4990552917715807 )
-            V2d( -0.8458406529500018, 0.4340626564690164 )
-            V2d( 0.9145341241356336, 0.40187426079092753 )
-            V2d( -0.8095919285224212, -0.2476471278659192 )
-            V2d( 0.2443597793708885, -0.8210571365841042 )
-            V2d( -0.29522102954593127, 0.6411496844366571 )
-            V2d( 0.4013698454531175, 0.47134750051312063 )
-            V2d( -0.1573158341083741, -0.48548502348882533 )
-            V2d( 0.5674301785250454, -0.1052346781436156 )
-            V2d( -0.4929375319230899, 0.09422383038685558 )
-            V2d( 0.967785465127825, -0.06868225365333279 )
-            V2d( 0.2267967507441493, -0.40237871966279687 )
-            V2d( -0.7200979001122771, -0.6248240905561527 )
-            V2d( -0.015195608523765971, 0.35623701723070667 )
-            V2d( -0.11428925675805125, -0.963723441683084 )
-            V2d( 0.5482105069441386, 0.781847612911249 )
-            V2d( -0.6515264455787967, 0.7473765703131305 )
-            V2d( 0.5826875031269089, -0.6956573112908789 )
-            V2d( -0.8496230198638387, 0.09209564840857346 )
-            V2d( 0.38289808661249414, 0.15269522898022844 )
-            V2d( -0.4951171173546325, -0.2654758742352245 )
+            V2f( -0.4612850228120782, -0.8824263018037591 )
+            V2f( 0.2033539719528926, 0.9766070232577696 )
+            V2f( 0.8622755945065503, -0.4990552917715807 )
+            V2f( -0.8458406529500018, 0.4340626564690164 )
+            V2f( 0.9145341241356336, 0.40187426079092753 )
+            V2f( -0.8095919285224212, -0.2476471278659192 )
+            V2f( 0.2443597793708885, -0.8210571365841042 )
+            V2f( -0.29522102954593127, 0.6411496844366571 )
+            V2f( 0.4013698454531175, 0.47134750051312063 )
+            V2f( -0.1573158341083741, -0.48548502348882533 )
+            V2f( 0.5674301785250454, -0.1052346781436156 )
+            V2f( -0.4929375319230899, 0.09422383038685558 )
+            V2f( 0.967785465127825, -0.06868225365333279 )
+            V2f( 0.2267967507441493, -0.40237871966279687 )
+            V2f( -0.7200979001122771, -0.6248240905561527 )
+            V2f( -0.015195608523765971, 0.35623701723070667 )
+            V2f( -0.11428925675805125, -0.963723441683084 )
+            V2f( 0.5482105069441386, 0.781847612911249 )
+            V2f( -0.6515264455787967, 0.7473765703131305 )
+            V2f( 0.5826875031269089, -0.6956573112908789 )
+            V2f( -0.8496230198638387, 0.09209564840857346 )
+            V2f( 0.38289808661249414, 0.15269522898022844 )
+            V2f( -0.4951171173546325, -0.2654758742352245 )
         |]
 
-    let linearToSrgb (v : V4d) =
-        let e = 1.0 / 2.2
-        V4d(v.X ** e, v.Y ** e, v.Z ** e, v.W)
+    let linearToSrgb (v : V4f) =
+        let e = 1.0f / 2.2f
+        V4f(v.X ** e, v.Y ** e, v.Z ** e, v.W)
 
     [<ReflectedDefinition>]
-    let srgbToLinear (v : V4d) =
-        let e = 2.2
-        V4d(v.X ** e, v.Y ** e, v.Z ** e, v.W)
+    let srgbToLinear (v : V4f) =
+        let e = 2.2f
+        V4f(v.X ** e, v.Y ** e, v.Z ** e, v.W)
 
-    let trowbridgeReitzNDF (roughness : float) (nDotH : float) =
+    let trowbridgeReitzNDF (roughness : float32) (nDotH : float32) =
         let a = roughness * roughness
         let a2 = a * a
         let nDotH2 = nDotH * nDotH
-        let denom = nDotH2 * (a2 - 1.0) + 1.0
-        a2 / (Constant.Pi * denom * denom)
+        let denom = nDotH2 * (a2 - 1.0f) + 1.0f
+        a2 / (ConstantF.Pi * denom * denom)
 
-    let fresnel (f0 : V3d) (nv : float) (roughness : float) =
-        let a = V3d.III * (1.0 - roughness)
-        f0 + (max f0 a - f0) * nv ** 5.0
+    let fresnel (f0 : V3f) (nv : float32) (roughness : float32) =
+        let a = V3f.III * (1.0f - roughness)
+        f0 + (max f0 a - f0) * nv ** 5.0f
 
-    let schlickBeckmannGAF (d : float) (roughness : float) =
+    let schlickBeckmannGAF (d : float32) (roughness : float32) =
         let a = roughness * roughness
-        let k = a * 0.797884560803
-        d / (d * (1.0 - k) + k)
+        let k = a * 0.797884560803f
+        d / (d * (1.0f - k) + k)
 
-    let sampleEnvDiffuse (viewDir : V3d) =
+    let sampleEnvDiffuse (viewDir : V3f) =
         let worldDir = uniform.ViewTrafoInv.TransformDir viewDir |> Vec.normalize
         skyboxDiffuse.Sample(worldDir) |> srgbToLinear |> Vec.xyz
 
-    let sampleEnv (viewDir : V3d) (roughness : float) =
+    let sampleEnv (viewDir : V3f) (roughness : float32) =
         let worldDir = uniform.ViewTrafoInv.TransformDir viewDir |> Vec.normalize
-        skyboxSpecular.SampleLevel(worldDir, roughness * float (uniform.LevelCount - 1)) |> srgbToLinear |> Vec.xyz
+        skyboxSpecular.SampleLevel(worldDir, roughness * float32 (uniform.LevelCount - 1)) |> srgbToLinear |> Vec.xyz
 
     [<ReflectedDefinition>] [<Inline>]
-    let getR0 (reflectivity : float, metalness : float, baseColor : V3d) =
-        V3d.III * reflectivity * (1.0 - metalness) + baseColor * metalness
+    let getR0 (reflectivity : float32, metalness : float32, baseColor : V3f) =
+        V3f.III * reflectivity * (1.0f - metalness) + baseColor * metalness
 
     let shade (v : Vertex) =
         fragment {
-            let eps = 0.00001
+            let eps = 0.00001f
 
             let baseColor =
                 if uniform.HasDiffuseColorTexture then
@@ -288,7 +288,7 @@ module Shader =
                     let uv = eps + uniform.Roughness
                     uv * tv |> saturate
                 else
-                    uniform.Roughness + eps |> clamp 0.0 0.99
+                    uniform.Roughness + eps |> clamp 0.0f 0.99f
 
             let metalness =
                 if uniform.HasMetallicnessTexture then
@@ -298,9 +298,9 @@ module Shader =
                 else
                     uniform.Metallicness + eps |> saturate
 
-            let occlusion = 1.0
+            let occlusion = 1.0f
 
-            if baseColor.W < 0.01 then discard()
+            if baseColor.W < 0.01f then discard()
 
             let vn = v.normal |> Vec.normalize
             let vld = v.viewLightDir |> Vec.normalize
@@ -310,7 +310,7 @@ module Shader =
                 let v = vld + vcd
                 let l = Vec.Length v
                 if l > eps then v / l
-                else V3d.Zero
+                else V3f.Zero
 
             let vn =
                 if uniform.HasNormalTexture then
@@ -318,10 +318,10 @@ module Shader =
                     let vb = Vec.normalize v.viewBiTangent
 
                     let v = normalTexture.Sample(v.normCoord).XYZ
-                    let nn = (v * 2.0 - 1.0) * V3d(V2d.II * uniform.NormalTextureScale * 0.5, 1.0)
+                    let nn = (v * 2.0f - 1.0f) * V3f(V2f.II * uniform.NormalTextureScale * 0.5f, 1.0f)
 
                     let newNormal = vn * nn.Z + vt * nn.X + vb * nn.Y |> Vec.normalize
-                    if newNormal.Z < 0.0 then vn
+                    if newNormal.Z < 0.0f then vn
                     else newNormal
                 else
                     vn
@@ -329,50 +329,50 @@ module Shader =
 
             let refl = -Vec.reflect vn vcd
 
-            let nl = Vec.dot vn vld |> max 0.0
-            let nh = Vec.dot vn half |> max 0.0
-            //let hv = Vec.dot half vcd |> max 0.0
-            let nv = Vec.dot vn vcd |> max 0.0
+            let nl = Vec.dot vn vld |> max 0.0f
+            let nh = Vec.dot vn half |> max 0.0f
+            //let hv = Vec.dot half vcd |> max 0.0f
+            let nv = Vec.dot vn vcd |> max 0.0f
 
 
 
-            let f0 = getR0(0.04, metalness, V3d.III) * baseColor.XYZ
+            let f0 = getR0(0.04f, metalness, V3f.III) * baseColor.XYZ
             let d = trowbridgeReitzNDF nh roughness
 
             let f = fresnel f0 nv roughness
             let g = schlickBeckmannGAF nv roughness * schlickBeckmannGAF nl roughness
 
-            let lambert = nl * 3.0
-            let dr = V3d.III * occlusion
+            let lambert = nl * 3.0f
+            let dr = V3f.III * occlusion
 
             let diffuseIrradiance = sampleEnvDiffuse vn * occlusion
             let specularIrradiance = sampleEnv refl roughness * occlusion
 
-            let diffuseDirectTerm = (baseColor.XYZ / Constant.Pi) * (V3d.III - f) * (1.0 - metalness)
+            let diffuseDirectTerm = (baseColor.XYZ / ConstantF.Pi) * (V3f.III - f) * (1.0f - metalness)
 
             let specularDirectTerm =
-                (f * g * d) / (4.0 * nl * nv + eps)
+                (f * g * d) / (4.0f * nl * nv + eps)
 
             let brdfDirectOutput = (diffuseDirectTerm + specularDirectTerm) * lambert * dr
-            let ambientDiffuse = diffuseIrradiance * (baseColor.XYZ / Constant.Pi) * (1.0 - f) * (1.0 - metalness)
+            let ambientDiffuse = diffuseIrradiance * (baseColor.XYZ / ConstantF.Pi) * (1.0f - f) * (1.0f - metalness)
 
             let ambientSpecular = specularIrradiance * f
 
             let color = brdfDirectOutput + ambientDiffuse + ambientSpecular
 
-            return V4d(saturate color, 1.0) |> linearToSrgb
+            return V4f(saturate color, 1.0f) |> linearToSrgb
         }
 
     let environment (v : Effects.Vertex) =
         fragment {
             let ndc = v.pos.XY / v.pos.W
 
-            let p04 = uniform.ProjTrafoInv * V4d(ndc, -1.0, 1.0)
-            let p14 = uniform.ProjTrafoInv * V4d(ndc, -0.8, 1.0)
+            let p04 = uniform.ProjTrafoInv * V4f(ndc, -1.0f, 1.0f)
+            let p14 = uniform.ProjTrafoInv * V4f(ndc, -0.8f, 1.0f)
 
             let dir = p14.XYZ / p14.W - p04.XYZ / p04.W
 
-            let res = V4d(sampleEnv dir 0.2, 1.0)
+            let res = V4f(sampleEnv dir 0.2f, 1.0f)
             return linearToSrgb res
             //return skybox.Sample(dir)
         }

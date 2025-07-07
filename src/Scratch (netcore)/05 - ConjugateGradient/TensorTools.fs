@@ -99,12 +99,12 @@ module TensorToolShaders =
         }
 
     [<LocalSize(X = 8, Y = 8)>]
-    let fold2d (zero : Expr<'b>) (addV4 : Expr<V4d -> V4d -> 'b>) (add : Expr<'b -> 'b -> 'b>) (result : 'b[]) =
+    let fold2d (zero : Expr<'b>) (addV4 : Expr<V4f -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) (result : 'b[]) =
         compute {
             let mem = allocateShared<'b> 128
 
             let size = lSampler.Size
-            let rcpSize = 1.0 / V2d size
+            let rcpSize = 1.0f / V2f size
 
             let lid = getLocalId().XY
             let gid = getWorkGroupId().XY
@@ -112,18 +112,18 @@ module TensorToolShaders =
 
             // index calculations
             let id = gid * 16 + lid * 2
-            let tc00 = (V2d id + V2d.Half) * rcpSize
-            let tc01 = tc00 + V2d(rcpSize.X, 0.0)
-            let tc10 = tc00 + V2d(0.0, rcpSize.Y)
+            let tc00 = (V2f id + V2f.Half) * rcpSize
+            let tc01 = tc00 + V2f(rcpSize.X, 0.0f)
+            let tc10 = tc00 + V2f(0.0f, rcpSize.Y)
             let tc11 = tc00 + rcpSize
             let tid = lid.X + 8 * lid.Y
 
             // load existing values into local memory
             let v0 =
-                (%addV4) (lSampler.SampleLevel(tc00, 0.0)) (lSampler.SampleLevel(tc01, 0.0))
+                (%addV4) (lSampler.SampleLevel(tc00, 0.0f)) (lSampler.SampleLevel(tc01, 0.0f))
                 
             let v1 =
-                (%addV4) (lSampler.SampleLevel(tc10, 0.0)) (lSampler.SampleLevel(tc11, 0.0)) 
+                (%addV4) (lSampler.SampleLevel(tc10, 0.0f)) (lSampler.SampleLevel(tc11, 0.0f))
 
             mem.[tid * 2 + 0] <- v0
             mem.[tid * 2 + 1] <- v1
@@ -145,12 +145,12 @@ module TensorToolShaders =
         }
        
     [<LocalSize(X = 8, Y = 8)>]
-    let dot2d (zero : Expr<'b>) (mul : Expr<V4d -> V4d -> 'b>) (add : Expr<'b -> 'b -> 'b>) (result : 'b[]) =
+    let dot2d (zero : Expr<'b>) (mul : Expr<V4f -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) (result : 'b[]) =
         compute {
             let mem = allocateShared<'b> 128
 
             let size = lSampler.Size
-            let rcpSize = 1.0 / V2d size
+            let rcpSize = 1.0f / V2f size
 
             let lid = getLocalId().XY
             let gid = getWorkGroupId().XY
@@ -158,22 +158,22 @@ module TensorToolShaders =
 
             // index calculations
             let id = gid * 16 + lid * 2
-            let tc00 = (V2d id + V2d.Half) * rcpSize
-            let tc01 = tc00 + V2d(rcpSize.X, 0.0)
-            let tc10 = tc00 + V2d(0.0, rcpSize.Y)
+            let tc00 = (V2f id + V2f.Half) * rcpSize
+            let tc01 = tc00 + V2f(rcpSize.X, 0.0f)
+            let tc10 = tc00 + V2f(0.0f, rcpSize.Y)
             let tc11 = tc00 + rcpSize
             let tid = lid.X + 8 * lid.Y
 
             // load existing values into local memory
             let v0 =
                 (%add) 
-                    ((%mul) (lSampler.SampleLevel(tc00, float 0.0)) (rSampler.SampleLevel(tc00, float 0.0)))
-                    ((%mul) (lSampler.SampleLevel(tc01, float 0.0)) (rSampler.SampleLevel(tc01, float 0.0)))
+                    ((%mul) (lSampler.SampleLevel(tc00, 0.0f)) (rSampler.SampleLevel(tc00, 0.0f)))
+                    ((%mul) (lSampler.SampleLevel(tc01, 0.0f)) (rSampler.SampleLevel(tc01, 0.0f)))
                 
             let v1 =
                 (%add) 
-                    ((%mul) (lSampler.SampleLevel(tc10, float 0.0)) (rSampler.SampleLevel(tc10, float 0.0)))
-                    ((%mul) (lSampler.SampleLevel(tc11, float 0.0)) (rSampler.SampleLevel(tc11, float 0.0)))
+                    ((%mul) (lSampler.SampleLevel(tc10, 0.0f)) (rSampler.SampleLevel(tc10, 0.0f)))
+                    ((%mul) (lSampler.SampleLevel(tc11, 0.0f)) (rSampler.SampleLevel(tc11, 0.0f)))
 
             mem.[tid * 2 + 0] <- v0
             mem.[tid * 2 + 1] <- v1
@@ -204,7 +204,7 @@ module TensorToolShaders =
         }
         
     [<LocalSize(X = 8, Y = 8)>]
-    let mad2d<'c, 'f, 'fmt when 'fmt :> Formats.IFloatingFormat> (mul : Expr<V4d -> 'f -> 'c>) (add : Expr<'c -> 'c -> V4d>) (srcFactor : 'f) (dstFactor : 'f) (src : Image2d<'fmt>) (dst : Image2d<'fmt>) =
+    let mad2d<'c, 'f, 'fmt when 'fmt :> Formats.IFloatingFormat> (mul : Expr<V4f -> 'f -> 'c>) (add : Expr<'c -> 'c -> V4f>) (srcFactor : 'f) (dstFactor : 'f) (src : Image2d<'fmt>) (dst : Image2d<'fmt>) =
         compute {
             let id = getGlobalId().XY
             let s = dst.Size
@@ -214,7 +214,7 @@ module TensorToolShaders =
         }
 
     [<LocalSize(X = 8, Y = 8)>]
-    let set2d<'fmt when 'fmt :> Formats.IFloatingFormat>  (value : V4d) (dst : Image2d<'fmt>) =
+    let set2d<'fmt when 'fmt :> Formats.IFloatingFormat>  (value : V4f) (dst : Image2d<'fmt>) =
         compute {
             let id = getGlobalId().XY
             let s = dst.Size

@@ -15,16 +15,16 @@ module Shader =
     type Vertex =
         {
             [<Position>]
-            position : V4d
+            position : V4f
             [<Semantic("Offset")>]
-            offset : V4d
+            offset : V4f
         }
 
     let instanceTrafo (v : Vertex) =
         vertex {
             return 
                 { v with 
-                    position = V4d(v.position.XYZ + v.offset.XYZ,1.0)
+                    position = V4f(v.position.XYZ + v.offset.XYZ, 1.0f)
                 }
         }
 

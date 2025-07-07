@@ -11,21 +11,21 @@ module SimpleLighting =
             let n = v.n |> Vec.normalize
             let c = uniform.LightLocation - v.wp.XYZ |> Vec.normalize
 
-            let ambient = 0.2
+            let ambient = 0.2f
             let diffuse = Vec.dot c n |> abs
 
-            let l = ambient + (1.0 - ambient) * diffuse
+            let l = ambient + (1.0f - ambient) * diffuse
 
-            return V4d(v.c.XYZ * l, v.c.W)
+            return V4f(v.c.XYZ * l, v.c.W)
         }
 
     type Vertex = {
-        [<Position>]                pos     : V4d
-        [<Normal>]                  n       : V3d
-        [<BiNormal>]                b       : V3d
-        [<Tangent>]                 t       : V3d
-        [<Color>]                   c       : V4d
-        [<Semantic("LightDir")>]    ldir    : V3d
+        [<Position>]                pos     : V4f
+        [<Normal>]                  n       : V3f
+        [<BiNormal>]                b       : V3f
+        [<Tangent>]                 t       : V3f
+        [<Color>]                   c       : V4f
+        [<Semantic("LightDir")>]    ldir    : V3f
     }
 
     let stableTrafo (v : Vertex) =
@@ -47,12 +47,12 @@ module SimpleLighting =
             let n = v.n |> Vec.normalize
             let c = v.ldir |> Vec.normalize
 
-            let ambient = 0.2
+            let ambient = 0.2f
             let diffuse = Vec.dot c n |> abs
 
-            let l = ambient + (1.0 - ambient) * diffuse
+            let l = ambient + (1.0f - ambient) * diffuse
 
-            return V4d(v.c.XYZ * l, v.c.W)
+            return V4f(v.c.XYZ * l, v.c.W)
         }
 
     let Effect = 

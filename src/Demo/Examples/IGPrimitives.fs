@@ -23,33 +23,33 @@ open System.Reflection
 module MyShader =
 
     type Vertex = {
-        [<Position>]        pos     : V4d
-        [<WorldPosition>]   wp      : V4d
-        [<Normal>]          n       : V3d
-        [<BiNormal>]        b       : V3d
-        [<Tangent>]         t       : V3d
-        [<Color>]           c       : V4d
-        [<TexCoord>]        tc      : V2d
+        [<Position>]        pos     : V4f
+        [<WorldPosition>]   wp      : V4f
+        [<Normal>]          n       : V3f
+        [<BiNormal>]        b       : V3f
+        [<Tangent>]         t       : V3f
+        [<Color>]           c       : V4f
+        [<TexCoord>]        tc      : V2f
     }
 
     let light (v : Vertex) = 
         fragment {
-            let lightpos = V3d(5.0,6.0,7.0)                
+            let lightpos = V3f(5.0f,6.0f,7.0f)
 
             let n = v.n |> Vec.normalize
             let c = lightpos - v.wp.XYZ |> Vec.normalize
-            let r = 2.0 * (Vec.dot c n |> clamp 0.0 1.0) * n - c |> Vec.normalize
+            let r = 2.0f * (Vec.dot c n |> clamp 0.0f 1.0f) * n - c |> Vec.normalize
             let cam = uniform?PerView?CameraLocation
             let vd = cam - v.wp.XYZ |> Vec.normalize
     
-            let ambient = 0.1
-            let diffuse = Vec.dot c n |> clamp 0.0 1.0
-            let specular = V3d.III * (max (pow (Vec.dot r vd) 50.0) 0.0)
+            let ambient = 0.1f
+            let diffuse = Vec.dot c n |> clamp 0.0f 1.0f
+            let specular = V3f.III * (max (pow (Vec.dot r vd) 50.0f) 0.0f)
         
-            let l = v.c.XYZ * (ambient + (1.0 - ambient) * diffuse)
+            let l = v.c.XYZ * (ambient + (1.0f - ambient) * diffuse)
             let col = l + l.Length * specular
         
-            return V4d(col, v.c.W)
+            return V4f(col, v.c.W)
         }
 
 module IGPrimitives =

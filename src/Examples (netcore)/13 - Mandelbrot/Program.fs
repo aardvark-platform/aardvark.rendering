@@ -9,15 +9,15 @@ module Shader =
 
     type Vertex =
         {
-            [<Position>] pos    : V4d
-            [<TexCoord; Interpolation(InterpolationMode.Sample)>] tc     : V2d
-            [<SamplePosition>] s     : V2d
+            [<Position>] pos    : V4f
+            [<TexCoord; Interpolation(InterpolationMode.Sample)>] tc     : V2f
+            [<SamplePosition>] s     : V2f
         }
 
     type UniformScope with
         member x.Iterations : int = x?Mandelbrot?Iterations
-        member x.Scale : float = x?Mandelbrot?Scale
-        member x.Center : V2d = x?Mandelbrot?Center
+        member x.Scale : float32 = x?Mandelbrot?Scale
+        member x.Center : V2f = x?Mandelbrot?Center
 
     let transfer =
         sampler2d {
@@ -33,10 +33,10 @@ module Shader =
             let scale = uniform.Scale
             let center = uniform.Center
             let size = uniform.ViewportSize
-            let aspect = float size.X / float size.Y
+            let aspect = float32 size.X / float32 size.Y
             let iter = uniform.Iterations
 
-            let c = V2d(aspect * (2.0 * v.tc.X - 1.0), (2.0 * v.tc.Y - 1.0)) * scale - center
+            let c = V2f(aspect * (2.0f * v.tc.X - 1.0f), (2.0f * v.tc.Y - 1.0f)) * scale - center
 
             let mutable cont = true
             let mutable z = c
@@ -45,14 +45,14 @@ module Shader =
                 let x = (z.X * z.X - z.Y * z.Y) + c.X
                 let y = (z.Y * z.X + z.X * z.Y) + c.Y
                 
-                if (x * x + y * y) > 4.0 then
+                if (x * x + y * y) > 4.0f then
                     cont <- false
                 else
-                    z <- V2d(x,y)
+                    z <- V2f(x,y)
                     i <- i + 1
 
-            let coord = if i = iter then 0.0 else float i / 100.0
-            let color = transfer.SampleLevel(V2d(coord, 0.0), 0.0)
+            let coord = if i = iter then 0.0f else float32 i / 100.0f
+            let color = transfer.SampleLevel(V2f(coord, 0.0f), 0.0f)
 
             return color
 

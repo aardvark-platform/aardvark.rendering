@@ -21,10 +21,10 @@ module Shader =
     open Aardvark.Rendering.Effects
 
     let private tipColor =
-        C4b.VRVisGreen.ToC4d().ToV4d()
+        C4b.VRVisGreen.ToC4f().ToV4f()
 
     let private tessColor =
-        C4b(255, 102, 102).ToC4d().ToV4d()
+        C4b(255, 102, 102).ToC4f().ToV4f()
 
     let private diffuseSampler =
         sampler2d {
@@ -41,7 +41,7 @@ module Shader =
         }
 
     [<ReflectedDefinition>]
-    let private computeNormal (p0 : V4d) (p1 : V4d) (p2 : V4d) =
+    let private computeNormal (p0 : V4f) (p1 : V4f) (p2 : V4f) =
         Vec.cross (p1.XYZ - p0.XYZ) (p2.XYZ - p0.XYZ) |> Vec.normalize
 
     let extrude (v : Triangle<Vertex>) =
@@ -50,19 +50,19 @@ module Shader =
             let p1Ext = v.P1.wp.XYZ
             let p2Ext = v.P2.wp.XYZ
 
-            let cExt = (p0Ext + p1Ext + p2Ext) / 3.0
+            let cExt = (p0Ext + p1Ext + p2Ext) / 3.0f
 
             let nExt = Vec.cross (p1Ext - p0Ext) (p2Ext - p1Ext)
             let lnExt = Vec.length nExt
-            let areaExt = 0.5 * lnExt
+            let areaExt = 0.5f * lnExt
             let nExt = nExt / lnExt
 
             let phExt = cExt + nExt * areaExt
 
-            let w0Ext = V4d(p0Ext, 1.0)
-            let w1Ext = V4d(p1Ext, 1.0)
-            let w2Ext = V4d(p2Ext, 1.0)
-            let whExt = V4d(phExt, 1.0)
+            let w0Ext = V4f(p0Ext, 1.0f)
+            let w1Ext = V4f(p1Ext, 1.0f)
+            let w2Ext = V4f(p2Ext, 1.0f)
+            let whExt = V4f(phExt, 1.0f)
 
             yield { v.P0 with wp = w0Ext; pos = uniform.ViewProjTrafo * w0Ext; n = nExt }
             yield { v.P1 with wp = w1Ext; pos = uniform.ViewProjTrafo * w1Ext; n = nExt }
@@ -89,33 +89,33 @@ module Shader =
         }
 
     [<ReflectedDefinition>]
-    let private lerpV2d (v0 : V2d) (v1 : V2d) (v2 : V2d) (coord : V3d) =
+    let private lerpV2f (v0 : V2f) (v1 : V2f) (v2 : V2f) (coord : V3f) =
         v0 * coord.X + v1 * coord.Y + v2 * coord.Z
 
     [<ReflectedDefinition>]
-    let private lerpV3d (v0 : V3d) (v1 : V3d) (v2 : V3d) (coord : V3d) =
+    let private lerpV3f (v0 : V3f) (v1 : V3f) (v2 : V3f) (coord : V3f) =
         v0 * coord.X + v1 * coord.Y + v2 * coord.Z
 
     [<ReflectedDefinition>]
-    let private lerpV4d (v0 : V4d) (v1 : V4d) (v2 : V4d) (coord : V3d) =
+    let private lerpV4f (v0 : V4f) (v1 : V4f) (v2 : V4f) (coord : V3f) =
         v0 * coord.X + v1 * coord.Y + v2 * coord.Z
 
     let tessellate(triangle : Patch<3 N, Vertex>) =
         tessellation  {
-            let! coord = tessellateTriangle 1.0 (2.0, 2.0, 2.0)
+            let! coord = tessellateTriangle 1.0f (2.0f, 2.0f, 2.0f)
 
             // Interpolate Vertex according to the barycentric coordinates from the tessellator
-            let pos = lerpV3d triangle.[0].pos.XYZ triangle.[1].pos.XYZ triangle.[2].pos.XYZ coord
-            let c   = lerpV4d triangle.[0].c triangle.[1].c triangle.[2].c coord
-            let n   = lerpV3d triangle.[0].n triangle.[1].n triangle.[2].n coord |> Vec.normalize
-            let tc  = lerpV2d triangle.[0].tc triangle.[1].tc triangle.[2].tc coord
+            let pos = lerpV3f triangle.[0].pos.XYZ triangle.[1].pos.XYZ triangle.[2].pos.XYZ coord
+            let c   = lerpV4f triangle.[0].c triangle.[1].c triangle.[2].c coord
+            let n   = lerpV3f triangle.[0].n triangle.[1].n triangle.[2].n coord |> Vec.normalize
+            let tc  = lerpV2f triangle.[0].tc triangle.[1].tc triangle.[2].tc coord
 
             let amount = coord.X |> min coord.Y |> min coord.Z
-            let c = (2.0 * amount) |> lerp c tessColor
+            let c = (2.0f * amount) |> lerp c tessColor
 
             // Transform vertex to world space
             let n   = uniform.NormalMatrix * n
-            let wp  = uniform.ModelTrafo * V4d(pos, 1.0)
+            let wp  = uniform.ModelTrafo * V4f(pos, 1.0f)
 
             // Transform the vertex to screen space
             let pos = uniform.ViewProjTrafo * wp

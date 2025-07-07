@@ -15,14 +15,13 @@ module Shader =
     open Aardvark.Rendering.Effects
 
     [<ReflectedDefinition>]
-    let transformNormal (n : V3d) =
-        uniform.ModelViewTrafoInv.Transposed * V4d(n, 0.0)
+    let transformNormal (n : V3f) =
+        uniform.ModelViewTrafoInv.Transposed * V4f(n, 0.0f)
         |> Vec.xyz
         |> Vec.normalize
 
     let stableInstanced (v : Vertex) = 
-        vertex { 
-            let u : M44d = uniform.ModelViewTrafo
+        vertex {
             let vp = uniform.ModelViewTrafo * v.pos
             let p = uniform.ProjTrafo * vp
             return { v with pos = p }
@@ -53,7 +52,7 @@ let main argv =
     // of course you can a custum form and add a control to it.
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
-    let win = app.CreateGameWindow(samples =1)
+    use win = app.CreateGameWindow(samples =1)
     //win.VSync <- false
 
     // Given eye, target and sky vector we compute our initial camera pose

@@ -45,7 +45,7 @@ and IFramebufferRuntime =
 
     /// Target depth range of shaders.
     /// The final depth will be mapped from [-1, 1] to the target range.
-    abstract member ShaderDepthRange : Range1d
+    abstract member ShaderDepthRange : Range1f
 
     /// Returns whether the runtime supports shader inputs for layered and multiviewport rendering.
     /// If false, shaders must use custom inputs.

@@ -11,7 +11,7 @@ module Shader =
 
     let texCoordColor(v : Effects.Vertex) =
         fragment {
-            return V4d(v.tc, 1.0, 1.0)
+            return V4f(v.tc, 1.0f, 1.0f)
         }
 
 [<EntryPoint>]

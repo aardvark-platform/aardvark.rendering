@@ -5,11 +5,11 @@ open Aardvark.Rendering
 open FShade
 
 type Vertex = {
-    [<Position>]        pos     : V4d
-    [<WorldPosition>]   wp      : V4d
-    [<Normal>]          n       : V3d
-    [<BiNormal>]        b       : V3d
-    [<Tangent>]         t       : V3d
-    [<Color>]           c       : V4d
-    [<TexCoord>]        tc      : V2d
+    [<Position>]        pos     : V4f
+    [<WorldPosition>]   wp      : V4f
+    [<Normal>]          n       : V3f
+    [<BiNormal>]        b       : V3f
+    [<Tangent>]         t       : V3f
+    [<Color>]           c       : V4f
+    [<TexCoord>]        tc      : V2f
 }

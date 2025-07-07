@@ -20,21 +20,21 @@ module GeometryComposition =
     module Shader =
         open FShade
 
-        type Vertex = { [<Position>] p : V4d; [<WorldPosition>] wp : V4d; [<Color>] c : V4d; [<Normal>] n : V3d; [<Semantic("LightDir")>] ldir : V3d }
+        type Vertex = { [<Position>] p : V4f; [<WorldPosition>] wp : V4f; [<Color>] c : V4f; [<Normal>] n : V3f; [<Semantic("LightDir")>] ldir : V3f }
 
         let divide (v : Triangle<Vertex>) =
             triangle {
                 
                 let ccDiv = v.P0.c
                 let nDiv = v.P0.n
-                let cpDiv = (v.P0.wp + v.P1.wp + v.P2.wp) / 3.0
+                let cpDiv = (v.P0.wp + v.P1.wp + v.P2.wp) / 3.0f
                 //let cc = (v.P0.c + v.P1.c + v.P2.c) / 3.0
 
 
                 // 0 1 c   c 1 2   c 2 0
                 yield { v.P0 with n = nDiv }
                 yield { v.P1 with n = nDiv }
-                yield { p = uniform.ViewProjTrafo * cpDiv; wp = cpDiv; c = V4d.IIII; n = nDiv; ldir = V3d.Zero}
+                yield { p = uniform.ViewProjTrafo * cpDiv; wp = cpDiv; c = V4f.IIII; n = nDiv; ldir = V3f.Zero}
                 yield { v.P2 with n = nDiv }
                 yield { v.P0 with n = nDiv }
             }
@@ -42,13 +42,13 @@ module GeometryComposition =
         let shrink (v : Triangle<Vertex>) =
             triangle {
             
-                let cp = (v.P0.wp + v.P1.wp + v.P2.wp) / 3.0
+                let cp = (v.P0.wp + v.P1.wp + v.P2.wp) / 3.0f
                 
-                let r = 0.9
+                let r = 0.9f
 
-                let a = V4d(cp.XYZ * (1.0 - r) + v.P0.wp.XYZ * r, v.P0.wp.W)
-                let b = V4d(cp.XYZ * (1.0 - r) + v.P1.wp.XYZ * r, v.P1.wp.W)
-                let c = V4d(cp.XYZ * (1.0 - r) + v.P2.wp.XYZ * r, v.P2.wp.W)
+                let a = V4f(cp.XYZ * (1.0f - r) + v.P0.wp.XYZ * r, v.P0.wp.W)
+                let b = V4f(cp.XYZ * (1.0f - r) + v.P1.wp.XYZ * r, v.P1.wp.W)
+                let c = V4f(cp.XYZ * (1.0f - r) + v.P2.wp.XYZ * r, v.P2.wp.W)
 
                 yield { v.P0 with p = uniform.ViewProjTrafo * a; wp = a } 
                 yield { v.P1 with p = uniform.ViewProjTrafo * b; wp = b } 
@@ -66,9 +66,9 @@ module GeometryComposition =
         let invert (v : Triangle<Vertex>) =
             triangle {
                 
-                let p01 = (v.P0.wp + v.P1.wp) / 2.0
-                let p12 = (v.P1.wp + v.P2.wp) / 2.0
-                let p20 = (v.P2.wp + v.P0.wp) / 2.0
+                let p01 = (v.P0.wp + v.P1.wp) / 2.0f
+                let p12 = (v.P1.wp + v.P2.wp) / 2.0f
+                let p20 = (v.P2.wp + v.P0.wp) / 2.0f
                 
                 yield { v.P0 with p = uniform.ViewProjTrafo * p01; wp = p01 } 
                 yield { v.P1 with p = uniform.ViewProjTrafo * p12; wp = p12 } 
@@ -78,17 +78,17 @@ module GeometryComposition =
             
         let tricolor (v : Triangle<Vertex>) =
             triangle {
-                yield { v.P0 with c = V4d.OIII }
-                yield { v.P1 with c = V4d.IOII }
-                yield { v.P2 with c = V4d.IIOI }
+                yield { v.P0 with c = V4f.OIII }
+                yield { v.P1 with c = V4f.IOII }
+                yield { v.P2 with c = V4f.IIOI }
             }
 
         let tritri (v : Triangle<Vertex>) =
             triangle {
                 
-                let p01 = (v.P0.wp + v.P1.wp) / 2.0
-                let p12 = (v.P1.wp + v.P2.wp) / 2.0
-                let p20 = (v.P2.wp + v.P0.wp) / 2.0
+                let p01 = (v.P0.wp + v.P1.wp) / 2.0f
+                let p12 = (v.P1.wp + v.P2.wp) / 2.0f
+                let p20 = (v.P2.wp + v.P0.wp) / 2.0f
 
                 yield v.P0
                 yield { v.P0 with p = uniform.ViewProjTrafo * p01; wp = p01 } 
@@ -110,9 +110,9 @@ module GeometryComposition =
                 yield { v.P1 with p = uniform.ViewProjTrafo * p12; wp = p12 } 
                 restartStrip()
 
-                let p01 = p01 + V4d.OOIO
-                let p12 = p12 + V4d.OOIO
-                let p20 = p20 + V4d.OOIO
+                let p01 = p01 + V4f.OOIO
+                let p12 = p12 + V4f.OOIO
+                let p20 = p20 + V4f.OOIO
                 yield { v.P0 with p = uniform.ViewProjTrafo * p01; wp = p01 } 
                 yield { v.P1 with p = uniform.ViewProjTrafo * p12; wp = p12 } 
                 yield { v.P2 with p = uniform.ViewProjTrafo * p20; wp = p20 } 
@@ -121,7 +121,7 @@ module GeometryComposition =
 
 
         [<ReflectedDefinition>]
-        let computeNormal (p0 : V4d) (p1 : V4d) (p2 : V4d) =
+        let computeNormal (p0 : V4f) (p1 : V4f) (p2 : V4f) =
             Vec.cross (p1.XYZ - p0.XYZ) (p2.XYZ - p0.XYZ) |> Vec.normalize
 
         let extrude (v : Triangle<Vertex>) =
@@ -130,43 +130,43 @@ module GeometryComposition =
                 let p1Ext = v.P1.wp.XYZ
                 let p2Ext = v.P2.wp.XYZ
 
-                let cExt = (p0Ext + p1Ext + p2Ext) / 3.0
+                let cExt = (p0Ext + p1Ext + p2Ext) / 3.0f
                 
                 let nExt = Vec.cross (p1Ext - p0Ext) (p2Ext - p1Ext)
                 let lnExt = Vec.length nExt
-                let areaExt = 0.5 * lnExt
+                let areaExt = 0.5f * lnExt
                 let nExt = nExt / lnExt
 
                 let phExt = cExt + nExt * areaExt
 
 
-                let w0Ext = V4d(p0Ext, 1.0)
-                let w1Ext = V4d(p1Ext, 1.0)
-                let w2Ext = V4d(p2Ext, 1.0)
-                let whExt = V4d(phExt, 1.0)
+                let w0Ext = V4f(p0Ext, 1.0f)
+                let w1Ext = V4f(p1Ext, 1.0f)
+                let w2Ext = V4f(p2Ext, 1.0f)
+                let whExt = V4f(phExt, 1.0f)
 
 
-                yield { wp = w0Ext; p = uniform.ViewProjTrafo * w0Ext; n = nExt; c = v.P0.c; ldir = V3d.Zero }
-                yield { wp = w1Ext; p = uniform.ViewProjTrafo * w1Ext; n = nExt; c = v.P1.c; ldir = V3d.Zero }
-                yield { wp = w2Ext; p = uniform.ViewProjTrafo * w2Ext; n = nExt; c = v.P2.c; ldir = V3d.Zero }
+                yield { wp = w0Ext; p = uniform.ViewProjTrafo * w0Ext; n = nExt; c = v.P0.c; ldir = V3f.Zero }
+                yield { wp = w1Ext; p = uniform.ViewProjTrafo * w1Ext; n = nExt; c = v.P1.c; ldir = V3f.Zero }
+                yield { wp = w2Ext; p = uniform.ViewProjTrafo * w2Ext; n = nExt; c = v.P2.c; ldir = V3f.Zero }
                 restartStrip()
 
                 let nExt = computeNormal w0Ext w1Ext whExt
-                yield { wp = w0Ext; p = uniform.ViewProjTrafo * w0Ext; n = nExt; c = v.P0.c; ldir = V3d.Zero }
-                yield { wp = w1Ext; p = uniform.ViewProjTrafo * w1Ext; n = nExt; c = v.P1.c; ldir = V3d.Zero }
-                yield { wp = whExt; p = uniform.ViewProjTrafo * whExt; n = nExt; c = V4d.IOII; ldir = V3d.Zero }
+                yield { wp = w0Ext; p = uniform.ViewProjTrafo * w0Ext; n = nExt; c = v.P0.c; ldir = V3f.Zero }
+                yield { wp = w1Ext; p = uniform.ViewProjTrafo * w1Ext; n = nExt; c = v.P1.c; ldir = V3f.Zero }
+                yield { wp = whExt; p = uniform.ViewProjTrafo * whExt; n = nExt; c = V4f.IOII; ldir = V3f.Zero }
                 restartStrip()
 
                 let nExt = computeNormal w1Ext w2Ext whExt
-                yield { wp = w1Ext; p = uniform.ViewProjTrafo * w1Ext; n = nExt; c = v.P1.c; ldir = V3d.Zero }
-                yield { wp = w2Ext; p = uniform.ViewProjTrafo * w2Ext; n = nExt; c = v.P2.c; ldir = V3d.Zero }
-                yield { wp = whExt; p = uniform.ViewProjTrafo * whExt; n = nExt; c = V4d.IOII; ldir = V3d.Zero }
+                yield { wp = w1Ext; p = uniform.ViewProjTrafo * w1Ext; n = nExt; c = v.P1.c; ldir = V3f.Zero }
+                yield { wp = w2Ext; p = uniform.ViewProjTrafo * w2Ext; n = nExt; c = v.P2.c; ldir = V3f.Zero }
+                yield { wp = whExt; p = uniform.ViewProjTrafo * whExt; n = nExt; c = V4f.IOII; ldir = V3f.Zero }
                 restartStrip()
 
                 let nExt = computeNormal w2Ext w0Ext whExt
-                yield { wp = w2Ext; p = uniform.ViewProjTrafo * w2Ext; n = nExt; c = v.P2.c; ldir = V3d.Zero }
-                yield { wp = w0Ext; p = uniform.ViewProjTrafo * w0Ext; n = nExt; c = v.P0.c; ldir = V3d.Zero }
-                yield { wp = whExt; p = uniform.ViewProjTrafo * whExt; n = nExt; c = V4d.IOII; ldir = V3d.Zero }
+                yield { wp = w2Ext; p = uniform.ViewProjTrafo * w2Ext; n = nExt; c = v.P2.c; ldir = V3f.Zero }
+                yield { wp = w0Ext; p = uniform.ViewProjTrafo * w0Ext; n = nExt; c = v.P0.c; ldir = V3f.Zero }
+                yield { wp = whExt; p = uniform.ViewProjTrafo * whExt; n = nExt; c = V4f.IOII; ldir = V3f.Zero }
                 restartStrip()
 
 
@@ -174,7 +174,7 @@ module GeometryComposition =
 
         let withLightDir (v : Vertex) =
             vertex {
-                return { v with ldir = (uniform.ViewTrafo * (V4d(50.0, 60.0, 70.0, 1.0) - v.wp)).XYZ |> Vec.normalize; n = (uniform.ViewTrafo * V4d(v.n, 0.0)).XYZ |> Vec.normalize }
+                return { v with ldir = (uniform.ViewTrafo * (V4f(50.0f, 60.0f, 70.0f, 1.0f) - v.wp)).XYZ |> Vec.normalize; n = (uniform.ViewTrafo * V4f(v.n, 0.0f)).XYZ |> Vec.normalize }
             }
 
     open FShade

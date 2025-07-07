@@ -8,14 +8,14 @@ module Shaders =
     open FShade
 
     type UniformScope with
-        member x.Colors : V4d[] = uniform?StorageBuffer?Colors
+        member x.Colors : V4f[] = uniform?StorageBuffer?Colors
         member x.ColorCount : int = uniform?ColorCount
 
     type ColorIndexAttribute() =
         inherit SemanticAttribute("ColorIndex")
 
     type InstanceVertex = {
-        [<Color>]        Color : V4d
+        [<Color>]        Color : V4f
         [<ColorIndex>]   ColorIndex : int
     }
 

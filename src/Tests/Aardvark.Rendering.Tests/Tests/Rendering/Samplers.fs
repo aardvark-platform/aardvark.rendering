@@ -21,7 +21,7 @@ module Samplers =
         open FShade
 
         type Vertex = {
-            [<TexCoord>] tc : V2d
+            [<TexCoord>] tc : V2f
         }
 
         let private diffuseIntSampler =
@@ -62,7 +62,7 @@ module Samplers =
                 addressV WrapMode.Border
             }
 
-        let texturesWithBorderSampler (tc: V2d) (_ : Vertex) =
+        let texturesWithBorderSampler (tc: V2f) (_ : Vertex) =
             fragment {
                 let o1 = borderSampler1.Sample tc
                 let o2 = borderSampler2.Sample tc
@@ -207,7 +207,7 @@ module Samplers =
 
         let sample2DDynamicSamplerStates (runtime: IRuntime) =
             let size = V2i(2, 1)
-            let tc = V2d(1.5, 0.0)
+            let tc = V2f(1.5, 0.0)
 
             use signature =
                 runtime.CreateFramebufferSignature([

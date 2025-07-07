@@ -29,53 +29,53 @@ module Path =
         type UniformScope with
             member x.FillGlyphs : bool = uniform?FillGlyphs
             member x.Antialias : bool = uniform?Antialias
-            member x.BoundaryColor : V4d = uniform?BoundaryColor
-            member x.DepthBias : float = uniform?DepthBias
+            member x.BoundaryColor : V4f = uniform?BoundaryColor
+            member x.DepthBias : float32 = uniform?DepthBias
 
         type Vertex =
             {
-                [<Position>] p : V4d
-                [<Interpolation(InterpolationMode.Sample); KLMKind>] klmKind : V4d
-                [<ShapeTrafoR0>] tr0 : V4d
-                [<ShapeTrafoR1>] tr1 : V4d
-                [<PathColor>] color : V4d
+                [<Position>] p : V4f
+                [<Interpolation(InterpolationMode.Sample); KLMKind>] klmKind : V4f
+                [<ShapeTrafoR0>] tr0 : V4f
+                [<ShapeTrafoR1>] tr1 : V4f
+                [<PathColor>] color : V4f
 
-                [<SamplePosition>] samplePos : V2d
+                [<SamplePosition>] samplePos : V2f
 
-                [<DepthLayer>] layer : float
+                [<DepthLayer>] layer : float32
 
 
-                [<TrafoOffsetAndScale>] instanceTrafo : M34d
+                [<TrafoOffsetAndScale>] instanceTrafo : M34f
             }
 
         type VertexNoSampleShading =
             {
-                [<Position>] p : V4d
-                [<KLMKind>] klmKind : V4d
-                [<ShapeTrafoR0>] tr0 : V4d
-                [<ShapeTrafoR1>] tr1 : V4d
-                [<PathColor>] color : V4d
+                [<Position>] p : V4f
+                [<KLMKind>] klmKind : V4f
+                [<ShapeTrafoR0>] tr0 : V4f
+                [<ShapeTrafoR1>] tr1 : V4f
+                [<PathColor>] color : V4f
 
-                [<SamplePosition>] samplePos : V2d
+                [<SamplePosition>] samplePos : V2f
 
-                [<DepthLayer>] layer : float
+                [<DepthLayer>] layer : float32
 
 
-                [<TrafoOffsetAndScale>] instanceTrafo : M34d
+                [<TrafoOffsetAndScale>] instanceTrafo : M34f
             }
 
-        let eps = 0.00001
+        let eps = 0.00001f
         [<Inline>]
-        let keepsWinding (isOrtho : bool) (t : M44d) =
+        let keepsWinding (isOrtho : bool) (t : M44f) =
             if isOrtho then
-                t.M00 > 0.0
+                t.M00 > 0.0f
             else
-                let c = V3d(t.M03, t.M13, t.M23)
-                let z = V3d(t.M02, t.M12, t.M22)
-                Vec.dot c z < 0.0
+                let c = V3f(t.M03, t.M13, t.M23)
+                let z = V3f(t.M02, t.M12, t.M22)
+                Vec.dot c z < 0.0f
 
         [<Inline>]
-        let isOrtho (proj : M44d) =
+        let isOrtho (proj : M44f) =
             abs proj.M30 < eps &&
             abs proj.M31 < eps &&
             abs proj.M32 < eps
@@ -84,28 +84,28 @@ module Path =
             vertex {
                 let trafo = uniform.ModelViewTrafo
 
-                let mutable p = V4d.Zero
+                let mutable p = V4f.Zero
 
-                let flip = v.tr0.W < 0.0
+                let flip = v.tr0.W < 0.0f
                 let pm =
-                    V2d(
-                        Vec.dot v.tr0.XYZ (V3d(v.p.XY, 1.0)),
-                        Vec.dot v.tr1.XYZ (V3d(v.p.XY, 1.0))
+                    V2f(
+                        Vec.dot v.tr0.XYZ (V3f(v.p.XY, 1.0f)),
+                        Vec.dot v.tr1.XYZ (V3f(v.p.XY, 1.0f))
                     )
 
                 if flip then
                     if keepsWinding (isOrtho uniform.ProjTrafo) trafo then
-                        p <- trafo * V4d( pm.X, pm.Y, v.p.Z, v.p.W)
+                        p <- trafo * V4f( pm.X, pm.Y, v.p.Z, v.p.W)
                     else
-                        p <- trafo * V4d(-pm.X, pm.Y, v.p.Z, v.p.W)
+                        p <- trafo * V4f(-pm.X, pm.Y, v.p.Z, v.p.W)
                 else
-                    p <- trafo * V4d(pm.X, pm.Y, v.p.Z, v.p.W)
+                    p <- trafo * V4f(pm.X, pm.Y, v.p.Z, v.p.W)
 
                 return {
                     v with
                         p = uniform.ProjTrafo * p
                         //kind = v.klmKind.W
-                        layer = 0.0
+                        layer = 0.0f
                         //klm = v.klmKind.XYZ
                         color = v.color
                     }
@@ -113,25 +113,25 @@ module Path =
 
         let pathVertexInstanced (v : Vertex) =
             vertex {
-                let instanceTrafo = M44d.op_Explicit v.instanceTrafo //M44d.FromRows(v.instanceTrafo.R0, v.instanceTrafo.R1, v.instanceTrafo.R2, V4d.OOOI)
+                let instanceTrafo = M44f v.instanceTrafo //M44d.FromRows(v.instanceTrafo.R0, v.instanceTrafo.R1, v.instanceTrafo.R2, V4d.OOOI)
                 let trafo = uniform.ModelViewTrafo * instanceTrafo
 
-                let flip = v.tr0.W < 0.0
+                let flip = v.tr0.W < 0.0f
                 let pm =
-                    V2d(
-                        Vec.dot v.tr0.XYZ (V3d(v.p.XY, 1.0)),
-                        Vec.dot v.tr1.XYZ (V3d(v.p.XY, 1.0))
+                    V2f(
+                        Vec.dot v.tr0.XYZ (V3f(v.p.XY, 1.0f)),
+                        Vec.dot v.tr1.XYZ (V3f(v.p.XY, 1.0f))
                     )
 
-                let mutable p = V4d.Zero
+                let mutable p = V4f.Zero
 
                 if flip then
                     if keepsWinding (isOrtho uniform.ProjTrafo) trafo then
-                        p <- trafo * V4d( pm.X, pm.Y, v.p.Z, v.p.W)
+                        p <- trafo * V4f( pm.X, pm.Y, v.p.Z, v.p.W)
                     else
-                        p <- trafo * V4d(-pm.X, pm.Y, v.p.Z, v.p.W)
+                        p <- trafo * V4f(-pm.X, pm.Y, v.p.Z, v.p.W)
                 else
-                    p <- trafo * V4d(pm.X, pm.Y, v.p.Z, v.p.W)
+                    p <- trafo * V4f(pm.X, pm.Y, v.p.Z, v.p.W)
 
                 return {
                     v with
@@ -139,7 +139,7 @@ module Path =
                         //kind = v.klmKind.W
                         layer = v.color.W
                         //klm = v.klmKind.XYZ
-                        color = V4d(v.color.XYZ, 1.0)
+                        color = V4f(v.color.XYZ, 1.0f)
                 }
             }
 
@@ -152,29 +152,29 @@ module Path =
                 let up = mvi.C1.XYZ |> Vec.normalize
 
                 let pm =
-                    V2d(
-                        Vec.dot v.tr0.XYZ (V3d(v.p.XY, 1.0)),
-                        Vec.dot v.tr1.XYZ (V3d(v.p.XY, 1.0))
+                    V2f(
+                        Vec.dot v.tr0.XYZ (V3f(v.p.XY, 1.0f)),
+                        Vec.dot v.tr1.XYZ (V3f(v.p.XY, 1.0f))
                     )
 
-                let mutable p = V4d.Zero
+                let mutable p = V4f.Zero
 
 
-                let pm = right * pm.X + up * pm.Y + V3d(0.0, 0.0, v.p.Z)
+                let pm = right * pm.X + up * pm.Y + V3f(0.0f, 0.0f, v.p.Z)
 
-                p <- trafo * V4d(pm, 1.0)
+                p <- trafo * V4f(pm, 1.0f)
 
                 return {
                     v with
                         p = uniform.ProjTrafo * p
-                        layer = 0.0
+                        layer = 0.0f
                         color = v.color
                     }
             }
 
         let pathVertexInstancedBillboard (v : Vertex) =
             vertex {
-                let instanceTrafo = M44d.op_Explicit v.instanceTrafo
+                let instanceTrafo = M44f v.instanceTrafo
                 let trafo = uniform.ModelViewTrafo * instanceTrafo
 
                 let mvi = trafo.Transposed
@@ -183,64 +183,64 @@ module Path =
 
 
 
-                let flip = v.tr0.W < 0.0
+                let flip = v.tr0.W < 0.0f
                 let pm =
-                    V2d(
-                        Vec.dot v.tr0.XYZ (V3d(v.p.XY, 1.0)),
-                        Vec.dot v.tr1.XYZ (V3d(v.p.XY, 1.0))
+                    V2f(
+                        Vec.dot v.tr0.XYZ (V3f(v.p.XY, 1.0f)),
+                        Vec.dot v.tr1.XYZ (V3f(v.p.XY, 1.0f))
                     )
 
-                let p = trafo * V4d(right * pm.X + up * pm.Y + V3d(0.0, 0.0, v.p.Z), v.p.W)
+                let p = trafo * V4f(right * pm.X + up * pm.Y + V3f(0.0f, 0.0f, v.p.Z), v.p.W)
 
                 return {
                     v with
                         p = uniform.ProjTrafo * p
                         layer = v.color.W
-                        color = V4d(v.color.XYZ, 1.0)
+                        color = V4f(v.color.XYZ, 1.0f)
                 }
             }
 
         let depthBiasVs(v : Vertex) =
             vertex {
-                let bias = 255.0 * v.layer * uniform.DepthBias
-                let p = v.p - V4d(0.0, 0.0, bias, 0.0)
+                let bias = 255.0f * v.layer * uniform.DepthBias
+                let p = v.p - V4f(0.0f, 0.0f, bias, 0.0f)
                 return { v with p = p }
             }
 
         let pathFragment(v : Vertex) =
             fragment {
-                let kind = v.klmKind.W + 0.001 * v.samplePos.X
+                let kind = v.klmKind.W + 0.001f * v.samplePos.X
 
                 let mutable color = v.color
 
                 if uniform.FillGlyphs then
-                    if kind > 1.5 && kind < 3.5 then
+                    if kind > 1.5f && kind < 3.5f then
                         // bezier2
                         let ci = v.klmKind.XYZ
                         let f = (ci.X * ci.X - ci.Y) * ci.Z
-                        if f > 0.0 then
+                        if f > 0.0f then
                             discard()
 
-                    elif kind > 3.5 && kind < 5.5 then
+                    elif kind > 3.5f && kind < 5.5f then
                         // arc
                         let ci = v.klmKind.XYZ
-                        let f = ((ci.X * ci.X + ci.Y*ci.Y) - 1.0) * ci.Z
+                        let f = ((ci.X * ci.X + ci.Y*ci.Y) - 1.0f) * ci.Z
 
-                        if f > 0.0 then
+                        if f > 0.0f then
                             discard()
 
-                     elif kind > 5.5  then
+                     elif kind > 5.5f  then
                         let ci = v.klmKind.XYZ
                         let f = ci.X * ci.X * ci.X - ci.Y * ci.Z
-                        if f > 0.0 then
+                        if f > 0.0f then
                             discard()
                 else
-                    if kind > 1.5 && kind < 3.5 then
-                        color <- V4d.IOOI
-                    elif kind > 3.5 && kind < 5.5 then
-                        color <- V4d.OIOI
-                    elif kind > 5.5  then
-                        color <- V4d.OOII
+                    if kind > 1.5f && kind < 3.5f then
+                        color <- V4f.IOOI
+                    elif kind > 3.5f && kind < 5.5f then
+                        color <- V4f.OIOI
+                    elif kind > 5.5f  then
+                        color <- V4f.OOII
 
                 return color
 
@@ -253,33 +253,33 @@ module Path =
                 let mutable color = v.color
 
                 if uniform.FillGlyphs then
-                    if kind > 1.5 && kind < 3.5 then
+                    if kind > 1.5f && kind < 3.5f then
                         // bezier2
                         let ci = v.klmKind.XYZ
                         let f = (ci.X * ci.X - ci.Y) * ci.Z
-                        if f > 0.0 then
+                        if f > 0.0f then
                             discard()
 
-                    elif kind > 3.5 && kind < 5.5 then
+                    elif kind > 3.5f && kind < 5.5f then
                         // arc
                         let ci = v.klmKind.XYZ
-                        let f = ((ci.X * ci.X + ci.Y*ci.Y) - 1.0) * ci.Z
+                        let f = ((ci.X * ci.X + ci.Y*ci.Y) - 1.0f) * ci.Z
 
-                        if f > 0.0 then
+                        if f > 0.0f then
                             discard()
 
-                     elif kind > 5.5  then
+                     elif kind > 5.5f  then
                         let ci = v.klmKind.XYZ
                         let f = ci.X * ci.X * ci.X - ci.Y * ci.Z
-                        if f > 0.0 then
+                        if f > 0.0f then
                             discard()
                 else
-                    if kind > 1.5 && kind < 3.5 then
-                        color <- V4d.IOOI
-                    elif kind > 3.5 && kind < 5.5 then
-                        color <- V4d.OIOI
-                    elif kind > 5.5  then
-                        color <- V4d.OOII
+                    if kind > 1.5f && kind < 3.5f then
+                        color <- V4f.IOOI
+                    elif kind > 3.5f && kind < 5.5f then
+                        color <- V4f.OIOI
+                    elif kind > 5.5f  then
+                        color <- V4f.OOII
 
                 return color
 

@@ -130,7 +130,7 @@ module ``SceneGraph Tests`` =
             let effectAddBlue =
                 let shader (v : Effects.Vertex) =
                     fragment {
-                        return v.c + V4d.OOIO
+                        return v.c + V4f.OOIO
                     }
 
                 Effect.ofFunction shader

@@ -237,18 +237,18 @@ module Shader =
     
     type LodVertex =
         {
-            [<Position>] pos : V4d
-            [<TexCoord>] tc : V2d
-            [<Semantic("ViewPosition")>] vp : V4d
-            [<Color>] col : V4d
-            [<Normal>] n : V3d
+            [<Position>] pos : V4f
+            [<TexCoord>] tc : V2f
+            [<Semantic("ViewPosition")>] vp : V4f
+            [<Color>] col : V4f
+            [<Normal>] n : V3f
             [<Semantic("TreeId")>] id : int
-            [<Semantic("DiffuseColorTextureTrafo")>] textureTrafo : V4d
+            [<Semantic("DiffuseColorTextureTrafo")>] textureTrafo : V4f
         }
         
     type UniformScope with
-        member x.ModelTrafos : M44d[] = x?StorageBuffer?ModelTrafos
-        member x.ModelViewTrafos : M44d[] = x?StorageBuffer?ModelViewTrafos
+        member x.ModelTrafos : M44f[] = x?StorageBuffer?ModelTrafos
+        member x.ModelViewTrafos : M44f[] = x?StorageBuffer?ModelViewTrafos
 
     let trafo (v : LodVertex) =       
         vertex { 
@@ -256,22 +256,22 @@ module Shader =
             //let f = if magic then 0.07 else 1.0 / 0.3
 
             let vp = mv * v.pos
-            let vn = mv * V4d(v.n, 0.0) |> Vec.xyz |> Vec.normalize
+            let vn = mv * V4f(v.n, 0.0f) |> Vec.xyz |> Vec.normalize
             let pp = uniform.ProjTrafo * vp
 
             
             let mutable tc = v.tc
-            if tc.X < 0.0 then tc.X <- 0.0
-            elif tc.X > 1.0 then tc.X <- 1.0
-            if tc.Y < 0.0 then tc.Y <- 0.0
-            elif tc.Y > 1.0 then tc.Y <- 1.0
+            if tc.X < 0.0f then tc.X <- 0.0f
+            elif tc.X > 1.0f then tc.X <- 1.0f
+            if tc.Y < 0.0f then tc.Y <- 0.0f
+            elif tc.Y > 1.0f then tc.Y <- 1.0f
 
-            tc.Y <- 1.0 - tc.Y
+            tc.Y <- 1.0f - tc.Y
 
             let tc =
                 let trafo = v.textureTrafo
-                if trafo.Z < 0.0 then
-                    V2d(-trafo.Z, trafo.W) * V2d(1.0 - tc.Y, tc.X) + trafo.XY
+                if trafo.Z < 0.0f then
+                    V2f(-trafo.Z, trafo.W) * V2f(1.0f - tc.Y, tc.X) + trafo.XY
                 else
                     trafo.ZW * tc + trafo.XY
 
@@ -309,26 +309,26 @@ module Shader =
         fragment {
             
             let tc = 
-                let mutable tc = V2d(v.tc.X % 1.0, v.tc.Y % 1.0)
-                if tc.X < 0.0 then tc.X <- 1.0 + tc.X
-                if tc.Y < 0.0 then tc.Y <- 1.0 + tc.Y
+                let mutable tc = V2f(v.tc.X % 1.0f, v.tc.Y % 1.0f)
+                if tc.X < 0.0f then tc.X <- 1.0f + tc.X
+                if tc.Y < 0.0f then tc.Y <- 1.0f + tc.Y
                 tc
 
             if uniform?MipMaps then
                 if uniform?Anisotropic then
                     return sam.Sample(tc)
                 else
-                    let s = V2d sam.Size
-                    let maxLevel = sam.MipMapLevels - 1 |> float
+                    let s = V2f sam.Size
+                    let maxLevel = sam.MipMapLevels - 1 |> float32
 
                     let dx = s * ddx v.tc
                     let dy = s * ddy v.tc
 
-                    let level = log2 (max (Vec.length dx) (Vec.length dy)) |> clamp 0.0 maxLevel
+                    let level = log2 (max (Vec.length dx) (Vec.length dy)) |> clamp 0.0f maxLevel
 
                     return sam.SampleLevel(v.tc, level)
             else
-                return sam.SampleLevel(v.tc, 0.0)
+                return sam.SampleLevel(v.tc, 0.0f)
         }
 
 [<EntryPoint>]

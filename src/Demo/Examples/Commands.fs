@@ -109,7 +109,7 @@ module CommandTest =
                     toEffect <| DefaultSurfaces.constantColor C4f.White
                     toEffect <| fun (v : Effects.Vertex) ->
                         fragment {
-                            let color : V4d = uniform?NodeColor
+                            let color : V4f = uniform?NodeColor
                             return color
                         }
                     toEffect <| DefaultSurfaces.simpleLighting

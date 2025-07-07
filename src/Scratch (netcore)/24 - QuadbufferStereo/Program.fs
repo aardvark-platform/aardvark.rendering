@@ -21,7 +21,7 @@ module Shader =
 
     let leftRightTest (v : Vertex) =
         fragment {
-            return { v with c = if layer() = 0 then V4d.IOOI elif layer() = 1 then V4d.OIOI else V4d.OOII }
+            return { v with c = if layer() = 0 then V4f.IOOI elif layer() = 1 then V4f.OIOI else V4f.OOII }
         }
 
 

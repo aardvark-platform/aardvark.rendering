@@ -8,9 +8,6 @@ open FSharp.Data.Adaptive
 module Instancing =
 
     module Sg =
-        let private convert (t : Trafo3d[]) =
-            t |> Array.map (fun t -> M44f.op_Explicit t.Forward)
-
         type InstancingNode(count : aval<int>, uniforms : Map<string, BufferView>, child : aval<ISg>) =
             interface ISg
             member x.Count = count
@@ -83,35 +80,35 @@ module Instancing =
                         match index with
                             | None ->
                                 match name with
-                                    | "ModelTrafo"
-                                    | "ModelViewTrafo"
-                                    | "ModelViewProjTrafo" when hasTrafo ->
-                                        let o : Expr<M44d> = Expr.ReadInput(ParameterKind.Uniform, typ, name, slot) |> Expr.Cast
-                                        let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafo, slot) |> Expr.Cast
+                                | "ModelTrafo"
+                                | "ModelViewTrafo"
+                                | "ModelViewProjTrafo" when hasTrafo ->
+                                    let o : Expr<M44f> = Expr.ReadInput(ParameterKind.Uniform, typ, name, slot) |> Expr.Cast
+                                    let n : Expr<M44f> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafo, slot) |> Expr.Cast
 
-                                        Some <@@  %o * %n @@>
-                                                
-                                    | "ModelTrafoInv"
-                                    | "ModelViewTrafoInv"
-                                    | "ModelViewProjTrafoInv" when hasTrafo ->
-                                        let o : Expr<M44d> = Expr.ReadInput(ParameterKind.Uniform, typ, name, slot) |> Expr.Cast
-                                        let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv, slot) |> Expr.Cast
+                                    Some <@@  %o * %n @@>
 
-                                        Some <@@  %n * %o @@>
+                                | "ModelTrafoInv"
+                                | "ModelViewTrafoInv"
+                                | "ModelViewProjTrafoInv" when hasTrafo ->
+                                    let o : Expr<M44f> = Expr.ReadInput(ParameterKind.Uniform, typ, name, slot) |> Expr.Cast
+                                    let n : Expr<M44f> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv, slot) |> Expr.Cast
 
-                                    | "NormalMatrix" when hasTrafo ->
-                                        let o : Expr<M33d> = Expr.ReadInput(ParameterKind.Uniform, typ, name, slot) |> Expr.Cast
-                                        let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv, slot) |> Expr.Cast
-                                                    
-                                        Some <@@ %o * (m33d %n).Transposed @@>
+                                    Some <@@  %n * %o @@>
+
+                                | "NormalMatrix" when hasTrafo ->
+                                    let o : Expr<M33f> = Expr.ReadInput(ParameterKind.Uniform, typ, name, slot) |> Expr.Cast
+                                    let n : Expr<M44f> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv, slot) |> Expr.Cast
+
+                                    Some <@@ %o * (m33f %n).Transposed @@>
 
 
-                                    | _ ->
-                                        if Set.contains name uniforms then
-                                            let e = Expr.ReadInput(ParameterKind.Input, typ, name, slot)
-                                            Some e
-                                        else
-                                            None
+                                | _ ->
+                                    if Set.contains name uniforms then
+                                        let e = Expr.ReadInput(ParameterKind.Input, typ, name, slot)
+                                        Some e
+                                    else
+                                        None
                             | _ ->
                                 None
                     )

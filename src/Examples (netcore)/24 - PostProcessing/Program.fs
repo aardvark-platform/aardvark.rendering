@@ -14,7 +14,7 @@ open FSharp.Data.Adaptive.Operators
 module Shaders =
     open FShade
 
-    type Vertex = { [<TexCoord>] tc : V2d; [<Position>] p : V4d }
+    type Vertex = { [<TexCoord>] tc : V2f; [<Position>] p : V4f }
 
     let inputTex =
         sampler2d {
@@ -24,14 +24,14 @@ module Shaders =
 
     // for a given filterSize and sigma calculate the weights CPU-side
     let filterSize = 15
-    let sigma = 6.0
+    let sigma = 6.0f
 
     let halfFilterSize = filterSize / 2
     let weights =
         let res = 
             Array.init filterSize (fun i ->
                 let x = abs (i - halfFilterSize)
-                exp (-float (x*x) / (2.0 * sigma * sigma))
+                exp (-float32 (x*x) / (2.0f * sigma * sigma))
             )
 
         // normalize the weights
@@ -41,36 +41,36 @@ module Shaders =
 
     let gaussX (v : Vertex) =
         fragment {
-            let mutable color = V4d.Zero
+            let mutable color = V4f.Zero
 
-            let off = V2d(1.0 / float uniform.ViewportSize.X, 0.0)
+            let off = V2f(1.0f / float32 uniform.ViewportSize.X, 0.0f)
             for x in -halfFilterSize..halfFilterSize do
                 let w = weights.[x+halfFilterSize]
-                color <- color + w * inputTex.Sample(v.tc + (float x) * off)
+                color <- color + w * inputTex.Sample(v.tc + (float32 x) * off)
              
 
-            return V4d(color.XYZ, 1.0)
+            return V4f(color.XYZ, 1.0f)
         }
 
     let gaussY (v : Vertex) =
         fragment {
-            let mutable color = V4d.Zero
-            let off = V2d(0.0, 1.0 / float uniform.ViewportSize.Y)
+            let mutable color = V4f.Zero
+            let off = V2f(0.0f, 1.0f / float32 uniform.ViewportSize.Y)
             for y in -halfFilterSize..halfFilterSize do
                 let w = weights.[y+halfFilterSize]
-                color <- color + w * inputTex.Sample(v.tc + (float y) * off)
+                color <- color + w * inputTex.Sample(v.tc + (float32 y) * off)
 
-            return V4d(color.XYZ, 1.0)
+            return V4f(color.XYZ, 1.0f)
         }
             
-    type PSVertex = { [<TexCoord; Interpolation(InterpolationMode.Sample)>] tc : V2d }
+    type PSVertex = { [<TexCoord; Interpolation(InterpolationMode.Sample)>] tc : V2f }
 
     let pointSpriteFragment (v : PSVertex) =
         fragment {
             let tc = v.tc // + 0.00000001 * v.sp
 
-            let c = 2.0 * tc - V2d.II
-            if c.Length > 1.0 then
+            let c = 2.0f * tc - V2f.II
+            if c.Length > 1.0f then
                 discard()
 
             return v

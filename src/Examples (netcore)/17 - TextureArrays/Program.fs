@@ -24,15 +24,15 @@ module Shader =
         fragment {
             
             let cnt : int = uniform?TextureCount
-            let crdOff : V2d = uniform?BlaBuffer?CoordOff
-            let mutable color = V3d.OOO
+            let crdOff : V2f = uniform?BlaBuffer?CoordOff
+            let mutable color = V3f.OOO
             for i in 0..cnt-1 do
-                color <- color + samplerArray.[i].Sample(v.tc + crdOff * 3.0).XYZ
+                color <- color + samplerArray.[i].Sample(v.tc + crdOff * 3.0f).XYZ
 
             if cnt > 0 then
-                color <- color / float cnt
+                color <- color / float32 cnt
 
-            return V4d(v.c.XYZ + color, 1.0)
+            return V4f(v.c.XYZ + color, 1.0f)
         }      
 
     let samplerArraySeparate = 
@@ -60,13 +60,13 @@ module Shader =
     let sampleTextureArray2 (v : Effects.Vertex) =
         fragment {
             
-            let mutable color = V3d.OOO
+            let mutable color = V3f.OOO
             for i in 0..2 do
                 color <- color + samplerArraySeparate.[i].Sample(v.tc).XYZ
                 
-            color <- color / 3.0
+            color <- color / 3.0f
 
-            return V4d(v.c.XYZ * 0.5 + color * 0.5, 1.0)
+            return V4f(v.c.XYZ * 0.5f + color * 0.5f, 1.0f)
         }  
 
     let singleSampler =
@@ -82,21 +82,21 @@ module Shader =
             
             let color = singleSampler.Sample(v.tc).XYZ
 
-            return V4d(v.c.XYZ * 0.5 + color * 0.5, 1.0)
+            return V4f(v.c.XYZ * 0.5f + color * 0.5f, 1.0f)
         } 
       
     type VertexIn = {
-        [<WorldPosition>] wp : V4d
+        [<WorldPosition>] wp : V4f
     }
 
     type VertexOut = {
-        [<WorldPosition>] wp : V4d
-        [<ClipDistance>] cd : float[]
+        [<WorldPosition>] wp : V4f
+        [<ClipDistance>] cd : float32[]
     }
 
     let clipVs (v : VertexIn) =
         vertex {
-            let planeCoefficients : V4d = uniform?ClipPlaneCoefficients
+            let planeCoefficients : V4f = uniform?ClipPlaneCoefficients
             let clidDistance = Vec.dot v.wp planeCoefficients
             return { wp = v.wp
                      cd = [| clidDistance |] }

@@ -11,15 +11,15 @@ module Shader =
     open FShade
 
     type Vertex = {
-        [<Position>]        pos     : V4d
-        [<WorldPosition>]   wp      : V4d
-        [<Color>]           c       : V4d
-        [<Normal>]          n       : V3d
+        [<Position>]        pos     : V4f
+        [<WorldPosition>]   wp      : V4f
+        [<Color>]           c       : V4f
+        [<Normal>]          n       : V3f
     }
 
     type UniformScope with
-        member x.LightViewProj : M44d = uniform?LightViewProj
-        member x.LightLocation : V3d = uniform?LightLocation
+        member x.LightViewProj : M44f = uniform?LightViewProj
+        member x.LightLocation : V3f = uniform?LightLocation
         
     let private shadowSampler =
         sampler2dShadow {
@@ -36,9 +36,9 @@ module Shader =
         fragment {
             let np = uniform.LightViewProj * v.wp
             let p = np.XYZ / np.W
-            let tc = V3d(0.5, 0.5,0.5) + V3d(0.5, 0.5, 0.5) * p.XYZ
-            let d = max 0.3 (shadowSampler.Sample(tc.XY, tc.Z - 0.000017))
-            return V4d(v.c.XYZ * d, v.c.W)
+            let tc = V3f(0.5f) + V3f(0.5f) * p.XYZ
+            let d = max 0.3f (shadowSampler.Sample(tc.XY, tc.Z - 0.000017f))
+            return V4f(v.c.XYZ * d, v.c.W)
         }
 
 
@@ -47,16 +47,16 @@ module Shader =
             let n = v.n |> Vec.normalize
             let c = uniform.LightLocation - v.wp.XYZ |> Vec.normalize
 
-            let ambient = 0.0
-            let diffuse = Vec.dot (uniform.ViewTrafo * V4d(c,0.0)).XYZ n |> max 0.0
+            let ambient = 0.0f
+            let diffuse = Vec.dot (uniform.ViewTrafo * V4f(c,0.0f)).XYZ n |> max 0.0f
 
-            return V4d(v.c.XYZ * diffuse + V3d(ambient,ambient,ambient), v.c.W)
+            return V4f(v.c.XYZ * diffuse + V3f(ambient,ambient,ambient), v.c.W)
         }
 
 
     type InstanceVertex = { 
-        [<Position>]      pos   : V4d 
-        [<InstanceTrafo>] trafo : M44d
+        [<Position>]      pos   : V4f
+        [<InstanceTrafo>] trafo : M44f
     }
 
     let instanceTrafo (v : InstanceVertex) =

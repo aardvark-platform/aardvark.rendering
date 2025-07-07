@@ -18,11 +18,11 @@ module Shader =
     // Helper functions need to be reflectable for fshade in order to generate code
     // (you can also put ReflectedDefinition on the whole module)
     [<ReflectedDefinition>]
-    let lerp3_ (v0 : V4d)(v1 : V4d)(v2 : V4d)(coord : V3d) = 
+    let lerp3_ (v0 : V4f)(v1 : V4f)(v2 : V4f)(coord : V3f) =
         v0 * coord.X + v1 * coord.Y + v2 * coord.Z
 
     [<ReflectedDefinition>]
-    let lerp3 (v0 : V3d)(v1 : V3d)(v2 : V3d)(coord : V3d) = 
+    let lerp3 (v0 : V3f)(v1 : V3f)(v2 : V3f)(coord : V3f) =
         v0 * coord.X + v1 * coord.Y + v2 * coord.Z
 
     //                                 |  the shader uses patches of size 3 (3 here is a type level literal)
@@ -31,23 +31,23 @@ module Shader =
         // tesselation shaders run in the tesselation computation expression builder
         tessellation  {
                 
-            let viewportSize = V2d uniform.ViewportSize
-            let maxEdgeLengthInPixel = float uniform?MaxEdgeLengthInPixel
+            let viewportSize = V2f uniform.ViewportSize
+            let maxEdgeLengthInPixel : float32 = uniform?MaxEdgeLengthInPixel
 
             let v0 = triangle.[0]
             let v1 = triangle.[1]
             let v2 = triangle.[2]
 
             // Transform positions to screen space
-            let sp0 = uniform.ModelViewProjTrafo * V4d(v0.pos.XYZ , 1.0)
-            let sp1 = uniform.ModelViewProjTrafo * V4d(v1.pos.XYZ , 1.0)
-            let sp2 = uniform.ModelViewProjTrafo * V4d(v2.pos.XYZ , 1.0)
+            let sp0 = uniform.ModelViewProjTrafo * V4f(v0.pos.XYZ , 1.0f)
+            let sp1 = uniform.ModelViewProjTrafo * V4f(v1.pos.XYZ , 1.0f)
+            let sp2 = uniform.ModelViewProjTrafo * V4f(v2.pos.XYZ , 1.0f)
 
 
             // Transform into image space
-            let pp0 = (sp0.XY / sp0.W * 0.5 + 0.5 ) * viewportSize
-            let pp1 = (sp1.XY / sp1.W * 0.5 + 0.5 ) * viewportSize
-            let pp2 = (sp2.XY / sp2.W * 0.5 + 0.5 ) * viewportSize
+            let pp0 = (sp0.XY / sp0.W * 0.5f + 0.5f ) * viewportSize
+            let pp1 = (sp1.XY / sp1.W * 0.5f + 0.5f ) * viewportSize
+            let pp2 = (sp2.XY / sp2.W * 0.5f + 0.5f ) * viewportSize
             
             // Edge vectors in image space
             let v01 = pp1 - pp0
@@ -59,7 +59,7 @@ module Shader =
             let outer02 = ceil (v02.Length / maxEdgeLengthInPixel )
             let outer12 = ceil (v12.Length / maxEdgeLengthInPixel )
                 
-            let inner   = ceil (outer01 +  outer02 + outer12) / 3.0
+            let inner   = ceil (outer01 +  outer02 + outer12) / 3.0f
 
             // Perform Tessellation 
             // Here, the GLSL tessellation control shader ends and the tessellation evaluation shader begins
@@ -76,7 +76,7 @@ module Shader =
 
             // Transform vertex to world space
             let n   = uniform.NormalMatrix * n
-            let wp  = uniform.ModelTrafo * V4d(pos, 1.0)
+            let wp  = uniform.ModelTrafo * V4f(pos, 1.0f)
 
             // Transform the vertex to screen space
             let pos = uniform.ViewProjTrafo * wp

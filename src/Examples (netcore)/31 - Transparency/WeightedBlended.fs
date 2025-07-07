@@ -25,8 +25,8 @@ module WeightedBlended =
         open FShade
 
         type Fragment = {
-            [<Color>] color : V4d
-            [<FragCoord>] coord : V4d
+            [<Color>] color : V4f
+            [<FragCoord>] coord : V4f
             [<SampleId>] sample : int
         }
 
@@ -37,12 +37,12 @@ module WeightedBlended =
         // http://casual-effects.blogspot.com/2015/03/implemented-weighted-blended-order.html
         let weightedBlend (f : Fragment) =
             fragment {
-                let a = f.color.W * 8.0 + 0.01
-                let b = -f.coord.Z * 0.95 + 1.0
-                let w = clamp 1e-2 3e2 (a * a * a * 1e8 * b * b * b)
+                let a = f.color.W * 8.0f + 0.01f
+                let b = -f.coord.Z * 0.95f + 1.0f
+                let w = clamp 1e-2f 3e2f (a * a * a * 1e8f * b * b * b)
 
                 let alpha = f.color.W
-                let color = V4d(f.color.XYZ * alpha, alpha) * w
+                let color = V4f(f.color.XYZ * alpha, alpha) * w
 
                 return {| Accum = color
                           Revealage = alpha |}
@@ -83,27 +83,27 @@ module WeightedBlended =
         // Composites the results using the two buffers from the earlier pass.
         let composite (samples : int) (f : Fragment) =
             fragment {
-                let mutable accum = V4d.Zero
-                let mutable revealage = V4d.Zero
+                let mutable accum = V4f.Zero
+                let mutable revealage = V4f.Zero
 
                 if samples > 1 then
                     for i in 0 .. samples - 1 do
                         accum <- accum + accumSamplerMS.Read(V2i f.coord.XY, i)
                         revealage <- revealage + revealageSamplerMS.Read(V2i f.coord.XY, i)
 
-                    accum <- accum / float samples
-                    revealage <- revealage / float samples
+                    accum <- accum / float32 samples
+                    revealage <- revealage / float32 samples
                 else
                     accum <- accumSampler.Read(V2i f.coord.XY, 0)
                     revealage <- revealageSampler.Read(V2i f.coord.XY, 0)
 
                 let accum =
                     if isInfinity accum then
-                        V4d(accum.W)
+                        V4f(accum.W)
                     else
                         accum
 
-                return V4d(accum.XYZ / max accum.W 1e-5, 1.0 - revealage.X)
+                return V4f(accum.XYZ / max accum.W 1e-5f, 1.0f - revealage.X)
             }
 
         // Blit one multisampled texture to another.

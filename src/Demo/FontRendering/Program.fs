@@ -22,10 +22,10 @@ open Microsoft.FSharp.NativeInterop
 
 module Shader =
     type Vertex = { 
-        [<Position>] pos : V4d 
-        [<TexCoord>] tc : V2d
-        [<Color>] color : V4d
-        [<Semantic("InstanceTrafo")>] trafo : M44d
+        [<Position>] pos : V4f
+        [<TexCoord>] tc : V2f
+        [<Color>] color : V4f
+        [<Semantic("InstanceTrafo")>] trafo : M44f
     }
 
     let trafo (v : Vertex) =
@@ -42,7 +42,7 @@ module Shader =
 
     let white (v : Vertex) =
         fragment {
-            return V4d.IIII
+            return V4f.IIII
         }
 
 

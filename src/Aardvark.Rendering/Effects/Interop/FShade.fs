@@ -25,40 +25,40 @@ type FShadeEffect = Effect
 module FShadeInterop =
 
     type UniformScope with
-        member x.ModelTrafo : M44d = x?PerModel?ModelTrafo
-        member x.ViewTrafo : M44d = x?PerView?ViewTrafo
-        member x.ProjTrafo : M44d = x?PerView?ProjTrafo
-        member x.ViewProjTrafo : M44d = x?PerView?ViewProjTrafo
-        member x.ModelViewTrafo : M44d = x?PerModel?ModelViewTrafo
-        member x.ModelViewProjTrafo : M44d = x?PerModel?ModelViewProjTrafo
-        member x.NormalMatrix : M33d = x?PerModel?NormalMatrix
+        member x.ModelTrafo : M44f = x?PerModel?ModelTrafo
+        member x.ViewTrafo : M44f = x?PerView?ViewTrafo
+        member x.ProjTrafo : M44f = x?PerView?ProjTrafo
+        member x.ViewProjTrafo : M44f = x?PerView?ViewProjTrafo
+        member x.ModelViewTrafo : M44f = x?PerModel?ModelViewTrafo
+        member x.ModelViewProjTrafo : M44f = x?PerModel?ModelViewProjTrafo
+        member x.NormalMatrix : M33f = x?PerModel?NormalMatrix
 
-        member x.ModelTrafoInv : M44d = x?PerModel?ModelTrafoInv
-        member x.ViewTrafoInv : M44d = x?PerView?ViewTrafoInv
-        member x.ProjTrafoInv : M44d = x?PerView?ProjTrafoInv
-        member x.ViewProjTrafoInv : M44d = x?PerView?ViewProjTrafoInv
-        member x.ModelViewTrafoInv : M44d = x?PerModel?ModelViewTrafoInv
-        member x.ModelViewProjTrafoInv : M44d = x?PerModel?ModelViewProjTrafoInv
+        member x.ModelTrafoInv : M44f = x?PerModel?ModelTrafoInv
+        member x.ViewTrafoInv : M44f = x?PerView?ViewTrafoInv
+        member x.ProjTrafoInv : M44f = x?PerView?ProjTrafoInv
+        member x.ViewProjTrafoInv : M44f = x?PerView?ViewProjTrafoInv
+        member x.ModelViewTrafoInv : M44f = x?PerModel?ModelViewTrafoInv
+        member x.ModelViewProjTrafoInv : M44f = x?PerModel?ModelViewProjTrafoInv
 
-        member x.CameraLocation : V3d = x?PerView?CameraLocation
-        member x.LightLocation : V3d = x?PerLight?LightLocation
+        member x.CameraLocation : V3f = x?PerView?CameraLocation
+        member x.LightLocation : V3f = x?PerLight?LightLocation
 
 
 
-        member x.LineWidth : float = x?LineWidth
-        member x.LineColor : V4d = x?LineColor
+        member x.LineWidth : float32 = x?LineWidth
+        member x.LineColor : V4f = x?LineColor
 
-        member x.PointSize : float = x?PointSize
-        member x.PointColor : V4d = x?PointColor
+        member x.PointSize : float32 = x?PointSize
+        member x.PointColor : V4f = x?PointColor
 
         member x.ViewportSize : V2i = x?PerView?ViewportSize
 
 
-        member x.DiffuseColor : V4d = x?PerMaterial?DiffuseColor
-        member x.AmbientColor : V4d = x?PerMaterial?DiffuseColor
-        member x.EmissiveColor : V4d = x?PerMaterial?EmissiveColor
-        member x.SpecularColor : V4d = x?PerMaterial?SpecularColor
-        member x.Shininess : float = x?PerMaterial?Shininess
+        member x.DiffuseColor : V4f = x?PerMaterial?DiffuseColor
+        member x.AmbientColor : V4f = x?PerMaterial?DiffuseColor
+        member x.EmissiveColor : V4f = x?PerMaterial?EmissiveColor
+        member x.SpecularColor : V4f = x?PerMaterial?SpecularColor
+        member x.Shininess : float32 = x?PerMaterial?Shininess
 
         member x.DiffuseColorTexture : ShaderTextureHandle = x?DiffuseColorTexture
         member x.AmbientColorTexture : ShaderTextureHandle = x?AmbientColorTexture
@@ -159,7 +159,7 @@ module FShadeInterop =
 
         let (|Array|_|) (sampler : GLSL.GLSLSampler) =
             match sampler.samplerTextures with
-            | [] | _::[] ->
+            | [] | [ _ ] ->
                 None
             | (BaseName baseName, state)::xs ->
                 let names, samplers = List.unzip xs
@@ -231,30 +231,30 @@ module FShadeInterop =
     // Output types for color-renderable texture formats
     let private colorFormatToType =
         LookupTable.tryLookupV [
-            TextureFormat.Bgr8,         typeof<V3d>
-            TextureFormat.Bgra8,        typeof<V4d>
-            TextureFormat.R3G3B2,       typeof<V3d>
-            TextureFormat.Rgb4,         typeof<V3d>
-            TextureFormat.Rgb5,         typeof<V3d>
-            TextureFormat.Rgb8,         typeof<V3d>
-            TextureFormat.Rgb10,        typeof<V3d>
-            TextureFormat.Rgb12,        typeof<V3d>
-            TextureFormat.Rgb16,        typeof<V3d>
-            TextureFormat.Rgba2,        typeof<V4d>
-            TextureFormat.Rgba4,        typeof<V4d>
-            TextureFormat.Rgb5A1,       typeof<V4d>
-            TextureFormat.Rgba8,        typeof<V4d>
-            TextureFormat.Rgb10A2,      typeof<V4d>
-            TextureFormat.Rgba12,       typeof<V4d>
-            TextureFormat.Rgba16,       typeof<V4d>
-            TextureFormat.R8,           typeof<float>
-            TextureFormat.R16,          typeof<float>
-            TextureFormat.Rg8,          typeof<V2d>
-            TextureFormat.Rg16,         typeof<V2d>
-            TextureFormat.R16f,         typeof<float>
-            TextureFormat.R32f,         typeof<float>
-            TextureFormat.Rg16f,        typeof<V2d>
-            TextureFormat.Rg32f,        typeof<V2d>
+            TextureFormat.Bgr8,         typeof<V3f>
+            TextureFormat.Bgra8,        typeof<V4f>
+            TextureFormat.R3G3B2,       typeof<V3f>
+            TextureFormat.Rgb4,         typeof<V3f>
+            TextureFormat.Rgb5,         typeof<V3f>
+            TextureFormat.Rgb8,         typeof<V3f>
+            TextureFormat.Rgb10,        typeof<V3f>
+            TextureFormat.Rgb12,        typeof<V3f>
+            TextureFormat.Rgb16,        typeof<V3f>
+            TextureFormat.Rgba2,        typeof<V4f>
+            TextureFormat.Rgba4,        typeof<V4f>
+            TextureFormat.Rgb5A1,       typeof<V4f>
+            TextureFormat.Rgba8,        typeof<V4f>
+            TextureFormat.Rgb10A2,      typeof<V4f>
+            TextureFormat.Rgba12,       typeof<V4f>
+            TextureFormat.Rgba16,       typeof<V4f>
+            TextureFormat.R8,           typeof<float32>
+            TextureFormat.R16,          typeof<float32>
+            TextureFormat.Rg8,          typeof<V2f>
+            TextureFormat.Rg16,         typeof<V2f>
+            TextureFormat.R16f,         typeof<float32>
+            TextureFormat.R32f,         typeof<float32>
+            TextureFormat.Rg16f,        typeof<V2f>
+            TextureFormat.Rg32f,        typeof<V2f>
             TextureFormat.R8i,          typeof<int>
             TextureFormat.R8ui,         typeof<uint>
             TextureFormat.R16i,         typeof<int>
@@ -267,14 +267,14 @@ module FShadeInterop =
             TextureFormat.Rg16ui,       typeof<V2ui>
             TextureFormat.Rg32i,        typeof<V2i>
             TextureFormat.Rg32ui,       typeof<V2ui>
-            TextureFormat.Rgba32f,      typeof<V4d>
-            TextureFormat.Rgb32f,       typeof<V3d>
-            TextureFormat.Rgba16f,      typeof<V4d>
-            TextureFormat.Rgb16f,       typeof<V3d>
-            TextureFormat.R11fG11fB10f, typeof<V3d>
-            TextureFormat.Rgb9E5,       typeof<V3d>
-            TextureFormat.Srgb8,        typeof<V3d>
-            TextureFormat.Srgb8Alpha8,  typeof<V4d>
+            TextureFormat.Rgba32f,      typeof<V4f>
+            TextureFormat.Rgb32f,       typeof<V3f>
+            TextureFormat.Rgba16f,      typeof<V4f>
+            TextureFormat.Rgb16f,       typeof<V3f>
+            TextureFormat.R11fG11fB10f, typeof<V3f>
+            TextureFormat.Rgb9E5,       typeof<V3f>
+            TextureFormat.Srgb8,        typeof<V3f>
+            TextureFormat.Srgb8Alpha8,  typeof<V4f>
             TextureFormat.Rgba32ui,     typeof<V4ui>
             TextureFormat.Rgb32ui,      typeof<V3ui>
             TextureFormat.Rgba16ui,     typeof<V4ui>
@@ -287,14 +287,14 @@ module FShadeInterop =
             TextureFormat.Rgb16i,       typeof<V3i>
             TextureFormat.Rgba8i,       typeof<V4i>
             TextureFormat.Rgb8i,        typeof<V3i>
-            TextureFormat.R8Snorm,      typeof<float>
-            TextureFormat.Rg8Snorm,     typeof<V2d>
-            TextureFormat.Rgb8Snorm,    typeof<V3d>
-            TextureFormat.Rgba8Snorm,   typeof<V4d>
-            TextureFormat.R16Snorm,     typeof<float>
-            TextureFormat.Rg16Snorm,    typeof<V2d>
-            TextureFormat.Rgb16Snorm,   typeof<V3d>
-            TextureFormat.Rgba16Snorm,  typeof<V4d>
+            TextureFormat.R8Snorm,      typeof<float32>
+            TextureFormat.Rg8Snorm,     typeof<V2f>
+            TextureFormat.Rgb8Snorm,    typeof<V3f>
+            TextureFormat.Rgba8Snorm,   typeof<V4f>
+            TextureFormat.R16Snorm,     typeof<float32>
+            TextureFormat.Rg16Snorm,    typeof<V2f>
+            TextureFormat.Rgb16Snorm,   typeof<V3f>
+            TextureFormat.Rgba16Snorm,  typeof<V4f>
             TextureFormat.Rgb10A2ui,    typeof<V4ui>
         ]
 

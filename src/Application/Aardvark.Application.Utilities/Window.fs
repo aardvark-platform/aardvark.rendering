@@ -72,13 +72,13 @@ module ``FShade Extensions`` =
     type SpecularColorAttribute() = inherit FShade.SemanticAttribute("SpecularColor")
 
     type UniformScope with
-        member x.AmbientColor : V4d = x?Material?AmbientColor
-        member x.DiffuseColor : V4d = x?Material?DiffuseColor
-        member x.EmissiveColor : V4d = x?Material?EmissiveColor
-        member x.ReflectiveColor : V4d = x?Material?ReflectiveColor
-        member x.SpecularColor : V4d = x?Material?SpecularColor
-        member x.Shininess : float = x?Material?Shininess
-        member x.BumpScale : float = x?Material?BumpScale
+        member x.AmbientColor : V4f = x?Material?AmbientColor
+        member x.DiffuseColor : V4f = x?Material?DiffuseColor
+        member x.EmissiveColor : V4f = x?Material?EmissiveColor
+        member x.ReflectiveColor : V4f = x?Material?ReflectiveColor
+        member x.SpecularColor : V4f = x?Material?SpecularColor
+        member x.Shininess : float32 = x?Material?Shininess
+        member x.BumpScale : float32 = x?Material?BumpScale
 
 
 
@@ -98,12 +98,12 @@ module Utilities =
         let renderStereo (v : Effects.Vertex) =
             fragment {
                 let index =
-                    if v.tc.X > 0.5 then 1
+                    if v.tc.X > 0.5f then 1
                     else 0
 
                 let tc =
-                    if v.tc.X > 0.5 then V2d((v.tc.X - 0.5) * 2.0, v.tc.Y)
-                    else V2d(v.tc.X * 2.0, v.tc.Y)
+                    if v.tc.X > 0.5f then V2f((v.tc.X - 0.5f) * 2.0f, v.tc.Y)
+                    else V2f(v.tc.X * 2.0f, v.tc.Y)
 
                 return stereoTexture.SampleLevel(tc, index, uniform?Dependent)
             }

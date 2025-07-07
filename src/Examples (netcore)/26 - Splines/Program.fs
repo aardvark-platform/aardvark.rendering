@@ -9,122 +9,118 @@ open Aardvark.Application
 module SplineShader =
     open FShade
 
-    [<GLSLIntrinsic("cbrt({0})")>]
-    let cbrt (v : float) : float = onlyInShaderCode "cbrt"
-
-
-    let realRootsOfNormed (c2 : float) (c1 : float) (c0 : float) =
+    let realRootsOfNormed (c2 : float32) (c1 : float32) (c0 : float32) =
         // ------ eliminate quadric term (x = y - c2/3): x^3 + p x + q = 0
         let d = c2 * c2
-        let p3 = 1.0/3.0 * (* p *)(-1.0/3.0 * d + c1)
-        let q2 = 1.0/2.0 * (* q *)((2.0/27.0 * d - 1.0/3.0 * c1) * c2 + c0)
+        let p3 = 1.0f/3.0f * (* p *)(-1.0f/3.0f * d + c1)
+        let q2 = 1.0f/2.0f* (* q *)((2.0f/27.0f * d - 1.0f/3.0f * c1) * c2 + c0)
         let p3c = p3 * p3 * p3
-        let shift = 1.0/3.0 * c2
+        let shift = 1.0f/3.0f * c2
         let d = q2 * q2 + p3c
 
-        if d < 0.0 then
-            let phi = 1.0 / 3.0 * Fun.Acos(-q2 / Fun.Sqrt(-p3c))
-            let t = 2.0 * Fun.Sqrt(-p3)
+        if d < 0.0f then
+            let phi = 1.0f / 3.0f * Fun.Acos(-q2 / Fun.Sqrt(-p3c))
+            let t = 2.0f * Fun.Sqrt(-p3)
             let r0 = t * Fun.Cos(phi) - shift
-            let r1 = -t * Fun.Cos(phi + Constant.Pi / 3.0) - shift
-            let r2 = -t * Fun.Cos(phi - Constant.Pi / 3.0) - shift
+            let r1 = -t * Fun.Cos(phi + ConstantF.Pi / 3.0f) - shift
+            let r2 = -t * Fun.Cos(phi - ConstantF.Pi / 3.0f) - shift
             (r0, r1, r2)
         else
             let d = Fun.Sqrt(d)                 // one single and one double root
-            let uav = (d - q2) ** (1.0 / 3.0) - (d + q2) ** (1.0 / 3.0)
+            let uav = (d - q2) ** (1.0f / 3.0f) - (d + q2) ** (1.0f / 3.0f)
             let s0 = uav - shift
-            let s1 = -0.5 * uav - shift
+            let s1 = -0.5f * uav - shift
             (s0, s1, s1)
 
-    let realRootsOf (c3 : float) (c2 : float) (c1 : float) (c0 : float) =
+    let realRootsOf (c3 : float32) (c2 : float32) (c1 : float32) (c0 : float32) =
         realRootsOfNormed (c2 / c3) (c1 / c3) (c0 / c3)
 
-    let clipSpline (a : V2d) (b : V2d) (c : V2d) (d : V2d) (tmin : ref<float>) (tmax : ref<float>) =
+    let clipSpline (a : V2f) (b : V2f) (c : V2f) (d : V2f) (tmin : ref<float32>) (tmax : ref<float32>) =
         
-        let (txl0, txl1, txl2) = realRootsOf (d.X + 3.0*b.X - 3.0*c.X - a.X) (3.0*(a.X - 2.0*b.X + c.X)) (3.0 * (b.X - a.X)) (a.X - 1.0)
-        let (txh0, txh1, txh2) = realRootsOf (d.X + 3.0*b.X - 3.0*c.X - a.X) (3.0*(a.X - 2.0*b.X + c.X)) (3.0 * (b.X - a.X)) (a.X + 1.0)
+        let (txl0, txl1, txl2) = realRootsOf (d.X + 3.0f*b.X - 3.0f*c.X - a.X) (3.0f*(a.X - 2.0f*b.X + c.X)) (3.0f * (b.X - a.X)) (a.X - 1.0f)
+        let (txh0, txh1, txh2) = realRootsOf (d.X + 3.0f*b.X - 3.0f*c.X - a.X) (3.0f*(a.X - 2.0f*b.X + c.X)) (3.0f * (b.X - a.X)) (a.X + 1.0f)
         
-        let (tyl0, tyl1, tyl2) = realRootsOf (d.Y + 3.0*b.Y - 3.0*c.Y - a.Y) (3.0*(a.Y - 2.0*b.Y + c.Y)) (3.0 * (b.Y - a.Y)) (a.Y - 1.0)
-        let (tyh0, tyh1, tyh2) = realRootsOf (d.Y + 3.0*b.Y - 3.0*c.Y - a.Y) (3.0*(a.Y - 2.0*b.Y + c.Y)) (3.0 * (b.Y - a.Y)) (a.Y + 1.0)
+        let (tyl0, tyl1, tyl2) = realRootsOf (d.Y + 3.0f*b.Y - 3.0f*c.Y - a.Y) (3.0f*(a.Y - 2.0f*b.Y + c.Y)) (3.0f * (b.Y - a.Y)) (a.Y - 1.0f)
+        let (tyh0, tyh1, tyh2) = realRootsOf (d.Y + 3.0f*b.Y - 3.0f*c.Y - a.Y) (3.0f*(a.Y - 2.0f*b.Y + c.Y)) (3.0f * (b.Y - a.Y)) (a.Y + 1.0f)
 
-        let mutable min = 1.0
-        let mutable max = 0.0
+        let mutable min = 1.0f
+        let mutable max = 0.0f
 
-        if txl0 >= 0.0 && txl0 <= 1.0 then
+        if txl0 >= 0.0f && txl0 <= 1.0f then
             if txl0 < min then min <- txl0
             elif txl0 > max then max <- txl0
 
-        if txl1 >= 0.0 && txl1 <= 1.0 then
+        if txl1 >= 0.0f && txl1 <= 1.0f then
             if txl1 < min then min <- txl1
             elif txl1 > max then max <- txl1
             
-        if txl2 >= 0.0 && txl2 <= 1.0 then
+        if txl2 >= 0.0f && txl2 <= 1.0f then
             if txl2 < min then min <- txl2
             elif txl2 > max then max <- txl2
 
-        if txh0 >= 0.0 && txh0 <= 1.0 then
+        if txh0 >= 0.0f && txh0 <= 1.0f then
             if txh0 < min then min <- txh0
             elif txh0 > max then max <- txh0
 
-        if txh1 >= 0.0 && txh1 <= 1.0 then
+        if txh1 >= 0.0f && txh1 <= 1.0f then
             if txh1 < min then min <- txh1
             elif txh1 > max then max <- txh1
             
-        if txh2 >= 0.0 && txh2 <= 1.0 then
+        if txh2 >= 0.0f && txh2 <= 1.0f then
             if txh2 < min then min <- txh2
             elif txh2 > max then max <- txh2
 
 
-        if tyl0 >= 0.0 && tyl0 <= 1.0 then
+        if tyl0 >= 0.0f && tyl0 <= 1.0f then
             if tyl0 < min then min <- tyl0
             elif tyl0 > max then max <- tyl0
 
-        if tyl1 >= 0.0 && tyl1 <= 1.0 then
+        if tyl1 >= 0.0f && tyl1 <= 1.0f then
             if tyl1 < min then min <- tyl1
             elif tyl1 > max then max <- tyl1
             
-        if tyl2 >= 0.0 && tyl2 <= 1.0 then
+        if tyl2 >= 0.0f && tyl2 <= 1.0f then
             if tyl2 < min then min <- tyl2
             elif tyl2 > max then max <- tyl2
 
-        if tyh0 >= 0.0 && tyh0 <= 1.0 then
+        if tyh0 >= 0.0f && tyh0 <= 1.0f then
             if tyh0 < min then min <- tyh0
             elif tyh0 > max then max <- tyh0
 
-        if tyh1 >= 0.0 && tyh1 <= 1.0 then
+        if tyh1 >= 0.0f && tyh1 <= 1.0f then
             if tyh1 < min then min <- tyh1
             elif tyh1 > max then max <- tyh1
             
-        if tyh2 >= 0.0 && tyh2 <= 1.0 then
+        if tyh2 >= 0.0f && tyh2 <= 1.0f then
             if tyh2 < min then min <- tyh2
             elif tyh2 > max then max <- tyh2
 
         tmin := min
         tmax := max
 
-    let evalSpline (a : V4d) (b : V4d) (c : V4d) (d : V4d) (t : float) =
-        (1.0-t)*((1.0-t)*((1.0-t)*a + t*b) + t*((1.0-t)*b + t*c)) +
-        t      *((1.0-t)*((1.0-t)*b + t*c) + t*((1.0-t)*c + t*d))
+    let evalSpline (a : V4f) (b : V4f) (c : V4f) (d : V4f) (t : float32) =
+        (1.0f-t)*((1.0f-t)*((1.0f-t)*a + t*b) + t*((1.0f-t)*b + t*c)) +
+        t      *((1.0f-t)*((1.0f-t)*b + t*c) + t*((1.0f-t)*c + t*d))
 
-    let evalProjectiveSpline (a : V4d) (b : V4d) (c : V4d) (d : V4d) (t : float) =
+    let evalProjectiveSpline (a : V4f) (b : V4f) (c : V4f) (d : V4f) (t : float32) =
         let res = evalSpline a b c d t
-        0.5 * (res.XY / res.W + V2d.II)
+        0.5f * (res.XY / res.W + V2f.II)
 
     [<LocalSize(X = 64)>]
-    let prepare (cpIn : V4f[]) (div : int[]) (ts : V2f[]) (count : int) (viewProj : M44d) (viewportSize : V2i) (threshold : float) =
+    let prepare (cpIn : V4f[]) (div : int[]) (ts : V2f[]) (count : int) (viewProj : M44f) (viewportSize : V2i) (threshold : float32) =
         compute {
             let id = getGlobalId().X
 
             if id < count then
                 let i0 = 4 * id
-                let p0 = viewProj * V4d cpIn.[i0 + 0]
-                let p1 = viewProj * V4d cpIn.[i0 + 1]
-                let p2 = viewProj * V4d cpIn.[i0 + 2]
-                let p3 = viewProj * V4d cpIn.[i0 + 3]
+                let p0 = viewProj * cpIn.[i0 + 0]
+                let p1 = viewProj * cpIn.[i0 + 1]
+                let p2 = viewProj * cpIn.[i0 + 2]
+                let p3 = viewProj * cpIn.[i0 + 3]
 
                 // TODO: proper clipping
-                let mutable tmin = 0.0
-                let mutable tmax = 1.0
+                let mutable tmin = 0.0f
+                let mutable tmax = 1.0f
                 // !!! clipSline is wrong !!!
                 // clipSpline (p0.XY / p0.W) (p1.XY / p1.W) (p2.XY / p2.W) (p3.XY / p3.W) &&tmin &&tmax
                 
@@ -132,12 +128,12 @@ module SplineShader =
                 let steps = 8
                 let mutable tc = tmin
                 let mutable pc = evalProjectiveSpline p0 p1 p2 p3 tc
-                let step = (tmax - tmin) / float steps
-                let mutable approxLen = 0.0
+                let step = (tmax - tmin) / float32 steps
+                let mutable approxLen = 0.0f
                 for i in 0 .. steps - 1 do
                     let tn = tc + step
                     let pn = evalProjectiveSpline p0 p1 p2 p3 tn
-                    approxLen <- approxLen + Vec.length(V2d viewportSize * (pn - pc))
+                    approxLen <- approxLen + Vec.length(V2f viewportSize * (pn - pc))
                     tc <- tn
                     pc <- pn
 
@@ -176,24 +172,24 @@ module SplineShader =
                 let cnt = scannedDiv.[splineId] - baseIndex
 
                 let ts = ts.[splineId]
-                let tmin = float ts.X
-                let tmax = float ts.Y
+                let tmin = ts.X
+                let tmax = ts.Y
 
-                let ts = (tmax - tmin) / float cnt
-                let t0 = float indexInSpline * ts + tmin
+                let ts = (tmax - tmin) / float32 cnt
+                let t0 = float32 indexInSpline * ts + tmin
                 let t1 = t0 + ts
 
                 let i0 = 4 * splineId
-                let a = V4d cps.[i0 + 0]
-                let b = V4d cps.[i0 + 1]
-                let c = V4d cps.[i0 + 2]
-                let d = V4d cps.[i0 + 3]
+                let a = cps.[i0 + 0]
+                let b = cps.[i0 + 1]
+                let c = cps.[i0 + 2]
+                let d = cps.[i0 + 3]
 
                 let p0 = evalSpline a b c d t0
                 let p1 = evalSpline a b c d t1
 
-                lines.[2*id+0] <- V4f p0
-                lines.[2*id+1] <- V4f p1
+                lines.[2*id+0] <- p0
+                lines.[2*id+1] <- p1
         }
 
 

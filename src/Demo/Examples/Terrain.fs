@@ -98,44 +98,44 @@ module Terrain =
             }
 
         type UniformScope with
-            member x.CellSize : V2d = x?Height?CellSize
+            member x.CellSize : V2f = x?Height?CellSize
 
         type Vertex =
             {
-                [<Position>]        pos : V4d
-                [<Semantic("OffsetPos")>]        hpos : V4d
-                [<WorldPosition>]   wp : V4d
-                [<Normal>]          n : V3d
-                [<BiNormal>]        b : V3d
-                [<Tangent>]         t : V3d
-                [<TexCoord>]        tc : V2d
+                [<Position>]        pos : V4f
+                [<Semantic("OffsetPos")>]        hpos : V4f
+                [<WorldPosition>]   wp : V4f
+                [<Normal>]          n : V3f
+                [<BiNormal>]        b : V3f
+                [<Tangent>]         t : V3f
+                [<TexCoord>]        tc : V2f
             }
 
         let heightVertex (v : Vertex) =
             vertex {
                 let s = uniform.CellSize
 
-                let ddx = V2d(s.X, 0.0)
-                let ddy = V2d(0.0, s.Y)
+                let ddx = V2f(s.X, 0.0f)
+                let ddy = V2f(0.0f, s.Y)
 
                 let h0 = height.SampleGrad(v.tc, ddx, ddy).X
-                let hr = height.SampleGrad(v.tc + V2d(0.5 * s.X, 0.0), ddx, ddy).X
-                let hu = height.SampleGrad(v.tc + V2d(0.0, 0.5 * s.Y), ddx, ddy).X
+                let hr = height.SampleGrad(v.tc + V2f(0.5f * s.X, 0.0f), ddx, ddy).X
+                let hu = height.SampleGrad(v.tc + V2f(0.0f, 0.5f * s.Y), ddx, ddy).X
     
-                let pr = v.pos.XYZ + V3d(0.5 * s.X, 0.0, hr)
-                let pu = v.pos.XYZ + V3d(0.0, 0.5 * s.Y, hu)
-                let p0 = v.pos.XYZ + V3d(0.0, 0.0, h0)
+                let pr = v.pos.XYZ + V3f(0.5f * s.X, 0.0f, hr)
+                let pu = v.pos.XYZ + V3f(0.0f, 0.5f * s.Y, hu)
+                let p0 = v.pos.XYZ + V3f(0.0f, 0.0f, h0)
 
                 let t = (pr - p0) |> Vec.normalize
                 let b = (pu - p0) |> Vec.normalize
                 let n = Vec.cross t b |> Vec.normalize
 
-                return { v with hpos = V4d(p0, 1.0); n = n; t = t; b = b }
+                return { v with hpos = V4f(p0, 1.0f); n = n; t = t; b = b }
             }
 
         [<ReflectedDefinition>]
-        let inViewVolume (v : V3d) =
-            v.X >= -1.0 && v.Y >= -1.0 && v.Z >= -1.0 && v.X <= 1.0 && v.Y <= 1.0 && v.Z <= 1.0
+        let inViewVolume (v : V3f) =
+            v.X >= -1.0f && v.Y >= -1.0f && v.Z >= -1.0f && v.X <= 1.0f && v.Y <= 1.0f && v.Z <= 1.0f
 
 //        let tessFactor (p0 : V4d) (p1 : V4d) 
 //            let wp0 = uniform.ModelTrafo * p0
@@ -162,56 +162,56 @@ module Terrain =
 
         let heightTess (t : Triangle<Vertex>) =
             tessellation {
-                let vs = V2d uniform.ViewportSize 
+                let vs = V2f uniform.ViewportSize
                 let p0 = uniform.ModelViewProjTrafo * t.P0.hpos
                 let p1 = uniform.ModelViewProjTrafo * t.P1.hpos
                 let p2 = uniform.ModelViewProjTrafo * t.P2.hpos
 
-                let pp0 = 0.5 * p0.XYZ / p0.W
-                let pp1 = 0.5 * p1.XYZ / p1.W
-                let pp2 = 0.5 * p2.XYZ / p2.W
+                let pp0 = 0.5f * p0.XYZ / p0.W
+                let pp1 = 0.5f * p1.XYZ / p1.W
+                let pp2 = 0.5f * p2.XYZ / p2.W
 
 
-                let mutable t01 = -1.0
-                let mutable t12 = -1.0
-                let mutable t20 = -1.0
+                let mutable t01 = -1.0f
+                let mutable t12 = -1.0f
+                let mutable t20 = -1.0f
 
                 if inViewVolume pp0 || inViewVolume pp1 || inViewVolume pp2 then
                     let e01 = vs * (pp1.XY - pp0.XY) |> Vec.length
                     let e12 = vs * (pp2.XY - pp1.XY) |> Vec.length
                     let e20 = vs * (pp0.XY - pp2.XY) |> Vec.length
 
-                    t01 <- 0.1 * e01 |> clamp 1.0 64.0
-                    t12 <- 0.1 * e12 |> clamp 1.0 64.0
-                    t20 <- 0.1 * e20 |> clamp 1.0 64.0
+                    t01 <- 0.1f * e01 |> clamp 1.0f 64.0f
+                    t12 <- 0.1f * e12 |> clamp 1.0f 64.0f
+                    t20 <- 0.1f * e20 |> clamp 1.0f 64.0f
 
-                let avg = (t01 + t12 + t20) / 3.0
+                let avg = (t01 + t12 + t20) / 3.0f
                 let! coord = tessellateTriangle avg (t12, t20, t01)
 
                 let p = coord.X * t.P0.pos + coord.Y * t.P1.pos + coord.Z * t.P2.pos
                 let tc = p.XY
 
 
-                let s = V2d(0.01, 0.01)
-                let ddx = V2d(s.X, 0.0)
-                let ddy = V2d(0.0, s.Y)
+                let s = V2f(0.01f, 0.01f)
+                let ddx = V2f(s.X, 0.0f)
+                let ddy = V2f(0.0f, s.Y)
 
                 let h0 = height.SampleGrad(tc, ddx, ddy).X
-                let hr = height.SampleGrad(tc + V2d(0.5 * s.X, 0.0), ddx, ddy).X
-                let hu = height.SampleGrad(tc + V2d(0.0, 0.5 * s.Y), ddx, ddy).X
+                let hr = height.SampleGrad(tc + V2f(0.5f * s.X, 0.0f), ddx, ddy).X
+                let hu = height.SampleGrad(tc + V2f(0.0f, 0.5f * s.Y), ddx, ddy).X
     
-                let pr = p.XYZ + V3d(0.5 * s.X, 0.0, hr)
-                let pu = p.XYZ + V3d(0.0, 0.5 * s.Y, hu)
-                let p0 = p.XYZ + V3d(0.0, 0.0, h0)
+                let pr = p.XYZ + V3f(0.5f * s.X, 0.0f, hr)
+                let pu = p.XYZ + V3f(0.0f, 0.5f * s.Y, hu)
+                let p0 = p.XYZ + V3f(0.0f, 0.0f, h0)
 
                 let t = (pr - p0) |> Vec.normalize
                 let b = (pu - p0) |> Vec.normalize
                 let n = Vec.cross t b |> Vec.normalize
                 
                 return { 
-                    pos = uniform.ModelViewProjTrafo * V4d(p0, 1.0)
+                    pos = uniform.ModelViewProjTrafo * V4f(p0, 1.0f)
                     hpos = p
-                    wp = uniform.ModelTrafo * V4d(p0, 1.0)
+                    wp = uniform.ModelTrafo * V4f(p0, 1.0f)
                     n = uniform.ModelTrafoInv.TransposedTransformDir n
                     t = uniform.ModelTrafo.TransformDir t
                     b = uniform.ModelTrafo.TransformDir b 

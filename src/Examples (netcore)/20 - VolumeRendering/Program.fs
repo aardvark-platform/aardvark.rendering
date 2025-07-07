@@ -18,21 +18,21 @@ module Shader =
             addressW WrapMode.Clamp
         }
 
-    let pickRay (p : V2d) =
-        let pn = uniform.ViewProjTrafoInv * V4d(p.X, p.Y, 0.0, 1.0)
+    let pickRay (p : V2f) =
+        let pn = uniform.ViewProjTrafoInv * V4f(p.X, p.Y, 0.0f, 1.0f)
         let nearPlanePoint = pn.XYZ / pn.W
         Vec.normalize nearPlanePoint
 
     type Vertex =
         {
             [<Position>]
-            pos : V4d
+            pos : V4f
 
             [<Semantic("RayDirection")>]
-            dir : V3d
+            dir : V3f
 
             [<Semantic("CubeCoord")>]
-            cubeCoord : V3d
+            cubeCoord : V3f
 
         }
 
@@ -50,20 +50,20 @@ module Shader =
     let fragment (v : Vertex) =
         fragment {
             let size = volumeTexture.Size
-            let mutable color = V3d.Zero
+            let mutable color = V3f.Zero
                 
             let mutable sampleLocation = v.cubeCoord
 
             let steps = 100
 
-            let dir = -Vec.normalize v.dir / float steps
+            let dir = -Vec.normalize v.dir / float32 steps
 
             do
-                while sampleLocation.X >= 0.0 && sampleLocation.X <= 1.0 && sampleLocation.Y >= 0.0 && sampleLocation.Y <= 1.0 && sampleLocation.Z >= 0.0 && sampleLocation.Z <= 1.0 do
-                    color <- color + V3d.III * volumeTexture.SampleLevel(sampleLocation, 0.0).X
+                while sampleLocation.X >= 0.0f && sampleLocation.X <= 1.0f && sampleLocation.Y >= 0.0f && sampleLocation.Y <= 1.0f && sampleLocation.Z >= 0.0f && sampleLocation.Z <= 1.0f do
+                    color <- color + V3f.III * volumeTexture.SampleLevel(sampleLocation, 0.0f).X
                     sampleLocation <- sampleLocation + dir
 
-            return V4d(2.0 * color / float steps, 1.0)
+            return V4f(2.0f * color / float32 steps, 1.0f)
         }
 
 [<ReflectedDefinition>]
@@ -87,27 +87,27 @@ module Scatter =
             id : int
 
             [<Position>]
-            position : V4d
+            position : V4f
 
             [<PointSize>]
-            pointSize : float
+            pointSize : float32
         }
 
-    let estimateNormal (pos : V3d) (level : int) : V3d =
+    let estimateNormal (pos : V3f) (level : int) : V3f =
         let size = volumeTexture.Size 
-        let level = float level
+        let level = float32 level
 
-        let h = (1.0 / V3d size)
+        let h = (1.0f / V3f size)
 
-        let sxp = volumeTexture.SampleLevel(pos + V3d(h.X, 0.0, 0.0), level).X
-        let sxn = volumeTexture.SampleLevel(pos + V3d(-h.X, 0.0, 0.0), level).X
-        let syp = volumeTexture.SampleLevel(pos + V3d(0.0, h.Y, 0.0), level).X
-        let syn = volumeTexture.SampleLevel(pos + V3d(0.0, -h.Y, 0.0), level).X
-        let szp = volumeTexture.SampleLevel(pos + V3d(0.0, 0.0, h.Z), level).X
-        let szn = volumeTexture.SampleLevel(pos + V3d(0.0, 0.0, -h.Z), level).X
+        let sxp = volumeTexture.SampleLevel(pos + V3f(h.X, 0.0f, 0.0f), level).X
+        let sxn = volumeTexture.SampleLevel(pos + V3f(-h.X, 0.0f, 0.0f), level).X
+        let syp = volumeTexture.SampleLevel(pos + V3f(0.0f, h.Y, 0.0f), level).X
+        let syn = volumeTexture.SampleLevel(pos + V3f(0.0f, -h.Y, 0.0f), level).X
+        let szp = volumeTexture.SampleLevel(pos + V3f(0.0f, 0.0f, h.Z), level).X
+        let szn = volumeTexture.SampleLevel(pos + V3f(0.0f, 0.0f, -h.Z), level).X
 
-        let s1 = V3d(sxn, syn, szn)
-        let s2 = V3d(sxp, syp, szp)
+        let s1 = V3f(sxn, syn, szn)
+        let s2 = V3f(sxp, syp, szp)
         let n =  (s2 - s1)
         -n
    
@@ -121,31 +121,31 @@ module Scatter =
             let id = id - z * (size.X * size.Y)
             let x = id % size.X
             let y = id / size.Y
-            let coord = V3d(x,y,z) / V3d size
+            let coord = V3f(x,y,z) / V3f size
 
-            let d = volumeTexture.SampleLevel(coord, 0.0).X
+            let d = volumeTexture.SampleLevel(coord, 0.0f).X
             let n = estimateNormal coord 0
             let gmag2 = Vec.length n 
 
-            let wp = V4d(d * 2.0 - 1.0, gmag2 * 0.7 * 2.0 - 1.0, 1.0, 1.0) 
+            let wp = V4f(d * 2.0f - 1.0f, gmag2 * 0.7f * 2.0f - 1.0f, 1.0f, 1.0f)
 
             return 
                 { v with
                     position = wp
-                    pointSize = 2.0
+                    pointSize = 2.0f
                 } 
         }
     
     let vis (v : Effects.Vertex) =
         fragment {
             let c = v.c.X
-            if c >= 1.0 then return V4d.IIII * c * 0.002 // Fun.Log2  c * 0.04
-            else return V4d.Zero
+            if c >= 1.0f then return V4f.IIII * c * 0.002f // Fun.Log2  c * 0.04
+            else return V4f.Zero
         }
 
     let fragment (v : Vertex) =
         fragment { 
-            return V4d.IIII
+            return V4f.IIII
         }
 
 

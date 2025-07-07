@@ -25,26 +25,26 @@ module OctNormal =
     // Encode normals as a V2d by mapping to an octahedron
     // and projecting onto the z=0 plane (Meyer et al. 2010)
     [<ReflectedDefinition>]
-    let private signNonZero (v : V2d) =
-        V2d (
-            (if v.X >= 0.0 then 1.0 else - 1.0),
-            (if v.Y >= 0.0 then 1.0 else - 1.0)
+    let private signNonZero (v : V2f) =
+        V2f (
+            (if v.X >= 0.0f then 1.0f else - 1.0f),
+            (if v.Y >= 0.0f then 1.0f else - 1.0f)
         )
 
     [<ReflectedDefinition>]
-    let encode (n : V3d) =
-        let p = n.XY * (1.0 / (abs n.X + abs n.Y + abs n.Z))
-        if n.Z <= 0.0 then (1.0 - abs p.YX) * signNonZero p else p
+    let encode (n : V3f) =
+        let p = n.XY * (1.0f / (abs n.X + abs n.Y + abs n.Z))
+        if n.Z <= 0.0f then (1.0f - abs p.YX) * signNonZero p else p
 
     [<ReflectedDefinition>]
-    let decode (e : V2d) =
-        let z = 1.0 - abs e.X - abs e.Y
+    let decode (e : V2f) =
+        let z = 1.0f - abs e.X - abs e.Y
 
         Vec.normalize (
-            if z < 0.0 then
-                V3d((1.0 - abs e.YX) * signNonZero e.XY, z)
+            if z < 0.0f then
+                V3f((1.0f - abs e.YX) * signNonZero e.XY, z)
             else
-                V3d(e.XY, z)
+                V3f(e.XY, z)
         )
 
 module Shader =
@@ -54,9 +54,9 @@ module Shader =
         inherit SemanticAttribute("CustomId")
 
     type Fragment = {
-        [<Position>]     pos   : V4d
-        [<Normal>]       n     : V3d
-        [<FragCoord>]    coord : V4d
+        [<Position>]     pos   : V4f
+        [<Normal>]       n     : V3f
+        [<FragCoord>]    coord : V4f
         [<CustomId; Interpolation(InterpolationMode.Flat)>] id : int
     }
 
@@ -80,15 +80,15 @@ module Shader =
     // B, A = normal encoded using oct mapping
     let picking (f : Fragment) =
         fragment {
-            let id = float <| Fun.FloatFromBits(f.id)
+            let id = Fun.FloatFromBits(f.id)
             let d = f.pos.Z / f.pos.W
             let n = OctNormal.encode f.n
-            return {| PickData = V4d(id, d, n) |}
+            return {| PickData = V4f(id, d, n) |}
         }
 
     let withoutPicking (f : Fragment) =
         fragment {
-            return {| PickData = V4d.Zero |}
+            return {| PickData = V4f.Zero |}
         }
 
     let resolveSingle (samples : int) (f : Fragment) =
@@ -102,12 +102,12 @@ module Shader =
     let resolve (samples : int) (f : Fragment) =
         fragment {
             if samples > 1 then
-                let mutable result = V4d.Zero
+                let mutable result = V4f.Zero
 
                 for i = 0 to samples - 1 do
                     result <- result + diffuseSamplerMS.Read(V2i f.coord.XY, i)
 
-                return result / float samples
+                return result / float32 samples
             else
                 return diffuseSampler.Read(V2i f.coord.XY, 0)
         }
@@ -404,7 +404,7 @@ let main argv =
                 // Get id, depth and normal from pixel
                 let id = Fun.FloatToBits pixel.R
                 let depth = float pixel.G
-                let normal = OctNormal.decode <| V2d(pixel.B, pixel.A)
+                let normal = V3d (OctNormal.decode <| V2f(pixel.B, pixel.A))
 
                 // Compute world space position
                 let wp =

@@ -16,7 +16,7 @@ module ConjugateGradientShaders =
     open FShade
 
     [<LocalSize(X = 8, Y = 8)>]
-    let polynomial2d<'f, 'v when 'f :> Formats.IFloatingFormat> (call : Expr<V2i -> 'v>) (toV4 : Expr<'v -> V4d>) (res : Image2d<'f>) =
+    let polynomial2d<'f, 'v when 'f :> Formats.IFloatingFormat> (call : Expr<V2i -> 'v>) (toV4 : Expr<'v -> V4f>) (res : Image2d<'f>) =
         compute {
             let id = getGlobalId().XY
             if id.X < res.Size.X && id.Y < res.Size.Y then
@@ -52,108 +52,108 @@ module ConjugateGradientShaders =
         }
 
 
-    let cubic (v : float) =
-        let n = V4d(1.0, 2.0, 3.0, 4.0) - V4d(v,v,v,v)
+    let cubic (v : float32) =
+        let n = V4f(1.0f, 2.0f, 3.0f, 4.0f) - V4f(v,v,v,v)
         let s = n * n * n
         let x = s.X
-        let y = s.Y - 4.0 * s.X
-        let z = s.Z - 4.0 * s.Y + 6.0 * s.X
-        let w = 6.0 - x - y - z
-        V4d(x, y, z, w) * (1.0/6.0)
+        let y = s.Y - 4.0f * s.X
+        let z = s.Z - 4.0f * s.Y + 6.0f * s.X
+        let w = 6.0f - x - y - z
+        V4f(x, y, z, w) * (1.0f/6.0f)
 
 
-    let w0 (a : float) = (1.0/6.0)*(a*(a*(-a + 3.0) - 3.0) + 1.0)
-    let w1 (a : float) = (1.0/6.0)*(a*a*(3.0*a - 6.0) + 4.0)
-    let w2 (a : float) = (1.0/6.0)*(a*(a*(-3.0*a + 3.0) + 3.0) + 1.0)
-    let w3 (a : float) = (1.0/6.0)*(a*a*a)
-    let g0 (a : float) = w0(a) + w1(a)
-    let g1 (a : float) = w2(a) + w3(a)
+    let w0 (a : float32) = (1.0f/6.0f)*(a*(a*(-a + 3.0f) - 3.0f) + 1.0f)
+    let w1 (a : float32) = (1.0f/6.0f)*(a*a*(3.0f*a - 6.0f) + 4.0f)
+    let w2 (a : float32) = (1.0f/6.0f)*(a*(a*(-3.0f*a + 3.0f) + 3.0f) + 1.0f)
+    let w3 (a : float32) = (1.0f/6.0f)*(a*a*a)
+    let g0 (a : float32) = w0(a) + w1(a)
+    let g1 (a : float32) = w2(a) + w3(a)
 
     [<GLSLIntrinsic("fract({0})")>]
-    let fract (v : V2d) : V2d = onlyInShaderCode "fract"
+    let fract (v : V2f) : V2f = onlyInShaderCode "fract"
 
-    let V4(a : V2d, b : V2d) = V4d(a.X, a.Y, b.X, b.Y)
+    let V4(a : V2f, b : V2f) = V4f(a.X, a.Y, b.X, b.Y)
 
     
-    let sampleLinear (sam : Sampler2d) (tc : V2d) : V4d =
-        srcSampler.SampleLevel(tc, 0.0)
+    let sampleLinear (sam : Sampler2d) (tc : V2f) : V4f =
+        srcSampler.SampleLevel(tc, 0.0f)
 
-    let sampleGauss3 (sam : Sampler2d) (tc : V2d) : V4d =
+    let sampleGauss3 (sam : Sampler2d) (tc : V2f) : V4f =
         let size = sam.Size
-        let d = 0.5 / V2d size
-        let v00 = srcSampler.SampleLevel(tc, 0.0)
-        let vp0 = srcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
-        let vn0 = srcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
-        let v0p = srcSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0)
-        let v0n = srcSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0)
+        let d = 0.5f / V2f size
+        let v00 = srcSampler.SampleLevel(tc, 0.0f)
+        let vp0 = srcSampler.SampleLevel(tc + V2f( d.X,  0.0f), 0.0f)
+        let vn0 = srcSampler.SampleLevel(tc + V2f(-d.X,  0.0f), 0.0f)
+        let v0p = srcSampler.SampleLevel(tc + V2f( 0.0f,  d.Y), 0.0f)
+        let v0n = srcSampler.SampleLevel(tc + V2f( 0.0f, -d.Y), 0.0f)
 
-        (vp0 + vn0 + v0n + v0p) / 4.0
+        (vp0 + vn0 + v0n + v0p) / 4.0f
 
         
-    let sampleGauss5 (sam : Sampler2d) (tc : V2d) : V4d =
+    let sampleGauss5 (sam : Sampler2d) (tc : V2f) : V4f =
         let size = sam.Size
-        let d = 0.5 / V2d size
+        let d = 0.5f / V2f size
 
         let sum = 
-            sampleGauss3 sam (tc + V2d( d.X,  0.0)) + 
-            sampleGauss3 sam (tc + V2d(-d.X,  0.0)) + 
-            sampleGauss3 sam (tc + V2d( 0.0,  d.Y)) + 
-            sampleGauss3 sam (tc + V2d( 0.0, -d.Y)) + 
-            sampleGauss3 sam (tc + V2d( d.X,  d.Y)) + 
-            sampleGauss3 sam (tc + V2d( d.X, -d.Y)) + 
-            sampleGauss3 sam (tc + V2d(-d.X,  d.Y)) + 
-            sampleGauss3 sam (tc + V2d(-d.X, -d.Y))
-        sum / 8.0
+            sampleGauss3 sam (tc + V2f( d.X,  0.0f)) +
+            sampleGauss3 sam (tc + V2f(-d.X,  0.0f)) +
+            sampleGauss3 sam (tc + V2f( 0.0f,  d.Y)) +
+            sampleGauss3 sam (tc + V2f( 0.0f, -d.Y)) +
+            sampleGauss3 sam (tc + V2f( d.X,  d.Y)) +
+            sampleGauss3 sam (tc + V2f( d.X, -d.Y)) +
+            sampleGauss3 sam (tc + V2f(-d.X,  d.Y)) +
+            sampleGauss3 sam (tc + V2f(-d.X, -d.Y))
+        sum / 8.0f
 
-    let sampleCubic (sam : Sampler2d) (uv : V2d) : V4d =
-        let texSize = V2d sam.Size
+    let sampleCubic (sam : Sampler2d) (uv : V2f) : V4f =
+        let texSize = V2f sam.Size
 
         // half_f is a sort of sub-pixelquad fraction, -1 <= half_f < 1.
-        let half_f = 2.0 * fract(0.5 * uv * texSize - V2d(0.25, 0.25)) - 1.0
+        let half_f = 2.0f * fract(0.5f * uv * texSize - V2f(0.25f, 0.25f)) - 1.0f
 
         // f is the regular sub-pixel fraction, 0 <= f < 1. This is equivalent to
         // fract(uv * texSize - 0.5), but based on half_f to prevent rounding issues.
         let f = fract(half_f)
         
  
-        let s1         = ( 0.5 * f - 0.5) * f           // = w1 / (1 - f)
-        let s12        = (-2.0 * f + 1.5) * f + 1.0     // = (w2 - w1) / (1 - f)
-        let s34        = ( 2.0 * f - 2.5) * f - 0.5     // = (w4 - w3) / f
+        let s1         = ( 0.5f * f - 0.5f) * f            // = w1 / (1 - f)
+        let s12        = (-2.0f * f + 1.5f) * f + 1.0f     // = (w2 - w1) / (1 - f)
+        let s34        = ( 2.0f * f - 2.5f) * f - 0.5f     // = (w4 - w3) / f
 
         let p0 = (-f * s12 + s1) / (texSize * s12) + uv
         let p1 = (-f * s34 + s1 + s34) / (texSize * s34) + uv
-        let positions = V4d(p0.X, p0.Y, p1.X, p1.Y)
+        let positions = V4f(p0.X, p0.Y, p1.X, p1.Y)
 
-        let sign_flip = if half_f.X * half_f.Y > 0.0 then 1.0 else -1.0
+        let sign_flip = if half_f.X * half_f.Y > 0.0f then 1.0f else -1.0f
 
         let w          = V4(-f * s12 + s12, s34 * f) // = (w2 - w1, w4 - w3)
         let weights    = V4(w.XZ * (w.Y * sign_flip), w.XZ * (w.W * sign_flip))
 
 
-        sam.SampleLevel(positions.XY, 0.0) * weights.X +
-        sam.SampleLevel(positions.ZY, 0.0) * weights.Y +
-        sam.SampleLevel(positions.XW, 0.0) * weights.Z +
-        sam.SampleLevel(positions.ZW, 0.0) * weights.W
+        sam.SampleLevel(positions.XY, 0.0f) * weights.X +
+        sam.SampleLevel(positions.ZY, 0.0f) * weights.Y +
+        sam.SampleLevel(positions.XW, 0.0f) * weights.Z +
+        sam.SampleLevel(positions.ZW, 0.0f) * weights.W
         
 
 
     [<LocalSize(X = 8, Y = 8)>]
-    let restrict<'fmt when 'fmt :> Formats.IFloatingFormat> (dst : Image2d<'fmt>) (factor : float) =
+    let restrict<'fmt when 'fmt :> Formats.IFloatingFormat> (dst : Image2d<'fmt>) (factor : float32) =
         compute {
             let id = getGlobalId().XY
             let dstSize = dst.Size
             let srcSize = srcSampler.Size
 
             if id.X < dstSize.X && id.Y < dstSize.Y then
-                let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
+                let tc = (V2f(id) + V2f.Half) / V2f(dstSize)
 
 
-                let d = 0.25 / V2d dstSize
-                let vp0 = srcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
-                let vn0 = srcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
-                let v0p = srcSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0)
-                let v0n = srcSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0)
-                let value = (vp0 + vn0 + v0n + v0p) / 4.0
+                let d = 0.25f / V2f dstSize
+                let vp0 = srcSampler.SampleLevel(tc + V2f( d.X,  0.0f), 0.0f)
+                let vn0 = srcSampler.SampleLevel(tc + V2f(-d.X,  0.0f), 0.0f)
+                let v0p = srcSampler.SampleLevel(tc + V2f( 0.0f,  d.Y), 0.0f)
+                let v0n = srcSampler.SampleLevel(tc + V2f( 0.0f, -d.Y), 0.0f)
+                let value = (vp0 + vn0 + v0n + v0p) / 4.0f
 
                 //let value = srcSampler.SampleLevel(tc, 0.0) //sampleLinear srcSampler tc 
 
@@ -173,13 +173,13 @@ module ConjugateGradientShaders =
         }
 
     [<ReflectedDefinition>]
-    let inline interpolate4 (v : V2d) (p00 : V4d) (p01 : V4d) (p10 : V4d) (p11 : V4d) =
+    let inline interpolate4 (v : V2f) (p00 : V4f) (p01 : V4f) (p10 : V4f) (p11 : V4f) =
         let px0 = p00 + v.X * (p10 - p00)
         let px1 = p01 + v.X * (p11 - p01)
         px0 + v.Y * (px1 - px0)
 
     [<ReflectedDefinition>]
-    let inline interpolate1 (v : V2d) (p00 : float) (p01 : float) (p10 : float) (p11 : float) =
+    let inline interpolate1 (v : V2f) (p00 : float32) (p01 : float32) (p10 : float32) (p11 : float32) =
         let px0 = p00 + v.X * (p10 - p00)
         let px1 = p01 + v.X * (p11 - p01)
         px0 + v.Y * (px1 - px0)
@@ -193,19 +193,19 @@ module ConjugateGradientShaders =
             let srcSize = srcSampler.Size
 
             if id.X < dstSize.X && id.Y < dstSize.Y then
-                let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
+                let tc = (V2f(id) + V2f.Half) / V2f(dstSize)
 
-                let d = 0.25 / V2d dstSize
-                let wp0 = weightSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0).X
-                let wn0 = weightSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0).X
-                let w0p = weightSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0).X
-                let w0n = weightSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0).X
-                let weightAvg = (wp0 + wn0 + w0n + w0p) / 4.0
-                let vp0 = weightTimesSrcSampler.SampleLevel(tc + V2d( d.X,  0.0), 0.0)
-                let vn0 = weightTimesSrcSampler.SampleLevel(tc + V2d(-d.X,  0.0), 0.0)
-                let v0p = weightTimesSrcSampler.SampleLevel(tc + V2d( 0.0,  d.Y), 0.0)
-                let v0n = weightTimesSrcSampler.SampleLevel(tc + V2d( 0.0, -d.Y), 0.0)
-                let v = (vp0 + vn0 + v0n + v0p) / 4.0
+                let d = 0.25f / V2f dstSize
+                let wp0 = weightSampler.SampleLevel(tc + V2f( d.X,  0.0f), 0.0f).X
+                let wn0 = weightSampler.SampleLevel(tc + V2f(-d.X,  0.0f), 0.0f).X
+                let w0p = weightSampler.SampleLevel(tc + V2f( 0.0f,  d.Y), 0.0f).X
+                let w0n = weightSampler.SampleLevel(tc + V2f( 0.0f, -d.Y), 0.0f).X
+                let weightAvg = (wp0 + wn0 + w0n + w0p) / 4.0f
+                let vp0 = weightTimesSrcSampler.SampleLevel(tc + V2f( d.X,  0.0f), 0.0f)
+                let vn0 = weightTimesSrcSampler.SampleLevel(tc + V2f(-d.X,  0.0f), 0.0f)
+                let v0p = weightTimesSrcSampler.SampleLevel(tc + V2f( 0.0f,  d.Y), 0.0f)
+                let v0n = weightTimesSrcSampler.SampleLevel(tc + V2f( 0.0f, -d.Y), 0.0f)
+                let v = (vp0 + vn0 + v0n + v0p) / 4.0f
                 
                 //let weightAvg = weightSampler.SampleLevel(tc, 0.0).X //(sampleLinear weightSampler tc).X 
                 //let v = weightTimesSrcSampler.SampleLevel(tc, 0.0) //sampleLinear weightTimesSrcSampler tc 
@@ -218,26 +218,26 @@ module ConjugateGradientShaders =
                 
 
                 let value = 
-                    if weightAvg < 0.00001 then 
-                        V4d.Zero
+                    if weightAvg < 0.00001f then
+                        V4f.Zero
                     else 
                         //let v = interpolate4 frac (v00 * w00) (v01 * w01) (v10 * w10) (v11 * w11)
                         v / weightAvg
 
                 dst.[id] <- value
-                dstWeight.[id] <- V4d.IIII * weightAvg
+                dstWeight.[id] <- V4f.IIII * weightAvg
         }
 
     [<LocalSize(X = 8, Y = 8)>]
-    let interpolate<'fmt when 'fmt :> Formats.IFloatingFormat> (factor : V4d) (dst : Image2d<'fmt>) =
+    let interpolate<'fmt when 'fmt :> Formats.IFloatingFormat> (factor : V4f) (dst : Image2d<'fmt>) =
         compute {
             let id = getGlobalId().XY
             let dstSize = dst.Size
             let srcSize = srcSampler.Size
 
             if id.X < dstSize.X && id.Y < dstSize.Y then
-                let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
-                let v = factor * srcSampler.SampleLevel(tc, 0.0)
+                let tc = (V2f(id) + V2f.Half) / V2f(dstSize)
+                let v = factor * srcSampler.SampleLevel(tc, 0.0f)
                 dst.[id] <- v 
         }
     [<LocalSize(X = 8, Y = 8)>]
@@ -249,17 +249,17 @@ module ConjugateGradientShaders =
             let srcSize = srcSampler.Size
 
             if id.X < dstSize.X && id.Y < dstSize.Y then
-                let tc = (V2d(id) + V2d.Half) / V2d(dstSize)
+                let tc = (V2f(id) + V2f.Half) / V2f(dstSize)
 
-                let d = 1.0 / V2d srcSize
+                let d = 1.0f / V2f srcSize
 
-                let v00  = srcSampler.SampleLevel(tc,0.0)
-                let vp0  = srcSampler.SampleLevel(tc + V2d( d.X, 0.0 ),0.0)
-                let vn0  = srcSampler.SampleLevel(tc + V2d(-d.X, 0.0 ),0.0)
-                let v0p  = srcSampler.SampleLevel(tc + V2d( 0.0, d.Y ),0.0)
-                let v0n  = srcSampler.SampleLevel(tc + V2d( 0.0,-d.Y ),0.0)
+                let v00  = srcSampler.SampleLevel(tc,0.0f)
+                let vp0  = srcSampler.SampleLevel(tc + V2f( d.X, 0.0f ),0.0f)
+                let vn0  = srcSampler.SampleLevel(tc + V2f(-d.X, 0.0f ),0.0f)
+                let v0p  = srcSampler.SampleLevel(tc + V2f( 0.0f, d.Y ),0.0f)
+                let v0n  = srcSampler.SampleLevel(tc + V2f( 0.0f,-d.Y ),0.0f)
 
-                let div = 4.0 * v00 - vp0 - vn0 - v0p - v0n
+                let div = 4.0f * v00 - vp0 - vn0 - v0p - v0n
                 
                 dst.[id] <- div 
         }
@@ -614,11 +614,11 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                                 if hasX then
                                     match c, d with
                                         | Zero, _ | _, Zero -> 
-                                            [(Power_(Uniform "h", Value 0.0), b)]
+                                            [(Power_(Uniform "h", Value 0.0f), b)]
                                         | _ -> 
-                                            (Power_(Uniform "h", Value 0.0), c) :: allIsolations d
+                                            (Power_(Uniform "h", Value 0.0f), c) :: allIsolations d
                                 else
-                                    [(Power_(Uniform "h", Value 0.0), b)]
+                                    [(Power_(Uniform "h", Value 0.0f), b)]
                             | f -> 
                                 allIsolations bf |> List.map (fun (fi,b) ->
                                     Term.simplify (f * fi), b
@@ -1358,7 +1358,7 @@ module PixImageExtensionsNew =
         let save (path : string) (img : PixImage) =
             img.Save path
 
-type DepthMapSolver(runtime : IRuntime, lambda : float, sigma : float) =
+type DepthMapSolver(runtime : IRuntime, lambda : float32, sigma : float32) =
 
     static let w_cx = Term.TermParameter2d("w_cx")
     static let w_cy = Term.TermParameter2d("w_cy")
@@ -1366,8 +1366,8 @@ type DepthMapSolver(runtime : IRuntime, lambda : float, sigma : float) =
     static let v = Term.TermParameter2d("v")
 
     let residual (x : Term.TermParameter2d) (h : Term<V2i>) =
-        let cx = (2.0 * x.[0,0] - x.[-1,0] - x.[1,0]) / h**2
-        let cy = (2.0 * x.[0,0] - x.[0,-1] - x.[0,1]) / h**2
+        let cx = (2.0f * x.[0,0] - x.[-1,0] - x.[1,0]) / h**2
+        let cy = (2.0f * x.[0,0] - x.[0,-1] - x.[0,1]) / h**2
         
         Term.Value lambda * (w_cx.[0,0] * cx ** 2 + w_cy.[0,0] * cy ** 2) +
         w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
@@ -1376,12 +1376,12 @@ type DepthMapSolver(runtime : IRuntime, lambda : float, sigma : float) =
     
     let computeWCX = 
         solver.Compile (
-            let cx = 2.0 * v.[0,0] - v.[-1,0] - v.[1,0]
+            let cx = 2.0f * v.[0,0] - v.[-1,0] - v.[1,0]
             exp (-abs cx / sigma)
         )
     let computeWCY = 
         solver.Compile (
-            let cy = 2.0 * v.[0,0] - v.[0,-1] - v.[0,-1]
+            let cy = 2.0f * v.[0,0] - v.[0,-1] - v.[0,-1]
             exp (-abs cy / sigma)
         )
 
@@ -1448,8 +1448,8 @@ type ImageResonstructionSolver(runtime : IRuntime) =
     static let v = Term.TermParameter2d("v")
 
     let residual (x : Term.TermParameter2d) (h : Term<V2i>) =
-        let cx = (2.0 * x.[0,0] - x.[-1,0] - x.[1,0]) / h**2
-        let cy = (2.0 * x.[0,0] - x.[0,-1] - x.[0,1]) / h**2
+        let cx = (2.0f * x.[0,0] - x.[-1,0] - x.[1,0]) / h**2
+        let cy = (2.0f * x.[0,0] - x.[0,-1] - x.[0,1]) / h**2
         
         (cx + cy - div.[0,0]) ** 2 +
         w_v.[0,0] * (x.[0,0] - v.[0,0]) ** 2
@@ -1458,7 +1458,7 @@ type ImageResonstructionSolver(runtime : IRuntime) =
     
     let computeDiv = 
         solver.Compile (
-            4.0 * v.[0,0] - v.[-1,0] - v.[1,0] - v.[0,-1] - v.[0,1]
+            4.0f * v.[0,0] - v.[-1,0] - v.[1,0] - v.[0,-1] - v.[0,1]
         )
 
     member x.Solve(input : ITextureSubResource, weights : ITextureSubResource, res : ITextureSubResource, cfg : MultigridConfig) =
@@ -1502,7 +1502,7 @@ let depth (runtime : IRuntime) =
     let color = PixImage.Load @"C:\temp\b\P9094511.png"
     let depthValues = PixImage.Load @"C:\temp\b\P9094511.exr"
     let depthWeight = depthValues |> PixImage.map (fun v -> if v.X > 0.0 then V4d.IIII else V4d.Zero)
-    let solver = DepthMapSolver(runtime, 10.0, 0.1)
+    let solver = DepthMapSolver(runtime, 10.0f, 0.1f)
 
 
     let config =

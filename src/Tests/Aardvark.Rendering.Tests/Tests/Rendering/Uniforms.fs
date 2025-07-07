@@ -15,35 +15,35 @@ module Uniforms =
         open FShade
 
         type UniformScope with
-            member x.M22d : M22d             = x?MyUniform
-            member x.M23d : M23d             = x?MyUniform
-            member x.M33d : M33d             = x?MyUniform
-            member x.V2dArr : Arr<N<2>, V2d> = x?MyUniform
-            member x.V3dArr : Arr<N<2>, V3d> = x?MyUniform
+            member x.M22f : M22f             = x?MyUniform
+            member x.M23f : M23f             = x?MyUniform
+            member x.M33f : M33f             = x?MyUniform
+            member x.V2fArr : Arr<N<2>, V2f> = x?MyUniform
+            member x.V3fArr : Arr<N<2>, V3f> = x?MyUniform
 
-        let m22d (v : Effects.Vertex) =
+        let m22f (v : Effects.Vertex) =
             fragment {
-                return V4d(uniform.M22d.R0, uniform.M22d.R1)
+                return V4f(uniform.M22f.R0, uniform.M22f.R1)
             }
 
-        let m23d (v : Effects.Vertex) =
+        let m23f (v : Effects.Vertex) =
             fragment {
-                return uniform.M23d.R0 + uniform.M23d.R1
+                return uniform.M23f.R0 + uniform.M23f.R1
             }
 
-        let m33d (v : Effects.Vertex) =
+        let m33f (v : Effects.Vertex) =
             fragment {
-                return uniform.M33d.R0 + uniform.M33d.R1 + uniform.M33d.R2
+                return uniform.M33f.R0 + uniform.M33f.R1 + uniform.M33f.R2
             }
 
-        let v2dArr (v : Effects.Vertex) =
+        let v2fArr (v : Effects.Vertex) =
             fragment {
-                return V4d(uniform.V2dArr.[0], uniform.V2dArr.[1])
+                return V4f(uniform.V2fArr.[0], uniform.V2fArr.[1])
             }
 
-        let v3dArr (v : Effects.Vertex) =
+        let v3fArr (v : Effects.Vertex) =
             fragment {
-                return uniform.V3dArr.[0] + uniform.V3dArr.[1]
+                return uniform.V3fArr.[0] + uniform.V3fArr.[1]
             }
 
     module Cases =
@@ -71,27 +71,27 @@ module Uniforms =
 
         let private m22 (create : float32[] -> 'T) : IRuntime -> unit =
             let values = [| 1.0f; 2.0f; 3.0f; 4.0f |]
-            render (toEffect Shader.m22d) (create values) values
+            render (toEffect Shader.m22f) (create values) values
 
         let private m23 (create : float32[] -> 'T) : IRuntime -> unit =
             let values = Array.init 6 float32
             let expected = Array.init 3 (fun i -> values[i] + values.[i + 3])
-            render (toEffect Shader.m23d) (create values) expected
+            render (toEffect Shader.m23f) (create values) expected
 
         let private m33 (create : float32[] -> 'T) : IRuntime -> unit =
             let values = Array.init 9 float32
             let expected = Array.init 3 (fun i -> values[i] + values.[i + 3] + values.[i + 6])
-            render (toEffect Shader.m33d) (create values) expected
+            render (toEffect Shader.m33f) (create values) expected
 
         let private v2Array (create : V2f[] -> 'T) : IRuntime -> unit =
             let values = [| V2f(1.0f, 2.0f); V2f(3.0f, 4.0f) |]
             let expected = V4f(values.[0], values.[1])
-            render (toEffect Shader.v2dArr) (create values) (expected.ToArray())
+            render (toEffect Shader.v2fArr) (create values) (expected.ToArray())
 
         let private v3Array (create : V3f[] -> 'T) : IRuntime -> unit =
             let values = [| V3f(1.0f, 2.0f, 3.0f); V3f(4.0f, 5.0f, 6.0f) |]
             let expected = values.[0] + values.[1]
-            render (toEffect Shader.v3dArr) (create values) (expected.ToArray())
+            render (toEffect Shader.v3fArr) (create values) (expected.ToArray())
 
         let m22f : IRuntime -> unit = m22 M22f
         let m22d : IRuntime -> unit = m22 (Array.map float >> M22d)

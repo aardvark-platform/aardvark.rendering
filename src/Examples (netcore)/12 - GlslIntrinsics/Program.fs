@@ -15,8 +15,8 @@ module Shader =
 
     let test (v : Effects.Vertex) =
         fragment {
-            if frontFace () then return V4d(1.0,0.0,0.0,1.0)
-            else return V4d(0.0,1.0,0.0,1.0)
+            if frontFace () then return V4f(1, 0, 0, 1)
+            else return V4f(0, 1, 0, 1)
         }
 
 [<EntryPoint>]

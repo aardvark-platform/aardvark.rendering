@@ -7,7 +7,7 @@ open FSharp.Data.Adaptive
 [<AutoOpen>]
 module private PolynomialHelpers =
 
-    let arr2d (arr : float[][]) =
+    let arr2d (arr : float32[][]) =
         let r = arr.Length
         if r = 0 then 
             Array2D.zeroCreate 0 0
@@ -35,7 +35,7 @@ module private PolynomialHelpers =
                 res <- HashMap.alter k (Option.defaultValue num.zero >> num.add v >> Some) res
         res
 
-    let inline toOption (v : float) =
+    let inline toOption (v : float32) =
         if Fun.IsTiny v then None
         else Some v
 
@@ -444,13 +444,13 @@ module Polynomial =
             
             if p = V2i.Zero then
                 <@
-                    (%fromV4) ((%sam).SampleLevel((V2d (%id) + V2d.Half) / V2d (%size), float (%level)))
+                    (%fromV4) ((%sam).SampleLevel((V2f (%id) + V2f.Half) / V2f (%size), float32 (%level)))
                 @>
             else 
-                let ox = float p.X + 0.5
-                let oy = float p.Y + 0.5
+                let ox = float32 p.X + 0.5f
+                let oy = float32 p.Y + 0.5f
                 <@
-                    (%fromV4) ((%sam).SampleLevel((V2d (%id) + V2d(ox, oy)) / V2d (%size), float (%level)))
+                    (%fromV4) ((%sam).SampleLevel((V2f (%id) + V2f(ox, oy)) / V2f (%size), float32 (%level)))
                 @>
 
     let toExpr (fetch : string -> 'p -> Expr<'c>) (p : Polynomial<'p, 'c>) =
@@ -547,7 +547,7 @@ module Polynomial =
 
         call
 
-    let toCCode (fetch : Expr<'p> -> string -> 'p -> Expr<float>)  (p : Polynomial<'p, float>) =
+    let toCCode (fetch : Expr<'p> -> string -> 'p -> Expr<float32>)  (p : Polynomial<'p, float32>) =
         let call = toReflectedCall fetch p
 
         let coord : Expr<'p> =
@@ -562,7 +562,7 @@ module Polynomial =
             compute {
                 let id = (%coord)
                 let value = (%call) id
-                dst.[getGlobalId().XY] <- V4d.IIII * value
+                dst.[getGlobalId().XY] <- V4f.IIII * value
             }
 
         let glsl = 

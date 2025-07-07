@@ -24,22 +24,22 @@ module Lighting =
             let l = c
             let h = c
 
-            let ambient = 0.1
+            let ambient = 0.1f
             let diffuse = 
                 if twoSided then Vec.dot l n |> abs
-                else Vec.dot l n |> max 0.0
+                else Vec.dot l n |> max 0.0f
 
             let s = Vec.dot h n 
 
-            let l = ambient + (1.0 - ambient) * diffuse
+            let l = ambient + (1.0f - ambient) * diffuse
 
             let spec =
                 if uniform.HasSpecularColorTexture then 
                     let v = specular.Sample(v.tc).XYZ
-                    v.X * V3d.III
-                else V3d.III
+                    v.X * V3f.III
+                else V3f.III
 
-            return V4d(v.c.XYZ * l + spec * pown s 32, v.c.W)
+            return V4f(v.c.XYZ * l + spec * pown s 32, v.c.W)
         }
 
     let Effect (twoSided : bool)= 

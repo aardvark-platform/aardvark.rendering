@@ -7,7 +7,7 @@ open FSharp.Data.Adaptive
 type Term<'c when 'c : equality> =
     | Parameter of name : string * coord : 'c
     | Uniform of name : string
-    | Value of float
+    | Value of float32
     | Negate of Term<'c>
 
     | Sum of list<Term<'c>>
@@ -25,47 +25,47 @@ type Term<'c when 'c : equality> =
     static member Sin(a : Term<'c>) = Sine a
     static member Cos(a : Term<'c>) = Cosine a
     static member Tan(a : Term<'c>) = Tangent a
-    static member Exp(a : Term<'c>) = Power_(Value System.Math.E, a)
+    static member Exp(a : Term<'c>) = Power_(Value System.MathF.E, a)
     static member Abs(a : Term<'c>) = Absolute(a)
 
     static member (~-) (v : Term<'c>) = Negate v
     static member (+) (l : Term<'c>, r : Term<'c>) = Sum [l;r]
-    static member (+) (l : Term<'c>, r : float) = Sum [l; Value r]
-    static member (+) (l : float, r : Term<'c>) = Sum [Value l; r]
-    static member (+) (l : Term<'c>, r : int) = Sum [l; Value (float r)]
-    static member (+) (l : int, r : Term<'c>) = Sum [Value (float l); r]
+    static member (+) (l : Term<'c>, r : float32) = Sum [l; Value r]
+    static member (+) (l : float32, r : Term<'c>) = Sum [Value l; r]
+    static member (+) (l : Term<'c>, r : int) = Sum [l; Value (float32 r)]
+    static member (+) (l : int, r : Term<'c>) = Sum [Value (float32 l); r]
 
 
     static member (-) (l : Term<'c>, r : Term<'c>) = Sum [l; Negate r]
-    static member (-) (l : Term<'c>, r : float) = Sum [l; Value -r]
-    static member (-) (l : float, r : Term<'c>) = Sum [Value l; Negate r]
-    static member (-) (l : Term<'c>, r : int) = Sum [l; Value -(float r)]
-    static member (-) (l : int, r : Term<'c>) = Sum [Value (float l); Negate r]
+    static member (-) (l : Term<'c>, r : float32) = Sum [l; Value -r]
+    static member (-) (l : float32, r : Term<'c>) = Sum [Value l; Negate r]
+    static member (-) (l : Term<'c>, r : int) = Sum [l; Value -(float32 r)]
+    static member (-) (l : int, r : Term<'c>) = Sum [Value (float32 l); Negate r]
     
     static member (*) (l : Term<'c>, r : Term<'c>) = Product [l;r]
-    static member (*) (l : Term<'c>, r : float) = Product [l;Value r]
-    static member (*) (l : float, r : Term<'c>) = Product [Value l;r]
-    static member (*) (l : Term<'c>, r : int) = Product [l;Value (float r)]
-    static member (*) (l : int, r : Term<'c>) = Product [Value(float l);r]
+    static member (*) (l : Term<'c>, r : float32) = Product [l;Value r]
+    static member (*) (l : float32, r : Term<'c>) = Product [Value l;r]
+    static member (*) (l : Term<'c>, r : int) = Product [l;Value (float32 r)]
+    static member (*) (l : int, r : Term<'c>) = Product [Value(float32 l);r]
 
-    static member (/) (l : Term<'c>, r : Term<'c>) = Product [l;Power_(r, Value -1.0)]
-    static member (/) (l : Term<'c>, r : float) = Product [l;Value(1.0/r)]
-    static member (/) (l : float, r : Term<'c>) = Product [Value l;Power_(r, Value -1.0)]
-    static member (/) (l : Term<'c>, r : int) = Product [l;Value(1.0/float r)]
-    static member (/) (l : int, r : Term<'c>) = Product [Value (float l);Power_(r, Value -1.0)]
+    static member (/) (l : Term<'c>, r : Term<'c>) = Product [l;Power_(r, Value -1.0f)]
+    static member (/) (l : Term<'c>, r : float32) = Product [l;Value(1.0f/r)]
+    static member (/) (l : float32, r : Term<'c>) = Product [Value l;Power_(r, Value -1.0f)]
+    static member (/) (l : Term<'c>, r : int) = Product [l;Value(1.0f/float32 r)]
+    static member (/) (l : int, r : Term<'c>) = Product [Value (float32 l);Power_(r, Value -1.0f)]
 
     static member Power (l : Term<'c>, r : Term<'c>) = Power_(l,r)
-    static member Power (l : Term<'c>, r : float) = Power_(l,Value r)
-    static member Power (l : Term<'c>, r : int) = Power_(l,Value (float r))
+    static member Power (l : Term<'c>, r : float32) = Power_(l,Value r)
+    static member Power (l : Term<'c>, r : int) = Power_(l,Value (float32 r))
 
-    static member Sqrt(l : Term<'c>) = Power_(l, Value 0.5)
-    static member Cbrt(l : Term<'c>) = Power_(l, Value (1.0 / 3.0))
+    static member Sqrt(l : Term<'c>) = Power_(l, Value 0.5f)
+    static member Cbrt(l : Term<'c>) = Power_(l, Value (1.0f / 3.0f))
     
 
-    static member Zero : Term<'c> = Value 0.0
-    static member One : Term<'c> = Value 1.0
-    static member E : Term<'c> = Value Constant.E
-    static member Pi : Term<'c> = Value Constant.Pi
+    static member Zero : Term<'c> = Value 0.0f
+    static member One : Term<'c> = Value 1.0f
+    static member E : Term<'c> = Value ConstantF.E
+    static member Pi : Term<'c> = Value ConstantF.Pi
 
     member private x.AsString = x.ToString()
 
@@ -126,7 +126,7 @@ type Term<'c when 'c : equality> =
 
                 let s = 
                     match pos, neg with
-                        | [], [] -> "0.0"
+                        | [], [] -> "0.0f"
                         | pos, [] -> String.concat " + " pos
                         | [], neg -> String.concat " - " neg |> sprintf "-%s"
                         | pos, neg ->
@@ -136,7 +136,7 @@ type Term<'c when 'c : equality> =
 
             | Product(vs) ->
         
-                let neg, pos = vs |> List.partition (function Power_(a, Value e) when e < 0.0 -> true | _ -> false)
+                let neg, pos = vs |> List.partition (function Power_(a, Value e) when e < 0.0f -> true | _ -> false)
 
                 let pos = pos |> List.sortWith cmp |> List.map toString
                 let neg = neg |> List.sortWith cmp |> List.map (function (Power_(a,Value e)) -> toString (Power_(a, Value -e)) | _ -> failwith "")
@@ -149,9 +149,9 @@ type Term<'c when 'c : equality> =
                     
 
                 match pos, neg with
-                    | [], [] -> "1.0"
+                    | [], [] -> "1.0f"
                     | pos, [] -> conc " * " pos 
-                    | [], neg -> conc " * " neg |> sprintf "1.0 / %s"
+                    | [], neg -> conc " * " neg |> sprintf "1.0f / %s"
                     | pos, neg ->
                         let pos = conc " * " pos 
                         let neg = conc " * " neg
@@ -159,9 +159,9 @@ type Term<'c when 'c : equality> =
                         
 
             | Negate(l) -> sprintf "-%s" (toString l)
-            | Power_(l,Value 0.5) -> sprintf "sqrt(%s)" (toString l)
-            | Power_(l,Value 1.0) -> (toString l)
-            | Power_(l,Value -1.0) -> sprintf "1.0 / %s" (toString l)
+            | Power_(l,Value 0.5f) -> sprintf "sqrt(%s)" (toString l)
+            | Power_(l,Value 1.0f) -> (toString l)
+            | Power_(l,Value -1.0f) -> sprintf "1.0f / %s" (toString l)
             | Power_(l,r) -> sprintf "%s**%s" (toString l) (toString r)
             | Logarithm a -> sprintf "log(%s)" (toString a)
        
@@ -183,9 +183,9 @@ module TermPatterns =
             | _             -> None
 
 
-    let private tryFoldConstants (seed : float) (combine : float -> float -> float) (l : list<Term<'c>>) =
+    let private tryFoldConstants (seed : float32) (combine : float32 -> float32 -> float32) (l : list<Term<'c>>) =
 
-        let rec foldConstantsAux (cnt : int) (seed : float) (combine : float -> float -> float) (l : list<Term<'c>>) =
+        let rec foldConstantsAux (cnt : int) (seed : float32) (combine : float32 -> float32 -> float32) (l : list<Term<'c>>) =
             match l with
                 | Value v :: rest ->
                     foldConstantsAux (cnt + 1) (combine seed v) combine rest
@@ -204,14 +204,14 @@ module TermPatterns =
     let (|ConstantSum|_|) (e : Term<'a>) =
         match e with
             | Sum es -> 
-                tryFoldConstants 0.0 (+) es |> Option.map Sum
+                tryFoldConstants 0.0f (+) es |> Option.map Sum
             | _ ->
                 None
 
     let (|ConstantProduct|_|) (e : Term<'a>) =
         match e with
             | Product es -> 
-                tryFoldConstants 1.0 (*) es |> Option.map Product
+                tryFoldConstants 1.0f (*) es |> Option.map Product
             | _ ->
                 None
 
@@ -314,12 +314,12 @@ module TermPatterns =
 
     let (|Pinf|_|) (e : Term<'c>) =
         match e with
-            | Value v when System.Double.IsPositiveInfinity v -> Some ()
+            | Value v when isPositiveInfinity v -> Some ()
             | _ -> None
 
     let (|Ninf|_|) (e : Term<'c>) =
         match e with
-            | Value v when System.Double.IsNegativeInfinity v -> Some ()
+            | Value v when isNegativeInfinity v -> Some ()
             | _ -> None
 
     let (|Zero|_|) (e : Term<'c>) =
@@ -330,23 +330,23 @@ module TermPatterns =
 
     let (|Half|_|) (e : Term<'c>) =
         match e with
-            | Value v when Fun.IsTiny(v - 0.5) -> Some ()
+            | Value v when Fun.IsTiny(v - 0.5f) -> Some ()
             | _ -> None
 
     let (|One|_|) (e : Term<'c>) =
         match e with
-            | Value v when Fun.IsTiny(v - 1.0) -> Some ()
+            | Value v when Fun.IsTiny(v - 1.0f) -> Some ()
             | Product [] -> Some ()
             | _ -> None
 
     let (|MinusOne|_|) (e : Term<'c>) =
         match e with
-            | Value v when Fun.IsTiny(v + 1.0) -> Some ()
+            | Value v when Fun.IsTiny(v + 1.0f) -> Some ()
             | _ -> None
 
     let (|E|_|) (e : Term<'c>) =
         match e with
-            | Value v when Fun.IsTiny(v - Constant.E) -> Some ()
+            | Value v when Fun.IsTiny(v - ConstantF.E) -> Some ()
             | _ -> None
 
 
@@ -361,14 +361,14 @@ module TermPatterns =
                         Some r
                     else
                         match h, e with
-                            | Power_(a,Value ae), Power_(b,Value be) when be > 0.0 && a = b && ae >= be ->
+                            | Power_(a,Value ae), Power_(b,Value be) when be > 0.0f && a = b && ae >= be ->
                                 Some(Power_(a, Value (ae - be)) :: r)
                             
-                            | Power_(a,Value ae), Power_(b,Value be) when be < 0.0 && a = b && ae <= be ->
+                            | Power_(a,Value ae), Power_(b,Value be) when be < 0.0f && a = b && ae <= be ->
                                 Some(Power_(a, Value (ae - be)) :: r)
                             
-                            | Power_(a,Value ae), b when a = b && ae >= 1.0 ->
-                                Some(Power_(a, Value (ae - 1.0)) :: r)
+                            | Power_(a,Value ae), b when a = b && ae >= 1.0f ->
+                                Some(Power_(a, Value (ae - 1.0f)) :: r)
                                 
 
                             | _ ->
@@ -471,21 +471,21 @@ module Term =
 
         let sinDivCos a b =
             match a, b with
-                | Sine(a), Power_(Cosine(b), Value -1.0) 
-                | Power_(Cosine(b), Value -1.0), Sine(a) when a = b ->
+                | Sine(a), Power_(Cosine(b), Value -1.0f) 
+                | Power_(Cosine(b), Value -1.0f), Sine(a) when a = b ->
                     Some (Tangent(a))
                     
-                | Cosine(a), Power_(Sine(b), Value -1.0) 
-                | Power_(Sine(b), Value -1.0), Cosine(a) when a = b ->
-                    Some (1.0 / Tangent(a))
+                | Cosine(a), Power_(Sine(b), Value -1.0f) 
+                | Power_(Sine(b), Value -1.0f), Cosine(a) when a = b ->
+                    Some (1.0f / Tangent(a))
                 | _ ->
                     None
 
         let sinAddCosSquared a b =
             match a, b with
-                | Power_(Sine(a), Value 2.0), Power_(Cosine(b), Value 2.0) 
-                | Power_(Cosine(b), Value 2.0), Power_(Sine(a), Value 2.0) when a = b ->
-                    Some (Value 1.0)
+                | Power_(Sine(a), Value 2.0f), Power_(Cosine(b), Value 2.0f) 
+                | Power_(Cosine(b), Value 2.0f), Power_(Sine(a), Value 2.0f) when a = b ->
+                    Some (Value 1.0f)
 
                 | _ ->
                     None
@@ -494,8 +494,8 @@ module Term =
 
         [
             
-            function Sum [] -> Some (Value 0.0) | _ -> None
-            function Product [] -> Some (Value 1.0) | _ -> None
+            function Sum [] -> Some (Value 0.0f) | _ -> None
+            function Product [] -> Some (Value 1.0f) | _ -> None
             function Sum [a] -> Some a | _ -> None
             function Product [a] -> Some a | _ -> None
         
@@ -513,11 +513,11 @@ module Term =
             function Power_(Product ps, e) -> Some (Product (List.map (fun p -> Power_(p,e)) ps)) | _ -> None
             function Negate(Product (Any isValue (v,rest))) -> Some (Product (Value -v :: rest)) | _ -> None
             function Power_(a, One) -> Some a | _ -> None
-            function Power_(a, Zero) -> Some (Value 1.0) | _ -> None
+            function Power_(a, Zero) -> Some (Value 1.0f) | _ -> None
             function Absolute(Value a) -> Some (Value (abs a)) | _ -> None
             function Absolute(Negate a) -> Some (Absolute a) | _ -> None
-            function Absolute(Power_(a, Value e)) when e % 2.0 = 0.0 -> Some (Power_(a, Value e)) | _ -> None
-            function Power_(Absolute a, Value e) when e % 2.0 = 0.0 -> Some (Power_(a, Value e)) | _ -> None
+            function Absolute(Power_(a, Value e)) when e % 2.0f = 0.0f -> Some (Power_(a, Value e)) | _ -> None
+            function Power_(Absolute a, Value e) when e % 2.0f = 0.0f -> Some (Power_(a, Value e)) | _ -> None
 
             function Sine(Value a) -> Some (Value (sin a)) | _ -> None
             function Cosine(Value a) -> Some (Value (cos a)) | _ -> None
@@ -525,7 +525,7 @@ module Term =
             function Product(AnyPair sinDivCos (t,rest)) -> Some (Product(t :: rest)) | _ -> None
             function Sum(AnyPair sinAddCosSquared (t,rest)) -> Some (Sum(t :: rest)) | _ -> None
             function Sum(Any (|Zero|_|) (_, rest)) -> Some (Sum rest) | _ -> None
-            function Product(Any (|Zero|_|) _) -> Some (Value 0.0) | _ -> None
+            function Product(Any (|Zero|_|) _) -> Some (Value 0.0f) | _ -> None
             function Product(Any (|One|_|) (_, rest)) -> Some (Product rest) | _ -> None
             function Product(Any (|MinusOne|_|) (_, rest)) -> Some (Negate (Product rest)) | _ -> None
             function Negate(Negate a) -> Some a | _ -> None
@@ -538,28 +538,28 @@ module Term =
     let private simplifyRules<'c when 'c : equality> : list<Term<'c> -> Option<Term<'c>>> =
         let eqa a b = 
             if a = b then 
-                Some(Value 2.0, a) 
+                Some(Value 2.0f, a) 
             else 
                 match a, b with
                     | a, Product (AnyEq a rest) 
                     | Product (AnyEq a rest), a -> 
-                        Some(Sum [Product rest; Value 1.0], a)
+                        Some(Sum [Product rest; Value 1.0f], a)
 
                     | a, Negate(Product (AnyEq a rest)) 
                     | Negate(Product (AnyEq a rest)), a -> 
-                        Some (Sum [Value 1.0; Negate (Product rest)], a)
+                        Some (Sum [Value 1.0f; Negate (Product rest)], a)
                     
                     | _ -> 
                         None
 
         let eqm a b = 
             if a = b then 
-                Some(a, Value 2.0) 
+                Some(a, Value 2.0f) 
             else 
                 match a, b with
                     | a, Power_(b,f) 
                     | Power_(b,f), a  when a = b -> 
-                        Some(a, Sum [f; Value 1.0])
+                        Some(a, Sum [f; Value 1.0f])
 
                     | Power_(a,e0), Power_(b,e1) when a = b ->
                         Some(a, Sum [e0; e1])
@@ -602,7 +602,7 @@ module Term =
     [<GeneralizableValue>]
     let one<'c when 'c : equality> = Term<'c>.One
     
-    let inline constant (value : float) = Value value
+    let inline constant (value : float32) = Value value
     let inline parameter (name : string) (i : 'c) = Parameter(name, i)
     let inline uniform (name : string) = Uniform(name)
 
@@ -662,11 +662,11 @@ module Term =
                 | Absolute _ -> 
                     failwith "no derivative for abs"
                 | Value _ | Uniform _ -> 
-                    Value 0.0
+                    Value 0.0f
                 
                 | Parameter(n, ii) ->
-                    if name = n && i = ii then Value 1.0
-                    else Value 0.0
+                    if name = n && i = ii then Value 1.0f
+                    else Value 0.0f
 
                 | Negate a -> 
                     Negate (derivative name i a)
@@ -681,27 +681,27 @@ module Term =
                     Negate(Sine a) * derivative name i a
 
                 | Tangent a ->
-                    (1.0 + Tangent(a) ** 2) * derivative name i a
+                    (1.0f + Tangent(a) ** 2) * derivative name i a
 
                 | Power_(E, x) ->
-                    Power_(Value Constant.E, x) * derivative name i x
+                    Power_(Value ConstantF.E, x) * derivative name i x
 
                 | Power_(a, Value e) ->
-                    e * Power_(a, Value (e - 1.0)) * derivative name i a
+                    e * Power_(a, Value (e - 1.0f)) * derivative name i a
 
                 | Power_(Value a, e) ->
                     Power_(Value a, e) * log a * derivative  name i e
 
                 | Power_(f,g) ->
-                    Power_(f, g - 1.0) * (g * derivative name i f + f * log f * derivative name i g)
+                    Power_(f, g - 1.0f) * (g * derivative name i f + f * log f * derivative name i g)
 
                 | Logarithm a ->
-                    (1.0 / a) * derivative name i a
+                    (1.0f / a) * derivative name i a
 
                 | Product es ->
                     let rec derive (acc : list<Term<'c>>) (r : list<Term<'c>>) =
                         match r with
-                            | [] -> Value 0.0
+                            | [] -> Value 0.0f
                             | h :: t ->
                                 derivative name i h * (Product (acc @ t)) +
                                 derive (h :: acc) t
@@ -725,7 +725,7 @@ module Term =
     let private factorizeRules<'c when 'c : equality> : list<Term<'c> -> Option<Term<'c>>> =
 
         let rec power (l : list<Term<'c>>) (e : int) =
-            if e <= 0 then Value 1.0
+            if e <= 0 then Value 1.0f
             elif e = 1 then Sum l
             else
                 let l2 = List.allPairs l l |> List.map (fun (a, b) -> a * b) |> List.sum
@@ -736,7 +736,7 @@ module Term =
 
             function Product(Any isSum (s, rest)) -> s |> List.map (fun s -> Product (s :: rest)) |> Sum |> Some | _ -> None
             function Power_(Product xs, e) -> Some (Product (xs |> List.map (fun x -> Power_(x, e)))) | _ -> None
-            function Power_(Sum xs, Value e) when Fun.IsTiny(Fun.Frac e) && e > 0.0 -> Some (power xs (int e)) | _ -> None
+            function Power_(Sum xs, Value e) when Fun.IsTiny(Fun.Frac e) && e > 0.0f -> Some (power xs (int e)) | _ -> None
             function Power_(Negate a, Value e) when Fun.IsTiny(Fun.Frac e) && int (abs e) % 2 = 0 -> Some (Power_(a, Value e)) | _ -> None
             function Power_(Negate a, Value e) when Fun.IsTiny(Fun.Frac e) && int (abs e) % 2 = 1 -> Some (Negate (Power_(a, Value e))) | _ -> None
             
@@ -748,7 +748,7 @@ module Term =
             function Sine(Sum (a :: b)) -> Some (sin a * cos (Sum b) + cos a * sin (Sum b)) | _ -> None
             function Cosine(Sum (a :: b)) -> Some (cos a * cos (Sum b) - sin a * sin (Sum b)) | _ -> None
             
-            function Power_(s, Value e) when float (int e) = e && e > 0.0 -> Some (Product [s; Power_(s, Value (e - 1.0))]) | _ -> None
+            function Power_(s, Value e) when float32 (int e) = e && e > 0.0f -> Some (Product [s; Power_(s, Value (e - 1.0f))]) | _ -> None
         ]
 
     let factorize (name : string) (t : Term<'a>) =
@@ -766,9 +766,9 @@ module Term =
                 | t -> 
                     let ns = names t
                     if Set.contains name ns then
-                        (t, Value 0.0)
+                        (t, Value 0.0f)
                     else
-                        (Value 0.0, t)
+                        (Value 0.0f, t)
                   
 
         let (d,c) = t |> applyFix factorizeRules |> run 0
@@ -778,8 +778,8 @@ module Term =
         let rec isolate (name : string) (t : Term<'a>) =
             match t with
                 | Uniform n ->
-                    if n = name then t, Value 1.0
-                    else Value 1.0, t
+                    if n = name then t, Value 1.0f
+                    else Value 1.0f, t
 
                 | Negate(t) ->
                     let f, t = isolate name t
@@ -797,7 +797,7 @@ module Term =
 
                 | Parameter _ | Value _
                 | Sine _ | Cosine _ | Tangent _ | Sum _ | Logarithm _ | Absolute _ ->
-                    Value 1.0, t
+                    Value 1.0f, t
         let f, t = isolate name t
         simplify f, simplify t
 
@@ -888,13 +888,13 @@ module Term =
             
                     if p = V2i.Zero then
                         <@
-                            (%fromV4) ((%sam).SampleLevel((V2d (%id) + V2d.Half) / V2d (%size), float (%level)))
+                            (%fromV4) ((%sam).SampleLevel((V2f (%id) + V2f.Half) / V2f (%size), float32 (%level)))
                         @>
                     else 
-                        let ox = float p.X + 0.5
-                        let oy = float p.Y + 0.5
+                        let ox = float32 p.X + 0.5f
+                        let oy = float32 p.Y + 0.5f
                         <@
-                            (%fromV4) ((%sam).SampleLevel((V2d (%id) + V2d(ox, oy)) / V2d (%size), float (%level)))
+                            (%fromV4) ((%sam).SampleLevel((V2f (%id) + V2f(ox, oy)) / V2f (%size), float32 (%level)))
                         @>
 
     let private varNames =
@@ -946,7 +946,7 @@ module Term =
         let private sub = getMethodInfo <@ (-) : int -> int -> int @>
         let private mul = getMethodInfo <@ (*) : int -> int -> int @>
         let private div = getMethodInfo <@ (/) : int -> int -> int @>
-        let private pow = getMethodInfo <@ ( ** ) : float -> float -> float @>
+        let private pow = getMethodInfo <@ ( ** ) : float32 -> float32 -> float32 @>
         
         type Expr with
             static member Negate(l : Expr) =
@@ -1073,57 +1073,57 @@ module Term =
                                     Expr.Var(v) |> Expr.Cast
 
         let mul (l : Expr) (r : Expr) =
-            let lf = l.Type = typeof<float>
-            let rf = r.Type = typeof<float>
+            let lf = l.Type = typeof<float32>
+            let rf = r.Type = typeof<float32>
             match lf, rf with
-                | true, true -> <@@ (%%l : float) * (%%r : float) @@>
+                | true, true -> <@@ (%%l : float32) * (%%r : float32) @@>
                 | false, true -> <@@ (%rreal.muls) (%%l) (%%r) @@>
                 | true, false -> <@@ (%rreal.muls) (%%r) (%%l) @@>
                 | false, false -> <@@ (%rreal.mul) (%%l) (%%r) @@>
 
         let div (l : Expr) (r : Expr) =
-            let lf = l.Type = typeof<float>
-            let rf = r.Type = typeof<float>
+            let lf = l.Type = typeof<float32>
+            let rf = r.Type = typeof<float32>
             match lf, rf with
-                | true, true -> <@@ (%%l : float) / (%%r : float) @@>
+                | true, true -> <@@ (%%l : float32) / (%%r : float32) @@>
                 | false, true -> <@@ (%rreal.divs) (%%l) (%%r) @@>
                 | true, false -> <@@ (%rreal.div) ((%rreal.fromFloat) %%l) (%%r) @@>
                 | false, false -> <@@ (%rreal.div) (%%l) (%%r) @@>
 
         let pow (l : Expr) (r : Expr) =
-            let lf = l.Type = typeof<float>
-            let rf = r.Type = typeof<float>
+            let lf = l.Type = typeof<float32>
+            let rf = r.Type = typeof<float32>
             match lf, rf with
-                | true, true -> <@@ (%%l : float) ** (%%r : float) @@>
+                | true, true -> <@@ (%%l : float32) ** (%%r : float32) @@>
                 | false, true -> <@@ (%rreal.pows) (%%l) (%%r) @@>
                 | true, false -> <@@ (%rreal.pow) ((%rreal.fromFloat) (%%l)) (%%r) @@>
                 | false, false -> <@@ (%rreal.pow) (%%l) (%%r) @@>
 
         let negate (l : Expr) =
-            if l.Type = typeof<float> then 
-                <@@ -(%%l : float) @@>
+            if l.Type = typeof<float32> then 
+                <@@ -(%%l : float32) @@>
             else
                 <@@ (%rreal.neg) (%%l) @@>
 
 
         let add (l : Expr) (r : Expr) =
             let l =
-                if l.Type = typeof<float> then <@@ (%rreal.fromFloat) (%%l : float) @@>
+                if l.Type = typeof<float32> then <@@ (%rreal.fromFloat) (%%l : float32) @@>
                 else l
 
             let r =
-                if r.Type = typeof<float> then <@@ (%rreal.fromFloat) (%%r : float) @@>
+                if r.Type = typeof<float32> then <@@ (%rreal.fromFloat) (%%r : float32) @@>
                 else r
 
             <@@ (%rreal.add) (%%l) (%%r) @@>
 
         let sub (l : Expr) (r : Expr) =
             let l =
-                if l.Type = typeof<float> then <@@ (%rreal.fromFloat) (%%l : float) @@>
+                if l.Type = typeof<float32> then <@@ (%rreal.fromFloat) (%%l : float32) @@>
                 else l
 
             let r =
-                if r.Type = typeof<float> then <@@ (%rreal.fromFloat) (%%r : float) @@>
+                if r.Type = typeof<float32> then <@@ (%rreal.fromFloat) (%%r : float32) @@>
                 else r
 
             <@@ (%rreal.sub) (%%l) (%%r) @@>
@@ -1140,15 +1140,15 @@ module Term =
                 | Parameter(name, i) -> 
                     get name (Some i) 1 :> Expr
 
-                | Power_(Uniform name, Value e) when float (int e) = e ->
-                    if e > 0.0 then
+                | Power_(Uniform name, Value e) when float32 (int e) = e ->
+                    if e > 0.0f then
                         get name None (int e) :> Expr
                     else
                         let v = get name None (int -e)
-                        div <@@ 1.0 @@> v 
+                        div <@@ 1.0f @@> v 
                         
                 
-                | Power_(Parameter(name, i), Value e) when float (int e) = e ->
+                | Power_(Parameter(name, i), Value e) when float32 (int e) = e ->
                     get name (Some i) (int e) :> Expr
 
                 | Power_(E, value) ->
@@ -1211,7 +1211,7 @@ module Term =
 
                
                 | Product vs ->
-                    let neg, pos = vs |> List.partition (function Power_(a, Value e) when e < 0.0 -> true | _ -> false)
+                    let neg, pos = vs |> List.partition (function Power_(a, Value e) when e < 0.0f -> true | _ -> false)
                     let pos = pos |> List.map toExpr
                     let neg = neg |> List.map (function (Power_(a,Value e)) -> toExpr (Power_(a, Value -e)) | _ -> failwith "")
 
@@ -1241,7 +1241,7 @@ module Term =
 
         let sum = toExpr (simplify p)
         let sum = 
-            if sum.Type = typeof<float> then <@@ (%rreal.fromFloat) (%%sum) @@>
+            if sum.Type = typeof<float32> then <@@ (%rreal.fromFloat) (%%sum) @@>
             else sum
         let bindings = bindings.Values |> Seq.toList |> List.sortBy (fun (v,_) -> v.Name)
 
@@ -1276,7 +1276,7 @@ module Term =
 
         call
 
-    let toCCode (fetch : Expr<'c> -> string -> Option<'c> -> Expr<float>)  (p : Term<'c>) =
+    let toCCode (fetch : Expr<'c> -> string -> Option<'c> -> Expr<float32>)  (p : Term<'c>) =
         let call = toReflectedCall fetch p
 
         let coord : Expr<'c> =
@@ -1291,7 +1291,7 @@ module Term =
             compute {
                 let id = (%coord)
                 let value = (%call) id
-                dst.[getGlobalId().XY] <- V4d.IIII * value
+                dst.[getGlobalId().XY] <- V4f.IIII * value
             }
 
         let glsl = 

@@ -7,7 +7,7 @@ open FShade
 module ConstantColor = 
 
     let internal constantColor (c : C4f) (v : Vertex) =
-        let c = c.ToV4d()
+        let c = c.ToV4f()
         fragment {
             return c
         }

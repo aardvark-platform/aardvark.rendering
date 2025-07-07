@@ -244,16 +244,16 @@ module LoD =
         open FShade
         open Aardvark.SceneGraph.Semantics
         type Vertex = { 
-                [<Position>]      pos   : V4d 
-                [<Color>]         col   : V4d
-                [<PointSize>] blubb : float
+                [<Position>]      pos   : V4f
+                [<Color>]         col   : V4f
+                [<PointSize>] blubb : float32
             }
 
         let trafo (v : Vertex) =
             vertex {
                 return { 
-                    v with blubb = 1.0
-                           col = V4d(v.col.XYZ,0.5)
+                    v with blubb = 1.0f
+                           col = V4f(v.col.XYZ,0.5f)
                 }
             }
             

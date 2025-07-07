@@ -20,18 +20,18 @@ module StereoShader =
     type Vertex = 
         {
             [<Layer>]           layer   : int
-            [<Position>]        pos     : V4d
-            [<WorldPosition>]   wp      : V4d
-            [<Normal>]          n       : V3d
-            [<BiNormal>]        b       : V3d
-            [<Tangent>]         t       : V3d
-            [<Color>]           c       : V4d
-            [<TexCoord>]        tc      : V2d
+            [<Position>]        pos     : V4f
+            [<WorldPosition>]   wp      : V4f
+            [<Normal>]          n       : V3f
+            [<BiNormal>]        b       : V3f
+            [<Tangent>]         t       : V3f
+            [<Color>]           c       : V4f
+            [<TexCoord>]        tc      : V2f
         }
 
     type UniformScope with
-        member x.LeftProj : M44d = uniform?PerView?LeftProj
-        member x.RightProj : M44d = uniform?PerView?RightProj
+        member x.LeftProj : M44f = uniform?PerView?LeftProj
+        member x.RightProj : M44f = uniform?PerView?RightProj
         
 
     let trafo (t : Triangle<Vertex>) =
@@ -48,13 +48,13 @@ module StereoShader =
 
     let fancyColor (v : Vertex) =
         vertex {
-            return { v with c = V4d(v.pos.XYZ, 1.0) }
+            return { v with c = V4f(v.pos.XYZ, 1.0f) }
         }
     let flip (v : Vertex) =
         vertex {
             let version : int = uniform?Version
-            let zero = 1.0E-10 * float (version % 2)
-            return { v with pos = V4d(1.0, -1.0, 1.0 + zero, 1.0) * v.pos }
+            let zero = 1.0E-10f * float32 (version % 2)
+            return { v with pos = V4f(1.0f, -1.0f, 1.0f + zero, 1.0f) * v.pos }
         }
 
     let inputSampler =
@@ -67,15 +67,15 @@ module StereoShader =
 
     let sample (v : Effects.Vertex) =
         fragment {
-            let margin : float = uniform?Margin
-            if v.tc.X > 0.5 + (margin / 2.0) then 
-                let tc = V2d(2.0 * (v.tc.X - 0.5), v.tc.Y)
+            let margin : float32 = uniform?Margin
+            if v.tc.X > 0.5f + (margin / 2.0f) then
+                let tc = V2f(2.0f * (v.tc.X - 0.5f), v.tc.Y)
                 return inputSampler.Sample(tc, 1)
-            elif v.tc.X < 0.5 - (margin / 2.0) then
-                let tc = V2d(2.0 * v.tc.X, v.tc.Y)
+            elif v.tc.X < 0.5f - (margin / 2.0f) then
+                let tc = V2f(2.0f * v.tc.X, v.tc.Y)
                 return inputSampler.Sample(tc, 0)
             else
-                return V4d.Zero
+                return V4f.Zero
         }
 
 module Stereo =

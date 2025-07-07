@@ -14,7 +14,7 @@ open Expecto
 module FramebufferSignature =
 
     type UniformScope with
-        member x.Color: V4d = x?Color
+        member x.Color: V4f = x?Color
 
     module private Semantic =
         let Output0 = Sym.ofString "Output0"
@@ -27,27 +27,27 @@ module FramebufferSignature =
 
         let output0White (v : Effects.Vertex) =
             fragment {
-                return {| Output0 = V4d.One |}
+                return {| Output0 = V4f.One |}
             }
 
         let output1White (v : Effects.Vertex) =
             fragment {
-                return {| Output1 = V4d.One |}
+                return {| Output1 = V4f.One |}
             }
 
         let output4White (v : Effects.Vertex) =
             fragment {
-                return {| Output4 = V4d.One |}
+                return {| Output4 = V4f.One |}
             }
 
         let output02White (v : Effects.Vertex) =
             fragment {
-                return {| Output0 = V4d.One; Output2 = V4d.One |}
+                return {| Output0 = V4f.One; Output2 = V4f.One |}
             }
 
         let output13White (v : Effects.Vertex) =
             fragment {
-                return {| Output1 = V4d.One; Output3 = V4d.One |}
+                return {| Output1 = V4f.One; Output3 = V4f.One |}
             }
 
     module Cases =

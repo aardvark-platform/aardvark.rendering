@@ -25,8 +25,8 @@ module Shaders =
     open FShade
 
     type Fragment = {
-        [<Color>] color : V4d
-        [<FragCoord>] coord : V4d
+        [<Color>] color : V4f
+        [<FragCoord>] coord : V4f
         [<SampleId>] sample : int
     }
 

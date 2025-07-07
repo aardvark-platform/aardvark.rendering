@@ -18,11 +18,11 @@ module Shader =
     open Aardvark.Rendering.Effects
 
     type InstanceVertex = { 
-        [<Position>]            pos   : V4d 
-        [<Normal>]              n     : V3d 
-        [<BiNormal>]            b     : V3d 
-        [<Tangent>]             t     : V3d 
-        [<InstanceTrafo>]       trafo : M44d
+        [<Position>]            pos   : V4f
+        [<Normal>]              n     : V3f
+        [<BiNormal>]            b     : V3f
+        [<Tangent>]             t     : V3f
+        [<InstanceTrafo>]       trafo : M44f
     }
 
     // same as DefaultSurfaces.trafo but assumes ortho model trafos and uses model trafo instead of proper normal matrix.
@@ -38,9 +38,9 @@ module Shader =
         }
 
     type Vertex = {
-        [<Position>]        pos : V4d
-        [<Color>]           c   : V4d
-        [<Normal>]          n   : V3d
+        [<Position>]        pos : V4f
+        [<Color>]           c   : V4f
+        [<Normal>]          n   : V3f
     }
 
     // since we need special extension feature not provided by fshade we simply import the functionality (standard approach)
@@ -49,8 +49,8 @@ module Shader =
 
     // define some typed accessors for uniforms/storage buffers.
     type UniformScope with
-        member x.ObjectColors : V4d[] = x?StorageBuffer?ObjectColors
-        member x.MeshTrafo : M44d[] = x?StorageBuffer?MeshTrafo
+        member x.ObjectColors : V4f[] = x?StorageBuffer?ObjectColors
+        member x.MeshTrafo : M44f[] = x?StorageBuffer?MeshTrafo
     
     // fetches data from perMesh info
     let objectColor (v : Vertex) =
