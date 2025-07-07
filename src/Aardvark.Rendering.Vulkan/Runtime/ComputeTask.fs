@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Base.Monads.State
 open Aardvark.Rendering
@@ -12,8 +11,9 @@ module internal ComputeTaskInternals =
 
     type ComputeInputBinding =
         {
-            Shader  : IComputeShader
-            Binding : INativeResourceLocation<DescriptorSetBinding>
+            Shader         : IComputeShader
+            DescriptorSets : INativeResourceLocation<DescriptorSetBinding>
+            PushConstants  : IConstantResourceLocation<PushConstants> voption
         }
 
         interface IComputeInputBinding with
@@ -24,12 +24,18 @@ module internal ComputeTaskInternals =
         member x.CreateComputeInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
             let provider = UniformProvider.computeInputs inputs
 
-            let binding =
+            let descriptorSets =
                 let sets = x.CreateDescriptorSets(shader.PipelineLayout, provider)
                 x.CreateDescriptorSetBinding(VkPipelineBindPoint.Compute, shader.PipelineLayout, sets)
 
-            { Shader  = shader
-              Binding = binding }
+            let pushConstants =
+                shader.PipelineLayout.PushConstants |> ValueOption.map (fun pc ->
+                    x.CreatePushConstants(pc, provider)
+                )
+
+            { Shader         = shader
+              DescriptorSets = descriptorSets
+              PushConstants  = pushConstants }
 
 
     [<RequireQualifiedAccess>]
@@ -94,7 +100,7 @@ module internal ComputeTaskInternals =
             let stream =
                 State.custom (fun s ->
                     match s.Commands with
-                    | (CompiledCommand.Device stream)::_ -> s, stream
+                    | CompiledCommand.Device stream::_ -> s, stream
                     | _ ->
                         let stream = new VKVM.CommandStream()
                         let cmd = CompiledCommand.Device stream
@@ -255,7 +261,10 @@ module internal ComputeTaskInternals =
                     | ComputeCommand.SetInputCmd input ->
                         let input = unbox<ComputeInputBinding> input
                         let! stream = CompilerState.stream
-                        stream.IndirectBindDescriptorSets(input.Binding.Pointer) |> ignore
+                        stream.IndirectBindDescriptorSets(input.DescriptorSets.Pointer) |> ignore
+                        match input.PushConstants with
+                        | ValueSome pc -> stream.PushConstants(input.Shader.PipelineLayout.Handle, pc.Handle) |> ignore
+                        | _ -> ()
 
                     | ComputeCommand.DispatchCmd groups ->
                         let! stream = CompilerState.stream
@@ -405,7 +414,8 @@ module internal ComputeTaskInternals =
                         | _ ->
                             failf "unknown input binding type %A" (input.GetType())
 
-                    resources.Add input.Binding
+                    resources.Add input.DescriptorSets
+                    input.PushConstants |> ValueOption.iter resources.Add
                     inputs.[index] <- input
 
                     ComputeCommand.SetInputCmd input
@@ -422,10 +432,10 @@ module internal ComputeTaskInternals =
 
             let remove (removedInputs : System.Collections.Generic.List<_>) (index : Index) =
                 match inputs.TryRemove(index) with
-                | (true, input) -> removedInputs.Add input
+                | true, input -> removedInputs.Add input
                 | _ ->
                     match nested.TryRemove(index) with
-                    | (true, other) -> other.Outputs.Remove owner |> ignore
+                    | true, other -> other.Outputs.Remove owner |> ignore
                     | _ -> ()
 
                 match commands.TryGet index with
@@ -444,7 +454,7 @@ module internal ComputeTaskInternals =
                 let removedInputs = System.Collections.Generic.List<ComputeInputBinding>()
 
                 // Process deltas
-                for (index, op) in deltas do
+                for index, op in deltas do
                     remove removedInputs index
 
                     match op with
@@ -458,7 +468,8 @@ module internal ComputeTaskInternals =
                 // Delay removing inputs from the resource set
                 // This way nothing will be released if the input just moved in the command list
                 for input in removedInputs do
-                    resources.Remove input.Binding
+                    resources.Remove input.DescriptorSets
+                    input.PushConstants |> ValueOption.iter resources.Remove
 
                 // Update all hooked compute programs
                 let mutable changed = deltas.Count > 0
@@ -476,7 +487,8 @@ module internal ComputeTaskInternals =
 
             member x.Dispose() =
                 for KeyValue(_, input) in inputs do
-                    resources.Remove input.Binding
+                    resources.Remove input.DescriptorSets
+                    input.PushConstants |> ValueOption.iter resources.Remove
                 inputs.Clear()
 
                 for KeyValue(_, task) in nested do

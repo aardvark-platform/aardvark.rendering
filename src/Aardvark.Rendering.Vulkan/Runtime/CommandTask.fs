@@ -31,6 +31,7 @@ type PreparedGeometry =
     {
         pgOriginal      : Geometry
         pgDescriptors   : INativeResourceLocation<DescriptorSetBinding>
+        pgPushConstants : IConstantResourceLocation<PushConstants> voption
         pgAttributes    : INativeResourceLocation<VertexBufferBinding>
         pgIndex         : INativeResourceLocation<IndexBufferBinding> voption
         pgCall          : INativeResourceLocation<DrawCall>
@@ -107,9 +108,17 @@ type ResourceManagerExtensions private() =
         let resources = System.Collections.Generic.List<IResourceLocation>()
 
         let layout = state.ppLayout
+        let uniforms = UniformProvider.union uniforms state.ppUniforms
 
         let descriptorSets =
-            this.CreateDescriptorSets(layout, UniformProvider.union uniforms state.ppUniforms)
+            this.CreateDescriptorSets(layout, uniforms)
+
+        let pc =
+            layout.PushConstants |> ValueOption.map (fun pc ->
+                let res = this.CreatePushConstants(pc, uniforms)
+                resources.Add res
+                res
+            )
 
         let vertexBuffers = 
             layout.PipelineInfo.pInputs 
@@ -147,6 +156,7 @@ type ResourceManagerExtensions private() =
         {
             pgOriginal      = g
             pgDescriptors   = dsb
+            pgPushConstants = pc
             pgAttributes    = vbb
             pgIndex         = ibo
             pgCall          = call
@@ -834,6 +844,10 @@ module private RuntimeCommands =
                 stream.IndirectBindPipeline(VkPipelineBindPoint.Graphics, o.Pipeline.Pointer) |> ignore
                 stream.IndirectBindDescriptorSets(o.DescriptorSets.Pointer) |> ignore
 
+                match o.PushConstants with
+                | ValueSome pc -> stream.PushConstants(o.PipelineLayout.Handle, pc.Handle) |> ignore
+                | _ -> ()
+
                 match o.IndexBuffer with
                 | ValueSome ib ->
                     stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
@@ -1468,6 +1482,10 @@ module private RuntimeCommands =
                 
             stream.IndirectBindDescriptorSets(pg.pgDescriptors.Pointer) |> ignore
 
+            match pg.pgPushConstants with
+            | ValueSome pc -> stream.PushConstants(pipeline.ppLayout.Handle, pc.Handle) |> ignore
+            | _ -> ()
+
             match pg.pgIndex with
             | ValueSome index ->
                 stream.IndirectBindIndexBuffer(index.Pointer) |> ignore
@@ -1750,6 +1768,8 @@ module private RuntimeCommands =
     and private DummyObject() =
         inherit AdaptiveObject()
 
+    // TODO: This seems to be rather buggy
+    // Turning on validation in Demo/Examples/CommandTest reveales resource leaks and race conditions
     and IndirectDrawCommand(compiler : Compiler, effect : FShade.Effect, state : PipelineState, newReader : unit -> IOpReader<HashSetDelta<IndexedGeometry>>) =
         inherit PreparedCommand()
 
@@ -1771,9 +1791,16 @@ module private RuntimeCommands =
             let surface = Aardvark.Rendering.Surface.Effect effect
             compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
 
+        let uniforms = compiler.task.HookProvider state.GlobalUniforms
+
         let descriptorSet =
-            let sets = compiler.manager.CreateDescriptorSets(pipeline.ppLayout, compiler.task.HookProvider state.GlobalUniforms)
+            let sets = compiler.manager.CreateDescriptorSets(pipeline.ppLayout, uniforms)
             compiler.manager.CreateDescriptorSetBinding(VkPipelineBindPoint.Graphics, pipeline.ppLayout, sets)
+
+        let pushConstants =
+            pipeline.ppLayout.PushConstants |> ValueOption.map (fun pc ->
+                compiler.manager.CreatePushConstants(pc, uniforms)
+            )
 
         let pipelineInfo = pipeline.ppLayout.PipelineInfo
 
@@ -1849,10 +1876,15 @@ module private RuntimeCommands =
                 compiler.resources.Add pipeline.ppPipeline
                 compiler.resources.Add descriptorSet
                 compiler.resources.Add instanceManager
+                pushConstants |> ValueOption.iter compiler.resources.Add
 
                 // adjust the first-command to bind the pipeline
                 first.IndirectBindPipeline(VkPipelineBindPoint.Graphics, pipeline.ppPipeline.Pointer) |> ignore
                 first.IndirectBindDescriptorSets(descriptorSet.Pointer) |> ignore
+
+                match pushConstants with
+                | ValueSome pc -> first.PushConstants(pipeline.ppLayout.Handle, pc.Handle) |> ignore
+                | _ -> ()
 
                 // the main-stream just needs to call the first stream
                 stream.Clear()
@@ -1973,6 +2005,7 @@ module private RuntimeCommands =
                 compiler.resources.Remove pipeline.ppPipeline
                 compiler.resources.Remove descriptorSet
                 compiler.resources.Remove instanceManager
+                pushConstants |> ValueOption.iter compiler.resources.Remove
 
             first.Dispose()
             drawStream.Dispose()

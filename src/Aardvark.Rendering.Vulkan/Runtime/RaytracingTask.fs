@@ -55,6 +55,16 @@ module private RaytracingTaskInternals =
                 }
             )
 
+        member x.PushConstants(pipelineLayout : PipelineLayout, constants : PushConstants) =
+            cmds.Add (
+                { new Command() with
+                    member _.Compatible = QueueFlags.Compute
+                    member _.Enqueue cmd =
+                        cmd.AppendCommand()
+                        VkRaw.vkCmdPushConstants(cmd.Handle, pipelineLayout.Handle, constants.StageFlags, 0u, uint32 constants.SizeInBytes, constants.Pointer.Address)
+                }
+            )
+
         member x.TraceRays(count : V3i) =
             cmds.Add (
                 { new Command() with
@@ -129,6 +139,10 @@ module private RaytracingTaskInternals =
                 compiled.Clear()
                 compiled.BindPipeline preparedPipeline.Pipeline.Pointer
                 compiled.BindDescriptorSets preparedPipeline.DescriptorSets.Pointer
+
+                match preparedPipeline.PushConstants with
+                | ValueSome pc -> compiled.PushConstants(preparedPipeline.Program.PipelineLayout, pc.Handle)
+                | _ -> ()
 
                 for cmd in reader.State do
                     compiled.Enqueue cmd

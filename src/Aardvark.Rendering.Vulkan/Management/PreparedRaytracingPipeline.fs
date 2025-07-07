@@ -89,6 +89,7 @@ type PreparedRaytracingPipeline(device         : Device,
                                 program        : RaytracingProgram,
                                 pipeline       : INativeResourceLocation<RaytracingPipeline, VkPipeline>,
                                 descriptorSets : INativeResourceLocation<DescriptorSetBinding>,
+                                pushConstants  : IConstantResourceLocation<PushConstants> voption,
                                 sbt            : INativeResourceLocation<ShaderBindingTable, ShaderBindingTableHandle>,
                                 hitConfigPool  : IDisposable) =
 
@@ -99,6 +100,7 @@ type PreparedRaytracingPipeline(device         : Device,
     member x.Program = program
     member x.Pipeline = pipeline
     member x.DescriptorSets = descriptorSets
+    member x.PushConstants = pushConstants
     member x.ShaderBindingTable = sbt
 
     override x.Destroy() =
@@ -138,11 +140,19 @@ type DevicePreparedRaytracingPipelineExtensions private() =
 
             resources.Add(descriptorSetBinding)
 
+            let pushConstants =
+                program.PipelineLayout.PushConstants |> ValueOption.map (fun pc ->
+                    let res = this.CreatePushConstants(pc, state.Uniforms)
+                    resources.Add res
+                    res
+                )
+
             new PreparedRaytracingPipeline(
                 this.Device, state,
                 CSharpList.toList resources,
                 program, pipeline,
                 descriptorSetBinding,
+                pushConstants,
                 shaderBindingTable,
                 hitConfigPool
             )

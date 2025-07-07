@@ -20,6 +20,7 @@ type PreparedRenderObject(device         : Device,
                           pipeline       : INativeResourceLocation<VkPipeline>,
                           indexBuffer    : INativeResourceLocation<IndexBufferBinding> voption,
                           descriptorSets : INativeResourceLocation<DescriptorSetBinding>,
+                          pushConstants  : IConstantResourceLocation<PushConstants> voption,
                           vertexBuffers  : INativeResourceLocation<VertexBufferBinding>,
                           drawCalls      : INativeResourceLocation<DrawCall>,
                           isActive       : INativeResourceLocation<int>,
@@ -34,6 +35,7 @@ type PreparedRenderObject(device         : Device,
     member x.Pipeline = pipeline
     member x.IndexBuffer = indexBuffer
     member x.DescriptorSets = descriptorSets
+    member x.PushConstants = pushConstants
     member x.VertexBuffers = vertexBuffers
     member x.DrawCalls = drawCalls
     member x.IsActive = isActive
@@ -119,7 +121,7 @@ type DevicePreparedRenderObjectExtensions private() =
                 ds.Bindings |> Array.map (fun b ->
                     match b.Parameter with
                     | UniformBlockParameter block ->
-                        let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms)
+                        let buffer = this.CreateUniformBuffer(block, uniforms)
                         AdaptiveDescriptor.UniformBuffer (b.Binding, buffer) :> IAdaptiveDescriptor
 
                     | StorageBufferParameter block ->
@@ -393,6 +395,13 @@ type DevicePreparedRenderObjectExtensions private() =
 
             resources.Add(descriptorBindings)
 
+            let pushConstants =
+                programLayout.PushConstants |> ValueOption.map (fun pc ->
+                    let res = this.CreatePushConstants(pc, ro.Uniforms)
+                    resources.Add res
+                    res
+                )
+
             let isActive = this.CreateIsActive ro.IsActive
             resources.Add isActive
 
@@ -406,6 +415,7 @@ type DevicePreparedRenderObjectExtensions private() =
                 pipeline,
                 indexBufferBinding,
                 descriptorBindings,
+                pushConstants,
                 bindings,
                 calls,
                 isActive,

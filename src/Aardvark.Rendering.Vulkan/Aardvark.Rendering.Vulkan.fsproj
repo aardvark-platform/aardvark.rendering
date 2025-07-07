@@ -74,6 +74,7 @@
     <Compile Include="Resources\Sampler.fs" />
     <Compile Include="Resources\Pipeline\RenderPass.fs" />
     <Compile Include="Resources\Pipeline\DescriptorSetLayout.fs" />
+    <Compile Include="Resources\Pipeline\PushConstants.fs" />
     <Compile Include="Resources\Pipeline\PipelineLayout.fs" />
     <Compile Include="Resources\Pipeline\PipelineStates.fs" />
     <Compile Include="Resources\Shaders\ShaderModule.fs" />

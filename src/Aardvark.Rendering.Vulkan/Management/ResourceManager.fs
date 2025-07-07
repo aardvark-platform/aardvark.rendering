@@ -64,6 +64,10 @@ and IResourceLocation<'T> =
     inherit IManagedResource<'T>
     abstract member Update : user: IResourceUser * token: AdaptiveToken * renderToken: RenderToken -> ResourceInfo<'T>
 
+and IConstantResourceLocation<'T> =
+    inherit IResourceLocation
+    abstract member Handle : 'T
+
 and IResourceCache =
     abstract member Device : Device
     abstract member Remove : key : list<obj> -> unit
@@ -603,12 +607,11 @@ module Resources =
         )
 
     type UniformBufferResource(owner : IResourceCache, key : list<obj>, device : Device,
-                               layout : FShade.GLSL.GLSLUniformBuffer, writers : list<IAdaptiveValue * UniformWriters.IWriter>) =
+                               layout : FShade.GLSL.GLSLUniformBuffer, writers : struct (IAdaptiveValue * UniformWriters.IWriter)[]) =
         inherit AbstractResourceLocation<UniformBuffer>(owner, key)
 
         let mutable handle : UniformBuffer = Unchecked.defaultof<_>
         let name = if device.DebugLabelsEnabled then $"{layout.ubName} (Uniform Buffer)" else null
-
 
         member x.Handle = handle
 
@@ -623,14 +626,41 @@ module Resources =
 
         override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
-                for (m,w) in writers do
-                    w.Write(token, m, handle.Storage.Pointer)
+                for value, writer in writers do
+                    writer.Write(token, value, handle.Storage.Pointer)
 
                 device.Upload handle
 
                 { handle = handle; version = 0 }
             else
                 { handle = handle; version = 0 }
+
+    type PushConstantsResource(owner : IResourceCache, key : list<obj>,
+                               layout : PushConstantsLayout, writers : struct (IAdaptiveValue * UniformWriters.IWriter)[]) =
+        inherit AbstractResourceLocation<PushConstants>(owner, key)
+
+        let mutable handle = Unchecked.defaultof<PushConstants>
+        let mutable version = -1
+
+        override x.Create() =
+            handle <- new PushConstants(layout)
+
+        override x.Destroy() =
+            if handle <> Unchecked.defaultof<_> then
+                handle.Dispose()
+                handle <- Unchecked.defaultof<_>
+
+        override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            if x.OutOfDate then
+                for value, writer in writers do
+                    writer.Write(token, value, handle.Pointer.Address)
+
+                inc &version
+
+            { handle = handle; version = version }
+
+        interface IConstantResourceLocation<PushConstants> with
+            member _.Handle = handle
 
     type ImageResource(owner : IResourceCache, key : list<obj>, name : string, device : Device, properties : ImageProperties, input : aval<ITexture>) =
         inherit ImmutableResourceLocation<ITexture, Image>(
@@ -1653,6 +1683,9 @@ module internal ResourceCaches =
     type ResourceLocationCache<'T>(device : Device) =
         inherit ResourceCache<IResourceLocation<'T>>(device)
 
+    type ConstantResourceLocationCache<'T>(device : Device) =
+        inherit ResourceCache<IConstantResourceLocation<'T>>(device)
+
     type NativeResourceLocationCache<'T, 'V when 'V : unmanaged>(device : Device) =
         inherit ResourceCache<INativeResourceLocation<'T, 'V>>(device)
 
@@ -1686,6 +1719,7 @@ type ResourceManager(device : Device) =
     let indexBufferCache        = ResourceLocationCache<Buffer>(device)
     let descriptorSetCache      = ResourceLocationCache<DescriptorSet>(device)
     let uniformBufferCache      = ResourceLocationCache<UniformBuffer>(device)
+    let pushConstantsCache      = ConstantResourceLocationCache<PushConstants>(device)
     let imageCache              = ResourceLocationCache<Image>(device)
     let imageViewCache          = ResourceLocationCache<ImageView>(device)
     let samplerCache            = ResourceLocationCache<Sampler>(device)
@@ -1729,6 +1763,7 @@ type ResourceManager(device : Device) =
         indexBufferCache.Clear()
         descriptorSetCache.Clear()
         uniformBufferCache.Clear()
+        pushConstantsCache.Clear()
         imageCache.Clear()
         imageViewCache.Clear()
         samplerCache.Clear()
@@ -1980,42 +2015,55 @@ type ResourceManager(device : Device) =
         | Surface.None ->
             failf "encountered empty surface"
 
-    member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, uniforms : IUniformProvider) =
-        let values =
-            layout.ubFields
-            |> List.map (fun (f) ->
-                let name = f.ufName
+    member inline private x.GetUniformBufferValues(layout : FShade.GLSL.GLSLUniformBuffer, uniforms : IUniformProvider) =
+        layout.ubFields
+        |> List.map (fun (f) ->
+            let name = f.ufName
 
-                let struct (field, value) =
-                    match Uniforms.tryGetDerivedUniform f.ufName uniforms with
-                    | ValueSome r -> f, r
+            let struct (field, value) =
+                match Uniforms.tryGetDerivedUniform f.ufName uniforms with
+                | ValueSome r -> f, r
+                | ValueNone ->
+                    match uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create name) with
+                    | ValueSome v -> f, v
                     | ValueNone ->
-                        match uniforms.TryGetUniform(scope, Symbol.Create name) with
-                        | ValueSome v -> f, v
-                        | ValueNone ->
-                            failf "could not find uniform '%s'" name
+                        failf "could not find uniform '%s'" name
 
-                if Object.ReferenceEquals(value, null) then
-                    failf "uniform '%s' is null" name
+            if Object.ReferenceEquals(value, null) then
+                failf "uniform '%s' is null" name
 
-                field, value
-            )
+            struct (field, value)
+        )
 
-        let key = (layout :> obj) :: (values |> List.map (snd >> box))
+    member inline private x.GetUniformWriters(values : struct (FShade.GLSL.GLSLUniformBufferField * IAdaptiveValue) list) =
+        values |> List.map (fun struct (target, value) ->
+            let writer =
+                try
+                    value.ContentType |> UniformWriters.getWriter target.ufOffset target.ufType
+                with
+                | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
+                    failf "cannot convert uniform '%s' from %A to %A" target.ufName exn.Source exn.Target
+
+            struct (value, writer)
+        )
+        |> List.toArray
+
+    member x.CreateUniformBuffer(layout : FShade.GLSL.GLSLUniformBuffer, uniforms : IUniformProvider) =
+        let values = x.GetUniformBufferValues(layout, uniforms)
+
+        let key = (layout :> obj) :: (values |> List.map (sndv >> box))
         uniformBufferCache.GetOrCreate(key, fun cache key ->
-            let writers =
-                values |> List.map (fun (target, m) ->
-                    let writer =
-                        try
-                            m.ContentType |> UniformWriters.getWriter target.ufOffset target.ufType
-                        with
-                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                            failf "cannot convert uniform '%s' from %A to %A" target.ufName exn.Source exn.Target
-
-                    m, writer
-                )
-
+            let writers = x.GetUniformWriters values
             UniformBufferResource(cache, key, device, layout, writers)
+        )
+
+    member x.CreatePushConstants(layout : PushConstantsLayout, uniforms : IUniformProvider) =
+        let values = x.GetUniformBufferValues(layout.Buffer, uniforms)
+
+        let key = (layout :> obj) :: (values |> List.map (sndv >> box))
+        pushConstantsCache.GetOrCreate(key, fun cache key ->
+            let writers = x.GetUniformWriters values
+            PushConstantsResource(cache, key, layout, writers)
         )
 
     member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : IAdaptiveDescriptor[]) =

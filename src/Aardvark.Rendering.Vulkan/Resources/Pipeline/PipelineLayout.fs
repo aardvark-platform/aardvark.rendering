@@ -24,7 +24,8 @@ type PipelineInfo =
 type PipelineLayout =
     class
         inherit Resource<VkPipelineLayout>
-        val public DescriptorSetLayouts : array<DescriptorSetLayout>
+        val public DescriptorSetLayouts : DescriptorSetLayout[]
+        val public PushConstants : PushConstantsLayout voption
         val public PipelineInfo : PipelineInfo
         val public LayerCount : int
         val public PerLayerUniforms : Set<string>
@@ -37,9 +38,10 @@ type PipelineLayout =
             x.Handle <- VkPipelineLayout.Null
 
 
-        new(device, handle, descriptorSetLayouts, info, layerCount : int, perLayer : Set<string>) = 
+        new(device, handle, descriptorSetLayouts, pushConstants, info, layerCount : int, perLayer : Set<string>) =
             { inherit Resource<_>(device, handle);
                 DescriptorSetLayouts = descriptorSetLayouts;
+                PushConstants = pushConstants;
                 PipelineInfo = info;
                 LayerCount = layerCount;
                 PerLayerUniforms = perLayer
@@ -50,7 +52,7 @@ type PipelineLayout =
 module PipelineLayout =
     open FShade
 
-    let ofProgramInterface (inputLayout : Option<EffectInputLayout>) (iface : FShade.GLSL.GLSLProgramInterface) 
+    let ofProgramInterface (inputLayout : Option<EffectInputLayout>) (iface : FShade.GLSL.GLSLProgramInterface)
                            (layers : int) (perLayer : Set<string>) (device : Device) =
         // figure out which stages reference which uniforms/textures
         let uniformBlocks = Dict.empty
@@ -58,6 +60,7 @@ module PipelineLayout =
         let images = Dict.empty
         let storageBlocks = Dict.empty
         let accelerationStructures = Dict.empty
+        let mutable pushConstants : PushConstantsLayout voption = ValueNone
         let mutable setCount = 0
 
         let findStages (name : string) =
@@ -118,7 +121,17 @@ module PipelineLayout =
             setCount <- max setCount (b.ubSet + 1)
             let key = b.ubSet, b.ubBinding
             let stages = findStages n
-            (b, stages) ||> add uniformBlocks key
+
+            if b.ubSet >= 0 && b.ubBinding >= 0 then
+                (b, stages) ||> add uniformBlocks key
+            else
+                match pushConstants with
+                | ValueSome other -> failf $"multiple push constant blocks: {other.Buffer.ubName}, {b.ubName}"
+                | _ ->
+                    if Mem b.ubSize > device.PhysicalDevice.Limits.Uniform.MaxPushConstantsSize then
+                        failf $"push constant block has size {Mem b.ubSize} but device limit is {device.PhysicalDevice.Limits.Uniform.MaxPushConstantsSize}"
+
+                    pushConstants <- ValueSome <| { StageFlags = stages; Buffer = b }
 
         for (KeyValue(n, b)) in iface.storageBuffers do
             setCount <- max setCount (b.ssbSet + 1)
@@ -214,16 +227,20 @@ module PipelineLayout =
             )
 
         // create a pipeline layout from the given DescriptorSetLayouts
-        let handles = setLayouts |> Array.map (fun d -> d.Handle)
+        let setLayoutHandles = setLayouts |> Array.map _.Handle
+        let pushConstantRanges = pushConstants |> ValueOption.toArray |> Array.map _.Range
 
         native {
-            let! pHandles = handles
+            let! pSetLayoutHandles = setLayoutHandles
+            let! pPushConstantRanges = pushConstantRanges
+
             let! pInfo =
                 VkPipelineLayoutCreateInfo(
                     VkPipelineLayoutCreateFlags.None,
-                    uint32 handles.Length, pHandles,
-                    0u, NativePtr.zero
+                    uint32 setLayoutHandles.Length, pSetLayoutHandles,
+                    uint32 pushConstantRanges.Length, pPushConstantRanges
                 )
+
             let! pHandle = VkPipelineLayout.Null
             VkRaw.vkCreatePipelineLayout(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create PipelineLayout"
@@ -240,7 +257,7 @@ module PipelineLayout =
                     pEffectLayout           = None
                 }
 
-            return new PipelineLayout(device, !!pHandle, setLayouts, info, layers, perLayer)
+            return new PipelineLayout(device, !!pHandle, setLayouts, pushConstants, info, layers, perLayer)
         }
 
 [<AbstractClass; Sealed; Extension>]
