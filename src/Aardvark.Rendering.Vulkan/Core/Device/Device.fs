@@ -19,7 +19,7 @@ type UploadMode =
     | Sync
     | Async
 
-type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string seq) =
+type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string seq, selectFeatures: DeviceFeatures -> DeviceFeatures) =
     let isGroup, physicalDevices =
         match physicalDevice with
         | :? PhysicalDeviceGroup as g -> true, g.Devices
@@ -105,6 +105,7 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
 
     let enabledFeatures =
         physicalDevice.GetFeatures(flip List.contains enabledExtensions)
+        |> selectFeatures
 
     let mutable isDisposed = 0
 
@@ -198,8 +199,8 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
         stagingMemory <- memoryAllocator.GetMemory(preferDevice = false, hostAccess = HostAccess.WriteOnly)
         readbackMemory <- memoryAllocator.GetMemory(preferDevice = false, hostAccess = HostAccess.ReadWrite)
 
-    static member Create(physicalDevice: PhysicalDevice, wantedExtensions: string seq) =
-        let device = new Device(physicalDevice, wantedExtensions)
+    static member Create(physicalDevice: PhysicalDevice, wantedExtensions: string seq, selectFeatures: DeviceFeatures -> DeviceFeatures) =
+        let device = new Device(physicalDevice, wantedExtensions, selectFeatures)
         device.Initialize()
         device
 
@@ -358,8 +359,8 @@ module IDeviceObjectExtensions =
 type DeviceExtensions private() =
 
     [<Extension>]
-    static member CreateDevice(this: PhysicalDevice, wantedExtensions: string seq) =
-        Device.Create(this, wantedExtensions)
+    static member CreateDevice(this: PhysicalDevice, wantedExtensions: string seq, selectFeatures: DeviceFeatures -> DeviceFeatures) =
+        Device.Create(this, wantedExtensions, selectFeatures)
 
     [<Extension>]
     static member Set(semaphore: Vulkan.Semaphore) =

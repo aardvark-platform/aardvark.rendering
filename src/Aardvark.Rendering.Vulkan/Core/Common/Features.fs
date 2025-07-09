@@ -933,3 +933,8 @@ module DeviceFeatures =
                     AccelerationStructureHostCommands =   toBool accelerationStructureFeatures.accelerationStructureHostCommands
                 }
         }
+
+    /// Returns the default features to be enabled.
+    /// Disables the robust buffer access feature.
+    let getDefault (availableFeatures: DeviceFeatures) =
+        { availableFeatures with Memory.RobustBufferAccess = false }

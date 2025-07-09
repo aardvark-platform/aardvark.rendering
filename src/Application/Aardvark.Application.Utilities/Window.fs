@@ -380,7 +380,7 @@ module Utilities =
             | Backend.GL -> 
                 new OpenGlApplication(cfg.deviceKind = DeviceKind.Dedicated, cfg.debug) :> IApplication
             | Backend.Vulkan ->
-                let app = new VulkanApplication(cfg.debug, chooser = deviceChooser cfg)
+                let app = new VulkanApplication(cfg.debug, deviceChooser = deviceChooser cfg)
                 app :> IApplication
 
     let createGameWindow (app : IApplication) (cfg : RenderConfig) =
@@ -600,7 +600,7 @@ module Utilities =
         let app = 
             match cfg.backend with
                 | Backend.Vulkan ->
-                    let app = new VulkanVRApplicationLayered(cfg.debug, cfg.samples, chooser = deviceChooser cfg)
+                    let app = new VulkanVRApplicationLayered(cfg.debug, cfg.samples, deviceChooser = deviceChooser cfg)
                     app :> VrRenderer
                 | Backend.GL ->
                     let app = new OpenGlVRApplicationLayered(cfg.debug, cfg.samples)

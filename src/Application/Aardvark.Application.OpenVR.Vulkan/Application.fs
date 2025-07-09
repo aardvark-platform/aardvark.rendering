@@ -9,6 +9,7 @@ open Valve.VR
 open Aardvark.Application
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
+open System
 open System.Runtime.InteropServices
 
 module StereoShader =
@@ -58,12 +59,14 @@ module StereoShader =
 type private DummyObject() =
     inherit AdaptiveObject()
 
-type VulkanVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
+type VulkanVRApplicationLayered(debug: IDebugConfig,
                                 [<Optional; DefaultParameterValue(1)>] samples: int,
+                                [<Optional; DefaultParameterValue(null : Func<V2i, V2i>)>] adjustSize: Func<V2i, V2i>,
                                 [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq,
-                                [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) as this =
+                                [<Optional; DefaultParameterValue(null : Func<DeviceFeatures, DeviceFeatures>)>] deviceFeatures: Func<DeviceFeatures, DeviceFeatures>,
+                                [<Optional; DefaultParameterValue(null : IDeviceChooser)>] deviceChooser: IDeviceChooser) as this =
 
-    inherit VrRenderer(adjustSize)
+    inherit VrRenderer(if isNull adjustSize then id else adjustSize.Invoke)
 
     let instanceExtensions =
         let extensions = if extensions = null then Seq.empty else extensions
@@ -72,7 +75,7 @@ type VulkanVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
     let deviceExtensions (device: PhysicalDevice) =
         this.GetVulkanDeviceExtensions device.Handle
 
-    let app = new HeadlessVulkanApplication(debug, instanceExtensions, deviceExtensions, chooser)
+    let app = new HeadlessVulkanApplication(debug, instanceExtensions, deviceExtensions, deviceFeatures, deviceChooser)
     
     let device = app.Device
 
@@ -146,23 +149,13 @@ type VulkanVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
     let queueHandle = device.GraphicsFamily.CurrentQueue
     let queue = queueHandle.Queue
 
-    new(debug: IDebugConfig,
-        [<Optional; DefaultParameterValue(1)>] samples: int,
-        [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq,
-        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
-        new VulkanVRApplicationLayered(debug, id, samples, extensions, chooser)
-
-    new(debug: bool, adjustSize: V2i -> V2i,
-        [<Optional; DefaultParameterValue(1)>] samples: int,
-        [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq,
-        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
-        new VulkanVRApplicationLayered(DebugLevel.ofBool debug, adjustSize, samples, extensions, chooser)
-
     new([<Optional; DefaultParameterValue(false)>] debug: bool,
         [<Optional; DefaultParameterValue(1)>] samples: int,
+        [<Optional; DefaultParameterValue(null : Func<V2i, V2i>)>] adjustSize: Func<V2i, V2i>,
         [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq,
-        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
-        new VulkanVRApplicationLayered(debug, id, samples, extensions, chooser)
+        [<Optional; DefaultParameterValue(null : Func<DeviceFeatures, DeviceFeatures>)>] deviceFeatures: Func<DeviceFeatures, DeviceFeatures>,
+        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] deviceChooser: IDeviceChooser) =
+        new VulkanVRApplicationLayered(DebugLevel.ofBool debug, samples, adjustSize, extensions, deviceFeatures, deviceChooser)
 
     member x.Version = version
     member x.Texture = tex

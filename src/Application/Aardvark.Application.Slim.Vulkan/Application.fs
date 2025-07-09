@@ -9,6 +9,7 @@ open KHRSurface
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Application
 open Aardvark.Glfw
+open System
 open System.Runtime.InteropServices
 
 #nowarn "9"
@@ -127,16 +128,18 @@ type VulkanApplication private (app : HeadlessVulkanApplication, hideCocoaMenuBa
 
     new(debug : IDebugConfig,
         [<Optional; DefaultParameterValue(null : string seq)>] extensions : string seq,
-        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool,
-        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
-        let app = new HeadlessVulkanApplication(debug, getExtensions extensions, (fun _ -> Seq.empty), chooser)
+        [<Optional; DefaultParameterValue(null : Func<DeviceFeatures, DeviceFeatures>)>] deviceFeatures: Func<DeviceFeatures, DeviceFeatures>,
+        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] deviceChooser: IDeviceChooser,
+        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
+        let app = new HeadlessVulkanApplication(debug, getExtensions extensions, (fun _ -> Seq.empty), deviceFeatures, deviceChooser)
         new VulkanApplication(app, hideCocoaMenuBar)
 
     new([<Optional; DefaultParameterValue(false)>] debug : bool,
         [<Optional; DefaultParameterValue(null : string seq)>] extensions : string seq,
-        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool,
-        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
-        new VulkanApplication(DebugLevel.ofBool debug, extensions, hideCocoaMenuBar, chooser)
+        [<Optional; DefaultParameterValue(null : Func<DeviceFeatures, DeviceFeatures>)>] deviceFeatures: Func<DeviceFeatures, DeviceFeatures>,
+        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] deviceChooser: IDeviceChooser,
+        [<Optional; DefaultParameterValue(false)>] hideCocoaMenuBar : bool) =
+        new VulkanApplication(DebugLevel.ofBool debug, extensions, deviceFeatures, deviceChooser, hideCocoaMenuBar)
 
     member x.Runtime = app.Runtime
 

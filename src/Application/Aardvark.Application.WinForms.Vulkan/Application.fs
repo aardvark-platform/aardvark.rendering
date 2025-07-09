@@ -33,7 +33,8 @@ type DeviceChooserVisual() =
 
 type VulkanApplication(debug: IDebugConfig,
                        [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq,
-                       [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
+                       [<Optional; DefaultParameterValue(null : Func<DeviceFeatures, DeviceFeatures>)>] deviceFeatures: Func<DeviceFeatures, DeviceFeatures>,
+                       [<Optional; DefaultParameterValue(null : IDeviceChooser)>] deviceChooser: IDeviceChooser) =
     let debug = DebugConfig.unbox debug
 
     let requestedExtensions =
@@ -82,7 +83,7 @@ type VulkanApplication(debug: IDebugConfig,
         if instance.Devices.Length = 0 then
             failwithf "[Vulkan] could not get vulkan devices"
         else
-            let chooser = if chooser <> null then chooser else DeviceChooserVisual()
+            let chooser = if deviceChooser <> null then deviceChooser else DeviceChooserVisual()
             chooser.Run instance.Devices
 
     do instance.PrintInfo(physicalDevice, debug.PlatformInformationVerbosity)
@@ -93,8 +94,9 @@ type VulkanApplication(debug: IDebugConfig,
             physicalDevice.GlobalExtensions |> Seq.map _.name |> Set.ofSeq
   
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
+        let selectFeatures = if isNull deviceFeatures then DeviceFeatures.getDefault else deviceFeatures.Invoke
 
-        physicalDevice.CreateDevice(enabledExtensions)
+        physicalDevice.CreateDevice(enabledExtensions, selectFeatures)
 
     // create a runtime
     let runtime = new Runtime(device)
@@ -141,5 +143,6 @@ type VulkanApplication(debug: IDebugConfig,
 
     new([<Optional; DefaultParameterValue(false)>] debug: bool,
         [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq,
-        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] chooser: IDeviceChooser) =
-        new VulkanApplication(DebugLevel.ofBool debug, extensions, chooser)
+        [<Optional; DefaultParameterValue(null : Func<DeviceFeatures, DeviceFeatures>)>] deviceFeatures: Func<DeviceFeatures, DeviceFeatures>,
+        [<Optional; DefaultParameterValue(null : IDeviceChooser)>] deviceChooser: IDeviceChooser) =
+        new VulkanApplication(DebugLevel.ofBool debug, extensions, deviceFeatures, deviceChooser)
