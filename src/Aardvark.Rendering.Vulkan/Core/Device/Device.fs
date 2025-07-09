@@ -97,7 +97,7 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
                     Log.Vulkan.debug "enabled device extension %A" name
                     Some realName
                 | _ ->
-                    Log.Vulkan.warn "could not enable extension '%s' since it is not available" name
+                    Log.Vulkan.debug "requested extension %A is not available" name
                     None
             )
 
