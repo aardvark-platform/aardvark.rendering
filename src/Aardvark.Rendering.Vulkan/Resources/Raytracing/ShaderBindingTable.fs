@@ -135,7 +135,7 @@ module private ShaderBindingTableUtilities =
                     limits.ShaderGroupHandleSize |> roundUp limits.ShaderGroupHandleAlignment
 
                 | _ ->
-                    failwith "[Raytracing] Cannot determine alignment requirements"
+                    failwith "Cannot determine shader binding table alignment requirements"
 
             let shaderHandles : uint8[] = Array.zeroCreate <| groupCount  * (int size)
 
@@ -143,7 +143,7 @@ module private ShaderBindingTableUtilities =
                 VkRaw.vkGetRayTracingShaderGroupHandlesKHR(
                     pipeline.Device.Handle, pipeline.Handle, 0u, uint32 groupCount, uint64 shaderHandles.Length, ptr.Address
                 )
-                |> check "[Raytracing] Failed to get shader group handles"
+                |> check "Failed to get shader group handles"
             )
 
             { Data = shaderHandles
@@ -297,7 +297,7 @@ module private ShaderBindingSubtable =
             buffer.Name <- $"{name} (Shader Binding Table)"
 
         if not (table |> tryUpdate data) then
-            failwith "[Raytracing] Failed to update shader binding table"
+            failf "Failed to update shader binding table"
 
         table
 

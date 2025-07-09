@@ -53,6 +53,7 @@ module Instance =
 
         let Raytracing = [
                 KHRRayTracingPipeline.Name
+                KHRRayTracingPositionFetch.Name
                 KHRAccelerationStructure.Name
                 KHRBufferDeviceAddress.Name
                 KHRDeferredHostOperations.Name

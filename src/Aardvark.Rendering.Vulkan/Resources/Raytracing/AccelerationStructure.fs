@@ -124,7 +124,7 @@ module AccelerationStructure =
 
                 let result = VkRaw.vkCreateAccelerationStructureKHR(device.Handle, pInfo, NativePtr.zero, pHandle)
                 if result <> VkResult.Success then
-                    failwithf "[Raytracing] Could not create acceleration structure: %A" result
+                    failf "Could not create acceleration structure: %A" result
 
                 return !!pHandle
             }
@@ -179,7 +179,7 @@ module AccelerationStructure =
                     isGeometryCompatible n o
 
                 | _ ->
-                    failwithf "[Raytracing] Trying to update acceleration structure with data of different type"
+                    failf "Trying to update acceleration structure with data of different type"
 
             else
                 false

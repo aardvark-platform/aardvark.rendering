@@ -12,6 +12,7 @@ open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
 open KHRAccelerationStructure
 open KHRBufferDeviceAddress
+open KHRRayTracingPositionFetch
 
 [<Struct>]
 type Instances =
@@ -80,7 +81,7 @@ module private NativeAccelerationStructureData =
         let prepare (device : Device) (alignment : uint64) (buffer : IBuffer) =
             Buffer.ofBuffer' false usage alignment buffer device.DeviceMemory
 
-    let private getFlags (allowUpdate : bool) (usage : AccelerationStructureUsage) =
+    let private getFlags (positionFetch : bool) (allowUpdate : bool) (usage : AccelerationStructureUsage) =
         let hint =
             match usage with
             | AccelerationStructureUsage.Static -> VkBuildAccelerationStructureFlagsKHR.PreferFastTraceBit
@@ -92,7 +93,13 @@ module private NativeAccelerationStructureData =
             else
                 VkBuildAccelerationStructureFlagsKHR.None
 
-        update ||| hint
+        let positionFetch =
+            if positionFetch then
+                VkBuildAccelerationStructureFlagsKHR.AllowDataAccess
+            else
+                VkBuildAccelerationStructureFlagsKHR.None
+
+        update ||| hint ||| positionFetch
 
     let private ofGeometry (device : Device) (allowUpdate : bool)
                            (usage : AccelerationStructureUsage) (geometry : TraceGeometry) =
@@ -159,21 +166,21 @@ module private NativeAccelerationStructureData =
                 )
             )
 
-        let geometries =
+        let geometries, positionFetch =
             match geometry with
             | TraceGeometry.Triangles arr ->
                 arr |> Array.map (fun mesh ->
                     let data = ofTriangleData mesh.Vertices mesh.Indices mesh.Transform
                     VkAccelerationStructureGeometryKHR(VkGeometryTypeKHR.Triangles, data, enum <| int mesh.Flags)
-                )
+                ), device.EnabledFeatures.Raytracing.PositionFetch
 
             | TraceGeometry.AABBs arr ->
                 arr |> Array.map (fun bb ->
                     let data = ofAabbData bb.Data
                     VkAccelerationStructureGeometryKHR(VkGeometryTypeKHR.Aabbs, data, enum <| int bb.Flags)
-                )
+                ), false
 
-        let flags = getFlags allowUpdate usage
+        let flags = getFlags positionFetch allowUpdate usage
 
         new NativeAccelerationStructureData(
             VkAccelerationStructureTypeKHR.BottomLevel, geometries, geometry.Primitives, flags, buffers.ToArray()
@@ -193,7 +200,7 @@ module private NativeAccelerationStructureData =
                 VkGeometryFlagsKHR.None
             )
 
-        let flags = getFlags allowUpdate usage
+        let flags = getFlags false allowUpdate usage
 
         new NativeAccelerationStructureData(
             VkAccelerationStructureTypeKHR.TopLevel, [| geometry |], [| instances.Count |], flags, Array.empty

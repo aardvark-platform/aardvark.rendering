@@ -483,6 +483,9 @@ type RaytracingFeatures =
         /// Indicates whether the implementation supports the ray tracing pipeline functionality.
         Pipeline : bool
 
+        /// Indicates whether the implementation supports fetching the object space vertex positions of a hit triangle.
+        PositionFetch : bool
+
         /// Indicates whether the implementation supports ray query (OpRayQueryProceedKHR) functionality.
         RayQuery : bool
 
@@ -513,6 +516,7 @@ type RaytracingFeatures =
 
     member internal x.Print(l : ILogger) =
         l.line "pipeline:                           %A" x.Pipeline
+        l.line "position fetch:                     %A" x.PositionFetch
         l.line "ray queries:                        %A" x.RayQuery
         l.section "shader group handles: " (fun () ->
             l.line "capture & replay:                 %A" x.ShaderGroupHandleCaptureReplay
@@ -556,6 +560,7 @@ type DeviceFeatures =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DeviceFeatures =
     open KHRRayTracingPipeline
+    open KHRRayTracingPositionFetch
     open KHRRayQuery
     open KHRAccelerationStructure
     open KHRBufferDeviceAddress
@@ -651,6 +656,11 @@ module DeviceFeatures =
                 toVkBool features.Raytracing.RayTraversalPrimitiveCulling
             )
 
+        let rtpos =
+            VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR(
+                toVkBool features.Raytracing.PositionFetch
+            )
+
         let acc =
             VkPhysicalDeviceAccelerationStructureFeaturesKHR(
                 toVkBool features.Raytracing.AccelerationStructure,
@@ -744,6 +754,7 @@ module DeviceFeatures =
         |> VkStructChain.add dp
         |> if not idx.IsEmpty then VkStructChain.add idx else id
         |> if not rtp.IsEmpty then VkStructChain.add rtp else id
+        |> if not rtpos.IsEmpty then VkStructChain.add rtpos else id
         |> if not acc.IsEmpty then VkStructChain.add acc else id
         |> if not rq.IsEmpty  then VkStructChain.add rq  else id
         |> if not bda.IsEmpty then VkStructChain.add bda else id
@@ -759,6 +770,7 @@ module DeviceFeatures =
                (shaderDrawParametersFeatures : VkPhysicalDeviceShaderDrawParametersFeatures)
                (descriptorIndexingFeatures : VkPhysicalDeviceDescriptorIndexingFeaturesEXT)
                (raytracingPipelineFeatures : VkPhysicalDeviceRayTracingPipelineFeaturesKHR)
+               (raytracingPositionFetchFeatures : VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR)
                (accelerationStructureFeatures : VkPhysicalDeviceAccelerationStructureFeaturesKHR)
                (rayQueryFeatures : VkPhysicalDeviceRayQueryFeaturesKHR)
                (bufferDeviceAddressFeatures : VkPhysicalDeviceBufferDeviceAddressFeaturesKHR)
@@ -909,6 +921,7 @@ module DeviceFeatures =
             Raytracing =
                 {
                     Pipeline =                            toBool raytracingPipelineFeatures.rayTracingPipeline
+                    PositionFetch =                       toBool raytracingPositionFetchFeatures.rayTracingPositionFetch
                     RayQuery =                            toBool rayQueryFeatures.rayQuery
                     ShaderGroupHandleCaptureReplay =      toBool raytracingPipelineFeatures.rayTracingPipelineShaderGroupHandleCaptureReplay
                     ShaderGroupHandleCaptureReplayMixed = toBool raytracingPipelineFeatures.rayTracingPipelineShaderGroupHandleCaptureReplayMixed

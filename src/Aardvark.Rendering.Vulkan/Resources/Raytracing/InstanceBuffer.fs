@@ -43,7 +43,7 @@ module internal InstanceBuffer =
             let accel = inst.Geometry.GetValue(token)
 
             if accel.GeometryCount > cfg.Length then
-                failwithf "[Raytracing] Object has %d geometries but only %d hit groups" accel.GeometryCount cfg.Length
+                failf "Object has %d geometries but only %d hit groups" accel.GeometryCount cfg.Length
 
             uint32 sbt.HitGroupTable.Indices.[cfg]
 

@@ -101,7 +101,7 @@ module RaytracingPipeline =
 
                 let! pHandle = VkPipeline.Null
                 VkRaw.vkCreateRayTracingPipelinesKHR(device.Handle, VkDeferredOperationKHR.Null, VkPipelineCache.Null, 1u, pInfo, NativePtr.zero, pHandle)
-                    |> check "[Raytracing] Failed to create pipeline"
+                    |> check "Failed to create raytracing pipeline"
 
                 return !!pHandle
             }

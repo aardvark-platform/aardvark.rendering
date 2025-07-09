@@ -5,6 +5,7 @@ open System
 open Vulkan11
 open KHRGetPhysicalDeviceProperties2
 open KHRRayTracingPipeline
+open KHRRayTracingPositionFetch
 open KHRRayQuery
 open KHRAccelerationStructure
 open KHRBufferDeviceAddress
@@ -56,7 +57,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
                 !!ptr
 
         fun (hasExtension: string -> bool) ->
-            let f, pm, memp, ycbcr, s8, s16, f16i8, vp, sdp, idx, rtp, acc, rq, bda =
+            let f, pm, memp, ycbcr, s8, s16, f16i8, vp, sdp, idx, rtp, rtpos, acc, rq, bda =
                 use chain = new VkStructChain()
                 let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
                 let pMemPrior   = if hasExtension EXTMemoryPriority.Name then chain.Add<VkPhysicalDeviceMemoryPriorityFeaturesEXT>() else NativePtr.zero
@@ -68,6 +69,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
                 let pDrawParams = chain.Add<VkPhysicalDeviceShaderDrawParametersFeatures>()
                 let pIdx        = if hasExtension EXTDescriptorIndexing.Name then chain.Add<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>() else NativePtr.zero
                 let pRTP        = if hasExtension KHRRayTracingPipeline.Name then chain.Add<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>() else NativePtr.zero
+                let pRTPos      = if hasExtension KHRRayTracingPositionFetch.Name then chain.Add<VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR>() else NativePtr.zero
                 let pAcc        = if hasExtension KHRAccelerationStructure.Name then chain.Add<VkPhysicalDeviceAccelerationStructureFeaturesKHR>() else NativePtr.zero
                 let pRQ         = if hasExtension KHRRayQuery.Name then chain.Add<VkPhysicalDeviceRayQueryFeaturesKHR>() else NativePtr.zero
                 let pDevAddr    = if hasExtension KHRBufferDeviceAddress.Name then chain.Add<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>() else NativePtr.zero
@@ -75,9 +77,9 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
 
                 VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
                 (!!pFeatures).features, !!pMem, !!pMemPrior, !!pYcbcr, readOrEmpty p8bit, !!p16bit, readOrEmpty pf16i8,
-                !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx, readOrEmpty pRTP, readOrEmpty pAcc, readOrEmpty pRQ, readOrEmpty pDevAddr
+                !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx, readOrEmpty pRTP, readOrEmpty pRTPos, readOrEmpty pAcc, readOrEmpty pRQ, readOrEmpty pDevAddr
 
-            DeviceFeatures.create pm memp ycbcr s8 s16 f16i8 vp sdp idx rtp acc rq bda f
+            DeviceFeatures.create pm memp ycbcr s8 s16 f16i8 vp sdp idx rtp rtpos acc rq bda f
 
     let features =
         queryFeatures hasExtension
