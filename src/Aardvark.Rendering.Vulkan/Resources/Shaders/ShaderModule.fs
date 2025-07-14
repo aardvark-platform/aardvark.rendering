@@ -67,7 +67,11 @@ module ShaderModule =
         let config = device.DebugConfig
 
         match GLSLang.GLSLang.tryCompileWithTarget target (glslangStage slot) siface.shaderEntry config.GenerateShaderDebugInfo defines info.code with
-        | Some binary, _ ->
+        | Some binary, wrn ->
+            if not <| System.String.IsNullOrWhiteSpace wrn then
+                let wrn = String.normalizeLineEndings wrn
+                Log.warn $"{slot} shader compilation succeeded with warnings:{nl}{nl}{wrn}"
+
             let binary =
                 if not config.OptimizeShaders then binary
                 else GLSLang.GLSLang.optimizeDefault binary
