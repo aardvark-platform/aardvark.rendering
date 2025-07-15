@@ -1,6 +1,5 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System
 open Aardvark.Base
 
 

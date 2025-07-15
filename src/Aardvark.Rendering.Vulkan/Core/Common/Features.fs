@@ -2,6 +2,7 @@
 
 open EXTMemoryPriority
 
+[<CLIMutable>]
 type MemoryFeatures =
     {
         /// Specifies that accesses to buffers are bounds-checked against the range of the buffer descriptor
@@ -72,6 +73,7 @@ type MemoryFeatures =
             l.line "multidevice:        %A" x.BufferDeviceAddressMultiDevice
         )
 
+[<CLIMutable>]
 type DescriptorFeatures =
     {
         /// Indicates whether the implementation supports updating uniform buffer descriptors after a set is bound.
@@ -123,6 +125,7 @@ type DescriptorFeatures =
         l.line "variable count:              %A" x.BindingVariableDescriptorCount
         l.line "runtime array:               %A" x.RuntimeDescriptorArray
 
+[<CLIMutable>]
 type ImageFeatures =
     {
 
@@ -146,6 +149,7 @@ type ImageFeatures =
         l.line "ASTC LDR compression:     %A" x.CompressionASTC_LDR
         l.line "BC compression:           %A" x.CompressionBC
 
+[<CLIMutable>]
 type SamplerFeatures =
     {
         /// Specifies whether anisotropic filtering is supported.
@@ -159,6 +163,7 @@ type SamplerFeatures =
         l.line "anisotropy:           %A" x.Anisotropy
         l.line "ycbcr:                %A" x.YcbcrConversion
 
+[<CLIMutable>]
 type ShaderFeatures =
     {
         /// Specifies whether geometry shaders are supported.
@@ -354,6 +359,7 @@ type ShaderFeatures =
         l.line "variable pointers (storage buffer): %A" x.VariablePointersStorageBuffer
         l.line "draw parameters:                    %A" x.DrawParameters
 
+[<CLIMutable>]
 type QueryFeatures =
     {
         /// Specifies whether occlusion queries returning actual sample counts are supported.
@@ -371,6 +377,7 @@ type QueryFeatures =
         l.line "pipeline statistics: %A" x.PipelineStatistics
         l.line "inherited queries:   %A" x.InheritedQueries
 
+[<CLIMutable>]
 type DepthFeatures =
     {
         /// Specifies whether depth clamping is supported.
@@ -388,6 +395,7 @@ type DepthFeatures =
         l.line "bias clamping: %A" x.BiasClamp
         l.line "bounds test:   %A" x.BoundsTest
 
+[<CLIMutable>]
 type BlendFeatures =
     {
         /// Specifies whether the VkPipelineColorBlendAttachmentState settings are controlled independently per-attachment.
@@ -405,6 +413,7 @@ type BlendFeatures =
         l.line "dual-source:      %A" x.DualSrcBlend
         l.line "logic operations: %A" x.LogicOp
 
+[<CLIMutable>]
 type DrawingFeatures =
     {
         /// Specifies the full 32-bit range of indices is supported for indexed draw calls when using a VkIndexType of VK_INDEX_TYPE_UINT32.
@@ -422,6 +431,7 @@ type DrawingFeatures =
         l.line "multi draw indirect:          %A" x.MultiDrawIndirect
         l.line "draw indirect first instance: %A" x.DrawIndirectFirstInstance
 
+[<CLIMutable>]
 type MultiviewFeatures =
     {
         /// Specifies whether more than one viewport is supported.
@@ -431,6 +441,7 @@ type MultiviewFeatures =
     member internal x.Print(l : ILogger) =
         l.line "multiple viewports:             %A" x.MultiViewport
 
+[<CLIMutable>]
 type RasterizerFeatures =
     {
         /// Specifies whether lines with width other than 1.0 are supported.
@@ -462,6 +473,7 @@ type RasterizerFeatures =
         l.line "alpha to one:              %A" x.AlphaToOne
         l.line "variable multisample rate: %A" x.VariableMultisampleRate
 
+[<CLIMutable>]
 type GraphicsPipelineFeatures =
     {
         Depth: DepthFeatures
@@ -478,6 +490,7 @@ type GraphicsPipelineFeatures =
         l.section "multiview: " (fun () -> x.Multiview.Print(l))
         l.section "rasterizer:" (fun () -> x.Rasterizer.Print(l))
 
+[<CLIMutable>]
 type RaytracingFeatures =
     {
         /// Indicates whether the implementation supports the ray tracing pipeline functionality.
@@ -531,6 +544,7 @@ type RaytracingFeatures =
             l.line "host commands:                %A" x.AccelerationStructureHostCommands
         )
 
+[<CLIMutable>]
 type DeviceFeatures =
     {
         Memory: MemoryFeatures
