@@ -18,7 +18,6 @@ module Semantics =
         let Shadow = Sym.ofString "MissShadow"
 
     module InstanceAttribute =
-        let ModelMatrix = Sym.ofString "ModelMatrix"
         let NormalMatrix = Sym.ofString "NormalMatrix"
 
     module FaceAttribute =
@@ -39,7 +38,6 @@ module Effect =
             member x.Positions      : V3f[]  = uniform?StorageBuffer?Positions
             member x.Normals        : V3f[]  = uniform?StorageBuffer?Normals
             member x.TextureCoords  : V2f[]  = uniform?StorageBuffer?DiffuseColorCoordinates
-            member x.ModelMatrices  : M44f[] = uniform?StorageBuffer?ModelMatrix
             member x.NormalMatrices : M33f[] = uniform?StorageBuffer?NormalMatrix
             member x.FaceColors     : V3f[]  = uniform?StorageBuffer?FaceColors
             member x.Colors         : V3f[]  = uniform?StorageBuffer?Colors
@@ -137,12 +135,20 @@ module Effect =
             let barycentricCoords = V3f(1.0f - coords.X - coords.Y, coords.X, coords.Y)
             v0 * barycentricCoords.X + v1 * barycentricCoords.Y + v2 * barycentricCoords.Z
 
-        [<ReflectedDefinition>]
-        let getPosition (indices : V3i) (input : RayHitInput<'T, V2f>) =
-            let p0 = uniform.Positions.[indices.X]
-            let p1 = uniform.Positions.[indices.Y]
-            let p2 = uniform.Positions.[indices.Z]
-            input.hit.attribute |> fromBarycentric p0 p1 p2
+        // If the position fetch feature is supported and enabled, we can get the object space triangle positions directly from the shader input.
+        // Inline this function to eliminate the use of hit.positions if not enabled or supported.
+        [<ReflectedDefinition; Inline>]
+        let getPosition (positionFetch : bool) (indices : V3i) (input : RayHitInput<'T, V2f>) =
+            if positionFetch then
+                let p0 = input.hit.positions.[0]
+                let p1 = input.hit.positions.[1]
+                let p2 = input.hit.positions.[2]
+                input.hit.attribute |> fromBarycentric p0 p1 p2
+            else
+                let p0 = uniform.Positions.[indices.X]
+                let p1 = uniform.Positions.[indices.Y]
+                let p2 = uniform.Positions.[indices.Z]
+                input.hit.attribute |> fromBarycentric p0 p1 p2
 
         [<ReflectedDefinition>]
         let getNormal (indices : V3i) (input : RayHitInput<'T, V2f>) =
@@ -197,15 +203,14 @@ module Effect =
               direction   = Vec.reflect normal input.ray.direction
               attenuation = input.payload.attenuation * reflectiveness }
 
-        let chitFaceColor (input : RayHitInput<Payload>) =
+        let chitFaceColor (positionFetch : bool) (input : RayHitInput<Payload>) =
             closestHit {
                 let info = TraceGeometryInfo.ofRayHit input
                 let indices = TraceGeometryInfo.getIndices info input
 
                 let position =
-                    let p = getPosition indices input
-                    let m = uniform.ModelMatrices.[info.InstanceAttributeIndex]
-                    m.TransformPos p
+                    let p = getPosition positionFetch indices input
+                    input.objectSpace.objectToWorld.TransformPos p
 
                 let normal =
                     let n = getNormal indices input
@@ -216,15 +221,14 @@ module Effect =
                 return lightingWithShadow 0xFF diffuse 0.0f 1.0f 16.0f position normal input
             }
 
-        let chitTextured (input : RayHitInput<Payload>) =
+        let chitTextured (positionFetch : bool) (input : RayHitInput<Payload>) =
             closestHit {
                 let info = TraceGeometryInfo.ofRayHit input
                 let indices = TraceGeometryInfo.getIndices info input
 
                 let position =
-                    let p = getPosition indices input
-                    let m = uniform.ModelMatrices.[info.InstanceAttributeIndex]
-                    m.TransformPos p
+                    let p = getPosition positionFetch indices input
+                    input.objectSpace.objectToWorld.TransformPos p
 
                 let texCoords =
                     getTextureCoords indices input
@@ -260,14 +264,14 @@ module Effect =
             }
 
 
-    let private hitGroupModel =
+    let private hitGroupModel (positionFetch : bool) =
         hitgroup {
-            closestHit chitFaceColor
+            closestHit (chitFaceColor positionFetch)
         }
 
-    let private hitGroupFloor =
+    let private hitGroupFloor (positionFetch : bool) =
         hitgroup {
-            closestHit chitTextured
+            closestHit (chitTextured positionFetch)
         }
 
     let private hitGroupSphere =
@@ -276,13 +280,13 @@ module Effect =
             intersection (intersectionSphere 0.2f)
         }
 
-    let main =
+    let main (positionFetch : bool) =
         raytracingEffect {
             raygen rgenMain
             miss missSky
             miss MissShader.Shadow missShadow
-            hitgroup HitGroup.Model hitGroupModel
-            hitgroup HitGroup.Floor hitGroupFloor
+            hitgroup HitGroup.Model (hitGroupModel positionFetch)
+            hitgroup HitGroup.Floor (hitGroupFloor positionFetch)
             hitgroup HitGroup.Sphere hitGroupSphere
         }
 
@@ -300,7 +304,8 @@ let main _argv =
             debug true
         }
 
-    let runtime = win.Runtime
+    let runtime = win.Runtime :?> Vulkan.Runtime
+    let positionFetch = runtime.Device.EnabledFeatures.Raytracing.PositionFetch
 
     let cameraView =
         let initialView = CameraView.LookAt(V3d.One * 10.0, V3d.Zero, V3d.OOI)
@@ -320,14 +325,13 @@ let main _argv =
         let signature =
             let vertexAttributes =
                 Map.ofList [
-                    DefaultSemantic.Positions, typeof<V4f>
+                    if not positionFetch then DefaultSemantic.Positions, typeof<V4f>
                     DefaultSemantic.Normals, typeof<V4f>
                     DefaultSemantic.DiffuseColorCoordinates, typeof<V2f>
                 ]
 
             let instanceAttributes =
                 Map.ofList [
-                    InstanceAttribute.ModelMatrix, typeof<M44f>
                     InstanceAttribute.NormalMatrix, typeof<M34f>
                 ]
 
@@ -368,16 +372,16 @@ let main _argv =
                 trafo.Backward.Transposed.UpperLeftM33()
 
             Map.ofList [
-                InstanceAttribute.ModelMatrix, AVal.constant trafo.Forward :> IAdaptiveValue
                 InstanceAttribute.NormalMatrix, AVal.constant normalMatrix :> IAdaptiveValue
             ]
 
         scene.meshes.[0].geometry
-        |> TraceObject.ofIndexedGeometry GeometryFlags.Opaque trafo
+        |> TraceObject.ofIndexedGeometry GeometryFlags.Opaque Trafo3d.Identity
+        |> TraceObject.transform trafo
         |> TraceObject.instanceAttributes instanceAttr
         |> TraceObject.faceAttribute (FaceAttribute.Colors, colors)
         |> TraceObject.hitGroup HitGroup.Model
-        |> TraceObject.frontFace WindingOrder.Clockwise
+        |> TraceObject.frontFace WindingOrder.CounterClockwise
 
     let floor =
         let positions = [| V3f(-0.5f, -0.5f, 0.0f); V3f(-0.5f, 0.5f, 0.0f); V3f(0.5f, -0.5f, 0.0f); V3f(0.5f, 0.5f, 0.0f); |]
@@ -397,7 +401,6 @@ let main _argv =
                 trafo.Backward.Transposed.UpperLeftM33()
 
             Map.ofList [
-                InstanceAttribute.ModelMatrix, AVal.constant trafo.Forward :> IAdaptiveValue
                 InstanceAttribute.NormalMatrix, AVal.constant normalMatrix :> IAdaptiveValue
             ]
 
@@ -405,7 +408,8 @@ let main _argv =
             IndexedGeometry(IndexedGeometryMode.TriangleStrip, indices, vertexAttr, SymDict.empty)
 
         geom
-        |> TraceObject.ofIndexedGeometry GeometryFlags.Opaque trafo
+        |> TraceObject.ofIndexedGeometry GeometryFlags.Opaque Trafo3d.Identity
+        |> TraceObject.transform trafo
         |> TraceObject.instanceAttributes instanceAttr
         |> TraceObject.hitGroup HitGroup.Floor
         |> TraceObject.frontFace WindingOrder.CounterClockwise
@@ -476,7 +480,7 @@ let main _argv =
                 let startTime = System.DateTime.Now
 
                 let position = rnd.UniformV3d(Box3d(V3d(-10.0, -10.0, 2.0), V3d(10.0)))
-                let rotation = ((rnd.UniformV3d()) * 2.0 - 1.0) * 2.0 * Constant.Pi
+                let rotation = (rnd.UniformV3d() * 2.0 - 1.0) * 2.0 * Constant.Pi
 
                 win.Time |> AVal.map (fun t ->
                     let t = (t - startTime).TotalSeconds
@@ -495,7 +499,7 @@ let main _argv =
 
     let pipeline =
         {
-            Effect            = Effect.main
+            Effect            = Effect.main positionFetch
             Scenes            = Map.ofList [Sym.ofString "MainScene", scene]
             Uniforms          = uniforms
             MaxRecursionDepth = AVal.constant 1
