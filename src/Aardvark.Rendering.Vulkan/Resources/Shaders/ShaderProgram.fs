@@ -5,36 +5,21 @@ open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
-open Microsoft.FSharp.NativeInterop
-open FSharp.Data.Adaptive
 
 module internal FShadeConfig =
+    open FShade
     open FShade.GLSL
 
-    let backend =
-        let extensions =
-            Set.ofList [
-                "GL_ARB_tessellation_shader"
-                "GL_ARB_separate_shader_objects"
-                "GL_ARB_shading_language_420pack"
-            ]
+    let availableExtensions (device: Device) =
+        Map.ofList [
+            "GL_ARB_tessellation_shader",        device.EnabledFeatures.Shaders.TessellationShader
+            "GL_EXT_ray_tracing",                device.EnabledFeatures.Raytracing.Pipeline
+            "GL_EXT_ray_tracing_position_fetch", device.EnabledFeatures.Raytracing.PositionFetch
+        ]
 
-        Backend.Create {
-            version                     = GLSLVersion(4,5,0)
-            enabledExtensions           = extensions
-            createUniformBuffers        = true
-            bindingMode                 = BindingMode.Global
-            createDescriptorSets        = true
-            stepDescriptorSets          = false
-            createInputLocations        = true
-            createPerStageUniforms      = false
-            reverseMatrixLogic          = true
-            reverseTessellationWinding  = true
-            createOutputLocations       = true
-            createPassingLocations      = true
-            depthWriteMode              = true
-            useInOut                    = true
-        }
+    let backend (device: Device)  =
+        let extensions = availableExtensions device
+        Backend.Create { glslVulkan.Config with availableExtensions = extensions }
 
     /// The target depth range passed to FShade.
     let depthRange =
@@ -346,7 +331,8 @@ module ShaderProgram =
               outputs    : Map<int, string * TextureFormat>
               layered    : Set<string>
               layerCount : int
-              depthRange : Range1f }
+              depthRange : Range1f
+              extensions : Map<string, bool> }
 
         let ofEffectKey (device: Device) (key: EffectCacheKey) =
             let signature =
@@ -358,7 +344,9 @@ module ShaderProgram =
                   outputs    = outputs
                   layered    = key.layout.PerLayerUniforms
                   layerCount = key.layout.LayerCount
-                  depthRange = FShadeConfig.depthRange }
+                  depthRange = FShadeConfig.depthRange
+                  extensions = FShadeConfig.availableExtensions device
+                }
 
             getHash signature
 
@@ -557,10 +545,11 @@ module ShaderProgram =
 
         let compile() =
             let glsl =
+                let backend = FShadeConfig.backend device
                 try
                     module_
-                    |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
-                    |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
+                    |> FShade.Imperative.ModuleCompiler.compile backend
+                    |> FShade.GLSL.Assembler.assemble backend
                 with exn ->
                     Log.error "%s" exn.Message
                     reraise()
@@ -593,11 +582,12 @@ module ShaderProgram =
 
         let compile() =
             let glsl =
+                let backend = FShadeConfig.backend device
                 try
                     key.effect
                     |> Effect.link pass key.topology false
-                    |> FShade.Imperative.ModuleCompiler.compile FShadeConfig.backend
-                    |> FShade.GLSL.Assembler.assemble FShadeConfig.backend
+                    |> FShade.Imperative.ModuleCompiler.compile backend
+                    |> FShade.GLSL.Assembler.assemble backend
                 with exn ->
                     Log.error "%s" exn.Message
                     reraise()

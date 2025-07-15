@@ -122,6 +122,7 @@ module ProgramExtensions =
                     {
                         version = GLSLVersion(ctx.Driver.glsl.Major, ctx.Driver.glsl.Minor, 0)
                         enabledExtensions = enabledGLSLExts
+                        availableExtensions = Map.empty
                         createUniformBuffers = uniformBuffers
                         bindingMode = bindingMode
                         createDescriptorSets = false
@@ -134,6 +135,7 @@ module ProgramExtensions =
                         createPassingLocations = locations
                         depthWriteMode = conservativeDepth
                         useInOut = inout
+                        pushConstants = false
                     }
                 Backend.Create cfg
             )

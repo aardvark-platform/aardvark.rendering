@@ -172,8 +172,9 @@ module ComputeProgram =
 
     let private ofFShadeInternal (shader : FShade.ComputeShader) (device : Device) =
         let glsl =
+            let backend = FShadeConfig.backend device
             try
-                shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
+                shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL backend
             with exn ->
                 Log.error "%s" exn.Message
                 reraise()

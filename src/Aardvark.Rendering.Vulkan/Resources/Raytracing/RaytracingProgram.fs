@@ -112,8 +112,9 @@ module RaytracingProgram =
             g @ h
 
         let glsl =
+            let backend = FShadeConfig.backend device
             try
-                effect |> FShade.RaytracingEffect.toModule |> FShade.Backends.ModuleCompiler.compileGLSLRaytracing
+                effect |> FShade.RaytracingEffect.toModule |> FShade.Backends.ModuleCompiler.compileGLSL backend
             with exn ->
                 Log.error "%s" exn.Message
                 reraise()
