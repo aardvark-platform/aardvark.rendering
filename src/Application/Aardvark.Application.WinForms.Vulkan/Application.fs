@@ -55,6 +55,7 @@ type VulkanApplication(debug: IDebugConfig,
             yield Instance.Extensions.ConservativeRasterization
             yield Instance.Extensions.MemoryBudget
             yield Instance.Extensions.MemoryPriority
+            yield Instance.Extensions.DeviceFault
 
             yield! Instance.Extensions.Maintenance
             yield! Instance.Extensions.Raytracing

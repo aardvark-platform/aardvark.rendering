@@ -20,10 +20,10 @@ type Event internal (device: IDevice) =
 
     member x.IsSet =
         if handle.IsValid then
-            let res = VkRaw.vkGetEventStatus(device.Handle, handle)
-            if res = VkResult.EventSet then true
-            elif res = VkResult.EventReset then false
-            else failf "could not get event status"
+            match VkRaw.vkGetEventStatus(device.Handle, handle) with
+            | VkResult.EventSet -> true
+            | VkResult.EventReset -> false
+            | err -> err |> checkForFault device "could not get event status" |> unbox
         else
             failf "could not get event status"
 

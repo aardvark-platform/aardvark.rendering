@@ -31,23 +31,20 @@ type Fence internal (device: IDevice, [<Optional; DefaultParameterValue(false)>]
         if fences.Length > 0 then
             let pFences = fences |> NativePtr.stackUseArr _.Handle
             VkRaw.vkWaitForFences(fences.[0].DeviceInterface.Handle, uint32 fences.Length, pFences, 1u, infinite)
-                |> check "failed to wait for fences"
+                |> checkForFault fences.[0].DeviceInterface "failed to wait for fences"
 
     static member WaitAny(fences: Fence[]) =
         if fences.Length > 0 then
             let pFences = fences |> NativePtr.stackUseArr _.Handle
             VkRaw.vkWaitForFences(fences.[0].DeviceInterface.Handle, uint32 fences.Length, pFences, 0u, infinite)
-                |> check "failed to wait for fences"
+                |> checkForFault fences.[0].DeviceInterface "failed to wait for fences"
 
     member x.Signaled =
         if fence.IsValid then
-            VkRaw.vkGetFenceStatus(device.Handle, fence) = VkResult.Success
-        else
-            true
-
-    member x.Completed =
-        if fence.IsValid then
-            VkRaw.vkGetFenceStatus(device.Handle, fence) <> VkResult.NotReady
+            match VkRaw.vkGetFenceStatus(device.Handle, fence) with
+            | VkResult.Success -> true
+            | VkResult.NotReady -> false
+            | err -> err |> checkForFault device "failed to get fence status" |> unbox
         else
             true
 
@@ -62,7 +59,7 @@ type Fence internal (device: IDevice, [<Optional; DefaultParameterValue(false)>]
         match VkRaw.vkWaitForFences(device.Handle, 1u, &&fence, 1u, timeoutInNanoseconds) with
         | VkResult.Success -> true
         | VkResult.Timeout -> false
-        | err -> failf "could not wait for fences: %A" err
+        | err -> err |> checkForFault device "could not wait for fence" |> unbox
 
     member x.Dispose() =
         if fence.IsValid && device.Handle <> 0n then

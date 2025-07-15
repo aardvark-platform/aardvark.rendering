@@ -34,6 +34,8 @@ module Instance =
 
         let Debug                           = EXTDebugUtils.Name
 
+        let DeviceFault                     = EXTDeviceFault.Name
+
         let MemoryBudget                    = EXTMemoryBudget.Name
 
         let MemoryPriority                  = EXTMemoryPriority.Name
@@ -465,11 +467,11 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                 l.section "group:" (fun () ->
                     for i in 0 .. devices.Length - 1 do
                         let d = devices.[i]
-                        l.line "%d: %s %s" i d.Vendor d.Name
+                        l.line "%d: %s" i d.FullName
                 )
             else
                 let d = devices.[0]
-                l.line "device: %s %s" d.Vendor d.Name
+                l.line "device: %s" d.FullName
         )
 
     interface IVulkanInstance

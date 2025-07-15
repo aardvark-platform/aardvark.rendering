@@ -57,12 +57,12 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
 
             use pBinds = fixed binds
             VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
-                |> check "could not bind sparse memory"
+                |> checkForFault device "could not bind sparse memory"
 
         | _ ->
             use pBinds = fixed binds
             VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
-                |> check "could not bind sparse memory"
+                |> checkForFault device "could not bind sparse memory"
 
     member x.BindSparseSynchronously(binds: VkBindSparseInfo[]) =
         fence.Reset()
@@ -107,7 +107,7 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
                 )
 
             VkRaw.vkQueueSubmit(handle, 1u, &&submitInfo, fence)
-                |> check "could not submit command buffer"
+                |> checkForFault device "could not submit command buffer"
 
         | _ ->
             let mutable submitInfo =
@@ -118,7 +118,7 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
                 )
 
             VkRaw.vkQueueSubmit(handle, 1u, &&submitInfo, fence)
-                |> check "could not submit command buffer"
+                |> checkForFault device "could not submit command buffer"
 
     member x.RunSynchronously(buffers: CommandBuffer[], waitFor: Semaphore[], signal: Semaphore[]) =
         fence.Reset()

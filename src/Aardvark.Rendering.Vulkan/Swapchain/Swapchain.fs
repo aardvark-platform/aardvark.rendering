@@ -358,7 +358,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
         let o = System.Threading.Interlocked.Exchange(&disposed, 1)
         if o = 0 then
             // delete old things
-            VkRaw.vkDeviceWaitIdle(device.Handle) |> check "could not wait for device to be idle"
+            VkRaw.vkDeviceWaitIdle(device.Handle) |> checkForFault device "could not wait for device to be idle"
             VkRaw.vkDestroySwapchainKHR(device.Handle, handle, NativePtr.zero)
             
             framebuffer |> Option.iter (fun framebuffer ->

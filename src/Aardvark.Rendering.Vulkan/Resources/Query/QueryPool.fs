@@ -58,7 +58,7 @@ module QueryPool =
             match result with
             | VkResult.Success -> Some data
             | VkResult.NotReady -> None
-            | _ -> result |> check "failed to get query results" |> unbox
+            | _ -> result |> checkForFault pool.Device "failed to get query results" |> unbox
         )
 
     let tryGetValues (valuesPerQuery : int) (pool : QueryPool) =

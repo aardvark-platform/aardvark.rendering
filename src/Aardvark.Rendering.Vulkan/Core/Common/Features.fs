@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open EXTMemoryPriority
-
 [<CLIMutable>]
 type MemoryFeatures =
     {
@@ -545,20 +543,32 @@ type RaytracingFeatures =
         )
 
 [<CLIMutable>]
+type DebuggingFeatures =
+    {
+        /// Indicates whether the implementation supports the reporting of device fault information.
+        DeviceFault : bool
+
+        /// Indicates that the implementation supports the generation of vendor-specific binary crash dumps.
+        /// These may provide additional information when imported into vendor-specific external tools.
+        VendorBinaryDump : bool
+    }
+
+    member internal x.Print(l : ILogger) =
+        l.line "device fault:                       %A" x.DeviceFault
+        l.line "vendor binary dump:                 %A" x.VendorBinaryDump
+
+[<CLIMutable>]
 type DeviceFeatures =
     {
-        Memory: MemoryFeatures
-        Descriptors: DescriptorFeatures
-        Images: ImageFeatures
-        Samplers: SamplerFeatures
-
-        Shaders: ShaderFeatures
-
-        Queries: QueryFeatures
-
+        Memory           : MemoryFeatures
+        Descriptors      : DescriptorFeatures
+        Images           : ImageFeatures
+        Samplers         : SamplerFeatures
+        Shaders          : ShaderFeatures
+        Queries          : QueryFeatures
         GraphicsPipeline : GraphicsPipelineFeatures
-
-        Raytracing : RaytracingFeatures
+        Raytracing       : RaytracingFeatures
+        Debugging        : DebuggingFeatures
     }
 
     member internal x.Print(l : ILogger) =
@@ -570,6 +580,7 @@ type DeviceFeatures =
         l.section "queries:" (fun () -> x.Queries.Print(l))
         l.section "graphics pipeline:" (fun () -> x.GraphicsPipeline.Print(l))
         l.section "raytracing:" (fun () -> x.Raytracing.Print(l))
+        l.section "debugging:" (fun () -> x.Debugging.Print(l))
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DeviceFeatures =
@@ -581,6 +592,8 @@ module DeviceFeatures =
     open KHRShaderFloat16Int8
     open KHR8bitStorage
     open EXTDescriptorIndexing
+    open EXTMemoryPriority
+    open EXTDeviceFault
     open Vulkan11
 
     let private toBool (value : VkBool32) =
@@ -696,6 +709,12 @@ module DeviceFeatures =
                 toVkBool features.Memory.BufferDeviceAddressMultiDevice
             )
 
+        let dflt =
+            VkPhysicalDeviceFaultFeaturesEXT(
+                toVkBool features.Debugging.DeviceFault,
+                toVkBool features.Debugging.VendorBinaryDump
+            )
+
         let features =
             VkPhysicalDeviceFeatures2(
                 VkPhysicalDeviceFeatures(
@@ -772,6 +791,7 @@ module DeviceFeatures =
         |> if not acc.IsEmpty then VkStructChain.add acc else id
         |> if not rq.IsEmpty  then VkStructChain.add rq  else id
         |> if not bda.IsEmpty then VkStructChain.add bda else id
+        |> if not dflt.IsEmpty then VkStructChain.add dflt else id
         |> VkStructChain.add features
 
     let create (protectedMemoryFeatures : VkPhysicalDeviceProtectedMemoryFeatures)
@@ -788,6 +808,7 @@ module DeviceFeatures =
                (accelerationStructureFeatures : VkPhysicalDeviceAccelerationStructureFeaturesKHR)
                (rayQueryFeatures : VkPhysicalDeviceRayQueryFeaturesKHR)
                (bufferDeviceAddressFeatures : VkPhysicalDeviceBufferDeviceAddressFeaturesKHR)
+               (deviceFaultFeatures : VkPhysicalDeviceFaultFeaturesEXT)
                (features : VkPhysicalDeviceFeatures) =
 
         {
@@ -827,16 +848,16 @@ module DeviceFeatures =
 
             Images =
                 {
-                    ImageCubeArray =              toBool features.imageCubeArray
-                    CompressionETC2 =             toBool features.textureCompressionETC2
-                    CompressionASTC_LDR =         toBool features.textureCompressionASTC_LDR
-                    CompressionBC =               toBool features.textureCompressionBC
+                    ImageCubeArray =      toBool features.imageCubeArray
+                    CompressionETC2 =     toBool features.textureCompressionETC2
+                    CompressionASTC_LDR = toBool features.textureCompressionASTC_LDR
+                    CompressionBC =       toBool features.textureCompressionBC
                 }
 
             Samplers =
                 {
-                    Anisotropy =        toBool features.samplerAnisotropy
-                    YcbcrConversion =   toBool samplerYcbcrConversionFeatures.samplerYcbcrConversion
+                    Anisotropy =      toBool features.samplerAnisotropy
+                    YcbcrConversion = toBool samplerYcbcrConversionFeatures.samplerYcbcrConversion
                 }
 
             Shaders =
@@ -918,7 +939,7 @@ module DeviceFeatures =
 
                     Multiview =
                         {
-                            MultiViewport =               toBool features.multiViewport
+                            MultiViewport = toBool features.multiViewport
                         }
 
                     Rasterizer =
@@ -946,9 +967,17 @@ module DeviceFeatures =
                     AccelerationStructureIndirectBuild =  toBool accelerationStructureFeatures.accelerationStructureIndirectBuild
                     AccelerationStructureHostCommands =   toBool accelerationStructureFeatures.accelerationStructureHostCommands
                 }
+
+            Debugging =
+                {
+                    DeviceFault      = toBool deviceFaultFeatures.deviceFault
+                    VendorBinaryDump = toBool deviceFaultFeatures.deviceFaultVendorBinary
+                }
         }
 
     /// Returns the default features to be enabled.
-    /// Disables the robust buffer access feature.
+    /// Disables the robust buffer access feature and binary crash dumps.
     let getDefault (availableFeatures: DeviceFeatures) =
-        { availableFeatures with Memory.RobustBufferAccess = false }
+        { availableFeatures with
+            Memory.RobustBufferAccess  = false
+            Debugging.VendorBinaryDump = false }

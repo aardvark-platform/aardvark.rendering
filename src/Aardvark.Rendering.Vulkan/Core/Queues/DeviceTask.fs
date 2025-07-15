@@ -21,7 +21,7 @@ type DeviceTask internal (fence: Fence) =
     member x.IsCompleted =
         if Monitor.TryEnter lockObj then
             try
-                if fence <> null && fence.Completed then
+                if fence <> null && fence.Signaled then
                     finalize()
                     true
                 else

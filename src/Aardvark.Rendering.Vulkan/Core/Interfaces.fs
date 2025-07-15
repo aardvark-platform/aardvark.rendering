@@ -13,7 +13,7 @@ type IDevice =
 type IDeviceObject =
     abstract member DeviceInterface : IDevice
 
-and IDeviceQueueFamily =
+type IDeviceQueueFamily =
     inherit IDeviceObject
     abstract member Info : QueueFamilyInfo
 
@@ -29,3 +29,9 @@ type IResource =
 type IResource<'Handle> =
     inherit IResource
     abstract member Handle : 'Handle
+
+[<AutoOpen>]
+module internal IDeviceExtensions =
+    let inline checkForFault (device: IDevice) (message: string) (result: VkResult) =
+        if result = VkResult.ErrorDeviceLost && device.EnabledFeatures.Debugging.DeviceFault then DeviceFault.report device.Handle
+        result |> check message

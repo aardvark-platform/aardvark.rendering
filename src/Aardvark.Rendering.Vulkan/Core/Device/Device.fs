@@ -137,8 +137,6 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
                     pDevices
                 )
 
-            // TODO: Do we really want to enable all available features?
-            // Does this have real performance implications?
             use pNext =
                 DeviceFeatures.toNativeChain enabledFeatures
                 |> if isGroup then VkStructChain.add groupInfo else id
