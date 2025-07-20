@@ -136,6 +136,7 @@ module ProgramExtensions =
                         depthWriteMode = conservativeDepth
                         useInOut = inout
                         pushConstants = false
+                        separateTexturesAndSamplers = false
                     }
                 Backend.Create cfg
             )
@@ -352,6 +353,8 @@ module ProgramExtensions =
                                         uniformBuffers              = MapExt.empty
                                         shaders                     = FShade.GLSL.GLSLProgramShaders.Graphics { stages = MapExt.empty }
                                         accelerationStructures      = MapExt.empty
+                                        samplerStates               = MapExt.empty
+                                        textures                    = MapExt.empty
                                     }
                             }
 

@@ -1,3 +1,6 @@
+### 5.6.0-prerelease0005
+- Updated FShade to 5.7.0-prerelease0003
+
 ### 5.6.0-prerelease0004
 - Changed type of Handle property in resource interfaces to uint64
 - Removed obsolete code

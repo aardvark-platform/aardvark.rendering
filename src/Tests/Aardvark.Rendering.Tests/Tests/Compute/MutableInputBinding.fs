@@ -21,7 +21,9 @@ module MutableInputBinding =
               storageBuffers = MapExt.empty
               uniformBuffers = MapExt.empty
               accelerationStructures = MapExt.empty
-              shaders = Unchecked.defaultof<_> }
+              shaders = Unchecked.defaultof<_>
+              samplerStates = MapExt.empty
+              textures = MapExt.empty }
 
         let private createDummyShader (buffers : string list) (runtime : IRuntime) =
             let buffers =
