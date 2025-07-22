@@ -16,6 +16,7 @@ module internal FShadeConfig =
             GLSLExtension.ARBTessellationShader,      device.EnabledFeatures.Shaders.TessellationShader
             GLSLExtension.EXTRayTracing,              device.EnabledFeatures.Raytracing.Pipeline
             GLSLExtension.EXTRayTracingPositionFetch, device.EnabledFeatures.Raytracing.PositionFetch
+            GLSLExtension.NVShaderInvocationReorder,  device.EnabledFeatures.Raytracing.InvocationReorder
         ]
 
     let backend (device: Device)  =

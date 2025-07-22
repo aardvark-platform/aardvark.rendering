@@ -587,12 +587,16 @@ type RaytracingLimits =
 
         /// Maximum size in bytes for a ray attribute structure.
         MaxRayHitAttributeSize                                      : uint32
+
+        /// Indicates if the implementation will actually reorder at the reorder calls.
+        InvocationReorderMode                                       : NVRayTracingInvocationReorder.VkRayTracingInvocationReorderModeNV
     }
 
     member internal x.Print(l : ILogger) =
         l.line "max ray recursion depth:      %d" x.MaxRayRecursionDepth
         l.line "max ray dispatch invocations: %d" x.MaxRayDispatchInvocationCount
         l.line "max ray hit attribute size:   %d" x.MaxRayHitAttributeSize
+        l.line "invocation reorder mode:      %d" (int x.InvocationReorderMode)
         l.section "acceleration structures: " (fun () ->
             l.line "max geometry count:                            %d" x.MaxGeometryCount
             l.line "max instance count:                            %d" x.MaxInstanceCount
@@ -660,9 +664,11 @@ module DeviceLimits =
     open KHRRayTracingPipeline
     open KHRAccelerationStructure
     open KHRMaintenance3
+    open NVRayTracingInvocationReorder
 
     let create (maintenance3Properties : VkPhysicalDeviceMaintenance3PropertiesKHR)
                (rtpProperties : VkPhysicalDeviceRayTracingPipelinePropertiesKHR)
+               (rtirProperties : VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV)
                (asProperties : VkPhysicalDeviceAccelerationStructurePropertiesKHR)
                (limits : VkPhysicalDeviceLimits) =
         {
@@ -867,5 +873,6 @@ module DeviceLimits =
                         MaxRayDispatchInvocationCount                               = rtpProperties.maxRayDispatchInvocationCount
                         ShaderGroupHandleAlignment                                  = rtpProperties.shaderGroupHandleAlignment
                         MaxRayHitAttributeSize                                      = rtpProperties.maxRayHitAttributeSize
+                        InvocationReorderMode                                       = rtirProperties.rayTracingInvocationReorderReorderingHint
                     }
         }

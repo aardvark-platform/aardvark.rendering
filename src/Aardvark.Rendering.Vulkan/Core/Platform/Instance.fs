@@ -62,6 +62,7 @@ module Instance =
                 EXTDescriptorIndexing.Name
                 KHRSpirv14.Name
                 KHRShaderFloatControls.Name
+                NVRayTracingInvocationReorder.Name
             ]
 
         let ExternalMemory =
