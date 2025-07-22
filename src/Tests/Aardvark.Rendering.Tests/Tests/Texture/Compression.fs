@@ -37,6 +37,7 @@ module TextureCompression =
 
         [<GlobalCleanup>]
         member x.Cleanup() =
+            app.Complete()
             app.Dispose()
 
         [<Benchmark>]

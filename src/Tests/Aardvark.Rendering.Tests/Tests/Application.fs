@@ -23,11 +23,13 @@ type ITestApplication =
     inherit IDisposable
     abstract member Runtime : IRuntime
 
-type TestApplication(inner : ITestApplication, disposable : IDisposable) =
+type TestApplication(inner : ITestApplication, onExit : bool -> unit) =
     do inner.Runtime.ShaderCachePath <- None
+    let mutable completed = false
 
     member x.Runtime = inner.Runtime
-    member x.Dispose() = disposable.Dispose()
+    member x.Complete() = completed <- true
+    member x.Dispose() = onExit completed
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -93,12 +95,10 @@ module TestApplication =
 
             new TestApplication(
                 app,
-                { new IDisposable with
-                    member x.Dispose() =
-                        checkForErrors()
-                        app.Dispose()
-                        checkForDebugErrors()
-                }
+                fun completed ->
+                    if completed then checkForErrors()
+                    app.Dispose()
+                    if completed then checkForDebugErrors()
             )
 
     module private Vulkan =
@@ -112,21 +112,19 @@ module TestApplication =
                     member x.Runtime = headless.Runtime
                     member x.Dispose() = headless.Dispose() }
 
-            let onExit =
-                { new IDisposable with
-                    member x.Dispose() =
-                        app.Dispose()
+            let onExit completed =
+                app.Dispose()
 
-                        let failed, errors =
-                            let br = Environment.NewLine + Environment.NewLine
-                            let msgs = headless.Instance.DebugSummary.ErrorMessages
+                if completed then
+                    let failed, errors =
+                        let br = Environment.NewLine + Environment.NewLine
+                        let msgs = headless.Instance.DebugSummary.ErrorMessages
 
-                            msgs.Length > 0,
-                            msgs |> String.concat br |> (+) br
+                        msgs.Length > 0,
+                        msgs |> String.concat br |> (+) br
 
-                        if failed then
-                            failwithf "Vulkan validation triggered errors: %s" errors
-                }
+                    if failed then
+                        failwithf "Vulkan validation triggered errors: %s" errors
 
             new TestApplication(
                 app, onExit
@@ -159,4 +157,6 @@ module TestApplication =
 
     let createUse f backend =
         use app = create backend
-        f app.Runtime
+        let result = f app.Runtime
+        app.Complete()
+        result

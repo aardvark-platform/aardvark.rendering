@@ -103,6 +103,7 @@ module ``SceneGraph Tests`` =
 
         prepared |> List.iter Disposable.dispose
         Expect.equal count countAfterDispose "unexpected count after disposing"
+        app.Complete()
 
     let onActivationMultiRenderObject =
         test "Sg.OnActivation multiple RenderObjects" {
@@ -161,6 +162,8 @@ module ``SceneGraph Tests`` =
 
             finally
                 buffer.Release()
+
+            app.Complete()
         }
 
     [<Tests>]
