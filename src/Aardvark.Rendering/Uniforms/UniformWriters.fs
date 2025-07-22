@@ -134,7 +134,7 @@ module GLSLType =
         | Sampler _ -> failwith "[UniformWriter] sampler does not have a size"
         | DynamicArray _ -> failwith "[UniformWriter] dynamic arrays do not have a size"
         | Intrinsic _ -> failwith "[UniformWriter] dynamic arrays do not have a size"
-        | SamplerState -> failwith "[UniformWriter] SamplerStates do not have a size"
+        | SamplerState _ -> failwith "[UniformWriter] SamplerStates do not have a size"
         | Texture _ -> failwith "[UniformWriter] Textures do not have a size"
 
 

@@ -12,9 +12,9 @@ module internal FShadeConfig =
 
     let availableExtensions (device: Device) =
         Map.ofList [
-            "GL_ARB_tessellation_shader",        device.EnabledFeatures.Shaders.TessellationShader
-            "GL_EXT_ray_tracing",                device.EnabledFeatures.Raytracing.Pipeline
-            "GL_EXT_ray_tracing_position_fetch", device.EnabledFeatures.Raytracing.PositionFetch
+            GLSLExtension.ARBTessellationShader,      device.EnabledFeatures.Shaders.TessellationShader
+            GLSLExtension.EXTRayTracing,              device.EnabledFeatures.Raytracing.Pipeline
+            GLSLExtension.EXTRayTracingPositionFetch, device.EnabledFeatures.Raytracing.PositionFetch
         ]
 
     let backend (device: Device)  =
