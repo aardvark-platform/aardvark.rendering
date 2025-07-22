@@ -218,7 +218,7 @@ module ComputeProgram =
         )
 
     let ofFunction (f : 'a -> 'b) (device : Device) =
-        let shader = FShade.ComputeShader.ofFunction device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize f
+        let shader = FShade.ComputeShader.ofFunction (V3i device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize) f
         ofFShade shader device
 
 

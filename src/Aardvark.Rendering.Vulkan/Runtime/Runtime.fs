@@ -443,7 +443,7 @@ type Runtime(device : Device) as this =
             }
 
     // Compute
-    member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
+    member x.MaxLocalSize = V3i device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
 
     member x.CreateComputeShader(shader : FShade.ComputeShader) =
         device.CreateComputeShader shader

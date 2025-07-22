@@ -2,23 +2,22 @@
 
 open Aardvark.Base
 
-
 type ImageLimits =
     {
         /// the maximum dimension of an image created with an imageType of VK_IMAGE_TYPE_1D
-        MaxDimension1D : int
+        MaxDimension1D : uint
 
         /// the maximum dimension of an image created with an imageType of VK_IMAGE_TYPE_2D and without VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT set in flags.
-        MaxDimension2D : V2i
+        MaxDimension2D : V2ui
 
         /// the maximum dimension (width, height, or depth) of an image created with an imageType of VK_IMAGE_TYPE_3D.
-        MaxDimension3D : V3i
+        MaxDimension3D : V3ui
 
         /// the maximum dimension (width or height) of an image created with an imageType of VK_IMAGE_TYPE_2D and with VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT set in flags.
-        MaxDimensionCube : V2i
+        MaxDimensionCube : V2ui
 
         /// the maximum number of layers (arrayLayers) for an image.
-        MaxArrayLayers : int
+        MaxArrayLayers : uint
     }
 
     member internal x.Print(l : ILogger) =
@@ -56,7 +55,7 @@ type SampledImageLimits =
 type SamplerLimits =
     {
         /// the maximum number of sampler objects, as created by vkCreateSampler, which can simultaneously exist on a device.
-        MaxAllocationCount : int
+        MaxAllocationCount : uint
 
         /// the maximum absolute sampler level of detail bias.
         MaxLodBias : float
@@ -66,7 +65,7 @@ type SamplerLimits =
     }
 
     member internal x.Print(l : ILogger) =
-        l.line "max allocations: %A" x.MaxAllocationCount
+        l.line "max allocations: %d" x.MaxAllocationCount
         l.line "max lod bias:    %A" x.MaxLodBias
         l.line "max anisotropy:  %A" x.MaxAnisotropy
 
@@ -79,7 +78,7 @@ type UniformLimits =
         MaxStorageViewRange : Mem
 
         /// the maximum number of addressable texels for a buffer view created on a buffer which was created with the VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT or VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT set
-        MaxTexelBufferElements : int
+        MaxTexelBufferElements : uint
 
         /// the maximum size, in bytes, of the pool of push constant memory.
         MaxPushConstantsSize : Mem
@@ -88,42 +87,43 @@ type UniformLimits =
     member internal x.Print(l : ILogger) =
         l.line "max buffer range:   %A" x.MaxBufferViewRange
         l.line "max storage range:  %A" x.MaxStorageViewRange
-        l.line "max texel elements: %A" x.MaxTexelBufferElements
+        l.line "max texel elements: %d" x.MaxTexelBufferElements
         l.line "max push constants: %A" x.MaxPushConstantsSize
 
 type MemoryLimits =
     {
         /// the maximum number of device memory allocations, as created by vkAllocateMemory, which can simultaneously exist.
-        MaxAllocationCount : int
+        MaxAllocationCount : uint
 
+        /// the maximum size of a memory allocation that can be created, even if there is more space available in the heap.
         MaxAllocationSize : Mem
 
         /// the total amount of address space available, in bytes, for sparse memory resources. This is an upper bound on the sum of the size of all sparse resources, regardless of whether any memory is bound to them.
         SparseAddressSpaceSize : Mem
 
         /// the granularity, in bytes, at which buffer or linear image resources, and optimal image resources can be bound to adjacent offsets in the same VkDeviceMemory object without aliasing.
-        BufferImageGranularity : int64
+        BufferImageGranularity : uint64
 
         /// the minimum required alignment, in bytes, of host visible memory allocations within the host address space. When mapping a memory allocation with vkMapMemory, subtracting offset bytes from the returned pointer will always produce an integer multiple of this limit.
-        MinMemoryMapAlignment : int64
+        MinMemoryMapAlignment : uint64
 
         /// the minimum required alignment, in bytes, for the offset member of the VkBufferViewCreateInfo structure for texel buffers.
-        MinTexelBufferOffsetAlignment : int64
+        MinTexelBufferOffsetAlignment : uint64
 
         /// the minimum required alignment, in bytes, for the offset member of the VkDescriptorBufferInfo structure for uniform buffers.
-        MinUniformBufferOffsetAlignment : int64
+        MinUniformBufferOffsetAlignment : uint64
 
         /// the minimum required alignment, in bytes, for the offset member of the VkDescriptorBufferInfo structure for storage buffers.
-        MinStorageBufferOffsetAlignment : int64
+        MinStorageBufferOffsetAlignment : uint64
 
         /// the optimal buffer offset alignment in bytes for vkCmdCopyBufferToImage and vkCmdCopyImageToBuffer. The per texel alignment requirements are still enforced, this is just an additional alignment recommendation for optimal performance and power.
-        OptimalBufferCopyOffsetAlignment : int64
+        OptimalBufferCopyOffsetAlignment : uint64
 
         /// the optimal buffer row pitch alignment in bytes for vkCmdCopyBufferToImage and vkCmdCopyImageToBuffer. Row pitch is the number of bytes between texels with the same X coordinate in adjacent rows (Y coordinates differ by one). The per texel alignment requirements are still enforced, this is just an additional alignment recommendation for optimal performance and power.
-        OptimalBufferCopyRowPitchAlignment : int64
+        OptimalBufferCopyRowPitchAlignment : uint64
 
         /// the size and alignment in bytes that bounds concurrent access to host-mapped device memory.
-        NonCoherentAtomSize : int64
+        NonCoherentAtomSize : uint64
 
     }
 
@@ -141,58 +141,62 @@ type MemoryLimits =
 
 type DescriptorLimits =
     {
+        /// the maximum number of descriptors (summed over all descriptor types) in a single descriptor set
+        /// that is guaranteed to satisfy any implementation-dependent constraints on the size of a descriptor set itself.
+        MaxPerSetDescriptors : uint
+
         /// the maximum number of descriptor sets that can be simultaneously used by a pipeline.
-        MaxBoundDescriptorSets : int
+        MaxBoundDescriptorSets : uint
 
         /// the maximum number of samplers that can be accessible to a single shader stage in a pipeline layout.
-        MaxPerStageSamplers : int
+        MaxPerStageSamplers : uint
 
         /// the maximum number of uniform buffers that can be accessible to a single shader stage in a pipeline layout.
-        MaxPerStageUniformBuffers : int
+        MaxPerStageUniformBuffers : uint
 
         /// the maximum number of storage buffers that can be accessible to a single shader stage in a pipeline layout.
-        MaxPerStageStorageBuffers : int
+        MaxPerStageStorageBuffers : uint
 
         /// the maximum number of sampled images that can be accessible to a single shader stage in a pipeline layout.
-        MaxPerStageSampledImages : int
+        MaxPerStageSampledImages : uint
 
         /// the maximum number of storage images that can be accessible to a single shader stage in a pipeline layout.
-        MaxPerStageStorageImages : int
+        MaxPerStageStorageImages : uint
 
         /// the maximum number of input attachments that can be accessible to a single shader stage in a pipeline layout.
-        MaxPerStageInputAttachments : int
+        MaxPerStageInputAttachments : uint
 
         /// the maximum number of resources that can be accessible to a single shader stage in a pipeline layout.
-        MaxPerStageResources : int
-
+        MaxPerStageResources : uint
 
         /// the maximum number of samplers that can be included in descriptor bindings in a pipeline layout across all pipeline shader stages and descriptor set numbers.
-        MaxSamplers : int
+        MaxSamplers : uint
 
         /// the maximum number of uniform buffers that can be included in descriptor bindings in a pipeline layout across all pipeline shader stages and descriptor set numbers.
-        MaxUniformBuffers : int
+        MaxUniformBuffers : uint
 
         /// the maximum number of dynamic uniform buffers that can be included in descriptor bindings in a pipeline layout across all pipeline shader stages and descriptor set numbers.
-        MaxUniformBuffersDynamic : int
+        MaxUniformBuffersDynamic : uint
 
         /// the maximum number of storage buffers that can be included in descriptor bindings in a pipeline layout across all pipeline shader stages and descriptor set numbers.
-        MaxStorageBuffers : int
+        MaxStorageBuffers : uint
 
         /// the maximum number of dynamic storage buffers that can be included in descriptor bindings in a pipeline layout across all pipeline shader stages and descriptor set numbers.
-        MaxStorageBuffersDynamic : int
+        MaxStorageBuffersDynamic : uint
 
         /// the maximum number of sampled images that can be included in descriptor bindings in a pipeline layout across all pipeline shader stages and descriptor set numbers.
-        MaxSampledImages : int
+        MaxSampledImages : uint
 
         /// the maximum number of storage images that can be included in descriptor bindings in a pipeline layout across all pipeline shader stages and descriptor set numbers.
-        MaxStorageImages : int
+        MaxStorageImages : uint
 
         /// the maximum number of input attachments that can be included in descriptor bindings in a pipeline layout across all pipeline shader stages and descriptor set numbers.
-        MaxInputAttachments : int
+        MaxInputAttachments : uint
 
     }
 
     member internal x.Print(l : ILogger) =
+        l.line "max per set descriptors: %d" x.MaxPerSetDescriptors
         l.line "max bound sets:          %d" x.MaxBoundDescriptorSets
         l.line "max samplers:            %d" x.MaxSamplers
         l.line "max uniform buffers:     %d" x.MaxUniformBuffers
@@ -215,19 +219,19 @@ type DescriptorLimits =
 type VertexLimits =
     {
         /// the maximum number of vertex input attributes that can be specified for a graphics pipeline.
-        MaxInputAttributes : int
+        MaxInputAttributes : uint
 
         /// the maximum number of vertex buffers that can be specified for providing vertex attributes to a graphics pipeline.
-        MaxInputBindings : int
+        MaxInputBindings : uint
 
         /// the maximum vertex input attribute offset that can be added to the vertex input binding stride.
-        MaxInputAttributeOffset : int64
+        MaxInputAttributeOffset : uint
 
         /// the maximum vertex input binding stride that can be specified in a vertex input binding.
-        MaxInputBindingStride : int64
+        MaxInputBindingStride : uint
 
         /// the maximum number of components of output variables which can be output by a vertex shader.
-        MaxOutputComponents : int
+        MaxOutputComponents : uint
     }
 
     member internal x.Print(l : ILogger) =
@@ -240,16 +244,16 @@ type VertexLimits =
 type TessControlLimits =
     {
         /// the maximum number of components of input variables which can be provided as per-vertex inputs to the tessellation control shader stage.
-        MaxPerVertexInputComponents : int
+        MaxPerVertexInputComponents : uint
 
         /// the maximum number of components of per-vertex output variables which can be output from the tessellation control shader stage.
-        MaxPerVertexOutputComponents : int
+        MaxPerVertexOutputComponents : uint
 
         /// the maximum number of components of per-patch output variables which can be output from the tessellation control shader stage.
-        MaxPerPatchOutputComponents : int
+        MaxPerPatchOutputComponents : uint
 
         /// the maximum total number of components of per-vertex and per-patch output variables which can be output from the tessellation control shader stage.
-        MaxTotalOutputComponents : int
+        MaxTotalOutputComponents : uint
     }
     member internal x.Print(l : ILogger) =
         l.line "max vertex in components:  %d" x.MaxPerVertexInputComponents
@@ -260,10 +264,10 @@ type TessControlLimits =
 type TessEvalLimits =
     {
         /// the maximum number of components of input variables which can be provided as per-vertex inputs to the tessellation evaluation shader stage.
-        MaxInputComponents : int
+        MaxInputComponents : uint
 
         /// the maximum number of components of per-vertex output variables which can be output from the tessellation evaluation shader stage.
-        MaxOutputComponents : int
+        MaxOutputComponents : uint
     }
     member internal x.Print(l : ILogger) =
         l.line "max in components:  %d" x.MaxInputComponents
@@ -272,10 +276,10 @@ type TessEvalLimits =
 type TessellationLimits =
     {
         /// the maximum tessellation generation level supported by the fixed-function tessellation primitive generator.
-        MaxGenerationLevel : int
+        MaxGenerationLevel : uint
 
         /// the maximum patch size, in vertices, of patches that can be processed by the tessellation control shader and tessellation primitive generator.
-        MaxPatchSize : int
+        MaxPatchSize : uint
 
         TessControlLimits : TessControlLimits
         TessEvalLimits : TessEvalLimits
@@ -294,19 +298,19 @@ type TessellationLimits =
 type GeometryLimits =
     {
         /// the maximum invocation count supported for instanced geometry shaders. The value provided in the Invocations execution mode of shader modules must be less than or equal to this limit.
-        MaxInvocations : int
+        MaxInvocations : uint
 
         /// the maximum number of components of input variables which can be provided as inputs to the geometry shader stage.
-        MaxInputComponents : int
+        MaxInputComponents : uint
 
         /// the maximum number of components of output variables which can be output from the geometry shader stage.
-        MaxOutputComponents : int
+        MaxOutputComponents : uint
 
         /// the maximum number of vertices which can be emitted by any geometry shader.
-        MaxOutputVertices : int
+        MaxOutputVertices : uint
 
         /// the maximum total number of components of output, across all emitted vertices, which can be output from the geometry shader stage.
-        MaxTotalOutputComponents : int
+        MaxTotalOutputComponents : uint
     }
     member internal x.Print(l : ILogger) =
         l.line "max invocations:    %d" x.MaxInvocations
@@ -320,19 +324,19 @@ type GeometryLimits =
 type FragmentLimits =
     {
         /// the maximum number of components of input variables which can be provided as inputs to the fragment shader stage.
-        MaxInputComponents : int
+        MaxInputComponents : uint
 
         /// the maximum number of output attachments which can be written to by the fragment shader stage.
-        MaxOutputAttachments : int
+        MaxOutputAttachments : uint
 
         /// the maximum number of output attachments which can be written to by the fragment shader stage when blending is enabled and one of the dual source blend modes is in use.
-        MaxDualSrcAttachments : int
+        MaxDualSrcAttachments : uint
 
         /// the total number of storage buffers, storage images, and output buffers which can be used in the fragment shader stage.
-        MaxCombinedOutputResources : int
+        MaxCombinedOutputResources : uint
 
         /// the maximum number of array elements of a variable decorated with the SampleMask built-in decoration.
-        MaxSampleMaskWords : int
+        MaxSampleMaskWords : uint
     }
     member internal x.Print(l : ILogger) =
         l.line "max in components:     %d" x.MaxInputComponents
@@ -347,13 +351,13 @@ type ComputeLimits =
         MaxSharedMemorySize : Mem
 
         /// the maximum number of local workgroups that can be dispatched by a single dispatch command.
-        MaxWorkGroupCount : V3i
+        MaxWorkGroupCount : V3ui
 
         /// the maximum total number of compute shader invocations in a single local workgroup. The product of the X, Y, and Z sizes as specified by the LocalSize execution mode in shader modules and by the object decorated by the WorkgroupSize decoration must be less than or equal to this limit.
-        MaxWorkGroupInvocations : int
+        MaxWorkGroupInvocations : uint
 
         /// the maximum size of a local compute workgroup, per dimension. These three values represent the maximum local workgroup size in the X, Y, and Z dimensions, respectively.
-        MaxWorkGroupSize : V3i
+        MaxWorkGroupSize : V3ui
     }
     member internal x.Print(l : ILogger) =
         l.line "shared memory:         %A" x.MaxSharedMemorySize
@@ -382,16 +386,16 @@ type ShaderLimits =
         MaxInterpolationOffset : float
 
         /// the number of subpixel fractional bits that the x and y offsets to the InterpolateAtOffset extended instruction may be rounded to as fixed-point values.
-        SubPixelInterpolationOffsetBits : int
+        SubPixelInterpolationOffsetBits : uint
 
         /// the maximum number of clip distances that can be used in a single shader stage.
-        MaxClipDistances : int
+        MaxClipDistances : uint
 
         /// the maximum number of cull distances that can be used in a single shader stage.
-        MaxCullDistances : int
+        MaxCullDistances : uint
 
         /// the maximum combined number of clip and cull distances that can be used in a single shader stage.
-        MaxCombinedClipAndCullDistances : int
+        MaxCombinedClipAndCullDistances : uint
 
     }
     member internal x.Print(l : ILogger) =
@@ -406,13 +410,13 @@ type ShaderLimits =
 type PrecisionLimits =
     {
         /// the number of bits of subpixel precision in framebuffer coordinates xf and yf.
-        SubPixelPrecisionBits : int
+        SubPixelPrecisionBits : uint
 
         /// the number of bits of precision in the division along an axis of an image used for minification and magnification filters.
-        SubTexelPrecisionBits : int
+        SubTexelPrecisionBits : uint
 
         /// the number of bits of division that the LOD calculation for mipmap fetching get snapped to when determining the contribution from each mip level to the mip filtered results.
-        MipMapPrecisionBits : int
+        MipMapPrecisionBits : uint
 
         /// indicates support for timestamps on all graphics and compute queues. If this limit is set to true, all queues that advertise the VK_QUEUE_GRAPHICS_BIT or VK_QUEUE_COMPUTE_BIT in the VkQueueFamilyProperties::queueFlags support VkQueueFamilyProperties::timestampValidBits of at least 36.
         TimestampComputeAndGraphics : bool
@@ -421,7 +425,7 @@ type PrecisionLimits =
         TimestampPeriod : float
 
         /// the number of discrete priorities that can be assigned to a queue based on the value of each member of VkDeviceQueueCreateInfo::pQueuePriorities. This must be at least 2, and levels must be spread evenly over the range, with at least one level at 1.0, and another at 0.0.
-        DiscreteQueuePriorities : int
+        DiscreteQueuePriorities : uint
     }
 
     member internal x.Print(l : ILogger) =
@@ -448,26 +452,25 @@ type DrawLimits =
 type FramebufferLimits =
     {
         /// the maximum number of active viewports.
-        MaxViewports : int
+        MaxViewports : uint
 
         /// the maximum viewport dimensions in the X (width) and Y (height) dimensions, respectively.
-        MaxViewportSize : V2i
+        MaxViewportSize : V2ui
 
         /// the maximum viewport dimensions in the X (width) and Y (height) dimensions, respectively.
         ViewportBounds : Box2d
 
         /// the number of bits of subpixel precision for viewport bounds. The subpixel precision that floating-point viewport bounds are interpreted at is given by this limit.
-        ViewportSubPixelBits : int
-
+        ViewportSubPixelBits : uint
 
         /// the maximum size for a framebuffer.
-        MaxSize : V2i
+        MaxSize : V2ui
 
         /// the maximum layer count for a layered framebuffer.
-        MaxLayers : int
+        MaxLayers : uint
 
         /// the maximum number of color attachments that can be used by a subpass in a render pass.
-        MaxColorAttachments : int
+        MaxColorAttachments : uint
 
         /// the color sample counts that are supported for all framebuffer color attachments.
         ColorSampleCounts : Set<int>
@@ -653,20 +656,23 @@ type DeviceLimits =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DeviceLimits =
+    open System
     open KHRRayTracingPipeline
     open KHRAccelerationStructure
+    open KHRMaintenance3
 
-    let create (maxAllocationSize : Mem)
-               (raytracingProperties : Option<VkPhysicalDeviceRayTracingPipelinePropertiesKHR * VkPhysicalDeviceAccelerationStructurePropertiesKHR>)
+    let create (maintenance3Properties : VkPhysicalDeviceMaintenance3PropertiesKHR)
+               (rtpProperties : VkPhysicalDeviceRayTracingPipelinePropertiesKHR)
+               (asProperties : VkPhysicalDeviceAccelerationStructurePropertiesKHR)
                (limits : VkPhysicalDeviceLimits) =
         {
             Image =
                 {
-                    MaxDimension1D      = int limits.maxImageDimension1D
-                    MaxDimension2D      = V2i(int limits.maxImageDimension2D, int limits.maxImageDimension2D)
-                    MaxDimension3D      = V3i(int limits.maxImageDimension3D, int limits.maxImageDimension3D, int limits.maxImageDimension3D)
-                    MaxDimensionCube    = V2i(int limits.maxImageDimensionCube, int limits.maxImageDimensionCube)
-                    MaxArrayLayers      = int limits.maxImageArrayLayers
+                    MaxDimension1D      = limits.maxImageDimension1D
+                    MaxDimension2D      = V2ui(limits.maxImageDimension2D)
+                    MaxDimension3D      = V3ui(limits.maxImageDimension3D)
+                    MaxDimensionCube    = V2ui(limits.maxImageDimensionCube)
+                    MaxArrayLayers      = limits.maxImageArrayLayers
                 }
 
             SampledImage =
@@ -680,7 +686,7 @@ module DeviceLimits =
 
             Sampler =
                 {
-                    MaxAllocationCount  = int limits.maxSamplerAllocationCount
+                    MaxAllocationCount  = limits.maxSamplerAllocationCount
                     MaxLodBias          = float limits.maxSamplerLodBias
                     MaxAnisotropy       = float limits.maxSamplerAnisotropy
                 }
@@ -689,123 +695,124 @@ module DeviceLimits =
                 {
                     MaxBufferViewRange      = Mem limits.maxUniformBufferRange
                     MaxStorageViewRange     = Mem limits.maxStorageBufferRange
-                    MaxTexelBufferElements  = int limits.maxTexelBufferElements
+                    MaxTexelBufferElements  = limits.maxTexelBufferElements
                     MaxPushConstantsSize    = Mem limits.maxPushConstantsSize
                 }
 
             Memory =
                 {
-                    MaxAllocationCount                  = int limits.maxMemoryAllocationCount
-                    MaxAllocationSize                   = maxAllocationSize
+                    MaxAllocationCount                  = limits.maxMemoryAllocationCount
+                    MaxAllocationSize                   = if maintenance3Properties.IsEmpty then Mem UInt64.MaxValue else Mem maintenance3Properties.maxMemoryAllocationSize
                     SparseAddressSpaceSize              = Mem (limits.sparseAddressSpaceSize &&& 0x7FFFFFFFFFFFFFFFUL)
-                    BufferImageGranularity              = int64 limits.bufferImageGranularity
-                    MinMemoryMapAlignment               = int64 limits.minMemoryMapAlignment
-                    MinTexelBufferOffsetAlignment       = int64 limits.minTexelBufferOffsetAlignment
-                    MinUniformBufferOffsetAlignment     = int64 limits.minUniformBufferOffsetAlignment
-                    MinStorageBufferOffsetAlignment     = int64 limits.minStorageBufferOffsetAlignment
-                    OptimalBufferCopyOffsetAlignment    = int64 limits.optimalBufferCopyOffsetAlignment
-                    OptimalBufferCopyRowPitchAlignment  = int64 limits.optimalBufferCopyRowPitchAlignment
-                    NonCoherentAtomSize                 = int64 limits.nonCoherentAtomSize
+                    BufferImageGranularity              = limits.bufferImageGranularity
+                    MinMemoryMapAlignment               = limits.minMemoryMapAlignment
+                    MinTexelBufferOffsetAlignment       = limits.minTexelBufferOffsetAlignment
+                    MinUniformBufferOffsetAlignment     = limits.minUniformBufferOffsetAlignment
+                    MinStorageBufferOffsetAlignment     = limits.minStorageBufferOffsetAlignment
+                    OptimalBufferCopyOffsetAlignment    = limits.optimalBufferCopyOffsetAlignment
+                    OptimalBufferCopyRowPitchAlignment  = limits.optimalBufferCopyRowPitchAlignment
+                    NonCoherentAtomSize                 = limits.nonCoherentAtomSize
 
                 }
 
             Descriptor =
                 {
-                    MaxBoundDescriptorSets      = int limits.maxBoundDescriptorSets
-                    MaxPerStageSamplers         = int limits.maxPerStageDescriptorSamplers
-                    MaxPerStageUniformBuffers   = int limits.maxPerStageDescriptorUniformBuffers
-                    MaxPerStageStorageBuffers   = int limits.maxPerStageDescriptorStorageBuffers
-                    MaxPerStageSampledImages    = int limits.maxPerStageDescriptorSampledImages
-                    MaxPerStageStorageImages    = int limits.maxPerStageDescriptorStorageImages
-                    MaxPerStageInputAttachments = int limits.maxPerStageDescriptorInputAttachments
-                    MaxPerStageResources        = int limits.maxPerStageResources
-                    MaxSamplers                 = int limits.maxDescriptorSetSamplers
-                    MaxUniformBuffers           = int limits.maxDescriptorSetUniformBuffers
-                    MaxUniformBuffersDynamic    = int limits.maxDescriptorSetUniformBuffersDynamic
-                    MaxStorageBuffers           = int limits.maxDescriptorSetStorageBuffers
-                    MaxStorageBuffersDynamic    = int limits.maxDescriptorSetStorageBuffersDynamic
-                    MaxSampledImages            = int limits.maxDescriptorSetSampledImages
-                    MaxStorageImages            = int limits.maxDescriptorSetStorageImages
-                    MaxInputAttachments         = int limits.maxDescriptorSetInputAttachments
+                    MaxPerSetDescriptors        = if maintenance3Properties.IsEmpty then UInt32.MaxValue else maintenance3Properties.maxPerSetDescriptors
+                    MaxBoundDescriptorSets      = limits.maxBoundDescriptorSets
+                    MaxPerStageSamplers         = limits.maxPerStageDescriptorSamplers
+                    MaxPerStageUniformBuffers   = limits.maxPerStageDescriptorUniformBuffers
+                    MaxPerStageStorageBuffers   = limits.maxPerStageDescriptorStorageBuffers
+                    MaxPerStageSampledImages    = limits.maxPerStageDescriptorSampledImages
+                    MaxPerStageStorageImages    = limits.maxPerStageDescriptorStorageImages
+                    MaxPerStageInputAttachments = limits.maxPerStageDescriptorInputAttachments
+                    MaxPerStageResources        = limits.maxPerStageResources
+                    MaxSamplers                 = limits.maxDescriptorSetSamplers
+                    MaxUniformBuffers           = limits.maxDescriptorSetUniformBuffers
+                    MaxUniformBuffersDynamic    = limits.maxDescriptorSetUniformBuffersDynamic
+                    MaxStorageBuffers           = limits.maxDescriptorSetStorageBuffers
+                    MaxStorageBuffersDynamic    = limits.maxDescriptorSetStorageBuffersDynamic
+                    MaxSampledImages            = limits.maxDescriptorSetSampledImages
+                    MaxStorageImages            = limits.maxDescriptorSetStorageImages
+                    MaxInputAttachments         = limits.maxDescriptorSetInputAttachments
 
                 }
 
             Vertex =
                 {
-                    MaxInputAttributes      = int limits.maxVertexInputAttributes
-                    MaxInputBindings        = int limits.maxVertexInputBindings
-                    MaxInputAttributeOffset = int64 limits.maxVertexInputAttributeOffset
-                    MaxInputBindingStride   = int64 limits.maxVertexInputBindingStride
-                    MaxOutputComponents     = int limits.maxVertexOutputComponents
+                    MaxInputAttributes      = limits.maxVertexInputAttributes
+                    MaxInputBindings        = limits.maxVertexInputBindings
+                    MaxInputAttributeOffset = limits.maxVertexInputAttributeOffset
+                    MaxInputBindingStride   = limits.maxVertexInputBindingStride
+                    MaxOutputComponents     = limits.maxVertexOutputComponents
                 }
 
             Tessellation =
                 {
-                    MaxGenerationLevel  = int limits.maxTessellationGenerationLevel
-                    MaxPatchSize        = int limits.maxTessellationPatchSize
+                    MaxGenerationLevel  = limits.maxTessellationGenerationLevel
+                    MaxPatchSize        = limits.maxTessellationPatchSize
                     TessControlLimits =
                         {
-                            MaxPerVertexInputComponents     = int limits.maxTessellationControlPerVertexInputComponents
-                            MaxPerVertexOutputComponents    = int limits.maxTessellationControlPerVertexOutputComponents
-                            MaxPerPatchOutputComponents     = int limits.maxTessellationControlPerPatchOutputComponents
-                            MaxTotalOutputComponents        = int limits.maxTessellationControlTotalOutputComponents
+                            MaxPerVertexInputComponents     = limits.maxTessellationControlPerVertexInputComponents
+                            MaxPerVertexOutputComponents    = limits.maxTessellationControlPerVertexOutputComponents
+                            MaxPerPatchOutputComponents     = limits.maxTessellationControlPerPatchOutputComponents
+                            MaxTotalOutputComponents        = limits.maxTessellationControlTotalOutputComponents
                         }
                     TessEvalLimits =
                         {
-                            MaxInputComponents  = int limits.maxTessellationEvaluationInputComponents
-                            MaxOutputComponents = int limits.maxTessellationEvaluationOutputComponents
+                            MaxInputComponents  = limits.maxTessellationEvaluationInputComponents
+                            MaxOutputComponents = limits.maxTessellationEvaluationOutputComponents
                         }
                 }
 
             Geometry =
                 {
-                    MaxInvocations              = int limits.maxGeometryShaderInvocations
-                    MaxInputComponents          = int limits.maxGeometryInputComponents
-                    MaxOutputComponents         = int limits.maxGeometryOutputComponents
-                    MaxOutputVertices           = int limits.maxGeometryOutputVertices
-                    MaxTotalOutputComponents    = int limits.maxGeometryTotalOutputComponents
+                    MaxInvocations              = limits.maxGeometryShaderInvocations
+                    MaxInputComponents          = limits.maxGeometryInputComponents
+                    MaxOutputComponents         = limits.maxGeometryOutputComponents
+                    MaxOutputVertices           = limits.maxGeometryOutputVertices
+                    MaxTotalOutputComponents    = limits.maxGeometryTotalOutputComponents
                 }
 
             Fragment =
                 {
-                    MaxInputComponents          = int limits.maxFragmentInputComponents
-                    MaxOutputAttachments        = int limits.maxFragmentOutputAttachments
-                    MaxDualSrcAttachments       = int limits.maxFragmentDualSrcAttachments
-                    MaxCombinedOutputResources  = int limits.maxFragmentCombinedOutputResources
-                    MaxSampleMaskWords          = int limits.maxSampleMaskWords
+                    MaxInputComponents          = limits.maxFragmentInputComponents
+                    MaxOutputAttachments        = limits.maxFragmentOutputAttachments
+                    MaxDualSrcAttachments       = limits.maxFragmentDualSrcAttachments
+                    MaxCombinedOutputResources  = limits.maxFragmentCombinedOutputResources
+                    MaxSampleMaskWords          = limits.maxSampleMaskWords
                 }
 
             Compute =
                 {
                     MaxSharedMemorySize     = Mem limits.maxComputeSharedMemorySize
-                    MaxWorkGroupCount       = V3i(int limits.maxComputeWorkGroupCount.X, int limits.maxComputeWorkGroupCount.Y, int limits.maxComputeWorkGroupCount.Z)
-                    MaxWorkGroupInvocations = int limits.maxComputeWorkGroupInvocations
-                    MaxWorkGroupSize        = V3i(int limits.maxComputeWorkGroupSize.X, int limits.maxComputeWorkGroupSize.Y, int limits.maxComputeWorkGroupSize.Z)
+                    MaxWorkGroupCount       = limits.maxComputeWorkGroupCount
+                    MaxWorkGroupInvocations = limits.maxComputeWorkGroupInvocations
+                    MaxWorkGroupSize        = limits.maxComputeWorkGroupSize
                 }
 
             Shader =
                 {
-                    MinTexelOffset                  = int limits.minTexelOffset
+                    MinTexelOffset                  = limits.minTexelOffset
                     MaxTexelOffset                  = int limits.maxTexelOffset
-                    MinTexelGatherOffset            = int limits.minTexelGatherOffset
+                    MinTexelGatherOffset            = limits.minTexelGatherOffset
                     MaxTexelGatherOffset            = int limits.maxTexelGatherOffset
                     MinInterpolationOffset          = float limits.minInterpolationOffset
                     MaxInterpolationOffset          = float limits.maxInterpolationOffset
-                    SubPixelInterpolationOffsetBits = int limits.subPixelInterpolationOffsetBits
-                    MaxClipDistances                = int limits.maxClipDistances
-                    MaxCullDistances                = int limits.maxCullDistances
-                    MaxCombinedClipAndCullDistances = int limits.maxCombinedClipAndCullDistances
+                    SubPixelInterpolationOffsetBits = limits.subPixelInterpolationOffsetBits
+                    MaxClipDistances                = limits.maxClipDistances
+                    MaxCullDistances                = limits.maxCullDistances
+                    MaxCombinedClipAndCullDistances = limits.maxCombinedClipAndCullDistances
 
                 }
 
             Precision =
                 {
-                    SubPixelPrecisionBits       = int limits.subPixelPrecisionBits
-                    SubTexelPrecisionBits       = int limits.subTexelPrecisionBits
-                    MipMapPrecisionBits         = int limits.mipmapPrecisionBits
+                    SubPixelPrecisionBits       = limits.subPixelPrecisionBits
+                    SubTexelPrecisionBits       = limits.subTexelPrecisionBits
+                    MipMapPrecisionBits         = limits.mipmapPrecisionBits
                     TimestampComputeAndGraphics = limits.timestampComputeAndGraphics <> 0u
                     TimestampPeriod             = float limits.timestampPeriod
-                    DiscreteQueuePriorities     = int limits.discreteQueuePriorities
+                    DiscreteQueuePriorities     = limits.discreteQueuePriorities
                 }
 
             Draw =
@@ -816,13 +823,13 @@ module DeviceLimits =
 
             Framebuffer =
                 {
-                    MaxViewports                = int limits.maxViewports
-                    MaxViewportSize             = V2i(int limits.maxViewportDimensions.X, int limits.maxViewportDimensions.Y)
+                    MaxViewports                = limits.maxViewports
+                    MaxViewportSize             = limits.maxViewportDimensions
                     ViewportBounds              = Box2d(float limits.viewportBoundsRange.X, float limits.viewportBoundsRange.X, float limits.viewportBoundsRange.Y, float limits.viewportBoundsRange.Y)
-                    ViewportSubPixelBits        = int limits.viewportSubPixelBits
-                    MaxSize                     = V2i(int limits.maxFramebufferWidth, int limits.maxFramebufferHeight)
-                    MaxLayers                   = int limits.maxFramebufferLayers
-                    MaxColorAttachments         = int limits.maxColorAttachments
+                    ViewportSubPixelBits        = limits.viewportSubPixelBits
+                    MaxSize                     = V2ui(limits.maxFramebufferWidth, limits.maxFramebufferHeight)
+                    MaxLayers                   = limits.maxFramebufferLayers
+                    MaxColorAttachments         = limits.maxColorAttachments
                     ColorSampleCounts           = VkSampleCountFlags.toSet limits.framebufferColorSampleCounts
                     DepthSampleCounts           = VkSampleCountFlags.toSet limits.framebufferDepthSampleCounts
                     StencilSampleCounts         = VkSampleCountFlags.toSet limits.framebufferStencilSampleCounts
@@ -840,24 +847,25 @@ module DeviceLimits =
                 }
 
             Raytracing =
-                raytracingProperties |> Option.map (fun (pipeline, accel) ->
-                    {
-                        MaxGeometryCount                                            = accel.maxGeometryCount
-                        MaxInstanceCount                                            = accel.maxInstanceCount
-                        MaxPrimitiveCount                                           = accel.maxPrimitiveCount
-                        MaxPerStageDescriptorAccelerationStructures                 = accel.maxPerStageDescriptorAccelerationStructures
-                        MaxPerStageDescriptorUpdateAfterBindAccelerationStructures  = accel.maxPerStageDescriptorUpdateAfterBindAccelerationStructures
-                        MaxDescriptorSetAccelerationStructures                      = accel.maxDescriptorSetAccelerationStructures
-                        MaxDescriptorSetUpdateAfterBindAccelerationStructures       = accel.maxDescriptorSetUpdateAfterBindAccelerationStructures
-                        MinAccelerationStructureScratchOffsetAlignment              = accel.minAccelerationStructureScratchOffsetAlignment
-                        ShaderGroupHandleSize                                       = pipeline.shaderGroupHandleSize
-                        MaxRayRecursionDepth                                        = pipeline.maxRayRecursionDepth
-                        MaxShaderGroupStride                                        = pipeline.maxShaderGroupStride
-                        ShaderGroupBaseAlignment                                    = pipeline.shaderGroupBaseAlignment
-                        ShaderGroupHandleCaptureReplaySize                          = pipeline.shaderGroupHandleCaptureReplaySize
-                        MaxRayDispatchInvocationCount                               = pipeline.maxRayDispatchInvocationCount
-                        ShaderGroupHandleAlignment                                  = pipeline.shaderGroupHandleAlignment
-                        MaxRayHitAttributeSize                                      = pipeline.maxRayHitAttributeSize
+                if rtpProperties.IsEmpty && asProperties.IsEmpty then
+                    None
+                else
+                    Some {
+                        MaxGeometryCount                                            = asProperties.maxGeometryCount
+                        MaxInstanceCount                                            = asProperties.maxInstanceCount
+                        MaxPrimitiveCount                                           = asProperties.maxPrimitiveCount
+                        MaxPerStageDescriptorAccelerationStructures                 = asProperties.maxPerStageDescriptorAccelerationStructures
+                        MaxPerStageDescriptorUpdateAfterBindAccelerationStructures  = asProperties.maxPerStageDescriptorUpdateAfterBindAccelerationStructures
+                        MaxDescriptorSetAccelerationStructures                      = asProperties.maxDescriptorSetAccelerationStructures
+                        MaxDescriptorSetUpdateAfterBindAccelerationStructures       = asProperties.maxDescriptorSetUpdateAfterBindAccelerationStructures
+                        MinAccelerationStructureScratchOffsetAlignment              = asProperties.minAccelerationStructureScratchOffsetAlignment
+                        ShaderGroupHandleSize                                       = rtpProperties.shaderGroupHandleSize
+                        MaxRayRecursionDepth                                        = rtpProperties.maxRayRecursionDepth
+                        MaxShaderGroupStride                                        = rtpProperties.maxShaderGroupStride
+                        ShaderGroupBaseAlignment                                    = rtpProperties.shaderGroupBaseAlignment
+                        ShaderGroupHandleCaptureReplaySize                          = rtpProperties.shaderGroupHandleCaptureReplaySize
+                        MaxRayDispatchInvocationCount                               = rtpProperties.maxRayDispatchInvocationCount
+                        ShaderGroupHandleAlignment                                  = rtpProperties.shaderGroupHandleAlignment
+                        MaxRayHitAttributeSize                                      = rtpProperties.maxRayHitAttributeSize
                     }
-                )
         }

@@ -3,7 +3,6 @@
 open Aardvark.Base
 open System
 open Vulkan11
-open KHRGetPhysicalDeviceProperties2
 open KHRRayTracingPipeline
 open KHRRayTracingPositionFetch
 open KHRRayQuery
@@ -11,11 +10,30 @@ open KHRAccelerationStructure
 open KHRBufferDeviceAddress
 open KHRShaderFloat16Int8
 open KHR8bitStorage
+open KHRExternalMemoryCapabilities
 open EXTDescriptorIndexing
 open EXTMemoryPriority
 open EXTDeviceFault
 
 type IVulkanInstance = interface end
+
+type DeviceProperties =
+    {
+        Name          : string
+        Vendor        : string
+        Type          : VkPhysicalDeviceType
+        APIVersion    : Version
+        DriverVersion : Version
+        UniqueId      : string
+        NodeMask      : uint32
+        Limits        : DeviceLimits
+    }
+
+    member inline this.FullName =
+        if this.Name.StartsWith(this.Vendor, StringComparison.InvariantCultureIgnoreCase) then
+            this.Name
+        else
+            $"{this.Vendor} {this.Name}"
 
 type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice, hasInstanceExtension: string -> bool) =
     static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
@@ -50,126 +68,61 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
     let hasExtension (name : string) =
         globalExtensions |> Array.exists (fun e -> e.name = name)
 
-    let queryFeatures =
-        let inline readOrEmpty (ptr : nativeptr< ^a>) =
-            if NativePtr.isNull ptr then
-                ((^a) : (static member Empty : ^a) ())
-            else
-                !!ptr
+    let queryFeatures (hasExtension: string -> bool) =
+        let f, pm, memp, ycbcr, s8, s16, f16i8, vp, sdp, idx, rtp, rtpos, acc, rq, bda, dflt =
+            use chain = new VkStructChain()
+            let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
+            let pMemPrior   = chain.Add<VkPhysicalDeviceMemoryPriorityFeaturesEXT>             (hasExtension EXTMemoryPriority.Name)
+            let pYcbcr      = chain.Add<VkPhysicalDeviceSamplerYcbcrConversionFeatures>()
+            let p8bit       = chain.Add<VkPhysicalDevice8BitStorageFeaturesKHR>                (hasExtension KHR8bitStorage.Name)
+            let p16bit      = chain.Add<VkPhysicalDevice16BitStorageFeatures>()
+            let pf16i8      = chain.Add<VkPhysicalDeviceFloat16Int8FeaturesKHR>                (hasExtension KHRShaderFloat16Int8.Name)
+            let pVarPtrs    = chain.Add<VkPhysicalDeviceVariablePointersFeatures>()
+            let pDrawParams = chain.Add<VkPhysicalDeviceShaderDrawParametersFeatures>()
+            let pIdx        = chain.Add<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>         (hasExtension EXTDescriptorIndexing.Name)
+            let pRTP        = chain.Add<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>         (hasExtension KHRRayTracingPipeline.Name)
+            let pRTPos      = chain.Add<VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR>    (hasExtension KHRRayTracingPositionFetch.Name)
+            let pAcc        = chain.Add<VkPhysicalDeviceAccelerationStructureFeaturesKHR>      (hasExtension KHRAccelerationStructure.Name)
+            let pRQ         = chain.Add<VkPhysicalDeviceRayQueryFeaturesKHR>                   (hasExtension KHRRayQuery.Name)
+            let pDevAddr    = chain.Add<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>        (hasExtension KHRBufferDeviceAddress.Name)
+            let pDevFault   = chain.Add<VkPhysicalDeviceFaultFeaturesEXT>                      (hasExtension EXTDeviceFault.Name)
+            let pFeatures   = chain.Add<VkPhysicalDeviceFeatures2>()
 
-        fun (hasExtension: string -> bool) ->
-            let f, pm, memp, ycbcr, s8, s16, f16i8, vp, sdp, idx, rtp, rtpos, acc, rq, bda, dflt =
-                use chain = new VkStructChain()
-                let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
-                let pMemPrior   = if hasExtension EXTMemoryPriority.Name then chain.Add<VkPhysicalDeviceMemoryPriorityFeaturesEXT>() else NativePtr.zero
-                let pYcbcr      = chain.Add<VkPhysicalDeviceSamplerYcbcrConversionFeatures>()
-                let p8bit       = if hasExtension KHR8bitStorage.Name then chain.Add<VkPhysicalDevice8BitStorageFeaturesKHR>() else NativePtr.zero
-                let p16bit      = chain.Add<VkPhysicalDevice16BitStorageFeatures>()
-                let pf16i8      = if hasExtension KHRShaderFloat16Int8.Name then chain.Add<VkPhysicalDeviceFloat16Int8FeaturesKHR>() else NativePtr.zero
-                let pVarPtrs    = chain.Add<VkPhysicalDeviceVariablePointersFeatures>()
-                let pDrawParams = chain.Add<VkPhysicalDeviceShaderDrawParametersFeatures>()
-                let pIdx        = if hasExtension EXTDescriptorIndexing.Name then chain.Add<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>() else NativePtr.zero
-                let pRTP        = if hasExtension KHRRayTracingPipeline.Name then chain.Add<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>() else NativePtr.zero
-                let pRTPos      = if hasExtension KHRRayTracingPositionFetch.Name then chain.Add<VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR>() else NativePtr.zero
-                let pAcc        = if hasExtension KHRAccelerationStructure.Name then chain.Add<VkPhysicalDeviceAccelerationStructureFeaturesKHR>() else NativePtr.zero
-                let pRQ         = if hasExtension KHRRayQuery.Name then chain.Add<VkPhysicalDeviceRayQueryFeaturesKHR>() else NativePtr.zero
-                let pDevAddr    = if hasExtension KHRBufferDeviceAddress.Name then chain.Add<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>() else NativePtr.zero
-                let pDevFault   = if hasExtension EXTDeviceFault.Name then chain.Add<VkPhysicalDeviceFaultFeaturesEXT>() else NativePtr.zero
-                let pFeatures   = chain.Add<VkPhysicalDeviceFeatures2>()
+            VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
 
-                VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
+            (!!pFeatures).features, !!pMem, !!pMemPrior, !!pYcbcr, NativePtr.readOrEmpty p8bit, !!p16bit, NativePtr.readOrEmpty pf16i8,
+            !!pVarPtrs, !!pDrawParams, NativePtr.readOrEmpty pIdx, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTPos,
+            NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pRQ, NativePtr.readOrEmpty pDevAddr, NativePtr.readOrEmpty pDevFault
 
-                (!!pFeatures).features, !!pMem, !!pMemPrior, !!pYcbcr, readOrEmpty p8bit, !!p16bit, readOrEmpty pf16i8,
-                !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx, readOrEmpty pRTP, readOrEmpty pRTPos, readOrEmpty pAcc,
-                readOrEmpty pRQ, readOrEmpty pDevAddr, readOrEmpty pDevFault
-
-            f |> DeviceFeatures.create pm memp ycbcr s8 s16 f16i8 vp sdp idx rtp rtpos acc rq bda dflt
+        f |> DeviceFeatures.create pm memp ycbcr s8 s16 f16i8 vp sdp idx rtp rtpos acc rq bda dflt
 
     let features =
         queryFeatures hasExtension
 
-    let properties, raytracingProperties =
-        use chain = new VkStructChain()
+    let properties =
+        let properties, main, devId, rtp, acc =
+            use chain = new VkStructChain()
+            let pMain       = chain.Add<VkPhysicalDeviceMaintenance3Properties>()
+            let pDevId      = chain.Add<VkPhysicalDeviceIDPropertiesKHR>()
+            let pRTP        = chain.Add<VkPhysicalDeviceRayTracingPipelinePropertiesKHR>         (hasExtension KHRRayTracingPipeline.Name)
+            let pAcc        = chain.Add<VkPhysicalDeviceAccelerationStructurePropertiesKHR>      (hasExtension KHRAccelerationStructure.Name)
+            let pProperties = chain.Add<VkPhysicalDeviceProperties2>()
 
-        let pRTP, pAcc =
-            if hasExtension KHRRayTracingPipeline.Name then
-                chain.Add<VkPhysicalDeviceRayTracingPipelinePropertiesKHR>(),
-                chain.Add<VkPhysicalDeviceAccelerationStructurePropertiesKHR>()
-            else
-                NativePtr.zero, NativePtr.zero
+            VkRaw.vkGetPhysicalDeviceProperties2(handle, VkStructChain.toNativePtr chain)
 
-        let pProperties = chain.Add<VkPhysicalDeviceProperties2>()
+            (!!pProperties).properties, !!pMain, !!pDevId,
+            NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pAcc
 
-        VkRaw.vkGetPhysicalDeviceProperties2(handle, VkStructChain.toNativePtr chain)
-        let props = (!!pProperties).properties
-
-        if hasExtension KHRRayTracingPipeline.Name then
-            props, Some(!!pRTP, !!pAcc)
-        else
-            props, None
-
-    let name = properties.deviceName.Value
-    let driverVersion = Version.FromVulkan properties.driverVersion
-    let apiVersion = Version.FromVulkan properties.apiVersion
-
-
-    let maxAllocationSize, maxPerSetDescriptors =
-        if apiVersion >= Version(1,1,0) || hasExtension KHRMaintenance3.Name then
-            let main3 =
-                VkPhysicalDeviceMaintenance3Properties(10u, 10UL)
-            main3 |> NativePtr.pin (fun pMain3 ->
-                let props =
-                    VkPhysicalDeviceProperties2(
-                        pMain3.Address,
-                        VkPhysicalDeviceProperties()
-                    )
-                props |> NativePtr.pin (fun pProps ->
-                    VkRaw.vkGetPhysicalDeviceProperties2(handle, pProps)
-                    let main3 = pMain3.[0]
-
-                    let maxMemoryAllocationSize = min (uint64 Int64.MaxValue) main3.maxMemoryAllocationSize |> int64
-                    let maxPerSetDescriptors = min (uint32 Int32.MaxValue) main3.maxPerSetDescriptors |> int
-
-                    maxMemoryAllocationSize, maxPerSetDescriptors
-                )
-            )
-        else
-            Int64.MaxValue, Int32.MaxValue
-
-    let uniqueId, deviceMask =
-        if apiVersion >= Version(1,1,0) || hasInstanceExtension KHRGetPhysicalDeviceProperties2.Name then
-            let id =
-                KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR(
-                    Guid.Empty,
-                    Guid.Empty,
-                    byte_8 (),
-                    0u,
-                    0u
-                )
-            id |> NativePtr.pin (fun pId ->
-                let khrProps =
-                    VkPhysicalDeviceProperties2KHR(
-                        pId.Address,
-                        VkPhysicalDeviceProperties()
-                    )
-                khrProps |> NativePtr.pin (fun pProps ->
-                    VkRaw.vkGetPhysicalDeviceProperties2(handle, pProps)
-                    let id = pId.[0]
-                    let uid = sprintf "{ GUID = %A; Mask = %d }" id.deviceUUID id.deviceNodeMask
-                    uid, id.deviceNodeMask
-                )
-            )
-        else
-            let uid = Guid.NewGuid() |> string
-            let mask = 1u
-            uid, mask
-
-
-    let limits = DeviceLimits.create (Mem maxAllocationSize) raytracingProperties properties.limits
-    let vendor = PCI.vendorName (int properties.vendorID)
-
-
-
+        {
+            Name          = properties.deviceName.Value
+            Vendor        = PCI.vendorName <| int properties.vendorID
+            Type          = properties.deviceType
+            APIVersion    = Version.FromVulkan properties.apiVersion
+            DriverVersion = Version.FromVulkan properties.driverVersion
+            UniqueId      = sprintf "{ GUID = %A; Mask = %d }" devId.deviceUUID devId.deviceNodeMask
+            NodeMask      = if devId.deviceLUIDValid = VkTrue then devId.deviceNodeMask else 1u
+            Limits        = properties.limits |> DeviceLimits.create main rtp acc
+        }
 
     let queueFamilyInfos =
         native {
@@ -223,9 +176,6 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
 
     let imageFormatProperties = FastConcurrentDict()
     let externalBufferProperties = FastConcurrentDict()
-
-    member x.MaxAllocationSize = maxAllocationSize
-    member x.MaxPerSetDescriptors = maxPerSetDescriptors
 
     member x.GetFormatFeatures(tiling : VkImageTiling, fmt : VkFormat) =
         match tiling with
@@ -305,25 +255,25 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
     member x.MemoryHeaps = memoryHeaps
 
     member x.Handle = handle
-    //member x.Index : int = index
-    member x.Vendor = vendor
-    member x.Name = name
-    member x.FullName = if name.StartsWith(vendor, StringComparison.InvariantCultureIgnoreCase) then name else $"{vendor} {name}"
-    member x.Type = properties.deviceType
-    member x.APIVersion = apiVersion
-    member x.DriverVersion = driverVersion
+    member x.Properties : DeviceProperties = properties
+    member x.Vendor : string = properties.Vendor
+    member x.Name : string = properties.Name
+    member x.FullName : string = properties.FullName
+    member x.Type = properties.Type
+    member x.APIVersion : Version = properties.APIVersion
+    member x.DriverVersion : Version = properties.DriverVersion
 
     member internal x.InstanceInterface = instance
     member x.Features : DeviceFeatures = features
-    member x.Limits : DeviceLimits = limits
+    member x.Limits : DeviceLimits = properties.Limits
 
     member internal x.GetFeatures(hasExtension: string -> bool) = queryFeatures hasExtension
 
     abstract member DeviceMask : uint32
-    default x.DeviceMask = deviceMask
+    default x.DeviceMask = properties.NodeMask
 
     abstract member Id : string
-    default x.Id = uniqueId
+    default x.Id = properties.UniqueId
 
     override x.ToString() =
-        sprintf "{ name = %s; type = %A; api = %A }" name x.Type x.APIVersion
+        sprintf "{ name = %s; type = %A; api = %A }" x.FullName x.Type x.APIVersion

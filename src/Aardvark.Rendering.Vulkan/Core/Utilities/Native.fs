@@ -112,3 +112,11 @@ module internal NativeUtilities =
     let native = NativeBuilder()
 
     let inline (!!) (v : nativeptr<'a>) = NativePtr.read v
+
+    module NativePtr =
+
+        let inline readOrEmpty (ptr : nativeptr< ^a>) =
+            if NativePtr.isNull ptr then
+                ((^a) : (static member Empty : ^a) ())
+            else
+                !!ptr

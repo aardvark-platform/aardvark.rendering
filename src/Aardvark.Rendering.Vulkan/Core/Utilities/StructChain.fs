@@ -72,6 +72,12 @@ type internal VkStructChain =
         let empty = (^T : (static member Empty : ^T) ())
         x.Add(empty)
 
+    /// Adds an empty struct to the beginning of the chain if enabled is true.
+    /// Returns a pointer to the new struct, which is valid until the chain is cleared or disposed.
+    /// If enabled is false, returns a null pointer.
+    member inline x.Add(enabled: bool) : nativeptr< ^T> =
+        if enabled then x.Add() else NativePtr.zero
+
     interface IDisposable with
         member x.Dispose() = x.Clear()
 
