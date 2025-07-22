@@ -12,6 +12,7 @@ module internal FShadeConfig =
 
     let availableExtensions (device: Device) =
         Map.ofList [
+            GLSLExtension.NVGpuShader5,               false // Apparently not supported in the current glslang version
             GLSLExtension.ARBTessellationShader,      device.EnabledFeatures.Shaders.TessellationShader
             GLSLExtension.EXTRayTracing,              device.EnabledFeatures.Raytracing.Pipeline
             GLSLExtension.EXTRayTracingPositionFetch, device.EnabledFeatures.Raytracing.PositionFetch
