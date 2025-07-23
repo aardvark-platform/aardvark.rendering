@@ -15,6 +15,7 @@ open EXTDescriptorIndexing
 open EXTMemoryPriority
 open EXTDeviceFault
 open NVRayTracingInvocationReorder
+open NVRayTracingValidation
 
 type IVulkanInstance = interface end
 
@@ -70,7 +71,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
         globalExtensions |> Array.exists (fun e -> e.name = name)
 
     let queryFeatures (hasExtension: string -> bool) =
-        let f, pm, memp, ycbcr, s8, s16, f16i8, vp, sdp, idx, rtp, rtpos, rtir, acc, rq, bda, dflt =
+        let f, pm, memp, ycbcr, s8, s16, f16i8, vp, sdp, idx, rtp, rtpos, rtir, rtv, acc, rq, bda, dflt =
             use chain = new VkStructChain()
             let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
             let pMemPrior   = chain.Add<VkPhysicalDeviceMemoryPriorityFeaturesEXT>             (hasExtension EXTMemoryPriority.Name)
@@ -84,6 +85,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             let pRTP        = chain.Add<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>         (hasExtension KHRRayTracingPipeline.Name)
             let pRTPos      = chain.Add<VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR>    (hasExtension KHRRayTracingPositionFetch.Name)
             let pRTIR       = chain.Add<VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV> (hasExtension NVRayTracingInvocationReorder.Name)
+            let pRTV        = chain.Add<VkPhysicalDeviceRayTracingValidationFeaturesNV>        (hasExtension NVRayTracingValidation.Name)
             let pAcc        = chain.Add<VkPhysicalDeviceAccelerationStructureFeaturesKHR>      (hasExtension KHRAccelerationStructure.Name)
             let pRQ         = chain.Add<VkPhysicalDeviceRayQueryFeaturesKHR>                   (hasExtension KHRRayQuery.Name)
             let pDevAddr    = chain.Add<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>        (hasExtension KHRBufferDeviceAddress.Name)
@@ -93,10 +95,11 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
 
             (!!pFeatures).features, !!pMem, !!pMemPrior, !!pYcbcr, NativePtr.readOrEmpty p8bit, !!p16bit, NativePtr.readOrEmpty pf16i8,
-            !!pVarPtrs, !!pDrawParams, NativePtr.readOrEmpty pIdx, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTPos, NativePtr.readOrEmpty pRTIR,
-            NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pRQ, NativePtr.readOrEmpty pDevAddr, NativePtr.readOrEmpty pDevFault
+            !!pVarPtrs, !!pDrawParams, NativePtr.readOrEmpty pIdx, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTPos,
+            NativePtr.readOrEmpty pRTIR, NativePtr.readOrEmpty pRTV, NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pRQ,
+            NativePtr.readOrEmpty pDevAddr, NativePtr.readOrEmpty pDevFault
 
-        f |> DeviceFeatures.create pm memp ycbcr s8 s16 f16i8 vp sdp idx rtp rtpos rtir acc rq bda dflt
+        f |> DeviceFeatures.create pm memp ycbcr s8 s16 f16i8 vp sdp idx rtp rtpos rtir rtv acc rq bda dflt
 
     let features =
         queryFeatures hasExtension

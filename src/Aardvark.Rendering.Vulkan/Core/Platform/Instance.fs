@@ -53,7 +53,7 @@ module Instance =
             KHRCreateRenderpass2.Name
         ]
 
-        let Raytracing = [
+        let Raytracing (validation: bool) = [
                 KHRRayTracingPipeline.Name
                 KHRRayTracingPositionFetch.Name
                 KHRAccelerationStructure.Name
@@ -63,6 +63,7 @@ module Instance =
                 KHRSpirv14.Name
                 KHRShaderFloatControls.Name
                 NVRayTracingInvocationReorder.Name
+                if validation then NVRayTracingValidation.Name
             ]
 
         let ExternalMemory =

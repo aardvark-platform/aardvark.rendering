@@ -500,6 +500,9 @@ type RaytracingFeatures =
         /// Indicates whether the implementation supports SPV_NV_shader_invocation_reorder.
         InvocationReorder : bool
 
+        /// Indicates whether the implementation supports the ray tracing validation feature.
+        Validation : bool
+
         /// Indicates whether the implementation supports ray query (OpRayQueryProceedKHR) functionality.
         RayQuery : bool
 
@@ -532,6 +535,7 @@ type RaytracingFeatures =
         l.line "pipeline:                           %A" x.Pipeline
         l.line "position fetch:                     %A" x.PositionFetch
         l.line "invocation reorder:                 %A" x.InvocationReorder
+        l.line "validation:                         %A" x.Validation
         l.line "ray queries:                        %A" x.RayQuery
         l.section "shader group handles: " (fun () ->
             l.line "capture & replay:                 %A" x.ShaderGroupHandleCaptureReplay
@@ -599,6 +603,7 @@ module DeviceFeatures =
     open EXTMemoryPriority
     open EXTDeviceFault
     open NVRayTracingInvocationReorder
+    open NVRayTracingValidation
     open Vulkan11
 
     let private toBool (value : VkBool32) =
@@ -696,6 +701,11 @@ module DeviceFeatures =
         let rtir =
             VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV(
                 toVkBool features.Raytracing.InvocationReorder
+            )
+
+        let rtv =
+            VkPhysicalDeviceRayTracingValidationFeaturesNV(
+                toVkBool features.Raytracing.Validation
             )
 
         let acc =
@@ -817,6 +827,7 @@ module DeviceFeatures =
                (raytracingPipelineFeatures : VkPhysicalDeviceRayTracingPipelineFeaturesKHR)
                (raytracingPositionFetchFeatures : VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR)
                (raytracingInvocationReorderFeatures : VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV)
+               (raytracingValidationFeatures : VkPhysicalDeviceRayTracingValidationFeaturesNV)
                (accelerationStructureFeatures : VkPhysicalDeviceAccelerationStructureFeaturesKHR)
                (rayQueryFeatures : VkPhysicalDeviceRayQueryFeaturesKHR)
                (bufferDeviceAddressFeatures : VkPhysicalDeviceBufferDeviceAddressFeaturesKHR)
@@ -970,6 +981,7 @@ module DeviceFeatures =
                     Pipeline =                            toBool raytracingPipelineFeatures.rayTracingPipeline
                     PositionFetch =                       toBool raytracingPositionFetchFeatures.rayTracingPositionFetch
                     InvocationReorder =                   toBool raytracingInvocationReorderFeatures.rayTracingInvocationReorder
+                    Validation =                          toBool raytracingValidationFeatures.rayTracingValidation
                     RayQuery =                            toBool rayQueryFeatures.rayQuery
                     ShaderGroupHandleCaptureReplay =      toBool raytracingPipelineFeatures.rayTracingPipelineShaderGroupHandleCaptureReplay
                     ShaderGroupHandleCaptureReplayMixed = toBool raytracingPipelineFeatures.rayTracingPipelineShaderGroupHandleCaptureReplayMixed

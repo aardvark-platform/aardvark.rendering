@@ -27,7 +27,7 @@ type HeadlessVulkanApplication(debug: IDebugConfig,
             yield Instance.Extensions.DeviceFault
 
             yield! Instance.Extensions.Maintenance
-            yield! Instance.Extensions.Raytracing
+            yield! Instance.Extensions.Raytracing debug.ValidationLayerEnabled
             yield! Instance.Extensions.Sharing
         ]
 

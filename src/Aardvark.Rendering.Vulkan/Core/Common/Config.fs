@@ -134,13 +134,13 @@ type DebugConfig =
         OptimizeShaders : bool
     }
 
-    member internal x.DebugReportEnabled =
+    member x.DebugReportEnabled =
         x.DebugReport.IsSome
 
-    member internal x.ValidationLayerEnabled =
+    member x.ValidationLayerEnabled =
         x.ValidationLayer.IsSome
 
-    member internal x.DebugPrintEnabled =
+    member x.DebugPrintEnabled =
         match x.ValidationLayer with
         | Some cfg -> cfg.ShaderBasedValidation = ShaderValidation.DebugPrint
         | _ -> false
