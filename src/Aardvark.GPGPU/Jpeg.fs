@@ -831,7 +831,7 @@ module private JpegKernels =
             Fun.HighestBit (int v)
 
         [<GLSLIntrinsic("atomicOr({0}, {1})")>]
-        let atomicOr (buf : uint32) (v : uint32) : unit =
+        let atomicOr (buf : uint32 ref) (v : uint32) : unit =
             onlyInShaderCode "atomicOr"
 
         [<GLSLIntrinsic("memoryBarrier()")>]
@@ -1140,14 +1140,14 @@ module private JpegKernels =
                 let space = 32 - oo
                 if space >= size then
                     let a = code <<< (space - size) |> flipByteOrder
-                    Tools.atomicOr target.[oi] a
+                    Tools.atomicOr &&target.[oi] a
                 else 
                     let rest = size - space
                     let a = (code >>> rest) |> flipByteOrder // &&& ((1u <<< space) - 1u) |> flipByteOrder
-                    Tools.atomicOr target.[oi] a
+                    Tools.atomicOr &&target.[oi] a
 
                     let b = (code &&& ((1u <<< rest) - 1u)) <<< (32 - rest) |> flipByteOrder
-                    Tools.atomicOr target.[oi + 1] b
+                    Tools.atomicOr &&target.[oi + 1] b
 
         }
    
