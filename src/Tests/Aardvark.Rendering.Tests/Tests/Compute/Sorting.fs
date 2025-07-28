@@ -10,15 +10,14 @@ open Expecto
 module ComputeSorting =
 
     module Cases =
-        open FShade
 
         let bitonic (runtime : IRuntime) =
-            use sorter = new BitonicSorter<V4f>(runtime, <@ fun a b -> a.Y < b.Y @>)
+            use sorter = new BitonicSorter<float32>(runtime, <@ fun a b -> a < b @>)
 
-            let input = Array.randomV4fs 1621
+            let input = Array.randomV4fs 1621 |> Array.map _.X
             let perm = sorter.CreatePermutation input
 
-            let expected = input |> Array.sortBy Vec.y
+            let expected = input |> Array.sort
             let result = input |> Array.permute (fun i -> Array.findIndex ((=) i) perm)
 
             Expect.equal result expected "Result mismatch"
