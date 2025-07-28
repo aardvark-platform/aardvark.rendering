@@ -12,11 +12,24 @@ module internal FShadeConfig =
 
     let availableExtensions (device: Device) =
         Map.ofList [
-            GLSLExtension.NVGpuShader5,               false // Apparently not supported in the current glslang version
-            GLSLExtension.ARBTessellationShader,      device.EnabledFeatures.Shaders.TessellationShader
-            GLSLExtension.EXTRayTracing,              device.EnabledFeatures.Raytracing.Pipeline
-            GLSLExtension.EXTRayTracingPositionFetch, device.EnabledFeatures.Raytracing.PositionFetch
-            GLSLExtension.NVShaderInvocationReorder,  device.EnabledFeatures.Raytracing.InvocationReorder
+            GLSLExtension.AMDGpuShaderHalfFloat,                   device.EnabledFeatures.Shaders.Float16
+            GLSLExtension.AMDGpuShaderInt16,                       device.EnabledFeatures.Shaders.Int16
+            GLSLExtension.AMDGpuShaderInt64,                       device.EnabledFeatures.Shaders.Int64
+            GLSLExtension.ARBGpuShaderFp64,                        device.EnabledFeatures.Shaders.Float64
+            GLSLExtension.ARBGpuShaderInt64,                       device.EnabledFeatures.Shaders.Int64
+            GLSLExtension.ARBTessellationShader,                   device.EnabledFeatures.Shaders.TessellationShader
+            GLSLExtension.EXTDebugPrintf,                          device.IsExtensionEnabled KHRShaderNonSemanticInfo.Name
+            GLSLExtension.EXTRayTracing,                           device.EnabledFeatures.Raytracing.Pipeline
+            GLSLExtension.EXTRayTracingPositionFetch,              device.EnabledFeatures.Raytracing.PositionFetch
+            GLSLExtension.EXTShader8bitStorage,                    device.IsExtensionEnabled KHR8bitStorage.Name
+            GLSLExtension.EXTShader16bitStorage,                   device.IsExtensionEnabled KHR16bitStorage.Name
+            GLSLExtension.EXTShaderExplicitArithmeticTypesFloat16, device.EnabledFeatures.Shaders.Float16
+            GLSLExtension.EXTShaderExplicitArithmeticTypesFloat64, device.EnabledFeatures.Shaders.Float64
+            GLSLExtension.EXTShaderExplicitArithmeticTypesInt8,    device.EnabledFeatures.Shaders.Int8
+            GLSLExtension.EXTShaderExplicitArithmeticTypesInt16,   device.EnabledFeatures.Shaders.Int16
+            GLSLExtension.EXTShaderExplicitArithmeticTypesInt64,   device.EnabledFeatures.Shaders.Int64
+            GLSLExtension.NVGpuShader5,                            false // Apparently not supported in the current glslang version
+            GLSLExtension.NVShaderInvocationReorder,               device.EnabledFeatures.Raytracing.InvocationReorder
         ]
 
     let backend (device: Device)  =
