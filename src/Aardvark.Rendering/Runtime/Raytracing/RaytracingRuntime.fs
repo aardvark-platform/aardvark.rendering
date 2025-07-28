@@ -27,6 +27,12 @@ and IRaytracingRuntime =
     /// Returns whether the runtime supports raytracing.
     abstract member SupportsRaytracing : bool
 
+    /// Returns whether the runtime supports fetching the position of a hit in raytracing shaders.
+    abstract member SupportsPositionFetch : bool
+
+    /// Returns whether threads can be reordered in raytracing shaders.
+    abstract member SupportsInvocationReorder : bool
+
     /// Returns the maximum number of levels of ray recursion allowed in a trace command.
     abstract member MaxRayRecursionDepth : int
 

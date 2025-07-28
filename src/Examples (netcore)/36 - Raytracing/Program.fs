@@ -299,8 +299,7 @@ let main _argv =
             debug true
         }
 
-    let runtime = win.Runtime :?> Vulkan.Runtime
-    let positionFetch = runtime.Device.EnabledFeatures.Raytracing.PositionFetch
+    let runtime = win.Runtime
 
     let cameraView =
         let initialView = CameraView.LookAt(V3d.One * 10.0, V3d.Zero, V3d.OOI)
@@ -320,7 +319,7 @@ let main _argv =
         let signature =
             let vertexAttributes =
                 Map.ofList [
-                    if not positionFetch then DefaultSemantic.Positions, typeof<V4f>
+                    if not runtime.SupportsPositionFetch then DefaultSemantic.Positions, typeof<V4f>
                     DefaultSemantic.Normals, typeof<V4f>
                     DefaultSemantic.DiffuseColorCoordinates, typeof<V2f>
                 ]
@@ -494,7 +493,7 @@ let main _argv =
 
     let pipeline =
         {
-            Effect            = Effect.main positionFetch
+            Effect            = Effect.main runtime.SupportsPositionFetch
             Scenes            = Map.ofList [Sym.ofString "MainScene", scene]
             Uniforms          = uniforms
             MaxRecursionDepth = AVal.constant 1

@@ -488,6 +488,14 @@ type Runtime(device : Device) as this =
     member x.SupportsRaytracing =
         x.Device.PhysicalDevice.Features.Raytracing.Pipeline
 
+    member x.SupportsPositionFetch =
+        x.Device.EnabledFeatures.Raytracing.PositionFetch
+
+    member x.SupportsInvocationReorder =
+        match x.Device.PhysicalDevice.Properties.Limits.Raytracing with
+        | Some limits -> limits.InvocationReorderMode = NVRayTracingInvocationReorder.VkRayTracingInvocationReorderModeNV.Reorder
+        | _ -> false
+
     member x.MaxRayRecursionDepth =
         match x.Device.PhysicalDevice.Limits.Raytracing with
         | Some limits -> int limits.MaxRayRecursionDepth
@@ -634,6 +642,12 @@ type Runtime(device : Device) as this =
 
         member x.SupportsRaytracing =
             x.SupportsRaytracing
+
+        member x.SupportsPositionFetch =
+            x.SupportsPositionFetch
+
+        member x.SupportsInvocationReorder =
+            x.SupportsInvocationReorder
 
         member x.MaxRayRecursionDepth =
             x.MaxRayRecursionDepth

@@ -210,6 +210,12 @@ type Runtime(debug : IDebugConfig) =
         member x.SupportsRaytracing =
             false
 
+        member x.SupportsPositionFetch =
+            false
+
+        member x.SupportsInvocationReorder =
+            false
+
         member x.MaxRayRecursionDepth =
             0
 
