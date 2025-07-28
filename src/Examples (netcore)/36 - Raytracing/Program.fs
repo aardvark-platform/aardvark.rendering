@@ -114,12 +114,7 @@ module Effect =
                     else
                         bottom
 
-                return {
-                    color       = color
-                    origin      = V3f.Zero
-                    direction   = V3f.Zero
-                    attenuation = 0.0f
-                }
+                return { unchanged with color = color; attenuation = 0.0f }
             }
 
         let missShadow =
