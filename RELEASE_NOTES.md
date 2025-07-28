@@ -1,3 +1,9 @@
+### 5.6.0-prerelease0006
+- Added IRuntime.SupportsPositionFetch and SupportsInvocationReorder
+- [Vulkan] Added support for VK_NV_ray_tracing_invocation_reorder
+- [Vulkan] Added support for VK_NV_ray_tracing_validation
+- [GPGPU] Fixed FShade-related issue in Jpeg compressor
+
 ### 5.6.0-prerelease0005
 - Updated FShade to 5.7.0-prerelease0003
 
