@@ -1246,11 +1246,11 @@ module private RuntimeCommands =
 
             // create an array containing all color-clears
             let colorClears = 
-                compiler.renderPass.ColorAttachments |> Map.toArray |> Array.choose (fun (i, att) ->
-                    match values.[att.Name] with
+                compiler.renderPass.ColorAttachments |> Map.toArray |> Array.choose (fun (i, (name, fmt)) ->
+                    match values.[name] with
                     | Some value ->
                         let clear =
-                            if att.Format.IsIntegerFormat then
+                            if fmt |> VkFormat.toTextureFormat |> TextureFormat.isIntegerFormat then
                                 VkClearColorValue(int32 = value.Integer)
                             else
                                 VkClearColorValue(float32 = value.Float)

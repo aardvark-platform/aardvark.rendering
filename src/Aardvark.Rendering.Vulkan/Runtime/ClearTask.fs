@@ -37,9 +37,9 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
                 for q in vulkanQueries do
                     do! Command.Begin q
 
-                for KeyValue(_, att) in renderPass.ColorAttachments do
-                    match values.[att.Name] with
-                    | Some color -> do! Command.ClearColor(fbo.Attachments.[att.Name], TextureAspect.Color, color)
+                for KeyValue(_, (name, _)) in renderPass.ColorAttachments do
+                    match values.[name] with
+                    | Some color -> do! Command.ClearColor(fbo.Attachments.[name], TextureAspect.Color, color)
                     | _ -> ()
 
                 if renderPassDepthAspect <> TextureAspect.None then

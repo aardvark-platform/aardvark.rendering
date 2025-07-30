@@ -1039,7 +1039,7 @@ module Resources =
             )
 
     type ColorBlendStateResource(owner : IResourceCache, key : list<obj>,
-                                 writeMasks : aval<ColorMask[]>, blendModes : aval<BlendMode[]>, blendConstant : aval<C4f>) =
+                                 writeMasks : aval<ColorMask[]>, blendModes : aval<BlendMode[]>, blendConstant : aval<C4f>, blendSupported : bool[]) =
         inherit AbstractPointerResourceWithEquality<VkPipelineColorBlendStateCreateInfo>(owner, key)
 
         override x.Free(h : VkPipelineColorBlendStateCreateInfo) =
@@ -1057,7 +1057,7 @@ module Resources =
                 let s = state.attachmentStates.[i]
                 let att =
                     VkPipelineColorBlendAttachmentState(
-                        (if s.enabled then 1u else 0u),
+                        (if s.enabled && blendSupported.[i] then VkTrue else VkFalse),
                         s.srcFactor,
                         s.dstFactor,
                         s.operation,
@@ -2113,7 +2113,7 @@ type ResourceManager(device : Device) =
                 return Array.init slots (fun i ->
                     pass.ColorAttachments
                     |> Map.tryFind i
-                    |> Option.bind (fun att -> values |> Map.tryFind att.Name)
+                    |> Option.bind (fun (name, _) -> values |> Map.tryFind name)
                     |> Option.defaultValue fallback
                 )
             }
@@ -2123,7 +2123,19 @@ type ResourceManager(device : Device) =
             fun cache key ->
                 let writeMasks = getAttachmentStates globalMask attachmentMask
                 let blendModes = getAttachmentStates globalBlend attachmentBlend
-                ColorBlendStateResource(cache, key, writeMasks, blendModes, blendConstant)
+
+                let blendSupported =
+                    Array.init slots (fun i ->
+                        pass.ColorAttachments
+                        |> Map.tryFind i
+                        |> Option.map (fun (_, fmt) ->
+                            let features = pass.Device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt)
+                            features.HasFlag VkFormatFeatureFlags.ColorAttachmentBlendBit
+                        )
+                        |> Option.defaultValue false
+                    )
+
+                ColorBlendStateResource(cache, key, writeMasks, blendModes, blendConstant, blendSupported)
         )
 
     member x.CreateMultisampleState(pass : RenderPass, multisample : aval<bool>) =

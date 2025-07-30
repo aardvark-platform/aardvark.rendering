@@ -10,7 +10,7 @@ type RenderPass =
         inherit Resource<VkRenderPass>
         val public Samples : int
         val internal Attachments : Symbol[]
-        val public ColorAttachments : Map<int, AttachmentSignature>
+        val public ColorAttachments : Map<int, Symbol * VkFormat>
         val public DepthStencilAttachment : Option<VkFormat>
         val public LayerCount : int
         val public PerLayerUniforms : Set<string>
@@ -26,18 +26,18 @@ type RenderPass =
         interface IFramebufferSignature with
             member x.Runtime = x.Runtime :> IFramebufferRuntime
             member x.Samples = x.Samples
-            member x.ColorAttachments = x.ColorAttachments
+            member x.ColorAttachments = x.ColorAttachments |> Map.map (fun _ (name, fmt) -> { Name = name; Format = VkFormat.toTextureFormat fmt })
             member x.DepthStencilAttachment = x.DepthStencilAttachment |> Option.map VkFormat.toTextureFormat
 
             member x.LayerCount = x.LayerCount
             member x.PerLayerUniforms = x.PerLayerUniforms
 
         new(device : Device, handle : VkRenderPass,
-            colors : Map<int, AttachmentSignature>, depthStencil : Option<VkFormat>,
+            colors : Map<int, Symbol * VkFormat>, depthStencil : Option<VkFormat>,
             samples : int, layers : int, perLayer : Set<string>) =
 
             let attachments =
-                let colors = colors |> Map.toArray |> Array.map (snd >> AttachmentSignature.name)
+                let colors = colors |> Map.toArray |> Array.map (snd >> fst)
                 match depthStencil with
                 | Some _ -> Array.append colors [| DefaultSemantic.DepthStencil |]
                 | _ -> colors
@@ -107,15 +107,21 @@ module RenderPass =
                     Log.warn "[Vulkan] cannot create render pass with %d samples (using %d instead)" samples max
                     max
 
-            let colors =
+            let colorAttachments =
                 colorAttachments
-                |> Map.toArray
-                |> Array.mapi (fun index (slot, att) ->
+                |> Map.map (fun _ att ->
                     let format =
                         match device.TryFindFormat(VkFormat.ofTextureFormat att.Format, VkFormatFeatureFlags.ColorAttachmentBit) with
                         | Some fmt -> fmt
                         | _ -> failf $"Format {att.Format} cannot be used for color attachments ({att.Name})"
 
+                    att.Name, format
+                )
+
+            let colors =
+                colorAttachments
+                |> Map.toArray
+                |> Array.mapi (fun index (slot, (_, format)) ->
                     let description =
                         VkAttachmentDescription(
                             VkAttachmentDescriptionFlags.None,
