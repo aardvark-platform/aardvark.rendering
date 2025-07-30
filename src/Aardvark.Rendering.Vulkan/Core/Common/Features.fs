@@ -809,6 +809,7 @@ module DeviceFeatures =
         |> if not rtp.IsEmpty then VkStructChain.add rtp else id
         |> if not rtpos.IsEmpty then VkStructChain.add rtpos else id
         |> if not rtir.IsEmpty then VkStructChain.add rtir else id
+        |> if not rtv.IsEmpty then VkStructChain.add rtv else id
         |> if not acc.IsEmpty then VkStructChain.add acc else id
         |> if not rq.IsEmpty  then VkStructChain.add rq  else id
         |> if not bda.IsEmpty then VkStructChain.add bda else id

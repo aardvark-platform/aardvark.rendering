@@ -496,7 +496,7 @@ let main _argv =
             Effect            = Effect.main runtime.SupportsPositionFetch
             Scenes            = Map.ofList [Sym.ofString "MainScene", scene]
             Uniforms          = uniforms
-            MaxRecursionDepth = AVal.constant 1
+            MaxRecursionDepth = AVal.constant 2
         }
 
     let traceOutput =

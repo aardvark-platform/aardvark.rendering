@@ -82,6 +82,9 @@ type ValidationLayerConfig =
         /// Enables the output of warnings related to common misuse of
         /// the Vulkan API, but which are not explicitly prohibited by the specification.
         BestPracticesValidation : bool
+
+        /// Enable validation for raytracing at the implementation level via VK_NV_ray_tracing_validation.
+        RaytracingValidation : bool
     }
 
     static member Standard =
@@ -89,7 +92,8 @@ type ValidationLayerConfig =
           ObjectLifetimesValidation = true
           ShaderBasedValidation     = ShaderValidation.Disabled
           SynchronizationValidation = false
-          BestPracticesValidation   = false }
+          BestPracticesValidation   = false
+          RaytracingValidation      = false }
 
     static member DebugPrint =
         { ValidationLayerConfig.Standard with
@@ -99,7 +103,8 @@ type ValidationLayerConfig =
         { ValidationLayerConfig.Standard with
             ShaderBasedValidation     = ShaderValidation.GpuAssisted
             SynchronizationValidation = true
-            BestPracticesValidation   = true }
+            BestPracticesValidation   = true
+            RaytracingValidation      = true }
 
 [<CLIMutable>]
 type DebugConfig =
@@ -139,6 +144,11 @@ type DebugConfig =
 
     member x.ValidationLayerEnabled =
         x.ValidationLayer.IsSome
+
+    member x.RaytracingValidationEnabled =
+        match x.ValidationLayer with
+        | Some l -> l.RaytracingValidation
+        | _ -> false
 
     member x.DebugPrintEnabled =
         match x.ValidationLayer with

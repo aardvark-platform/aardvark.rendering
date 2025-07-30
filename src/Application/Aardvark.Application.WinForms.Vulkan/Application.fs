@@ -58,7 +58,7 @@ type VulkanApplication(debug: IDebugConfig,
             yield Instance.Extensions.DeviceFault
 
             yield! Instance.Extensions.Maintenance
-            yield! Instance.Extensions.Raytracing debug.ValidationLayerEnabled
+            yield! Instance.Extensions.Raytracing debug.RaytracingValidationEnabled
             yield! Instance.Extensions.Sharing
         ]
 
