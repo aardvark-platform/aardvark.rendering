@@ -53,6 +53,7 @@ type VulkanApplication(debug: IDebugConfig,
             yield! Instance.Extensions.Shader8Bit16Bit
             yield Instance.Extensions.GetPhysicalDeviceProperties2
             yield Instance.Extensions.ConservativeRasterization
+            yield Instance.Extensions.CustomBorderColor
             yield Instance.Extensions.MemoryBudget
             yield Instance.Extensions.MemoryPriority
             yield Instance.Extensions.DeviceFault

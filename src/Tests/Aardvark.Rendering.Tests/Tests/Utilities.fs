@@ -596,3 +596,8 @@ module ``Test Utilities`` =
             C4b.Chocolate
             C4b.LawnGreen
         |]
+
+    let requireFeatures (check: Vulkan.DeviceFeatures -> bool) (message: string) (runtime: IRuntime) =
+        match runtime with
+        | :? Vulkan.Runtime as runtime when not <| check runtime.Device.EnabledFeatures -> skiptest message
+        | _ -> ()

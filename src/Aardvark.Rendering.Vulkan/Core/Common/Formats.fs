@@ -526,6 +526,56 @@ module VkFormat =
     let isSrgb (fmt : VkFormat) =
         srgbFormats.Contains fmt
 
+    let private integerFormats =
+        HashSet.ofList [
+            VkFormat.R8Uint
+            VkFormat.R8Sint
+            VkFormat.R8g8Uint
+            VkFormat.R8g8Sint
+            VkFormat.R8g8b8Uint
+            VkFormat.R8g8b8Sint
+            VkFormat.B8g8r8Uint
+            VkFormat.B8g8r8Sint
+            VkFormat.R8g8b8a8Uint
+            VkFormat.R8g8b8a8Sint
+            VkFormat.B8g8r8a8Uint
+            VkFormat.B8g8r8a8Sint
+            VkFormat.A8b8g8r8UintPack32
+            VkFormat.A8b8g8r8SintPack32
+            VkFormat.A2r10g10b10UintPack32
+            VkFormat.A2r10g10b10SintPack32
+            VkFormat.A2b10g10r10UintPack32
+            VkFormat.A2b10g10r10SintPack32
+            VkFormat.R16Uint
+            VkFormat.R16Sint
+            VkFormat.R16g16Uint
+            VkFormat.R16g16Sint
+            VkFormat.R16g16b16Uint
+            VkFormat.R16g16b16Sint
+            VkFormat.R16g16b16a16Uint
+            VkFormat.R16g16b16a16Sint
+            VkFormat.R32Uint
+            VkFormat.R32Sint
+            VkFormat.R32g32Uint
+            VkFormat.R32g32Sint
+            VkFormat.R32g32b32Uint
+            VkFormat.R32g32b32Sint
+            VkFormat.R32g32b32a32Uint
+            VkFormat.R32g32b32a32Sint
+            VkFormat.R64Uint
+            VkFormat.R64Sint
+            VkFormat.R64g64Uint
+            VkFormat.R64g64Sint
+            VkFormat.R64g64b64Uint
+            VkFormat.R64g64b64Sint
+            VkFormat.R64g64b64a64Uint
+            VkFormat.R64g64b64a64Sint
+            VkFormat.S8Uint
+        ]
+
+    let isIntegerFormat (fmt : VkFormat) =
+        integerFormats.Contains fmt
+
     let toAspect (fmt : VkFormat) =
         if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit
         elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit

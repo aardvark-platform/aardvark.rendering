@@ -62,12 +62,16 @@ type SamplerLimits =
 
         /// the maximum degree of sampler anisotropy.
         MaxAnisotropy : float
+
+        /// the maximum number of samplers with custom border colors which can simultaneously exist on a device.
+        MaxCustomBorderColorSamplers : uint
     }
 
     member internal x.Print(l : ILogger) =
-        l.line "max allocations: %d" x.MaxAllocationCount
-        l.line "max lod bias:    %A" x.MaxLodBias
-        l.line "max anisotropy:  %A" x.MaxAnisotropy
+        l.line "max allocations:            %d" x.MaxAllocationCount
+        l.line "max lod bias:               %A" x.MaxLodBias
+        l.line "max anisotropy:             %A" x.MaxAnisotropy
+        l.line "max custom border samplers: %d" x.MaxCustomBorderColorSamplers
 
 type UniformLimits =
     {
@@ -661,12 +665,14 @@ type DeviceLimits =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DeviceLimits =
     open System
+    open EXTCustomBorderColor
     open KHRRayTracingPipeline
     open KHRAccelerationStructure
     open KHRMaintenance3
     open NVRayTracingInvocationReorder
 
     let create (maintenance3Properties : VkPhysicalDeviceMaintenance3PropertiesKHR)
+               (cbcProperties : VkPhysicalDeviceCustomBorderColorPropertiesEXT)
                (rtpProperties : VkPhysicalDeviceRayTracingPipelinePropertiesKHR)
                (rtirProperties : VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV)
                (asProperties : VkPhysicalDeviceAccelerationStructurePropertiesKHR)
@@ -692,9 +698,10 @@ module DeviceLimits =
 
             Sampler =
                 {
-                    MaxAllocationCount  = limits.maxSamplerAllocationCount
-                    MaxLodBias          = float limits.maxSamplerLodBias
-                    MaxAnisotropy       = float limits.maxSamplerAnisotropy
+                    MaxAllocationCount           = limits.maxSamplerAllocationCount
+                    MaxLodBias                   = float limits.maxSamplerLodBias
+                    MaxAnisotropy                = float limits.maxSamplerAnisotropy
+                    MaxCustomBorderColorSamplers = cbcProperties.maxCustomBorderColorSamplers
                 }
 
             Uniform =

@@ -908,7 +908,7 @@ module ``Image Command Extensions`` =
                             cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
 
                             let clearValue =
-                                if img.Image.Format |> VkFormat.toTextureFormat |> TextureFormat.isIntegerFormat then
+                                if VkFormat.isIntegerFormat img.Image.Format then
                                     VkClearColorValue(int32 = color.Integer)
                                 else
                                     VkClearColorValue(float32 = color.Float)

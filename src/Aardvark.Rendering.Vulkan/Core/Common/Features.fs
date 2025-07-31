@@ -155,11 +155,21 @@ type SamplerFeatures =
 
         /// Specifies whether the implementation supports sampler Y′CBCR conversion.
         YcbcrConversion: bool
+
+        /// Specifies whether the implementation supports custom border colors for samplers.
+        CustomBorderColors: bool
+
+        /// Specifies whether explicit formats are not required for custom border colors.
+        CustomBorderColorsWithoutFormat: bool
     }
 
     member internal x.Print(l : ILogger) =
-        l.line "anisotropy:           %A" x.Anisotropy
-        l.line "ycbcr:                %A" x.YcbcrConversion
+        l.line "anisotropy:               %A" x.Anisotropy
+        l.line "ycbcr:                    %A" x.YcbcrConversion
+        l.section "custom border colors:" (fun _ ->
+            l.line "supported:              %A" x.CustomBorderColors
+            l.line "without format:         %A" x.CustomBorderColorsWithoutFormat
+        )
 
 [<CLIMutable>]
 type ShaderFeatures =
@@ -599,6 +609,7 @@ module DeviceFeatures =
     open KHRBufferDeviceAddress
     open KHRShaderFloat16Int8
     open KHR8bitStorage
+    open EXTCustomBorderColor
     open EXTDescriptorIndexing
     open EXTMemoryPriority
     open EXTDeviceFault
@@ -626,6 +637,12 @@ module DeviceFeatures =
         let ycbcr =
             VkPhysicalDeviceSamplerYcbcrConversionFeatures(
                 toVkBool features.Samplers.YcbcrConversion
+            )
+
+        let cbc =
+            VkPhysicalDeviceCustomBorderColorFeaturesEXT(
+                toVkBool features.Samplers.CustomBorderColors,
+                toVkBool features.Samplers.CustomBorderColorsWithoutFormat
             )
 
         let s8 =
@@ -800,6 +817,7 @@ module DeviceFeatures =
         |> VkStructChain.add mem
         |> if not memp.IsEmpty then VkStructChain.add memp else id
         |> VkStructChain.add ycbcr
+        |> if not cbc.IsEmpty then VkStructChain.add cbc else id
         |> if not s8.IsEmpty then VkStructChain.add s8 else id
         |> VkStructChain.add s16
         |> if not f16i8.IsEmpty then VkStructChain.add f16i8 else id
@@ -819,6 +837,7 @@ module DeviceFeatures =
     let create (protectedMemoryFeatures : VkPhysicalDeviceProtectedMemoryFeatures)
                (memoryPriorityFeatures : VkPhysicalDeviceMemoryPriorityFeaturesEXT)
                (samplerYcbcrConversionFeatures : VkPhysicalDeviceSamplerYcbcrConversionFeatures)
+               (customBorderColorFeatures : VkPhysicalDeviceCustomBorderColorFeaturesEXT)
                (storage8BitFeatures : VkPhysicalDevice8BitStorageFeaturesKHR)
                (storage16BitFeatures : VkPhysicalDevice16BitStorageFeatures)
                (float16int8Features : VkPhysicalDeviceFloat16Int8FeaturesKHR)
@@ -880,8 +899,10 @@ module DeviceFeatures =
 
             Samplers =
                 {
-                    Anisotropy =      toBool features.samplerAnisotropy
-                    YcbcrConversion = toBool samplerYcbcrConversionFeatures.samplerYcbcrConversion
+                    Anisotropy                      = toBool features.samplerAnisotropy
+                    YcbcrConversion                 = toBool samplerYcbcrConversionFeatures.samplerYcbcrConversion
+                    CustomBorderColors              = toBool customBorderColorFeatures.customBorderColors
+                    CustomBorderColorsWithoutFormat = toBool customBorderColorFeatures.customBorderColorWithoutFormat
                 }
 
             Shaders =

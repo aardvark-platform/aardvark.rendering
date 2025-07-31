@@ -71,6 +71,14 @@ module SamplerState =
             AddressW = WrapMode.Border
             BorderColor = color }
 
+    let inline withBorderColorui (color : C4ui) (state : SamplerState) =
+        let color = C4f(Fun.FloatFromUnsignedBits (color.ToV4ui()))
+        state |> withBorderColor color
+
+    let inline withBorderColori (color : V4i) (state : SamplerState) =
+        let color = C4f(Fun.FloatFromBits color)
+        state |> withBorderColor color
+
     let withComparison (compare : ComparisonFunction) (state : SamplerState) =
         { state with Comparison = compare }
 

@@ -434,7 +434,12 @@ type AbstractResourceLocationWithPointer<'T, 'V when 'T :> Resource<'V> and 'V :
 
 module Resources =
 
-    type ImageSampler = ImageView * Sampler
+    [<Struct>]
+    type ImageSampler =
+        internal {
+            Image   : ImageView
+            Sampler : Sampler
+        }
 
     type ImageSamplerArray = ResourceInfo<ImageSampler>[]
 
@@ -580,7 +585,7 @@ module Resources =
                 let images = images.handle
 
                 for i = 0 to images.Length - 1 do
-                    let v, s = images.[i].handle
+                    let { Image = v; Sampler = s } = images.[i].handle
                     let desc = Descriptor.CombinedImageSampler(slot, i, v, s, v.Image.SamplerLayout)
                     cache.[i] <- { Version = images.[i].version; Descriptor = desc }
 
@@ -640,7 +645,7 @@ module Resources =
         inherit AbstractResourceLocation<PushConstants>(owner, key)
 
         let mutable handle = Unchecked.defaultof<PushConstants>
-        let mutable version = -1
+        let mutable version = 0
 
         override x.Create() =
             handle <- new PushConstants(layout)
@@ -673,17 +678,6 @@ module Resources =
             }
         )
 
-    type SamplerResource(owner : IResourceCache, key : list<obj>, device : Device, input : aval<SamplerState>) =
-        inherit ImmutableResourceLocation<SamplerState, Sampler>(
-            owner, key,
-            input,
-            {
-                icreate = fun (s : SamplerState) -> device.CreateSampler(s)
-                idestroy = fun s -> s.Dispose()
-                ieagerDestroy = true
-            }
-        )
-
     type DynamicSamplerStateResource(owner : IResourceCache, key : list<obj>,
                                      state : SamplerState, modifier : aval<SamplerState -> SamplerState>) =
         inherit AbstractResourceLocation<SamplerState>(owner, key)
@@ -705,31 +699,52 @@ module Resources =
             | ValueSome s -> { handle = s; version = 0 }
             | _ -> failwith "[Resource] inconsistent state"
 
-    type ImageSamplerResource(owner : IResourceCache, key : list<obj>,
-                              imageView : IResourceLocation<ImageView>,
-                              sampler : IResourceLocation<Sampler>) =
+    type ImageSamplerResource(owner : IResourceCache, key : list<obj>, device : Device, imageView : IResourceLocation<ImageView>, samplerDesc : aval<SamplerState>) =
         inherit AbstractResourceLocation<ImageSampler>(owner, key)
 
-        let mutable cache = ValueNone
+        let mutable samplerVersion = 0
+        let mutable sampler : Sampler voption = ValueNone
+
+        let createSampler (format : VkFormat) (samplerDesc : SamplerState) =
+            let handle = device.CreateSampler(samplerDesc, format)
+            sampler <- ValueSome handle
+            inc &samplerVersion
+            handle
+
+        let mutable cache : ResourceInfo<ImageSampler> = Unchecked.defaultof<_>
 
         override x.Create() =
             imageView.Acquire()
-            sampler.Acquire()
+            samplerDesc.Acquire()
 
         override x.Destroy() =
-            sampler.Release()
+            sampler |> ValueOption.iter _.Dispose()
+            sampler <- ValueNone
+            cache <- Unchecked.defaultof<_>
+            samplerDesc.Release()
             imageView.Release()
 
         override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
                 let v = imageView.Update(user, token, renderToken)
-                let s = sampler.Update(user, token, renderToken)
-                cache <- ValueSome (v, s)
+                let s = samplerDesc.GetValue(user, token, renderToken)
+                let fmt = v.handle.Image.Format
 
-            match cache with
-            | ValueSome (v, s) -> { handle = (v.handle, s.handle); version = v.version + s.version }
-            | _ -> failwith "[Resource] inconsistent state"
+                let sampler =
+                    match sampler with
+                    | ValueSome old when old.Format = fmt && old.Description = s -> old
 
+                    | ValueSome old ->
+                        old.Dispose()
+                        createSampler fmt s
+
+                    | ValueNone ->
+                        createSampler fmt s
+
+                let handle = { Image = v.handle; Sampler = sampler }
+                cache <- { handle = handle; version = v.version + samplerVersion }
+
+            cache
 
     type ImageSamplerArrayResource(owner : IResourceCache, key : list<obj>, count : int,
                                    empty : IResourceLocation<ImageSampler>, input : amap<int, IResourceLocation<ImageSampler>>) as this =
@@ -1869,9 +1884,6 @@ type ResourceManager(device : Device) =
     member x.CreateImageView(imageType : FShade.GLSL.GLSLImageType, input : IResourceLocation<Image>) =
         imageViewCache.GetOrCreate([imageType :> obj; input :> obj], fun cache key -> StorageImageViewResource(cache, key, device, imageType, input))
 
-    member x.CreateSampler(data : aval<SamplerState>) =
-        samplerCache.GetOrCreate([data :> obj], fun cache key -> SamplerResource(cache, key, device, data))
-
     member x.CreateDynamicSamplerState(state : SamplerState, modifier : aval<SamplerState -> SamplerState>) =
         samplerStateCache.GetOrCreate(
             [state :> obj; modifier :> obj],
@@ -1882,11 +1894,10 @@ type ResourceManager(device : Device) =
                                         texture : aval<ITexture>, samplerDesc : aval<SamplerState>) =
         let image = x.CreateImage(name, samplerType.Properties, texture)
         let view = x.CreateImageView(samplerType, image)
-        let sampler = x.CreateSampler(samplerDesc)
 
         imageSamplerCache.GetOrCreate(
-            [view :> obj; sampler :> obj],
-            fun cache key -> ImageSamplerResource(cache, key, view, sampler)
+            [view :> obj; samplerDesc :> obj],
+            fun cache key -> ImageSamplerResource(cache, key, device, view, samplerDesc)
         )
 
     member private x.CreateImageSampler(name : string, samplerType : FShade.GLSL.GLSLSamplerType,
@@ -1895,11 +1906,10 @@ type ResourceManager(device : Device) =
         let slices = level |> AVal.mapNonAdaptive _.Slices
         let image = x.CreateImage(name, samplerType.Properties, level)
         let view = x.CreateImageView(samplerType, image, levels, slices)
-        let sampler = x.CreateSampler(samplerDesc)
 
         imageSamplerCache.GetOrCreate(
-            [view :> obj; sampler :> obj],
-            fun cache key -> ImageSamplerResource(cache, key, view, sampler)
+            [view :> obj; samplerDesc :> obj],
+            fun cache key -> ImageSamplerResource(cache, key, device, view, samplerDesc)
         )
 
     member x.CreateImageSampler(textureName : Symbol, samplerType : FShade.GLSL.GLSLSamplerType,

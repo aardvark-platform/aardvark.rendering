@@ -36,6 +36,11 @@ module Samplers =
                 filter Filter.MinMagPoint
             }
 
+        let outOfBoundsTexCoords (v : Vertex) =
+            vertex {
+                return { v with tc = V2f(2.0f) }
+            }
+
         let diffuseIntTexture (v : Vertex) =
             fragment {
                 return diffuseIntSampler.Sample v.tc
@@ -258,6 +263,60 @@ module Samplers =
             finally
                 r1.Release(); r2.Release()
 
+        let private sample2DBorder (expected: 'T[]) (setBorderColor: SamplerState -> SamplerState) (runtime: IRuntime) =
+            let size = V2i(1)
+
+            let format, effect =
+                match typeof<'T> with
+                | TypeMeta.Patterns.Int32   -> TextureFormat.Rgba32i,  toEffect Shader.diffuseIntTexture
+                | TypeMeta.Patterns.UInt32  -> TextureFormat.Rgba32ui, toEffect Shader.diffuseUIntTexture
+                | TypeMeta.Patterns.Float32 -> TextureFormat.Rgba32f,  toEffect DefaultSurfaces.diffuseTexture
+                | t -> failwithf "Invalid type: %A" t
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, format
+                ])
+
+            let dummyTexture =
+                let mutable vol = Volume<'T>(V3i(size, 4))
+                let pi = PixImage<'T>(Col.Format.RGBA, vol)
+                PixTexture2d pi
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.diffuseTexture' dummyTexture
+                |> Sg.shader {
+                    do! Shader.outOfBoundsTexCoords
+                    do! effect
+                }
+                |> Sg.modifySamplerState' DefaultSemantic.DiffuseColorTexture setBorderColor
+                |> Sg.compile runtime signature
+
+            let buffer = task |> RenderTask.renderToColor (AVal.constant size)
+            buffer.Acquire()
+
+            try
+                let output = buffer.GetValue().Download().AsPixImage<'T>().Data
+                Expect.equal output expected "Unexpected result"
+            finally
+                buffer.Release()
+
+        let sample2DBorderFloat32 (runtime: IRuntime) =
+            runtime |> requireFeatures _.Samplers.CustomBorderColors "Device does not support custom border colors"
+            let value = C4f(0.5f, 1.234f, -4.12f, 90.24f)
+            sample2DBorder (value.ToArray()) (SamplerState.withBorderColor value) runtime
+
+        let sample2DBorderUInt32 (runtime: IRuntime) =
+            runtime |> requireFeatures _.Samplers.CustomBorderColors "Device does not support custom border colors"
+            let value = C4ui(0u, 1u, 347824u, Constant<uint32>.ParseableMaxValue)
+            sample2DBorder (value.ToArray()) (SamplerState.withBorderColorui value) runtime
+
+        let sample2DBorderInt32 (runtime: IRuntime) =
+            runtime |> requireFeatures _.Samplers.CustomBorderColors "Device does not support custom border colors"
+            let value = V4i(0, 1, -347824, Constant<int32>.ParseableMinValue)
+            sample2DBorder (value.ToArray()) (SamplerState.withBorderColori value) runtime
+
     let tests (backend : Backend) =
         [
             "2D rgba8i", Cases.sample2Drgba8i 1
@@ -275,5 +334,9 @@ module Samplers =
             "2D depth / stencil", Cases.sampleDepthStencil
 
             "2D dynamic sampler states", Cases.sample2DDynamicSamplerStates
+
+            "2D border color float32", Cases.sample2DBorderFloat32
+            "2D border color uint32", Cases.sample2DBorderUInt32
+            "2D border color int32", Cases.sample2DBorderInt32
         ]
         |> prepareCases backend "Samplers"

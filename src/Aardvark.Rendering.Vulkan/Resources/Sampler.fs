@@ -4,9 +4,9 @@ open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
-open Microsoft.FSharp.NativeInterop
+open EXTCustomBorderColor
 
-#nowarn "9"
+#nowarn "51"
 
 [<AutoOpen>]
 module ``Sampler Extensions`` =
@@ -58,57 +58,89 @@ type Sampler =
     class
         inherit Resource<VkSampler>
         val public Description : SamplerState
+        val public Format : VkFormat
 
         override x.Destroy() =
             if x.Handle.IsValid then
                 VkRaw.vkDestroySampler(x.Device.Handle, x.Handle, NativePtr.zero)
                 x.Handle <- VkSampler.Null
 
-        new(device : Device, desc : SamplerState, handle : VkSampler) = { inherit Resource<_>(device, handle); Description = desc  }
+        new(device : Device, desc : SamplerState, handle : VkSampler, format : VkFormat) =
+            { inherit Resource<_>(device, handle)
+              Description = desc
+              Format = format }
     end
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Sampler =
-    let create (desc : SamplerState) (device : Device) =
-        native {
-            let cmpOp =
-                VkCompareOp.ofSamplerComparisonFunction desc.Comparison
+    let create (format : VkFormat) (desc : SamplerState) (device : Device) =
+        let isInteger = VkFormat.isIntegerFormat format
 
-            let cmpEnable =
-                if cmpOp <> VkCompareOp.Always then 1u
-                else 0u
+        let hasWrapModeBorder =
+            if desc.AddressU = WrapMode.Border || desc.AddressV = WrapMode.Border || desc.AddressW = WrapMode.Border then
+                if device.EnabledFeatures.Samplers.CustomBorderColors then
+                    true
+                else
+                    Log.warn "[Vulkan] Custom border colors for samplers are not supported"
+                    false
+            else
+                false
 
-            let! pInfo =
-                VkSamplerCreateInfo(
-                    VkSamplerCreateFlags.None,
-                    desc.Filter |> TextureFilter.magnification |> VkFilter.ofFilterMode,
-                    desc.Filter |> TextureFilter.minification |> VkFilter.ofFilterMode,
-                    VkSamplerMipmapMode.ofTextureFilter desc.Filter,
-                    VkSamplerAddressMode.ofWrapMode desc.AddressU,
-                    VkSamplerAddressMode.ofWrapMode desc.AddressV,
-                    VkSamplerAddressMode.ofWrapMode desc.AddressW,
-                    desc.MipLodBias,
-                    (if desc.IsAnisotropic then 1u else 0u),
-                    (if desc.IsAnisotropic then float32 desc.MaxAnisotropy else 1.0f),
-                    cmpEnable,
-                    cmpOp,
-                    (if desc.UseMipmap then desc.MinLod else 0.0f),
-                    (if desc.UseMipmap then desc.MaxLod else 0.25f),
-                    VkBorderColor.FloatTransparentBlack, // vulkan does not seem to support real bordercolors
-                    0u // unnormalized
-                )
+        let borderColor =
+            if hasWrapModeBorder then
+                if isInteger then VkBorderColor.IntCustomExt
+                else VkBorderColor.FloatCustomExt
+            else
+                if isInteger then VkBorderColor.IntOpaqueBlack
+                else VkBorderColor.FloatOpaqueBlack
 
+        let mutable customBorderColor =
+            if hasWrapModeBorder then
+                let border = v4f desc.BorderColor
 
-            let! pHandle = VkSampler.Null
-            VkRaw.vkCreateSampler(device.Handle, pInfo, NativePtr.zero, pHandle)
-                |> check "could not create sampler"
+                let color =
+                    if isInteger then
+                        VkClearColorValue(int32 = Fun.FloatToBits border)
+                    else
+                        VkClearColorValue(float32 = border)
 
-            return new Sampler(device, desc, !!pHandle)
-        }
+                VkSamplerCustomBorderColorCreateInfoEXT(color, format)
+            else
+                VkSamplerCustomBorderColorCreateInfoEXT.Empty
+
+        let pNext =
+            if hasWrapModeBorder then &&customBorderColor else NativePtr.zero
+
+        let mutable createInfo =
+            VkSamplerCreateInfo(
+                pNext.Address,
+                VkSamplerCreateFlags.None,
+                desc.Filter |> TextureFilter.magnification |> VkFilter.ofFilterMode,
+                desc.Filter |> TextureFilter.minification |> VkFilter.ofFilterMode,
+                VkSamplerMipmapMode.ofTextureFilter desc.Filter,
+                VkSamplerAddressMode.ofWrapMode desc.AddressU,
+                VkSamplerAddressMode.ofWrapMode desc.AddressV,
+                VkSamplerAddressMode.ofWrapMode desc.AddressW,
+                desc.MipLodBias,
+                (if desc.IsAnisotropic then VkTrue else VkFalse),
+                (if desc.IsAnisotropic then float32 desc.MaxAnisotropy else 1.0f),
+                (if desc.Comparison <> ComparisonFunction.Always then VkTrue else VkFalse),
+                VkCompareOp.ofSamplerComparisonFunction desc.Comparison,
+                (if desc.UseMipmap then desc.MinLod else 0.0f),
+                (if desc.UseMipmap then desc.MaxLod else 0.25f),
+                borderColor,
+                VkFalse
+            )
+
+        let mutable handle = VkSampler.Null
+        VkRaw.vkCreateSampler(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+            |> check "could not create sampler"
+
+        new Sampler(device, desc, handle, format)
 
 [<AbstractClass; Sealed; Extension>]
 type ContextSamplerExtensions private() =
     [<Extension>]
-    static member inline CreateSampler(this : Device, desc : SamplerState) =
-        this |> Sampler.create desc
+    static member inline CreateSampler(this : Device, desc : SamplerState, format : VkFormat) =
+        this |> Sampler.create format desc

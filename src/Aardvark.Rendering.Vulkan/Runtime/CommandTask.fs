@@ -1250,7 +1250,7 @@ module private RuntimeCommands =
                     match values.[name] with
                     | Some value ->
                         let clear =
-                            if fmt |> VkFormat.toTextureFormat |> TextureFormat.isIntegerFormat then
+                            if VkFormat.isIntegerFormat fmt then
                                 VkClearColorValue(int32 = value.Integer)
                             else
                                 VkClearColorValue(float32 = value.Float)

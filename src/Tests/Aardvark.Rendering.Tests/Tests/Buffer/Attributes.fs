@@ -24,11 +24,6 @@ module AttributeBuffer =
 
     module Cases =
 
-        let private requireFeatures (check: Vulkan.DeviceFeatures -> bool) (message: string) (runtime: IRuntime) =
-            match runtime with
-            | :? Vulkan.Runtime as runtime when not <| check runtime.Device.EnabledFeatures -> skiptest message
-            | _ -> ()
-
         // Conversions according to Vk / GL >= 4.2 spec
         let inline private unorm (value : 'T) =
             let bits = uint64 sizeof<'T> * 8UL

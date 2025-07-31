@@ -32,6 +32,8 @@ module Instance =
 
         let ConservativeRasterization       = EXTConservativeRasterization.Name
 
+        let CustomBorderColor               = EXTCustomBorderColor.Name
+
         let Debug                           = EXTDebugUtils.Name
 
         let DeviceFault                     = EXTDeviceFault.Name
