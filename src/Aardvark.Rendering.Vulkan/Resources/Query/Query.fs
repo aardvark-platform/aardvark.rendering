@@ -71,7 +71,7 @@ type PoolHandle(pool : QueryPool, valuesPerQuery : int) =
         cached
 
     member x.Dispose() =
-        pool |> QueryPool.delete
+        pool.Dispose()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

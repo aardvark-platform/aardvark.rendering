@@ -1,40 +1,42 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
-open Microsoft.FSharp.NativeInterop
+open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
+
+#nowarn "51"
 
 type QueryPool =
     class
-        val public Device : Device
-        val public Handle : VkQueryPool
-        val public Count : int
-        val public Type : VkQueryType
+        inherit Resource<VkQueryPool>
 
-        new(d,h,c,t) = { Device = d; Handle = h; Count = c; Type = t }
+        val public Type : VkQueryType
+        val public Count : int
+
+        override this.Destroy() =
+            if this.Device.Handle <> 0n && this.Handle.IsValid then
+                VkRaw.vkDestroyQueryPool(this.Device.Handle, this.Handle, NativePtr.zero)
+                this.Handle <- VkQueryPool.Null
+
+        new (device, handle, typ, count) =
+            { inherit Resource<_>(device, handle); Type = typ; Count = count }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module QueryPool =
-    let create (typ : VkQueryType) (flags : VkQueryPipelineStatisticFlags) (cnt : int) (device : Device) =
-        native {
-            let! pInfo =
-                VkQueryPoolCreateInfo(
-                    VkQueryPoolCreateFlags.None,
-                    typ, uint32 cnt, flags
-                )
+    let create (typ : VkQueryType) (flags : VkQueryPipelineStatisticFlags) (count : int) (device : Device) =
+        let mutable createInfo =
+            VkQueryPoolCreateInfo(
+                VkQueryPoolCreateFlags.None,
+                typ, uint32 count, flags
+            )
 
-            let! pHandle = VkQueryPool.Null
-            VkRaw.vkCreateQueryPool(device.Handle, pInfo, NativePtr.zero, pHandle)
-                |> check "could not create query pool"
+        let mutable handle = VkQueryPool.Null
+        VkRaw.vkCreateQueryPool(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+            |> check "could not create query pool"
 
-            return QueryPool(device, !!pHandle, cnt, typ)
-        }
-
-    let delete (pool : QueryPool) =
-        VkRaw.vkDestroyQueryPool(pool.Device.Handle, pool.Handle, NativePtr.zero)
+        new QueryPool(device, handle, typ, count)
 
     // Needs Vulkan 1.2 or EXTHostQueryReset
     //let reset (pool : QueryPool) =
@@ -83,6 +85,7 @@ module QueryCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
                     VkRaw.vkCmdResetQueryPool(cmd.Handle, pool.Handle, 0u, uint32 pool.Count)
+                    cmd.AddResource pool
             }
         static member BeginQuery(pool : QueryPool, index : int, flags : VkQueryControlFlags) =
             { new Command() with
@@ -90,6 +93,7 @@ module QueryCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
                     VkRaw.vkCmdBeginQuery(cmd.Handle, pool.Handle, uint32 index, flags)
+                    cmd.AddResource pool
             }
         static member EndQuery(pool : QueryPool, index : int) =
             { new Command() with
@@ -97,6 +101,7 @@ module QueryCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
                     VkRaw.vkCmdEndQuery(cmd.Handle, pool.Handle, uint32 index)
+                    cmd.AddResource pool
             }
 
         static member CopyQueryResults(pool : QueryPool, target : Buffer) =
@@ -105,6 +110,7 @@ module QueryCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
                     VkRaw.vkCmdCopyQueryPoolResults(cmd.Handle, pool.Handle, 0u, uint32 pool.Count, target.Handle, 0UL, 8UL, VkQueryResultFlags.D64Bit ||| VkQueryResultFlags.WaitBit ||| VkQueryResultFlags.PartialBit)
+                    cmd.AddResource pool
             }
 
         static member WriteTimestamp(pool : QueryPool, pipelineFlags : VkPipelineStageFlags, index : int) =
@@ -113,18 +119,19 @@ module QueryCommandExtensions =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
                     VkRaw.vkCmdWriteTimestamp(cmd.Handle, pipelineFlags, pool.Handle, uint32 index)
+                    cmd.AddResource pool
             }
 
 [<AbstractClass; Sealed; Extension>]
-type DeviceQueryPoolExtensions private() =
+type DeviceQueryPoolExtensions =
     [<Extension>]
-    static member inline CreateQueryPool(device : Device, count : int) =
-        device |> QueryPool.create VkQueryType.Timestamp VkQueryPipelineStatisticFlags.None count
+    static member inline CreateQueryPool(device : Device, typ : VkQueryType, [<Optional; DefaultParameterValue(1)>] count : int) =
+        device |> QueryPool.create typ VkQueryPipelineStatisticFlags.None count
 
     [<Extension>]
-    static member inline Delete(device : Device, pool : QueryPool) =
-        pool |> QueryPool.delete
+    static member inline CreateQueryPool(device : Device, statistics : VkQueryPipelineStatisticFlags, [<Optional; DefaultParameterValue(1)>] count : int) =
+        device |> QueryPool.create VkQueryType.PipelineStatistics statistics count
 
     [<Extension>]
-    static member inline GetResults(device : Device, pool : QueryPool) =
+    static member inline GetResults(pool : QueryPool) =
         pool |> QueryPool.get
