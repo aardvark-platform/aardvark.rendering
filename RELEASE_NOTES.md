@@ -1,3 +1,11 @@
+### 5.6.0-prerelease0007
+- [Vulkan] Added check if color attachment supports blending
+- [Vulkan] Added ValidationLayerConfig.RaytracingValidation
+- [Vulkan] Added support for custom sampler border colors
+- [Vulkan] Added support for acceleration structure compaction
+- [Vulkan] Renamed RaytracingSceneDescription to RaytracingScene
+- [Vulkan] Fixed compatibility check for acceleration structure updates
+
 ### 5.6.0-prerelease0006
 - Added IRuntime.SupportsPositionFetch and SupportsInvocationReorder
 - [Vulkan] Added support for VK_NV_ray_tracing_invocation_reorder
