@@ -239,16 +239,20 @@ module AccelerationStructure =
     let tryUpdate (data : AccelerationStructureData) (accelerationStructure : AccelerationStructure) =
 
         // Determine if we can update with new data
-        // https://khronos.org/registry/vulkan/specs/1.2-khr-extensions/html/chap32.html
-        // https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetAccelerationStructureBuildSizesKHR.html
+        // https://registry.khronos.org/vulkan/specs/latest/man/html/vkCmdBuildAccelerationStructuresKHR.html
+        let inline indexType (m : TriangleMesh) =
+            if isNull m.Indices then ValueNone
+            else ValueSome m.Indices.Type
+
         let isGeometryCompatible (n : TraceGeometry) (o : TraceGeometry) =
             match n, o with
             | TraceGeometry.Triangles nm, TraceGeometry.Triangles om ->
-                nm.Length <= om.Length &&
+                nm.Length = om.Length &&
                 (nm, om) ||> Array.safeForall2 (fun n o ->
                     n.Flags = o.Flags &&
                     n.Primitives = o.Primitives &&
-                    isNull n.Indices = isNull o.Indices
+                    n.Vertices.Count = o.Vertices.Count &&
+                    indexType n = indexType o
                 )
 
             | TraceGeometry.AABBs nbb, TraceGeometry.AABBs obb ->
