@@ -219,7 +219,7 @@ type Runtime(debug : IDebugConfig) =
         member x.MaxRayRecursionDepth =
             0
 
-        member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
+        member x.CreateAccelerationStructure(geometry, usage) =
             failwith "GL backend does not support raytracing"
 
         member x.TryUpdateAccelerationStructure(handle, geometry) =

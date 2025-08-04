@@ -22,7 +22,7 @@ type TraceObject(geometry: AdaptiveTraceGeometry,
     /// Geometry data of the instance.
     member val Geometry           = geometry                       with get, set
 
-    /// Usage flag of the underlying acceleration structure.
+    /// Usage flags of the underlying acceleration structure.
     member val Usage              = usage                          with get, set
 
     /// Vertex attributes of each geometry (ignored for AABBs).
@@ -104,7 +104,7 @@ module TraceObjectFSharp =
         /// Creates an empty trace object from the given trace geometry.
         static member inline ofAdaptiveGeometry (geometry: AdaptiveTraceGeometry) =
             TraceObject(
-                geometry, AccelerationStructureUsage.Static,
+                geometry, AccelerationStructureUsage.Static ||| AccelerationStructureUsage.Update,
                 Array.init geometry.Count (ignore >> IDictionary.create),
                 Array.init geometry.Count (ignore >> IDictionary.create),
                 Array.init geometry.Count (ignore >> IDictionary.create),
@@ -116,14 +116,17 @@ module TraceObjectFSharp =
                 AVal.constant VisibilityMask.All
             )
 
-        /// Creates an empty trace object from the given trace geometry.
-        static member inline ofGeometry (geometry: TraceGeometry) =
-            geometry |> AdaptiveTraceGeometry.FromTraceGeometry |> TraceObject.ofAdaptiveGeometry
-
-        /// Applies the usage mode for the given trace object.
+        /// Applies the usage flags for the given trace object.
         static member inline usage (usage: AccelerationStructureUsage) (obj : TraceObject) =
             obj.Usage <- usage
             obj
+
+        /// Creates an empty trace object from the given trace geometry.
+        static member inline ofGeometry (geometry: TraceGeometry) =
+            geometry
+            |> AdaptiveTraceGeometry.FromTraceGeometry
+            |> TraceObject.ofAdaptiveGeometry
+            |> TraceObject.usage AccelerationStructureUsage.Static
 
         /// Sets vertex attributes for the given trace object.
         /// The names can be string or Symbol.
@@ -349,10 +352,17 @@ module TraceObjectFSharp =
 
                 let mesh = AdaptiveTriangleMesh.FromIndexedGeometry(geometry, trafo, flags)
 
+                let usage =
+                    if trafo.IsConstant then
+                        AccelerationStructureUsage.Static
+                    else
+                        AccelerationStructureUsage.Static ||| AccelerationStructureUsage.Update
+
                 [| mesh |]
                 |> AdaptiveTraceGeometry.Triangles
                 |> TraceObject.ofAdaptiveGeometry
                 |> TraceObject.vertexAttributes attributes
+                |> TraceObject.usage usage
 
         /// Creates a trace object from the given indexed geometry.
         static member inline ofIndexedGeometry (flags : GeometryFlags) =

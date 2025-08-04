@@ -49,22 +49,6 @@ module ``Common Commands`` =
             member x.Compatible = QueueFlags.All
         }
 
-    let private barrier =
-        { new Command() with
-            member x.Compatible = QueueFlags.All
-            member x.Enqueue buffer =
-                buffer.AppendCommand()
-                VkRaw.vkCmdPipelineBarrier(
-                    buffer.Handle,
-                    VkPipelineStageFlags.AllCommandsBit,
-                    VkPipelineStageFlags.TopOfPipeBit,
-                    VkDependencyFlags.None,
-                    0u, NativePtr.zero,
-                    0u, NativePtr.zero,
-                    0u, NativePtr.zero
-                )
-        }
-
     let private resetDeviceMask =
         { new Command() with
             member x.Compatible = QueueFlags.All
@@ -80,7 +64,25 @@ module ``Common Commands`` =
 
     type Command with
         static member Nop = nop
-        static member Barrier = barrier
+
+        static member MemoryBarrier(srcStage: VkPipelineStageFlags, srcAccess: VkAccessFlags, dstStage: VkPipelineStageFlags, dstAccess: VkAccessFlags) =
+            { new Command() with
+                member _.Compatible = QueueFlags.All
+                member _.Enqueue cmd =
+                    cmd.AppendCommand()
+
+                    let mutable memoryBarrier =
+                        VkMemoryBarrier(srcAccess, dstAccess)
+
+                    VkRaw.vkCmdPipelineBarrier(
+                        cmd.Handle,
+                        srcStage, dstStage,
+                        VkDependencyFlags.None,
+                        1u, &&memoryBarrier,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero
+                    )
+            }
 
         static member Execute(inner: CommandBuffer[]) =
             let handles =

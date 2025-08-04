@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.Rendering.Vulkan.Raytracing
 
-#nowarn "9"
-
 open System
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
@@ -14,56 +12,85 @@ open KHRAccelerationStructure
 open KHRBufferDeviceAddress
 open KHRRayTracingPositionFetch
 
-[<Struct>]
-type Instances =
-    { Buffer : Buffer
-      Count : uint32 }
+#nowarn "9"
+#nowarn "51"
 
 [<RequireQualifiedAccess>]
 type AccelerationStructureData =
     | Geometry of TraceGeometry
-    | Instances of Instances
+    | Instances of count: uint32 * buffer: Buffer
 
-    member x.Count =
-        match x with
+    member this.Type =
+        match this with
+        | AccelerationStructureData.Geometry _ -> VkAccelerationStructureTypeKHR.BottomLevel
+        | AccelerationStructureData.Instances _ -> VkAccelerationStructureTypeKHR.TopLevel
+
+    member this.Count =
+        match this with
         | Geometry arr -> uint32 arr.Count
-        | Instances inst -> inst.Count
+        | Instances (count, _) -> count
 
-type private NativeAccelerationStructureData(typ : VkAccelerationStructureTypeKHR, data : VkAccelerationStructureGeometryKHR[],
-                                             primitives : uint32[], flags : VkBuildAccelerationStructureFlagsKHR,
-                                             buffers : Buffer[]) =
-    let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-    let pData = NativePtr.ofNativeInt<VkAccelerationStructureGeometryKHR> <| gc.AddrOfPinnedObject()
+type internal PreparedAccelerationStructureData(
+                    device     : Device,
+                    typ        : VkAccelerationStructureTypeKHR,
+                    flags      : VkBuildAccelerationStructureFlagsKHR,
+                    geometries : VkAccelerationStructureGeometryKHR[],
+                    primitives : uint32[],
+                    buffers    : Buffer[]
+                ) =
+    let pGeometriesHandle = GCHandle.Alloc(geometries, GCHandleType.Pinned)
+    let pGeometries = NativePtr.ofNativeInt <| pGeometriesHandle.AddrOfPinnedObject()
 
-    let geometryInfo =
-        let mutable info = VkAccelerationStructureBuildGeometryInfoKHR.Empty
-        info._type <- typ
-        info.flags <- flags
-        info.geometryCount <- uint32 data.Length
-        info.pGeometries <- pData
-        info
+    let mutable buildGeometryInfo =
+        VkAccelerationStructureBuildGeometryInfoKHR(
+            typ, flags,
+            VkBuildAccelerationStructureModeKHR.Build,
+            VkAccelerationStructureKHR.Null,
+            VkAccelerationStructureKHR.Null,
+            uint32 geometries.Length,
+            pGeometries, NativePtr.zero,
+            VkDeviceOrHostAddressKHR()
+        )
 
     let buildRangeInfos =
         primitives |> Array.map (fun count ->
             VkAccelerationStructureBuildRangeInfoKHR(count, 0u, 0u, 0u)
         )
 
-    member x.Primitives = primitives
-    member x.GeometryInfo = geometryInfo
-    member x.BuildRangeInfos = buildRangeInfos
+    let mutable buildSizesInfo = ValueNone
+
+    member _.Type = typ
+    member _.BuildGeometryInfo = buildGeometryInfo
+    member _.BuildRangeInfos = buildRangeInfos
+    member _.BuildSizesInfo =
+        match buildSizesInfo with
+        | ValueSome info -> info
+        | _ ->
+            use pMaxPrimitiveCounts = fixed primitives
+            let mutable info = VkAccelerationStructureBuildSizesInfoKHR.Empty
+
+            VkRaw.vkGetAccelerationStructureBuildSizesKHR(
+                device.Handle, VkAccelerationStructureBuildTypeKHR.Device,
+                &&buildGeometryInfo, pMaxPrimitiveCounts, &&info
+            )
+
+            buildSizesInfo <- ValueSome info
+            info
+
+    member inline this.Size = this.BuildSizesInfo.accelerationStructureSize
+    member inline this.ScratchBuildSize = this.BuildSizesInfo.buildScratchSize
+    member inline this.ScratchUpdateSize = this.BuildSizesInfo.updateScratchSize
 
     member x.Dispose() =
         buffers |> Array.iter Disposable.dispose
-        gc.Free()
+        pGeometriesHandle.Free()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module private NativeAccelerationStructureData =
-
-    open System.Collections.Generic
+module internal AccelerationStructureData =
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module private Buffer =
@@ -81,30 +108,27 @@ module private NativeAccelerationStructureData =
         let prepare (device : Device) (alignment : uint64) (buffer : IBuffer) =
             Buffer.ofBuffer' false usage alignment buffer device.DeviceMemory
 
-    let private getFlags (positionFetch : bool) (allowUpdate : bool) (usage : AccelerationStructureUsage) =
-        let hint =
-            match usage with
-            | AccelerationStructureUsage.Static -> VkBuildAccelerationStructureFlagsKHR.PreferFastTraceBit
-            | _                                 -> VkBuildAccelerationStructureFlagsKHR.PreferFastBuildBit
+    let private getFlags (positionFetch : bool) (usage : AccelerationStructureUsage) =
+        [
+            if usage.HasFlag AccelerationStructureUsage.Dynamic then
+                VkBuildAccelerationStructureFlagsKHR.PreferFastBuildBit
 
-        let update =
-            if allowUpdate then
+            elif usage.HasFlag AccelerationStructureUsage.Static then
+                VkBuildAccelerationStructureFlagsKHR.PreferFastTraceBit
+
+            if usage.HasFlag AccelerationStructureUsage.Update then
                 VkBuildAccelerationStructureFlagsKHR.AllowUpdateBit
-            else
-                VkBuildAccelerationStructureFlagsKHR.None
 
-        let positionFetch =
+            if usage.HasFlag AccelerationStructureUsage.Compact then
+                VkBuildAccelerationStructureFlagsKHR.AllowCompactionBit
+
             if positionFetch then
                 VkBuildAccelerationStructureFlagsKHR.AllowDataAccess
-            else
-                VkBuildAccelerationStructureFlagsKHR.None
+        ]
+        |> List.fold (|||) VkBuildAccelerationStructureFlagsKHR.None
 
-        update ||| hint ||| positionFetch
-
-    let private ofGeometry (device : Device) (allowUpdate : bool)
-                           (usage : AccelerationStructureUsage) (geometry : TraceGeometry) =
-
-        let mutable buffers = List<Buffer>()
+    let private ofGeometry (device : Device) (usage : AccelerationStructureUsage) (geometry : TraceGeometry) =
+        let mutable buffers = ResizeArray<Buffer>()
 
         let getBufferAddress (alignment : uint64) (offset : uint64) (buffer : IBuffer) =
             if alignment <> 0UL && offset % alignment <> 0UL then
@@ -180,60 +204,33 @@ module private NativeAccelerationStructureData =
                     VkAccelerationStructureGeometryKHR(VkGeometryTypeKHR.Aabbs, data, enum <| int bb.Flags)
                 ), false
 
-        let flags = getFlags positionFetch allowUpdate usage
+        let flags = getFlags positionFetch usage
 
-        new NativeAccelerationStructureData(
-            VkAccelerationStructureTypeKHR.BottomLevel, geometries, geometry.Primitives, flags, buffers.ToArray()
+        new PreparedAccelerationStructureData(
+            device, VkAccelerationStructureTypeKHR.BottomLevel, flags, geometries, geometry.Primitives, buffers.ToArray()
         )
 
-    let private ofInstances (allowUpdate : bool) (usage : AccelerationStructureUsage) (instances : Instances) =
+    let private ofInstances (device : Device) (usage : AccelerationStructureUsage) (count : uint32) (buffer : Buffer) =
         // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03715
-        if instances.Buffer.DeviceAddress % 16UL <> 0UL then
-            failf $"instance buffers must be aligned to 16 bytes (address = {instances.Buffer.DeviceAddress})"
+        if buffer.DeviceAddress % 16UL <> 0UL then
+            failf $"instance buffers must be aligned to 16 bytes (address = {buffer.DeviceAddress})"
 
         let geometry =
             VkAccelerationStructureGeometryKHR(
                 VkGeometryTypeKHR.Instances,
                 VkAccelerationStructureGeometryDataKHR.Instances(
-                    VkAccelerationStructureGeometryInstancesDataKHR(VkFalse, instances.Buffer |> Buffer.toAddress 0UL)
+                    VkAccelerationStructureGeometryInstancesDataKHR(VkFalse, buffer |> Buffer.toAddress 0UL)
                 ),
                 VkGeometryFlagsKHR.None
             )
 
-        let flags = getFlags false allowUpdate usage
+        let flags = getFlags false usage
 
-        new NativeAccelerationStructureData(
-            VkAccelerationStructureTypeKHR.TopLevel, [| geometry |], [| instances.Count |], flags, Array.empty
+        new PreparedAccelerationStructureData(
+            device, VkAccelerationStructureTypeKHR.TopLevel, flags, [| geometry |], [| count |], Array.empty
         )
 
-
-    let alloc device allowUpdate usage = function
-        | AccelerationStructureData.Geometry data -> ofGeometry device allowUpdate usage data
-        | AccelerationStructureData.Instances data -> ofInstances allowUpdate usage data
-
-    let createBuffers (device : Device) (data : NativeAccelerationStructureData) =
-        let sizes =
-            native {
-                let! pSizeInfo = VkAccelerationStructureBuildSizesInfoKHR.Empty
-                let! pBuildInfo = data.GeometryInfo
-                let! pPrimitiveCounts = data.Primitives
-
-                VkRaw.vkGetAccelerationStructureBuildSizesKHR(
-                    device.Handle, VkAccelerationStructureBuildTypeKHR.Device,
-                    pBuildInfo, pPrimitiveCounts, pSizeInfo
-                )
-
-                return !!pSizeInfo
-            }
-
-        let resultBuffer =
-            let flags = VkBufferUsageFlags.AccelerationStructureStorageBitKhr ||| VkBufferUsageFlags.ShaderDeviceAddressBitKhr
-            device.DeviceMemory |> Buffer.create flags sizes.accelerationStructureSize
-
-        let scratchBuffer =
-            let alignment = uint64 device.PhysicalDevice.Limits.Raytracing.Value.MinAccelerationStructureScratchOffsetAlignment
-            let flags = VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.ShaderDeviceAddressBitKhr
-            let size = max sizes.buildScratchSize sizes.updateScratchSize
-            device.DeviceMemory |> Buffer.create' false false flags alignment size
-
-        {| ResultBuffer = resultBuffer; ScratchBuffer = scratchBuffer |}
+    let prepare device usage data =
+        match data with
+        | AccelerationStructureData.Geometry geometry -> ofGeometry device usage geometry
+        | AccelerationStructureData.Instances (count, buffer) -> ofInstances device usage count buffer

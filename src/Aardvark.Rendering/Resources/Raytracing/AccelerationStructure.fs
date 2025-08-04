@@ -3,18 +3,29 @@
 open System
 open System.Runtime.InteropServices
 
+[<Flags>]
 type AccelerationStructureUsage =
-    /// Favor fast tracing over fast building.
-    | Static = 0
+    | None = 0
 
-    /// Favor fast building over fast tracing.
-    | Dynamic = 1
+    /// Prioritize tracing performance over build times.
+    | Static = 1
+
+    /// Prioritize short build times over tracing performance.
+    | Dynamic = 2
+
+    /// Allow the acceleration structure to be updated rather than having to rebuild it from scratch.
+    /// May incur a trace performance and memory overhead.
+    | Update = 4
+
+    /// Compact the acceleration structure after building to reduce its memory footprint.
+    | Compact = 8
 
 type IAccelerationStructure =
     inherit IDisposable
 
     abstract member Usage : AccelerationStructureUsage
     abstract member GeometryCount : int
+    abstract member SizeInBytes : uint64
     abstract member Name : string with get, set
 
 type IAccelerationStructureRuntime =
@@ -23,11 +34,9 @@ type IAccelerationStructureRuntime =
     /// Creates an acceleration structure from the given trace geometry.
     ///</summary>
     ///<param name="geometry">The geometry to build the acceleration structure from.</param>
-    ///<param name="usage">The usage flag of the acceleration structure. Default is AccelerationStructureUsage.Static.</param>
-    ///<param name="allowUpdate">Determines if the acceleration structure may be updated, instead of requiring a rebuild. Default is true.</param>
+    ///<param name="usage">The usage flags of the acceleration structure. Default is Static.</param>
     abstract member CreateAccelerationStructure : geometry: TraceGeometry *
-                                                  [<Optional; DefaultParameterValue(AccelerationStructureUsage.Static)>] usage: AccelerationStructureUsage *
-                                                  [<Optional; DefaultParameterValue(true)>] allowUpdate: bool -> IAccelerationStructure
+                                                  [<Optional; DefaultParameterValue(AccelerationStructureUsage.Static)>] usage: AccelerationStructureUsage -> IAccelerationStructure
 
     ///<summary>
     /// Tries to update an acceleration structure with the given trace geometry.

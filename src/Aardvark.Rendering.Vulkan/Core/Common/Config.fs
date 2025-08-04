@@ -129,6 +129,9 @@ type DebugConfig =
         /// Print render task recompilation.
         PrintRenderTaskRecompile : bool
 
+        /// Print information about acceleration structure compaction operations.
+        PrintAccelerationStructureCompactionInfo : bool
+
         /// Verbosity of the logger to be used to print instance and device information.
         PlatformInformationVerbosity : int
 
@@ -157,15 +160,16 @@ type DebugConfig =
 
     /// Disables all debugging functionality.
     static member None =
-        { DebugReport                   = None
-          DebugLabels                   = false
-          ValidationLayer               = None
-          VerifyShaderCacheIntegrity    = false
-          PlatformInformationVerbosity  = 4
-          PrintShaderCode               = false
-          PrintRenderTaskRecompile      = false
-          GenerateShaderDebugInfo       = false
-          OptimizeShaders               = true }
+        { DebugReport                              = None
+          DebugLabels                              = false
+          ValidationLayer                          = None
+          VerifyShaderCacheIntegrity               = false
+          PlatformInformationVerbosity             = 4
+          PrintAccelerationStructureCompactionInfo = false
+          PrintShaderCode                          = false
+          PrintRenderTaskRecompile                 = false
+          GenerateShaderDebugInfo                  = false
+          OptimizeShaders                          = true }
 
     /// Enables validation layers, printing warnings and errors.
     static member Minimal =
@@ -178,10 +182,11 @@ type DebugConfig =
     /// Also prints shader code and render task recompilation.
     static member Normal =
         { DebugConfig.Minimal with
-            DebugReport              = Some DebugReportConfig.Normal
-            DebugLabels              = true
-            PrintShaderCode          = true
-            PrintRenderTaskRecompile = true }
+            DebugReport                              = Some DebugReportConfig.Normal
+            DebugLabels                              = true
+            PrintShaderCode                          = true
+            PrintRenderTaskRecompile                 = true
+            PrintAccelerationStructureCompactionInfo = true }
 
     /// Enables object trace handling, shader cache integrity checks, and every validation layer feature.
     static member Full =

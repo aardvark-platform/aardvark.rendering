@@ -486,7 +486,7 @@ type Runtime(device : Device) as this =
 
     // Raytracing
     member x.SupportsRaytracing =
-        x.Device.PhysicalDevice.Features.Raytracing.Pipeline
+        x.Device.EnabledFeatures.Raytracing.Pipeline
 
     member x.SupportsPositionFetch =
         x.Device.EnabledFeatures.Raytracing.PositionFetch
@@ -501,12 +501,12 @@ type Runtime(device : Device) as this =
         | Some limits -> int limits.MaxRayRecursionDepth
         | _ -> 0
 
-    member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
+    member x.CreateAccelerationStructure(geometry, usage) =
         if not x.SupportsRaytracing then
             failwithf "[Vulkan] Runtime does not support raytracing"
 
         let data = AccelerationStructureData.Geometry geometry
-        AccelerationStructure.create x.Device allowUpdate usage data :> IAccelerationStructure
+        AccelerationStructure.create x.Device usage data :> IAccelerationStructure
 
     member x.TryUpdateAccelerationStructure(handle : IAccelerationStructure, geometry) =
         if not x.SupportsRaytracing then
@@ -652,8 +652,8 @@ type Runtime(device : Device) as this =
         member x.MaxRayRecursionDepth =
             x.MaxRayRecursionDepth
 
-        member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
-            x.CreateAccelerationStructure(geometry, usage, allowUpdate)
+        member x.CreateAccelerationStructure(geometry, usage) =
+            x.CreateAccelerationStructure(geometry, usage)
 
         member x.TryUpdateAccelerationStructure(handle, geometry) =
             x.TryUpdateAccelerationStructure(handle, geometry)

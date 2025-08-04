@@ -1,63 +1,94 @@
 ﻿namespace Aardvark.Rendering.Vulkan.Raytracing
 
-#nowarn "9"
-
 open Aardvark.Base
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
+open Microsoft.FSharp.NativeInterop
 open KHRAccelerationStructure
+open KHRBufferDeviceAddress
+
+#nowarn "9"
+#nowarn "51"
 
 type AccelerationStructure =
     class
         inherit Resource<VkAccelerationStructureKHR>
         val Data : AccelerationStructureData
         val Usage : AccelerationStructureUsage
-        val AllowUpdate : bool
         val ResultBuffer : Buffer
-        val ScratchBuffer : Buffer
         val DeviceAddress : VkDeviceAddress
+        val mutable private scratchBuffer : Buffer voption
         val mutable private name : string
 
-        member x.Name
-            with get() = x.name
+        member this.Name
+            with get() = this.name
             and set name =
-                x.name <- name
+                this.name <- name
                 if name <> null then
-                    x.ResultBuffer.Name <- $"{name} (Result Buffer)"
-                    x.ScratchBuffer.Name <- $"{name} (Scratch Buffer)"
-                x.Device.SetObjectName(VkObjectType.AccelerationStructureKhr, x.Handle.Handle, name)
+                    this.ResultBuffer.Name <- $"{name} (Result Buffer)"
+                    this.scratchBuffer |> ValueOption.iter (fun b -> b.Name <- $"{name} (Scratch Buffer)")
+                this.Device.SetObjectName(VkObjectType.AccelerationStructureKhr, this.Handle.Handle, name)
 
-        member x.GeometryCount =
-            match x.Data with
+        member this.GeometryCount =
+            match this.Data with
             | AccelerationStructureData.Geometry g -> g.Count
             | _ -> 0
 
-        override x.Destroy() =
-            VkRaw.vkDestroyAccelerationStructureKHR(x.Device.Handle, x.Handle, NativePtr.zero)
-            x.ResultBuffer.Dispose()
-            x.ScratchBuffer.Dispose()
+        member this.Size =
+            this.ResultBuffer.Size
 
-        new(device : Device, handle : VkAccelerationStructureKHR,
-            data : AccelerationStructureData, usage : AccelerationStructureUsage, allowUpdate : bool,
-            resultBuffer : Buffer, scratchBuffer : Buffer) =
+        member this.TotalSize =
+            let scratchSize = this.scratchBuffer |> ValueOption.map _.Size |> ValueOption.defaultValue 0UL
+            this.ResultBuffer.Size + scratchSize
+
+        member this.AllowUpdate =
+            this.Usage.HasFlag AccelerationStructureUsage.Update
+
+        member this.ScratchBuffer =
+            match this.scratchBuffer with
+            | ValueSome b -> b
+            | _ -> failf "scratch buffer is not allocated"
+
+        member internal this.CreateScratchBuffer(size : VkDeviceSize) =
+            match this.scratchBuffer with
+            | ValueSome b when b.Size = size -> ()
+            | _ ->
+                this.scratchBuffer |> ValueOption.iter _.Dispose()
+                let alignment = uint64 this.Device.PhysicalDevice.Limits.Raytracing.Value.MinAccelerationStructureScratchOffsetAlignment
+                let flags = VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.ShaderDeviceAddressBitKhr
+                let buffer = this.Device.DeviceMemory |> Buffer.create' false false flags alignment size
+                this.scratchBuffer <- ValueSome buffer
+
+        member internal this.DestroyScratchBuffer() =
+            this.scratchBuffer |> ValueOption.iter _.Dispose()
+            this.scratchBuffer <- ValueNone
+
+        override this.Destroy() =
+            VkRaw.vkDestroyAccelerationStructureKHR(this.Device.Handle, this.Handle, NativePtr.zero)
+            this.ResultBuffer.Dispose()
+            this.DestroyScratchBuffer()
+
+        new(device : Device, handle : VkAccelerationStructureKHR, buffer : Buffer,
+            data : AccelerationStructureData, usage : AccelerationStructureUsage) =
+
             let address =
-                native {
-                    let! pInfo = VkAccelerationStructureDeviceAddressInfoKHR(handle)
-                    return VkRaw.vkGetAccelerationStructureDeviceAddressKHR(device.Handle, pInfo)
-                }
+                let mutable info = VkAccelerationStructureDeviceAddressInfoKHR(handle)
+                VkRaw.vkGetAccelerationStructureDeviceAddressKHR(device.Handle, &&info)
 
-            { inherit Resource<_>(device, handle)
-              Data = data
-              Usage = usage
-              AllowUpdate = allowUpdate
-              ResultBuffer = resultBuffer
-              ScratchBuffer = scratchBuffer
-              DeviceAddress = address
-              name = null }
+            {
+                inherit Resource<_>(device, handle)
+                Data = data
+                Usage = usage
+                ResultBuffer = buffer
+                DeviceAddress = address
+                scratchBuffer = ValueNone
+                name = null
+            }
 
         interface IAccelerationStructure with
             member x.Usage = x.Usage
             member x.GeometryCount = x.GeometryCount
+            member x.SizeInBytes = x.TotalSize
             member x.Name with get() = x.Name and set name = x.Name <- name
     end
 
@@ -80,68 +111,128 @@ module AccelerationStructure =
 
         type Command with
 
-            static member Build(accelerationStructure : AccelerationStructure, data : NativeAccelerationStructureData, updateOnly : bool) =
+            static member Build(accelerationStructure : AccelerationStructure, data : PreparedAccelerationStructureData, update : bool) =
                 { new Command() with
                     member x.Compatible = QueueFlags.Compute
                     member x.Enqueue cmd =
                         cmd.AppendCommand()
 
-                        let mutable info = data.GeometryInfo
-                        info.mode <- if updateOnly then VkBuildAccelerationStructureModeKHR.Update else VkBuildAccelerationStructureModeKHR.Build
-                        info.scratchData.deviceAddress <- accelerationStructure.ScratchBuffer.DeviceAddress
-                        info.srcAccelerationStructure <- if updateOnly then accelerationStructure.Handle else VkAccelerationStructureKHR.Null
-                        info.dstAccelerationStructure <- accelerationStructure.Handle
+                        let mutable buildGeometryInfo = data.BuildGeometryInfo
+                        buildGeometryInfo.mode <- if update then VkBuildAccelerationStructureModeKHR.Update else VkBuildAccelerationStructureModeKHR.Build
+                        buildGeometryInfo.scratchData.deviceAddress <- accelerationStructure.ScratchBuffer.DeviceAddress
+                        buildGeometryInfo.srcAccelerationStructure <- if update then accelerationStructure.Handle else VkAccelerationStructureKHR.Null
+                        buildGeometryInfo.dstAccelerationStructure <- accelerationStructure.Handle
 
-                        native {
-                            let! pGeometryInfo = info
-                            let! pBuildRangeInfos = data.BuildRangeInfos
-                            let! ppBuildRangeInfos = pBuildRangeInfos
+                        use pBuildRangeInfos = fixed data.BuildRangeInfos
+                        let ppBuildRangeInfos = NativePtr.stackalloc 1
+                        ppBuildRangeInfos.[0] <- pBuildRangeInfos
 
-                            VkRaw.vkCmdBuildAccelerationStructuresKHR(
-                                cmd.Handle, 1u, pGeometryInfo, ppBuildRangeInfos
-                            )
-                        }
+                        VkRaw.vkCmdBuildAccelerationStructuresKHR(
+                            cmd.Handle, 1u, &&buildGeometryInfo, ppBuildRangeInfos
+                        )
 
                         cmd.AddResource accelerationStructure
                 }
 
-    let private createHandle (device : Device) (data : AccelerationStructureData) (usage : AccelerationStructureUsage)
-                             (allowUpdate : bool) (resultBuffer : Buffer) (scratchBuffer : Buffer) =
-        let typ =
-            match data with
-            | AccelerationStructureData.Instances _ -> VkAccelerationStructureTypeKHR.TopLevel
-            | AccelerationStructureData.Geometry _  -> VkAccelerationStructureTypeKHR.BottomLevel
+            static member WriteProperties(accelerationStructure : AccelerationStructure, queryPool : QueryPool) =
+                { new Command() with
+                    member _.Compatible = QueueFlags.Compute
+                    member _.Enqueue cmd =
+                        cmd.AppendCommand()
 
-        let handle =
-            native {
-                let! pHandle = VkAccelerationStructureKHR.Null
-                let! pInfo =
-                    VkAccelerationStructureCreateInfoKHR(
-                        VkAccelerationStructureCreateFlagsKHR.None,
-                        resultBuffer.Handle, 0UL, resultBuffer.Size,
-                        typ, 0UL
-                    )
+                        let mutable handle = accelerationStructure.Handle
+                        VkRaw.vkCmdWriteAccelerationStructuresPropertiesKHR(
+                            cmd.Handle, 1u, &&handle, queryPool.Type, queryPool.Handle, 0u
+                        )
 
-                let result = VkRaw.vkCreateAccelerationStructureKHR(device.Handle, pInfo, NativePtr.zero, pHandle)
-                if result <> VkResult.Success then
-                    failf "Could not create acceleration structure: %A" result
+                        cmd.AddResource accelerationStructure
+                        cmd.AddResource queryPool
+                }
 
-                return !!pHandle
-            }
+            static member Copy(src : AccelerationStructure, dst : AccelerationStructure, mode : VkCopyAccelerationStructureModeKHR) =
+                { new Command() with
+                    member _.Compatible = QueueFlags.Compute
+                    member _.Enqueue cmd =
+                        cmd.AppendCommand()
 
-        new AccelerationStructure(device, handle, data, usage, allowUpdate, resultBuffer, scratchBuffer)
+                        let mutable info = VkCopyAccelerationStructureInfoKHR(src.Handle, dst.Handle, mode)
+                        VkRaw.vkCmdCopyAccelerationStructureKHR(cmd.Handle, &&info)
+
+                        cmd.AddResource src
+                        cmd.AddResource dst
+                }
+
+    let private createHandle (device : Device) (data : AccelerationStructureData) (usage : AccelerationStructureUsage) (size : uint64) =
+        let buffer =
+            let flags = VkBufferUsageFlags.AccelerationStructureStorageBitKhr ||| VkBufferUsageFlags.ShaderDeviceAddressBitKhr
+            device.DeviceMemory |> Buffer.create flags size
+
+        let mutable createInfo =
+            VkAccelerationStructureCreateInfoKHR(
+                VkAccelerationStructureCreateFlagsKHR.None,
+                buffer.Handle, 0UL, buffer.Size,
+                data.Type, 0UL
+            )
+
+        let mutable handle = VkAccelerationStructureKHR.Null
+        VkRaw.vkCreateAccelerationStructureKHR(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+            |> checkf "could not create acceleration structure"
+
+        new AccelerationStructure(device, handle, buffer, data, usage)
 
     /// Creates and builds an acceleration structure with the given data.
-    let create (device : Device) (allowUpdate : bool) (usage : AccelerationStructureUsage) (data : AccelerationStructureData) =
-        use nativeData = NativeAccelerationStructureData.alloc device allowUpdate usage data
-        let buffers = nativeData |> NativeAccelerationStructureData.createBuffers device
-        let accelerationStructure = createHandle device data usage allowUpdate buffers.ResultBuffer buffers.ScratchBuffer
+    let create (device : Device) (usage : AccelerationStructureUsage) (data : AccelerationStructureData) =
+        use prepared = AccelerationStructureData.prepare device usage data
 
-        device.perform {
-            do! Command.Build(accelerationStructure, nativeData, false)
-        }
+        let mutable result = createHandle device data usage prepared.Size
+        result.CreateScratchBuffer prepared.ScratchBuildSize
 
-        accelerationStructure
+        if usage.HasFlag AccelerationStructureUsage.Compact then
+            use queryPool = device.CreateQueryPool(VkQueryType.AccelerationStructureCompactedSizeKhr)
+
+            device.perform {
+                do! Command.Build(result, prepared, false)
+
+                do! Command.MemoryBarrier(
+                    VkPipelineStageFlags.AccelerationStructureBuildBitKhr, VkAccessFlags.AccelerationStructureWriteBitKhr,
+                    VkPipelineStageFlags.AccelerationStructureBuildBitKhr, VkAccessFlags.AccelerationStructureReadBitKhr
+                )
+
+                do! Command.Reset queryPool
+                do! Command.WriteProperties(result, queryPool)
+            }
+
+            let compactSize = queryPool.GetResults().[0]
+            if compactSize < result.Size then
+                let compact = createHandle device data usage compactSize
+
+                if device.DebugConfig.PrintAccelerationStructureCompactionInfo then
+                    let ratio = 100.0 * (float compactSize / float result.Size)
+                    let typ = if data.Type = VkAccelerationStructureTypeKHR.TopLevel then "TLAS" else "BLAS"
+                    Log.startTimed $"[Vulkan] compacting {typ} {Mem result.Size} -> {Mem compactSize} (%.2f{ratio}%%)"
+
+                device.perform {
+                    do! Command.Copy(result, compact, VkCopyAccelerationStructureModeKHR.Compact)
+                }
+
+                if device.DebugConfig.PrintAccelerationStructureCompactionInfo then
+                    Log.stop()
+
+                result.Dispose()
+                result <- compact
+        else
+            device.perform {
+                do! Command.Build(result, prepared, false)
+            }
+
+        // We no longer need the scratch buffer we used for building.
+        // But we may need a (potentially smaller) scratch buffer for updating.
+        if result.AllowUpdate then
+            result.CreateScratchBuffer prepared.ScratchUpdateSize
+        else
+            result.DestroyScratchBuffer()
+
+        result
 
     /// Attempts to update the given acceleration structure with the given data.
     /// Returns true on success, false otherwise.
@@ -172,8 +263,8 @@ module AccelerationStructure =
         let isCompatible =
             if accelerationStructure.AllowUpdate then
                 match data, accelerationStructure.Data with
-                | AccelerationStructureData.Instances n, AccelerationStructureData.Instances o ->
-                    n.Count = o.Count
+                | AccelerationStructureData.Instances (nc, _), AccelerationStructureData.Instances (oc, _) ->
+                    nc = oc
 
                 | AccelerationStructureData.Geometry n, AccelerationStructureData.Geometry o ->
                     isGeometryCompatible n o
@@ -185,9 +276,10 @@ module AccelerationStructure =
                 false
 
         if isCompatible then
-            use nativeData = NativeAccelerationStructureData.alloc accelerationStructure.Device true accelerationStructure.Usage data
+            use prepared = data |> AccelerationStructureData.prepare accelerationStructure.Device accelerationStructure.Usage
+
             accelerationStructure.Device.perform {
-                do! Command.Build(accelerationStructure, nativeData, true)
+                do! Command.Build(accelerationStructure, prepared, true)
             }
 
             true

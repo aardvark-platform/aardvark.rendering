@@ -80,6 +80,11 @@
     <Compile Include="Resources\Shaders\ShaderModule.fs" />
     <Compile Include="Resources\Shaders\ShaderProgram.fs" />
     <Compile Include="Resources\Shaders\ComputeProgram.fs" />
+    <Compile Include="Resources\Query\QueryPool.fs" />
+    <Compile Include="Resources\Query\Query.fs" />
+    <Compile Include="Resources\Query\TimeQuery.fs" />
+    <Compile Include="Resources\Query\OcclusionQuery.fs" />
+    <Compile Include="Resources\Query\PipelineQuery.fs" />
     <Compile Include="Resources\Raytracing\AccelerationStructureData.fs" />
     <Compile Include="Resources\Raytracing\AccelerationStructure.fs" />
     <Compile Include="Resources\Raytracing\ShaderGroup.fs" />
@@ -89,11 +94,6 @@
     <Compile Include="Resources\Raytracing\InstanceBuffer.fs" />
     <Compile Include="Resources\Descriptors\DescriptorPool.fs" />
     <Compile Include="Resources\Descriptors\DescriptorSet.fs" />
-    <Compile Include="Resources\Query\QueryPool.fs" />
-    <Compile Include="Resources\Query\Query.fs" />
-    <Compile Include="Resources\Query\TimeQuery.fs" />
-    <Compile Include="Resources\Query\OcclusionQuery.fs" />
-    <Compile Include="Resources\Query\PipelineQuery.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\GeometryPool.fs" />
     <Compile Include="Swapchain\Surface.fs" />

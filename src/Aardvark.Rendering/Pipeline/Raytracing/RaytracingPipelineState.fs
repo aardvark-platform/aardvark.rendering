@@ -9,7 +9,7 @@ type RaytracingSceneDescription =
         /// The instances in the scene.
         Instances : aset<ITraceInstance>
 
-        /// Usage flag for the underlying acceleration structure.
+        /// Usage flags for the underlying acceleration structure.
         Usage   : AccelerationStructureUsage
     }
 
@@ -17,11 +17,10 @@ type RaytracingSceneDescription =
 module RaytracingSceneDescription =
 
     let empty =
-        { Instances = ASet.empty; Usage = AccelerationStructureUsage.Static }
+        { Instances = ASet.empty; Usage = AccelerationStructureUsage.Dynamic ||| AccelerationStructureUsage.Update }
 
     let ofASet (instances : aset<#ITraceInstance>) =
-        { Instances = instances |> ASet.map (fun x -> x :> ITraceInstance)
-          Usage     = AccelerationStructureUsage.Static }
+        { empty with Instances = instances |> ASet.map (fun x -> x :> ITraceInstance) }
 
     let ofList (instances : List<#ITraceInstance>) =
         instances |> ASet.ofList |> ofASet

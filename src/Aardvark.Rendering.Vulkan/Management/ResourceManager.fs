@@ -1539,7 +1539,7 @@ module Resources =
             let mutable version = 0
 
             let create (data : AccelerationStructureData) =
-                let acc = AccelerationStructure.create device true usage data
+                let acc = AccelerationStructure.create device usage data
                 if name <> null then acc.Name <- name
                 handle <- ValueSome acc
                 inc &version
@@ -1561,7 +1561,7 @@ module Resources =
                 if x.OutOfDate then
                     let buffer = instanceBuffer.Update(user, token, renderToken).handle
                     let count = instanceCount.GetValue(user, token, renderToken)
-                    let data = AccelerationStructureData.Instances { Buffer = buffer; Count = uint32 count }
+                    let data = AccelerationStructureData.Instances (uint32 count, buffer)
 
                     match handle with
                     | ValueNone -> create data

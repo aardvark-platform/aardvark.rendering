@@ -19,7 +19,7 @@ type internal AdaptiveAccelerationStructure(runtime : IAccelerationStructureRunt
     let mutable name = null
 
     let create (data : TraceGeometry) =
-        let accel = runtime.CreateAccelerationStructure(data, usage, true)
+        let accel = runtime.CreateAccelerationStructure(data, usage)
         accel.Name <- name
         handle <- Some accel
         accel
@@ -66,7 +66,13 @@ type internal AdaptiveAccelerationStructure(runtime : IAccelerationStructureRunt
 [<AbstractClass; Sealed; Extension>]
 type IAccelerationStructureRuntimeAdaptiveExtensions private() =
 
+    ///<summary>
+    /// Creates an acceleration structure from the given trace geometry.
+    ///</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="geometry">The geometry to build the acceleration structure from.</param>
+    ///<param name="usage">The usage flags of the acceleration structure. Default is Static | Update.</param>
     [<Extension>]
     static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>,
-                                              [<Optional; DefaultParameterValue(AccelerationStructureUsage.Static)>] usage : AccelerationStructureUsage) =
+                                              [<Optional; DefaultParameterValue(AccelerationStructureUsage.Static ||| AccelerationStructureUsage.Update)>] usage : AccelerationStructureUsage) =
         AdaptiveAccelerationStructure(this, geometry, usage) :> IAdaptiveAccelerationStructure
