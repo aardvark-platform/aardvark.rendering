@@ -198,7 +198,7 @@ module Culling =
                 |> match frontFace with Some ff -> TraceInstance.frontFace ff | _ -> id
 
             let pipeline =
-                let scene = RaytracingSceneDescription.ofList [instance]
+                let scene = RaytracingScene.ofList [instance]
 
                 { Effect            = Effect.raytracing flags
                   Scenes            = Map.ofList [Sym.ofString "MainScene", scene]

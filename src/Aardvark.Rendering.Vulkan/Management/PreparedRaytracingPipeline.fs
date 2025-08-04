@@ -52,7 +52,7 @@ module private PreparedRaytracingPipelineInternals =
             member x.Dispose() = x.Dispose()
 
 
-    type HitConfigPool(scenes : Map<Symbol, RaytracingSceneDescription>) =
+    type HitConfigPool(scenes : Map<Symbol, RaytracingScene>) =
         inherit AdaptiveObject()
 
         let mutable cache = Set.empty

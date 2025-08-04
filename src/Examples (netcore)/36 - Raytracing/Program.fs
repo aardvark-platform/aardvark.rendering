@@ -489,7 +489,7 @@ let main _argv =
 
     let scene =
         ASet.union staticObjects sphereObjects
-        |> RaytracingSceneDescription.ofPool geometryPool
+        |> RaytracingScene.ofPool geometryPool
 
     let pipeline =
         {

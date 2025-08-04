@@ -586,7 +586,7 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
 module ManagedTracePoolSceneExtensions =
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module RaytracingSceneDescription =
+    module RaytracingScene =
 
         let ofPool (pool: ManagedTracePool) (objects: aset<TraceObject>) =
             let reader = objects.GetReader()
@@ -620,4 +620,4 @@ module ManagedTracePoolSceneExtensions =
                     HashSetDelta.ofSeq deltas
                 )
 
-            RaytracingSceneDescription.ofASet objects
+            RaytracingScene.ofASet objects

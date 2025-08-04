@@ -4,7 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
-type RaytracingSceneDescription =
+type RaytracingScene =
     {
         /// The instances in the scene.
         Instances : aset<ITraceInstance>
@@ -14,8 +14,9 @@ type RaytracingSceneDescription =
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module RaytracingSceneDescription =
+module RaytracingScene =
 
+    /// Empty scene with usage Dynamic | Update.
     let empty =
         { Instances = ASet.empty; Usage = AccelerationStructureUsage.Dynamic ||| AccelerationStructureUsage.Update }
 
@@ -31,14 +32,14 @@ module RaytracingSceneDescription =
     let ofSeq (instances : seq<#ITraceInstance>) =
         instances |> ASet.ofSeq |> ofASet
 
-    let usage (u : AccelerationStructureUsage) (scene : RaytracingSceneDescription) =
-        { scene with Usage = u }
+    let usage (usage : AccelerationStructureUsage) (scene : RaytracingScene) =
+        { scene with Usage = usage }
 
 
 type RaytracingPipelineState =
     {
         Effect            : FShade.RaytracingEffect
-        Scenes            : Map<Symbol, RaytracingSceneDescription>
+        Scenes            : Map<Symbol, RaytracingScene>
         Uniforms          : IUniformProvider
         MaxRecursionDepth : aval<int>
     }
