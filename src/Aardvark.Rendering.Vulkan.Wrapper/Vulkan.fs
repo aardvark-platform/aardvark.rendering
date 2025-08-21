@@ -11784,57 +11784,57 @@ module Vulkan13 =
     [<Flags>]
     type VkPipelineStageFlags2 =
         | All = 131071
-        | PipelineStage2None = 0
-        | PipelineStage2TopOfPipeBit = 0x00000001
-        | PipelineStage2DrawIndirectBit = 0x00000002
-        | PipelineStage2VertexInputBit = 0x00000004
-        | PipelineStage2VertexShaderBit = 0x00000008
-        | PipelineStage2TessellationControlShaderBit = 0x00000010
-        | PipelineStage2TessellationEvaluationShaderBit = 0x00000020
-        | PipelineStage2GeometryShaderBit = 0x00000040
-        | PipelineStage2FragmentShaderBit = 0x00000080
-        | PipelineStage2EarlyFragmentTestsBit = 0x00000100
-        | PipelineStage2LateFragmentTestsBit = 0x00000200
-        | PipelineStage2ColorAttachmentOutputBit = 0x00000400
-        | PipelineStage2ComputeShaderBit = 0x00000800
-        | PipelineStage2AllTransferBit = 0x00001000
-        | PipelineStage2TransferBit = 0x00001000
-        | PipelineStage2BottomOfPipeBit = 0x00002000
-        | PipelineStage2HostBit = 0x00004000
-        | PipelineStage2AllGraphicsBit = 0x00008000
-        | PipelineStage2AllCommandsBit = 0x00010000
-        | PipelineStage2CopyBit = 0x00000001
-        | PipelineStage2ResolveBit = 0x00000002
-        | PipelineStage2BlitBit = 0x00000004
-        | PipelineStage2ClearBit = 0x00000008
-        | PipelineStage2IndexInputBit = 0x00000010
-        | PipelineStage2VertexAttributeInputBit = 0x00000020
-        | PipelineStage2PreRasterizationShadersBit = 0x00000040
+        | None = 0
+        | TopOfPipeBit = 0x00000001
+        | DrawIndirectBit = 0x00000002
+        | VertexInputBit = 0x00000004
+        | VertexShaderBit = 0x00000008
+        | TessellationControlShaderBit = 0x00000010
+        | TessellationEvaluationShaderBit = 0x00000020
+        | GeometryShaderBit = 0x00000040
+        | FragmentShaderBit = 0x00000080
+        | EarlyFragmentTestsBit = 0x00000100
+        | LateFragmentTestsBit = 0x00000200
+        | ColorAttachmentOutputBit = 0x00000400
+        | ComputeShaderBit = 0x00000800
+        | AllTransferBit = 0x00001000
+        | TransferBit = 0x00001000
+        | BottomOfPipeBit = 0x00002000
+        | HostBit = 0x00004000
+        | AllGraphicsBit = 0x00008000
+        | AllCommandsBit = 0x00010000
+        | CopyBit = 0x00000001
+        | ResolveBit = 0x00000002
+        | BlitBit = 0x00000004
+        | ClearBit = 0x00000008
+        | IndexInputBit = 0x00000010
+        | VertexAttributeInputBit = 0x00000020
+        | PreRasterizationShadersBit = 0x00000040
 
     [<Flags>]
     type VkAccessFlags2 =
         | All = 131071
-        | Access2None = 0
-        | Access2IndirectCommandReadBit = 0x00000001
-        | Access2IndexReadBit = 0x00000002
-        | Access2VertexAttributeReadBit = 0x00000004
-        | Access2UniformReadBit = 0x00000008
-        | Access2InputAttachmentReadBit = 0x00000010
-        | Access2ShaderReadBit = 0x00000020
-        | Access2ShaderWriteBit = 0x00000040
-        | Access2ColorAttachmentReadBit = 0x00000080
-        | Access2ColorAttachmentWriteBit = 0x00000100
-        | Access2DepthStencilAttachmentReadBit = 0x00000200
-        | Access2DepthStencilAttachmentWriteBit = 0x00000400
-        | Access2TransferReadBit = 0x00000800
-        | Access2TransferWriteBit = 0x00001000
-        | Access2HostReadBit = 0x00002000
-        | Access2HostWriteBit = 0x00004000
-        | Access2MemoryReadBit = 0x00008000
-        | Access2MemoryWriteBit = 0x00010000
-        | Access2ShaderSampledReadBit = 0x00000001
-        | Access2ShaderStorageReadBit = 0x00000002
-        | Access2ShaderStorageWriteBit = 0x00000004
+        | None = 0
+        | IndirectCommandReadBit = 0x00000001
+        | IndexReadBit = 0x00000002
+        | VertexAttributeReadBit = 0x00000004
+        | UniformReadBit = 0x00000008
+        | InputAttachmentReadBit = 0x00000010
+        | ShaderReadBit = 0x00000020
+        | ShaderWriteBit = 0x00000040
+        | ColorAttachmentReadBit = 0x00000080
+        | ColorAttachmentWriteBit = 0x00000100
+        | DepthStencilAttachmentReadBit = 0x00000200
+        | DepthStencilAttachmentWriteBit = 0x00000400
+        | TransferReadBit = 0x00000800
+        | TransferWriteBit = 0x00001000
+        | HostReadBit = 0x00002000
+        | HostWriteBit = 0x00004000
+        | MemoryReadBit = 0x00008000
+        | MemoryWriteBit = 0x00010000
+        | ShaderSampledReadBit = 0x00000001
+        | ShaderStorageReadBit = 0x00000002
+        | ShaderStorageWriteBit = 0x00000004
 
     [<Flags>]
     type VkSubmitFlags =
@@ -11854,32 +11854,32 @@ module Vulkan13 =
     type VkFormatFeatureFlags2 =
         | All = -2130714625
         | None = 0
-        | FormatFeature2SampledImageBit = 0x00000001
-        | FormatFeature2StorageImageBit = 0x00000002
-        | FormatFeature2StorageImageAtomicBit = 0x00000004
-        | FormatFeature2UniformTexelBufferBit = 0x00000008
-        | FormatFeature2StorageTexelBufferBit = 0x00000010
-        | FormatFeature2StorageTexelBufferAtomicBit = 0x00000020
-        | FormatFeature2VertexBufferBit = 0x00000040
-        | FormatFeature2ColorAttachmentBit = 0x00000080
-        | FormatFeature2ColorAttachmentBlendBit = 0x00000100
-        | FormatFeature2DepthStencilAttachmentBit = 0x00000200
-        | FormatFeature2BlitSrcBit = 0x00000400
-        | FormatFeature2BlitDstBit = 0x00000800
-        | FormatFeature2SampledImageFilterLinearBit = 0x00001000
-        | FormatFeature2TransferSrcBit = 0x00004000
-        | FormatFeature2TransferDstBit = 0x00008000
-        | FormatFeature2SampledImageFilterMinmaxBit = 0x00010000
-        | FormatFeature2MidpointChromaSamplesBit = 0x00020000
-        | FormatFeature2SampledImageYcbcrConversionLinearFilterBit = 0x00040000
-        | FormatFeature2SampledImageYcbcrConversionSeparateReconstructionFilterBit = 0x00080000
-        | FormatFeature2SampledImageYcbcrConversionChromaReconstructionExplicitBit = 0x00100000
-        | FormatFeature2SampledImageYcbcrConversionChromaReconstructionExplicitForceableBit = 0x00200000
-        | FormatFeature2DisjointBit = 0x00400000
-        | FormatFeature2CositedChromaSamplesBit = 0x00800000
-        | FormatFeature2StorageReadWithoutFormatBit = 0x80000000
-        | FormatFeature2StorageWriteWithoutFormatBit = 0x00000001
-        | FormatFeature2SampledImageDepthComparisonBit = 0x00000002
+        | SampledImageBit = 0x00000001
+        | StorageImageBit = 0x00000002
+        | StorageImageAtomicBit = 0x00000004
+        | UniformTexelBufferBit = 0x00000008
+        | StorageTexelBufferBit = 0x00000010
+        | StorageTexelBufferAtomicBit = 0x00000020
+        | VertexBufferBit = 0x00000040
+        | ColorAttachmentBit = 0x00000080
+        | ColorAttachmentBlendBit = 0x00000100
+        | DepthStencilAttachmentBit = 0x00000200
+        | BlitSrcBit = 0x00000400
+        | BlitDstBit = 0x00000800
+        | SampledImageFilterLinearBit = 0x00001000
+        | TransferSrcBit = 0x00004000
+        | TransferDstBit = 0x00008000
+        | SampledImageFilterMinmaxBit = 0x00010000
+        | MidpointChromaSamplesBit = 0x00020000
+        | SampledImageYcbcrConversionLinearFilterBit = 0x00040000
+        | SampledImageYcbcrConversionSeparateReconstructionFilterBit = 0x00080000
+        | SampledImageYcbcrConversionChromaReconstructionExplicitBit = 0x00100000
+        | SampledImageYcbcrConversionChromaReconstructionExplicitForceableBit = 0x00200000
+        | DisjointBit = 0x00400000
+        | CositedChromaSamplesBit = 0x00800000
+        | StorageReadWithoutFormatBit = 0x80000000
+        | StorageWriteWithoutFormatBit = 0x00000001
+        | SampledImageDepthComparisonBit = 0x00000002
 
 
     [<StructLayout(LayoutKind.Sequential)>]
@@ -14159,7 +14159,7 @@ module Vulkan13 =
               static member inline Astc1212SfloatBlock = enum<VkFormat> 1000066013
          type VkFormatFeatureFlags2 with
               /// This is an interaction with EXT_filter_cubic, though not tagged that way
-              static member inline FormatFeature2SampledImageFilterCubicBit = enum<VkFormatFeatureFlags2> 0x00002000
+              static member inline SampledImageFilterCubicBit = enum<VkFormatFeatureFlags2> 0x00002000
          type VkImageAspectFlags with
               static member inline None = enum<VkImageAspectFlags> 0
          type VkImageLayout with
@@ -14346,29 +14346,29 @@ module Vulkan14 =
     type VkPipelineCreateFlags2 =
         | All = 1207960351
         | None = 0
-        | PipelineCreate2DisableOptimizationBit = 0x00000001
-        | PipelineCreate2AllowDerivativesBit = 0x00000002
-        | PipelineCreate2DerivativeBit = 0x00000004
-        | PipelineCreate2ViewIndexFromDeviceIndexBit = 0x00000008
-        | PipelineCreate2DispatchBaseBit = 0x00000010
-        | PipelineCreate2FailOnPipelineCompileRequiredBit = 0x00000100
-        | PipelineCreate2EarlyReturnOnFailureBit = 0x00000200
-        | PipelineCreate2NoProtectedAccessBit = 0x08000000
-        | PipelineCreate2ProtectedAccessOnlyBit = 0x40000000
+        | DisableOptimizationBit = 0x00000001
+        | AllowDerivativesBit = 0x00000002
+        | DerivativeBit = 0x00000004
+        | ViewIndexFromDeviceIndexBit = 0x00000008
+        | DispatchBaseBit = 0x00000010
+        | FailOnPipelineCompileRequiredBit = 0x00000100
+        | EarlyReturnOnFailureBit = 0x00000200
+        | NoProtectedAccessBit = 0x08000000
+        | ProtectedAccessOnlyBit = 0x40000000
 
     [<Flags>]
     type VkBufferUsageFlags2 =
         | All = 511
         | None = 0
-        | BufferUsage2TransferSrcBit = 0x00000001
-        | BufferUsage2TransferDstBit = 0x00000002
-        | BufferUsage2UniformTexelBufferBit = 0x00000004
-        | BufferUsage2StorageTexelBufferBit = 0x00000008
-        | BufferUsage2UniformBufferBit = 0x00000010
-        | BufferUsage2StorageBufferBit = 0x00000020
-        | BufferUsage2IndexBufferBit = 0x00000040
-        | BufferUsage2VertexBufferBit = 0x00000080
-        | BufferUsage2IndirectBufferBit = 0x00000100
+        | TransferSrcBit = 0x00000001
+        | TransferDstBit = 0x00000002
+        | UniformTexelBufferBit = 0x00000004
+        | StorageTexelBufferBit = 0x00000008
+        | UniformBufferBit = 0x00000010
+        | StorageBufferBit = 0x00000020
+        | IndexBufferBit = 0x00000040
+        | VertexBufferBit = 0x00000080
+        | IndirectBufferBit = 0x00000100
 
     type VkPipelineRobustnessBufferBehavior =
         | DeviceDefault = 0
@@ -16319,7 +16319,7 @@ module Vulkan14 =
          type VkAttachmentLoadOp with
               static member inline None = enum<VkAttachmentLoadOp> 1000400000
          type VkBufferUsageFlags2 with
-              static member inline BufferUsage2ShaderDeviceAddressBit = enum<VkBufferUsageFlags2> 0x00020000
+              static member inline ShaderDeviceAddressBit = enum<VkBufferUsageFlags2> 0x00020000
          type VkDescriptorSetLayoutCreateFlags with
               static member inline PushDescriptorBit = enum<VkDescriptorSetLayoutCreateFlags> 0x00000001
          type Vulkan11.VkDescriptorUpdateTemplateType with
@@ -16330,7 +16330,7 @@ module Vulkan14 =
               static member inline A1b5g5r5UnormPack16 = enum<VkFormat> 1000470000
               static member inline A8Unorm = enum<VkFormat> 1000470001
          type Vulkan13.VkFormatFeatureFlags2 with
-              static member inline FormatFeature2HostImageTransferBit = enum<Vulkan13.VkFormatFeatureFlags2> 0x00004000
+              static member inline HostImageTransferBit = enum<Vulkan13.VkFormatFeatureFlags2> 0x00004000
          type VkImageLayout with
               static member inline RenderingLocalRead = enum<VkImageLayout> 1000232000
          type VkImageUsageFlags with
@@ -19027,8 +19027,8 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan13.VkAccessFlags2 with
-                  static member inline Access2VideoDecodeReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000008
-                  static member inline Access2VideoDecodeWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000010
+                  static member inline VideoDecodeReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000008
+                  static member inline VideoDecodeWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000010
              type VkBufferUsageFlags with
                   static member inline VideoDecodeSrcBitKhr = enum<VkBufferUsageFlags> 0x00002000
                   static member inline VideoDecodeDstBitKhr = enum<VkBufferUsageFlags> 0x00004000
@@ -19044,7 +19044,7 @@ module rec Extensions =
                   static member inline VideoDecodeSrcBitKhr = enum<VkImageUsageFlags> 0x00000800
                   static member inline VideoDecodeDpbBitKhr = enum<VkImageUsageFlags> 0x00001000
              type Vulkan13.VkPipelineStageFlags2 with
-                  static member inline PipelineStage2VideoDecodeBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x04000000
+                  static member inline VideoDecodeBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x04000000
              type VkQueueFlags with
                   static member inline VideoDecodeBitKhr = enum<VkQueueFlags> 0x00000020
 
@@ -19065,8 +19065,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkFormatFeatureFlags2 with
-                      static member inline FormatFeature2VideoDecodeOutputBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x02000000
-                      static member inline FormatFeature2VideoDecodeDpbBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x04000000
+                      static member inline VideoDecodeOutputBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x02000000
+                      static member inline VideoDecodeDpbBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x04000000
 
 
     module AMDGcnShader =
@@ -26931,9 +26931,9 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2ExecutionGraphScratchBitAmdx = enum<Vulkan14.VkBufferUsageFlags2> 0x02000000
+                      static member inline ExecutionGraphScratchBitAmdx = enum<Vulkan14.VkBufferUsageFlags2> 0x02000000
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2ExecutionGraphBitAmdx = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000001
+                      static member inline ExecutionGraphBitAmdx = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000001
 
 
     module AMDMixedAttachmentSamples =
@@ -28574,7 +28574,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkFormatFeatureFlags2 with
-                      static member inline FormatFeature2AccelerationStructureVertexBufferBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x20000000
+                      static member inline AccelerationStructureVertexBufferBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x20000000
 
 
         [<AutoOpen>]
@@ -32850,7 +32850,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkFormatFeatureFlags2 with
-                      static member inline FormatFeature2FragmentDensityMapBitExt = enum<Vulkan13.VkFormatFeatureFlags2> 0x01000000
+                      static member inline FragmentDensityMapBitExt = enum<Vulkan13.VkFormatFeatureFlags2> 0x01000000
 
 
         [<AutoOpen>]
@@ -33230,7 +33230,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkFormatFeatureFlags2 with
-                      static member inline FormatFeature2FragmentShadingRateAttachmentBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x40000000
+                      static member inline FragmentShadingRateAttachmentBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x40000000
 
 
         [<AutoOpen>]
@@ -35373,7 +35373,7 @@ module rec Extensions =
         module EnumExtensions =
              type Vulkan13.VkFormatFeatureFlags2 with
                   /// Host image copies are supported
-                  static member inline FormatFeature2HostImageTransferBitExt = enum<Vulkan13.VkFormatFeatureFlags2> 0x00004000
+                  static member inline HostImageTransferBitExt = enum<Vulkan13.VkFormatFeatureFlags2> 0x00004000
              type Vulkan14.VkHostImageCopyFlags with
                   static member inline MemcpyExt = enum<Vulkan14.VkHostImageCopyFlags> 0x00000001
              type VkImageUsageFlags with
@@ -38031,8 +38031,8 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan13.VkAccessFlags2 with
-                  static member inline Access2VideoEncodeReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000020
-                  static member inline Access2VideoEncodeWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000040
+                  static member inline VideoEncodeReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000020
+                  static member inline VideoEncodeWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000040
              type VkBufferUsageFlags with
                   static member inline VideoEncodeDstBitKhr = enum<VkBufferUsageFlags> 0x00008000
                   static member inline VideoEncodeSrcBitKhr = enum<VkBufferUsageFlags> 0x00010000
@@ -38048,7 +38048,7 @@ module rec Extensions =
                   static member inline VideoEncodeSrcBitKhr = enum<VkImageUsageFlags> 0x00004000
                   static member inline VideoEncodeDpbBitKhr = enum<VkImageUsageFlags> 0x00008000
              type Vulkan13.VkPipelineStageFlags2 with
-                  static member inline PipelineStage2VideoEncodeBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x08000000
+                  static member inline VideoEncodeBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x08000000
              type KHRVideoQueue.VkQueryResultStatusKHR with
                   static member inline InsufficientBitstreamBufferRange = enum<KHRVideoQueue.VkQueryResultStatusKHR> -1000299000
              type VkQueryType with
@@ -38090,8 +38090,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkFormatFeatureFlags2 with
-                      static member inline FormatFeature2VideoEncodeInputBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x08000000
-                      static member inline FormatFeature2VideoEncodeDpbBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x10000000
+                      static member inline VideoEncodeInputBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x08000000
+                      static member inline VideoEncodeDpbBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x10000000
 
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
@@ -38946,27 +38946,27 @@ module rec Extensions =
              type VkAccessFlags with
                   static member inline NoneKhr = enum<VkAccessFlags> 0
              type Vulkan13.VkAccessFlags2 with
-                  static member inline Access2NoneKhr = enum<Vulkan13.VkAccessFlags2> 0
-                  static member inline Access2IndirectCommandReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000001
-                  static member inline Access2IndexReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000002
-                  static member inline Access2VertexAttributeReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000004
-                  static member inline Access2UniformReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000008
-                  static member inline Access2InputAttachmentReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000010
-                  static member inline Access2ShaderReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000020
-                  static member inline Access2ShaderWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000040
-                  static member inline Access2ColorAttachmentReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000080
-                  static member inline Access2ColorAttachmentWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000100
-                  static member inline Access2DepthStencilAttachmentReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000200
-                  static member inline Access2DepthStencilAttachmentWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000400
-                  static member inline Access2TransferReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000800
-                  static member inline Access2TransferWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00001000
-                  static member inline Access2HostReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00002000
-                  static member inline Access2HostWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00004000
-                  static member inline Access2MemoryReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00008000
-                  static member inline Access2MemoryWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00010000
-                  static member inline Access2ShaderSampledReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000001
-                  static member inline Access2ShaderStorageReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000002
-                  static member inline Access2ShaderStorageWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000004
+                  static member inline NoneKhr = enum<Vulkan13.VkAccessFlags2> 0
+                  static member inline IndirectCommandReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000001
+                  static member inline IndexReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000002
+                  static member inline VertexAttributeReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000004
+                  static member inline UniformReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000008
+                  static member inline InputAttachmentReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000010
+                  static member inline ShaderReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000020
+                  static member inline ShaderWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000040
+                  static member inline ColorAttachmentReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000080
+                  static member inline ColorAttachmentWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000100
+                  static member inline DepthStencilAttachmentReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000200
+                  static member inline DepthStencilAttachmentWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000400
+                  static member inline TransferReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000800
+                  static member inline TransferWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00001000
+                  static member inline HostReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00002000
+                  static member inline HostWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00004000
+                  static member inline MemoryReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00008000
+                  static member inline MemoryWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00010000
+                  static member inline ShaderSampledReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000001
+                  static member inline ShaderStorageReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000002
+                  static member inline ShaderStorageWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000004
              type VkEventCreateFlags with
                   static member inline DeviceOnlyBitKhr = enum<VkEventCreateFlags> 0x00000001
              type VkImageLayout with
@@ -38975,32 +38975,32 @@ module rec Extensions =
              type VkPipelineStageFlags with
                   static member inline NoneKhr = enum<VkPipelineStageFlags> 0
              type Vulkan13.VkPipelineStageFlags2 with
-                  static member inline PipelineStage2NoneKhr = enum<Vulkan13.VkPipelineStageFlags2> 0
-                  static member inline PipelineStage2TopOfPipeBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000001
-                  static member inline PipelineStage2DrawIndirectBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000002
-                  static member inline PipelineStage2VertexInputBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000004
-                  static member inline PipelineStage2VertexShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000008
-                  static member inline PipelineStage2TessellationControlShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000010
-                  static member inline PipelineStage2TessellationEvaluationShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000020
-                  static member inline PipelineStage2GeometryShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000040
-                  static member inline PipelineStage2FragmentShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000080
-                  static member inline PipelineStage2EarlyFragmentTestsBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000100
-                  static member inline PipelineStage2LateFragmentTestsBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000200
-                  static member inline PipelineStage2ColorAttachmentOutputBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000400
-                  static member inline PipelineStage2ComputeShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000800
-                  static member inline PipelineStage2AllTransferBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00001000
-                  static member inline PipelineStage2TransferBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00001000
-                  static member inline PipelineStage2BottomOfPipeBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00002000
-                  static member inline PipelineStage2HostBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00004000
-                  static member inline PipelineStage2AllGraphicsBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00008000
-                  static member inline PipelineStage2AllCommandsBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00010000
-                  static member inline PipelineStage2CopyBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000001
-                  static member inline PipelineStage2ResolveBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000002
-                  static member inline PipelineStage2BlitBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000004
-                  static member inline PipelineStage2ClearBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000008
-                  static member inline PipelineStage2IndexInputBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000010
-                  static member inline PipelineStage2VertexAttributeInputBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000020
-                  static member inline PipelineStage2PreRasterizationShadersBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000040
+                  static member inline NoneKhr = enum<Vulkan13.VkPipelineStageFlags2> 0
+                  static member inline TopOfPipeBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000001
+                  static member inline DrawIndirectBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000002
+                  static member inline VertexInputBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000004
+                  static member inline VertexShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000008
+                  static member inline TessellationControlShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000010
+                  static member inline TessellationEvaluationShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000020
+                  static member inline GeometryShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000040
+                  static member inline FragmentShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000080
+                  static member inline EarlyFragmentTestsBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000100
+                  static member inline LateFragmentTestsBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000200
+                  static member inline ColorAttachmentOutputBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000400
+                  static member inline ComputeShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000800
+                  static member inline AllTransferBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00001000
+                  static member inline TransferBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00001000
+                  static member inline BottomOfPipeBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00002000
+                  static member inline HostBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00004000
+                  static member inline AllGraphicsBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00008000
+                  static member inline AllCommandsBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00010000
+                  static member inline CopyBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000001
+                  static member inline ResolveBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000002
+                  static member inline BlitBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000004
+                  static member inline ClearBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000008
+                  static member inline IndexInputBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000010
+                  static member inline VertexAttributeInputBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000020
+                  static member inline PreRasterizationShadersBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00000040
              type Vulkan13.VkSubmitFlags with
                   static member inline ProtectedBitKhr = enum<Vulkan13.VkSubmitFlags> 0x00000001
 
@@ -39046,11 +39046,11 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
-                      static member inline Access2TransformFeedbackWriteBitExt = enum<Vulkan13.VkAccessFlags2> 0x02000000
-                      static member inline Access2TransformFeedbackCounterReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x04000000
-                      static member inline Access2TransformFeedbackCounterWriteBitExt = enum<Vulkan13.VkAccessFlags2> 0x08000000
+                      static member inline TransformFeedbackWriteBitExt = enum<Vulkan13.VkAccessFlags2> 0x02000000
+                      static member inline TransformFeedbackCounterReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x04000000
+                      static member inline TransformFeedbackCounterWriteBitExt = enum<Vulkan13.VkAccessFlags2> 0x08000000
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2TransformFeedbackBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x01000000
+                      static member inline TransformFeedbackBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x01000000
 
 
         [<AutoOpen>]
@@ -39059,10 +39059,10 @@ module rec Extensions =
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
                       /// read access flag for reading conditional rendering predicate
-                      static member inline Access2ConditionalRenderingReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x00100000
+                      static member inline ConditionalRenderingReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x00100000
                  type Vulkan13.VkPipelineStageFlags2 with
                       /// A pipeline stage for conditional rendering predicate fetch
-                      static member inline PipelineStage2ConditionalRenderingBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x00040000
+                      static member inline ConditionalRenderingBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x00040000
 
 
         [<AutoOpen>]
@@ -39070,10 +39070,10 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
-                      static member inline Access2CommandPreprocessReadBitNv = enum<Vulkan13.VkAccessFlags2> 0x00020000
-                      static member inline Access2CommandPreprocessWriteBitNv = enum<Vulkan13.VkAccessFlags2> 0x00040000
+                      static member inline CommandPreprocessReadBitNv = enum<Vulkan13.VkAccessFlags2> 0x00020000
+                      static member inline CommandPreprocessWriteBitNv = enum<Vulkan13.VkAccessFlags2> 0x00040000
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2CommandPreprocessBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00020000
+                      static member inline CommandPreprocessBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00020000
 
 
         [<AutoOpen>]
@@ -39081,10 +39081,10 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
-                      static member inline Access2CommandPreprocessReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x00020000
-                      static member inline Access2CommandPreprocessWriteBitExt = enum<Vulkan13.VkAccessFlags2> 0x00040000
+                      static member inline CommandPreprocessReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x00020000
+                      static member inline CommandPreprocessWriteBitExt = enum<Vulkan13.VkAccessFlags2> 0x00040000
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2CommandPreprocessBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x00020000
+                      static member inline CommandPreprocessBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x00020000
 
 
         [<AutoOpen>]
@@ -39092,9 +39092,9 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
-                      static member inline Access2FragmentShadingRateAttachmentReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00800000
+                      static member inline FragmentShadingRateAttachmentReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00800000
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2FragmentShadingRateAttachmentBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00400000
+                      static member inline FragmentShadingRateAttachmentBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00400000
 
 
         [<AutoOpen>]
@@ -39102,9 +39102,9 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
-                      static member inline Access2ShadingRateImageReadBitNv = enum<Vulkan13.VkAccessFlags2> 0x00800000
+                      static member inline ShadingRateImageReadBitNv = enum<Vulkan13.VkAccessFlags2> 0x00800000
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2ShadingRateImageBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00400000
+                      static member inline ShadingRateImageBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00400000
 
 
         [<AutoOpen>]
@@ -39112,10 +39112,10 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
-                      static member inline Access2AccelerationStructureReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00200000
-                      static member inline Access2AccelerationStructureWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00400000
+                      static member inline AccelerationStructureReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00200000
+                      static member inline AccelerationStructureWriteBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00400000
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2AccelerationStructureBuildBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x02000000
+                      static member inline AccelerationStructureBuildBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x02000000
 
 
         [<AutoOpen>]
@@ -39123,7 +39123,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2RayTracingShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00200000
+                      static member inline RayTracingShaderBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x00200000
 
 
         [<AutoOpen>]
@@ -39131,11 +39131,11 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
-                      static member inline Access2AccelerationStructureReadBitNv = enum<Vulkan13.VkAccessFlags2> 0x00200000
-                      static member inline Access2AccelerationStructureWriteBitNv = enum<Vulkan13.VkAccessFlags2> 0x00400000
+                      static member inline AccelerationStructureReadBitNv = enum<Vulkan13.VkAccessFlags2> 0x00200000
+                      static member inline AccelerationStructureWriteBitNv = enum<Vulkan13.VkAccessFlags2> 0x00400000
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2RayTracingShaderBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00200000
-                      static member inline PipelineStage2AccelerationStructureBuildBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x02000000
+                      static member inline RayTracingShaderBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00200000
+                      static member inline AccelerationStructureBuildBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x02000000
 
 
         [<AutoOpen>]
@@ -39143,9 +39143,9 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
-                      static member inline Access2FragmentDensityMapReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x01000000
+                      static member inline FragmentDensityMapReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x01000000
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2FragmentDensityProcessBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x00800000
+                      static member inline FragmentDensityProcessBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x00800000
 
 
         [<AutoOpen>]
@@ -39153,7 +39153,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
-                      static member inline Access2ColorAttachmentReadNoncoherentBitExt = enum<Vulkan13.VkAccessFlags2> 0x00080000
+                      static member inline ColorAttachmentReadNoncoherentBitExt = enum<Vulkan13.VkAccessFlags2> 0x00080000
 
 
         [<AutoOpen>]
@@ -39161,8 +39161,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2TaskShaderBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00080000
-                      static member inline PipelineStage2MeshShaderBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00100000
+                      static member inline TaskShaderBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00080000
+                      static member inline MeshShaderBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00100000
 
 
         [<AutoOpen>]
@@ -39170,8 +39170,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2TaskShaderBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x00080000
-                      static member inline PipelineStage2MeshShaderBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x00100000
+                      static member inline TaskShaderBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x00080000
+                      static member inline MeshShaderBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x00100000
 
 
     /// Requires ((((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRBufferDeviceAddress, EXTDescriptorIndexing) | Vulkan12), KHRSynchronization2) | Vulkan13.
@@ -39752,7 +39752,7 @@ module rec Extensions =
              type KHRAccelerationStructure.VkAccelerationStructureCreateFlagsKHR with
                   static member inline DescriptorBufferCaptureReplayBitExt = enum<KHRAccelerationStructure.VkAccelerationStructureCreateFlagsKHR> 0x00000008
              type Vulkan13.VkAccessFlags2 with
-                  static member inline Access2DescriptorBufferReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x00000200
+                  static member inline DescriptorBufferReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x00000200
              type VkBufferCreateFlags with
                   static member inline DescriptorBufferCaptureReplayBitExt = enum<VkBufferCreateFlags> 0x00000020
              type VkBufferUsageFlags with
@@ -42157,7 +42157,7 @@ module rec Extensions =
                   static member inline RayTracingSkipAabbsBitKhr = enum<VkPipelineCreateFlags> 0x00002000
                   static member inline RayTracingShaderGroupHandleCaptureReplayBitKhr = enum<VkPipelineCreateFlags> 0x00080000
              type Vulkan14.VkPipelineCreateFlags2 with
-                  static member inline PipelineCreate2RayTracingSkipBuiltInPrimitivesBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00001000
+                  static member inline RayTracingSkipBuiltInPrimitivesBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00001000
              type VkPipelineStageFlags with
                   static member inline RayTracingShaderBitKhr = enum<VkPipelineStageFlags> 0x00200000
              type VkShaderStageFlags with
@@ -42674,31 +42674,31 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan13.VkFormatFeatureFlags2 with
-                  static member inline FormatFeature2SampledImageBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000001
-                  static member inline FormatFeature2StorageImageBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000002
-                  static member inline FormatFeature2StorageImageAtomicBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000004
-                  static member inline FormatFeature2UniformTexelBufferBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000008
-                  static member inline FormatFeature2StorageTexelBufferBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000010
-                  static member inline FormatFeature2StorageTexelBufferAtomicBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000020
-                  static member inline FormatFeature2VertexBufferBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000040
-                  static member inline FormatFeature2ColorAttachmentBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000080
-                  static member inline FormatFeature2ColorAttachmentBlendBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000100
-                  static member inline FormatFeature2DepthStencilAttachmentBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000200
-                  static member inline FormatFeature2BlitSrcBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000400
-                  static member inline FormatFeature2BlitDstBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000800
-                  static member inline FormatFeature2SampledImageFilterLinearBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00001000
-                  static member inline FormatFeature2TransferSrcBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00004000
-                  static member inline FormatFeature2TransferDstBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00008000
-                  static member inline FormatFeature2MidpointChromaSamplesBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00020000
-                  static member inline FormatFeature2SampledImageYcbcrConversionLinearFilterBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00040000
-                  static member inline FormatFeature2SampledImageYcbcrConversionSeparateReconstructionFilterBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00080000
-                  static member inline FormatFeature2SampledImageYcbcrConversionChromaReconstructionExplicitBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00100000
-                  static member inline FormatFeature2SampledImageYcbcrConversionChromaReconstructionExplicitForceableBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00200000
-                  static member inline FormatFeature2DisjointBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00400000
-                  static member inline FormatFeature2CositedChromaSamplesBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00800000
-                  static member inline FormatFeature2StorageReadWithoutFormatBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x80000000
-                  static member inline FormatFeature2StorageWriteWithoutFormatBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000001
-                  static member inline FormatFeature2SampledImageDepthComparisonBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000002
+                  static member inline SampledImageBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000001
+                  static member inline StorageImageBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000002
+                  static member inline StorageImageAtomicBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000004
+                  static member inline UniformTexelBufferBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000008
+                  static member inline StorageTexelBufferBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000010
+                  static member inline StorageTexelBufferAtomicBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000020
+                  static member inline VertexBufferBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000040
+                  static member inline ColorAttachmentBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000080
+                  static member inline ColorAttachmentBlendBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000100
+                  static member inline DepthStencilAttachmentBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000200
+                  static member inline BlitSrcBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000400
+                  static member inline BlitDstBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000800
+                  static member inline SampledImageFilterLinearBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00001000
+                  static member inline TransferSrcBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00004000
+                  static member inline TransferDstBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00008000
+                  static member inline MidpointChromaSamplesBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00020000
+                  static member inline SampledImageYcbcrConversionLinearFilterBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00040000
+                  static member inline SampledImageYcbcrConversionSeparateReconstructionFilterBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00080000
+                  static member inline SampledImageYcbcrConversionChromaReconstructionExplicitBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00100000
+                  static member inline SampledImageYcbcrConversionChromaReconstructionExplicitForceableBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00200000
+                  static member inline DisjointBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00400000
+                  static member inline CositedChromaSamplesBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00800000
+                  static member inline StorageReadWithoutFormatBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x80000000
+                  static member inline StorageWriteWithoutFormatBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000001
+                  static member inline SampledImageDepthComparisonBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000002
 
 
         [<AutoOpen>]
@@ -42706,7 +42706,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkFormatFeatureFlags2 with
-                      static member inline FormatFeature2SampledImageFilterMinmaxBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00010000
+                      static member inline SampledImageFilterMinmaxBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00010000
 
 
         [<AutoOpen>]
@@ -42714,7 +42714,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkFormatFeatureFlags2 with
-                      static member inline FormatFeature2SampledImageFilterCubicBitExt = enum<Vulkan13.VkFormatFeatureFlags2> 0x00002000
+                      static member inline SampledImageFilterCubicBitExt = enum<Vulkan13.VkFormatFeatureFlags2> 0x00002000
 
 
     /// Requires KHRSwapchain.
@@ -43552,7 +43552,7 @@ module rec Extensions =
              type VkPipelineBindPoint with
                   static member inline SubpassShadingHuawei = enum<VkPipelineBindPoint> 1000369003
              type Vulkan13.VkPipelineStageFlags2 with
-                  static member inline PipelineStage2SubpassShaderBitHuawei = enum<Vulkan13.VkPipelineStageFlags2> 0x00000080
+                  static member inline SubpassShaderBitHuawei = enum<Vulkan13.VkPipelineStageFlags2> 0x00000080
              type VkShaderStageFlags with
                   static member inline SubpassShadingBitHuawei = enum<VkShaderStageFlags> 0x00004000
 
@@ -43613,11 +43613,11 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan13.VkAccessFlags2 with
-                  static member inline Access2InvocationMaskReadBitHuawei = enum<Vulkan13.VkAccessFlags2> 0x00000080
+                  static member inline InvocationMaskReadBitHuawei = enum<Vulkan13.VkAccessFlags2> 0x00000080
              type VkImageUsageFlags with
                   static member inline InvocationMaskBitHuawei = enum<VkImageUsageFlags> 0x00040000
              type Vulkan13.VkPipelineStageFlags2 with
-                  static member inline PipelineStage2InvocationMaskBitHuawei = enum<Vulkan13.VkPipelineStageFlags2> 0x00000100
+                  static member inline InvocationMaskBitHuawei = enum<Vulkan13.VkPipelineStageFlags2> 0x00000100
 
         module VkRaw =
             [<SuppressUnmanagedCodeSecurity>]
@@ -44342,7 +44342,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkPipelineStageFlags2 with
-                      static member inline PipelineStage2AccelerationStructureCopyBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x10000000
+                      static member inline AccelerationStructureCopyBitKhr = enum<Vulkan13.VkPipelineStageFlags2> 0x10000000
 
 
         [<AutoOpen>]
@@ -44350,7 +44350,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkAccessFlags2 with
-                      static member inline Access2ShaderBindingTableReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000100
+                      static member inline ShaderBindingTableReadBitKhr = enum<Vulkan13.VkAccessFlags2> 0x00000100
 
 
         [<AutoOpen>]
@@ -45306,8 +45306,8 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan13.VkAccessFlags2 with
-                  static member inline Access2MicromapReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x00001000
-                  static member inline Access2MicromapWriteBitExt = enum<Vulkan13.VkAccessFlags2> 0x00002000
+                  static member inline MicromapReadBitExt = enum<Vulkan13.VkAccessFlags2> 0x00001000
+                  static member inline MicromapWriteBitExt = enum<Vulkan13.VkAccessFlags2> 0x00002000
              type VkBufferUsageFlags with
                   static member inline MicromapBuildInputReadOnlyBitExt = enum<VkBufferUsageFlags> 0x00800000
                   static member inline MicromapStorageBitExt = enum<VkBufferUsageFlags> 0x01000000
@@ -45323,7 +45323,7 @@ module rec Extensions =
              type VkPipelineCreateFlags with
                   static member inline RayTracingOpacityMicromapBitExt = enum<VkPipelineCreateFlags> 0x01000000
              type Vulkan13.VkPipelineStageFlags2 with
-                  static member inline PipelineStage2MicromapBuildBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x40000000
+                  static member inline MicromapBuildBitExt = enum<Vulkan13.VkPipelineStageFlags2> 0x40000000
              type VkQueryType with
                   static member inline MicromapSerializationSizeExt = enum<VkQueryType> 1000396000
                   static member inline MicromapCompactedSizeExt = enum<VkQueryType> 1000396001
@@ -45689,7 +45689,7 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan13.VkPipelineStageFlags2 with
-                  static member inline PipelineStage2ClusterCullingShaderBitHuawei = enum<Vulkan13.VkPipelineStageFlags2> 0x00000200
+                  static member inline ClusterCullingShaderBitHuawei = enum<Vulkan13.VkPipelineStageFlags2> 0x00000200
              type VkQueryPipelineStatisticFlags with
                   static member inline ClusterCullingShaderInvocationsBitHuawei = enum<VkQueryPipelineStatisticFlags> 0x00002000
              type VkShaderStageFlags with
@@ -47168,12 +47168,12 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan13.VkFormatFeatureFlags2 with
-                  static member inline FormatFeature2AccelerationStructureRadiusBufferBitNv = enum<Vulkan13.VkFormatFeatureFlags2> 0x00080000
+                  static member inline AccelerationStructureRadiusBufferBitNv = enum<Vulkan13.VkFormatFeatureFlags2> 0x00080000
              type KHRAccelerationStructure.VkGeometryTypeKHR with
                   static member inline SpheresNv = enum<KHRAccelerationStructure.VkGeometryTypeKHR> 1000429004
                   static member inline LinearSweptSpheresNv = enum<KHRAccelerationStructure.VkGeometryTypeKHR> 1000429005
              type Vulkan14.VkPipelineCreateFlags2 with
-                  static member inline PipelineCreate2RayTracingAllowSpheresAndLinearSweptSpheresBitNv = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000002
+                  static member inline RayTracingAllowSpheresAndLinearSweptSpheresBitNv = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000002
 
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
@@ -47220,7 +47220,7 @@ module rec Extensions =
             module EnumExtensions =
                  type Vulkan13.VkFormatFeatureFlags2 with
                       /// Format support linear image as render target, it cannot be mixed with non linear attachment
-                      static member inline FormatFeature2LinearColorAttachmentBitNv = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000040
+                      static member inline LinearColorAttachmentBitNv = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000040
 
 
     /// Requires KHRSurface.
@@ -47440,10 +47440,10 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan13.VkFormatFeatureFlags2 with
-                      static member inline FormatFeature2WeightImageBitQcom = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000004
-                      static member inline FormatFeature2WeightSampledImageBitQcom = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000008
-                      static member inline FormatFeature2BlockMatchingBitQcom = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000010
-                      static member inline FormatFeature2BoxFilterSampledBitQcom = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000020
+                      static member inline WeightImageBitQcom = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000004
+                      static member inline WeightSampledImageBitQcom = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000008
+                      static member inline BlockMatchingBitQcom = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000010
+                      static member inline BoxFilterSampledBitQcom = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000020
 
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
@@ -49033,18 +49033,18 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan13.VkAccessFlags2 with
-                  static member inline Access2OpticalFlowReadBitNv = enum<Vulkan13.VkAccessFlags2> 0x00000400
-                  static member inline Access2OpticalFlowWriteBitNv = enum<Vulkan13.VkAccessFlags2> 0x00000800
+                  static member inline OpticalFlowReadBitNv = enum<Vulkan13.VkAccessFlags2> 0x00000400
+                  static member inline OpticalFlowWriteBitNv = enum<Vulkan13.VkAccessFlags2> 0x00000800
              type VkFormat with
                   static member inline R16g16Sfixed5Nv = enum<VkFormat> 1000464000
              type Vulkan13.VkFormatFeatureFlags2 with
-                  static member inline FormatFeature2OpticalFlowImageBitNv = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000100
-                  static member inline FormatFeature2OpticalFlowVectorBitNv = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000200
-                  static member inline FormatFeature2OpticalFlowCostBitNv = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000400
+                  static member inline OpticalFlowImageBitNv = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000100
+                  static member inline OpticalFlowVectorBitNv = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000200
+                  static member inline OpticalFlowCostBitNv = enum<Vulkan13.VkFormatFeatureFlags2> 0x00000400
              type VkObjectType with
                   static member inline OpticalFlowSessionNv = enum<VkObjectType> 1000464000
              type Vulkan13.VkPipelineStageFlags2 with
-                  static member inline PipelineStage2OpticalFlowBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x20000000
+                  static member inline OpticalFlowBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x20000000
              type VkQueueFlags with
                   static member inline OpticalFlowBitNv = enum<VkQueueFlags> 0x00000100
 
@@ -49128,7 +49128,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2EnableLegacyDitheringBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000004
+                      static member inline EnableLegacyDitheringBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000004
                  type Vulkan13.VkRenderingFlags with
                       static member inline EnableLegacyDitheringBitExt = enum<Vulkan13.VkRenderingFlags> 0x00000008
 
@@ -49292,24 +49292,24 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan14.VkBufferUsageFlags2 with
-                  static member inline BufferUsage2TransferSrcBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000001
-                  static member inline BufferUsage2TransferDstBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000002
-                  static member inline BufferUsage2UniformTexelBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000004
-                  static member inline BufferUsage2StorageTexelBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000008
-                  static member inline BufferUsage2UniformBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000010
-                  static member inline BufferUsage2StorageBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000020
-                  static member inline BufferUsage2IndexBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000040
-                  static member inline BufferUsage2VertexBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000080
-                  static member inline BufferUsage2IndirectBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000100
+                  static member inline TransferSrcBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000001
+                  static member inline TransferDstBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000002
+                  static member inline UniformTexelBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000004
+                  static member inline StorageTexelBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000008
+                  static member inline UniformBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000010
+                  static member inline StorageBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000020
+                  static member inline IndexBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000040
+                  static member inline VertexBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000080
+                  static member inline IndirectBufferBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000100
              type VkFormat with
                   static member inline A1b5g5r5UnormPack16Khr = enum<VkFormat> 1000470000
                   static member inline A8UnormKhr = enum<VkFormat> 1000470001
              type Vulkan14.VkPipelineCreateFlags2 with
-                  static member inline PipelineCreate2DisableOptimizationBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000001
-                  static member inline PipelineCreate2AllowDerivativesBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000002
-                  static member inline PipelineCreate2DerivativeBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000004
-                  static member inline PipelineCreate2ViewIndexFromDeviceIndexBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000008
-                  static member inline PipelineCreate2DispatchBaseBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000010
+                  static member inline DisableOptimizationBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000001
+                  static member inline AllowDerivativesBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000002
+                  static member inline DerivativeBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000004
+                  static member inline ViewIndexFromDeviceIndexBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000008
+                  static member inline DispatchBaseBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000010
 
         module VkRaw =
             [<SuppressUnmanagedCodeSecurity>]
@@ -49343,9 +49343,9 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2RayTracingBitNv = enum<Vulkan14.VkBufferUsageFlags2> 0x00000400
+                      static member inline RayTracingBitNv = enum<Vulkan14.VkBufferUsageFlags2> 0x00000400
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2DeferCompileBitNv = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000020
+                      static member inline DeferCompileBitNv = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000020
 
 
         [<AutoOpen>]
@@ -49353,8 +49353,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2CaptureStatisticsBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000040
-                      static member inline PipelineCreate2CaptureInternalRepresentationsBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000080
+                      static member inline CaptureStatisticsBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000040
+                      static member inline CaptureInternalRepresentationsBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000080
 
 
         [<AutoOpen>]
@@ -49362,8 +49362,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2FailOnPipelineCompileRequiredBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000100
-                      static member inline PipelineCreate2EarlyReturnOnFailureBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000200
+                      static member inline FailOnPipelineCompileRequiredBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000100
+                      static member inline EarlyReturnOnFailureBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000200
 
 
         [<AutoOpen>]
@@ -49371,8 +49371,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2LinkTimeOptimizationBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000400
-                      static member inline PipelineCreate2RetainLinkTimeOptimizationInfoBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x00800000
+                      static member inline LinkTimeOptimizationBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000400
+                      static member inline RetainLinkTimeOptimizationInfoBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x00800000
 
 
         [<AutoOpen>]
@@ -49380,7 +49380,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2LibraryBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000800
+                      static member inline LibraryBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000800
 
 
         [<AutoOpen>]
@@ -49388,15 +49388,15 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2ShaderBindingTableBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000400
+                      static member inline ShaderBindingTableBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00000400
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2RayTracingSkipTrianglesBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00001000
-                      static member inline PipelineCreate2RayTracingSkipAabbsBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00002000
-                      static member inline PipelineCreate2RayTracingNoNullAnyHitShadersBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00004000
-                      static member inline PipelineCreate2RayTracingNoNullClosestHitShadersBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00008000
-                      static member inline PipelineCreate2RayTracingNoNullMissShadersBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00010000
-                      static member inline PipelineCreate2RayTracingNoNullIntersectionShadersBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00020000
-                      static member inline PipelineCreate2RayTracingShaderGroupHandleCaptureReplayBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00080000
+                      static member inline RayTracingSkipTrianglesBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00001000
+                      static member inline RayTracingSkipAabbsBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00002000
+                      static member inline RayTracingNoNullAnyHitShadersBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00004000
+                      static member inline RayTracingNoNullClosestHitShadersBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00008000
+                      static member inline RayTracingNoNullMissShadersBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00010000
+                      static member inline RayTracingNoNullIntersectionShadersBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00020000
+                      static member inline RayTracingShaderGroupHandleCaptureReplayBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00080000
 
 
         [<AutoOpen>]
@@ -49404,7 +49404,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2IndirectBindableBitNv = enum<Vulkan14.VkPipelineCreateFlags2> 0x00040000
+                      static member inline IndirectBindableBitNv = enum<Vulkan14.VkPipelineCreateFlags2> 0x00040000
 
 
         [<AutoOpen>]
@@ -49412,7 +49412,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2RayTracingAllowMotionBitNv = enum<Vulkan14.VkPipelineCreateFlags2> 0x00100000
+                      static member inline RayTracingAllowMotionBitNv = enum<Vulkan14.VkPipelineCreateFlags2> 0x00100000
 
 
         [<AutoOpen>]
@@ -49420,7 +49420,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2RenderingFragmentShadingRateAttachmentBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00200000
+                      static member inline RenderingFragmentShadingRateAttachmentBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x00200000
 
 
         [<AutoOpen>]
@@ -49428,7 +49428,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2RenderingFragmentDensityMapAttachmentBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x00400000
+                      static member inline RenderingFragmentDensityMapAttachmentBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x00400000
 
 
         [<AutoOpen>]
@@ -49436,10 +49436,10 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2MicromapBuildInputReadOnlyBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00800000
-                      static member inline BufferUsage2MicromapStorageBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x01000000
+                      static member inline MicromapBuildInputReadOnlyBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00800000
+                      static member inline MicromapStorageBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x01000000
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2RayTracingOpacityMicromapBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x01000000
+                      static member inline RayTracingOpacityMicromapBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x01000000
 
 
         [<AutoOpen>]
@@ -49447,8 +49447,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2ColorAttachmentFeedbackLoopBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x02000000
-                      static member inline PipelineCreate2DepthStencilAttachmentFeedbackLoopBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x04000000
+                      static member inline ColorAttachmentFeedbackLoopBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x02000000
+                      static member inline DepthStencilAttachmentFeedbackLoopBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x04000000
 
 
         [<AutoOpen>]
@@ -49456,8 +49456,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2NoProtectedAccessBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x08000000
-                      static member inline PipelineCreate2ProtectedAccessOnlyBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x40000000
+                      static member inline NoProtectedAccessBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x08000000
+                      static member inline ProtectedAccessOnlyBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x40000000
 
 
         [<AutoOpen>]
@@ -49465,7 +49465,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2RayTracingDisplacementMicromapBitNv = enum<Vulkan14.VkPipelineCreateFlags2> 0x10000000
+                      static member inline RayTracingDisplacementMicromapBitNv = enum<Vulkan14.VkPipelineCreateFlags2> 0x10000000
 
 
         [<AutoOpen>]
@@ -49473,11 +49473,11 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2SamplerDescriptorBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00200000
-                      static member inline BufferUsage2ResourceDescriptorBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00400000
-                      static member inline BufferUsage2PushDescriptorsDescriptorBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x04000000
+                      static member inline SamplerDescriptorBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00200000
+                      static member inline ResourceDescriptorBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00400000
+                      static member inline PushDescriptorsDescriptorBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x04000000
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2DescriptorBufferBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x20000000
+                      static member inline DescriptorBufferBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x20000000
 
 
         [<AutoOpen>]
@@ -49485,7 +49485,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2ConditionalRenderingBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00000200
+                      static member inline ConditionalRenderingBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00000200
 
 
         [<AutoOpen>]
@@ -49493,8 +49493,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2TransformFeedbackBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00000800
-                      static member inline BufferUsage2TransformFeedbackCounterBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00001000
+                      static member inline TransformFeedbackBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00000800
+                      static member inline TransformFeedbackCounterBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x00001000
 
 
         [<AutoOpen>]
@@ -49502,8 +49502,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2VideoDecodeSrcBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00002000
-                      static member inline BufferUsage2VideoDecodeDstBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00004000
+                      static member inline VideoDecodeSrcBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00002000
+                      static member inline VideoDecodeDstBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00004000
 
 
         [<AutoOpen>]
@@ -49511,8 +49511,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2VideoEncodeDstBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00008000
-                      static member inline BufferUsage2VideoEncodeSrcBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00010000
+                      static member inline VideoEncodeDstBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00008000
+                      static member inline VideoEncodeSrcBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00010000
 
 
         [<AutoOpen>]
@@ -49520,7 +49520,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2ShaderDeviceAddressBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00020000
+                      static member inline ShaderDeviceAddressBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00020000
 
 
         [<AutoOpen>]
@@ -49528,8 +49528,8 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkBufferUsageFlags2 with
-                      static member inline BufferUsage2AccelerationStructureBuildInputReadOnlyBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00080000
-                      static member inline BufferUsage2AccelerationStructureStorageBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00100000
+                      static member inline AccelerationStructureBuildInputReadOnlyBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00080000
+                      static member inline AccelerationStructureStorageBitKhr = enum<Vulkan14.VkBufferUsageFlags2> 0x00100000
 
 
         [<AutoOpen>]
@@ -49537,7 +49537,7 @@ module rec Extensions =
             [<AutoOpen>]
             module EnumExtensions =
                  type Vulkan14.VkPipelineCreateFlags2 with
-                      static member inline PipelineCreate2DisallowOpacityMicromapBitArm = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000020
+                      static member inline DisallowOpacityMicromapBitArm = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000020
 
 
     module AMDAntiLag =
@@ -50470,7 +50470,7 @@ module rec Extensions =
              type VkObjectType with
                   static member inline PipelineBinaryKhr = enum<VkObjectType> 1000483000
              type Vulkan14.VkPipelineCreateFlags2 with
-                  static member inline PipelineCreate2CaptureDataBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x80000000
+                  static member inline CaptureDataBitKhr = enum<Vulkan14.VkPipelineCreateFlags2> 0x80000000
              type VkResult with
                   static member inline PipelineBinaryMissingKhr = enum<VkResult> 1000483000
                   static member inline ErrorNotEnoughSpaceKhr = enum<VkResult> -1000483000
@@ -50991,7 +50991,7 @@ module rec Extensions =
                   static member inline FloatE4m3Nv = enum<KHRCooperativeMatrix.VkComponentTypeKHR> 1000491002
                   static member inline FloatE5m2Nv = enum<KHRCooperativeMatrix.VkComponentTypeKHR> 1000491003
              type Vulkan13.VkPipelineStageFlags2 with
-                  static member inline PipelineStage2ConvertCooperativeVectorMatrixBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00001000
+                  static member inline ConvertCooperativeVectorMatrixBitNv = enum<Vulkan13.VkPipelineStageFlags2> 0x00001000
 
         module VkRaw =
             [<SuppressUnmanagedCodeSecurity>]
@@ -54346,8 +54346,8 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan13.VkFormatFeatureFlags2 with
-                  static member inline FormatFeature2VideoEncodeQuantizationDeltaMapBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00020000
-                  static member inline FormatFeature2VideoEncodeEmphasisMapBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00040000
+                  static member inline VideoEncodeQuantizationDeltaMapBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00020000
+                  static member inline VideoEncodeEmphasisMapBitKhr = enum<Vulkan13.VkFormatFeatureFlags2> 0x00040000
              type VkImageLayout with
                   static member inline VideoEncodeQuantizationMapKhr = enum<VkImageLayout> 1000553000
              type VkImageUsageFlags with
@@ -56939,12 +56939,12 @@ module rec Extensions =
                   static member inline CommandPreprocessReadBitExt = enum<VkAccessFlags> 0x00020000
                   static member inline CommandPreprocessWriteBitExt = enum<VkAccessFlags> 0x00040000
              type Vulkan14.VkBufferUsageFlags2 with
-                  static member inline BufferUsage2PreprocessBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x80000000
+                  static member inline PreprocessBufferBitExt = enum<Vulkan14.VkBufferUsageFlags2> 0x80000000
              type VkObjectType with
                   static member inline IndirectCommandsLayoutExt = enum<VkObjectType> 1000572000
                   static member inline IndirectExecutionSetExt = enum<VkObjectType> 1000572001
              type Vulkan14.VkPipelineCreateFlags2 with
-                  static member inline PipelineCreate2IndirectBindableBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000040
+                  static member inline IndirectBindableBitExt = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000040
              type VkPipelineStageFlags with
                   static member inline CommandPreprocessBitExt = enum<VkPipelineStageFlags> 0x00020000
              type EXTShaderObject.VkShaderCreateFlagsEXT with
@@ -57048,7 +57048,7 @@ module rec Extensions =
         [<Flags>]
         type VkAccessFlags3KHR =
             | All = 0
-            | Access3None = 0
+            | None = 0
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -57757,7 +57757,7 @@ module rec Extensions =
         [<AutoOpen>]
         module EnumExtensions =
              type Vulkan14.VkPipelineCreateFlags2 with
-                  static member inline PipelineCreate2DisallowOpacityMicromapBitArm = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000020
+                  static member inline DisallowOpacityMicromapBitArm = enum<Vulkan14.VkPipelineCreateFlags2> 0x00000020
 
 
     /// Requires KHRExternalMemory | Vulkan11.

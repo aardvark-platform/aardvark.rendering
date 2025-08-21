@@ -1537,6 +1537,8 @@ module FSharpWriter =
         |> List.filter (fun tag -> e <> tag && e.EndsWith tag)
         |> List.tryHead
 
+    let private regexBaseEnumName = Regex @"(?<baseName>.+?)Flags(?<version>[0-9]*)$"
+
     let baseEnumName (vendorTags : string list) (e : string) =
         let rec remove (str : string) =
             let suffix = str |> findEnumVendorSuffix vendorTags
@@ -1545,10 +1547,12 @@ module FSharpWriter =
             | None -> str
 
         let name = remove e
-        let suffix = "Flags"
+        let m = regexBaseEnumName.Match name
 
-        if name.EndsWith suffix then
-            name.Substring(0, name.Length - suffix.Length)
+        if m.Success then
+            let baseName = m.Groups.["baseName"].Value
+            let version = m.Groups.["version"].Value
+            $"{baseName}{version}"
         else
             name
 
@@ -2194,15 +2198,12 @@ module FSharpWriter =
         | Ptr(Literal "void") -> "nativeint"
 
         | Literal n ->
-            if n.EndsWith "FlagBits" then
-                n.Substring(0, n.Length - 8) + "Flags"
-            else
-                match Map.tryFind n knownTypes with
-                | Some n -> n
-                | None ->
-                    if n.StartsWith "Vk" || n.StartsWith "PFN" then getFullyQualifiedTypeName location n
-                    elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
-                    else "nativeint" //failwithf "strange type: %A" n
+            match Map.tryFind n knownTypes with
+            | Some n -> n
+            | None ->
+                if n.StartsWith "Vk" || n.StartsWith "PFN" then getFullyQualifiedTypeName location n
+                elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
+                else "nativeint" //failwithf "strange type: %A" n
         | Ptr (Ptr t) -> "nativeint*"
         | Ptr t ->
             sprintf "%s*" (externTypeName location t)
