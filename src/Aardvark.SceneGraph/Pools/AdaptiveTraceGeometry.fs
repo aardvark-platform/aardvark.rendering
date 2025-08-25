@@ -81,13 +81,17 @@ type AdaptiveIndexData(indexType: IndexType, buffer: aval<IBuffer>, offset: uint
         member this.Equals other = this.Equals other
 
 /// Trace geometry described by a triangle mesh.
-type AdaptiveTriangleMesh(vertices: AdaptiveVertexData, indices: AdaptiveIndexData, primitives: uint32, transform: aval<Trafo3d>, flags: aval<GeometryFlags>) =
+type AdaptiveTriangleMesh(vertices: AdaptiveVertexData, indices: AdaptiveIndexData, primitives: uint32, transform: aval<Trafo3d>,
+                          flags: aval<GeometryFlags>, micromap: aval<IMicromap>) =
 
     /// Vertices of the mesh.
     member val Vertices = vertices
 
     /// Indices of the mesh (or null if not indexed).
     member val Indices = indices
+
+    /// Micromap of the mesh (value can be null).
+    member val Micromap = micromap
 
     /// Number of triangles in the mesh.
     member val Primitives = primitives
@@ -101,31 +105,41 @@ type AdaptiveTriangleMesh(vertices: AdaptiveVertexData, indices: AdaptiveIndexDa
     new (mesh: TriangleMesh) =
         AdaptiveTriangleMesh(
             AdaptiveVertexData mesh.Vertices, AdaptiveIndexData.FromIndexData mesh.Indices,
-            mesh.Primitives, ~~mesh.Transform, ~~mesh.Flags
+            mesh.Primitives, ~~mesh.Transform, ~~mesh.Flags, ~~null
         )
 
-    static member FromIndexedGeometry(geometry: IndexedGeometry, transform: aval<Trafo3d>, flags: aval<GeometryFlags>) =
+    static member FromIndexedGeometry(geometry: IndexedGeometry, transform: aval<Trafo3d>, flags: aval<GeometryFlags>, micromap: aval<#IMicromap>) =
         let mesh = TriangleMesh.FromIndexedGeometry(geometry)
         AdaptiveTriangleMesh(
             AdaptiveVertexData mesh.Vertices, AdaptiveIndexData.FromIndexData mesh.Indices,
-            mesh.Primitives, transform, flags
+            mesh.Primitives, transform, flags, micromap |> AdaptiveResource.map (fun m -> m :> IMicromap)
         )
 
-    static member inline FromIndexedGeometry(geometry: IndexedGeometry, transform: Trafo3d, [<DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
-        AdaptiveTriangleMesh.FromIndexedGeometry(geometry, ~~transform, ~~flags)
+    static member inline FromIndexedGeometry(geometry: IndexedGeometry, transform: Trafo3d,
+                                             [<DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags,
+                                             [<Optional; DefaultParameterValue(null : IMicromap)>] micromap: IMicromap) =
+        AdaptiveTriangleMesh.FromIndexedGeometry(geometry, ~~transform, ~~flags, ~~micromap)
 
-    static member inline FromIndexedGeometry(geometry: IndexedGeometry, [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
-        AdaptiveTriangleMesh.FromIndexedGeometry(geometry, Trafo3d.Identity, flags)
+    static member inline FromIndexedGeometry(geometry: IndexedGeometry,
+                                             [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags,
+                                             [<Optional; DefaultParameterValue(null : IMicromap)>] micromap: IMicromap) =
+        AdaptiveTriangleMesh.FromIndexedGeometry(geometry, Trafo3d.Identity, flags, micromap)
 
     /// Returns whether the mesh is indexed.
     member inline this.IsIndexed = not <| obj.ReferenceEquals(this.Indices, null)
 
     member inline internal this.GetValue(token: AdaptiveToken) =
         let indices = if this.IsIndexed then this.Indices.GetValue token else null
-        TriangleMesh(this.Vertices.GetValue token, indices, this.Primitives, this.Transform.GetValue token, this.Flags.GetValue token)
+        TriangleMesh(
+            this.Vertices.GetValue token,
+            indices, this.Primitives,
+            this.Transform.GetValue token,
+            this.Flags.GetValue token,
+            this.Micromap.GetValue token
+        )
 
     member inline private this.Equals(other: AdaptiveTriangleMesh) =
-        this.Vertices = other.Vertices && this.Indices = other.Indices &&
+        this.Vertices = other.Vertices && this.Indices = other.Indices && this.Micromap = other.Micromap &&
         this.Primitives = other.Primitives && this.Transform = other.Transform && this.Flags = other.Flags
 
     override this.Equals(obj: obj) =
@@ -135,7 +149,14 @@ type AdaptiveTriangleMesh(vertices: AdaptiveVertexData, indices: AdaptiveIndexDa
 
     override this.GetHashCode() =
         let indexHash = if this.IsIndexed then this.Indices.GetHashCode() else 0
-        HashCode.Combine(this.Vertices.GetHashCode(), indexHash, this.Primitives.GetHashCode(), this.Transform.GetHashCode(), this.Flags.GetHashCode())
+        HashCode.Combine(
+            this.Vertices.GetHashCode(),
+            indexHash,
+            this.Primitives.GetHashCode(),
+            this.Transform.GetHashCode(),
+            this.Flags.GetHashCode(),
+            this.Micromap.GetHashCode()
+        )
 
     interface IEquatable<AdaptiveTriangleMesh> with
         member this.Equals other = this.Equals other

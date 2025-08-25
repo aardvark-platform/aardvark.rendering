@@ -7,6 +7,7 @@ open System
 open System.Runtime.CompilerServices
 open Vulkan11
 open EXTDebugUtils
+open KHRSynchronization2
 
 #nowarn "9"
 #nowarn "51"
@@ -82,6 +83,26 @@ module ``Common Commands`` =
                         0u, NativePtr.zero,
                         0u, NativePtr.zero
                     )
+            }
+
+        static member MemoryBarrier(srcStage: VkPipelineStageFlags2KHR, srcAccess: VkAccessFlags2KHR, dstStage: VkPipelineStageFlags2KHR, dstAccess: VkAccessFlags2KHR) =
+            { new Command() with
+                member _.Compatible = QueueFlags.All
+                member _.Enqueue cmd =
+                    cmd.AppendCommand()
+
+                    let mutable memoryBarrier =
+                        VkMemoryBarrier2KHR(srcStage, srcAccess, dstStage, dstAccess)
+
+                    let mutable dependencyInfo =
+                        VkDependencyInfoKHR(
+                            VkDependencyFlags.None,
+                            1u, &&memoryBarrier,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero
+                        )
+
+                    VkRaw.vkCmdPipelineBarrier2KHR(cmd.Handle, &&dependencyInfo)
             }
 
         static member Execute(inner: CommandBuffer[]) =

@@ -8,9 +8,11 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
+open Aardvark.Rendering.Vulkan.Raytracing
 open KHRAccelerationStructure
 open KHRBufferDeviceAddress
 open KHRRayTracingPositionFetch
+open EXTOpacityMicromap
 
 #nowarn "9"
 #nowarn "51"
@@ -30,16 +32,52 @@ type AccelerationStructureData =
         | Geometry arr -> uint32 arr.Count
         | Instances (count, _) -> count
 
+// TODO: Replace with PinnedValue from Aardvark.Base >= 5.3.16
+[<AutoOpen>]
+module internal ArrayPinningUtils =
+
+    /// Utility to pin values with IDisposable semantics.
+    type PinnedValue private (value: obj, length: int) =
+        let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
+        let address = gc.AddrOfPinnedObject()
+
+        new (value: obj) =
+            let length = match value with | :? Array as array -> array.Length | _ -> 1
+            new PinnedValue(value, length)
+
+        new (array: Array) =
+            new PinnedValue(array, array.Length)
+
+        /// The address of the pinned value.
+        member _.Address = address
+
+        /// The number of elements if the pinned value is an array, 1 otherwise.
+        member _.Length = length
+
+        member _.Dispose() = gc.Free()
+
+        interface IDisposable with
+            member this.Dispose() = this.Dispose()
+
+    /// Utility to pin values with IDisposable semantics.
+    type PinnedValue<'T when 'T : unmanaged> =
+        inherit PinnedValue
+        new (value: 'T) = { inherit PinnedValue(value :> obj) }
+        new (array: 'T[]) = { inherit PinnedValue(array :> Array) }
+
+        /// The pointer of the pinned value.
+        member inline this.Pointer : nativeptr<'T> = NativePtr.ofNativeInt this.Address
+
 type internal PreparedAccelerationStructureData(
-                    device     : Device,
-                    typ        : VkAccelerationStructureTypeKHR,
-                    flags      : VkBuildAccelerationStructureFlagsKHR,
-                    geometries : VkAccelerationStructureGeometryKHR[],
-                    primitives : uint32[],
-                    buffers    : Buffer[]
+                    device      : Device,
+                    typ         : VkAccelerationStructureTypeKHR,
+                    flags       : VkBuildAccelerationStructureFlagsKHR,
+                    geometries  : VkAccelerationStructureGeometryKHR[],
+                    primitives  : uint32[],
+                    micromaps   : Micromap[],   // Micromaps that are not discardable
+                    disposables : IDisposable[]
                 ) =
-    let pGeometriesHandle = GCHandle.Alloc(geometries, GCHandleType.Pinned)
-    let pGeometries = NativePtr.ofNativeInt <| pGeometriesHandle.AddrOfPinnedObject()
+    let pGeometries = new PinnedValue<_>(geometries)
 
     let mutable buildGeometryInfo =
         VkAccelerationStructureBuildGeometryInfoKHR(
@@ -48,7 +86,7 @@ type internal PreparedAccelerationStructureData(
             VkAccelerationStructureKHR.Null,
             VkAccelerationStructureKHR.Null,
             uint32 geometries.Length,
-            pGeometries, NativePtr.zero,
+            pGeometries.Pointer, NativePtr.zero,
             VkDeviceOrHostAddressKHR()
         )
 
@@ -80,10 +118,11 @@ type internal PreparedAccelerationStructureData(
     member inline this.Size = this.BuildSizesInfo.accelerationStructureSize
     member inline this.ScratchBuildSize = this.BuildSizesInfo.buildScratchSize
     member inline this.ScratchUpdateSize = this.BuildSizesInfo.updateScratchSize
+    member _.Micromaps = micromaps
 
     member x.Dispose() =
-        buffers |> Array.iter Disposable.dispose
-        pGeometriesHandle.Free()
+        disposables |> Array.iter Disposable.dispose
+        pGeometries.Dispose()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -128,14 +167,15 @@ module internal AccelerationStructureData =
         |> List.fold (|||) VkBuildAccelerationStructureFlagsKHR.None
 
     let private ofGeometry (device : Device) (usage : AccelerationStructureUsage) (geometry : TraceGeometry) =
-        let mutable buffers = ResizeArray<Buffer>()
+        let disposables = ResizeArray<IDisposable>()
+        let micromaps = ResizeArray<Micromap>()
 
         let getBufferAddress (alignment : uint64) (offset : uint64) (buffer : IBuffer) =
             if alignment <> 0UL && offset % alignment <> 0UL then
                 failf $"buffer for acceleration structure must be aligned to {alignment} bytes but the offset is {offset}"
 
             let prepared = buffer |> Buffer.prepare device alignment
-            buffers.Add(prepared)
+            disposables.Add(prepared)
             prepared |> Buffer.toAddress offset
 
         let ofAabbData (data : AABBsData) =
@@ -153,39 +193,65 @@ module internal AccelerationStructureData =
                 VkAccelerationStructureGeometryAabbsDataKHR(address, stride)
             )
 
-        let ofTriangleData (vertexData : VertexData) (indexData : IndexData) (transform : Trafo3d) =
+        let ofTriangleData (mesh : TriangleMesh)  =
             let vertexDataAddress =
                 // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03711
-                getBufferAddress 4UL vertexData.Offset vertexData.Buffer
+                getBufferAddress 4UL mesh.Vertices.Offset mesh.Vertices.Buffer
 
             let vertexStride =
-                if vertexData.Stride = 0UL then
+                if mesh.Vertices.Stride = 0UL then
                     uint64 sizeof<V3f>
                 else
-                    vertexData.Stride
+                    mesh.Vertices.Stride
 
             let indexType =
-                if isNull indexData then VkIndexType.NoneKhr
+                if not mesh.IsIndexed then VkIndexType.NoneKhr
                 else
-                    match indexData.Type with
+                    match mesh.Indices.Type with
                     | IndexType.Int16 | IndexType.UInt16 -> VkIndexType.Uint16
                     | _ -> VkIndexType.Uint32
 
             let indexDataAddress =
-                if isNull indexData then VkDeviceOrHostAddressConstKHR()
+                if not mesh.IsIndexed then VkDeviceOrHostAddressConstKHR()
                 else
                     // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03712
                     let alignment = if indexType = VkIndexType.Uint16 then 2UL else 4UL
-                    getBufferAddress alignment indexData.Offset indexData.Buffer
+                    getBufferAddress alignment mesh.Indices.Offset mesh.Indices.Buffer
+
+            let pNext =
+                if mesh.Micromap = null then 0n
+                else
+                    let micromap = Micromap.prepare device mesh.Micromap
+
+                    // If the micromap is discardable we can dispose it alongside the PreparedAccelerationStructureData.
+                    // Otherwise, we have to keep it alive alongside the actual acceleration structure.
+                    if micromap.IsDiscardable then
+                        disposables.Add micromap
+                    else
+                        micromaps.Add micromap
+
+                    let pUsageCounts = new PinnedValue<_>(micromap.UsageCounts)
+                    disposables.Add pUsageCounts
+
+                    let trianglesOpacityMicromap =
+                        VkAccelerationStructureTrianglesOpacityMicromapEXT(
+                            micromap.IndexType, VkDeviceOrHostAddressConstKHR.DeviceAddress micromap.IndexBufferAddress, micromap.IndexStride,
+                            0u, uint32 micromap.UsageCounts.Length, NativePtr.cast pUsageCounts.Pointer, NativePtr.zero,
+                            micromap.Handle
+                        )
+
+                    let pTrianglesOpacityMicromap = new PinnedValue(trianglesOpacityMicromap)
+                    disposables.Add pTrianglesOpacityMicromap
+                    pTrianglesOpacityMicromap.Address
 
             let transformDataAddress =
                 // VUID-vkCmdBuildAccelerationStructuresKHR-pInfos-03810
-                let buffer = ArrayBuffer([| VkTransformMatrixKHR(M34f transform.Forward) |])
+                let buffer = ArrayBuffer([| VkTransformMatrixKHR(M34f mesh.Transform.Forward) |])
                 getBufferAddress 16UL 0UL buffer
 
             VkAccelerationStructureGeometryDataKHR.Triangles(
                 VkAccelerationStructureGeometryTrianglesDataKHR(
-                    VkFormat.R32g32b32Sfloat, vertexDataAddress, vertexStride, vertexData.Count - 1u,
+                    pNext, VkFormat.R32g32b32Sfloat, vertexDataAddress, vertexStride, mesh.Vertices.Count - 1u,
                     indexType, indexDataAddress, transformDataAddress
                 )
             )
@@ -194,7 +260,7 @@ module internal AccelerationStructureData =
             match geometry with
             | TraceGeometry.Triangles arr ->
                 arr |> Array.map (fun mesh ->
-                    let data = ofTriangleData mesh.Vertices mesh.Indices mesh.Transform
+                    let data = ofTriangleData mesh
                     VkAccelerationStructureGeometryKHR(VkGeometryTypeKHR.Triangles, data, enum <| int mesh.Flags)
                 ), device.EnabledFeatures.Raytracing.PositionFetch
 
@@ -207,7 +273,8 @@ module internal AccelerationStructureData =
         let flags = getFlags positionFetch usage
 
         new PreparedAccelerationStructureData(
-            device, VkAccelerationStructureTypeKHR.BottomLevel, flags, geometries, geometry.Primitives, buffers.ToArray()
+            device, VkAccelerationStructureTypeKHR.BottomLevel, flags, geometries, geometry.Primitives,
+            micromaps.ToArray(), disposables.ToArray()
         )
 
     let private ofInstances (device : Device) (usage : AccelerationStructureUsage) (count : uint32) (buffer : Buffer) =
@@ -227,7 +294,7 @@ module internal AccelerationStructureData =
         let flags = getFlags false usage
 
         new PreparedAccelerationStructureData(
-            device, VkAccelerationStructureTypeKHR.TopLevel, flags, [| geometry |], [| count |], Array.empty
+            device, VkAccelerationStructureTypeKHR.TopLevel, flags, [| geometry |], [| count |], Array.empty, Array.empty
         )
 
     let prepare device usage data =

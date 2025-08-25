@@ -216,13 +216,22 @@ type Runtime(debug : IDebugConfig) =
         member x.SupportsInvocationReorder =
             false
 
+        member x.SupportsMicromaps =
+            false
+
         member x.MaxRayRecursionDepth =
+            0
+
+        member x.GetMaxMicromapSubdivisionLevel(format) =
             0
 
         member x.CreateAccelerationStructure(geometry, usage) =
             failwith "GL backend does not support raytracing"
 
         member x.TryUpdateAccelerationStructure(handle, geometry) =
+            failwith "GL backend does not support raytracing"
+
+        member x.PrepareMicromap(micromap) =
             failwith "GL backend does not support raytracing"
 
         member x.CompileTrace(pipeline, commands) =

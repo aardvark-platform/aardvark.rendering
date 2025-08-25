@@ -594,6 +594,12 @@ type RaytracingLimits =
 
         /// Indicates if the implementation will actually reorder at the reorder calls.
         InvocationReorderMode                                       : NVRayTracingInvocationReorder.VkRayTracingInvocationReorderModeNV
+
+        /// Maximum subdivision level allowed for opacity micromaps with 2-state format.
+        MaxOpacity2StateSubdivisionLevel                            : uint32
+
+        /// Maximum subdivision level allowed for opacity micromaps with 4-state format.
+        MaxOpacity4StateSubdivisionLevel                            : uint32
     }
 
     member internal x.Print(l : ILogger) =
@@ -610,6 +616,10 @@ type RaytracingLimits =
             l.line "max descriptors:                               %d" x.MaxDescriptorSetAccelerationStructures
             l.line "max descriptors (updater atfer bind):          %d" x.MaxDescriptorSetUpdateAfterBindAccelerationStructures
             l.line "min scratch offset alignment:                  %d" x.MinAccelerationStructureScratchOffsetAlignment
+        )
+        l.section "micromaps:" (fun () ->
+            l.line "max subdivision level (opacity 2-state):       %d" x.MaxOpacity2StateSubdivisionLevel
+            l.line "max subdivision level (opacity 4-state):       %d" x.MaxOpacity4StateSubdivisionLevel
         )
         l.section "shader binding table: " (fun () ->
             l.line "header size:     %d" x.ShaderGroupHandleSize
@@ -666,6 +676,7 @@ type DeviceLimits =
 module DeviceLimits =
     open System
     open EXTCustomBorderColor
+    open EXTOpacityMicromap
     open KHRRayTracingPipeline
     open KHRAccelerationStructure
     open KHRMaintenance3
@@ -676,6 +687,7 @@ module DeviceLimits =
                (rtpProperties : VkPhysicalDeviceRayTracingPipelinePropertiesKHR)
                (rtirProperties : VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV)
                (asProperties : VkPhysicalDeviceAccelerationStructurePropertiesKHR)
+               (ommProperites : VkPhysicalDeviceOpacityMicromapPropertiesEXT)
                (limits : VkPhysicalDeviceLimits) =
         {
             Image =
@@ -881,5 +893,7 @@ module DeviceLimits =
                         ShaderGroupHandleAlignment                                  = rtpProperties.shaderGroupHandleAlignment
                         MaxRayHitAttributeSize                                      = rtpProperties.maxRayHitAttributeSize
                         InvocationReorderMode                                       = rtirProperties.rayTracingInvocationReorderReorderingHint
+                        MaxOpacity2StateSubdivisionLevel                            = ommProperites.maxOpacity2StateSubdivisionLevel
+                        MaxOpacity4StateSubdivisionLevel                            = ommProperites.maxOpacity4StateSubdivisionLevel
                     }
         }

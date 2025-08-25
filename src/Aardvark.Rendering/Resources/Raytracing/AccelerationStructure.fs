@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Raytracing
 
 open System
+open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 
 [<Flags>]
@@ -45,3 +46,10 @@ type IAccelerationStructureRuntime =
     ///<param name="geometry">The geometry to update the acceleration structure from.</param>
     ///<returns>True if the acceleration structure could be updated, false otherwise.</returns>
     abstract member TryUpdateAccelerationStructure : handle: IAccelerationStructure * geometry: TraceGeometry -> bool
+
+    /// <summary>
+    /// Prepares the given micromap.
+    /// The prepared micromap can be safely disposed after using it to build an accleration structure.
+    /// </summary>
+    /// <param name="micromap">The micromap to prepare.</param>
+    abstract member PrepareMicromap : micromap: IMicromap -> IBackendMicromap

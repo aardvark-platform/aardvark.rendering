@@ -85,6 +85,7 @@
     <Compile Include="Resources\Query\TimeQuery.fs" />
     <Compile Include="Resources\Query\OcclusionQuery.fs" />
     <Compile Include="Resources\Query\PipelineQuery.fs" />
+    <Compile Include="Resources\Raytracing\Micromap.fs" />
     <Compile Include="Resources\Raytracing\AccelerationStructureData.fs" />
     <Compile Include="Resources\Raytracing\AccelerationStructure.fs" />
     <Compile Include="Resources\Raytracing\ShaderGroup.fs" />

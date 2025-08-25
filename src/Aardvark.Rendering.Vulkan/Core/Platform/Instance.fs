@@ -65,6 +65,8 @@ module Instance =
                 KHRSpirv14.Name
                 KHRShaderFloatControls.Name
                 NVRayTracingInvocationReorder.Name
+                EXTOpacityMicromap.Name
+                KHRSynchronization2.Name
                 if validation then NVRayTracingValidation.Name
             ]
 

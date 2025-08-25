@@ -539,6 +539,15 @@ type RaytracingFeatures =
 
         /// Indicates whether the implementation supports host side acceleration structure commands.
         AccelerationStructureHostCommands : bool
+
+        /// Indicates whether the implementation supports the micromap array feature.
+        Micromap : bool
+
+        /// Indicates whether the implementation supports capture and replay of addresses for micromap arrays.
+        MicromapCaptureReplay : bool
+
+        /// Indicates whether the implementation supports host side micromap array commands.
+        MicromapHostCommands : bool
     }
 
     member internal x.Print(l : ILogger) =
@@ -558,6 +567,11 @@ type RaytracingFeatures =
             l.line "capture & replay:             %A" x.AccelerationStructureCaptureReplay
             l.line "indirect build:               %A" x.AccelerationStructureIndirectBuild
             l.line "host commands:                %A" x.AccelerationStructureHostCommands
+        )
+        l.section "micromaps:" (fun () ->
+            l.line "supported:                    %A" x.Micromap
+            l.line "capture & replay:             %A" x.MicromapCaptureReplay
+            l.line "host commands:                %A" x.MicromapHostCommands
         )
 
 [<CLIMutable>]
@@ -613,6 +627,7 @@ module DeviceFeatures =
     open EXTDescriptorIndexing
     open EXTMemoryPriority
     open EXTDeviceFault
+    open EXTOpacityMicromap
     open NVRayTracingInvocationReorder
     open NVRayTracingValidation
     open Vulkan11
@@ -734,6 +749,13 @@ module DeviceFeatures =
                 toVkBool features.Descriptors.BindingAccelerationStructureUpdateAfterBind
             )
 
+        let omm =
+            VkPhysicalDeviceOpacityMicromapFeaturesEXT(
+                toVkBool features.Raytracing.Micromap,
+                toVkBool features.Raytracing.MicromapCaptureReplay,
+                toVkBool features.Raytracing.MicromapHostCommands
+            )
+
         let rq =
             VkPhysicalDeviceRayQueryFeaturesKHR(
                 toVkBool features.Raytracing.RayQuery
@@ -829,6 +851,7 @@ module DeviceFeatures =
         |> if not rtir.IsEmpty then VkStructChain.add rtir else id
         |> if not rtv.IsEmpty then VkStructChain.add rtv else id
         |> if not acc.IsEmpty then VkStructChain.add acc else id
+        |> if not omm.IsEmpty then VkStructChain.add omm else id
         |> if not rq.IsEmpty  then VkStructChain.add rq  else id
         |> if not bda.IsEmpty then VkStructChain.add bda else id
         |> if not dflt.IsEmpty then VkStructChain.add dflt else id
@@ -849,6 +872,7 @@ module DeviceFeatures =
                (raytracingInvocationReorderFeatures : VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV)
                (raytracingValidationFeatures : VkPhysicalDeviceRayTracingValidationFeaturesNV)
                (accelerationStructureFeatures : VkPhysicalDeviceAccelerationStructureFeaturesKHR)
+               (opacityMicromapFeatures : VkPhysicalDeviceOpacityMicromapFeaturesEXT)
                (rayQueryFeatures : VkPhysicalDeviceRayQueryFeaturesKHR)
                (bufferDeviceAddressFeatures : VkPhysicalDeviceBufferDeviceAddressFeaturesKHR)
                (deviceFaultFeatures : VkPhysicalDeviceFaultFeaturesEXT)
@@ -1013,6 +1037,9 @@ module DeviceFeatures =
                     AccelerationStructureCaptureReplay =  toBool accelerationStructureFeatures.accelerationStructureCaptureReplay
                     AccelerationStructureIndirectBuild =  toBool accelerationStructureFeatures.accelerationStructureIndirectBuild
                     AccelerationStructureHostCommands =   toBool accelerationStructureFeatures.accelerationStructureHostCommands
+                    Micromap =                            toBool opacityMicromapFeatures.micromap
+                    MicromapCaptureReplay =               toBool opacityMicromapFeatures.micromapCaptureReplay
+                    MicromapHostCommands =                toBool opacityMicromapFeatures.micromapHostCommands
                 }
 
             Debugging =

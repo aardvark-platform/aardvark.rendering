@@ -105,13 +105,17 @@ type IndexData(indexType: IndexType, buffer: IBuffer, [<Optional; DefaultParamet
 
 /// Trace geometry described by a triangle mesh.
 type TriangleMesh(vertices: VertexData, indices: IndexData, primitives: uint32, transform: Trafo3d,
-                  [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
+                  [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags,
+                  [<Optional; DefaultParameterValue(null : IMicromap)>] micromap: IMicromap) =
 
     /// Vertices of the mesh.
     member val Vertices = vertices
 
     /// Indices of the mesh (or null if not indexed).
     member val Indices = indices
+
+    /// Micromap of the mesh (can be null).
+    member val Micromap = micromap
 
     /// Number of triangles in the mesh.
     member val Primitives = primitives
@@ -125,13 +129,20 @@ type TriangleMesh(vertices: VertexData, indices: IndexData, primitives: uint32, 
     /// Returns whether the mesh is indexed.
     member inline this.IsIndexed = not <| obj.ReferenceEquals(this.Indices, null)
 
-    new (vertices: Array, indices: Array, transform: Trafo3d, [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
+    /// Returns whether the mesh has a micromap.
+    member inline this.HasMicromap = not <| obj.ReferenceEquals(this.Micromap, null)
+
+    new (vertices: Array, indices: Array, transform: Trafo3d,
+        [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags,
+        [<Optional; DefaultParameterValue(null : IMicromap)>] micromap: IMicromap) =
         let indices, primitives =
             if isNull indices then null, vertices.Length / 3
             else IndexData indices, indices.Length / 3
-        TriangleMesh(VertexData vertices, indices, uint32 primitives, transform, flags)
+        TriangleMesh(VertexData vertices, indices, uint32 primitives, transform, flags, micromap)
 
-    static member FromIndexedGeometry(geometry: IndexedGeometry, transform: Trafo3d, [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
+    static member FromIndexedGeometry(geometry: IndexedGeometry, transform: Trafo3d,
+                                      [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags,
+                                      [<Optional; DefaultParameterValue(null : IMicromap)>] micromap: IMicromap) =
         let geometry =
             geometry |> IndexedGeometry.toNonStripped
 
@@ -151,14 +162,16 @@ type TriangleMesh(vertices: VertexData, indices: IndexData, primitives: uint32, 
 
         TriangleMesh(
             vertexData, indexData, primitiveCount,
-            transform, flags
+            transform, flags, micromap
         )
 
-    static member FromIndexedGeometry(geometry: IndexedGeometry, [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
-        TriangleMesh.FromIndexedGeometry(geometry, Trafo3d.Identity, flags)
+    static member FromIndexedGeometry(geometry: IndexedGeometry,
+                                      [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags,
+                                      [<Optional; DefaultParameterValue(null : IMicromap)>] micromap: IMicromap) =
+        TriangleMesh.FromIndexedGeometry(geometry, Trafo3d.Identity, flags, micromap)
 
     member inline private this.Equals(other: TriangleMesh) =
-        this.Vertices = other.Vertices && this.Indices = other.Indices &&
+        this.Vertices = other.Vertices && this.Indices = other.Indices && this.Micromap = other.Micromap &&
         this.Primitives = other.Primitives && this.Transform = other.Transform && this.Flags = other.Flags
 
     override this.Equals(obj: obj) =
@@ -168,7 +181,8 @@ type TriangleMesh(vertices: VertexData, indices: IndexData, primitives: uint32, 
 
     override this.GetHashCode() =
         let indexHash = if this.IsIndexed then this.Indices.GetHashCode() else 0
-        HashCode.Combine(this.Vertices.GetHashCode(), indexHash, this.Primitives.GetHashCode(), this.Transform.GetHashCode(), this.Flags.GetHashCode())
+        let micromapHash = if this.HasMicromap then this.Micromap.GetHashCode() else 0
+        HashCode.Combine(this.Vertices.GetHashCode(), indexHash, micromapHash, this.Primitives.GetHashCode(), this.Transform.GetHashCode(), this.Flags.GetHashCode())
 
     interface IEquatable<TriangleMesh> with
         member this.Equals other = this.Equals other

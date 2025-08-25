@@ -496,29 +496,47 @@ type Runtime(device : Device) as this =
         | Some limits -> limits.InvocationReorderMode = NVRayTracingInvocationReorder.VkRayTracingInvocationReorderModeNV.Reorder
         | _ -> false
 
+    member x.SupportsMicromaps =
+        x.Device.EnabledFeatures.Raytracing.Micromap
+
     member x.MaxRayRecursionDepth =
         match x.Device.PhysicalDevice.Limits.Raytracing with
         | Some limits -> int limits.MaxRayRecursionDepth
         | _ -> 0
 
+    member x.GetMaxMicromapSubdivisionLevel(format) =
+        match x.Device.PhysicalDevice.Limits.Raytracing with
+        | Some limits ->
+            match format with
+            | MicromapFormat.OpacityTwoState  -> int limits.MaxOpacity2StateSubdivisionLevel
+            | MicromapFormat.OpacityFourState -> int limits.MaxOpacity4StateSubdivisionLevel
+            | _ -> failf "Unknown micromap format: %A" format
+        | _ -> 0
+
     member x.CreateAccelerationStructure(geometry, usage) =
         if not x.SupportsRaytracing then
-            failwithf "[Vulkan] Runtime does not support raytracing"
+            failf "Runtime does not support raytracing"
 
         let data = AccelerationStructureData.Geometry geometry
         AccelerationStructure.create x.Device usage data :> IAccelerationStructure
 
     member x.TryUpdateAccelerationStructure(handle : IAccelerationStructure, geometry) =
         if not x.SupportsRaytracing then
-            failwithf "[Vulkan] Runtime does not support raytracing"
+            failf "Runtime does not support raytracing"
 
         let accel = unbox<AccelerationStructure> handle
         let data = AccelerationStructureData.Geometry geometry
         AccelerationStructure.tryUpdate data accel
 
+    member x.PrepareMicromap(micromap : IMicromap) : IBackendMicromap =
+        if not x.SupportsMicromaps then
+            failf "Runtime does not support micromaps"
+
+        Micromap.prepare device micromap
+
     member x.CompileTrace(pipeline : RaytracingPipelineState, commands : alist<RaytracingCommand>) =
         if not x.SupportsRaytracing then
-            failwithf "[Vulkan] Runtime does not support raytracing"
+            failf "Runtime does not support raytracing"
 
         new RaytracingTask(manager, pipeline, commands) :> IRaytracingTask
 
@@ -649,14 +667,23 @@ type Runtime(device : Device) as this =
         member x.SupportsInvocationReorder =
             x.SupportsInvocationReorder
 
+        member x.SupportsMicromaps =
+            x.SupportsMicromaps
+
         member x.MaxRayRecursionDepth =
             x.MaxRayRecursionDepth
+
+        member x.GetMaxMicromapSubdivisionLevel(format) =
+            x.GetMaxMicromapSubdivisionLevel(format)
 
         member x.CreateAccelerationStructure(geometry, usage) =
             x.CreateAccelerationStructure(geometry, usage)
 
         member x.TryUpdateAccelerationStructure(handle, geometry) =
             x.TryUpdateAccelerationStructure(handle, geometry)
+
+        member x.PrepareMicromap(micromap) =
+            x.PrepareMicromap(micromap)
 
         member x.CompileTrace(pipeline, commands) =
             x.CompileTrace(pipeline, commands)

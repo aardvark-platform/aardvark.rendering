@@ -342,15 +342,15 @@ module TraceObjectFSharp =
             TraceObject.mask (VisibilityMask value)
 
         /// Creates a trace object from the given indexed geometry.
-        static member ofIndexedGeometry (flags : aval<GeometryFlags>) =
-            fun (trafo : aval<Trafo3d>) (geometry : IndexedGeometry) ->
+        static member ofIndexedGeometry (micromap : aval<#IMicromap>) =
+            fun (flags : aval<GeometryFlags>) (trafo : aval<Trafo3d>) (geometry : IndexedGeometry) ->
                 let geometry = geometry.ToNonStripped()
 
                 let attributes = Dictionary()
                 for (KeyValue(sym, arr)) in geometry.IndexedAttributes do
                     attributes.[sym] <- BufferView.ofArray arr
 
-                let mesh = AdaptiveTriangleMesh.FromIndexedGeometry(geometry, trafo, flags)
+                let mesh = AdaptiveTriangleMesh.FromIndexedGeometry(geometry, trafo, flags, micromap)
 
                 let usage =
                     if trafo.IsConstant then
@@ -365,5 +365,15 @@ module TraceObjectFSharp =
                 |> TraceObject.usage usage
 
         /// Creates a trace object from the given indexed geometry.
+        static member ofIndexedGeometry (flags : aval<GeometryFlags>) =
+            fun (trafo : aval<Trafo3d>) (geometry : IndexedGeometry) ->
+                TraceObject.ofIndexedGeometry<IMicromap> ~~null flags trafo geometry
+
+        /// Creates a trace object from the given indexed geometry.
+        static member ofIndexedGeometry (micromap : IMicromap) =
+            fun (flags : GeometryFlags) (trafo : Trafo3d) (geometry : IndexedGeometry) ->
+                TraceObject.ofIndexedGeometry ~~micromap ~~flags ~~trafo geometry
+
+        /// Creates a trace object from the given indexed geometry.
         static member inline ofIndexedGeometry (flags : GeometryFlags) =
-            fun (trafo : Trafo3d) -> TraceObject.ofIndexedGeometry ~~flags ~~trafo
+            fun (trafo : Trafo3d) (geometry : IndexedGeometry) -> TraceObject.ofIndexedGeometry ~~flags ~~trafo geometry

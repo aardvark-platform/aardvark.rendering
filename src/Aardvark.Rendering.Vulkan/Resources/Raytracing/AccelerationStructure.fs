@@ -3,6 +3,7 @@
 open Aardvark.Base
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
+open Aardvark.Rendering.Vulkan.Raytracing
 open Microsoft.FSharp.NativeInterop
 open KHRAccelerationStructure
 open KHRBufferDeviceAddress
@@ -18,6 +19,7 @@ type AccelerationStructure =
         val ResultBuffer : Buffer
         val DeviceAddress : VkDeviceAddress
         val mutable private scratchBuffer : Buffer voption
+        val mutable private micromaps : Micromap[]
         val mutable private name : string
 
         member this.Name
@@ -49,6 +51,12 @@ type AccelerationStructure =
             | ValueSome b -> b
             | _ -> failf "scratch buffer is not allocated"
 
+        member internal this.Micromaps
+            with get() = this.micromaps
+            and set value =
+                this.micromaps |> Array.iter Disposable.dispose
+                this.micromaps <- value
+
         member internal this.CreateScratchBuffer(size : VkDeviceSize) =
             match this.scratchBuffer with
             | ValueSome b when b.Size = size -> ()
@@ -67,6 +75,7 @@ type AccelerationStructure =
             VkRaw.vkDestroyAccelerationStructureKHR(this.Device.Handle, this.Handle, NativePtr.zero)
             this.ResultBuffer.Dispose()
             this.DestroyScratchBuffer()
+            this.Micromaps <- Array.empty
 
         new(device : Device, handle : VkAccelerationStructureKHR, buffer : Buffer,
             data : AccelerationStructureData, usage : AccelerationStructureUsage) =
@@ -82,6 +91,7 @@ type AccelerationStructure =
                 ResultBuffer = buffer
                 DeviceAddress = address
                 scratchBuffer = ValueNone
+                micromaps = Array.empty
                 name = null
             }
 
@@ -232,6 +242,7 @@ module AccelerationStructure =
         else
             result.DestroyScratchBuffer()
 
+        result.Micromaps <- prepared.Micromaps
         result
 
     /// Attempts to update the given acceleration structure with the given data.
@@ -286,6 +297,7 @@ module AccelerationStructure =
                 do! Command.Build(accelerationStructure, prepared, true)
             }
 
+            accelerationStructure.Micromaps <- prepared.Micromaps
             true
         else
             false

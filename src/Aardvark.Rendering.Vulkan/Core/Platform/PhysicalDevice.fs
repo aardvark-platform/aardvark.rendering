@@ -11,6 +11,7 @@ open KHRBufferDeviceAddress
 open KHRShaderFloat16Int8
 open KHR8bitStorage
 open KHRExternalMemoryCapabilities
+open EXTOpacityMicromap
 open EXTCustomBorderColor
 open EXTDescriptorIndexing
 open EXTMemoryPriority
@@ -72,7 +73,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
         globalExtensions |> Array.exists (fun e -> e.name = name)
 
     let queryFeatures (hasExtension: string -> bool) =
-        let f, pm, memp, ycbcr, cbc, s8, s16, f16i8, vp, sdp, idx, rtp, rtpos, rtir, rtv, acc, rq, bda, dflt =
+        let f, pm, memp, ycbcr, cbc, s8, s16, f16i8, vp, sdp, idx, rtp, rtpos, rtir, rtv, acc, omm, rq, bda, dflt =
             use chain = new VkStructChain()
             let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
             let pMemPrior   = chain.Add<VkPhysicalDeviceMemoryPriorityFeaturesEXT>             (hasExtension EXTMemoryPriority.Name)
@@ -89,6 +90,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             let pRTIR       = chain.Add<VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV> (hasExtension NVRayTracingInvocationReorder.Name)
             let pRTV        = chain.Add<VkPhysicalDeviceRayTracingValidationFeaturesNV>        (hasExtension NVRayTracingValidation.Name)
             let pAcc        = chain.Add<VkPhysicalDeviceAccelerationStructureFeaturesKHR>      (hasExtension KHRAccelerationStructure.Name)
+            let pOmm        = chain.Add<VkPhysicalDeviceOpacityMicromapFeaturesEXT>            (hasExtension EXTOpacityMicromap.Name)
             let pRQ         = chain.Add<VkPhysicalDeviceRayQueryFeaturesKHR>                   (hasExtension KHRRayQuery.Name)
             let pDevAddr    = chain.Add<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>        (hasExtension KHRBufferDeviceAddress.Name)
             let pDevFault   = chain.Add<VkPhysicalDeviceFaultFeaturesEXT>                      (hasExtension EXTDeviceFault.Name)
@@ -99,16 +101,16 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             (!!pFeatures).features, !!pMem, !!pMemPrior, !!pYcbcr, NativePtr.readOrEmpty pCbc,
             NativePtr.readOrEmpty p8bit, !!p16bit, NativePtr.readOrEmpty pf16i8,
             !!pVarPtrs, !!pDrawParams, NativePtr.readOrEmpty pIdx, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTPos,
-            NativePtr.readOrEmpty pRTIR, NativePtr.readOrEmpty pRTV, NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pRQ,
+            NativePtr.readOrEmpty pRTIR, NativePtr.readOrEmpty pRTV, NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pOmm, NativePtr.readOrEmpty pRQ,
             NativePtr.readOrEmpty pDevAddr, NativePtr.readOrEmpty pDevFault
 
-        f |> DeviceFeatures.create pm memp ycbcr cbc s8 s16 f16i8 vp sdp idx rtp rtpos rtir rtv acc rq bda dflt
+        f |> DeviceFeatures.create pm memp ycbcr cbc s8 s16 f16i8 vp sdp idx rtp rtpos rtir rtv acc omm rq bda dflt
 
     let features =
         queryFeatures hasExtension
 
     let properties =
-        let properties, main, devId, cbc, rtp, rtir, acc =
+        let properties, main, devId, cbc, rtp, rtir, acc, omm =
             use chain = new VkStructChain()
             let pMain       = chain.Add<VkPhysicalDeviceMaintenance3Properties>()
             let pDevId      = chain.Add<VkPhysicalDeviceIDPropertiesKHR>()
@@ -116,12 +118,13 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             let pRTP        = chain.Add<VkPhysicalDeviceRayTracingPipelinePropertiesKHR>         (hasExtension KHRRayTracingPipeline.Name)
             let pRTIR       = chain.Add<VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV> (hasExtension NVRayTracingInvocationReorder.Name)
             let pAcc        = chain.Add<VkPhysicalDeviceAccelerationStructurePropertiesKHR>      (hasExtension KHRAccelerationStructure.Name)
+            let pOmm        = chain.Add<VkPhysicalDeviceOpacityMicromapPropertiesEXT>            (hasExtension EXTOpacityMicromap.Name)
             let pProperties = chain.Add<VkPhysicalDeviceProperties2>()
 
             VkRaw.vkGetPhysicalDeviceProperties2(handle, VkStructChain.toNativePtr chain)
 
             (!!pProperties).properties, !!pMain, !!pDevId,
-            NativePtr.readOrEmpty pCbc, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTIR, NativePtr.readOrEmpty pAcc
+            NativePtr.readOrEmpty pCbc, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTIR, NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pOmm
 
         {
             Name          = properties.deviceName.Value
@@ -131,7 +134,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             DriverVersion = Version.FromVulkan properties.driverVersion
             UniqueId      = sprintf "{ GUID = %A; Mask = %d }" devId.deviceUUID devId.deviceNodeMask
             NodeMask      = if devId.deviceLUIDValid = VkTrue then devId.deviceNodeMask else 1u
-            Limits        = properties.limits |> DeviceLimits.create main cbc rtp rtir acc
+            Limits        = properties.limits |> DeviceLimits.create main cbc rtp rtir acc omm
         }
 
     let queueFamilyInfos =

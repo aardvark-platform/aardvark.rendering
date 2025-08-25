@@ -33,8 +33,14 @@ and IRaytracingRuntime =
     /// Returns whether threads can be reordered in raytracing shaders.
     abstract member SupportsInvocationReorder : bool
 
+    /// Returns whether the runtime supports micromap to augment acceleration structures with data at a subtriangle level.
+    abstract member SupportsMicromaps : bool
+
     /// Returns the maximum number of levels of ray recursion allowed in a trace command.
     abstract member MaxRayRecursionDepth : int
+
+    /// Returns the maximum subdivison level allowed for micromaps with the given format.
+    abstract member GetMaxMicromapSubdivisionLevel : format: MicromapFormat -> int
 
     /// Compiles a raytracing task for the given pipeline and commands.
     abstract member CompileTrace : pipeline: RaytracingPipelineState * commands: alist<RaytracingCommand> -> IRaytracingTask
