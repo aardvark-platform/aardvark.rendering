@@ -176,6 +176,35 @@ type AdaptiveBoundingBoxes(data: aval<AABBsData>, count: uint32, flags: aval<Geo
     new (boundingBoxes: BoundingBoxes) =
         AdaptiveBoundingBoxes(~~boundingBoxes.Data, boundingBoxes.Count, ~~boundingBoxes.Flags)
 
+    static member inline FromCenterAndRadius(position: aval<V3f>, radius: aval<float32>, flags: aval<GeometryFlags>) =
+        let data =
+            (position, radius) ||> AVal.map2 (fun position radius ->
+                let box = Box3f.FromCenterAndSize(position, V3f(radius * 2.0f))
+                AABBsData(ArrayBuffer [| box |], 0UL, uint64 typeof<Box3f>.CLRSize)
+            )
+        AdaptiveBoundingBoxes(data, 1u, flags)
+
+    static member inline FromCenterAndRadius(position: aval<V3f>, radius: aval<float32>,
+                                             [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
+        AdaptiveBoundingBoxes.FromCenterAndRadius(position, radius, ~~flags)
+
+    static member inline FromCenterAndRadius(position: V3f, radius: float32,
+                                             [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
+        AdaptiveBoundingBoxes.FromCenterAndRadius(~~position, ~~radius, ~~flags)
+
+    static member inline FromCenterAndRadius(position: aval<V3d>, radius: aval<float>, flags: aval<GeometryFlags>) =
+        let position = position |> AVal.map v3f
+        let radius = radius |> AVal.map float32
+        AdaptiveBoundingBoxes.FromCenterAndRadius(position, radius, flags)
+
+    static member inline FromCenterAndRadius(position: aval<V3d>, radius: aval<float>,
+                                             [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
+        AdaptiveBoundingBoxes.FromCenterAndRadius(position, radius, ~~flags)
+
+    static member inline FromCenterAndRadius(position: V3d, radius: float,
+                                             [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
+        AdaptiveBoundingBoxes.FromCenterAndRadius(~~position, ~~radius, ~~flags)
+
     member inline internal this.GetValue(token: AdaptiveToken) =
         BoundingBoxes(this.Data.GetValue token, this.Count, this.Flags.GetValue token)
 
