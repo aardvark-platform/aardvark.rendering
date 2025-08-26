@@ -78,6 +78,8 @@ module TraceObjectFSharp =
     [<AutoOpen>]
     module private Utilities =
 
+        let inline requireUnmanaged<'T when 'T : unmanaged> = ()
+
         let inline (~~~~) (value : 'T) : IAdaptiveValue =
             if typeof<IAdaptiveValue>.IsAssignableFrom typeof<'T> then
                 unbox value
@@ -197,6 +199,7 @@ module TraceObjectFSharp =
         /// Sets a geometry attribute for the given trace object.
         /// The name can be a string or Symbol, or TypedSymbol<'T>.
         static member inline geometryAttribute (name: ^Name, values: #aval<'T> seq) =
+            requireUnmanaged<'T>
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
             let values = Seq.asArray values
 
@@ -209,6 +212,7 @@ module TraceObjectFSharp =
         /// Sets a geometry attribute for the given trace object.
         /// The name can be a string or Symbol, or TypedSymbol<'T>.
         static member inline geometryAttribute (name : ^Name, values : seq<'T>) =
+            requireUnmanaged<'T>
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
             let values = values |> Seq.asArray |> Array.map (~~)
 
@@ -229,12 +233,14 @@ module TraceObjectFSharp =
         /// Sets an instance attribute for the given trace object.
         /// The name can be a string or Symbol, or TypedSymbol<'T>.
         static member inline instanceAttribute (name: ^Name, value: aval<'T>) =
+            requireUnmanaged<'T>
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
             fun (obj : TraceObject) -> obj.InstanceAttributes <- obj.InstanceAttributes |> IDictionary.add sym value; obj
 
         /// Sets an instance attribute for the given trace object.
         /// The name can be a string or Symbol, or TypedSymbol<'T>.
         static member inline instanceAttribute (name: ^Name, value: 'T) =
+            requireUnmanaged<'T>
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
             fun (obj : TraceObject) -> obj.InstanceAttributes <- obj.InstanceAttributes |> IDictionary.add sym ~~~~value; obj
 
@@ -347,7 +353,7 @@ module TraceObjectFSharp =
                 let geometry = geometry.ToNonStripped()
 
                 let attributes = Dictionary()
-                for (KeyValue(sym, arr)) in geometry.IndexedAttributes do
+                for KeyValue(sym, arr) in geometry.IndexedAttributes do
                     attributes.[sym] <- BufferView.ofArray arr
 
                 let mesh = AdaptiveTriangleMesh.FromIndexedGeometry(geometry, trafo, flags, micromap)
