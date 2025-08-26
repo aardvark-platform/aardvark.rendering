@@ -434,15 +434,19 @@ module ``FSharp Style Debug Extensions`` =
         module private Patterns =
             open System.Text.RegularExpressions
 
-            let private debugPrintfRegex =
+            let private debugPrintfRegex = [
                 Regex @".*DEBUG-PRINTF.*\| MessageID = 0x[0-9a-fA-F]+ \| (.*)"
+                Regex @".*DEBUG-PRINTF.*DebugPrintf:\s?(.*)"
+            ]
 
             let (|DebugPrintf|_|) (msg : DebugMessage) =
-                let m = debugPrintfRegex.Match msg.message
-                if m.Success then
-                    Some m.Groups.[1].Value
-                else
-                    None
+                debugPrintfRegex |> List.tryPick (fun rx ->
+                    let m = rx.Match msg.message
+                    if m.Success then
+                        Some m.Groups.[1].Value
+                    else
+                        None
+                )
 
         let private getMessageString = function
             | DebugPrintf str -> str
