@@ -1,3 +1,10 @@
+### 5.6.0-prerelease0008
+- [Vulkan] Fixed case names of enums with a version suffix
+- [Vulkan] Added support for opacity micromaps
+- [Vulkan] Improved detection of debug printf messages
+- [Vulkan] Added AdaptiveBoundingBoxes.FromCenterAndRadius
+- [Vulkan] Added unmanaged constraints for TraceObject methods
+
 ### 5.6.0-prerelease0007
 - [Vulkan] Added check if color attachment supports blending
 - [Vulkan] Added ValidationLayerConfig.RaytracingValidation
