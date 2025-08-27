@@ -1,3 +1,8 @@
+### 5.6.0-prerelease0009
+- [Vulkan] Fixed memory leaks related to cstr
+- [Vulkan] Added micromap pipeline creation flag
+- [Application.Utilities] Removed preventDisposal parameter in ISimpleRenderWindow.Run
+
 ### 5.6.0-prerelease0008
 - [Vulkan] Fixed case names of enums with a version suffix
 - [Vulkan] Added support for opacity micromaps
