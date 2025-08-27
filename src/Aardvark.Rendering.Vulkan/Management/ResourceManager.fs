@@ -14,10 +14,9 @@ open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
 
 open EXTConservativeRasterization
-open KHRBufferDeviceAddress
-open KHRAccelerationStructure
 
 #nowarn "9"
+#nowarn "51"
 
 type ResourceInfo<'T> =
     {
@@ -1216,6 +1215,8 @@ module Resources =
         static let check str err =
             if err <> VkResult.Success then failwithf "[Vulkan] %s" str
 
+        let device = renderPass.Device
+
         override x.Create() =
             base.Create()
             program.Acquire()
@@ -1237,96 +1238,85 @@ module Resources =
             multisample.Release()
 
         override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
-            let program = program.Update(user, token, renderToken)
+            let prog = program.Update(user, token, renderToken).handle
 
-            let prog = program.handle
-            let device = prog.Device
+            use pShaderCreateInfos = fixed prog.ShaderCreateInfos
 
-            let pipeline =
-                native {
-                    let! pShaderCreateInfos = prog.ShaderCreateInfos
+            let mutable viewportState =
+                let vp  =
+                    if device.IsDeviceGroup then
+                        if renderPass.LayerCount > 1 then 1u
+                        else uint32 device.PhysicalDevices.Length
+                    else
+                        1u
 
-                    let! pViewportState =
-                        let vp  =
-                            if device.IsDeviceGroup then
-                                if renderPass.LayerCount > 1 then 1u
-                                else uint32 device.PhysicalDevices.Length
-                            else 1u
-                        VkPipelineViewportStateCreateInfo(
-                            VkPipelineViewportStateCreateFlags.None,
+                VkPipelineViewportStateCreateInfo(
+                    VkPipelineViewportStateCreateFlags.None,
+                    uint32 vp, NativePtr.zero,
+                    uint32 vp, NativePtr.zero
+                )
 
-                            uint32 vp,
-                            NativePtr.zero,
+            let dynamicStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
+            use pDynamicStates = fixed dynamicStates
 
-                            uint32 vp,
-                            NativePtr.zero
-                        )
+            let mutable tessStateInfo =
+                VkPipelineTessellationStateCreateInfo(
+                    VkPipelineTessellationStateCreateFlags.None,
+                    uint32 prog.TessellationPatchSize
+                )
 
-                    let dynamicStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
-                    let! pDynamicStates = Array.map uint32 dynamicStates
+            let pTessState =
+                if prog.HasTessellation then &&tessStateInfo
+                else NativePtr.zero
 
-                    let! pTessStateInfo =
-                        VkPipelineTessellationStateCreateInfo(
-                            VkPipelineTessellationStateCreateFlags.None,
-                            uint32 prog.TessellationPatchSize
-                        )
+            let mutable dynamicStateCreateInfo =
+                VkPipelineDynamicStateCreateInfo(
+                    VkPipelineDynamicStateCreateFlags.None,
+                    uint32 dynamicStates.Length,
+                    pDynamicStates
+                )
 
-                    let pTessState =
-                        if prog.HasTessellation then pTessStateInfo
-                        else NativePtr.zero
+            // TODO: tessellation input-patch-size
 
-                    let! pDynamicStates =
-                        VkPipelineDynamicStateCreateInfo(
-                            VkPipelineDynamicStateCreateFlags.None,
+            let inputState = inputState.Update(user, token, renderToken) |> ignore; inputState.Pointer
+            let inputAssembly = inputAssembly.Update(user, token, renderToken) |> ignore; inputAssembly.Pointer
+            let rasterizerState = rasterizerState.Update(user, token, renderToken) |> ignore; rasterizerState.Pointer
+            let depthStencil = depthStencil.Update(user, token, renderToken) |> ignore; depthStencil.Pointer
+            let colorBlendState = colorBlendState.Update(user, token, renderToken) |> ignore; colorBlendState.Pointer
+            let multisample = multisample.Update(user, token, renderToken) |> ignore; multisample.Pointer
 
-                            uint32 dynamicStates.Length,
-                            NativePtr.cast pDynamicStates
-                        )
+            let basePipeline, derivativeFlag =
+                if not x.HasHandle then
+                    VkPipeline.Null, VkPipelineCreateFlags.None
+                else
+                    !!x.Pointer, VkPipelineCreateFlags.DerivativeBit
 
-                    // TODO: tessellation input-patch-size
+            let mutable handle = VkPipeline.Null
+            let mutable createInfo =
+                VkGraphicsPipelineCreateInfo(
+                    VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
+                    uint32 prog.ShaderCreateInfos.Length,
+                    pShaderCreateInfos,
+                    inputState,
+                    inputAssembly,
+                    pTessState,
+                    &&viewportState,
+                    rasterizerState,
+                    multisample,
+                    depthStencil,
+                    colorBlendState,
+                    &&dynamicStateCreateInfo, //dynamic
+                    prog.PipelineLayout.Handle,
+                    renderPass.Handle,
+                    0u,
+                    basePipeline,
+                    -1
+                )
 
-                    let inputState = inputState.Update(user, token, renderToken) |> ignore; inputState.Pointer
-                    let inputAssembly = inputAssembly.Update(user, token, renderToken) |> ignore; inputAssembly.Pointer
-                    let rasterizerState = rasterizerState.Update(user, token, renderToken) |> ignore; rasterizerState.Pointer
-                    let depthStencil = depthStencil.Update(user, token, renderToken) |> ignore; depthStencil.Pointer
-                    let colorBlendState = colorBlendState.Update(user, token, renderToken) |> ignore; colorBlendState.Pointer
-                    let multisample = multisample.Update(user, token, renderToken) |> ignore; multisample.Pointer
+            VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, &&createInfo, NativePtr.zero, &&handle)
+                |> check "could not create pipeline"
 
-                    let basePipeline, derivativeFlag =
-                        if not x.HasHandle then
-                            VkPipeline.Null, VkPipelineCreateFlags.None
-                        else
-                            !!x.Pointer, VkPipelineCreateFlags.DerivativeBit
-
-                    let! pHandle = VkPipeline.Null
-                    let! pDesc =
-                        VkGraphicsPipelineCreateInfo(
-                            VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
-                            uint32 prog.ShaderCreateInfos.Length,
-                            pShaderCreateInfos,
-                            inputState,
-                            inputAssembly,
-                            pTessState,
-                            pViewportState,
-                            rasterizerState,
-                            multisample,
-                            depthStencil,
-                            colorBlendState,
-                            pDynamicStates, //dynamic
-                            prog.PipelineLayout.Handle,
-                            renderPass.Handle,
-                            0u,
-                            basePipeline,
-                            -1
-                        )
-
-                    VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pDesc, NativePtr.zero, pHandle)
-                        |> check "could not create pipeline"
-
-                    return !!pHandle
-                }
-
-            pipeline
+            handle
 
         override x.Free(p : VkPipeline) =
             VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
