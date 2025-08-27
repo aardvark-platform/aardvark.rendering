@@ -203,8 +203,6 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
     let validationEnabled =
         layers |> List.contains Instance.Layers.Validation
 
-    let appName = CStr.malloc "Aardvark"
-
     let mutable instance, apiVersion =
         let layers = List.toArray layers
         let extensions = List.toArray instanceExtensions
@@ -215,11 +213,13 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                 let! pExtensions = extensions
                 let version = apiVersion.ToVulkan()
 
+                let! pAppName = "Aardvark"
+
                 let! pApplicationInfo =
                     VkApplicationInfo(
-                        appName,
+                        pAppName,
                         0u,
-                        appName,
+                        pAppName,
                         0u,
                         version
                     )

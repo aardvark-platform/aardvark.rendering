@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 #nowarn "9"
+#nowarn "51"
 
 open System
 open System.IO
@@ -221,7 +222,7 @@ module private DebugReportHelpers =
                 observers.Clear()
                 currentId <- 0
 
-        let instanceDisposedHandler = Handler<unit>(fun _ () -> destroy())
+        let instanceDisposedHandler = Handler<unit>(fun _ -> destroy)
 
         let add (obs : IObserver<DebugMessage>) =
             let id = Interlocked.Increment(&currentId)
@@ -267,8 +268,6 @@ module private DebugReportHelpers =
                 | _ ->
                     Report.Warn "[Vulkan] DebugReport Observer removed which was never added"
 
-        let layer = CStr.malloc "DebugReport"
-
         static member internal TryGet(instance: Instance) =
             if instance.DebugReportEnabled then
                 lock adapters (fun () ->
@@ -306,37 +305,40 @@ module private DebugReportHelpers =
                     member x.Dispose() = remove id
                 }
 
-        member x.Raise(severity : MessageSeverity, msg : string) =
+        member x.Raise(severity : MessageSeverity, message : string) =
             let flags = VkDebugUtilsMessageSeverityFlagsEXT.ofMessageSeverity severity
-            native {
-                let! str = msg
 
-                // Validation layer insists on a non-null string here for some reason...
-                let! name = ""
+            // Validation layer insists on a non-null string here for some reason...
+            let pMessage = CStr.malloc message
+            let pObjectName = CStr.malloc ""
+            let pMessageIdName = CStr.malloc "DebugReport"
 
-                let! pObjectName =
+            try
+                let mutable objectNameInfo =
                     VkDebugUtilsObjectNameInfoEXT(
-                        VkObjectType.Instance, uint64 instance.Handle,
-                        name
+                        VkObjectType.Instance, uint64 instance.Handle, pObjectName
                     )
 
-                let! pInfo =
+                let mutable callbackData =
                     VkDebugUtilsMessengerCallbackDataEXT(
                         VkDebugUtilsMessengerCallbackDataFlagsEXT.None,
-                        layer, 0,
-                        str,
+                        pMessageIdName, 0,
+                        pMessage,
                         0u, NativePtr.zero,
                         0u, NativePtr.zero,
-                        1u, pObjectName
+                        1u, &&objectNameInfo
                     )
 
                 VkRaw.vkSubmitDebugUtilsMessageEXT(
                     instance.Handle,
                     flags,
                     VkDebugUtilsMessageTypeFlagsEXT.GeneralBit,
-                    pInfo
+                    &&callbackData
                 )
-            }
+            finally
+                CStr.free pMessage
+                CStr.free pObjectName
+                CStr.free pMessageIdName
 
         member x.TraceObject(handle : uint64) =
             let formatFrame (f : StackFrame) =
