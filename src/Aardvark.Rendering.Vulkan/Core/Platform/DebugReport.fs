@@ -437,18 +437,21 @@ module ``FSharp Style Debug Extensions`` =
             open System.Text.RegularExpressions
 
             let private debugPrintfRegex = [
-                Regex @".*DEBUG-PRINTF.*\| MessageID = 0x[0-9a-fA-F]+ \| (.*)"
-                Regex @".*DEBUG-PRINTF.*DebugPrintf:\s?(.*)"
+                Regex @"DEBUG-PRINTF.*\| MessageID = 0x[0-9a-fA-F]+ \| (.*)"
+                Regex @"DebugPrintf:\s?(.*)"
             ]
 
             let (|DebugPrintf|_|) (msg : DebugMessage) =
-                debugPrintfRegex |> List.tryPick (fun rx ->
-                    let m = rx.Match msg.message
-                    if m.Success then
-                        Some m.Groups.[1].Value
-                    else
-                        None
-                )
+                if msg.layerPrefix = "VVL-DEBUG-PRINTF" then
+                    debugPrintfRegex |> List.tryPick (fun rx ->
+                        let m = rx.Match msg.message
+                        if m.Success then
+                            Some m.Groups.[1].Value
+                        else
+                            None
+                    )
+                else
+                    None
 
         let private getMessageString = function
             | DebugPrintf str -> str
