@@ -17,6 +17,7 @@
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="data\aardvark-icon.bin" />
     <Compile Include="ChooseForm.fs" />
     <Compile Include="Keyboard.fs" />
     <Compile Include="Mouse.fs" />
