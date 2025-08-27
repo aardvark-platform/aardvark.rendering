@@ -2,13 +2,9 @@
 
 open System.Runtime.CompilerServices
 open System.Windows
-open System.Windows.Controls
-open System.Windows.Media
 open Aardvark.Base
 open Aardvark.Application
 open System.Windows.Media.Imaging
-
-
 
 type SimpleRenderWindow() as this =
     inherit Window()
@@ -85,6 +81,7 @@ type SimpleRenderWindow() as this =
         member x.Run() = x.Run()
         member x.BeforeRender = ctrl.BeforeRender
         member x.AfterRender = ctrl.AfterRender
+        member x.Dispose() = ()
 
 
 [<AbstractClass; Sealed; Extension>]

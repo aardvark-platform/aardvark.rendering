@@ -128,7 +128,7 @@ module Utilities =
         abstract member DropFiles : IEvent<Handler<string[]>, string[]>
 
         abstract member Scene : ISg with get, set
-        abstract member Run : ?preventDisposal:bool -> unit
+        abstract member Run : unit -> unit
 
 
     [<AbstractClass>]
@@ -150,7 +150,7 @@ module Utilities =
         default x.Release() = ()
 
         member x.Dispose() =
-            win.TryDispose() |> ignore // Disposes OpenTK.GameWindow and OpenTK.GraphicsContext (depending on backend)
+            win.Dispose()  // Disposes OpenTK.GameWindow and OpenTK.GraphicsContext (depending on backend)
             x.Release() // Application.Dispose / Runtime.Dispose + Context.Dispose
 
         member x.Runtime = win.Runtime
@@ -163,13 +163,7 @@ module Utilities =
             with get() = win.Cursor
             and set c = win.Cursor <- c
 
-        member x.Run(preventDisposal) = 
-            win.Run()
-            match preventDisposal with
-                | Some t when t = true -> ()
-                | _ -> x.Dispose()
-
-        member x.RunWithoutDisposing() = 
+        member x.Run() =
             win.Run()
 
         member x.Scene
@@ -206,8 +200,8 @@ module Utilities =
                         member x.Subscribe(_) = Disposable.empty
                     }
 
-            member x.Run(?preventDisposal) = x.Run(preventDisposal)
-            
+            member x.Run() = x.Run()
+
             member x.View = view
             member x.Proj = proj
 
@@ -587,10 +581,8 @@ module Utilities =
                     compile cfg sg
 
                 override x.Release() =
-                    //win.Dispose() <- todo make this disposable
                     signature.Dispose()     
                     app.Dispose()
-        
 
             } :> ISimpleRenderWindow
 

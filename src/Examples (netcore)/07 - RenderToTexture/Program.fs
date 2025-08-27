@@ -91,6 +91,6 @@ let main argv =
                 } 
             )
     
-    win.Run(preventDisposal = true)
+    win.Run()
 
     0

@@ -267,7 +267,7 @@ let main argv =
         )
         |> Sg.dynamic
 
-    win.Run(preventDisposal = true)
+    win.Run()
 
     workerPool.Dispose()
 

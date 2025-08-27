@@ -46,8 +46,6 @@ type IRenderControl =
     
 type IRenderWindow =
     inherit IRenderControl
-    
+    inherit IDisposable
+
     abstract member Run : unit -> unit
-
-
-            

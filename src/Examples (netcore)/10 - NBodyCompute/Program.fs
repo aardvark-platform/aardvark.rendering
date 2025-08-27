@@ -243,5 +243,5 @@ let main argv =
             |> Sg.uniform "Scale" (AVal.constant 0.05)
             |> Sg.uniform "Magic" magic
 
-    win.Run(preventDisposal = true)
+    win.Run()
     0

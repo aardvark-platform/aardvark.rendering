@@ -526,6 +526,6 @@ let main _argv =
     )
 
     win.Scene <- sg
-    win.Run(preventDisposal = true)
+    win.Run()
 
     0
