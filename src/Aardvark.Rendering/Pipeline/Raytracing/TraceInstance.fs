@@ -22,15 +22,24 @@ type VisibilityMask =
     static member All  = VisibilityMask(true)
     static member None = VisibilityMask(false)
 
+[<Flags>]
 type GeometryMode =
     /// Do not override individual geometry flags.
-    | Default = 0
+    | Default                       = 0
 
     /// Treat all geometries as if GeometryFlags.Opaque was specified.
-    | Opaque = 1
+    /// Mutually exclusive with ForceNoOpaque.
+    | ForceOpaque                   = 1
 
     /// Treat all geometries as if GeometryFlags.Opaque was not specified.
-    | Transparent = 2
+    /// Mutually exclusive with ForceOpaque.
+    | ForceNoOpaque                 = 2
+
+    /// Disable opacity micromaps of geometries in the instance.
+    | DisableOpacityMicromaps       = 4
+
+    /// Force opacity micromaps of geometries in the instance to be evaluated in two-state mode.
+    | ForceOpacityMicromapsTwoState = 8
 
 
 /// Interface for instances in a raytracing scene.

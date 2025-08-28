@@ -17,7 +17,7 @@ type IndexType =
 type GeometryFlags =
     | None                = 0
 
-    /// Geometry does not invoke any hit shaders.
+    /// Geometry does not invoke any-hit shaders.
     | Opaque              = 1
 
     /// Any hit shader may only be invoked once per primitive in the geometry.

@@ -5,6 +5,7 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
 open KHRAccelerationStructure
+open EXTOpacityMicromap
 open CompactBufferImplementation
 
 open FSharp.Data.Adaptive
@@ -14,7 +15,7 @@ module internal InstanceBuffer =
     [<AutoOpen>]
     module private Helpers =
 
-        let private getFlags (frontFace : WindingOrder voption) (geometryMode : GeometryMode) =
+        let private getFlags (micromaps : bool) (frontFace : WindingOrder voption) (geometryMode : GeometryMode) =
             let c =
                 frontFace |> (function
                     | ValueSome order ->
@@ -29,11 +30,20 @@ module internal InstanceBuffer =
                 )
 
             let g =
-                geometryMode |> (function
-                    | GeometryMode.Default -> VkGeometryInstanceFlagsKHR.None
-                    | GeometryMode.Opaque  -> VkGeometryInstanceFlagsKHR.ForceOpaqueBit
-                    | _                    -> VkGeometryInstanceFlagsKHR.ForceNoOpaqueBit
-                )
+                [
+                    if geometryMode.HasFlag GeometryMode.ForceOpaque then
+                        VkGeometryInstanceFlagsKHR.ForceOpaqueBit
+                    elif geometryMode.HasFlag GeometryMode.ForceNoOpaque then
+                        VkGeometryInstanceFlagsKHR.ForceNoOpaqueBit
+
+                    if micromaps then
+                        if geometryMode.HasFlag GeometryMode.DisableOpacityMicromaps then
+                            VkGeometryInstanceFlagsKHR.DisableOpacityMicromapsExt
+
+                        if geometryMode.HasFlag GeometryMode.ForceOpacityMicromapsTwoState then
+                            VkGeometryInstanceFlagsKHR.ForceOpacityMicromap2StateExt
+                ]
+                |> List.fold (|||) VkGeometryInstanceFlagsKHR.None
 
             c ||| g
 
@@ -47,7 +57,7 @@ module internal InstanceBuffer =
 
             uint32 sbt.HitGroupTable.Indices.[cfg]
 
-        let evaluate (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (inst : ITraceInstance) =
+        let evaluate (micromaps : bool) (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (inst : ITraceInstance) =
             let trafo = inst.Transform.GetValue(token)
             let index = inst.CustomIndex.GetValue(token)
             let mask = inst.Mask.GetValue(token)
@@ -60,7 +70,7 @@ module internal InstanceBuffer =
                 index,
                 uint32 mask,
                 getHitGroup sbt token inst,
-                getFlags front geom,
+                getFlags micromaps front geom,
                 accel.DeviceAddress
             )
 
@@ -72,7 +82,7 @@ module internal InstanceBuffer =
 
     let create (device : Device) (sbt : aval<ShaderBindingTable>) (instances : aset<ITraceInstance>) : ICompactBuffer =
         { new AdaptiveCompactBuffer<_, _>(
-                device.Runtime, evaluate sbt, acquire, release, instances,
+                device.Runtime, evaluate device.EnabledFeatures.Raytracing.Micromap sbt, acquire, release, instances,
                 BufferUsage.Write ||| BufferUsage.AccelerationStructure,
                 BufferStorage.Host
             ) with
