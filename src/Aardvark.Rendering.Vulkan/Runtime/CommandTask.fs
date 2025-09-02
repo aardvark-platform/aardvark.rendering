@@ -122,15 +122,14 @@ type ResourceManagerExtensions private() =
 
         let vertexBuffers = 
             layout.PipelineInfo.pInputs 
-                |> List.sortBy (fun i -> i.paramLocation) 
-                |> List.map (fun i ->
-                    let sem = Symbol.Create i.paramSemantic 
-                    match Map.tryFind sem g.vertexAttributes with
-                        | Some b ->
-                            this.CreateVertexBuffer(sem, b), 0L
-                        | None ->
-                            failf "geometry does not have buffer %A" sem
-                )
+            |> List.sortBy _.paramLocation
+            |> List.toArray
+            |> Array.map (fun i ->
+                let sem = Symbol.Create i.paramSemantic
+                match Map.tryFind sem g.vertexAttributes with
+                | Some b -> this.CreateVertexBuffer(sem, b)
+                | None -> failf "geometry does not have buffer %A" sem
+            )
 
         let dsb = this.CreateDescriptorSetBinding(VkPipelineBindPoint.Graphics, layout, descriptorSets)
         let vbb = this.CreateVertexBufferBinding(vertexBuffers)

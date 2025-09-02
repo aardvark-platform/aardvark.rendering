@@ -63,66 +63,31 @@ module IndirectCommands =
         struct
             val mutable public FirstBinding : int
             val mutable public BindingCount : int
-            val mutable public Buffers : nativeptr<VkBuffer>
-            val mutable public Offsets : nativeptr<uint64>
+            val mutable public Buffers      : nativeptr<VkBuffer>
+            val mutable public Offsets      : nativeptr<uint64>
 
-            member x.Dispose() =
-                if not (NativePtr.isNull x.Buffers) then
-                    NativePtr.free x.Buffers
-                    x.Buffers <- NativePtr.zero
+            new (count: int, [<Optional; DefaultParameterValue(0)>] first: int) =
+                {
+                    FirstBinding = first
+                    BindingCount = count
+                    Buffers      = NativePtr.alloc count
+                    Offsets      = NativePtr.alloc count
+                }
 
-                if not (NativePtr.isNull x.Offsets) then
-                    NativePtr.free x.Offsets
-                    x.Offsets <- NativePtr.zero
+            member this.Dispose() =
+                if not <| NativePtr.isNullPtr this.Buffers then
+                    NativePtr.free this.Buffers
+                    this.Buffers <- NativePtr.zero
 
-                x.FirstBinding <- 0
-                x.BindingCount <- 0
+                if not <| NativePtr.isNullPtr this.Offsets then
+                    NativePtr.free this.Offsets
+                    this.Offsets <- NativePtr.zero
+
+                this.FirstBinding <- 0
+                this.BindingCount <- 0
 
             interface IDisposable with
                 member x.Dispose() = x.Dispose()
-
-            member x.TryUpdate(first : int, buffers : array<VkBuffer>, offsets : int64[]) =
-                if x.FirstBinding = first && buffers.Length = x.BindingCount then
-                    let count = x.BindingCount
-                    for i in 0 .. count-1 do
-                        NativePtr.set x.Buffers i (buffers.[i])
-                        NativePtr.set x.Offsets i (uint64 offsets.[i])
-                    true
-                else
-                    false
-
-            new(first : int, buffers : array<VkBuffer>, offsets : int64[]) =
-                let count = buffers.Length
-                let pBuffers = NativePtr.alloc count
-                let pOffsets = NativePtr.alloc count
-
-                for i in 0 .. count-1 do
-                    NativePtr.set pBuffers i (buffers.[i])
-                    NativePtr.set pOffsets i (uint64 offsets.[i])
-
-                {
-                    FirstBinding = first
-                    BindingCount = count
-                    Buffers = pBuffers
-                    Offsets = pOffsets
-                }
-
-            new(first : int, buffersAndOffsets : array<VkBuffer * int64>) =
-                let count = buffersAndOffsets.Length
-                let pBuffers = NativePtr.alloc count
-                let pOffsets = NativePtr.alloc count
-
-                for i in 0 .. buffersAndOffsets.Length-1 do
-                    let (b, o) = buffersAndOffsets.[i]
-                    NativePtr.set pBuffers i b
-                    NativePtr.set pOffsets i (uint64 o)
-
-                {
-                    FirstBinding = first
-                    BindingCount = count
-                    Buffers = pBuffers
-                    Offsets = pOffsets
-                }
         end
 
 
@@ -130,49 +95,31 @@ module IndirectCommands =
     type DescriptorSetBinding =
         struct
             val mutable public FirstIndex : int
-            val mutable public Count : int
-            val mutable public BindPoint : VkPipelineBindPoint
-            val mutable public Layout : VkPipelineLayout
-            val mutable public Sets : nativeptr<VkDescriptorSet>
+            val mutable public Count      : int
+            val mutable public BindPoint  : VkPipelineBindPoint
+            val mutable public Layout     : VkPipelineLayout
+            val mutable public Sets       : nativeptr<VkDescriptorSet>
 
-            member x.Dispose() =
-                if not (NativePtr.isNull x.Sets) then
-                    NativePtr.free x.Sets
-                    x.Sets <- NativePtr.zero
+            new (bindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, count: int, [<Optional; DefaultParameterValue(0)>] first: int) =
+                {
+                    FirstIndex = first
+                    Count      = count
+                    BindPoint  = bindPoint
+                    Layout     = layout
+                    Sets       = NativePtr.alloc count
+                }
 
-                x.Layout <- VkPipelineLayout.Null
-                x.FirstIndex <- 0
-                x.Count <- 0
+            member this.Dispose() =
+                if not <| NativePtr.isNullPtr this.Sets then
+                    NativePtr.free this.Sets
+                    this.Sets <- NativePtr.zero
+
+                this.Layout <- VkPipelineLayout.Null
+                this.FirstIndex <- 0
+                this.Count <- 0
 
             interface IDisposable with
                 member x.Dispose() = x.Dispose()
-
-            new(bindPoint : VkPipelineBindPoint, layout : VkPipelineLayout, first : int, sets : array<VkDescriptorSet>) =
-                let count = sets.Length
-                let pSets = NativePtr.alloc count
-
-                for i in 0 .. count-1 do
-                    let s = sets.[i]
-                    NativePtr.set pSets i s
-
-                {
-                    FirstIndex = first
-                    Count = count
-                    BindPoint = bindPoint
-                    Layout = layout
-                    Sets = pSets
-                }
-
-            new(bindPoint : VkPipelineBindPoint, layout : VkPipelineLayout, first : int, count : int) =
-                let pSets = NativePtr.alloc count
-
-                {
-                    FirstIndex = first
-                    Count = count
-                    BindPoint = bindPoint
-                    Layout = layout
-                    Sets = pSets
-                }
         end
 
 
@@ -181,11 +128,11 @@ module IndirectCommands =
         struct
             val mutable public Buffer : VkBuffer
             val mutable public Offset : VkDeviceSize
-            val mutable public Type : VkIndexType
+            val mutable public Type   : VkIndexType
 
-            new(b : VkBuffer, t : VkIndexType) = { Buffer = b; Offset = 0UL; Type = t }
+            new(buffer: VkBuffer, indexType: VkIndexType, [<Optional; DefaultParameterValue(0UL)>] offset: uint64) =
+                { Buffer = buffer; Offset = offset; Type = indexType }
         end
-    
 
 module VKVM = 
 

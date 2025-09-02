@@ -2,7 +2,6 @@
 
 open System
 open System.Threading
-open System.Runtime.InteropServices
 open System.Collections.Generic
 open System.Collections.Concurrent
 
@@ -321,87 +320,31 @@ type AbstractPointerResource<'T when 'T : unmanaged>(owner : IResourceCache, key
     let mutable version = 0
     let mutable hasHandle = false
 
-    abstract member Compute : user: IResourceUser * token: AdaptiveToken * renderToken: RenderToken -> 'T
-    abstract member Free : 'T -> unit
-    default x.Free _ = ()
+    abstract member Update : handle: 'T byref *  user: IResourceUser * token: AdaptiveToken * renderToken: RenderToken -> bool
+    abstract member Free : handle: 'T inref -> unit
+    default _.Free _ = ()
 
     member x.Pointer = ptr
-
     member x.HasHandle = hasHandle
-
-    member x.NoChange() =
-        dec &version
+    member x.Handle = NativePtr.toByRef ptr
 
     override x.Create() =
         ptr <- NativePtr.alloc 1
 
     override x.Destroy() =
         if hasHandle then
-            let v = NativePtr.read ptr
-            x.Free v
-            NativePtr.free ptr
-            hasHandle <- false
+            x.Free &x.Handle
+
+        NativePtr.free ptr
+        hasHandle <- false
 
     override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
         if x.OutOfDate then
-            let value = x.Compute(user, token, renderToken)
-            if hasHandle then
-                let v = NativePtr.read ptr
-                x.Free v
-
-            NativePtr.write ptr value
+            let changed = x.Update(&x.Handle, user, token, renderToken)
+            if changed || not hasHandle then inc &version
             hasHandle <- true
-            inc &version
-            { handle = value; version = version }
-        else
-            { handle = NativePtr.read ptr; version = version }
 
-    interface INativeResourceLocation<'T> with
-        member x.Pointer = x.Pointer
-
-[<AbstractClass>]
-type AbstractPointerResourceWithEquality<'T when 'T : unmanaged>(owner : IResourceCache, key : list<obj>) =
-    inherit AbstractResourceLocation<'T>(owner, key)
-
-    let mutable ptr = NativePtr.zero
-    let mutable version = 0
-    let mutable hasHandle = false
-
-    abstract member Compute : user: IResourceUser * token: AdaptiveToken * renderToken: RenderToken -> 'T
-    abstract member Free : 'T -> unit
-    default x.Free _ = ()
-
-    member x.Pointer = ptr
-
-    override x.Create() =
-        ptr <- NativePtr.alloc 1
-
-    override x.Destroy() =
-        if hasHandle then
-            let v = NativePtr.read ptr
-            x.Free v
-            NativePtr.free ptr
-            hasHandle <- false
-
-    override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
-        if x.OutOfDate then
-            let value = x.Compute(user, token, renderToken)
-            if hasHandle then
-                let v = NativePtr.read ptr
-                if Unchecked.equals v value then
-                    { handle = value; version = version }
-                else
-                    x.Free v
-                    NativePtr.write ptr value
-                    inc &version
-                    { handle = value; version = version }
-            else
-                NativePtr.write ptr value
-                hasHandle <- true
-                inc &version
-                { handle = value; version = version }
-        else
-            { handle = NativePtr.read ptr; version = version }
+        { handle = NativePtr.read ptr; version = version }
 
     interface INativeResourceLocation<'T> with
         member x.Pointer = x.Pointer
@@ -887,67 +830,66 @@ module Resources =
         member x.Layout = layout
 
     type InputAssemblyStateResource(owner : IResourceCache, key : list<obj>, input : IndexedGeometryMode, program : IResourceLocation<ShaderProgram>) =
-        inherit AbstractPointerResourceWithEquality<VkPipelineInputAssemblyStateCreateInfo>(owner, key)
+        inherit AbstractPointerResource<VkPipelineInputAssemblyStateCreateInfo>(owner, key)
 
         override x.Create() =
             base.Create()
             program.Acquire()
 
         override x.Destroy() =
-            base.Destroy()
             program.Release()
+            base.Destroy()
 
-        override x.Compute(user, token, renderToken) =
-            let p = program.Update(user, token, renderToken)
-            let res = input |> InputAssemblyState.ofIndexedGeometryMode p.handle.HasTessellation
+        override x.Update(handle, user, token, renderToken) =
+            let info = program.Update(user, token, renderToken)
+            let state = input |> InputAssemblyState.ofIndexedGeometryMode info.handle.HasTessellation
 
-            VkPipelineInputAssemblyStateCreateInfo(
-                VkPipelineInputAssemblyStateCreateFlags.None,
-                res.topology,
-                (if res.restartEnable then 1u else 0u)
-            )
+            let result =
+                VkPipelineInputAssemblyStateCreateInfo(
+                    VkPipelineInputAssemblyStateCreateFlags.None,
+                    state.topology,
+                    VkBool32.ofBool state.restartEnable
+                )
+
+            if result <> handle then
+                handle <- result
+                true
+            else
+                false
 
     type VertexInputStateResource(owner : IResourceCache, key : list<obj>, prog : PipelineInfo, input : aval<Map<Symbol, VertexInputDescription>>) =
         inherit AbstractPointerResource<VkPipelineVertexInputStateCreateInfo>(owner, key)
-        static let collecti (f : int -> 'a -> list<'b>) (m : list<'a>) =
-            m |> List.indexed |> List.collect (fun (i,v) -> f i v)
 
-        override x.Free(state : VkPipelineVertexInputStateCreateInfo) =
-            NativePtr.free state.pVertexAttributeDescriptions
-            NativePtr.free state.pVertexBindingDescriptions
-
-        override x.Compute(user, token, renderToken) =
+        override x.Update(handle, user, token, renderToken) =
             let state = input.GetValue(user, token, renderToken)
 
-            let inputs = prog.pInputs |> List.sortBy (fun p -> p.paramLocation)
+            let inputs = prog.pInputs |> List.sortBy _.paramLocation
 
             let paramsWithInputs =
                 inputs |> List.map (fun p ->
                     let sem = Symbol.Create p.paramSemantic
                     match Map.tryFind sem state with
-                        | Some ip ->
-                            p.paramLocation, p, ip
-                        | None ->
-                            failf "could not get vertex input-type for %A" p
+                    | Some desc -> struct (p.paramLocation, desc)
+                    | None -> failf "could not get vertex input-type for %A" p
                 )
 
             let inputBindings =
-                paramsWithInputs |> List.mapi (fun i (loc, p, ip) ->
+                paramsWithInputs |> List.mapi (fun i struct (_, desc) ->
                     VkVertexInputBindingDescription(
                         uint32 i,
-                        uint32 ip.stride,
-                        ip.stepRate
+                        uint32 desc.stride,
+                        desc.stepRate
                     )
                 ) |> List.toArray
 
             let inputAttributes =
-                paramsWithInputs |> collecti (fun bi (loc, p, ip) ->
-                    ip.offsets |> List.mapi (fun i off ->
+                paramsWithInputs |> List.collecti (fun binding struct (location, desc) ->
+                    desc.offsets |> List.mapi (fun i offset ->
                         VkVertexInputAttributeDescription(
-                            uint32 (loc + i),
-                            uint32 bi,
-                            ip.inputFormat,
-                            uint32 off
+                            uint32 (location + i),
+                            uint32 binding,
+                            desc.inputFormat,
+                            uint32 offset
                         )
                     )
                 ) |> List.toArray
@@ -961,24 +903,34 @@ module Resources =
             for i in 0 .. inputAttributes.Length - 1 do
                 NativePtr.set pInputAttributes i inputAttributes.[i]
 
-            VkPipelineVertexInputStateCreateInfo(
-                VkPipelineVertexInputStateCreateFlags.None,
+            if x.HasHandle then
+                x.Free &handle
 
-                uint32 inputBindings.Length,
-                pInputBindings,
+            handle <-
+                VkPipelineVertexInputStateCreateInfo(
+                    VkPipelineVertexInputStateCreateFlags.None,
 
-                uint32 inputAttributes.Length,
-                pInputAttributes
-            )
+                    uint32 inputBindings.Length,
+                    pInputBindings,
+
+                    uint32 inputAttributes.Length,
+                    pInputAttributes
+                )
+
+            true
+
+        override x.Free(handle) =
+            NativePtr.free handle.pVertexBindingDescriptions
+            NativePtr.free handle.pVertexAttributeDescriptions
 
 
     type DepthStencilStateResource(owner : IResourceCache, key : list<obj>,
                                    depthTest : aval<DepthTest>, depthWrite : aval<bool>,
                                    stencilModeF : aval<StencilMode>, stencilMaskF : aval<StencilMask>,
                                    stencilModeB : aval<StencilMode>, stencilMaskB : aval<StencilMask>) =
-        inherit AbstractPointerResourceWithEquality<VkPipelineDepthStencilStateCreateInfo>(owner, key)
+        inherit AbstractPointerResource<VkPipelineDepthStencilStateCreateInfo>(owner, key)
 
-        override x.Compute(user, token, renderToken) =
+        override x.Update(handle, user, token, renderToken) =
             let depthTest = depthTest.GetValue(user, token, renderToken)
             let depthWrite = depthWrite.GetValue(user, token, renderToken)
 
@@ -990,30 +942,36 @@ module Resources =
             let depth = DepthState.create depthWrite depthTest
             let stencil = StencilState.create stencilMaskF stencilMaskB stencilModeF stencilModeB
 
-            VkPipelineDepthStencilStateCreateInfo(
-                VkPipelineDepthStencilStateCreateFlags.None,
-                (if depth.testEnabled then 1u else 0u),
-                (if depth.writeEnabled then 1u else 0u),
-                depth.compare,
-                (if depth.boundsTest then 1u else 0u),
-                (if stencil.enabled then 1u else 0u),
-                stencil.front,
-                stencil.back,
-                float32 depth.depthBounds.Min,
-                float32 depth.depthBounds.Max
-            )
+            let result =
+                VkPipelineDepthStencilStateCreateInfo(
+                    VkPipelineDepthStencilStateCreateFlags.None,
+                    VkBool32.ofBool depth.testEnabled,
+                    VkBool32.ofBool depth.writeEnabled,
+                    depth.compare,
+                    VkBool32.ofBool depth.boundsTest,
+                    VkBool32.ofBool stencil.enabled,
+                    stencil.front,
+                    stencil.back,
+                    float32 depth.depthBounds.Min,
+                    float32 depth.depthBounds.Max
+                )
+
+            if result <> handle then
+                handle <- result
+                true
+            else
+                false
 
     type RasterizerStateResource(owner : IResourceCache, key : list<obj>,
                                  depthClamp : aval<bool>, depthBias : aval<DepthBias>,
                                  cull : aval<CullMode>, frontFace : aval<WindingOrder>, fill : aval<FillMode>,
                                  conservativeRaster : aval<bool>) =
-        inherit AbstractPointerResourceWithEquality<VkPipelineRasterizationStateCreateInfo>(owner, key)
+        inherit AbstractPointerResource<VkPipelineRasterizationStateCreateInfo>(owner, key)
 
-        override x.Free(info : VkPipelineRasterizationStateCreateInfo) =
-            if info.pNext <> 0n then
-                Marshal.FreeHGlobal info.pNext
+        let supportsConservativeRaster = owner.Device.IsExtensionEnabled EXTConservativeRasterization.Name
+        let mutable conservativeState = VkPipelineRasterizationConservativeStateCreateInfoEXT.Empty
 
-        override x.Compute(user, token, renderToken) =
+        override x.Update(handle, user, token, renderToken) =
             let depthClamp = depthClamp.GetValue(user, token, renderToken)
             let bias = depthBias.GetValue(user, token, renderToken)
             let cull = cull.GetValue(user, token, renderToken)
@@ -1022,56 +980,63 @@ module Resources =
             let conservativeRaster = conservativeRaster.GetValue(user, token, renderToken)
             let state = RasterizerState.create conservativeRaster depthClamp bias cull front fill
 
-            let pConservativeRaster =
-                if conservativeRaster then
-                    let info =
+            let pConservativeState =
+                if supportsConservativeRaster && conservativeRaster then
+                    conservativeState <-
                         VkPipelineRasterizationConservativeStateCreateInfoEXT(
                             VkPipelineRasterizationConservativeStateCreateFlagsEXT.None,
                             VkConservativeRasterizationModeEXT.Overestimate,
                             0.0f
                         )
 
-                    let ptr = NativePtr.alloc<VkPipelineRasterizationConservativeStateCreateInfoEXT> 1
-                    info |> NativePtr.write ptr
-                    NativePtr.toNativeInt ptr
+                    &&conservativeState
                 else
-                    0n
+                    NativePtr.zero
 
-            VkPipelineRasterizationStateCreateInfo(
-                pConservativeRaster,
-                VkPipelineRasterizationStateCreateFlags.None,
-                (if state.depthClampEnable then 1u else 0u),
-                (if state.rasterizerDiscardEnable then 1u else 0u),
-                state.polygonMode,
-                state.cullMode,
-                state.frontFace,
-                (if state.depthBiasEnable then 1u else 0u),
-                float32 state.depthBiasConstantFactor,
-                float32 state.depthBiasClamp,
-                float32 state.depthBiasSlopeFactor,
-                float32 state.lineWidth
-            )
+            handle <-
+                VkPipelineRasterizationStateCreateInfo(
+                    pConservativeState.Address,
+                    VkPipelineRasterizationStateCreateFlags.None,
+                    VkBool32.ofBool state.depthClampEnable,
+                    VkBool32.ofBool state.rasterizerDiscardEnable,
+                    state.polygonMode,
+                    state.cullMode,
+                    state.frontFace,
+                    VkBool32.ofBool state.depthBiasEnable,
+                    float32 state.depthBiasConstantFactor,
+                    float32 state.depthBiasClamp,
+                    float32 state.depthBiasSlopeFactor,
+                    float32 state.lineWidth
+                )
+
+            true
 
     type ColorBlendStateResource(owner : IResourceCache, key : list<obj>,
                                  writeMasks : aval<ColorMask[]>, blendModes : aval<BlendMode[]>, blendConstant : aval<C4f>, blendSupported : bool[]) =
-        inherit AbstractPointerResourceWithEquality<VkPipelineColorBlendStateCreateInfo>(owner, key)
+        inherit AbstractPointerResource<VkPipelineColorBlendStateCreateInfo>(owner, key)
 
-        override x.Free(h : VkPipelineColorBlendStateCreateInfo) =
-            NativePtr.free h.pAttachments
+        let attachmentCount = blendSupported.Length
+        let mutable pAttachmentStates = NativePtr.zero<VkPipelineColorBlendAttachmentState>
 
-        override x.Compute(user, token, renderToken) =
+        override x.Create() =
+            base.Create()
+            pAttachmentStates <- NativePtr.alloc attachmentCount
+
+        override x.Destroy() =
+            NativePtr.free pAttachmentStates
+            base.Destroy()
+
+        override x.Update(handle, user, token, renderToken) =
             let writeMasks = writeMasks.GetValue(user, token, renderToken)
             let blendModes = blendModes.GetValue(user, token, renderToken)
             let blendConstant = blendConstant.GetValue(user, token, renderToken)
-
             let state = ColorBlendState.create writeMasks blendModes blendConstant
-            let pAttStates = NativePtr.alloc writeMasks.Length
 
-            for i in 0 .. state.attachmentStates.Length - 1 do
+            for i in 0 .. attachmentCount - 1 do
                 let s = state.attachmentStates.[i]
-                let att =
+                pAttachmentStates.[i] <-
                     VkPipelineColorBlendAttachmentState(
-                        (if s.enabled && blendSupported.[i] then VkTrue else VkFalse),
+                        VkBool32.ofBool (s.enabled && blendSupported.[i]),
                         s.srcFactor,
                         s.dstFactor,
                         s.operation,
@@ -1080,48 +1045,58 @@ module Resources =
                         s.operationAlpha,
                         s.colorWriteMask
                     )
-                NativePtr.set pAttStates i att
 
+            handle <-
+                VkPipelineColorBlendStateCreateInfo(
+                    VkPipelineColorBlendStateCreateFlags.None,
+                    (if state.logicOpEnable then 1u else 0u),
+                    state.logicOp,
+                    uint32 writeMasks.Length,
+                    pAttachmentStates,
+                    state.constant
+                )
 
-            VkPipelineColorBlendStateCreateInfo(
-                VkPipelineColorBlendStateCreateFlags.None,
-                (if state.logicOpEnable then 1u else 0u),
-                state.logicOp,
-                uint32 writeMasks.Length,
-                pAttStates,
-                state.constant
-            )
+            true
 
     // TODO: Sample shading
     type MultisampleStateResource(owner : IResourceCache, key : list<obj>, samples : int, enable : aval<bool>) =
-        inherit AbstractPointerResourceWithEquality<VkPipelineMultisampleStateCreateInfo>(owner, key)
+        inherit AbstractPointerResource<VkPipelineMultisampleStateCreateInfo>(owner, key)
 
-        override x.Compute(user, token, renderToken) =
+        override x.Update(handle, user, token, renderToken) =
             //let enable = enable.GetValue token
 
             // TODO: Cannot disable MSAA here...
             //let samples = if enable then samples else 1
             let state = MultisampleState.create false samples
 
-            VkPipelineMultisampleStateCreateInfo(
-                VkPipelineMultisampleStateCreateFlags.None,
-                unbox state.samples,
-                (if state.sampleShadingEnable then 1u else 0u),
-                float32 state.minSampleShading,
-                NativePtr.zero,
-                (if state.alphaToCoverageEnable then 1u else 0u),
-                (if state.alphaToOneEnable then 1u else 0u)
-            )
+            let result =
+                VkPipelineMultisampleStateCreateInfo(
+                    VkPipelineMultisampleStateCreateFlags.None,
+                    enum state.samples,
+                    VkBool32.ofBool state.sampleShadingEnable,
+                    float32 state.minSampleShading,
+                    NativePtr.zero,
+                    VkBool32.ofBool state.alphaToCoverageEnable,
+                    VkBool32.ofBool state.alphaToOneEnable
+                )
+
+            if result <> handle then
+                handle <- result
+                true
+            else
+                false
 
     type DirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : aval<list<DrawCallInfo>>) =
-        inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)
+        inherit AbstractPointerResource<DrawCall>(owner, key)
 
-        override x.Free(call : DrawCall) =
-            call.Dispose()
+        override x.Free(handle : DrawCall inref) =
+            handle.Dispose()
 
-        override x.Compute(user, token, renderToken) =
+        override x.Update(handle, user, token, renderToken) =
             let calls = calls.GetValue(user, token, renderToken)
-            DrawCall.Direct(indexed, List.toArray calls)
+            if x.HasHandle then x.Free &handle
+            handle <- DrawCall.Direct(indexed, List.toArray calls)
+            true
 
     type DescriptorSetResource(owner : IResourceCache, key : list<obj>, layout : DescriptorSetLayout, bindings : IAdaptiveDescriptor[]) =
         inherit AbstractResourceLocation<DescriptorSet>(owner, key)
@@ -1212,9 +1187,6 @@ module Resources =
                           multisample : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>) =
         inherit AbstractPointerResource<VkPipeline>(owner, key)
 
-        static let check str err =
-            if err <> VkResult.Success then failwithf "[Vulkan] %s" str
-
         let device = renderPass.Device
 
         override x.Create() =
@@ -1237,7 +1209,7 @@ module Resources =
             depthStencil.Release()
             multisample.Release()
 
-        override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+        override x.Update(handle : VkPipeline byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             let prog = program.Update(user, token, renderToken).handle
 
             use pShaderCreateInfos = fixed prog.ShaderCreateInfos
@@ -1289,9 +1261,9 @@ module Resources =
                 if not x.HasHandle then
                     VkPipeline.Null, VkPipelineCreateFlags.None
                 else
-                    !!x.Pointer, VkPipelineCreateFlags.DerivativeBit
+                    handle, VkPipelineCreateFlags.DerivativeBit
 
-            let mutable handle = VkPipeline.Null
+            let mutable result = VkPipeline.Null
             let mutable createInfo =
                 VkGraphicsPipelineCreateInfo(
                     VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
@@ -1313,16 +1285,20 @@ module Resources =
                     -1
                 )
 
-            VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, &&createInfo, NativePtr.zero, &&handle)
+            VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, &&createInfo, NativePtr.zero, &&result)
                 |> check "could not create pipeline"
 
-            handle
+            if x.HasHandle then
+                x.Free &handle
 
-        override x.Free(p : VkPipeline) =
-            VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
+            handle <- result
+            true
+
+        override x.Free(handle : VkPipeline inref) =
+            VkRaw.vkDestroyPipeline(renderPass.Device.Handle, handle, NativePtr.zero)
 
     type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
-        inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)
+        inherit AbstractPointerResource<DrawCall>(owner, key)
 
         override x.Create() =
             base.Create()
@@ -1332,102 +1308,89 @@ module Resources =
             base.Destroy()
             calls.Release()
 
-        override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+        override x.Update(handle : DrawCall byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             let calls = calls.Update(user, token, renderToken)
-            let call = DrawCall.Indirect(indexed, calls.handle.Handle, calls.handle.Count)
-            call
+            if x.HasHandle then x.Free &handle
+            handle <- DrawCall.Indirect(indexed, calls.handle.Handle, calls.handle.Count)
+            true
 
-        override x.Free(call : DrawCall) =
-            call.Dispose()
+        override x.Free(handle : DrawCall inref) =
+            handle.Dispose()
 
-    type BufferBindingResource(owner : IResourceCache, key : list<obj>, buffers : list<IResourceLocation<Buffer> * int64>) =
+    type BufferBindingResource(owner : IResourceCache, key : list<obj>, buffers : IResourceLocation<Buffer>[]) =
         inherit AbstractPointerResource<VertexBufferBinding>(owner, key)
-
-        let mutable last = []
 
         override x.Create() =
             base.Create()
-            for (b,_) in buffers do b.Acquire()
+            for b in buffers do b.Acquire()
+            x.Handle <- new VertexBufferBinding(count = buffers.Length)
+            for i = 0 to buffers.Length - 1 do x.Handle.Offsets.[i] <- 0UL
 
         override x.Destroy() =
+            x.Handle.Dispose()
+            for b in buffers do b.Release()
             base.Destroy()
-            for (b,_) in buffers do b.Release()
 
-        override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
-            let calls = buffers |> List.map (fun (b,o) -> b.Update(user, token, renderToken).handle.Handle, o)
+        override x.Update(handle : VertexBufferBinding byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            let mutable changed = false
 
-            if calls <> last then last <- calls
-            else x.NoChange()
+            for i = 0 to buffers.Length - 1 do
+                let buffer = buffers.[i].Update(user, token, renderToken).handle.Handle
 
-            let call = new VertexBufferBinding(0, List.toArray calls)
-            call
+                if handle.Buffers.[i] <> buffer then
+                    handle.Buffers.[i] <- buffer
+                    changed <- true
 
-        override x.Free(b : VertexBufferBinding) =
-            b.Dispose()
+            changed
 
     type DescriptorSetBindingResource(owner : IResourceCache, key : list<obj>,
                                       bindPoint : VkPipelineBindPoint, layout : PipelineLayout, sets : IResourceLocation<DescriptorSet>[]) =
         inherit AbstractPointerResource<DescriptorSetBinding>(owner, key)
 
-        let mutable setVersions = Array.init sets.Length (fun _ -> -1)
-        let mutable target : DescriptorSetBinding voption = ValueNone
+        let mutable versions = Array.replicate sets.Length -1
 
         override x.Create() =
             base.Create()
             for s in sets do s.Acquire()
+            x.Handle <- new DescriptorSetBinding(bindPoint, layout.Handle, count = sets.Length)
 
         override x.Destroy() =
-            base.Destroy()
+            x.Handle.Dispose()
+            Array.fill versions 0 versions.Length -1
             for s in sets do s.Release()
-            setVersions <- Array.init sets.Length (fun _ -> -1)
-            match target with
-            | ValueSome t -> t.Dispose(); target <- ValueNone
-            | ValueNone -> ()
+            base.Destroy()
 
-        override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+        override x.Update(handle : DescriptorSetBinding byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             let mutable changed = false
-            let target =
-                match target with
-                | ValueSome t -> t
-                | ValueNone ->
-                    let t = new DescriptorSetBinding(bindPoint, layout.Handle, 0, sets.Length)
-                    target <- ValueSome t
-                    t
 
             for i in 0 .. sets.Length - 1 do
                 let info = sets.[i].Update(user, token, renderToken)
-                NativePtr.set target.Sets i info.handle.Handle
-                if info.version <> setVersions.[i] then
-                    setVersions.[i] <- info.version
+                handle.Sets[i] <- info.handle.Handle
+
+                if info.version <> versions.[i] then
+                    versions.[i] <- info.version
                     changed <- true
 
-            if not changed then x.NoChange()
+            changed
 
-            target
-
-        override x.Free(t : DescriptorSetBinding) =
-            () //t.Dispose()
-
-    type IndexBufferBindingResource(owner : IResourceCache, key : list<obj>, indexType : VkIndexType, index : IResourceLocation<Buffer>) =
-        inherit AbstractPointerResourceWithEquality<IndexBufferBinding>(owner, key)
-
+    type IndexBufferBindingResource(owner : IResourceCache, key : list<obj>, indexType : VkIndexType, indexBuffer : IResourceLocation<Buffer>) =
+        inherit AbstractPointerResource<IndexBufferBinding>(owner, key)
 
         override x.Create() =
             base.Create()
-            index.Acquire()
+            indexBuffer.Acquire()
 
         override x.Destroy() =
             base.Destroy()
-            index.Release()
+            indexBuffer.Release()
 
-        override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
-            let index = index.Update(user, token, renderToken)
-            let ibo = IndexBufferBinding(index.handle.Handle, indexType)
-            ibo
-
-        override x.Free(ibo : IndexBufferBinding) =
-            //ibo.TryDispose()
-            ()
+        override x.Update(handle : IndexBufferBinding byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            let indexBuffer = indexBuffer.Update(user, token, renderToken).handle.Handle
+            if handle.Buffer <> indexBuffer then
+                handle <- IndexBufferBinding(indexBuffer, indexType)
+                true
+            else
+                false
 
     [<AbstractClass>]
     type AbstractImageViewResource(owner : IResourceCache, key : list<obj>, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
@@ -1513,10 +1476,11 @@ module Resources =
             device.CreateStorageView(image, imageType, levels, slices, mapping)
 
     type IsActiveResource(owner : IResourceCache, key : list<obj>, input : aval<bool>) =
-        inherit AbstractPointerResourceWithEquality<int>(owner, key)
+        inherit AbstractPointerResource<int>(owner, key)
 
-        override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
-            if input.GetValue(user, token, renderToken) then 1 else 0
+        override x.Update(handle : int byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            handle <- if input.GetValue(user, token, renderToken) then 1 else 0
+            true
 
     module Raytracing =
         open Aardvark.Rendering.Raytracing
@@ -2221,7 +2185,7 @@ type ResourceManager(device : Device) =
     member x.CreateDrawCall(indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
         drawCallCache.GetOrCreate([indexed :> obj; calls :> obj], fun cache key -> IndirectDrawCallResource(cache, key, indexed, calls))
 
-    member x.CreateVertexBufferBinding(buffers : list<IResourceLocation<Buffer> * int64>) =
+    member x.CreateVertexBufferBinding(buffers : IResourceLocation<Buffer>[]) =
         bufferBindingCache.GetOrCreate([buffers :> obj], fun cache key -> BufferBindingResource(cache, key, buffers))
 
     member x.CreateDescriptorSetBinding(bindPoint : VkPipelineBindPoint, layout : PipelineLayout, bindings : IResourceLocation<DescriptorSet>[]) =

@@ -16,6 +16,10 @@ module internal Utilities =
         let inline isSwapFailure (result: VkResult) =
             result = VkResult.ErrorOutOfDateKhr || result = VkResult.ErrorSurfaceLostKhr || result = VkResult.SuboptimalKhr
 
+    module VkBool32 =
+        let inline ofBool (value: bool) : VkBool32 = if value then VkTrue else VkFalse
+        let inline toBool (value: VkBool32) : bool = value = VkTrue
+
     module Alignment =
         let prev (align : int64) (v : int64) =
             let r = v % align

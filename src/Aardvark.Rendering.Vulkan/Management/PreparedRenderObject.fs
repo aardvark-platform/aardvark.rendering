@@ -281,7 +281,8 @@ type DevicePreparedRenderObjectExtensions private() =
             let attributeBindings =
                 programLayout.PipelineInfo.pInputs
                 |> List.sortBy (fun p -> p.paramLocation)
-                |> List.map (fun p ->
+                |> List.toArray
+                |> Array.map (fun p ->
                     let semantic = Sym.ofString p.paramSemantic
                     let expectedType = getExpectedType p.paramType
 
@@ -315,13 +316,13 @@ type DevicePreparedRenderObjectExtensions private() =
                         VertexInputDescription.create perInstance view.IsSingleValue view.Offset stride rows format
 
                     {| Semantic    = semantic
-                       Buffer      = (buffer, 0L)
+                       Buffer      = buffer
                        Description = inputDescription |}
                 )
 
             let attributeDescriptions =
                 attributeBindings
-                |> List.map (fun b -> b.Semantic, b.Description)
+                |> Array.map (fun b -> b.Semantic, b.Description)
                 |> Map.ofSeq
 
             let inputAssembly = this.CreateInputAssemblyState(ro.Mode, program)
@@ -386,7 +387,7 @@ type DevicePreparedRenderObjectExtensions private() =
             resources.Add calls
 
             let bindings =
-                this.CreateVertexBufferBinding(attributeBindings |> List.map (fun b -> b.Buffer))
+                this.CreateVertexBufferBinding(attributeBindings |> Array.map _.Buffer)
 
             resources.Add bindings
 
