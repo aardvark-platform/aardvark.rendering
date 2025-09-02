@@ -132,7 +132,7 @@ module RenderObjectSemantics =
 
         member x.RenderObjects(r : Sg.IndirectRenderNode, scope : Ag.Scope) : aset<IRenderObject> =
             let rj = RenderObject.ofScope scope
-            rj.DrawCalls <- Indirect r.Indirect
+            rj.DrawCalls <- DrawCalls.Indirect r.Indirect
             rj.Mode <- r.Mode
 
             ASet.single (rj :> IRenderObject)
@@ -149,18 +149,18 @@ module RenderObjectSemantics =
                     if info.FaceVertexCount < 0 then
                         let! (count : int) = scope?FaceVertexCount
                         return
-                            [ DrawCallInfo(
-                                FirstIndex = info.FirstIndex,
-                                FirstInstance = info.FirstInstance,
-                                InstanceCount = info.InstanceCount,
-                                FaceVertexCount = count,
-                                BaseVertex = 0
-                            ) ]
+                            [| DrawCallInfo(
+                                 FirstIndex = info.FirstIndex,
+                                 FirstInstance = info.FirstInstance,
+                                 InstanceCount = info.InstanceCount,
+                                 FaceVertexCount = count,
+                                 BaseVertex = 0
+                             ) |]
                     else
-                        return [info]
+                        return [| info |]
                 }
 
-            rj.DrawCalls <- Direct callInfos
+            rj.DrawCalls <- DrawCalls.Direct callInfos
             rj.Mode <- r.Mode
 
             ASet.single (rj :> IRenderObject)

@@ -3,8 +3,9 @@
 open Aardvark.Base
 open FSharp.Data.Adaptive
 
+[<RequireQualifiedAccess>]
 type DrawCalls =
-    | Direct of aval<DrawCallInfo list>
+    | Direct   of aval<DrawCallInfo[]>
     | Indirect of aval<IndirectBuffer>
 
 type DrawCallSet(collapseAdjacent : bool) =

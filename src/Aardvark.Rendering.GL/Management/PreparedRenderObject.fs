@@ -1074,7 +1074,7 @@ module PreparedObjectInfo =
 
             let indirect =
                 match rj.DrawCalls with
-                | Indirect indir ->
+                | DrawCalls.Indirect indir ->
                     let buffer = x.CreateIndirectBuffer(Option.isSome rj.Indices, indir) |> addResource resources
                     ValueSome buffer
 
@@ -1092,7 +1092,7 @@ module PreparedObjectInfo =
 
             let drawCalls =
                 match rj.DrawCalls with
-                | Direct dir -> x.CreateDrawCallInfoList dir |> addResource resources
+                | DrawCalls.Direct dir -> x.CreateDrawCallInfoList dir |> addResource resources
                 | _ -> Unchecked.defaultof<_>
 
             {

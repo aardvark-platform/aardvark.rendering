@@ -665,33 +665,33 @@ type Air private() =
     // ================================================================================================================
     // Draw
     // ================================================================================================================
-    static member Draw(infos : aval<list<DrawCallInfo>>) =
+    static member Draw(infos : aval<DrawCallInfo[]>) =
         air {
-            do! modify (fun s -> { s with drawCalls = Direct infos })
+            do! modify (fun s -> { s with drawCalls = DrawCalls.Direct infos })
             do! emit
         }
 
     static member DrawIndirect(b : aval<IndirectBuffer>) =
         air {
-            do! modify (fun s -> { s with drawCalls = Indirect b })
+            do! modify (fun s -> { s with drawCalls = DrawCalls.Indirect b })
             do! emit
         }
 
     static member Draw(infos : aval<DrawCallInfo>) =
         air {
-            do! modify (fun s -> { s with drawCalls = Direct (AVal.map (fun i -> [i]) infos) })
+            do! modify (fun s -> { s with drawCalls = DrawCalls.Direct (AVal.map Array.singleton infos) })
             do! emit
         }
 
-    static member Draw(infos : list<DrawCallInfo>) =
+    static member Draw(infos : DrawCallInfo[]) =
         air {
-            do! modify (fun s -> { s with drawCalls = Direct (AVal.constant infos) })
+            do! modify (fun s -> { s with drawCalls = DrawCalls.Direct (AVal.constant infos) })
             do! emit
         }
 
     static member Draw(info : DrawCallInfo) =
         air {
-            do! modify (fun s -> { s with drawCalls = Direct (AVal.constant [info]) })
+            do! modify (fun s -> { s with drawCalls = DrawCalls.Direct (AVal.constant [|info|]) })
             do! emit
         }
 

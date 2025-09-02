@@ -104,7 +104,7 @@ module GeometrySetSemantics =
             ro.Indices <- Some pool.IndexBuffer
             ro.VertexAttributes <- pool.VertexAttributes
             ro.InstanceAttributes <- pool.InstanceAttributes
-            ro.DrawCalls <- Indirect calls
+            ro.DrawCalls <- DrawCalls.Indirect calls
             ro.Activate <- fun () -> pool
 
             ASet.single (ro :> IRenderObject)

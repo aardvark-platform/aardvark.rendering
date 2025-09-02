@@ -1086,7 +1086,7 @@ module Resources =
             else
                 false
 
-    type DirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : aval<list<DrawCallInfo>>) =
+    type DirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : aval<DrawCallInfo[]>) =
         inherit AbstractPointerResource<DrawCall>(owner, key)
 
         override x.Free(handle : DrawCall inref) =
@@ -1095,7 +1095,7 @@ module Resources =
         override x.Update(handle, user, token, renderToken) =
             let calls = calls.GetValue(user, token, renderToken)
             if x.HasHandle then x.Free &handle
-            handle <- DrawCall.Direct(indexed, List.toArray calls)
+            handle <- DrawCall.Direct(indexed, calls)
             true
 
     type DescriptorSetResource(owner : IResourceCache, key : list<obj>, layout : DescriptorSetLayout, bindings : IAdaptiveDescriptor[]) =
@@ -2179,7 +2179,7 @@ type ResourceManager(device : Device) =
         )
 
 
-    member x.CreateDrawCall(indexed : bool, calls : aval<list<DrawCallInfo>>) =
+    member x.CreateDrawCall(indexed : bool, calls : aval<DrawCallInfo[]>) =
         drawCallCache.GetOrCreate([indexed :> obj; calls :> obj], fun cache key -> DirectDrawCallResource(cache, key, indexed, calls))
 
     member x.CreateDrawCall(indexed : bool, calls : IResourceLocation<IndirectBuffer>) =

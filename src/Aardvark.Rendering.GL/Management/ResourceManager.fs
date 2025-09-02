@@ -680,10 +680,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateDrawCallInfoList(value : aval<list<DrawCallInfo>>) =
+    member x.CreateDrawCallInfoList(value : aval<DrawCallInfo[]>) =
         drawCallInfoCache.GetOrCreate(value, fun () -> {
-            create = fun b      -> ctx.CreateDrawCallInfoList(List.toArray b)
-            update = fun h b    -> ctx.Update(h,List.toArray b)
+            create = fun b      -> ctx.CreateDrawCallInfoList(b)
+            update = fun h b    -> ctx.Update(h, b)
             delete = fun h      -> ctx.Delete h
             unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero

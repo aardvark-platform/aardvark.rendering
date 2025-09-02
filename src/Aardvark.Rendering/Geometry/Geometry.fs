@@ -9,7 +9,7 @@ type Geometry =
         vertexAttributes    : Map<Symbol, aval<IBuffer>>
         indices             : Option<BufferView>
         uniforms            : Map<string, IAdaptiveValue>
-        call                : aval<list<DrawCallInfo>>
+        call                : aval<DrawCallInfo[]>
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -55,6 +55,6 @@ module Geometry =
             vertexAttributes    = attributes
             indices             = index
             uniforms            = Map.union gUniforms uniforms
-            call                = AVal.constant [call]
+            call                = AVal.constant [| call |]
         }
 

@@ -619,7 +619,7 @@ module PointCloudRenderObjectSemantics =
                         IndirectBuffer.ofArray calls
                     )
 
-            ro.DrawCalls <- Indirect drawCallBuffer
+            ro.DrawCalls <- DrawCalls.Indirect drawCallBuffer
             ro.Mode <- IndexedGeometryMode.PointList
             ro.VertexAttributes <- vertexAttributes
             ro.Activate <- activate

@@ -180,10 +180,10 @@ module Instancing =
                                 
                     let newCall =
                         match o.DrawCalls with
-                            | Direct dir -> 
-                                Direct(
+                            | DrawCalls.Direct dir ->
+                                DrawCalls.Direct(
                                     AVal.map2 (fun l cnt -> 
-                                        l |> List.map (fun (c : DrawCallInfo) ->
+                                        l |> Array.map (fun (c : DrawCallInfo) ->
                                             if c.InstanceCount > 1 || c.FirstInstance <> 0 then
                                                 failwithf "[Sg] cannot instance drawcall with %d instances" c.InstanceCount
                                             

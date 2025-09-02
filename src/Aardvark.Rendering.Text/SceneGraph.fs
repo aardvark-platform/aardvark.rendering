@@ -236,7 +236,7 @@ module Sg =
             shapes.RenderPass <- if pass = RenderPass.main then RenderPass.shapes else pass
             shapes.BlendState <- { shapes.BlendState with Mode = AVal.constant BlendMode.Blend }
             shapes.VertexAttributes <- cache.VertexBuffers
-            shapes.DrawCalls <- Indirect(indirect)
+            shapes.DrawCalls <- DrawCalls.Indirect indirect
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
 
@@ -391,7 +391,7 @@ module Sg =
             shapes.RenderPass <- pass
             shapes.BlendState <- { shapes.BlendState with Mode = AVal.constant BlendMode.Blend }
             shapes.VertexAttributes <- cache.VertexBuffers
-            shapes.DrawCalls <- indirectAndOffsets |> AVal.map (fun (i,_,_,_) -> i) |> Indirect
+            shapes.DrawCalls <- indirectAndOffsets |> AVal.map (fun (i,_,_,_) -> i) |> DrawCalls.Indirect
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
             shapes.DepthState <- { shapes.DepthState with Bias = AVal.constant DepthBias.None }
@@ -413,7 +413,7 @@ module Sg =
                     BaseVertex = 0
                 )
 
-            boundary.DrawCalls <- Direct ([drawCall] |> AVal.constant)
+            boundary.DrawCalls <- DrawCalls.Direct ([| drawCall |] |> AVal.constant)
             boundary.Mode <- IndexedGeometryMode.TriangleList
 
             let bounds =

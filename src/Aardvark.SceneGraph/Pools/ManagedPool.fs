@@ -376,6 +376,6 @@ module ``Pool Semantics`` =
             ro.Indices <- Some pool.IndexBuffer
             ro.VertexAttributes <- pool.VertexAttributes
             ro.InstanceAttributes <- pool.InstanceAttributes
-            ro.DrawCalls <- Indirect calls
+            ro.DrawCalls <- DrawCalls.Indirect calls
 
             ASet.single (ro :> IRenderObject)
