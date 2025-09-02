@@ -315,7 +315,7 @@ type DevicePreparedRenderObjectExtensions private() =
                         VertexInputDescription.create perInstance view.IsSingleValue view.Offset stride rows format
 
                     {| Semantic    = semantic
-                       Buffer      = (buffer, int64 view.Offset)
+                       Buffer      = (buffer, 0L)
                        Description = inputDescription |}
                 )
 
