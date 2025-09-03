@@ -293,9 +293,9 @@ type DevicePreparedRenderObjectExtensions private() =
 
                     let buffer = this.CreateVertexBuffer(semantic, view.Buffer)
 
-                    let stride =
-                        if view.IsSingleValue then 0
-                        else view.Stride
+                    let struct (offset, stride) =
+                        if view.IsSingleValue then struct (0, 0)
+                        else struct (view.Offset, view.Stride)
 
                     let rows =
                         match view.ElementType with
@@ -313,7 +313,7 @@ type DevicePreparedRenderObjectExtensions private() =
                         failf "format %A for attribute '%A' is not supported" format semantic
 
                     let inputDescription =
-                        VertexInputDescription.create perInstance view.IsSingleValue view.Offset stride rows format
+                        VertexInputDescription.create perInstance view.IsSingleValue offset stride rows format
 
                     {| Semantic    = semantic
                        Buffer      = buffer

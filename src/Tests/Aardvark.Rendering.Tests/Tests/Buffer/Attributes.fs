@@ -64,8 +64,9 @@ module AttributeBuffer =
 
             let positionBuffer, colorBuffer =
                 if singleValue then
+                    let buffer = SingleValueBuffer color :> aval<IBuffer>
                     BufferView(positions),
-                    BufferView(SingleValueBuffer color, normalized = normalized)
+                    BufferView(buffer, typeof<'Color>, 123, 321, normalized) // Should ignore offset and stride
                 else
                     let colors = color |> Array.replicate (if perInstance then 1 else positions.Length)
 
@@ -78,8 +79,8 @@ module AttributeBuffer =
                             buffer.[i].Color    <- colors.[i]
 
                         let colorOffset = int <| Marshal.OffsetOf<Vertex<'Color>> "Color"
-                        BufferView(ArrayBuffer buffer, typeof<V3f>, 0,  sizeof<Vertex<'Color>>),
-                        BufferView(ArrayBuffer buffer, typeof<'Color>, colorOffset, sizeof<Vertex<'Color>>, normalized)
+                        BufferView(buffer, typeof<V3f>, 0, sizeof<Vertex<'Color>>),
+                        BufferView(buffer, typeof<'Color>, colorOffset, sizeof<Vertex<'Color>>, normalized)
                     else
                         BufferView(positions),
                         BufferView(colors, normalized = normalized)
