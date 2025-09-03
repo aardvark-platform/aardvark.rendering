@@ -16,6 +16,7 @@ module ``Rendering Tests`` =
         Samplers.tests
         Uniforms.tests
         Surfaces.tests
+        DrawCalls.tests
     ]
 
     [<Tests>]

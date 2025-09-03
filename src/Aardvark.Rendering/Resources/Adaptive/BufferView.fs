@@ -138,6 +138,21 @@ module BufferView =
     let ofArray (array : Array) =
         BufferView(array)
 
+    /// Returns the maximum number of elements in the buffer view.
+    let getCount (view : BufferView) =
+        if view.IsSingleValue then
+            AVal.constant 1
+        else
+            view.Buffer |> AVal.map (fun b ->
+                let sizeInBytes =
+                    match b with
+                    | :? INativeBuffer as b  -> b.SizeInBytes
+                    | :? IBackendBuffer as b -> b.SizeInBytes
+                    | _ -> failwith $"Cannot determine buffer size for view: {b}"
+
+                int ((sizeInBytes - uint64 view.Offset) / uint64 view.ElementType.CLRSize)
+            )
+
     let download (startIndex : int) (count : int) (view : BufferView) : aval<Array> =
         match view.SingleValue with
         | Some value ->

@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
-open System
-
 open Aardvark.Base
 open Aardvark.Base.Ag
 open Aardvark.Rendering
@@ -24,53 +22,24 @@ module AttributeExtensions =
 
 module AttributeSemantics =
 
-    let emptyIndex : aval<Array> = AVal.constant ([||] :> Array)
-
     [<Rule>]
     type AttributeSem() =
         static let zero = AVal.constant 0
-        let (~%) (m : Map<Symbol, BufferView>) = m
-
-        static let bufferViewCount (view : BufferView) =
-            if view.IsSingleValue then
-                AVal.constant 0
-            else
-                let elementSize = System.Runtime.InteropServices.Marshal.SizeOf view.ElementType
-                view.Buffer |> AVal.map (fun b ->
-                    match b with
-                        | :? INativeBuffer as b -> int ((b.SizeInBytes - uint64 view.Offset) / uint64 elementSize)
-                        | _ -> failwithf "[Sg] could not determine buffer-size: %A" b
-                )
-
 
         member x.FaceVertexCount (root : Root<ISg>, scope : Ag.Scope) =
             root.Child?FaceVertexCount <- zero
 
         member x.FaceVertexCount (app : Sg.VertexIndexApplicator, scope : Ag.Scope) =
-            app.Child?FaceVertexCount <- app.Value |> bufferViewCount
+            app.Child?FaceVertexCount <- BufferView.getCount app.Value
 
         member x.FaceVertexCount (app : Sg.VertexAttributeApplicator, scope : Ag.Scope) =
-            let res = scope.VertexIndexBuffer
-
-            match res with
-                | Some b ->
-                    app.Child?FaceVertexCount <- scope.FaceVertexCount
-                | _ -> 
-                    match Map.tryFind DefaultSemantic.Positions app.Values with
-                        | Some pos ->
-                            app.Child?FaceVertexCount <- 
-                                pos.Buffer 
-                                    |> AVal.bind (fun buffer ->
-                                        match buffer with
-                                            | :? ArrayBuffer as a ->
-                                                AVal.constant (a.Data.Length - pos.Offset)
-            
-                                            | _ -> scope.FaceVertexCount
-                                       )
-                        | _ -> app.Child?FaceVertexCount <- scope.FaceVertexCount
+            if scope.VertexIndexBuffer.IsNone then
+                match Map.tryFind DefaultSemantic.Positions app.Values with
+                | Some positions -> app.Child?FaceVertexCount <- BufferView.getCount positions
+                | _ -> ()
 
         member x.InstanceAttributes(root : Root<ISg>, scope : Ag.Scope) = 
-            root.Child?InstanceAttributes <- %Map.empty
+            root.Child?InstanceAttributes <- Map.empty<Symbol, BufferView>
 
         member x.VertexIndexBuffer(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?VertexIndexBuffer <- Option<BufferView>.None
@@ -79,7 +48,7 @@ module AttributeSemantics =
             v.Child?VertexIndexBuffer <- Some v.Value
 
         member x.VertexAttributes(e : Root<ISg>, scope : Ag.Scope) =
-            e.Child?VertexAttributes <- %Map.empty
+            e.Child?VertexAttributes <- Map.empty<Symbol, BufferView>
 
         member x.VertexAttributes(v : Sg.VertexAttributeApplicator, scope : Ag.Scope) =
             v.Child?VertexAttributes <- Map.union scope.VertexAttributes v.Values
