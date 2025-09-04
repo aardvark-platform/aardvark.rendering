@@ -759,11 +759,15 @@ module SgFSharp =
 
         /// Supplies the given draw call with the given geometry mode.
         let render (mode : IndexedGeometryMode) (call : DrawCallInfo) =
-            Sg.RenderNode(call,mode)
+            Sg.RenderNode(call, mode)
 
         /// Supplies the draw calls in the given indirect buffer with the given geometry mode.
         let indirectDraw (mode : IndexedGeometryMode) (buffer : aval<IndirectBuffer>) =
             Sg.IndirectRenderNode(buffer, mode) :> ISg
+
+        /// Supplies the draw calls in the given indirect buffer with the given geometry mode.
+        let inline indirectDraw' (mode : IndexedGeometryMode) (buffer : IndirectBuffer) =
+            indirectDraw mode ~~buffer
 
         /// Creates a draw call from the given indexed geometry and an adpative instance count.
         let ofIndexedGeometryInstancedA (g : IndexedGeometry) (instanceCount : aval<int>) =
