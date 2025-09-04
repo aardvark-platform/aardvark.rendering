@@ -1315,7 +1315,6 @@ type CompilerInfo =
         resources               : ResourceInputSet
         contextHandle           : nativeptr<nativeint>
         runtimeStats            : nativeptr<V2i>
-        currentContext          : aval<ContextHandle>
         drawBufferCount         : int
 
         structuralChange        : aval<unit>

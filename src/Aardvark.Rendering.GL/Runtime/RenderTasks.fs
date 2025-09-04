@@ -14,7 +14,6 @@ open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
-open FShade
 
 module RenderTasks =
 
@@ -27,7 +26,6 @@ module RenderTasks =
     module private Framebuffer =
 
         let draw (signature : IFramebufferSignature) (fbo : Framebuffer) (viewport : Box2i) (f : unit -> 'T) =
-
             let oldVp = Array.create 4 0
             let mutable oldFbo = 0
             GL.GetInteger(GetPName.Viewport, oldVp)
@@ -67,16 +65,17 @@ module RenderTasks =
         let runtimeStats = NativePtr.alloc 1
         let resources = new ResourceInputSet()
 
-        let currentContext = AVal.init Unchecked.defaultof<ContextHandle>
-        let contextHandle = NativePtr.alloc 1
+        let contextHandle = NativePtr.alloc<nativeint> 1
         do NativePtr.write contextHandle 0n
 
+        let writeCurrentContextHandle() =
+            let ctx = ContextHandle.Current.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
+            NativePtr.write contextHandle ctx.Context.Handle
 
         let scope =
             {
                 resources = resources
                 runtimeStats = runtimeStats
-                currentContext = currentContext
                 contextHandle = contextHandle
                 drawBufferCount = signature.ColorAttachmentSlots
                 usedTextureSlots = RefRef CountingHashSet.empty
@@ -86,8 +85,8 @@ module RenderTasks =
                 tags = Map.empty
             }
 
-        let beforeRender = new Event<unit>()
-        let afterRender = new Event<unit>()
+        let beforeRender = Event<unit>()
+        let afterRender = Event<unit>()
 
         member x.Resources = resources
 
@@ -99,9 +98,8 @@ module RenderTasks =
 
         abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
         abstract member UpdateResources : AdaptiveToken * RenderToken -> unit
-        abstract member Perform : AdaptiveToken * RenderToken * Framebuffer * OutputDescription -> unit
+        abstract member PerformInner : AdaptiveToken * RenderToken * OutputDescription -> unit
         abstract member Update :  AdaptiveToken * RenderToken -> unit
-        abstract member Release2 : unit -> unit
 
         member x.Context = ctx
         member x.Scope = scope
@@ -112,8 +110,6 @@ module RenderTasks =
         override x.FramebufferSignature = Some signature
 
         override x.Release() =
-            currentContext.Outputs.Clear()
-            x.Release2()
             contextHandle |> NativePtr.free
             runtimeStats |> NativePtr.free
             resources.Dispose()
@@ -130,36 +126,31 @@ module RenderTasks =
                 x.Update(token, renderToken)
             )
 
-        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
+        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, output : OutputDescription) =
             use __ = ctx.ResourceLock
             use __ = GlobalResourceLock.lock()
+            writeCurrentContextHandle()
 
             GL.Check "[RenderTask.Run] Entry"
             ctx.PushDebugGroup(x.Name ||? "Render Task")
 
-            let fbo = desc.framebuffer // TODO: fix outputdesc
-            signature |> FramebufferSignature.validateCompability fbo
-
-            if currentContext.Value <> ContextHandle.Current.Value then
-                let intCtx = ContextHandle.Current.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
-                NativePtr.write contextHandle intCtx.Context.Handle
-                transact (fun () -> currentContext.Value <- ContextHandle.Current.Value)
-
             let fbo =
-                match fbo with
-                    | :? Framebuffer as fbo -> fbo
-                    | _ -> failwithf "unsupported framebuffer: %A" fbo
+                match output.framebuffer with
+                | :? Framebuffer as fbo -> fbo
+                | fbo -> failf "unsupported framebuffer: %A" fbo
+
+            signature |> FramebufferSignature.validateCompability fbo
 
             x.ProcessDeltas(token, renderToken)
             x.UpdateResources(token, renderToken)
 
-            Framebuffer.draw signature fbo desc.viewport (fun _ ->
+            Framebuffer.draw signature fbo output.viewport (fun _ ->
                 renderTaskLock.Run (fun () ->
                     beforeRender.Trigger()
                     NativePtr.write runtimeStats V2i.Zero
 
-                    x.Perform(token, renderToken, fbo, desc)
-                    GL.Check "[RenderTask.Run] Perform"
+                    x.PerformInner(token, renderToken, output)
+                    GL.Check "[RenderTask.Run] PerformInner"
 
                     afterRender.Trigger()
                     let rt = NativePtr.read runtimeStats
@@ -197,7 +188,7 @@ module RenderTasks =
                 sortWatch.Stop()
                 res
 
-        member x.Execution (t : RenderToken, f : unit -> 'a) =
+        member x.Execution (_ : RenderToken, f : unit -> 'a) =
             f()
                 
         abstract member Update : AdaptiveToken * RenderToken -> unit
@@ -206,8 +197,7 @@ module RenderTasks =
         abstract member Add : PreparedCommand -> unit
         abstract member Remove : PreparedCommand -> unit
 
-        member x.Run(token : AdaptiveToken, renderToken : RenderToken, output : OutputDescription) =
-
+        member x.Run(token : AdaptiveToken, renderToken : RenderToken, _ : OutputDescription) =
             x.Perform(token, renderToken)
             if renderToken.Statistics.IsNone then
                 nop
@@ -289,8 +279,7 @@ module RenderTasks =
         let mutable hasProgram = false
         let mutable program : NativeRenderProgram = Unchecked.defaultof<_>
 
-
-        let reinit (self : StaticOrderSubTask) =
+        let reinit () =
             // if the config changed or we never compiled a program
             // we need to do something
             if not hasProgram then
@@ -324,8 +313,8 @@ module RenderTasks =
                                                 if (sltl <> sltr) then
                                                     cmp <- compare l.Id r.Id
                                                 else
-                                                    let leftTexId = match bndl with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
-                                                    let rigthTexId = match bndr with | ArrayBinding ab -> ab.Id; | SingleBinding (t, s) -> t.Id
+                                                    let leftTexId = match bndl with | ArrayBinding ab -> ab.Id; | SingleBinding (t, _) -> t.Id
+                                                    let rigthTexId = match bndr with | ArrayBinding ab -> ab.Id; | SingleBinding (t, _) -> t.Id
                                                     cmp <- compare leftTexId rigthTexId
                                                 i <- i + 1
                                             if cmp <> 0 then cmp
@@ -335,22 +324,22 @@ module RenderTasks =
                 // create the new program
                 let newProgram = 
                     Log.line "using optimized native program"
-                    new NativeRenderProgram(comparer, scope, objects, debug) 
+                    NativeRenderProgram(comparer, scope, objects, debug)
 
 
                 // finally we store the current config/ program and set hasProgram to true
                 program <- newProgram
                 hasProgram <- true
 
-        override x.Update(token, renderToken) =
-            reinit x
+        override x.Update(_, renderToken) =
+            reinit()
 
             //TODO
-            let programStats = x.ProgramUpdate (renderToken, fun () -> program.Update AdaptiveToken.Top)
+            x.ProgramUpdate (renderToken, fun () -> program.Update AdaptiveToken.Top)
             ()
 
         override x.Perform(token, renderToken) =
-            x.Update(token, renderToken) |> ignore
+            x.Update(token, renderToken)
             x.Execution (renderToken, fun () -> program.Run())
             //let ic = program.Stats.InstructionCount
             //renderToken.AddInstructions(ic, 0) // don't know active
@@ -406,10 +395,11 @@ module RenderTasks =
             mainCommand.Update(token, x.Scope)
 
             
-        override x.Release2() =
+        override x.Release() =
             mainCommand.Free(x.Scope)
+            base.Release()
 
-        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, fbo : Framebuffer, output : OutputDescription) =
+        override x.PerformInner(token : AdaptiveToken, _ : RenderToken, _ : OutputDescription) =
             mainCommand.Update(token, x.Scope)
             mainCommand.Run()
 
@@ -451,7 +441,7 @@ module RenderTasks =
                             | RenderPassOrder.Arbitrary ->
                                 new StaticOrderSubTask(ctx, this.Scope, debug) :> AbstractSubTask
 
-                            | order ->
+                            | _ ->
                                 Log.warn "[GL] no sorting"
                                 new StaticOrderSubTask(ctx, this.Scope, debug) :> AbstractSubTask //new CameraSortedSubTask(order, this) :> AbstractSubTask
 
@@ -490,11 +480,11 @@ module RenderTasks =
             x.Resources.Update(token, renderToken)
 
 
-        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, fbo : Framebuffer, output : OutputDescription) =
+        override x.PerformInner(token : AdaptiveToken, renderToken : RenderToken, output : OutputDescription) =
             subtasks |> Map.iter (fun _ t ->
-                    let s = t.Run(token, renderToken, output)
-                    subTaskResults.Add(s)
-                )
+                let s = t.Run(token, renderToken, output)
+                subTaskResults.Add(s)
+            )
 
             if RuntimeConfig.SyncUploadsAndFrames then
                 GL.Sync()
@@ -504,12 +494,13 @@ module RenderTasks =
                     t.Update(token, renderToken)
                 )
 
-        override x.Release2() =
+        override x.Release() =
             for ro in preparedObjectReader.State do
                 ro.Dispose()
 
             subtasks |> Map.iter (fun _ t -> t.Dispose())
             subtasks <- Map.empty
+            base.Release()
 
         override x.Use (f : unit -> 'a) =
             lock x (fun () ->
@@ -523,14 +514,13 @@ module RenderTasks =
     type ClearTask(runtime : IRuntime, ctx : Context, signature : IFramebufferSignature, values : aval<ClearValues>) =
         inherit AbstractRenderTask()
 
-        override x.PerformUpdate(token, t) = ()
-        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
+        override x.PerformUpdate(_, _) = ()
+        override x.Perform(token : AdaptiveToken, _ : RenderToken, desc : OutputDescription) =
             let fbo = desc.framebuffer |> unbox<Framebuffer>
             signature |> FramebufferSignature.validateCompability fbo
 
             Operators.using ctx.ResourceLock (fun _ ->
                 Framebuffer.draw signature fbo desc.viewport (fun _ ->
-
                     let values = values.GetValue token
                     let depthValue = values.Depth
                     let stencilValue = values.Stencil
