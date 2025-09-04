@@ -932,12 +932,12 @@ module GeometryPoolData =
         let mutable stride = 20
 
         let bufferHandles = NativePtr.allocArray [| V3i(buffer.Handle, bbuffer.Handle, count) |]
-        let indirectHandle = NativePtr.allocArray [| IndirectDrawArgs(buffer.Handle, count, stride) |]
+        let indirectHandle = NativePtr.allocArray [| IndirectDrawArgs(buffer.Handle, count, 0UL, stride) |]
         let computeSize = NativePtr.allocArray [| V3i.Zero |]
 
         let updatePointers() =
             NativePtr.write bufferHandles (V3i(buffer.Handle, bbuffer.Handle, count))
-            NativePtr.write indirectHandle (IndirectDrawArgs(buffer.Handle, count, stride))
+            NativePtr.write indirectHandle (IndirectDrawArgs(buffer.Handle, count, 0UL, stride))
             NativePtr.write computeSize (V3i(ceilDiv count 64, 1, 1))
 
         let oldProgram = NativePtr.allocArray [| 0 |]
@@ -1156,7 +1156,7 @@ module GeometryPoolData =
 
 
         member x.Buffer =
-            IndirectBuffer.ofBuffer false sizeof<DrawCallInfo> count buffer
+            IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> count buffer
 
         member x.BoundsBuffer =
             bbuffer

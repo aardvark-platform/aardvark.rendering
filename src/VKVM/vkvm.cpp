@@ -25,26 +25,26 @@ DllExport(void) vmBindVertexBuffers(VkCommandBuffer commandBuffer, VertexBufferB
 
 DllExport(void) vmDraw(VkCommandBuffer commandBuffer, RuntimeStats* stats, int* isActive, DrawCall* call)
 {
-	if (!*isActive)return;
+	if (!*isActive || call->Count == 0) return;
 
 	if (call->IsIndirect)
 	{
-		if (call->IndirectCount == 0)return;
 		stats->DrawCalls++;
-		stats->EffectiveDrawCalls += call->IndirectCount;
+		stats->EffectiveDrawCalls += call->Count;
+		const auto& buffer = call->DrawCallBuffer;
 
 		if (call->IsIndexed)
-			vkCmdDrawIndexedIndirect(commandBuffer, call->IndirectBuffer, 0, call->IndirectCount, sizeof(DrawCallInfo));
+			vkCmdDrawIndexedIndirect(commandBuffer, buffer.Handle, buffer.Offset, call->Count, buffer.Stride);
 		else
-			vkCmdDrawIndirect(commandBuffer, call->IndirectBuffer, 0, call->IndirectCount, sizeof(DrawCallInfo));
+			vkCmdDrawIndirect(commandBuffer, buffer.Handle, buffer.Offset, call->Count, buffer.Stride);
 	}
 	else
 	{
 		auto info = call->DrawCalls;
-		auto count = call->DrawCallCount;
+		auto count = call->Count;
 		auto indexed = call->IsIndexed;
-
 		stats->DrawCalls += count;
+
 		for (int i = 0; i < count; i++, info += 1)
 		{
 			auto instanceCount = info->InstanceCount;

@@ -231,11 +231,12 @@ typedef struct {
 	int RemovedInstructions;
 } Statistics;
 
-typedef struct IndirctDrawArgsStruct {
+typedef struct IndirectDrawArgsStruct {
 	int Handle;
 	int Count;
+	uint64_t Offset;
 	int Stride;
-} IndirctDrawArgs;
+} IndirectDrawArgs;
 
 
 DllExport(void) vmInit();
@@ -263,8 +264,8 @@ DllExport(void) hglCleanup(void* ctx);
 DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mode, DrawCallInfoList* infos);
 DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos);
 
-DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, IndirctDrawArgsStruct* handleAndCount);
-DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, IndirctDrawArgsStruct* handleAndCount);
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, IndirectDrawArgsStruct* handleAndCount);
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, IndirectDrawArgsStruct* handleAndCount);
 DllExport(void) hglSetDepthTest(int* mode);
 DllExport(void) hglSetDepthBias(DepthBiasInfo* state);
 DllExport(void) hglSetCullFace(GLenum* face);

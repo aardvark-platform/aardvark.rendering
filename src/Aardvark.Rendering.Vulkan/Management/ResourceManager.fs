@@ -1094,8 +1094,13 @@ module Resources =
 
         override x.Update(handle, user, token, renderToken) =
             let calls = calls.GetValue(user, token, renderToken)
-            if x.HasHandle then x.Free &handle
-            handle <- DrawCall.Direct(indexed, calls)
+
+            if x.HasHandle && calls.Length = handle.Count then
+                for i = 0 to handle.Count - 1 do handle.DrawCalls.[i] <- calls.[i]
+            else
+                if x.HasHandle then x.Free &handle
+                handle <- DrawCall.Direct(calls, indexed)
+
             true
 
     type DescriptorSetResource(owner : IResourceCache, key : list<obj>, layout : DescriptorSetLayout, bindings : IAdaptiveDescriptor[]) =
@@ -1297,25 +1302,21 @@ module Resources =
         override x.Free(handle : VkPipeline inref) =
             VkRaw.vkDestroyPipeline(renderPass.Device.Handle, handle, NativePtr.zero)
 
-    type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
+    type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, buffer : IResourceLocation<IndirectBuffer>) =
         inherit AbstractPointerResource<DrawCall>(owner, key)
 
         override x.Create() =
             base.Create()
-            calls.Acquire()
+            buffer.Acquire()
 
         override x.Destroy() =
             base.Destroy()
-            calls.Release()
+            buffer.Release()
 
         override x.Update(handle : DrawCall byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
-            let calls = calls.Update(user, token, renderToken)
-            if x.HasHandle then x.Free &handle
-            handle <- DrawCall.Indirect(indexed, calls.handle.Handle, calls.handle.Count)
+            let buffer = buffer.Update(user, token, renderToken).handle
+            handle <- DrawCall.Indirect(buffer.Handle, buffer.Count, buffer.Offset, buffer.Stride, indexed)
             true
-
-        override x.Free(handle : DrawCall inref) =
-            handle.Dispose()
 
     type BufferBindingResource(owner : IResourceCache, key : list<obj>, buffers : IResourceLocation<Buffer>[]) =
         inherit AbstractPointerResource<VertexBufferBinding>(owner, key)

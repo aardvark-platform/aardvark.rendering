@@ -356,7 +356,7 @@ module ``Pool Semantics`` =
                 buffer.Name <- "Indirect Buffer (ManagedPool)"
 
             (buffer.Count, buffer) ||> AdaptiveResource.map2 (
-                IndirectBuffer.ofBuffer true sizeof<DrawCallInfo>
+                IndirectBuffer.ofBuffer true 0UL sizeof<DrawCallInfo>
             )
 
     [<Rule>]

@@ -1,7 +1,11 @@
 ﻿namespace Aardvark.Rendering
 
 open Aardvark.Base
+open FSharp.NativeInterop
+open System
 open System.Runtime.InteropServices
+
+#nowarn "9"
 
 /// Struct describing a draw call.
 /// The layout is compatible with the layout required for non-indexed draw calls (barring the stride).
@@ -42,6 +46,27 @@ type DrawCallInfo =
         static member inline ToggleIndexed(call : byref<DrawCallInfo>) =
             Fun.Swap(&call.BaseVertex, &call.FirstInstance)
 
+        /// <summary>
+        /// Copies draw calls while switching between indexed and non-indexed layout.
+        /// </summary>
+        /// <param name="src">The source address of the copy.</param>
+        /// <param name="dst">The destination address of the copy.</param>
+        /// <param name="stride">The number of bytes between consecutive draw calls.</param>
+        /// <param name="count">The number of draw calls to copy.</param>
+        static member inline ToggleIndexedCopy(src : nativeint, dst : nativeint, stride : nativeint, count : int) =
+            let mutable src = src
+            let mutable dst = dst
+
+            for i = 1 to count do
+                let pSrc = NativePtr.ofNativeInt<DrawCallInfo> src
+                let pDst = NativePtr.ofNativeInt<DrawCallInfo> dst
+
+                let mutable c = NativePtr.read pSrc
+                DrawCallInfo.ToggleIndexed(&c)
+                NativePtr.write pDst c
+
+                &src += stride
+                &dst += stride
     end
 
 /// Type for describing buffers holding draw calls.
@@ -53,45 +78,104 @@ type IndirectBuffer =
         /// The number of draw calls in the buffer.
         Count   : int
 
+        /// The offset in bytes into the buffer.
+        Offset  : uint64
+
         /// The number of bytes between the beginning of two successive draw calls.
         Stride  : int
 
-        /// Determines if the buffer contains indexed draw calls.
+        /// True if the buffer contains indexed draw calls, false if it contains non-indexed draw calls.
+        /// If an indexed indirect buffer is used to render non-indexed geometry (or vice versa), the layout of the draw calls is adjusted automatically.
+        /// This automatic layout adjustment does not work for backend buffers.
         Indexed : bool
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndirectBuffer =
 
-    /// Creates an indirect buffer of the given buffer.
+    /// <summary>
+    /// Creates an indirect buffer from a buffer containing draw calls.
     /// If the buffer is a backend buffer, the data must be in the correct layout (i.e. indexed or non-indexed).
-    let inline ofBuffer (indexed : bool) (stride : int) (count : int) (buffer : IBuffer) =
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="DrawCallInfo"/> struct follows the non-indexed layout by default.
+    /// </remarks>
+    /// <param name="indexed">True if the buffer contains indexed draw calls, false if it contains non-indexed draw calls.</param>
+    /// <param name="offset">The offset in bytes into the buffer.</param>
+    /// <param name="stride">The number of bytes between the beginning of two successive draw calls.</param>
+    /// <param name="count">The number of draw calls.</param>
+    /// <param name="buffer">The buffer containing the draw calls.</param>
+    let inline ofBuffer (indexed : bool) (offset : uint64) (stride : int) (count : int) (buffer : IBuffer) =
         { Buffer  = buffer
           Count   = count
+          Offset  = offset
           Stride  = stride
           Indexed = indexed }
 
-    /// Creates an indirect buffer of the given array.
-    /// The indexed parameter determines the data layout of the draw calls.
-    /// The DrawCallInfo struct follows the non-indexed layout by default.
-    let inline ofArray' (indexed : bool) (calls : DrawCallInfo[]) =
-        { Buffer  = ArrayBuffer calls
-          Count   = calls.Length
-          Stride  = sizeof<DrawCallInfo>
-          Indexed = indexed }
+    /// <summary>
+    /// Creates an indirect buffer from an array of draw calls.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="DrawCallInfo"/> struct follows the non-indexed layout by default.
+    /// </remarks>
+    /// <param name="indexed">True if the array contains indexed draw calls, false if it contains non-indexed draw calls.</param>
+    /// <param name="first">The index of the first draw call in the array.</param>
+    /// <param name="count">The number of draw calls.</param>
+    /// <param name="calls">The array containing the draw calls.</param>
+    let inline ofArray' (indexed : bool) (first : int) (count : int) (calls : DrawCallInfo[]) =
+        if first < 0 || count < 0 || first + count > calls.Length then
+            raise <| ArgumentOutOfRangeException(null, $"Draw call range exceeds input array (first = {first}, count = {count}, array length = {calls.Length})")
 
-    /// Creates an indirect buffer of the given array.
-    /// The draw calls are assumed to be in the non-indexed layout (default struct layout).
+        let buffer = ArrayBuffer calls
+        let offset = uint64 first * uint64 sizeof<DrawCallInfo>
+        ofBuffer indexed offset sizeof<DrawCallInfo> count buffer
+
+    /// <summary>
+    /// Creates an indirect buffer from an array of draw calls.
+    /// The draw calls are assumed to be in the non-indexed layout (default <see cref="DrawCallInfo"/> struct layout).
+    /// </summary>
+    /// <param name="calls">The array containing the draw calls.</param>
     let inline ofArray (calls : DrawCallInfo[]) =
-        calls |> ofArray' false
+        calls |> ofArray' false 0 calls.Length
 
-    /// Creates an indirect buffer of the given list.
-    /// The indexed parameter determines the data layout of the draw calls (default is false).
-    /// The DrawCallInfo struct follows the non-indexed layout by default.
-    let inline ofList' (indexed : bool) (calls : DrawCallInfo list) =
-        calls |> List.toArray |> ofArray' indexed
+    /// <summary>
+    /// Creates an indirect buffer from a list of draw calls.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="DrawCallInfo"/> struct follows the non-indexed layout by default.
+    /// </remarks>
+    /// <param name="indexed">True if the list contains indexed draw calls, false if it contains non-indexed draw calls.</param>
+    /// <param name="first">The index of the first draw call in the list.</param>
+    /// <param name="count">The number of draw calls.</param>
+    /// <param name="calls">The list containing the draw calls.</param>
+    let inline ofList' (indexed : bool) (first : int) (count : int) (calls : DrawCallInfo list) =
+        calls |> List.toArray |> ofArray' indexed first count
 
-    /// Creates an indirect buffer of the given list.
-    /// The draw calls are assumed to be in the non-indexed layout (default struct layout).
+    /// <summary>
+    /// Creates an indirect buffer from a list of draw calls.
+    /// The draw calls are assumed to be in the non-indexed layout (default <see cref="DrawCallInfo"/> struct layout).
+    /// </summary>
+    /// <param name="calls">The list containing the draw calls.</param>
     let inline ofList (calls : DrawCallInfo list) =
-        calls |> ofList' false
+        calls |> List.toArray |> ofArray
+
+    /// <summary>
+    /// Creates an indirect buffer from a sequence of draw calls.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="DrawCallInfo"/> struct follows the non-indexed layout by default.
+    /// </remarks>
+    /// <param name="indexed">True if the list contains indexed draw calls, false if it contains non-indexed draw calls.</param>
+    /// <param name="first">The index of the first draw call in the sequence.</param>
+    /// <param name="count">The number of draw calls.</param>
+    /// <param name="calls">The sequence containing the draw calls.</param>
+    let inline ofSeq' (indexed : bool) (first : int) (count : int) (calls : DrawCallInfo seq) =
+        calls |> Seq.asArray |> ofArray' indexed first count
+
+    /// <summary>
+    /// Creates an indirect buffer from a sequence of draw calls.
+    /// The draw calls are assumed to be in the non-indexed layout (default <see cref="DrawCallInfo"/> struct layout).
+    /// </summary>
+    /// <param name="calls">The sequence containing the draw calls.</param>
+    let inline ofSeq (calls : DrawCallInfo seq) =
+        calls |> Seq.asArray |> ofArray

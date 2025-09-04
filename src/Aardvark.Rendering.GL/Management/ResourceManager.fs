@@ -3,6 +3,7 @@
 #nowarn "9"
 
 open System
+open System.Runtime.InteropServices
 open System.Collections.Concurrent
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
@@ -10,40 +11,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL
-
-type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource<'a>) =
-    inherit AdaptiveObject()
-    static let th = typeof<'b>
-    let handle = inner.Handle |> AVal.map unbox
-
-    member x.Inner = inner
-
-    override x.GetHashCode() = inner.GetHashCode()
-    override x.Equals o = 
-        match o with
-            | :? CastResource<'a,'b> as o -> inner.Equals o.Inner
-            | _ -> false
-
-    member x.Update(token : AdaptiveToken, rt : RenderToken) =
-        x.EvaluateIfNeeded token () (fun token ->
-            inner.Update(token, rt)
-        )
-
-    interface IResource with  
-        member x.Id = inner.Id
-        member x.HandleType = th
-        member x.Dispose() = inner.Dispose()
-        member x.AddRef() = inner.AddRef()
-        member x.RemoveRef() = inner.RemoveRef()
-        member x.Update(caller, token) = x.Update(caller, token)
-        member x.Info = inner.Info
-        member x.IsDisposed = inner.IsDisposed
-        member x.Kind = inner.Kind
-
-    interface IResource<'b> with
-        member x.Handle = handle
 
 [<Struct>]
 type private AttachmentConfig<'a> =
@@ -142,6 +110,49 @@ type InterfaceSlots =
         storageBuffers : (string * FShade.GLSL.GLSLStorageBuffer)[]
         images : (string * FShade.GLSL.GLSLImage)[]
     }
+
+type internal LayoutedIndirectData(data : IndirectBuffer) =
+    let mutable ptr, sizeInBytes =
+        match data.Buffer with
+        | :? INativeBuffer as nb ->
+            let dst = Marshal.AllocHGlobal(nativeint nb.SizeInBytes)
+
+            nb.Use (fun src ->
+                let offset = nativeint data.Offset
+                let stride = nativeint data.Stride
+                DrawCallInfo.ToggleIndexedCopy(src + offset, dst + offset, stride, data.Count)
+            )
+
+            dst, nb.SizeInBytes
+
+        | buffer ->
+            failf $"cannot adjust draw call layout of buffer: {buffer}"
+
+    member _.Data = data
+
+    override this.Equals(obj: obj) =
+        match obj with
+        | :? LayoutedIndirectData as other -> this.Data = other.Data
+        | _ -> false
+
+    override this.GetHashCode() =
+        data.GetHashCode()
+
+    member _.Use(action: nativeint -> 'T) =
+        if ptr = 0n then raise <| ObjectDisposedException("LayoutedIndirectData")
+        action ptr
+
+    member _.Dispose() =
+        Marshal.FreeHGlobal ptr
+        sizeInBytes <- 0UL
+        ptr <- 0n
+
+    interface INativeBuffer with
+        member _.SizeInBytes = sizeInBytes
+        member this.Use action = this.Use action
+
+    interface IDisposable with
+        member this.Dispose() = this.Dispose()
 
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskLock : Option<RenderTaskLock>) =
@@ -307,72 +318,58 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         x.CreateTexture(name, data, samplerType.Properties)
 
     member x.CreateIndirectBuffer(indexed : bool, data : aval<IndirectBuffer>) =
-        
-        // TODO: proper cache for transformIndirectData -> if transform necessary duplicates are uploaded at the moment
-
-        let transformIndirectData (buffer : IBuffer) =
-            match buffer with
-            | :? ArrayBuffer as ab ->
-                match ab.Data with
-                | :? (DrawCallInfo[]) as data -> 
-                    let transformed = data |> Array.map (fun dc -> 
-                                DrawCallInfo(
-                                    FaceVertexCount = dc.FaceVertexCount,
-                                    InstanceCount = dc.InstanceCount,
-                                    FirstIndex = dc.FirstIndex,
-                                    BaseVertex = dc.FirstInstance,
-                                    FirstInstance = dc.BaseVertex
-                                ))
-                    ArrayBuffer(transformed) :> IBuffer
-                | _ -> failwith "[GL] IndirectBuffer data supposed to be DrawCallInfo[]"
-            | _ -> 
-                buffer
-
         let name = if ctx.DebugLabelsEnabled then "Indirect Buffer" else null
 
         indirectBufferCache.GetOrCreate<IndirectBuffer>(data, [indexed :> obj], fun () -> {
-            create = fun b ->
+            create = fun data ->
                 let (buffer, own) =
-                    match BufferManager.TryUnwrap b.Buffer with
-                    | ValueSome h ->
-                        if b.Indexed <> indexed then
-                            if b.Indexed then failwithf "[GL] Expected non-indexed data but indirect buffer contains indexed data."
-                            else failwithf "[GL] Expected indexed data but indirect buffer contains non-indexed data."
+                    match BufferManager.TryUnwrap data.Buffer with
+                    | ValueSome handle ->
+                        if data.Indexed <> indexed then
+                            if data.Indexed then failf "Expected non-indexed data but indirect buffer contains indexed data."
+                            else failf "Expected indexed data but indirect buffer contains non-indexed data."
 
-                        h, false
+                        handle, false
 
                     | _ ->
-                        let layoutedData = if b.Indexed <> indexed then transformIndirectData b.Buffer else b.Buffer
-                        bufferManager.Create(name, layoutedData), true
+                        if data.Indexed <> indexed then
+                            use layouted = new LayoutedIndirectData(data)
+                            bufferManager.Create(name, layouted), true
+                        else
+                            bufferManager.Create(name, data.Buffer), true
 
-                GLIndirectBuffer(buffer, b.Count, b.Stride, indexed, own)
+                GLIndirectBuffer(buffer, data.Count, data.Offset, data.Stride, indexed, own)
 
-            update = fun h b ->
-                if h.Indexed <> b.Indexed then
-                    failwith "[GL] cannot change Indexed option of IndirectBuffer"
+            update = fun handle data ->
+                if handle.Indexed <> data.Indexed then
+                    failf "cannot change Indexed option of IndirectBuffer"
 
                 let buffer =
-                    match BufferManager.TryUnwrap b.Buffer with
+                    match BufferManager.TryUnwrap data.Buffer with
                     | ValueSome v ->
-                        if h.OwnResource then
-                            failwith "[GL] cannot change IndirectBuffer type"
+                        if handle.OwnResource then
+                            failf "cannot change IndirectBuffer type"
                         v
 
                     | _ ->
-                        if not h.OwnResource then
-                            failwith "[GL] cannot change IndirectBuffer type"
-                        let layoutedData = if b.Indexed <> indexed then transformIndirectData b.Buffer else b.Buffer
-                        bufferManager.Update(name, h.Buffer, layoutedData)
+                        if not handle.OwnResource then
+                            failf "cannot change IndirectBuffer type"
 
-                if h.Buffer = buffer && h.Count = b.Count && h.Stride = b.Stride then // OwnResource and Indexed cannot change
-                    h // return old to remain reference equal -> will be counted as InPlaceUpdate (no real performance difference)
+                        if data.Indexed <> indexed then
+                            use layouted = new LayoutedIndirectData(data)
+                            bufferManager.Update(name, handle.Buffer, layouted)
+                        else
+                            bufferManager.Update(name, handle.Buffer, data.Buffer)
+
+                if handle.Buffer = buffer && handle.Count = data.Count && handle.Offset = data.Offset && handle.Stride = data.Stride then // OwnResource and Indexed cannot change
+                    handle // return old to remain reference equal -> will be counted as InPlaceUpdate (no real performance difference)
                 else
-                    GLIndirectBuffer(buffer, b.Count, b.Stride, indexed, h.OwnResource)
+                    GLIndirectBuffer(buffer, data.Count, data.Offset, data.Stride, indexed, handle.OwnResource)
 
             delete = fun h   -> if h.OwnResource then bufferManager.Delete(h.Buffer)
             unwrap = fun _   -> ValueNone
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
-            view =   fun h   -> IndirectDrawArgs(h.Buffer.Handle, h.Count, h.Stride)
+            view =   fun h   -> IndirectDrawArgs(h.Buffer.Handle, h.Count, h.Offset, h.Stride)
             kind = ResourceKind.IndirectBuffer
         })
 

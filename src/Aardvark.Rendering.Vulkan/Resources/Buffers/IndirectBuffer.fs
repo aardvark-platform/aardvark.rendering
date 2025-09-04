@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open System
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
@@ -12,77 +12,44 @@ type IndirectBuffer =
     class
         inherit BufferDecorator
         val public Count  : int
+        val public Offset : uint64
+        val public Stride : int
 
-        new(parent : Buffer, count : int) =
+        new(parent : Buffer, count : int, offset : uint64, stride : int) =
             { inherit BufferDecorator(parent);
-              Count  = count }
+              Count  = count; Offset = offset; Stride = stride }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndirectBuffer =
-    open Microsoft.FSharp.NativeInterop
 
     let private flags = VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit
 
-    let inline private copySwap (src : nativeptr<DrawCallInfo>) (dst : nativeptr<DrawCallInfo>) (cnt : int) =
-        let mutable src = src
-        let mutable dst = dst
-        for i in 1 .. cnt do
-            let mutable c = NativePtr.read src
-            DrawCallInfo.ToggleIndexed(&c)
-            NativePtr.write dst c
-            src <- NativePtr.add src 1
-            dst <- NativePtr.add dst 1
+    let create (indexed : bool) (data : Aardvark.Rendering.IndirectBuffer) (device : Device) =
+        // VUID-vkCmdDrawIndexedIndirect-offset-02710
+        if data.Offset % 4UL <> 0UL then
+            failf $"Offset of indirect buffer must be a multiple of 4 (Offset = {data.Offset})"
 
-    let inline private copyDirect (src : nativeptr<DrawCallInfo>) (dst : nativeptr<DrawCallInfo>) (cnt : int) =
-        let src = NativePtr.toNativeInt src
-        let dst = NativePtr.toNativeInt dst
-        Marshal.Copy(src, dst, sizeof<DrawCallInfo> * cnt)
+        // VUID-vkCmdDrawIndexedIndirect-drawCount-00528
+        if data.Count > 1 && (data.Stride < sizeof<DrawCallInfo> || data.Stride % 4 <> 0) then
+            failf $"Stride of indirect buffer must not be smaller than {sizeof<DrawCallInfo>} and must be a multiple of 4 (Stride = {data.Stride})"
 
-
-    let private copy (swap : bool) (src : nativeint) (dst : nativeint) (cnt : int) =
-        let src = NativePtr.ofNativeInt src
-        let dst = NativePtr.ofNativeInt dst
-
-        if swap then
-            copySwap src dst cnt
-        else
-            copyDirect src dst cnt
-
-    let create (indexed : bool) (b : Aardvark.Rendering.IndirectBuffer) (device : Device) =
-        if b.Stride <> sizeof<DrawCallInfo> then
-            failf "Stride of indirect buffer must be %d (is %d)" sizeof<DrawCallInfo> b.Stride
-
-        let swap = (indexed <> b.Indexed)
+        let swap = (indexed <> data.Indexed)
 
         let buffer =
-            match b.Buffer with
-            | :? ArrayBuffer as ab ->
-                if ab.Data.Length <> 0 then
-                    if ab.ElementType <> typeof<DrawCallInfo> then
-                        failf "Element type of array for indirect buffer must be DrawCallInfo (is %A)" ab.ElementType
-
-                    let size = uint64 ab.Data.LongLength * uint64 sizeof<DrawCallInfo>
-                    let buffer = Buffer.create flags size device.DeviceMemory
-
-                    ab.Data |> NativeInt.pin (fun src ->
-                        Buffer.write buffer (fun dst ->
-                            copy swap src dst ab.Data.Length
-                        )
-                    )
-
-                    buffer
-                else
-                    Buffer.empty false flags 0UL device.DeviceMemory
-
+            match data.Buffer with
             | :? INativeBuffer as nb ->
                 if nb.SizeInBytes <> 0UL then
-                    let count = int (nb.SizeInBytes / uint64 sizeof<DrawCallInfo>)
                     let buffer = Buffer.create flags nb.SizeInBytes device.DeviceMemory
 
                     nb.Use (fun src ->
                         Buffer.write buffer (fun dst ->
-                             copy swap src dst count
+                            if swap then
+                                let offset = nativeint data.Offset
+                                let stride = nativeint data.Stride
+                                DrawCallInfo.ToggleIndexedCopy(src + offset, dst + offset, stride, data.Count)
+                            else
+                                Buffer.MemoryCopy(src, dst, nb.SizeInBytes, nb.SizeInBytes)
                         )
                     )
 
@@ -90,20 +57,20 @@ module IndirectBuffer =
                 else
                     Buffer.empty false flags 0UL device.DeviceMemory
 
-            | :? Buffer as bb ->
+            | :? Buffer as b ->
                 if swap then
-                    if b.Indexed then
+                    if data.Indexed then
                         failf "Indirect buffer contains indexed data but expected non-indexed data"
                     else
                         failf "Indirect buffer contains non-indexed data but expected indexed data"
 
-                bb.AddReference()
-                bb
+                b.AddReference()
+                b
 
             | _ ->
-                failf "Unsupported indirect buffer type %A" b.Buffer
+                failf "Unsupported indirect buffer type %A" data.Buffer
 
-        new IndirectBuffer(buffer, b.Count)
+        new IndirectBuffer(buffer, data.Count, data.Offset, data.Stride)
 
 [<AbstractClass; Sealed; Extension>]
 type ContextIndirectBufferExtensions private() =

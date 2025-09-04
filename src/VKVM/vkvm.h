@@ -24,13 +24,20 @@ typedef struct {
 	int BaseVertex;
 } DrawCallInfo;
 
+struct DrawCallBuffer {
+	VkBuffer Handle;
+	uint64_t Offset;
+	int		 Stride;
+};
+
 typedef struct {
-	int				IsIndirect;
-	int				IsIndexed;
-	VkBuffer		IndirectBuffer;
-	int				IndirectCount;
-	int				DrawCallCount;
-	DrawCallInfo*	DrawCalls;
+	uint8_t		IsIndirect;
+	uint8_t		IsIndexed;
+	int			Count;
+	union {
+		DrawCallInfo*  DrawCalls;
+		DrawCallBuffer DrawCallBuffer;
+	};
 } DrawCall;
 
 typedef struct {

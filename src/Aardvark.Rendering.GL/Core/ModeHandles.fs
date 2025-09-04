@@ -199,8 +199,10 @@ type VertexInputBindingHandle =
 type IndirectDrawArgs =
     struct
         val mutable public Handle : int
-        val mutable public Count : int
+        val mutable public Count  : int
+        val mutable public Offset : uint64
         val mutable public Stride : int
 
-        new(handle : int, count : int, stride : int) = { Handle = handle; Count = count; Stride = stride }
+        new(handle : int, count : int, offset : uint64, stride : int) =
+            { Handle = handle; Count = count; Offset = offset; Stride = stride }
     end

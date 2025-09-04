@@ -14,49 +14,50 @@ open Microsoft.FSharp.NativeInterop
 module IndirectCommands =
 
     [<StructLayout(LayoutKind.Sequential)>]
+    type DrawCallBuffer =
+        struct
+            val mutable Handle : VkBuffer
+            val mutable Offset : uint64
+            val mutable Stride : int
+            new (handle, offset, stride) = { Handle = handle; Offset = offset; Stride = stride }
+        end
+
+    [<StructLayout(LayoutKind.Explicit)>]
     type DrawCall =
         struct
-            val mutable public IsIndirect       : int
-            val mutable public IsIndexed        : int
-            val mutable public IndirectBuffer   : VkBuffer
-            val mutable public IndirectCount    : int
-            val mutable public DrawCallCount    : int
-            val mutable public DrawCalls        : nativeptr<DrawCallInfo>
+            [<FieldOffset(0)>] val mutable public IsIndirect     : uint8
+            [<FieldOffset(1)>] val mutable public IsIndexed      : uint8
+            [<FieldOffset(4)>] val mutable public Count          : int
+            [<FieldOffset(8)>] val mutable public DrawCalls      : nativeptr<DrawCallInfo>
+            [<FieldOffset(8)>] val mutable public DrawCallBuffer : DrawCallBuffer
 
+            static member Direct(calls: DrawCallInfo[], indexed: bool) =
+                let mutable dc = Unchecked.defaultof<DrawCall>
+                dc.IsIndirect <- 0uy
+                dc.IsIndexed  <- if indexed then 1uy else 0uy
+                dc.Count      <- calls.Length
+                dc.DrawCalls  <- NativePtr.alloc dc.Count
+                for i = 0 to dc.Count - 1 do dc.DrawCalls.[i] <- calls.[i]
+                dc
 
-            static member Indirect (indexed : bool, ib : VkBuffer, count : int) =
-                new DrawCall(true, indexed, ib, count, 0, NativePtr.zero)
+            static member Indirect(buffer: VkBuffer, count: int, offset: uint64, stride: int, indexed: bool) =
+                let mutable dc = Unchecked.defaultof<DrawCall>
+                dc.IsIndirect     <- 1uy
+                dc.IsIndexed      <- if indexed then 1uy else 0uy
+                dc.Count          <- count
+                dc.DrawCallBuffer <- DrawCallBuffer(buffer, offset, stride)
+                dc
 
-            static member Direct (indexed : bool, calls : DrawCallInfo[]) =
-                let pCalls = NativePtr.alloc calls.Length
-                for i in 0 .. calls.Length-1 do
-                    NativePtr.set pCalls i calls.[i]
-                new DrawCall(false, indexed, VkBuffer.Null, 0, calls.Length, pCalls)
-                
             member x.Dispose() =
-                if not (NativePtr.isNull x.DrawCalls) then
+                if x.IsIndirect = 0uy && not <| NativePtr.isNullPtr x.DrawCalls then
                     NativePtr.free x.DrawCalls
 
-                x.IndirectBuffer <- VkBuffer.Null
-                x.IndirectCount <- 0
+                x.Count <- 0
                 x.DrawCalls <- NativePtr.zero
-                x.DrawCallCount <- 0
 
             interface IDisposable with
                 member x.Dispose() = x.Dispose()
-
-            private new(isIndirect : bool, isIndexed : bool, ib : VkBuffer, ibc : int, callCount : int, pCalls : nativeptr<DrawCallInfo>) =
-                {
-                    IsIndirect = (if isIndirect then 1 else 0)
-                    IsIndexed = (if isIndexed then 1 else 0)
-                    IndirectBuffer = ib
-                    IndirectCount = ibc
-                    DrawCallCount = callCount
-                    DrawCalls = pCalls
-                }
-
         end
-
 
     [<StructLayout(LayoutKind.Sequential)>]
     type VertexBufferBinding =
@@ -90,7 +91,6 @@ module IndirectCommands =
                 member x.Dispose() = x.Dispose()
         end
 
-
     [<StructLayout(LayoutKind.Sequential)>]
     type DescriptorSetBinding =
         struct
@@ -121,7 +121,6 @@ module IndirectCommands =
             interface IDisposable with
                 member x.Dispose() = x.Dispose()
         end
-
 
     [<StructLayout(LayoutKind.Sequential)>]
     type IndexBufferBinding =

@@ -437,11 +437,16 @@ module IndirectBufferExtensions =
         class
             val mutable public Buffer : Buffer
             val mutable public Count : int
+            val mutable public Offset : uint64
             val mutable public Stride : int
             val mutable public Indexed : bool
             val mutable public OwnResource : bool
 
-            new(b, count, stride, indexed, ownResource) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed; OwnResource = ownResource }
+            new(handle, count, offset, stride, indexed, ownResource) =
+                if stride % 4 <> 0 then
+                    failf $"Stride of indirect buffer must be a multiple of 4 (Stride = {stride})"
+
+                { Buffer = handle; Count = count; Offset = offset; Stride = stride; Indexed = indexed; OwnResource = ownResource }
         end
 
     type Context with

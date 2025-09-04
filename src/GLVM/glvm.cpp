@@ -425,10 +425,10 @@ void runInstruction(Instruction* i)
 		hglDrawElements((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (DrawCallInfoList*)i->Arg4);
 		break;
 	case HDrawArraysIndirect:
-		hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (IndirctDrawArgsStruct*)i->Arg3);
+		hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (IndirectDrawArgsStruct*)i->Arg3);
 		break;
 	case HDrawElementsIndirect:
-		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (IndirctDrawArgsStruct*)i->Arg4);
+		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (IndirectDrawArgsStruct*)i->Arg4);
 		break;
 	case HSetDepthTest:
 		hglSetDepthTest((int*)i->Arg0);
@@ -740,10 +740,10 @@ Statistics runRedundancyChecks(Fragment* frag)
 					hglDrawElements((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (DrawCallInfoList*)i->Arg4);
 					break;
 				case HDrawArraysIndirect:
-					hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (IndirctDrawArgsStruct*)i->Arg3);
+					hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (IndirectDrawArgsStruct*)i->Arg3);
 					break;
 				case HDrawElementsIndirect:
-					hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (IndirctDrawArgsStruct*)i->Arg4);
+					hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (IndirectDrawArgsStruct*)i->Arg4);
 					break;
 
 				case HSetDepthTest:
@@ -941,7 +941,7 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 	endtrace("a")
 }
 
-DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, IndirctDrawArgsStruct* args)
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, IndirectDrawArgsStruct* args)
 {
 	trace("hglDrawArraysIndirect\n");
 
@@ -949,6 +949,7 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 	auto drawcount = args->Count;
 	if (!active || !drawcount) return;
 	auto buffer = args->Handle;
+	auto offset = args->Offset;
 	auto stride = args->Stride;
 
 	stats->DrawCalls++;
@@ -963,7 +964,6 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 		if (buffer != 0)
 		{
 			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-			size_t offset = 0;
 			for (int i = 0; i < drawcount; i++)
 			{
 				glDrawArraysIndirect(m, (const GLvoid*)offset);
@@ -994,7 +994,7 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 		if (buffer != 0)
 		{
 			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-			glMultiDrawArraysIndirect(m, nullptr, drawcount, stride);
+			glMultiDrawArraysIndirect(m, (const void*)offset, drawcount, stride);
 		}
 		else
 		{
@@ -1005,7 +1005,7 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 	endtrace("a")
 }
 
-DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, IndirctDrawArgsStruct* args)
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, IndirectDrawArgsStruct* args)
 {
 	trace("hglDrawElementsIndirect\n");
 	auto drawcount = args->Count;
