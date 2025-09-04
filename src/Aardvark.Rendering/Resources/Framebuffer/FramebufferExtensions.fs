@@ -3,10 +3,9 @@
 open Aardvark.Base
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
-open System
 
 [<AutoOpen>]
-module IFramebufferRuntimeFSharpExtensions =
+module IFramebufferFSharpExtensions =
 
     // These extensions use SRTPs so MUST NOT be exposed to C#
     type IFramebufferRuntime with
@@ -74,6 +73,72 @@ module IFramebufferRuntimeFSharpExtensions =
         member inline x.ClearDepthStencil(fbo : IFramebuffer, depth : ^Depth, stencil : ^Stencil) =
             let values = (depth, stencil) ||> (fun d s -> clear { depth d; stencil s })
             x.Clear(fbo, values)
+
+    type IFramebuffer with
+
+        // ================================================================================================================
+        // Clear
+        // ================================================================================================================
+
+        /// Clears the framebuffer with the given color.
+        member inline x.Clear(color : ^Color) =
+            let values = color |> (fun c -> clear { color c })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given colors.
+        member inline x.Clear(colors : Map<Symbol, ^Color>) =
+            let values = colors |> (fun c -> clear { colors c })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given colors.
+        member inline x.Clear(colors : seq<Symbol * ^Color>) =
+            let values = colors |> (fun c -> clear { colors c })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given color and depth.
+        member inline x.Clear(color : ^Color, depth : ^Depth) =
+            let values = (color, depth) ||> (fun c d -> clear { color c; depth d })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given colors and depth.
+        member inline x.Clear(colors : Map<Symbol, ^Color>, depth : ^Depth) =
+            let values = (colors, depth) ||> (fun c d -> clear { colors c; depth d })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given colors and depth.
+        member inline x.Clear(colors : seq<Symbol * ^Color>, depth : ^Depth) =
+            let values = (colors, depth) ||> (fun c d -> clear { colors c; depth d })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given color, depth and stencil values.
+        member inline x.Clear(color : ^Color, depth : ^Depth, stencil : ^Stencil) =
+            let values = (color, depth, stencil) |||> (fun c d s -> clear { color c; depth d; stencil s })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given colors, depth and stencil values.
+        member inline x.Clear(colors : Map<Symbol, ^Color>, depth : ^Depth, stencil : ^Stencil) =
+            let values = (colors, depth, stencil) |||> (fun c d s -> clear { colors c; depth d; stencil s })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given colors, depth and stencil values.
+        member inline x.Clear(colors : seq<Symbol * ^Color>, depth : ^Depth, stencil : ^Stencil) =
+            let values = (colors, depth, stencil) |||> (fun c d s -> clear { colors c; depth d; stencil s })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given depth value.
+        member inline x.ClearDepth(depth : ^Depth) =
+            let values = depth |> (fun d -> clear { depth d })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given stencil value.
+        member inline x.ClearStencil(stencil : ^Stencil) =
+            let values = stencil |> (fun s -> clear { stencil s })
+            x.Signature.Runtime.Clear(x, values)
+
+        /// Clears the framebuffer with the given depth and stencil values.
+        member inline x.ClearDepthStencil(depth : ^Depth, stencil : ^Stencil) =
+            let values = (depth, stencil) ||> (fun d s -> clear { depth d; stencil s })
+            x.Signature.Runtime.Clear(x, values)
 
 
 [<AbstractClass; Sealed; Extension>]
