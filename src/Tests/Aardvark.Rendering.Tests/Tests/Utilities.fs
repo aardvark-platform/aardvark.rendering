@@ -2,6 +2,7 @@
 
 open System
 open System.Reflection
+open System.Runtime.InteropServices
 open System.Text.RegularExpressions
 open System.IO
 open Aardvark.Base
@@ -316,7 +317,7 @@ module ``Expecto Extensions`` =
             Expect.floatClose accuracy actual.Z expected.Z message
             Expect.floatClose accuracy actual.W expected.W message
 
-        let inline approxEqualAux< ^a, ^b when (^a or ^b) : (static member ApproximateEquals : ^a * ^a * float -> bool)> (foo : ^ b) (a : 'a) (b : 'a) (eps : float) =
+        let inline approxEqualAux< ^a, ^b when (^a or ^b) : (static member ApproximateEquals : ^a * ^a * float -> bool)> (_ : ^ b) (a : 'a) (b : 'a) (eps : float) =
             (((^a or ^b) : (static member ApproximateEquals : ^a * ^a * float -> bool) (a, b, eps)))
 
         let inline approxEquals a b eps msg =
@@ -381,9 +382,14 @@ module ``Expecto Extensions`` =
             match tests with
             | t :: rem ->
                 let name = t.fullName "."
+                let title = $"({index + 1} / {count}) {name}"
                 let mutable success = false
 
-                Report.Begin $"({index + 1} / {count}) {name}"
+                if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                    try Console.Title <- title
+                    with _ -> ()
+
+                Report.Begin title
 
                 match t.test with
                 | Sync f ->
