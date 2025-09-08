@@ -446,12 +446,12 @@ module OpenGl =
     /// </summary>
     module Pointers =
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindVertexArray.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBindVertexArray.xhtml
         /// </summary>
         let BindVertexArray  = getProcAddress "glBindVertexArray"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glUseProgram.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glUseProgram.xhtml
         /// </summary>
         let BindProgram  = getProcAddress "glUseProgram"
 
@@ -481,217 +481,217 @@ module OpenGl =
         let GetNamedBufferSubData = getProcAddress "glGetNamedBufferSubData"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glActiveTexture.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glActiveTexture.xhtml
         /// </summary>
         let ActiveTexture  = getProcAddress "glActiveTexture"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindSampler.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBindSampler.xhtml
         /// </summary>
         let BindSampler  = getProcAddress "glBindSampler"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindTexture.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBindTexture.xhtml
         /// </summary>
         let BindTexture  = getProcAddress "glBindTexture"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindBuffer.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBindBuffer.xhtml
         /// </summary>
         let BindBuffer  = getProcAddress "glBindBuffer"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindBufferBase.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBindBufferBase.xhtml
         /// </summary>
         let BindBufferBase  = getProcAddress "glBindBufferBase"
         
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindBufferRange.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBindBufferRange.xhtml
         /// </summary>
         let BindBufferRange = getProcAddress "glBindBufferRange"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindFramebuffer.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBindFramebuffer.xhtml
         /// </summary>
         let BindFramebuffer  = getProcAddress "glBindFramebuffer"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glViewport.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glViewport.xhtml
         /// </summary>
         let Viewport  = getProcAddress "glViewport"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glScissor.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glScissor.xhtml
         /// </summary>
         let Scissor  = getProcAddress "glScissor"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glEnable.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glEnable.xhtml
         /// </summary>
         let Enable  = getProcAddress "glEnable"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDisable.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glEnable.xhtml
         /// </summary>
         let Disable  = getProcAddress "glDisable"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDepthFunc.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glDepthFunc.xhtml
         /// </summary>
         let DepthFunc  = getProcAddress "glDepthFunc"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glCullFace.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glCullFace.xhtml
         /// </summary>
         let CullFace  = getProcAddress "glCullFace"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glFrontFace.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glFrontFace.xhtml
         /// </summary>
         let FrontFace  = getProcAddress "glFrontFace"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBlendFuncSeparate.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBlendFuncSeparate.xhtml
         /// </summary>
         let BlendFuncSeparate  = getProcAddress "glBlendFuncSeparate"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBlendEquationSeparate.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBlendEquationSeparate.xhtml
         /// </summary>
         let BlendEquationSeparate  = getProcAddress "glBlendEquationSeparate"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBlendColor.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBlendColor.xhtml
         /// </summary>
         let BlendColor  = getProcAddress "glBlendColor"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glPolygonMode.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glPolygonMode.xhtml
         /// </summary>
         let PolygonMode  = getProcAddress "glPolygonMode"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glStencilFuncSeparate.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glStencilFuncSeparate.xhtml
         /// </summary>
         let StencilFuncSeparate  = getProcAddress "glStencilFuncSeparate"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glStencilOpSeparate.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glStencilOpSeparate.xhtml
         /// </summary>
         let StencilOpSeparate  = getProcAddress "glStencilOpSeparate"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glPatchParameteri.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glPatchParameter.xhtml
         /// </summary>
         let PatchParameter  = getProcAddress "glPatchParameteri"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDrawElements.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glDrawElements.xhtml
         /// </summary>
         let DrawElements  = getProcAddress "glDrawElements"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDrawArrays.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glDrawArrays.xhtml
         /// </summary>
         let DrawArrays  = getProcAddress "glDrawArrays"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDrawElementsInstanced.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glDrawElementsInstanced.xhtml
         /// </summary>
         let DrawElementsInstanced  = getProcAddress "glDrawElementsInstanced"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDrawArraysInstanced.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glDrawArraysInstanced.xhtml
         /// </summary>
         let DrawArraysInstanced  = getProcAddress "glDrawArraysInstanced"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glClear.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClear.xhtml
         /// </summary>
         let Clear  = getProcAddress "glClear"
         let ClearBufferiv  = getProcAddress "glClearBufferiv"
         let ClearBufferfv  = getProcAddress "glClearBufferfv"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindImageTexture.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBindImageTexture.xhtml
         /// </summary>
         let BindImageTexture = getProcAddress "glBindImageTexture"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glClearColor.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearColor.xhtml
         /// </summary>
         let ClearColor  = getProcAddress "glClearColor"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glClearDepth.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearDepth.xhtml
         /// </summary>
         let ClearDepth  = getProcAddress "glClearDepth"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glClearStencil.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glClearStencil.xhtml
         /// </summary>
         let ClearStencil  = getProcAddress "glClearStencil"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glGetError.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glGetError.xhtml
         /// </summary>
         let GetError  = getProcAddress "glGetError"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glVertexAttribPointer.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glVertexAttribPointer.xhtml
         /// </summary>
         let VertexAttribPointer = getProcAddress "glVertexAttribPointer"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glVertexAttribDivisor.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glVertexAttribDivisor.xhtml
         /// </summary>
         let VertexAttribDivisor = getProcAddress "glVertexAttribDivisor"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glEnableVertexAttribArray.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glEnableVertexAttribArray.xhtml
         /// </summary>
         let EnableVertexAttribArray = getProcAddress "glEnableVertexAttribArray"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDisableVertexAttribArray.xml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glEnableVertexAttribArray.xhtml
         /// </summary>
         let DisableVertexAttribArray = getProcAddress "glDisableVertexAttribArray"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/html/glMultiDrawArraysIndirect.xhtml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glMultiDrawArraysIndirect.xhtml
         /// </summary>
         let MultiDrawArraysIndirect = getProcAddress "glMultiDrawArraysIndirect"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/html/glMultiDrawElementsIndirect.xhtml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glMultiDrawElementsIndirect.xhtml
         /// </summary>
         let MultiDrawElementsIndirect = getProcAddress "glMultiDrawElementsIndirect"
 
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/html/glDepthMask.xhtml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glDepthMask.xhtml
         /// </summary>
         let DepthMask = getProcAddress "glDepthMask"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/html/glStencilMask.xhtml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glStencilMask.xhtml
         /// </summary>
         let StencilMask = getProcAddress "glStencilMask"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/html/glStencilMaskSeparate.xhtml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glStencilMaskSeparate.xhtml
         /// </summary>
         let StencilMaskSeparate = getProcAddress "glStencilMaskSeparate"
 
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/html/glColorMask.xhtml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glColorMask.xhtml
         /// </summary>
         let ColorMask = getProcAddress "glColorMask"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/html/glDrawBuffers.xhtml
+        /// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glDrawBuffers.xhtml
         /// </summary>
         let DrawBuffers = getProcAddress "glDrawBuffers"
 
