@@ -55,29 +55,25 @@ module BaseLibExtensions =
             Version(int (v >>> 22), int ((v >>> 12) &&& 0x3FFu), int (v &&& 0xFFFu))
 
     type V2i with
-        static member OfExtent (e : VkExtent2D) =
-            V2i(int e.width, int e.height)
-
-        member x.ToExtent() =
-            VkExtent2D(uint32 x.X, uint32 x.Y)
+        static member inline OfExtent (e : VkExtent2D) = V2i(int32 e.width, int32 e.height)
+        static member inline OfOffset (o : VkOffset2D) = V2i(o.x, o.y)
+        member inline this.ToExtent() = VkExtent2D(uint32 this.X, uint32 this.Y)
+        member inline this.ToOffset() = VkOffset2D(this.X, this.Y)
 
     type V2l with
-        static member OfExtent (e : VkExtent2D) =
-            V2l(int64 e.width, int64 e.height)
-
-        member x.ToExtent() =
-            VkExtent2D(uint32 x.X, uint32 x.Y)
+        static member inline OfExtent (e : VkExtent2D) = V2l(int32 e.width, int32 e.height)
+        static member inline OfOffset (o : VkOffset2D) = V2l(int64 o.x, int64 o.y)
+        member inline this.ToExtent() = VkExtent2D(uint32 this.X, uint32 this.Y)
+        member inline this.ToOffset() = VkOffset2D(int32 this.X, int32 this.Y)
 
     type V3i with
-        static member OfExtent (e : VkExtent3D) =
-            V3i(int e.width, int e.height, int e.depth)
-
-        member x.ToExtent() =
-            VkExtent3D(uint32 x.X, uint32 x.Y, uint32 x.Z)
+        static member inline OfExtent (e : VkExtent3D) = V3i(int32 e.width, int32 e.height, int32 e.depth)
+        static member inline OfOffset (o : VkOffset3D) = V3i(o.x, o.y, o.z)
+        member inline this.ToExtent() = VkExtent3D(uint32 this.X, uint32 this.Y, uint32 this.Z)
+        member inline this.ToOffset() = VkOffset3D(this.X, this.Y, this.Z)
 
     type V3l with
-        static member OfExtent (e : VkExtent3D) =
-            V3l(int64 e.width, int64 e.height, int64 e.depth)
-
-        member x.ToExtent() =
-            VkExtent3D(uint32 x.X, uint32 x.Y, uint32 x.Z)
+        static member inline OfExtent (e : VkExtent3D) = V3l(int32 e.width, int32 e.height, int32 e.depth)
+        static member inline OfOffset (o : VkOffset3D) = V3l(int64 o.x, int64 o.y, int64 o.z)
+        member inline this.ToExtent() = VkExtent3D(uint32 this.X, uint32 this.Y, uint32 this.Z)
+        member inline this.ToOffset() = VkOffset3D(int32 this.X, int32 this.Y, int32 this.Z)

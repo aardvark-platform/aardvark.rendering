@@ -34,11 +34,23 @@ type IPreparedRenderObject =
     abstract member Update : AdaptiveToken * RenderToken -> unit
     abstract member Original : Option<RenderObject>
 
-and RenderObject private (id : RenderObjectId,
-                          attributeScope : Ag.Scope, isActive : aval<bool>, renderPass : RenderPass, drawCalls : DrawCalls, mode : IndexedGeometryMode,
-                          surface : Surface, depthState : DepthState, blendState : BlendState, stencilState : StencilState, rasterizerState : RasterizerState,
-                          indices : BufferView option, instanceAttributes : IAttributeProvider, vertexAttributes : IAttributeProvider,
-                          uniforms : IUniformProvider, activate : unit -> IDisposable) =
+and RenderObject private (id                 : RenderObjectId,
+                          attributeScope     : Ag.Scope,
+                          isActive           : aval<bool>,
+                          renderPass         : RenderPass,
+                          drawCalls          : DrawCalls,
+                          mode               : IndexedGeometryMode,
+                          surface            : Surface,
+                          depthState         : DepthState,
+                          blendState         : BlendState,
+                          stencilState       : StencilState,
+                          rasterizerState    : RasterizerState,
+                          viewportState      : ViewportState,
+                          indices            : BufferView option,
+                          instanceAttributes : IAttributeProvider,
+                          vertexAttributes   : IAttributeProvider,
+                          uniforms           : IUniformProvider,
+                          activate           : unit -> IDisposable) =
     static let empty =
         RenderObject(
             id                 = RenderObjectId(),
@@ -52,6 +64,7 @@ and RenderObject private (id : RenderObjectId,
             blendState         = BlendState.Default,
             stencilState       = StencilState.Default,
             rasterizerState    = RasterizerState.Default,
+            viewportState      = ViewportState.Default,
             indices            = None,
             instanceAttributes = AttributeProvider.Empty,
             vertexAttributes   = AttributeProvider.Empty,
@@ -70,6 +83,7 @@ and RenderObject private (id : RenderObjectId,
     member val BlendState         = blendState         with get, set
     member val StencilState       = stencilState       with get, set
     member val RasterizerState    = rasterizerState    with get, set
+    member val ViewportState      = viewportState      with get, set
     member val Indices            = indices            with get, set
     member val InstanceAttributes = instanceAttributes with get, set
     member val VertexAttributes   = vertexAttributes   with get, set
@@ -89,6 +103,7 @@ and RenderObject private (id : RenderObjectId,
             blendState         = other.BlendState,
             stencilState       = other.StencilState,
             rasterizerState    = other.RasterizerState,
+            viewportState      = other.ViewportState,
             indices            = other.Indices,
             instanceAttributes = other.InstanceAttributes,
             vertexAttributes   = other.VertexAttributes,
@@ -110,7 +125,7 @@ and RenderObject private (id : RenderObjectId,
         RenderObject(id = RenderObjectId.New(), other = ro)
 
     member x.Path =
-        if System.Object.ReferenceEquals(x.AttributeScope,Ag.Scope.Root) then "EMPTY"
+        if obj.ReferenceEquals(x.AttributeScope, Ag.Scope.Root) then "EMPTY"
         else string x.AttributeScope
 
     /// Tries to retrieve the buffer view of the given attribute and returns if it is and per-instance attribute.

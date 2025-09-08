@@ -522,6 +522,11 @@ module OpenGl =
         let Viewport  = getProcAddress "glViewport"
 
         /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glScissor.xml
+        /// </summary>
+        let Scissor  = getProcAddress "glScissor"
+
+        /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glEnable.xml
         /// </summary>
         let Enable  = getProcAddress "glEnable"
@@ -753,6 +758,7 @@ module OpenGl =
               BindBufferRange, "glBindBufferRange"
               BindFramebuffer, "glBindFramebuffer"
               Viewport, "glViewport"
+              Scissor, "glScissor"
               Enable, "glEnable"
               Disable, "glDisable"
               DepthFunc, "glDepthFunc"

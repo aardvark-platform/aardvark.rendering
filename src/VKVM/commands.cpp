@@ -32,7 +32,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 			buffer,
 			get(SetViewport, data)->FirstViewport,
 			get(SetViewport, data)->ViewportCount,
-			getptr(SetViewport, Viewports, VkViewport)
+			get(SetViewport, data)->Viewports
 		);
 		break;
 	case CmdSetScissor:
@@ -40,7 +40,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 			buffer,
 			get(SetScissor, data)->FirstScissor,
 			get(SetScissor, data)->ScissorCount,
-			getptr(SetScissor, Scissors, VkRect2D)
+			get(SetScissor, data)->Scissors
 		);
 		break;
 	case CmdSetLineWidth:

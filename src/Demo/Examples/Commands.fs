@@ -81,6 +81,7 @@ module CommandTest =
                 BlendState      = BlendState.Default
                 StencilState    = StencilState.Default
                 RasterizerState = { RasterizerState.Default with FrontFacing = AVal.constant WindingOrder.Clockwise }
+                ViewportState   = ViewportState.Default
 
                 GlobalUniforms      =
                     UniformProvider.ofList [

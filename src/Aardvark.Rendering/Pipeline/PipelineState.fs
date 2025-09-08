@@ -78,6 +78,32 @@ type RasterizerState =
             ConservativeRaster  = AVal.constant false
         }
 
+[<Struct; CLIMutable>]
+type ViewportState =
+    {
+        /// <summary>
+        /// The region of the framebuffer that will be rendered to.
+        /// It determines the transformation from normalized device coordinates to framebuffer coordinates.
+        /// Viewport.Min and Viewport.Max are the framebuffer coordinates of the viewport's lower left and upper right corners (exclusive) respectively.
+        /// If None, the viewport specified in <see cref="OutputDescription"/> is used.
+        /// </summary>
+        Viewport : aval<Box2i> option
+
+        /// <summary>
+        /// The region of the framebuffer that can be modified by the render task.
+        /// Fragments with coordinates outside of the scissor region will be discarded.
+        /// Scissor.Min and Scissor.Max are the framebuffer coordinates of the scissor's lower left and upper right corners (exclusive) respectively.
+        /// If None, the scissor specified in <see cref="OutputDescription"/> is used.
+        /// </summary>
+        Scissor  : aval<Box2i> option
+    }
+
+    static member Default =
+        {
+            Viewport = None
+            Scissor  = None
+        }
+
 [<CLIMutable>]
 type PipelineState =
     {
@@ -88,6 +114,7 @@ type PipelineState =
         BlendState          : BlendState
         StencilState        : StencilState
         RasterizerState     : RasterizerState
+        ViewportState       : ViewportState
 
         GlobalUniforms      : IUniformProvider
         PerGeometryUniforms : Map<string, Type>

@@ -873,42 +873,23 @@ module VKVM =
                 )
             x.Append(&cmd)
         
-        member x.SetViewport(first : uint32, viewports : VkViewport[]) =
-            let count = viewports.Length
-            let size = sizeof<SetViewportCommand> + sizeof<VkViewport> * count
-            x.Append(size, fun ptr ->
-                let pViewports = NativePtr.ofNativeInt (ptr + nsizeof<SetViewportCommand>)
+        member x.SetViewport(first : uint32, count : uint32, pViewports : nativeptr<VkViewport>) =
+            let mutable cmd = Unchecked.defaultof<SetViewportCommand>
+            cmd.Length <- usizeof<SetViewportCommand>
+            cmd.OpCode <- CommandType.SetViewport
+            cmd.FirstViewport <- first
+            cmd.ViewportCount <- count
+            cmd.Viewports <- pViewports
+            x.Append(&cmd)
 
-                let mutable cmd = Unchecked.defaultof<SetViewportCommand>
-                cmd.Length <- uint32 size
-                cmd.OpCode <- CommandType.SetViewport
-                cmd.FirstViewport <- first
-                cmd.ViewportCount <- uint32 count
-                cmd.Viewports <- NativePtr.ofNativeInt (nsizeof<SetViewportCommand>)
-                NativeInt.write ptr cmd
-
-                for i in 0 .. count - 1 do
-                    NativePtr.set pViewports i viewports.[i]
-
-            )
-
-        member x.SetScissor(first : uint32, scissors : VkRect2D[]) =
-            let count = scissors.Length
-            let size = sizeof<SetScissorCommand> + sizeof<VkRect2D> * count
-            x.Append(size, fun ptr ->
-                let pScissors = NativePtr.ofNativeInt (ptr + nativeint sizeof<SetScissorCommand>)
-                
-                let mutable cmd = Unchecked.defaultof<SetScissorCommand>
-                cmd.Length <- uint32 size
-                cmd.OpCode <- CommandType.SetScissor
-                cmd.FirstScissor <- first
-                cmd.ScissorCount <- uint32 count
-                cmd.Scissors <- NativePtr.ofNativeInt (nativeint sizeof<SetScissorCommand>)
-                NativeInt.write ptr cmd
-                
-                for i in 0 .. count - 1 do
-                    NativePtr.set pScissors i scissors.[i]
-            )      
+        member x.SetScissor(first : uint32, count : uint32, pScissors : nativeptr<VkRect2D>) =
+            let mutable cmd = Unchecked.defaultof<SetScissorCommand>
+            cmd.Length <- usizeof<SetScissorCommand>
+            cmd.OpCode <- CommandType.SetScissor
+            cmd.FirstScissor <- first
+            cmd.ScissorCount <- count
+            cmd.Scissors <- pScissors
+            x.Append(&cmd)
 
         member x.SetLineWidth(width : float32) =
             let mutable cmd =

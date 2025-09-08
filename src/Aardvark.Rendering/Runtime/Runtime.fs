@@ -116,16 +116,16 @@ type RenderTaskRunExtensions() =
         t.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
 
     [<Extension>]
-    static member Run(t : IRenderTask, fbo : OutputDescription) =
-        t.Run(AdaptiveToken.Top, RenderToken.Empty, fbo)
+    static member Run(t : IRenderTask, output : OutputDescription) =
+        t.Run(AdaptiveToken.Top, RenderToken.Empty, output)
 
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer) =
         t.Run(AdaptiveToken.Top, token, OutputDescription.ofFramebuffer fbo)
 
     [<Extension>]
-    static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription) =
-        t.Run(AdaptiveToken.Top, token, fbo)
+    static member Run(t : IRenderTask, token : RenderToken, output : OutputDescription) =
+        t.Run(AdaptiveToken.Top, token, output)
 
     [<Extension>]
     static member inline GetRuntime(t : IRenderTask) =

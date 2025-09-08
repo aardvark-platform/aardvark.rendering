@@ -45,6 +45,13 @@ module RasterizerState =
             ConservativeRaster = scope.ConservativeRaster
         }
 
+module ViewportState =
+    let ofScope (scope : Ag.Scope) : ViewportState =
+        {
+            Viewport = scope.Viewport
+            Scissor  = scope.Scissor
+        }
+
 module RenderObject =
 
     let ofScope (scope : Ag.Scope) =
@@ -81,6 +88,7 @@ module RenderObject =
         rj.DepthState <- DepthState.ofScope scope
         rj.StencilState <- StencilState.ofScope scope
         rj.RasterizerState <- RasterizerState.ofScope scope
+        rj.ViewportState <- ViewportState.ofScope scope
 
         rj
 
@@ -101,6 +109,7 @@ module PipelineState =
             DepthState          = DepthState.ofScope scope
             StencilState        = StencilState.ofScope scope
             RasterizerState     = RasterizerState.ofScope scope
+            ViewportState       = ViewportState.ofScope scope
 
             GlobalUniforms      = new Providers.UniformProvider(scope, scope.Uniforms, [attributes])
             PerGeometryUniforms = Map.empty

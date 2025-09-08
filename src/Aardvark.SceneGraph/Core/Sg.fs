@@ -349,6 +349,31 @@ module Sg =
 
         new(state : aval<bool>, child : ISg) = ConservativeRasterApplicator(state, AVal.constant child)
 
+    type ViewportApplicator private (uniforms : IUniformProvider, state : aval<Box2i> option, child : aval<ISg>) =
+        inherit UniformApplicator(uniforms, child)
+
+        member x.Viewport = state
+
+        new(state : aval<Box2i> option, child : aval<ISg>) =
+            let uniforms : IUniformProvider =
+                match state with
+                | Some vp -> new Providers.SingleUniformHolder(Symbol.Create "ViewportSize", vp |> AVal.map _.Size)
+                | _ -> UniformProvider.Empty
+
+            ViewportApplicator(uniforms, state, child)
+
+        new(state : aval<Box2i> option, child : ISg) = ViewportApplicator(state, AVal.constant child)
+        new(state : aval<Box2i>, child : aval<ISg>) = ViewportApplicator(Some state, child)
+        new(state : aval<Box2i>, child : ISg) = ViewportApplicator(Some state, child)
+
+    type ScissorApplicator(state : aval<Box2i> option, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Scissor = state
+
+        new(state : aval<Box2i> option, child : ISg) = ScissorApplicator(state, AVal.constant child)
+        new(state : aval<Box2i>, child : aval<ISg>) = ScissorApplicator(Some state, child)
+        new(state : aval<Box2i>, child : ISg) = ScissorApplicator(Some state, child)
 
     type Set(content : aset<ISg>) =
 

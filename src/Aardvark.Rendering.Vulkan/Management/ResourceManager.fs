@@ -1086,6 +1086,32 @@ module Resources =
             else
                 false
 
+    type ViewportResource(owner : IResourceCache, key : list<obj>, viewport : aval<Box2i>) =
+        inherit AbstractPointerResource<VkViewport>(owner, key)
+
+        override x.Update(handle, user, token, renderToken) =
+            let viewport = viewport.GetValue(user, token, renderToken)
+            let result = VkViewport(float32 viewport.Min.X, float32 viewport.Min.Y, float32 viewport.SizeX, float32 viewport.SizeY, 0.0f, 1.0f)
+
+            if result <> handle then
+                handle <- result
+                true
+            else
+                false
+
+    type ScissorResource(owner : IResourceCache, key : list<obj>, scissor : aval<Box2i>) =
+        inherit AbstractPointerResource<VkRect2D>(owner, key)
+
+        override x.Update(handle, user, token, renderToken) =
+            let scissor = scissor.GetValue(user, token, renderToken)
+            let result = VkRect2D(scissor.Min.ToOffset(), scissor.Size.ToExtent())
+
+            if result <> handle then
+                handle <- result
+                true
+            else
+                false
+
     type DirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : aval<DrawCallInfo[]>) =
         inherit AbstractPointerResource<DrawCall>(owner, key)
 
@@ -1709,6 +1735,8 @@ type ResourceManager(device : Device) =
     let rasterizerStateCache    = NativeResourceLocationCache<VkPipelineRasterizationStateCreateInfo>(device)
     let colorBlendStateCache    = NativeResourceLocationCache<VkPipelineColorBlendStateCreateInfo>(device)
     let multisampleCache        = NativeResourceLocationCache<VkPipelineMultisampleStateCreateInfo>(device)
+    let viewportCache           = NativeResourceLocationCache<VkViewport>(device)
+    let scissorCache            = NativeResourceLocationCache<VkRect2D>(device)
     let pipelineCache           = NativeResourceLocationCache<VkPipeline>(device)
 
     let drawCallCache           = NativeResourceLocationCache<DrawCall>(device)
@@ -1752,6 +1780,8 @@ type ResourceManager(device : Device) =
         rasterizerStateCache.Clear()
         colorBlendStateCache.Clear()
         multisampleCache.Clear()
+        viewportCache.Clear()
+        scissorCache.Clear()
         pipelineCache.Clear()
 
         drawCallCache.Clear()
@@ -2107,6 +2137,18 @@ type ResourceManager(device : Device) =
         multisampleCache.GetOrCreate(
             [pass.Samples :> obj; multisample :> obj],
             fun cache key -> MultisampleStateResource(cache, key, pass.Samples, multisample)
+        )
+
+    member x.CreateViewport(viewport : aval<Box2i>) =
+        viewportCache.GetOrCreate(
+            [viewport :> obj],
+            fun cache key -> ViewportResource(cache, key, viewport)
+        )
+
+    member x.CreateScissor(scissor : aval<Box2i>) =
+        scissorCache.GetOrCreate(
+            [scissor :> obj],
+            fun cache key -> ScissorResource(cache, key, scissor)
         )
 
     member x.CreatePipeline(program         : IResourceLocation<ShaderProgram>,

@@ -193,6 +193,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let stencilMaskCache        = derivedCache (fun m -> m.StencilMaskCache)
     let flagCache               = derivedCache (fun m -> m.FlagCache)
     let colorCache              = derivedCache (fun m -> m.ColorCache)
+    let viewportCache           = derivedCache (fun m -> m.ViewportCache)
     let textureBindingCache     = derivedCache (fun m -> m.TextureBindingCache)
     let imageBindingCache       = derivedCache (fun m -> m.ImageBindingCache)
 
@@ -243,6 +244,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.StencilMaskCache         : ResourceCache<uint32, uint32>                            = stencilMaskCache
     member private x.FlagCache                : ResourceCache<bool, int>                                 = flagCache
     member private x.ColorCache               : ResourceCache<C4f, C4f>                                  = colorCache
+    member private x.ViewportCache            : ResourceCache<Box2i, V4i>                                = viewportCache
     member private x.TextureBindingCache      : ResourceCache<TextureArrayBinding, TextureArrayBinding>  = textureBindingCache
     member private x.ImageBindingCache        : ResourceCache<ImageBinding, ImageBinding>                = imageBindingCache
 
@@ -831,6 +833,17 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view =   id
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateViewport (value : aval<Box2i>) =
+        viewportCache.GetOrCreate<Box2i>(value, fun () -> {
+            create = fun b      -> b
+            update = fun h b    -> b
+            delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
+            info =   fun h      -> ResourceInfo.Zero
+            view =   fun b      -> V4i(b.Min, b.Size)
             kind = ResourceKind.Unknown
         })
 

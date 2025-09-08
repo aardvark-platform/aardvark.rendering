@@ -37,6 +37,10 @@ module ModeSemantics =
         member x.Multisample                : aval<bool>                    = x?Multisample
         member x.ConservativeRaster         : aval<bool>                    = x?ConservativeRaster
 
+        // Viewport
+        member x.Viewport                   : aval<Box2i> option            = x?Viewport
+        member x.Scissor                    : aval<Box2i> option            = x?Scissor
+
     module Semantic =
         let blendMode                (s : Ag.Scope) = s.BlendMode
         let blendConstant            (s : Ag.Scope) = s.BlendConstant
@@ -139,3 +143,12 @@ module ModeSemantics =
         member x.ConservativeRaster(r : Root<ISg>, scope : Ag.Scope) = r.Child?ConservativeRaster <- RasterizerState.Default.ConservativeRaster
         member x.ConservativeRaster(b : Sg.ConservativeRasterApplicator, scope : Ag.Scope) =
             b.Child?ConservativeRaster <- b.ConservativeRaster
+
+        // Viewport
+        member x.Viewport(r : Root<ISg>, scope : Ag.Scope) = r.Child?Viewport <- ViewportState.Default.Viewport
+        member x.Viewport(a : Sg.ViewportApplicator, scope : Ag.Scope) =
+            a.Child?Viewport <- a.Viewport
+
+        member x.Scissor(r : Root<ISg>, scope : Ag.Scope) = r.Child?Scissor <- ViewportState.Default.Scissor
+        member x.Scissor(a : Sg.ScissorApplicator, scope : Ag.Scope) =
+            a.Child?Scissor <- a.Scissor

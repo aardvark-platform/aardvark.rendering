@@ -843,15 +843,21 @@ module private RuntimeCommands =
                 stream.IndirectBindPipeline(VkPipelineBindPoint.Graphics, o.Pipeline.Pointer) |> ignore
                 stream.IndirectBindDescriptorSets(o.DescriptorSets.Pointer) |> ignore
 
+                match o.Viewport with
+                | ValueSome vp -> stream.SetViewport(0u, 1u, vp.Pointer) |> ignore
+                | _ -> ()
+
+                match o.Scissor with
+                | ValueSome sc -> stream.SetScissor(0u, 1u, sc.Pointer) |> ignore
+                | _ -> ()
+
                 match o.PushConstants with
                 | ValueSome pc -> stream.PushConstants(o.PipelineLayout.Handle, pc.Handle) |> ignore
                 | _ -> ()
 
                 match o.IndexBuffer with
-                | ValueSome ib ->
-                    stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
-                | ValueNone ->
-                    ()
+                | ValueSome ib -> stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
+                | _ -> ()
 
                 stream.IndirectBindVertexBuffers(o.VertexBuffers.Pointer) |> ignore
                 stream.IndirectDraw(compiler.stats, o.IsActive.Pointer, o.DrawCalls.Pointer) |> ignore
@@ -1197,7 +1203,8 @@ module private RuntimeCommands =
         override x.Compile(token, stream) =
             // figure out a viewport
             // NOTE that currently all devices clear everything in multi-GPU setups
-            let viewport = compiler.viewports.GetValue(token).[0]
+            let output = compiler.task.OutputDescription.GetValue(token)
+            let region = Box.Intersection(output.Viewport, output.Scissor)
 
             let values = values.GetValue token
             let depth = values.Depth
@@ -1273,9 +1280,8 @@ module private RuntimeCommands =
                     Array.append depthClears colorClears,
                     [|
                         VkClearRect(
-                            VkRect2D(VkOffset2D(viewport.Min.X,viewport.Min.Y), VkExtent2D(uint32 (1 + viewport.SizeX) , uint32 (1 + viewport.SizeY))),
-                            0u,
-                            uint32 compiler.renderPass.LayerCount
+                            VkRect2D(region.Min.ToOffset(), region.Size.ToExtent()),
+                            0u, uint32 compiler.renderPass.LayerCount
                         )
                     |]
                 ) |> ignore
@@ -2111,8 +2117,6 @@ module private RuntimeCommands =
             manager         : ResourceManager
             renderPass      : RenderPass
             stats           : nativeptr<V2i>
-            viewports       : aval<Box2i[]>
-            scissors        : aval<Box2i[]>
         }
 
         member x.Compile (cmd : RuntimeCommand) : PreparedCommand =
@@ -2157,15 +2161,12 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
     let device = manager.Device
 
-    let viewports = AVal.init [||]
-    let scissors = AVal.init [||]
-
     let pool = device.GraphicsFamily.CreateCommandPool()
     let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
     let stats = NativePtr.alloc 1
     let resources = ResourceLocationSet()
-    let mutable lastFramebuffer = ValueNone
+    let mutable lastOutput = ValueNone
 
     let compiler =
         {
@@ -2174,8 +2175,6 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             RuntimeCommands.Compiler.manager         = manager
             RuntimeCommands.Compiler.renderPass      = renderPass
             RuntimeCommands.Compiler.stats           = stats
-            RuntimeCommands.Compiler.viewports       = viewports
-            RuntimeCommands.Compiler.scissors        = scissors
         }
 
     let compiled = compiler.Compile command
@@ -2190,9 +2189,13 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         )
 
     let updateResources (token : AdaptiveToken) (renderToken : RenderToken) (action : bool -> 'T) =
-        resources.Use(token, renderToken, fun changed ->
-            action changed
-        )
+        resources.Use(token, renderToken, action)
+
+    abstract member DefaultName : string
+    default _.DefaultName = "Render Task"
+
+    abstract member DebugColor : C4f
+    default _.DebugColor = DebugColor.RenderTask
 
     override x.Release() =
         transact (fun () ->
@@ -2212,54 +2215,26 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         updateResources token renderToken ignore
 
         // Make sure that command buffer gets recompiled with updated commands on next render.
-        lastFramebuffer <- ValueNone
+        lastOutput <- ValueNone
 
     override x.Use(f : unit -> 'r) =
         f()
 
-    override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
+    override x.Perform(token : AdaptiveToken, renderToken : RenderToken, output : OutputDescription) =
         let vulkanQueries = renderToken.GetVulkanQueries()
 
         let fbo =
-            match desc.framebuffer with
+            match output.Framebuffer with
             | :? Framebuffer as fbo -> fbo
             | fbo -> failwithf "unsupported framebuffer: %A" fbo
 
         renderPass |> RenderPass.validateCompability fbo
 
-        let ranges =
-            let range =
-                {
-                    frMin = desc.viewport.Min;
-                    frMax = desc.viewport.Max;
-                    frLayers = Range1i(0,renderPass.LayerCount-1)
-                }
-            range.Split(int device.PhysicalDevices.Length)
-
-        let sc =
-            if device.IsDeviceGroup then
-                if renderPass.LayerCount > 1 then
-                    [| desc.viewport |]
-                else
-                    ranges |> Array.map (fun { frMin = min; frMax = max } -> Box2i(min, max))
-
-            else
-                [| desc.viewport |]
-
-        let vp = Array.create sc.Length desc.viewport
-
-        let viewportChanged =
-            if viewports.Value = vp && scissors.Value = sc then
+        let outputChanged =
+            if lastOutput |> ValueOption.contains output then
                 false
             else
-                transact (fun () -> viewports.Value <- vp; scissors.Value <- sc)
-                true
-
-        let framebufferChanged =
-            if lastFramebuffer |> ValueOption.contains fbo then
-                false
-            else
-                lastFramebuffer <- ValueSome fbo
+                lastOutput <- ValueSome output
                 true
 
         use dt = device.Token
@@ -2269,15 +2244,14 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
         updateResources token renderToken (fun resourcesChanged ->
 
-            if viewportChanged || commandChanged || resourcesChanged || framebufferChanged then
+            if outputChanged || commandChanged || resourcesChanged then
 
                 if device.DebugConfig.PrintRenderTaskRecompile then
                     let cause =
                         String.concat "; " [
                             if commandChanged then yield "content"
                             if resourcesChanged then yield "resources"
-                            if viewportChanged then yield "viewport"
-                            if framebufferChanged then yield "framebuffer"
+                            if outputChanged then yield "output"
                         ]
                         |> sprintf "{ %s }"
 
@@ -2287,8 +2261,8 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                 inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue, true)
 
                 inner.enqueue {
-                    do! Command.SetViewports(vp)
-                    do! Command.SetScissors(sc)
+                    do! Command.SetViewports [| output.Viewport |]
+                    do! Command.SetScissors [| output.Scissor |]
                 }
 
                 inner.AppendCommand()
@@ -2297,7 +2271,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                 inner.End()
 
             dt.perform {
-                do! Command.BeginLabel(x.Name ||? "Render Task", DebugColor.RenderTask)
+                do! Command.BeginLabel(x.Name ||? x.DefaultName, x.DebugColor)
 
                 for q in vulkanQueries do
                     do! Command.Begin q

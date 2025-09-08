@@ -93,7 +93,7 @@ type Runtime(device : Device) as this =
         new CommandTask(manager, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
 
     member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =
-        new ClearTask(device, unbox signature, values) :> IRenderTask
+        new ClearTask(manager, unbox signature, values) :> IRenderTask
 
     member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
                                         depthStencilAttachment : Option<TextureFormat>,

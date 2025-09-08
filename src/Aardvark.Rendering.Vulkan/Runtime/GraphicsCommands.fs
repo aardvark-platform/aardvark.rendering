@@ -55,7 +55,7 @@ module ``Graphics Commands`` =
 
                     use pViewports =
                         fixed viewports |> Array.map (fun b ->
-                            VkViewport(float32 b.Min.X, float32 b.Min.X, float32 (1 + b.SizeX), float32 (1 + b.SizeY), 0.0f, 1.0f)
+                            VkViewport(float32 b.Min.X, float32 b.Min.Y, float32 b.SizeX, float32 b.SizeY, 0.0f, 1.0f)
                         )
 
                     VkRaw.vkCmdSetViewport(cmd.Handle, 0u, uint32 viewports.Length, pViewports)
@@ -69,7 +69,7 @@ module ``Graphics Commands`` =
 
                     use pScissors =
                         fixed scissors |> Array.map (fun b ->
-                            VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(1 + b.SizeX, 1 + b.SizeY))
+                            VkRect2D(b.Min.ToOffset(), b.Size.ToExtent())
                         )
 
                     VkRaw.vkCmdSetScissor(cmd.Handle, 0u, uint32 scissors.Length, pScissors)

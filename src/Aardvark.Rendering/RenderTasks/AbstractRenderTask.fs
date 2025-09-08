@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering
 
 open System
-open Aardvark.Base
 open FSharp.Data.Adaptive
 
 [<AbstractClass>]
@@ -10,33 +9,26 @@ type AbstractRenderTask() =
 
     let id = RenderTaskId.New()
 
-    static let runtimeUniforms =
-        Map.ofList [
-            "ViewportSize", fun (o : OutputDescription) -> o.viewport.Size + V2i.II
-        ]
-
     let mutable frameId = 0UL
 
     let mutable isDisposed = false
 
-    let runtimeValueCache = Dict.empty
-    let currentOutput = AVal.init { framebuffer = Unchecked.defaultof<_>; viewport = Box2i(V2i.OO, V2i.II) }
-    let tryGetRuntimeValue (name : string) =
-        runtimeValueCache.GetOrCreate(name, fun name ->
-            // TODO: different runtime-types
-            match Map.tryFindV name runtimeUniforms with
-            | ValueSome f -> currentOutput |> AVal.map f :> IAdaptiveValue |> ValueSome
-            | ValueNone -> ValueNone
-        )
+    let outputDescription = AVal.init Unchecked.defaultof<OutputDescription>
+    let viewportSize = outputDescription |> AVal.map _.Viewport.Size
+
+    let tryGetRuntimeValue (name : string) : IAdaptiveValue voption =
+        match name with
+        | "ViewportSize" -> ValueSome viewportSize
+        | _ -> ValueNone
 
     let transaction = new Transaction()
 
     let hookProvider (provider : IUniformProvider) =
         { new IUniformProvider with
             member x.TryGetUniform(scope, name) =
-                match tryGetRuntimeValue (string name) with
+                match provider.TryGetUniform(scope, name) with
                 | ValueSome v -> ValueSome v
-                | _ -> provider.TryGetUniform(scope, name)
+                | _ -> tryGetRuntimeValue (string name)
 
             member x.Dispose() =
                 provider.Dispose()
@@ -49,6 +41,12 @@ type AbstractRenderTask() =
         let copy = RenderObject ro
         copy.Uniforms <- hookProvider ro.Uniforms
         copy
+
+    /// The output description with which the task has last been run or is currently being run.
+    member _.OutputDescription = outputDescription :> aval<_>
+
+    /// The viewport size of the current output description.
+    member _.ViewportSize = viewportSize
 
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
@@ -66,7 +64,7 @@ type AbstractRenderTask() =
 
     member val Name : string = null with get, set
     member x.FrameId = frameId
-    member x.Run(token : AdaptiveToken, renderToken : RenderToken, out : OutputDescription) =
+    member x.Run(token : AdaptiveToken, renderToken : RenderToken, output : OutputDescription) =
         x.EvaluateAlways token (fun token ->
             if isDisposed then
                 raise <| ObjectDisposedException(null, "Cannot run a disposed render task.")
@@ -77,12 +75,12 @@ type AbstractRenderTask() =
 
             // perform 'transact' with reusable transaction object
             useTransaction transaction (fun () -> // fun alloc :/
-                currentOutput.Value <- out
+                outputDescription.Value <- output
             )
             transaction.Commit()
             transaction.Dispose()
 
-            x.Perform(token, renderToken, out)
+            x.Perform(token, renderToken, output)
             frameId <- frameId + 1UL
         )
 

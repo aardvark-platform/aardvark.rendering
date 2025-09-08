@@ -9,7 +9,6 @@ open FSharp.Data.Adaptive
 open TypeMeta
 
 #nowarn "9"
-// #nowarn "51"
 
 type PreparedRenderObject(device         : Device,
                           signature      : RenderPass,
@@ -18,6 +17,8 @@ type PreparedRenderObject(device         : Device,
                           program        : IResourceLocation<ShaderProgram>,
                           pipelineLayout : PipelineLayout,
                           pipeline       : INativeResourceLocation<VkPipeline>,
+                          viewport       : INativeResourceLocation<VkViewport> voption,
+                          scissor        : INativeResourceLocation<VkRect2D> voption,
                           indexBuffer    : INativeResourceLocation<IndexBufferBinding> voption,
                           descriptorSets : INativeResourceLocation<DescriptorSetBinding>,
                           pushConstants  : IConstantResourceLocation<PushConstants> voption,
@@ -33,6 +34,8 @@ type PreparedRenderObject(device         : Device,
     member x.Resources = resources
     member x.PipelineLayout = pipelineLayout
     member x.Pipeline = pipeline
+    member x.Viewport = viewport
+    member x.Scissor = scissor
     member x.IndexBuffer = indexBuffer
     member x.DescriptorSets = descriptorSets
     member x.PushConstants = pushConstants
@@ -55,7 +58,7 @@ type PreparedRenderObject(device         : Device,
         member x.Id = original.Id
         member x.RenderPass = original.RenderPass
         member x.AttributeScope = original.AttributeScope
-        member x.Update(caller, token) = x.Update(caller, token) |> ignore
+        member x.Update(caller, token) = x.Update(caller, token)
         member x.Original = Some original
 
 
@@ -92,13 +95,12 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
 
     interface IPreparedRenderObject with
         member x.Original = Some first.Original
-        member x.Update(caller, token) = x.Update(caller, token) |> ignore
+        member x.Update(caller, token) = x.Update(caller, token)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
 open Aardvark.Rendering.Vulkan.Resources
-open System.Threading.Tasks
 open Uniforms.Patterns
 
 [<AbstractClass; Sealed; Extension>]
@@ -365,6 +367,24 @@ type DevicePreparedRenderObjectExtensions private() =
 
             resources.Add pipeline
 
+            let viewport =
+                match ro.ViewportState.Viewport with
+                | Some viewport ->
+                    let res = this.CreateViewport(viewport)
+                    resources.Add res
+                    ValueSome res
+                | _ ->
+                    ValueNone
+
+            let scissor =
+                match ro.ViewportState.Scissor with
+                | Some scissor ->
+                    let res = this.CreateScissor(scissor)
+                    resources.Add res
+                    ValueSome res
+                | _ ->
+                    ValueNone
+
             let indexed = Option.isSome ro.Indices
             let indexBufferBinding =
                 match ro.Indices with
@@ -414,6 +434,8 @@ type DevicePreparedRenderObjectExtensions private() =
                 program,
                 programLayout,
                 pipeline,
+                viewport,
+                scissor,
                 indexBufferBinding,
                 descriptorBindings,
                 pushConstants,

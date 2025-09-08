@@ -48,6 +48,8 @@ type ICommandStream =
     abstract member SetFrontFace : m : nativeptr<int> -> unit
     abstract member SetConservativeRaster : s : bool * r : nativeptr<int> -> unit
     abstract member SetMultisample : r : nativeptr<int> -> unit
+    abstract member SetViewport : v : nativeptr<V4i> -> unit
+    abstract member SetScissor : s : nativeptr<V4i> -> unit
 
     abstract member UseProgram : p : int -> unit
     abstract member UseProgram : m : nativeptr<int> -> unit
@@ -457,7 +459,21 @@ module GLAssemblerExtensions =
         member this.SetMultisample(m : nativeptr<int>) =
             this.Toggle(int EnableCap.Multisample, m)
 
+        member this.SetViewport(v : nativeptr<V4i>) =
+            s.BeginCall(4)
+            s.PushIntArg(12n + NativePtr.toNativeInt v)
+            s.PushIntArg(8n + NativePtr.toNativeInt v)
+            s.PushIntArg(4n + NativePtr.toNativeInt v)
+            s.PushIntArg(0n + NativePtr.toNativeInt v)
+            s.Call(OpenGl.Pointers.Viewport)
 
+        member this.SetScissor(v : nativeptr<V4i>) =
+            s.BeginCall(4)
+            s.PushIntArg(12n + NativePtr.toNativeInt v)
+            s.PushIntArg(8n + NativePtr.toNativeInt v)
+            s.PushIntArg(4n + NativePtr.toNativeInt v)
+            s.PushIntArg(0n + NativePtr.toNativeInt v)
+            s.Call(OpenGl.Pointers.Scissor)
 
         member this.UseProgram(p : int) =
              s.BeginCall(1)
@@ -1032,6 +1048,8 @@ module GLAssemblerExtensions =
             member this.SetDepthClamp(m: nativeptr<int>) = this.SetDepthClamp(m)
             member this.SetDrawBuffers(count: int, ptr: nativeint) = this.SetDrawBuffers(count, ptr)
             member this.SetMultisample(r: nativeptr<int>) = this.SetMultisample(r)
+            member this.SetViewport(v: nativeptr<V4i>) = this.SetViewport(v)
+            member this.SetScissor(s: nativeptr<V4i>) = this.SetScissor(s)
             member this.SetPolygonMode(m: nativeptr<int>) = this.SetPolygonMode(m)
             member this.SetStencilMask(m: bool) = this.SetStencilMask(m)
             member this.SetStencilMask(f : StencilFace, m: nativeptr<uint32>) = this.SetStencilMask(f, m)
@@ -1153,6 +1171,8 @@ module GLAssemblerExtensions =
             member x.SetDepthClamp(m: nativeptr<int>) = inner.SetDepthClamp(m); x.Append("SetDepthClamp", m)
             member x.SetDrawBuffers(count: int, ptr: nativeint) = inner.SetDrawBuffers(count, ptr); x.Append("SetDrawBuffers", count, ptr)
             member x.SetMultisample(r: nativeptr<int>) = inner.SetMultisample(r); x.Append("SetMultisample", r)
+            member x.SetViewport(v: nativeptr<V4i>) = inner.SetViewport(v); x.Append("SetViewport", v)
+            member x.SetScissor(s: nativeptr<V4i>) = inner.SetScissor(s); x.Append("SetScissor", s)
             member x.SetPolygonMode(m: nativeptr<int>) = inner.SetPolygonMode(m); x.Append("SetPolygonMode", m)
             member x.SetStencilMask(mask: bool) = inner.SetStencilMask(mask); x.Append("SetStencilMask", mask)
             member x.SetStencilMask(f: StencilFace, m: nativeptr<uint32>) = inner.SetStencilMask(f, m); x.Append("SetStencilMask", f, m)
@@ -1219,6 +1239,8 @@ module GLAssemblerExtensions =
 
         member inline x.SetConservativeRaster(s : bool, r : IResource<_,int>) = x.SetConservativeRaster(s, r.Pointer)
         member inline x.SetMultisample(r : IResource<_,int>) = x.SetMultisample(r.Pointer)
+        member inline x.SetViewport(r : IResource<_, V4i>) = x.SetViewport(r.Pointer)
+        member inline x.SetScissor(r : IResource<_, V4i>) = x.SetScissor(r.Pointer)
 
         member inline x.DrawArrays(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, calls : IResource<_,DrawCallInfoList>) =
             x.DrawArrays(

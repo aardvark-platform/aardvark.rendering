@@ -25,17 +25,27 @@ module RenderTasks =
 
     module private Framebuffer =
 
-        let draw (signature : IFramebufferSignature) (fbo : Framebuffer) (viewport : Box2i) (f : unit -> 'T) =
-            let oldVp = Array.create 4 0
+        let draw (signature : IFramebufferSignature) (fbo : Framebuffer) (viewport : Box2i) (scissor : Box2i) (perform : unit -> 'T) =
+            let oldViewport = NativePtr.stackalloc<int> 4
+            let oldScissorBox = NativePtr.stackalloc<int> 4
+            let mutable oldScissorTest = false
             let mutable oldFbo = 0
-            GL.GetInteger(GetPName.Viewport, oldVp)
+
+            GL.GetInteger(GetPName.Viewport, oldViewport)
+            GL.GetBoolean(GetPName.ScissorTest, &oldScissorTest)
+            if oldScissorTest then GL.GetInteger(GetPName.ScissorBox, oldScissorBox)
             GL.GetInteger(GetPName.DrawFramebufferBinding, &oldFbo)
+            GL.Check "could not get currrent viewport, scissor, or framebuffer"
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo.Handle)
             GL.Check "could not bind framebuffer"
 
-            GL.Viewport(viewport.Min.X, viewport.Min.Y, viewport.SizeX + 1, viewport.SizeY + 1)
+            GL.Viewport(viewport.Min.X, viewport.Min.Y, viewport.SizeX, viewport.SizeY)
             GL.Check "could not set viewport"
+
+            GL.Enable(EnableCap.ScissorTest)
+            GL.Scissor(scissor.Min.X, scissor.Min.Y, scissor.SizeX, scissor.SizeY)
+            GL.Check "could not set scissor"
 
             try
                 if fbo.Handle = 0 then
@@ -45,14 +55,21 @@ module RenderTasks =
                     GL.DrawBuffers(drawBuffers.Length, drawBuffers);
                 GL.Check "could not set draw buffers"
 
-                f()
+                perform()
 
             finally
                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, oldFbo)
-                GL.Check "could reset framebuffer"
+                GL.Check "could not reset framebuffer"
 
-                GL.Viewport(oldVp.[0], oldVp.[1], oldVp.[2], oldVp.[3])
-                GL.Check "could reset viewport"
+                GL.Viewport(oldViewport.[0], oldViewport.[1], oldViewport.[2], oldViewport.[3])
+                GL.Check "could not reset viewport"
+
+                if oldScissorTest then
+                    GL.Scissor(oldScissorBox.[0], oldScissorBox.[1], oldScissorBox.[2], oldScissorBox.[3])
+                    GL.Check "could not reset scissor"
+                else
+                    GL.Disable(EnableCap.ScissorTest)
+                    GL.Check "could not disable scissor"
 
     [<AbstractClass>]
     type AbstractOpenGlRenderTask(manager : ResourceManager, signature : IFramebufferSignature) as this =
@@ -135,7 +152,7 @@ module RenderTasks =
             ctx.PushDebugGroup(x.Name ||? "Render Task")
 
             let fbo =
-                match output.framebuffer with
+                match output.Framebuffer with
                 | :? Framebuffer as fbo -> fbo
                 | fbo -> failf "unsupported framebuffer: %A" fbo
 
@@ -144,7 +161,7 @@ module RenderTasks =
             x.ProcessDeltas(token, renderToken)
             x.UpdateResources(token, renderToken)
 
-            Framebuffer.draw signature fbo output.viewport (fun _ ->
+            Framebuffer.draw signature fbo output.Viewport output.Scissor (fun _ ->
                 renderTaskLock.Run (fun () ->
                     beforeRender.Trigger()
                     NativePtr.write runtimeStats V2i.Zero
@@ -515,12 +532,12 @@ module RenderTasks =
         inherit AbstractRenderTask()
 
         override x.PerformUpdate(_, _) = ()
-        override x.Perform(token : AdaptiveToken, _ : RenderToken, desc : OutputDescription) =
-            let fbo = desc.framebuffer |> unbox<Framebuffer>
+        override x.Perform(token : AdaptiveToken, _ : RenderToken, output : OutputDescription) =
+            let fbo = output.Framebuffer |> unbox<Framebuffer>
             signature |> FramebufferSignature.validateCompability fbo
 
             Operators.using ctx.ResourceLock (fun _ ->
-                Framebuffer.draw signature fbo desc.viewport (fun _ ->
+                Framebuffer.draw signature fbo output.Viewport output.Scissor (fun _ ->
                     let values = values.GetValue token
                     let depthValue = values.Depth
                     let stencilValue = values.Stencil
@@ -538,7 +555,7 @@ module RenderTasks =
                         | None ->
                             ()
 
-                    // Clear depth-stencil if it necessary         
+                    // Clear depth-stencil if it necessary
                     let mask =
                         let depthMask =
                             match signature.DepthStencilAttachment, depthValue with

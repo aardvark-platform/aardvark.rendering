@@ -82,7 +82,10 @@ type PreparedPipelineState =
         pPolygonMode : IResource<int, int>
         pMultisample : IResource<bool, int>
         pConservativeRaster : IResource<bool, int>
-    } 
+
+        pViewport : IResource<Box2i, V4i> voption
+        pScissor : IResource<Box2i, V4i> voption
+    }
 
     member x.Resources =
         seq {
@@ -117,6 +120,14 @@ type PreparedPipelineState =
             yield x.pPolygonMode :> _
             yield x.pMultisample :> _
             yield x.pConservativeRaster :> _
+
+            match x.pViewport with
+            | ValueSome v -> yield v :> _
+            | _ -> ()
+
+            match x.pScissor with
+            | ValueSome s -> yield s :> _
+            | _ -> ()
         }
 
     member x.Dispose() =
@@ -161,6 +172,9 @@ type PreparedPipelineState =
                     x.pPolygonMode.Dispose()
                     x.pMultisample.Dispose()
                     x.pConservativeRaster.Dispose()
+
+                    x.pViewport |> ValueOption.iter _.Dispose()
+                    x.pScissor |> ValueOption.iter _.Dispose()
         )
 
     interface IDisposable with
@@ -397,6 +411,16 @@ module PreparedPipelineState =
             let multisample = x.CreateFlag rj.RasterizerState.Multisample |> addResource resources
             let conservativeRaster = x.CreateFlag rj.RasterizerState.ConservativeRaster |> addResource resources
 
+            let viewport =
+                match rj.ViewportState.Viewport with
+                | Some vp -> x.CreateViewport vp |> addResource resources |> ValueSome
+                | _ -> ValueNone
+
+            let scissor =
+                match rj.ViewportState.Scissor with
+                | Some sc -> x.CreateViewport sc |> addResource resources |> ValueSome
+                | _ -> ValueNone
+
             {
                 pUniformProvider = rj.Uniforms
                 pContext = x.Context
@@ -426,6 +450,9 @@ module PreparedPipelineState =
                 pPolygonMode = polygonMode
                 pMultisample = multisample
                 pConservativeRaster = conservativeRaster
+
+                pViewport = viewport
+                pScissor = scissor
             }
 
         with _ ->
@@ -474,6 +501,16 @@ module PreparedPipelineState =
             let multisample = x.CreateFlag rj.RasterizerState.Multisample |> addResource resources
             let conservativeRaster = x.CreateFlag rj.RasterizerState.ConservativeRaster |> addResource resources
 
+            let viewport =
+                match rj.ViewportState.Viewport with
+                | Some vp -> x.CreateViewport vp |> addResource resources |> ValueSome
+                | _ -> ValueNone
+
+            let scissor =
+                match rj.ViewportState.Scissor with
+                | Some sc -> x.CreateViewport sc |> addResource resources |> ValueSome
+                | _ -> ValueNone
+
             {
                 pUniformProvider = rj.GlobalUniforms
                 pContext = x.Context
@@ -503,6 +540,9 @@ module PreparedPipelineState =
                 pPolygonMode = polygonMode
                 pMultisample = multisample
                 pConservativeRaster = conservativeRaster
+
+                pViewport = viewport
+                pScissor = scissor
             }
 
         with _ ->
@@ -568,7 +608,15 @@ module PreparedPipelineStateAssembler =
             x.SetFrontFace(me.pFrontFace)
             x.SetMultisample(me.pMultisample)
             x.SetConservativeRaster(GL.NV_conservative_raster, me.pConservativeRaster)
-            
+
+            match me.pViewport with
+            | ValueSome v -> x.SetViewport v
+            | _ -> ()
+
+            match me.pScissor with
+            | ValueSome s -> x.SetScissor s
+            | _ -> ()
+
             let myProg = me.pProgram.Handle.GetValue()
             x.UseProgram(me.pProgram)
             if myProg.WritesPointSize then
@@ -674,6 +722,17 @@ module PreparedPipelineStateAssembler =
             if prev.pConservativeRaster <> me.pConservativeRaster then
                 x.SetConservativeRaster(GL.NV_conservative_raster, me.pConservativeRaster)
                 icnt <- icnt + 1
+
+            // Viewport state
+            if prev.pViewport <> me.pViewport then
+                match me.pViewport with
+                | ValueSome v -> x.SetViewport(v); icnt <- icnt + 1
+                | _ -> ()
+
+            if prev.pScissor <> me.pScissor then
+                match me.pScissor with
+                | ValueSome s -> x.SetScissor(s); icnt <- icnt + 1
+                | _ -> ()
 
             // Program
             if prev.pProgram <> me.pProgram then
