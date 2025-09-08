@@ -188,7 +188,7 @@ module RenderTasks =
         let sortWatch           = Stopwatch()
 
         member x.ProgramUpdate (renderToken : RenderToken, f : unit -> 'a) =
-            if renderToken.Statistics.IsNone then
+            if not renderToken.HasStatistics then
                 f()
             else
                 programUpdateWatch.Restart()
@@ -197,7 +197,7 @@ module RenderTasks =
                 res
 
         member x.Sorting (renderToken : RenderToken, f : unit -> 'a) =
-            if renderToken.Statistics.IsNone then
+            if not renderToken.HasStatistics then
                 f()
             else
                 sortWatch.Restart()
@@ -216,7 +216,7 @@ module RenderTasks =
 
         member x.Run(token : AdaptiveToken, renderToken : RenderToken, _ : OutputDescription) =
             x.Perform(token, renderToken)
-            if renderToken.Statistics.IsNone then
+            if not renderToken.HasStatistics then
                 nop
             else
                 lazy (

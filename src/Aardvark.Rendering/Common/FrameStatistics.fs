@@ -1,102 +1,106 @@
 ﻿namespace Aardvark.Rendering
 
-open System.Runtime.CompilerServices
 open Aardvark.Base
 
-[<AutoOpen>]
-module private FrameStatisticsHelpers =
-    let inline add (cell : byref<'a>) (value : 'a) =
-        cell <- cell + value
-
 type ResourceKind =
-    | Unknown = 0
-    | Buffer = 1
-    | VertexArrayObject = 2
-    | Texture = 3
-    | UniformBuffer = 4
-    | UniformLocation = 5
-    | SamplerState = 6
-    | ShaderProgram = 7
-    | Renderbuffer = 8
-    | Framebuffer = 9
-    | IndirectBuffer = 10
-    | DrawCall = 11
-    | IndexBuffer = 12
-    | AccelerationStructure = 13
+    | Unknown               = 0
+    | Buffer                = 1
+    | VertexArrayObject     = 2
+    | Texture               = 3
+    | UniformBuffer         = 4
+    | UniformLocation       = 5
+    | Sampler               = 6
+    | ShaderProgram         = 7
+    | Renderbuffer          = 8
+    | Framebuffer           = 9
+    | IndirectBuffer        = 10
+    | AccelerationStructure = 11
 
+module internal ResourceKind =
+    let all = System.Enum.GetValues(typeof<ResourceKind>) :?> ResourceKind[]
+
+[<AllowNullLiteral>]
 type FrameStatistics =
-    class
-        val mutable public InPlaceUpdates : int
-        val mutable public ReplacedResources : int
-        val mutable public CreatedResources : int
-        val mutable public UpdateCounts : Dict<ResourceKind, int>
+    val mutable public InPlaceUpdates         : Dict<ResourceKind, int>
+    val mutable public ReplacedResources      : Dict<ResourceKind, int>
+    val mutable public CreatedResources       : Dict<ResourceKind, int>
 
-        val mutable public RenderPasses : int
-        val mutable public TotalInstructions : int
-        val mutable public ActiveInstructions : int
-        val mutable public DrawCallCount : int
-        val mutable public EffectiveDrawCallCount : int
-        val mutable public SortingTime : MicroTime
-        val mutable public DrawUpdateTime : MicroTime
+    val mutable public RenderPasses           : int
+    val mutable public TotalInstructions      : int
+    val mutable public ActiveInstructions     : int
+    val mutable public DrawCallCount          : int
+    val mutable public EffectiveDrawCallCount : int
+    val mutable public SortingTime            : MicroTime
+    val mutable public DrawUpdateTime         : MicroTime
 
-        val mutable public AddedRenderObjects : int
-        val mutable public RemovedRenderObjects : int
+    val mutable public AddedRenderObjects     : int
+    val mutable public RemovedRenderObjects   : int
 
-        static member inline Zero = FrameStatistics()
+    static member inline Zero = FrameStatistics()
 
-        new() =
-            {
-                InPlaceUpdates = 0
-                ReplacedResources = 0
-                CreatedResources = 0
-                UpdateCounts = Dict()
-                RenderPasses = 0
-                TotalInstructions = 0
-                ActiveInstructions = 0
-                DrawCallCount = 0
-                EffectiveDrawCallCount = 0
-                SortingTime = MicroTime.Zero
-                DrawUpdateTime = MicroTime.Zero
-                AddedRenderObjects = 0
-                RemovedRenderObjects = 0
-            }
-            
-    end
+    new() =
+        {
+            InPlaceUpdates         = Dict()
+            ReplacedResources      = Dict()
+            CreatedResources       = Dict()
+            RenderPasses           = 0
+            TotalInstructions      = 0
+            ActiveInstructions     = 0
+            DrawCallCount          = 0
+            EffectiveDrawCallCount = 0
+            SortingTime            = MicroTime.Zero
+            DrawUpdateTime         = MicroTime.Zero
+            AddedRenderObjects     = 0
+            RemovedRenderObjects   = 0
+        }
 
-[<AbstractClass; Sealed; Extension>]
-type FrameStatisticsExtensions private() =
-    [<Extension>]
-    static member InPlaceResourceUpdate(this : FrameStatistics, kind : ResourceKind) =
-        inc &this.InPlaceUpdates
-        this.UpdateCounts.[kind] <- 1 + this.UpdateCounts.GetOrDefault(kind)
+    member this.TotalInplaceUpdates =
+        let mutable count = 0
+        for kind in ResourceKind.all do &count += this.InPlaceUpdates.GetOrDefault kind
+        count
 
-    [<Extension>]
-    static member ReplacedResource(this : FrameStatistics, kind : ResourceKind) =
-        inc &this.ReplacedResources
-        this.UpdateCounts.[kind] <- 1 + this.UpdateCounts.GetOrDefault(kind)
+    member this.TotalReplacedResources =
+        let mutable count = 0
+        for kind in ResourceKind.all do &count += this.ReplacedResources.GetOrDefault kind
+        count
 
-    [<Extension>]
-    static member CreatedResource(this : FrameStatistics, kind : ResourceKind) =
-        inc &this.CreatedResources
-        this.UpdateCounts.[kind] <- 1 + this.UpdateCounts.GetOrDefault(kind)
+    member this.TotalCreatedResources =
+        let mutable count = 0
+        for kind in ResourceKind.all do &count += this.CreatedResources.GetOrDefault kind
+        count
 
-    [<Extension>]
-    static member AddInstructions(this : FrameStatistics, total : int, active : int) =
-        add &this.TotalInstructions total
-        add &this.ActiveInstructions active
+    member this.UpdateCounts =
+        let result = Dict()
+        for kind in ResourceKind.all do
+            let inPlaceUpdates = this.InPlaceUpdates.GetOrDefault kind
+            let replacedResources = this.ReplacedResources.GetOrDefault kind
+            let createdResources = this.CreatedResources.GetOrDefault kind
+            let count = inPlaceUpdates + replacedResources + createdResources
+            if count > 0 then result.[kind] <- count
+        result
 
-    [<Extension>]
-    static member AddDrawCalls(this : FrameStatistics, count : int, effective : int) =
-        add &this.DrawCallCount count
-        add &this.EffectiveDrawCallCount effective
+    member inline this.InPlaceResourceUpdate(kind: ResourceKind) =
+        this.InPlaceUpdates.[kind] <- 1 + this.InPlaceUpdates.GetOrDefault kind
 
-    [<Extension>]
-    static member AddSubTask(this : FrameStatistics, sorting : MicroTime, update : MicroTime) =
+    member inline this.ReplacedResource(kind: ResourceKind) =
+        this.ReplacedResources.[kind] <- 1 + this.ReplacedResources.GetOrDefault kind
+
+    member inline this.CreatedResource(kind: ResourceKind) =
+        this.CreatedResources.[kind] <- 1 + this.CreatedResources.GetOrDefault kind
+
+    member inline this.AddInstructions(total: int, active: int) =
+        &this.TotalInstructions += total
+        &this.ActiveInstructions += active
+
+    member inline this.AddDrawCalls(count: int, effective: int) =
+        &this.DrawCallCount += count
+        &this.EffectiveDrawCallCount += effective
+
+    member inline this.AddSubTask(sorting: MicroTime, update: MicroTime) =
         inc &this.RenderPasses
-        add &this.SortingTime sorting
-        add &this.DrawUpdateTime update
+        &this.SortingTime += sorting
+        &this.DrawUpdateTime += update
 
-    [<Extension>]
-    static member RenderObjectDeltas(this : FrameStatistics, added : int, removed : int) =
-        add &this.AddedRenderObjects added
-        add &this.RemovedRenderObjects removed
+    member inline this.RenderObjectDeltas(added: int, removed: int) =
+        &this.AddedRenderObjects += added
+        &this.RemovedRenderObjects += removed

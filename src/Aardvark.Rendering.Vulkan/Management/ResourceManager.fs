@@ -186,7 +186,7 @@ type AbstractResourceLocation<'T>(owner : IResourceCache, key : list<obj>) =
     interface IResourceLocation<'T> with
         member x.Update(u, t, rt) = x.Update(u, t, rt)
 
-type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list<obj>,
+type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list<obj>, kind : ResourceKind,
                                                 input : aval<'Input>, desc : ImmutableResourceDescription<'Input, 'Handle>) =
     inherit AbstractResourceLocation<'Handle>(owner, key)
 
@@ -199,12 +199,14 @@ type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : li
         match handle with
         | ValueSome(o, h) when Unchecked.equals o n -> h
         | ValueSome(_, h) ->
+            renderToken.ReplacedResource kind
             desc.idestroy h
             let r = desc.icreate n
             handle <- ValueSome(n,r)
             inc &version
             r
         | ValueNone ->
+            renderToken.CreatedResource kind
             let r = desc.icreate n
             handle <- ValueSome(n,r)
             inc &version
@@ -252,7 +254,7 @@ type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : li
             | ValueSome(_,h) -> { handle = h; version = version }
             | ValueNone -> failwith "[Resource] inconsistent state"
 
-type MutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list<obj>,
+type MutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list<obj>, kind : ResourceKind,
                                               input : aval<'Input>, desc : MutableResourceDescription<'Input, 'Handle>) =
     inherit AbstractResourceLocation<'Handle>(owner, key)
 
@@ -276,6 +278,7 @@ type MutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list
 
         match handle with
         | ValueNone ->
+            renderToken.CreatedResource kind
             inc &version
             recreate n
 
@@ -284,9 +287,11 @@ type MutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list
 
         | ValueSome(_, oh) ->
             if desc.mtryUpdate oh n then
+                renderToken.InPlaceResourceUpdate kind
                 handle <- ValueSome(n, oh)
                 oh
             else
+                renderToken.ReplacedResource kind
                 inc &version
                 recreate n
 
@@ -533,7 +538,7 @@ module Resources =
 
     type BufferResource(owner : IResourceCache, key : list<obj>, name : string, device : Device, usage : VkBufferUsageFlags, input : aval<IBuffer>) =
         inherit MutableResourceLocation<IBuffer, Buffer>(
-            owner, key,
+            owner, key, ResourceKind.Buffer,
             input,
             {
                 mcreate          = fun (b : IBuffer) -> let r = device.CreateBuffer(usage, b) in (if name <> null && r.Name = null then r.Name <- name); r
@@ -544,7 +549,7 @@ module Resources =
 
     type IndirectBufferResource(owner : IResourceCache, key : list<obj>, name : string, device : Device, indexed : bool, input : aval<Aardvark.Rendering.IndirectBuffer>) =
         inherit ImmutableResourceLocation<Aardvark.Rendering.IndirectBuffer, IndirectBuffer>(
-            owner, key,
+            owner, key, ResourceKind.IndirectBuffer,
             input,
             {
                 icreate         = fun b -> let r = device.CreateIndirectBuffer(indexed, b) in (if name <> null && r.Name = null then r.Name <- name); r
@@ -573,6 +578,8 @@ module Resources =
 
         override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
+                renderToken.InPlaceResourceUpdate ResourceKind.UniformBuffer
+
                 for value, writer in writers do
                     writer.Write(token, value, handle.Storage.Pointer)
 
@@ -611,7 +618,7 @@ module Resources =
 
     type ImageResource(owner : IResourceCache, key : list<obj>, name : string, device : Device, properties : ImageProperties, input : aval<ITexture>) =
         inherit ImmutableResourceLocation<ITexture, Image>(
-            owner, key,
+            owner, key, ResourceKind.Texture,
             input,
             {
                 icreate         = fun t -> let r = device.CreateImage(t, properties) in (if name <> null && r.Name = null then r.Name <- name); r
@@ -677,10 +684,12 @@ module Resources =
                     | ValueSome old when old.Format = fmt && old.Description = s -> old
 
                     | ValueSome old ->
+                        renderToken.ReplacedResource ResourceKind.Sampler
                         old.Dispose()
                         createSampler fmt s
 
                     | ValueNone ->
+                        renderToken.CreatedResource ResourceKind.Sampler
                         createSampler fmt s
 
                 let handle = { Image = v.handle; Sampler = sampler }
@@ -818,7 +827,7 @@ module Resources =
 
     type DynamicShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, layout : PipelineLayout, input : aval<FShade.Imperative.Module>) =
         inherit ImmutableResourceLocation<FShade.Imperative.Module, ShaderProgram>(
-            owner, key,
+            owner, key, ResourceKind.ShaderProgram,
             input,
             {
                 icreate = fun (e : FShade.Imperative.Module) -> layout.AddReference(); ShaderProgram.ofModule e device
@@ -1545,12 +1554,16 @@ module Resources =
                     let data = AccelerationStructureData.Instances (uint32 count, buffer)
 
                     match handle with
-                    | ValueNone -> create data
+                    | ValueNone ->
+                        renderToken.CreatedResource ResourceKind.AccelerationStructure
+                        create data
 
                     | ValueSome old ->
                         if old |> AccelerationStructure.tryUpdate data then
+                            renderToken.InPlaceResourceUpdate ResourceKind.AccelerationStructure
                             { handle = old; version = version }
                         else
+                            renderToken.ReplacedResource ResourceKind.AccelerationStructure
                             old.Dispose()
                             create data
                 else

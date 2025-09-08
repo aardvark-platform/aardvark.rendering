@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering
 
 open System
-open System.Runtime.CompilerServices
 open Aardvark.Base
 
 /// Token for gathering and querying statistics about the rendering process.
@@ -10,112 +9,85 @@ open Aardvark.Base
 type RenderToken =
     {
         /// User provided GPU queries.
-        Queries : IQuery list
+        Queries    : IQuery list
 
-        /// Optional runtime statistics.
-        Statistics : Option<FrameStatistics>
+        /// Optional runtime statistics, can be null.
+        Statistics : FrameStatistics
     }
 
+    /// Empty token without frame statistics.
     static member Empty = RenderTokenEmpty.Empty
 
+    /// Empty token with frame statistics.
     static member inline Zero =
         {
-            Queries = []
-            Statistics = Some <| FrameStatistics()
+            Queries    = []
+            Statistics = FrameStatistics()
         }
 
-    member private x.GetStatistic(fallback : 'T, f : FrameStatistics -> 'T) =
-        x.Statistics |> Option.map f |> Option.defaultValue fallback 
-
-    member inline private x.GetStatistic(f : FrameStatistics -> 'T) =
-        x.GetStatistic(zero, f)   
-
-    member x.InPlaceUpdates         = x.GetStatistic(fun f -> f.InPlaceUpdates)
-    member x.ReplacedResources      = x.GetStatistic(fun f -> f.ReplacedResources)
-    member x.CreatedResources       = x.GetStatistic(fun f -> f.CreatedResources)
-    member x.UpdateCounts           = x.GetStatistic(Dict.empty, fun f -> f.UpdateCounts)
-
-    member x.RenderPasses           = x.GetStatistic(fun f -> f.RenderPasses)
-    member x.TotalInstructions      = x.GetStatistic(fun f -> f.TotalInstructions)
-    member x.ActiveInstructions     = x.GetStatistic(fun f -> f.ActiveInstructions)
-    member x.DrawCallCount          = x.GetStatistic(fun f -> f.DrawCallCount)
-    member x.EffectiveDrawCallCount = x.GetStatistic(fun f -> f.EffectiveDrawCallCount)
-    member x.SortingTime            = x.GetStatistic(fun f -> f.SortingTime)
-    member x.DrawUpdateTime         = x.GetStatistic(fun f -> f.DrawUpdateTime)
-
-    member x.AddedRenderObjects     = x.GetStatistic(fun f -> f.AddedRenderObjects)
-    member x.RemovedRenderObjects   = x.GetStatistic(fun f -> f.RemovedRenderObjects)
-
-and [<Sealed; AbstractClass>] private RenderTokenEmpty() =
-    static let empty =
-        { Queries = []
-          Statistics = None }
-
-    static member Empty = empty
-
-
-module RenderTokenInternals =
-
-    [<Struct>]
-    type QueryUseDisposable =
-        val Queries : IQuery list
-
-        interface IDisposable with
-            member x.Dispose() =
-                for q in x.Queries do q.End()
-
-        new(queries : IQuery list) =
-            { Queries = queries }
-
-
-[<AbstractClass; Sealed; Extension>]
-type RenderTokenExtensions private() =
+    /// Returns whether the token has statistics, i.e. Statistics is not null.
+    member inline this.HasStatistics = not <| obj.ReferenceEquals(this.Statistics, null)
 
     /// Begins the queries of the token and returns an IDisposable that
     /// ends the queries when disposed.
-    [<Extension>]
-    static member inline Use(this : RenderToken) : RenderTokenInternals.QueryUseDisposable =
+    member inline this.Use() : QueryUseDisposable =
         for q in this.Queries do q.Begin()
-        new RenderTokenInternals.QueryUseDisposable(this.Queries)
+        new QueryUseDisposable(this.Queries)
 
-    [<Extension>]
-    static member InPlaceResourceUpdate(this : RenderToken, kind : ResourceKind) =
-        match this.Statistics with
-        | Some stats -> stats.InPlaceResourceUpdate(kind)
-        | _ -> ()
+    member inline private this.GetStatistic(fallback: 'T, [<InlineIfLambda>] mapping: FrameStatistics -> 'T) =
+        if this.HasStatistics then mapping this.Statistics
+        else fallback
 
-    [<Extension>]
-    static member ReplacedResource(this : RenderToken, kind : ResourceKind) =
-        match this.Statistics with
-        | Some stats -> stats.ReplacedResource(kind)
-        | _ -> ()
+    member inline private this.GetStatistic([<InlineIfLambda>] mapping: FrameStatistics -> 'T) =
+        this.GetStatistic(zero, mapping)
 
-    [<Extension>]
-    static member CreatedResource(this : RenderToken, kind : ResourceKind) =
-        match this.Statistics with
-        | Some stats -> stats.CreatedResource(kind)
-        | _ -> ()
+    member inline this.InPlaceUpdates         = this.GetStatistic(Dict.empty, _.InPlaceUpdates)
+    member inline this.TotalInPlaceUpdates    = this.GetStatistic(_.TotalInplaceUpdates)
+    member inline this.ReplacedResources      = this.GetStatistic(Dict.empty, _.ReplacedResources)
+    member inline this.TotalReplacedResources = this.GetStatistic(_.TotalReplacedResources)
+    member inline this.CreatedResources       = this.GetStatistic(Dict.empty, _.CreatedResources)
+    member inline this.TotalCreatedResources  = this.GetStatistic(_.TotalCreatedResources)
+    member inline this.UpdateCounts           = this.GetStatistic(Dict.empty, _.UpdateCounts)
 
-    [<Extension>]
-    static member AddInstructions(this : RenderToken, total : int, active : int) =
-        match this.Statistics with
-        | Some stats -> stats.AddInstructions(total, active)
-        | _ -> ()
+    member inline this.RenderPasses           = this.GetStatistic(_.RenderPasses)
+    member inline this.TotalInstructions      = this.GetStatistic(_.TotalInstructions)
+    member inline this.ActiveInstructions     = this.GetStatistic(_.ActiveInstructions)
+    member inline this.DrawCallCount          = this.GetStatistic(_.DrawCallCount)
+    member inline this.EffectiveDrawCallCount = this.GetStatistic(_.EffectiveDrawCallCount)
+    member inline this.SortingTime            = this.GetStatistic(_.SortingTime)
+    member inline this.DrawUpdateTime         = this.GetStatistic(_.DrawUpdateTime)
 
-    [<Extension>]
-    static member AddDrawCalls(this : RenderToken, count : int, effective : int) =
-        match this.Statistics with
-        | Some stats -> stats.AddDrawCalls(count, effective)
-        | _ -> ()
+    member inline this.AddedRenderObjects     = this.GetStatistic(_.AddedRenderObjects)
+    member inline this.RemovedRenderObjects   = this.GetStatistic(_.RemovedRenderObjects)
 
-    [<Extension>]
-    static member AddSubTask(this : RenderToken, sorting : MicroTime, update : MicroTime) =
-        match this.Statistics with
-        | Some stats -> stats.AddSubTask(sorting, update)
-        | _ -> ()
+    member inline this.InPlaceResourceUpdate(kind: ResourceKind) =
+        if this.HasStatistics then this.Statistics.InPlaceResourceUpdate kind
 
-    [<Extension>]
-    static member RenderObjectDeltas(this : RenderToken, added : int, removed : int) =
-        match this.Statistics with
-        | Some stats -> stats.RenderObjectDeltas(added, removed)
-        | _ -> ()
+    member inline this.ReplacedResource(kind: ResourceKind) =
+        if this.HasStatistics then this.Statistics.ReplacedResource(kind)
+
+    member inline this.CreatedResource(kind: ResourceKind) =
+        if this.HasStatistics then this.Statistics.CreatedResource(kind)
+
+    member inline this.AddInstructions(total: int, active: int) =
+        if this.HasStatistics then this.Statistics.AddInstructions(total, active)
+
+    member inline this.AddDrawCalls(count: int, effective: int) =
+        if this.HasStatistics then this.Statistics.AddDrawCalls(count, effective)
+
+    member inline this.AddSubTask(sorting: MicroTime, update: MicroTime) =
+        if this.HasStatistics then this.Statistics.AddSubTask(sorting, update)
+
+    member inline this.RenderObjectDeltas(added: int, removed: int) =
+        if this.HasStatistics then this.Statistics.RenderObjectDeltas(added, removed)
+
+and [<Sealed; AbstractClass>] private RenderTokenEmpty =
+    static let empty = { Queries = []; Statistics = null }
+    static member Empty = empty
+
+and [<Struct>] QueryUseDisposable (queries: IQuery list) =
+    member _.Queries = queries
+    member _.Dispose() = for q in queries do q.End()
+
+    interface IDisposable with
+        member this.Dispose() = this.Dispose()

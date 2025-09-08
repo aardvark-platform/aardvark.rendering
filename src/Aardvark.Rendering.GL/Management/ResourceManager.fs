@@ -440,7 +440,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view =   fun h      -> h.Handle
-            kind = ResourceKind.SamplerState
+            kind = ResourceKind.Sampler
         })
 
     member x.CreateTextureBinding(slots : Range1i, bindings : (IResource<Texture, TextureBinding> * IResource<Sampler, int>)[]) =
