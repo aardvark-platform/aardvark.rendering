@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: 
-      - vma
+      - v56
     paths:
-      - .github/workflows/vkvm.yml    
+      - .github/workflows/vkvm.yml
 jobs:
   windows-x64:
     name: Windows (x64)
