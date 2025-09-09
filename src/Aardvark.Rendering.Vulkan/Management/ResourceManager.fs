@@ -34,7 +34,7 @@ type MutableResourceDescription<'Input, 'Handle> =
     {
         mcreate          : 'Input -> 'Handle
         mdestroy         : 'Handle -> unit
-        mtryUpdate       : 'Handle -> 'Input -> bool
+        mtryUpdate       : 'Input -> 'Handle -> bool
         mownsHandle      : 'Input -> bool
     }
 
@@ -289,7 +289,7 @@ type MutableResourceLocation<'Input, 'Handle when 'Handle :> Resource>(
             oh
 
         | ValueSome(oi, oh) ->
-            if desc.mownsHandle oi && desc.mtryUpdate oh n then
+            if desc.mownsHandle oi && desc.mtryUpdate n oh then
                 renderToken.InPlaceResourceUpdate kind
                 handle <- ValueSome(n, oh)
                 oh
@@ -552,19 +552,20 @@ module Resources =
             {
                 mcreate          = fun (b : IBuffer) -> let r = device.CreateBuffer(usage, b) in (if name <> null && r.Name = null then r.Name <- name); r
                 mdestroy         = _.Dispose()
-                mtryUpdate       = fun (b : Buffer) (v : IBuffer) -> Buffer.tryUpdate v b
+                mtryUpdate       = Buffer.tryUpdate
                 mownsHandle      = ownsBuffer
             }
         )
 
     type IndirectBufferResource(owner : IResourceCache, key : list<obj>, name : string, device : Device, indexed : bool, input : aval<Aardvark.Rendering.IndirectBuffer>) =
-        inherit ImmutableResourceLocation<Aardvark.Rendering.IndirectBuffer, IndirectBuffer>(
+        inherit MutableResourceLocation<Aardvark.Rendering.IndirectBuffer, IndirectBuffer>(
             owner, key, ResourceKind.IndirectBuffer,
             input,
             {
-                icreate         = fun b -> let r = device.CreateIndirectBuffer(indexed, b) in (if name <> null && r.Name = null then r.Name <- name); r
-                idestroy        = _.Dispose()
-                ieagerDestroy   = false
+                mcreate         = fun b -> let r = device.CreateIndirectBuffer(indexed, b) in (if name <> null && r.Name = null then r.Name <- name); r
+                mdestroy        = _.Dispose()
+                mtryUpdate      = IndirectBuffer.tryUpdate indexed
+                mownsHandle     = _.Buffer >> ownsBuffer
             }
         )
 

@@ -25,6 +25,44 @@ module IndirectBuffer =
 
     let private flags = VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit
 
+    let private copyNative (swap : bool) (count : int) (offset : uint64) (stride : int) (src : INativeBuffer) (dst : Buffer) =
+        src.Use (fun pSrc ->
+            Buffer.write dst (fun pDst ->
+                if swap then
+                    let offset = nativeint offset
+                    let stride = nativeint stride
+                    DrawCallInfo.ToggleIndexedCopy(pSrc + offset, pDst + offset, stride, count)
+                else
+                    Buffer.MemoryCopy(pSrc, pDst, src.SizeInBytes, src.SizeInBytes)
+            )
+        )
+
+    let tryUpdate (indexed : bool) (data : Aardvark.Rendering.IndirectBuffer) (buffer : IndirectBuffer) =
+        let swap = (indexed <> data.Indexed)
+
+        let rec tryUpdate (dataBuffer: IBuffer) =
+            match dataBuffer with
+            | :? INativeBuffer as nb ->
+                if buffer.Size = nb.SizeInBytes then
+                    copyNative swap data.Count data.Offset data.Stride nb buffer
+                    true
+                else
+                    false
+
+            | :? Buffer as b ->
+                buffer.Handle = b.Handle && not swap
+
+            | :? IBufferRange as bv when bv != bv.Buffer ->
+                tryUpdate bv.Buffer
+
+            | _ ->
+                false
+
+        if buffer.Count = data.Count && buffer.Offset = data.Offset && buffer.Stride = data.Stride then
+            tryUpdate data.Buffer
+        else
+            false
+
     let create (indexed : bool) (data : Aardvark.Rendering.IndirectBuffer) (device : Device) =
         // VUID-vkCmdDrawIndexedIndirect-offset-02710
         if data.Offset % 4UL <> 0UL then
@@ -36,23 +74,12 @@ module IndirectBuffer =
 
         let swap = (indexed <> data.Indexed)
 
-        let buffer =
-            match data.Buffer with
+        let rec createBuffer (buffer: IBuffer) =
+            match buffer with
             | :? INativeBuffer as nb ->
                 if nb.SizeInBytes <> 0UL then
                     let buffer = Buffer.create flags nb.SizeInBytes device.DeviceMemory
-
-                    nb.Use (fun src ->
-                        Buffer.write buffer (fun dst ->
-                            if swap then
-                                let offset = nativeint data.Offset
-                                let stride = nativeint data.Stride
-                                DrawCallInfo.ToggleIndexedCopy(src + offset, dst + offset, stride, data.Count)
-                            else
-                                Buffer.MemoryCopy(src, dst, nb.SizeInBytes, nb.SizeInBytes)
-                        )
-                    )
-
+                    copyNative swap data.Count data.Offset data.Stride nb buffer
                     buffer
                 else
                     Buffer.empty false flags 0UL device.DeviceMemory
@@ -67,9 +94,16 @@ module IndirectBuffer =
                 b.AddReference()
                 b
 
-            | _ ->
-                failf "Unsupported indirect buffer type %A" data.Buffer
+            | :? IBufferRange as bv when bv != bv.Buffer ->
+                createBuffer bv.Buffer
 
+            | _ when obj.ReferenceEquals(buffer, null) ->
+                failf $"Indirect buffer data is null"
+
+            | _ ->
+                failf $"unsupported indirect buffer type: {buffer.GetType()}"
+
+        let buffer = createBuffer data.Buffer
         new IndirectBuffer(buffer, data.Count, data.Offset, data.Stride)
 
 [<AbstractClass; Sealed; Extension>]

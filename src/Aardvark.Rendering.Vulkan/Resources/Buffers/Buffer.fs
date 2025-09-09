@@ -473,7 +473,7 @@ module Buffer =
             b.AddReference()
             b
 
-        | :? IBufferRange as bv when bv <> bv.Buffer ->
+        | :? IBufferRange as bv when bv != bv.Buffer ->
             ofBuffer' export usage alignment bv.Buffer memory
 
         | _ when buffer = Unchecked.defaultof<_> ->
