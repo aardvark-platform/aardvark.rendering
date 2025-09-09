@@ -35,6 +35,7 @@ type MutableResourceDescription<'Input, 'Handle> =
         mcreate          : 'Input -> 'Handle
         mdestroy         : 'Handle -> unit
         mtryUpdate       : 'Handle -> 'Input -> bool
+        mownsHandle      : 'Input -> bool
     }
 
 type IResourceUser =
@@ -254,11 +255,13 @@ type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : li
             | ValueSome(_,h) -> { handle = h; version = version }
             | ValueNone -> failwith "[Resource] inconsistent state"
 
-type MutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list<obj>, kind : ResourceKind,
-                                              input : aval<'Input>, desc : MutableResourceDescription<'Input, 'Handle>) =
+type MutableResourceLocation<'Input, 'Handle when 'Handle :> Resource>(
+                                              owner : IResourceCache, key : list<obj>, kind : ResourceKind,
+                                              input : aval<'Input>, desc : MutableResourceDescription<'Input, 'Handle>
+                                        ) =
     inherit AbstractResourceLocation<'Handle>(owner, key)
 
-    let mutable handle : ValueOption<'Input * 'Handle> = ValueNone
+    let mutable handle : ValueOption<struct ('Input * 'Handle)> = ValueNone
     let mutable version = 0
 
     let recreate (n : 'Input) =
@@ -282,11 +285,11 @@ type MutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list
             inc &version
             recreate n
 
-        | ValueSome(oa, oh) when Unchecked.equals oa n ->
+        | ValueSome(oi, oh) when Unchecked.equals oi n ->
             oh
 
-        | ValueSome(_, oh) ->
-            if desc.mtryUpdate oh n then
+        | ValueSome(oi, oh) ->
+            if desc.mownsHandle oi && desc.mtryUpdate oh n then
                 renderToken.InPlaceResourceUpdate kind
                 handle <- ValueSome(n, oh)
                 oh
@@ -536,6 +539,12 @@ module Resources =
                     let desc = Descriptor.CombinedImageSampler(slot, i, v, s, v.Image.SamplerLayout)
                     cache.[i] <- { Version = images.[i].version; Descriptor = desc }
 
+    let private ownsBuffer (buffer: IBuffer) =
+        match buffer with
+        | :? IBackendBuffer
+        | :? IBufferRange -> false
+        | _ -> true
+
     type BufferResource(owner : IResourceCache, key : list<obj>, name : string, device : Device, usage : VkBufferUsageFlags, input : aval<IBuffer>) =
         inherit MutableResourceLocation<IBuffer, Buffer>(
             owner, key, ResourceKind.Buffer,
@@ -544,6 +553,7 @@ module Resources =
                 mcreate          = fun (b : IBuffer) -> let r = device.CreateBuffer(usage, b) in (if name <> null && r.Name = null then r.Name <- name); r
                 mdestroy         = _.Dispose()
                 mtryUpdate       = fun (b : Buffer) (v : IBuffer) -> Buffer.tryUpdate v b
+                mownsHandle      = ownsBuffer
             }
         )
 
