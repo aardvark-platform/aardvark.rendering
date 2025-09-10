@@ -31,7 +31,7 @@ module CompactBufferImplementation =
             else action()
 
         member inline private x.GetAlignedSize(count : int) =
-            let count = uint64 <| Fun.NextPowerOfTwo(int64 count) // TODO: unsigned
+            let count = Fun.NextPowerOfTwo(uint64 count)
             count * elementSize
 
         /// Indicates whether a transaction is used when processing deltas.

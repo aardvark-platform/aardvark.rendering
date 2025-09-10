@@ -32,42 +32,6 @@ type AccelerationStructureData =
         | Geometry arr -> uint32 arr.Count
         | Instances (count, _) -> count
 
-// TODO: Replace with PinnedValue from Aardvark.Base >= 5.3.16
-[<AutoOpen>]
-module internal ArrayPinningUtils =
-
-    /// Utility to pin values with IDisposable semantics.
-    type PinnedValue private (value: obj, length: int) =
-        let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-        let address = gc.AddrOfPinnedObject()
-
-        new (value: obj) =
-            let length = match value with | :? Array as array -> array.Length | _ -> 1
-            new PinnedValue(value, length)
-
-        new (array: Array) =
-            new PinnedValue(array, array.Length)
-
-        /// The address of the pinned value.
-        member _.Address = address
-
-        /// The number of elements if the pinned value is an array, 1 otherwise.
-        member _.Length = length
-
-        member _.Dispose() = gc.Free()
-
-        interface IDisposable with
-            member this.Dispose() = this.Dispose()
-
-    /// Utility to pin values with IDisposable semantics.
-    type PinnedValue<'T when 'T : unmanaged> =
-        inherit PinnedValue
-        new (value: 'T) = { inherit PinnedValue(value :> obj) }
-        new (array: 'T[]) = { inherit PinnedValue(array :> Array) }
-
-        /// The pointer of the pinned value.
-        member inline this.Pointer : nativeptr<'T> = NativePtr.ofNativeInt this.Address
-
 type internal PreparedAccelerationStructureData(
                     device      : Device,
                     typ         : VkAccelerationStructureTypeKHR,

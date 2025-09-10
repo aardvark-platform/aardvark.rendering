@@ -137,7 +137,7 @@ module internal ManagedBufferImplementation =
         member inline private x.Allocate(range : Range1ul) =
             let min = (range.Max + 1UL) * elementSize
             if x.Size < min then
-                x.Resize(uint64 <| Fun.NextPowerOfTwo(int64 min)) //TODO: unsigned
+                x.Resize(Fun.NextPowerOfTwo min)
 
         member private x.AddRange(writer : AbstractWriter, input : obj, range : Range1ul) =
             transact (fun _ ->
