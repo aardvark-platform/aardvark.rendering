@@ -942,7 +942,7 @@ type PreparedObjectInfo =
         oIndexBinding : IndexBinding voption
         oIsActive : IResource<bool, int>
         oDrawCallInfos : IResource<DrawCallInfoList, DrawCallInfoList>
-        oIndirectBuffer : IResource<GLIndirectBuffer, IndirectDrawArgs> voption
+        oIndirectBuffer : IResource<IndirectBuffer, IndirectDrawArgs> voption
         oVertexInputBinding : IResource<VertexInputBindingHandle, int>
     }
 

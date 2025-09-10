@@ -80,6 +80,32 @@ type internal SharedBuffer(ctx, size, handle, external : IExportedBackendBuffer,
         x.Memory.Dispose()
         base.Destroy()
 
+type IndirectBuffer =
+    val public Buffer  : Buffer
+    val public Count   : int
+    val public Offset  : uint64
+    val public Stride  : int
+    val public Indexed : bool
+
+    member inline private this.Equals(other: IndirectBuffer) =
+        this.Buffer = other.Buffer && this.Count = other.Count &&
+        this.Offset = other.Offset && this.Stride = other.Stride &&
+        this.Indexed = other.Indexed
+
+    override this.Equals(obj: obj) =
+        match obj with
+        | :? IndirectBuffer as other -> this.Equals other
+        | _ -> false
+
+    override this.GetHashCode() =
+        HashCode.Combine(this.Buffer.GetHashCode(), this.Count, this.Offset.GetHashCode(), this.Stride, this.Indexed.GetHashCode())
+
+    new (handle, count, offset, stride, indexed) =
+        if stride % 4 <> 0 then
+            failf $"Stride of indirect buffer must be a multiple of 4 (Stride = {stride})"
+
+        { Buffer = handle; Count = count; Offset = offset; Stride = stride; Indexed = indexed }
+
 [<AutoOpen>]
 module BufferExtensions =
 
@@ -431,23 +457,7 @@ module BufferExtensions =
 
 
 [<AutoOpen>]
-module IndirectBufferExtensions =
-
-    type GLIndirectBuffer =
-        class
-            val mutable public Buffer : Buffer
-            val mutable public Count : int
-            val mutable public Offset : uint64
-            val mutable public Stride : int
-            val mutable public Indexed : bool
-            val mutable public OwnResource : bool
-
-            new(handle, count, offset, stride, indexed, ownResource) =
-                if stride % 4 <> 0 then
-                    failf $"Stride of indirect buffer must be a multiple of 4 (Stride = {stride})"
-
-                { Buffer = handle; Count = count; Offset = offset; Stride = stride; Indexed = indexed; OwnResource = ownResource }
-        end
+module BufferContextExtensions =
 
     type Context with
 

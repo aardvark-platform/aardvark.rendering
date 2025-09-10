@@ -111,7 +111,7 @@ type InterfaceSlots =
         images : (string * FShade.GLSL.GLSLImage)[]
     }
 
-type internal LayoutedIndirectData(data : IndirectBuffer) =
+type internal LayoutedIndirectData(data: Aardvark.Rendering.IndirectBuffer) =
     let mutable ptr, sizeInBytes =
         match data.Buffer with
         | :? INativeBuffer as nb ->
@@ -125,8 +125,11 @@ type internal LayoutedIndirectData(data : IndirectBuffer) =
 
             dst, nb.SizeInBytes
 
-        | buffer ->
-            failf $"cannot adjust draw call layout of buffer: {buffer}"
+        | _ ->
+            if data.Indexed then
+                failf "Indirect buffer contains indexed data but expected non-indexed data"
+            else
+                failf "Indirect buffer contains non-indexed data but expected indexed data"
 
     member _.Data = data
 
@@ -227,7 +230,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member private x.BufferCache              : ResourceCache<Buffer, int>                               = bufferCache
     member private x.TextureCache             : ResourceCache<Texture, TextureBinding>                   = textureCache
-    member private x.IndirectBufferCache      : ResourceCache<GLIndirectBuffer, IndirectDrawArgs>        = indirectBufferCache
+    member private x.IndirectBufferCache      : ResourceCache<IndirectBuffer, IndirectDrawArgs>          = indirectBufferCache
     member private x.SamplerCache             : ResourceCache<Sampler, int>                              = samplerCache
     member private x.VertexInputCache         : ResourceCache<VertexInputBindingHandle, int>             = vertexInputCache
     member private x.IsActiveCache            : ResourceCache<bool, int>                                 = isActiveCache
@@ -319,57 +322,32 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let name = if ctx.DebugLabelsEnabled then $"{name} (Sampled Texture)" else null
         x.CreateTexture(name, data, samplerType.Properties)
 
-    member x.CreateIndirectBuffer(indexed : bool, data : aval<IndirectBuffer>) =
+    member x.CreateIndirectBuffer(indexed : bool, data : aval<Aardvark.Rendering.IndirectBuffer>) =
         let name = if ctx.DebugLabelsEnabled then "Indirect Buffer" else null
 
-        indirectBufferCache.GetOrCreate<IndirectBuffer>(data, [indexed :> obj], fun () -> {
+        indirectBufferCache.GetOrCreate(data, [indexed :> obj], fun () -> {
             create = fun data ->
-                let (buffer, own) =
-                    match BufferManager.TryUnwrap data.Buffer with
-                    | ValueSome handle ->
-                        if data.Indexed <> indexed then
-                            if data.Indexed then failf "Expected non-indexed data but indirect buffer contains indexed data."
-                            else failf "Expected indexed data but indirect buffer contains non-indexed data."
+                let buffer =
+                    if data.Indexed <> indexed then
+                        use layouted = new LayoutedIndirectData(data)
+                        bufferManager.Create(name, layouted)
+                    else
+                        bufferManager.Create(name, data.Buffer)
 
-                        handle, false
-
-                    | _ ->
-                        if data.Indexed <> indexed then
-                            use layouted = new LayoutedIndirectData(data)
-                            bufferManager.Create(name, layouted), true
-                        else
-                            bufferManager.Create(name, data.Buffer), true
-
-                GLIndirectBuffer(buffer, data.Count, data.Offset, data.Stride, indexed, own)
+                IndirectBuffer(buffer, data.Count, data.Offset, data.Stride, indexed)
 
             update = fun handle data ->
-                if handle.Indexed <> data.Indexed then
-                    failf "cannot change Indexed option of IndirectBuffer"
-
                 let buffer =
-                    match BufferManager.TryUnwrap data.Buffer with
-                    | ValueSome v ->
-                        if handle.OwnResource then
-                            failf "cannot change IndirectBuffer type"
-                        v
+                    if data.Indexed <> indexed then
+                        use layouted = new LayoutedIndirectData(data)
+                        bufferManager.Update(name, handle.Buffer, layouted)
+                    else
+                        bufferManager.Update(name, handle.Buffer, data.Buffer)
 
-                    | _ ->
-                        if not handle.OwnResource then
-                            failf "cannot change IndirectBuffer type"
+                IndirectBuffer(buffer, data.Count, data.Offset, data.Stride, indexed)
 
-                        if data.Indexed <> indexed then
-                            use layouted = new LayoutedIndirectData(data)
-                            bufferManager.Update(name, handle.Buffer, layouted)
-                        else
-                            bufferManager.Update(name, handle.Buffer, data.Buffer)
-
-                if handle.Buffer = buffer && handle.Count = data.Count && handle.Offset = data.Offset && handle.Stride = data.Stride then // OwnResource and Indexed cannot change
-                    handle // return old to remain reference equal -> will be counted as InPlaceUpdate (no real performance difference)
-                else
-                    GLIndirectBuffer(buffer, data.Count, data.Offset, data.Stride, indexed, handle.OwnResource)
-
-            delete = fun h   -> if h.OwnResource then bufferManager.Delete(h.Buffer)
-            unwrap = fun _   -> ValueNone
+            delete = fun h   -> bufferManager.Delete(h.Buffer)
+            unwrap = fun b   -> BufferManager.TryUnwrap(b, indexed)
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
             view =   fun h   -> IndirectDrawArgs(h.Buffer.Handle, h.Count, h.Offset, h.Stride)
             kind = ResourceKind.IndirectBuffer

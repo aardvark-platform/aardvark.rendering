@@ -76,3 +76,8 @@ type internal BufferManager(ctx : Context) =
         | :? IBackendBuffer -> ValueNone
         | :? IBufferRange as r -> BufferManager.TryUnwrap r.Buffer
         | _ -> ValueNone
+
+    static member TryUnwrap(data : Aardvark.Rendering.IndirectBuffer, indexed: bool) =
+        match BufferManager.TryUnwrap data.Buffer with
+        | ValueSome buffer when data.Indexed = indexed -> ValueSome <| IndirectBuffer(buffer, data.Count, data.Offset, data.Stride, data.Indexed)
+        | _ -> ValueNone

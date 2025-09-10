@@ -16,6 +16,7 @@ module ResourceManagement =
         type private Mode =
             | InPlace
             | Replace of coerce: bool
+            | NoChange
 
         let private render (task: IRenderTask) =
             let output = task |> RenderTask.renderToColor (~~V2i(256))
@@ -42,14 +43,15 @@ module ResourceManagement =
                     DefaultSemantic.Colors, TextureFormat.Rgba32f
                 ])
 
-            let expectedInPlaceUpdates, expectedReplacedResources =
+            let checkInPlaceUpdates, checkReplacedResources, expectedUpdatedResult =
                 match mode with
-                | InPlace -> 1, 0
-                | _ -> 0, 1
+                | InPlace   -> (=) 1,  (=) 0, updatedResult
+                | Replace _ -> (=) 0,  (=) 1, updatedResult
+                | NoChange  -> (>=) 1, (=) 0, initialResult
 
-            let initialBuffer, preparedBuffer : (IBuffer * IBackendBuffer option) =
+            let initialBuffer, preparedBuffer : IBuffer * IBackendBuffer option =
                 match mode with
-                | InPlace -> ArrayBuffer initialData, None
+                | InPlace | NoChange -> ArrayBuffer initialData, None
                 | Replace coerce ->
                     let prep = runtime.PrepareBuffer(ArrayBuffer initialData)
                     if coerce then
@@ -69,15 +71,20 @@ module ResourceManagement =
                 render task |> PixImage.isColor (initialResult.ToArray())
 
                 transact (fun _ ->
-                    buffer.Value <- getHandle <| ArrayBuffer updatedData
+                    if mode = NoChange then
+                        buffer.MarkOutdated()
+                    else
+                        buffer.Value <- getHandle <| ArrayBuffer updatedData
                 )
 
                 let rt = RenderToken.Zero
                 task.Update(AdaptiveToken.Top, rt)
-                render task |> PixImage.isColor (updatedResult.ToArray())
+                render task |> PixImage.isColor (expectedUpdatedResult.ToArray())
 
-                Expect.equal (rt.InPlaceUpdates.GetOrDefault kind) expectedInPlaceUpdates "Unexpected number of in-place updates"
-                Expect.equal (rt.ReplacedResources.GetOrDefault kind) expectedReplacedResources "Unexpected number of replaced buffers"
+                let inPlaceUpdates = rt.InPlaceUpdates.GetOrDefault kind
+                let replacedResources = rt.ReplacedResources.GetOrDefault kind
+                Expect.isTrue (checkInPlaceUpdates inPlaceUpdates) "Unexpected number of in-place updates"
+                Expect.isTrue (checkReplacedResources replacedResources) "Unexpected number of replaced buffers"
 
                 preparedBuffer |> Option.iter (fun preparedBuffer ->
                     let downloaded = preparedBuffer.Buffer.Coerce<'Data>().Download()
@@ -115,17 +122,26 @@ module ResourceManagement =
 
         let inplaceUpdateVertexBuffer       = vertexBuffer InPlace
         let replaceVertexBuffer coerce      = vertexBuffer <| Replace coerce
+        let noChangeVertexBuffer            = vertexBuffer NoChange
 
         let inplaceUpdateIndirectBuffer     = indirectBuffer InPlace
         let replaceIndirectBuffer coerce    = indirectBuffer <| Replace coerce
+        let noChangeIndirectBuffer          = indirectBuffer NoChange
 
     let tests (backend: Backend) =
         [
-            "In-place update vertex buffer",     Cases.inplaceUpdateVertexBuffer
+            // The GL backend caches buffers at aval<IBuffer> level and also at the IBuffer level itself.
+            // The latter means that in-place updates are not possible (at least not without introducing locks).
+            if backend <> Backend.GL then
+                "In-place update vertex buffer",     Cases.inplaceUpdateVertexBuffer
+                "In-place update indirect buffer",   Cases.inplaceUpdateIndirectBuffer
+
+            "No change vertex buffer",           Cases.noChangeVertexBuffer
+            "No change indirect buffer",         Cases.noChangeIndirectBuffer
+
             "Replace vertex buffer",             Cases.replaceVertexBuffer false
             "Replace vertex buffer (coerced)",   Cases.replaceVertexBuffer true
 
-            "In-place update indirect buffer",   Cases.inplaceUpdateIndirectBuffer
             "Replace indirect buffer",           Cases.replaceIndirectBuffer false
             "Replace indirect buffer (coerced)", Cases.replaceIndirectBuffer true
         ]
