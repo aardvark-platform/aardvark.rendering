@@ -26,7 +26,7 @@ type AccelerationStructure =
             with get() = this.name
             and set name =
                 this.name <- name
-                if name <> null then
+                if notNull name then
                     this.ResultBuffer.Name <- $"{name} (Result Buffer)"
                     this.scratchBuffer |> ValueOption.iter (fun b -> b.Name <- $"{name} (Scratch Buffer)")
                 this.Device.SetObjectName(VkObjectType.AccelerationStructureKhr, this.Handle.Handle, name)

@@ -133,7 +133,7 @@ and RenderObject private (id                 : RenderObjectId,
         match x.VertexAttributes.TryGetAttribute name with
         | ValueSome value -> ValueSome (value, false)
         | _  ->
-            if x.InstanceAttributes <> null then
+            if notNull x.InstanceAttributes then
                 match x.InstanceAttributes.TryGetAttribute name with
                 | ValueSome value -> ValueSome (value, true)
                 | _ -> ValueNone

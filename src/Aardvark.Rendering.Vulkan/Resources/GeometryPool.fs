@@ -142,7 +142,7 @@ module GeometryPoolUtilities =
                             for (_, (elemSize,_,b)) in Map.toSeq buffers do
                                 let old = b.Value |> unbox<StreamingBuffer>
                                 let n = device.CreateStreamingBuffer(lock, usage, elemSize * newCapacity)
-                                if old.Name <> null then
+                                if notNull old.Name then
                                     n.Name <- old.Name
                                     n.ScratchBuffer.Name <- old.ScratchBuffer.Name
 

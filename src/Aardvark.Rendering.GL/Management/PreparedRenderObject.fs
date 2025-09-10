@@ -191,11 +191,11 @@ module PreparedPipelineState =
     module internal ResourceUtilities =
 
         let inline addResource (resources : List<IDisposable>) (resource : #IDisposable) =
-            if resources <> null then resources.Add resource |> ignore
+            if notNull resources then resources.Add resource
             resource
 
         let inline removeResource (resources : List<IDisposable>) (resource : IDisposable) =
-            if resources <> null then resources.Remove resource |> ignore
+            if notNull resources then resources.Remove resource |> ignore
 
     type ResourceManager with
         member x.CreateUniformBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope, resources : List<IDisposable>) =

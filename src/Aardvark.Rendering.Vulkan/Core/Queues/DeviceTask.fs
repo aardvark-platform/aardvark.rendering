@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open Aardvark.Base
 open System
 open System.Threading
 
@@ -21,7 +22,7 @@ type DeviceTask internal (fence: Fence) =
     member x.IsCompleted =
         if Monitor.TryEnter lockObj then
             try
-                if fence <> null && fence.Signaled then
+                if notNull fence && fence.Signaled then
                     finalize()
                     true
                 else
@@ -33,7 +34,7 @@ type DeviceTask internal (fence: Fence) =
 
     member x.Wait() =
         lock lockObj (fun _ ->
-            if fence <> null then
+            if notNull fence then
                 fence.Wait()
                 finalize()
         )

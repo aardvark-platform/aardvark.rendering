@@ -74,7 +74,7 @@ type Texture =
         default x.Name
             with get() = x.name
             and set name =
-                if x.Context <> null then
+                if notNull x.Context then
                     x.name <- name
                     x.Context.SetObjectLabel(ObjectLabelIdentifier.Texture, x.Handle, name)
 
@@ -91,7 +91,7 @@ type Texture =
             GL.Check "could not delete texture"
 
         member x.Dispose() =
-            if x.Context <> null then // NullTexture has no context
+            if notNull x.Context then // NullTexture has no context
                 using x.Context.ResourceLock (fun _ ->
                     x.Destroy()
                     x.Handle <- 0

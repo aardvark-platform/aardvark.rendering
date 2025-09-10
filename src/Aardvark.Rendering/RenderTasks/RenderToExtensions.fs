@@ -121,7 +121,7 @@ type RenderToExtensions private() =
 
             let create() =
                 clear <- runtime.CompileClear(signature, clearValues)
-                if this.Name <> null then clear.Name <- $"{this.Name} (Clear)"
+                if notNull this.Name then clear.Name <- $"{this.Name} (Clear)"
                 new SequentialRenderTask [| clear; this |] :> IRenderTask
 
             let destroy (_ : IRenderTask) =
@@ -165,7 +165,7 @@ type RenderToExtensions private() =
             let create() =
                 (clearValues, this) ||> CubeMap.map2(fun values task ->
                     let clear = cache.GetOrCreate(values, fun _ -> runtime.CompileClear(signature, values))
-                    if task.Name <> null then clear.Name <- $"{task.Name} (Clear)"
+                    if notNull task.Name then clear.Name <- $"{task.Name} (Clear)"
                     new SequentialRenderTask [|clear; task|] :> IRenderTask
                 )
 

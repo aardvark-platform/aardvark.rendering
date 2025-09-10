@@ -550,7 +550,7 @@ module Resources =
             owner, key, ResourceKind.Buffer,
             input,
             {
-                mcreate          = fun (b : IBuffer) -> let r = device.CreateBuffer(usage, b) in (if name <> null && r.Name = null then r.Name <- name); r
+                mcreate          = fun (b : IBuffer) -> let r = device.CreateBuffer(usage, b) in (if notNull name && isNull r.Name then r.Name <- name); r
                 mdestroy         = _.Dispose()
                 mtryUpdate       = Buffer.tryUpdate
                 mownsHandle      = ownsBuffer
@@ -562,7 +562,7 @@ module Resources =
             owner, key, ResourceKind.IndirectBuffer,
             input,
             {
-                mcreate         = fun b -> let r = device.CreateIndirectBuffer(indexed, b) in (if name <> null && r.Name = null then r.Name <- name); r
+                mcreate         = fun b -> let r = device.CreateIndirectBuffer(indexed, b) in (if notNull name && isNull r.Name then r.Name <- name); r
                 mdestroy        = _.Dispose()
                 mtryUpdate      = IndirectBuffer.tryUpdate indexed
                 mownsHandle     = _.Buffer >> ownsBuffer
@@ -583,7 +583,7 @@ module Resources =
             handle.Name <- name
 
         override x.Destroy() =
-            if handle <> Unchecked.defaultof<_> then
+            if notNull handle then
                 handle.Dispose()
                 handle <- Unchecked.defaultof<_>
 
@@ -611,7 +611,7 @@ module Resources =
             handle <- new PushConstants(layout)
 
         override x.Destroy() =
-            if handle <> Unchecked.defaultof<_> then
+            if notNull handle then
                 handle.Dispose()
                 handle <- Unchecked.defaultof<_>
 
@@ -632,7 +632,7 @@ module Resources =
             owner, key, ResourceKind.Texture,
             input,
             {
-                icreate         = fun t -> let r = device.CreateImage(t, properties) in (if name <> null && r.Name = null then r.Name <- name); r
+                icreate         = fun t -> let r = device.CreateImage(t, properties) in (if notNull name && isNull r.Name then r.Name <- name); r
                 idestroy        = _.Dispose()
                 ieagerDestroy   = true
             }
@@ -1196,7 +1196,7 @@ module Resources =
             for b in bindings do
                 b.Release()
 
-            if handle <> Unchecked.defaultof<_> then
+            if notNull handle then
                 handle.Dispose()
                 handle <- Unchecked.defaultof<_>
 
@@ -1553,7 +1553,7 @@ module Resources =
 
             let create (data : AccelerationStructureData) =
                 let acc = AccelerationStructure.create device usage data
-                if name <> null then acc.Name <- name
+                if notNull name then acc.Name <- name
                 handle <- ValueSome acc
                 inc &version
                 { handle = acc; version = version }

@@ -140,7 +140,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 
         GLVM.hglCleanup((unbox<IGraphicsContextInternal> handle).Context.Handle)
         let actions = Interlocked.Exchange(&onMakeCurrent, null)
-        if actions <> null then
+        if notNull actions then
             for a in actions do
                 a()
 
@@ -243,7 +243,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                         GLVM.hglCleanup((unbox<IGraphicsContextInternal> handle).Context.Handle)
                     
                         let actions = Interlocked.Exchange(&onMakeCurrent, null)
-                        if actions <> null then
+                        if notNull actions then
                                 for a in actions do
                                     a()            
                             )

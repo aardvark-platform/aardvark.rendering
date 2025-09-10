@@ -2,6 +2,7 @@
 
 open System.Threading
 open System.Collections.Concurrent
+open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.GL
 
@@ -18,7 +19,7 @@ type internal RefCountedBuffer(ctx, create : unit -> Buffer, destroy : unit -> u
     member x.Acquire(name: string) =
         if Interlocked.Increment &refCount = 1 then
             let b = Operators.using ctx.ResourceLock (fun _ -> create())
-            if name <> null && b.Name = null then b.Name <- name
+            if notNull name && isNull b.Name then b.Name <- name
             x.Handle <- b.Handle
             x.SizeInBytes <- b.SizeInBytes
             handle <- b

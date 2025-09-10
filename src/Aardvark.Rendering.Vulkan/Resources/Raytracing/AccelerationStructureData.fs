@@ -183,7 +183,7 @@ module internal AccelerationStructureData =
                     getBufferAddress alignment mesh.Indices.Offset mesh.Indices.Buffer
 
             let pNext =
-                if mesh.Micromap = null then 0n
+                if isNull mesh.Micromap then 0n
                 else
                     let micromap = Micromap.prepare device mesh.Micromap
 

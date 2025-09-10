@@ -117,7 +117,7 @@ type DevicePtr =
 
     member this.Dispose() =
         if this.allocation <> 0n then
-            if this.externalBlock <> null then
+            if notNull this.externalBlock then
                 this.externalBlock.Dispose()
                 this.externalBlock <- null
 
