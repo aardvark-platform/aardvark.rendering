@@ -60,6 +60,37 @@ module DrawCalls =
             let result = render<float32> size task
             result |> PixImage.isColor32f Accuracy.medium (expectedColor.ToArray())
 
+        let faceVertexCountUpdate (indexed: bool) (runtime: IRuntime) =
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, TextureFormat.Rgba32f
+                ])
+
+            let vertices = AVal.init [| V3f(-1,-1,0); V3f(1,-1,0); V3f(-1,1,0); V3f(1,1,0) |]
+            let indices = AVal.init [| 0s; 1s; 2s; 3s |]
+
+            use task =
+                Sg.draw IndexedGeometryMode.TriangleStrip
+                |> if indexed then Sg.index indices else id
+                |> Sg.vertexAttribute DefaultSemantic.Positions vertices
+                |> Sg.effect [ Effects.ConstantColor.Effect C4f.White ]
+                |> Sg.compile runtime signature
+
+            task.Update()
+
+            transact (fun _ ->
+                if indexed then
+                    indices.Value <- indices.Value |> Array.map ((+) 1s)
+                else
+                    vertices.Value <- vertices.Value |> Array.map ((*) 2.0f)
+            )
+
+            let rt = RenderToken.Zero
+            task.Update(AdaptiveToken.Top, rt)
+
+            Expect.equal (rt.InPlaceUpdates.GetOrDefault ResourceKind.DrawCalls) 0 "Unexpected updated draw calls"
+            Expect.equal (rt.ReplacedResources.GetOrDefault ResourceKind.DrawCalls) 0 "Unexpected replaced draw calls"
+
         let indirect (withOffsetAndStride: bool) (correctLayout: bool) (runtime: IRuntime) =
             use signature =
                 runtime.CreateFramebufferSignature([
@@ -129,6 +160,11 @@ module DrawCalls =
             "Automatic FaceVertexCount computation (non-indexed, with offset and stride)",  Cases.faceVertexCount true false
             "Automatic FaceVertexCount computation (indexed)",                              Cases.faceVertexCount false true
             "Automatic FaceVertexCount computation (indexed, with offset and stride)",      Cases.faceVertexCount false true
+
+            // GL always reports in-place updates even if nothing changed
+            if backend <> Backend.GL then
+                "Automatic FaceVertexCount update (non-indexed)",                           Cases.faceVertexCountUpdate false
+                "Automatic FaceVertexCount update (indexed)",                               Cases.faceVertexCountUpdate true
 
             "Indirect array",                                                               Cases.indirect false true
             "Indirect array (with offset and stride)",                                      Cases.indirect true true

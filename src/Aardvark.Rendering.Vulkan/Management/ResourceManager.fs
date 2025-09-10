@@ -1135,19 +1135,31 @@ module Resources =
     type DirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : aval<DrawCallInfo[]>) =
         inherit AbstractPointerResource<DrawCall>(owner, key)
 
+        let mutable current = null
+
         override x.Free(handle : DrawCall inref) =
             handle.Dispose()
+
+        override x.Destroy() =
+            current <- null
+            base.Destroy()
 
         override x.Update(handle, user, token, renderToken) =
             let calls = calls.GetValue(user, token, renderToken)
 
-            if x.HasHandle && calls.Length = handle.Count then
-                for i = 0 to handle.Count - 1 do handle.DrawCalls.[i] <- calls.[i]
+            if obj.ReferenceEquals(current, calls) then
+                false
             else
-                if x.HasHandle then x.Free &handle
-                handle <- DrawCall.Direct(calls, indexed)
+                if x.HasHandle && calls.Length = handle.Count then
+                    renderToken.InPlaceResourceUpdate ResourceKind.DrawCalls
+                    for i = 0 to handle.Count - 1 do handle.DrawCalls.[i] <- calls.[i]
+                else
+                    renderToken.ReplacedResource ResourceKind.DrawCalls
+                    if x.HasHandle then x.Free &handle
+                    handle <- DrawCall.Direct(calls, indexed)
 
-            true
+                current <- calls
+                true
 
     type DescriptorSetResource(owner : IResourceCache, key : list<obj>, layout : DescriptorSetLayout, bindings : IAdaptiveDescriptor[]) =
         inherit AbstractResourceLocation<DescriptorSet>(owner, key)

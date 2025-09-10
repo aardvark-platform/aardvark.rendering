@@ -665,7 +665,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = id
-            kind = ResourceKind.Unknown
+            kind = ResourceKind.DrawCalls
         })
 
     member x.CreateDepthTest(value : aval<DepthTest>) =

@@ -14,7 +14,7 @@ open System.Runtime.InteropServices
 // See (same for OpenGL and Direct3D):
 // https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDrawIndirectCommand.html
 // https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkDrawIndexedIndirectCommand.html
-[<StructLayout(LayoutKind.Sequential)>]
+[<StructLayout(LayoutKind.Sequential); CustomEquality; NoComparison>]
 type DrawCallInfo =
     struct
         /// The number of vertices to draw.
@@ -67,6 +67,22 @@ type DrawCallInfo =
 
                 &src += stride
                 &dst += stride
+
+        member inline private this.Equals(other: DrawCallInfo) =
+            this.FaceVertexCount = other.FaceVertexCount && this.InstanceCount = other.InstanceCount &&
+            this.FirstIndex = other.FirstIndex && this.FirstInstance = other.FirstInstance &&
+            this.BaseVertex = other.BaseVertex
+
+        override this.Equals(obj: obj) =
+            match obj with
+            | :? DrawCallInfo as other -> this.Equals other
+            | _ -> false
+
+        override this.GetHashCode() =
+            HashCode.Combine(this.FaceVertexCount, this.InstanceCount, this.FirstIndex, this.FirstInstance, this.BaseVertex)
+
+        interface IEquatable<DrawCallInfo> with
+            member this.Equals other = this.Equals(other)
     end
 
 /// Type for describing buffers holding draw calls.

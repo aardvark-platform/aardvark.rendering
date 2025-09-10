@@ -152,24 +152,24 @@ module RenderObjectSemantics =
         member x.RenderObjects(r : Sg.RenderNode, scope : Ag.Scope) : aset<IRenderObject> =
             let rj = RenderObject.ofScope scope
 
-            let callInfos =
-                adaptive {
-                    let! info = r.DrawCallInfo
-                    if info.FaceVertexCount < 0 then
-                        let! (count : int) = scope?FaceVertexCount
-                        return
-                            [| DrawCallInfo(
-                                 FirstIndex = info.FirstIndex,
-                                 FirstInstance = info.FirstInstance,
-                                 InstanceCount = info.InstanceCount,
-                                 FaceVertexCount = count,
-                                 BaseVertex = 0
-                             ) |]
-                    else
-                        return [| info |]
-                }
+            let drawCalls =
+                let mutable current = [| DrawCallInfo() |]
+                let cmp = System.Collections.Generic.EqualityComparer<DrawCallInfo>.Default
 
-            rj.DrawCalls <- DrawCalls.Direct callInfos
+                AVal.custom (fun t ->
+                    let mutable info = r.DrawCallInfo.GetValue t
+
+                    if info.FaceVertexCount < 0 then
+                        info.FaceVertexCount <- scope.FaceVertexCount.GetValue t
+                        info.BaseVertex <- 0
+
+                    if not <| cmp.Equals(current.[0], info) then
+                        current <- [| info |]
+
+                    current
+                )
+
+            rj.DrawCalls <- DrawCalls.Direct drawCalls
             rj.Mode <- r.Mode
 
             ASet.single (rj :> IRenderObject)

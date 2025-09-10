@@ -14,7 +14,8 @@ type ResourceKind =
     | Renderbuffer          = 8
     | Framebuffer           = 9
     | IndirectBuffer        = 10
-    | AccelerationStructure = 11
+    | DrawCalls             = 11
+    | AccelerationStructure = 12
 
 module internal ResourceKind =
     let all = System.Enum.GetValues(typeof<ResourceKind>) :?> ResourceKind[]
