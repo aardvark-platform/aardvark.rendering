@@ -180,212 +180,7 @@ module RenderTasks =
 
             ctx.PopDebugGroup()
 
-    [<AbstractClass>]
-    type AbstractSubTask() =
-        static let nop = System.Lazy<unit>(id)
-
-        let programUpdateWatch  = Stopwatch()
-        let sortWatch           = Stopwatch()
-
-        member x.ProgramUpdate (renderToken : RenderToken, f : unit -> 'a) =
-            if not renderToken.HasStatistics then
-                f()
-            else
-                programUpdateWatch.Restart()
-                let res = f()
-                programUpdateWatch.Stop()
-                res
-
-        member x.Sorting (renderToken : RenderToken, f : unit -> 'a) =
-            if not renderToken.HasStatistics then
-                f()
-            else
-                sortWatch.Restart()
-                let res = f()
-                sortWatch.Stop()
-                res
-
-        member x.Execution (_ : RenderToken, f : unit -> 'a) =
-            f()
-                
-        abstract member Update : AdaptiveToken * RenderToken -> unit
-        abstract member Perform : AdaptiveToken * RenderToken -> unit
-        abstract member Dispose : unit -> unit
-        abstract member Add : PreparedCommand -> unit
-        abstract member Remove : PreparedCommand -> unit
-
-        member x.Run(token : AdaptiveToken, renderToken : RenderToken, _ : OutputDescription) =
-            x.Perform(token, renderToken)
-            if not renderToken.HasStatistics then
-                nop
-            else
-                lazy (
-                    renderToken.AddSubTask(
-                        MicroTime sortWatch.Elapsed,
-                        MicroTime programUpdateWatch.Elapsed
-                    )
-                )
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
-
-    type NativeRenderProgram(cmp : IComparer<PreparedCommand>, scope : CompilerInfo, content : aset<PreparedCommand>, debug : bool) =
-        inherit AdaptiveObject()
-        //inherit NativeProgram<PreparedCommand, NativeStats>(
-        //                ASet.sortWith (curry cmp.Compare) content, 
-        //                (fun l r s -> 
-        //                        let asm =  AssemblerCommandStream(s) :> ICommandStream
-        //                        let stream = if debug then DebugCommandStream(asm) :> ICommandStream else asm
-        //                        r.Compile(scope, stream, l)
-        //                    ),
-        //                NativeStats.Zero, (+), (-))
-        let mutable reader = content.GetReader()
-        let mutable state = 
-            SortedSetExt<PreparedCommand * Aardvark.Assembler.Fragment<PreparedCommand>> {
-                new IComparer<PreparedCommand * Aardvark.Assembler.Fragment<PreparedCommand>> with
-                    member x.Compare((a,_), (b,_)) =
-                        cmp.Compare(a, b)
-            }
-
-        let compile (l : option<PreparedCommand>) (self : PreparedCommand) (ass : IAssemblerStream) =
-            let asm =  AssemblerCommandStream(ass) :> ICommandStream
-            let stream = if debug then DebugCommandStream(asm) :> ICommandStream else asm
-            self.Compile(scope, stream, Option.toValueOption l) |> ignore // TODO: stats, Aardvark.Assembler voption
-
-        let mutable program = new Aardvark.Assembler.FragmentProgram<PreparedCommand>(compile)
-
-        member x.Update(token : AdaptiveToken) =
-            x.EvaluateIfNeeded token () (fun token ->
-                let ops = reader.GetChanges token
-                for op in ops do
-                    match op with
-                    | Add(_, cmd) ->
-                        let (struct(hasL, hasV, _), l, _, _) = state.FindNeighboursV((cmd, null))
-                        if hasV then
-                            Log.warn "[NativeRenderProgram] duplicate add of: %A" cmd
-                        else
-                            let l = if hasL then snd l else null
-                            let self = program.InsertAfter(l, cmd)
-                            state.Add((cmd, self)) |> ignore
-                    | Rem(_, cmd) ->
-                        let (hasValue, value) = state.FindValue((cmd, null))
-                        if hasValue then
-                            let _, f = value
-                            f.Dispose()
-                            state.Remove(cmd, null) |> ignore
-                        else
-                            Log.warn "[NativeRenderProgram] removal of unknown command: %A" cmd
-
-                program.Update()
-            )
-
-        member x.Run() =
-            program.Run()
-
-        member x.Dispose() =
-            if not (isNull state) then
-                program.Dispose()
-                state <- null
-                reader <- Unchecked.defaultof<_>
-
-
-    type StaticOrderSubTask(ctx : Context, scope : CompilerInfo, debug : bool) =
-        inherit AbstractSubTask()
-        let objects : cset<PreparedCommand> = cset [new EpilogCommand(ctx) :> PreparedCommand]
-
-        let mutable hasProgram = false
-        let mutable program : NativeRenderProgram = Unchecked.defaultof<_>
-
-        let reinit () =
-            // if the config changed or we never compiled a program
-            // we need to do something
-            if not hasProgram then
-
-                // if we have a program we'll dispose it now
-                if hasProgram then program.Dispose()
-
-                // use the config to create a comparer for IRenderObjects
-                let comparer =
-                    { new IComparer<PreparedCommand> with 
-                        member x.Compare(l, r) =
-                            match l, r with
-                                | :? EpilogCommand, :? EpilogCommand -> compare l.Id r.Id
-                                | :? EpilogCommand, _ -> 1
-                                | _, :? EpilogCommand -> -1
-                                | _ -> 
-                                    match l.EntryState, r.EntryState with
-                                    | ValueNone, ValueNone -> compare l.Id r.Id
-                                    | ValueNone, ValueSome _ -> -1
-                                    | ValueSome _, ValueNone -> 1
-                                    | ValueSome ls, ValueSome rs ->
-                                        let cmp = compare ls.pProgram.Id rs.pProgram.Id
-                                        if cmp <> 0 then cmp
-                                        else // efficient texture sorting requires that slots are ordered [Global, PerMaterial, PerInstance] -> currently alphabetic based on SamplerName !
-                                            let mutable cmp = 0
-                                            let mutable i = 0
-                                            let texCnt = min ls.pTextureBindings.Length rs.pTextureBindings.Length
-                                            while cmp = 0 && i < texCnt do
-                                                let struct (sltl, bndl) = ls.pTextureBindings.[i]
-                                                let struct (sltr, bndr) = ls.pTextureBindings.[i]
-                                                if (sltl <> sltr) then
-                                                    cmp <- compare l.Id r.Id
-                                                else
-                                                    let leftTexId = match bndl with | ArrayBinding ab -> ab.Id; | SingleBinding (t, _) -> t.Id
-                                                    let rigthTexId = match bndr with | ArrayBinding ab -> ab.Id; | SingleBinding (t, _) -> t.Id
-                                                    cmp <- compare leftTexId rigthTexId
-                                                i <- i + 1
-                                            if cmp <> 0 then cmp
-                                            else compare l.Id r.Id
-                    }
-
-                // create the new program
-                let newProgram = 
-                    Log.line "using optimized native program"
-                    NativeRenderProgram(comparer, scope, objects, debug)
-
-
-                // finally we store the current config/ program and set hasProgram to true
-                program <- newProgram
-                hasProgram <- true
-
-        override x.Update(_, renderToken) =
-            reinit()
-
-            //TODO
-            x.ProgramUpdate (renderToken, fun () -> program.Update AdaptiveToken.Top)
-            ()
-
-        override x.Perform(token, renderToken) =
-            x.Update(token, renderToken)
-            x.Execution (renderToken, fun () -> program.Run())
-            //let ic = program.Stats.InstructionCount
-            //renderToken.AddInstructions(ic, 0) // don't know active
-               
-
-        override x.Dispose() =
-            if hasProgram then
-                hasProgram <- false
-                program.Dispose()
-
-                (objects :> aset<_>).History.Value.Outputs.Clear()
-
-                objects.Clear()
-        
-        override x.Add(o) = 
-            transact (fun () -> 
-                scope.structuralChange.MarkOutdated()
-                objects.Add o |> ignore
-            )
-
-        override x.Remove(o) = 
-            transact (fun () -> 
-                scope.structuralChange.MarkOutdated()
-                objects.Remove o |> ignore
-            )
-
-
-    
-    type NewRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, debug : bool) as this =
+    type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, debug : bool) as this =
         inherit AbstractOpenGlRenderTask(man, fboSignature)
 
         let rec hook (r : IRenderObject) : IRenderObject =
@@ -396,22 +191,21 @@ module RenderTasks =
             | _ -> r
 
         let mainCommand = Command.ofRenderObjects fboSignature this.ResourceManager debug (ASet.map hook objects)
-        
+
         override x.Use(action : unit -> 'a) = action()
 
         override x.ProcessDeltas(token : AdaptiveToken, renderToken : RenderToken) =
             x.Resources.Update(token, renderToken)
             mainCommand.Update(token, x.Scope)
-            
+
         override x.Update(token : AdaptiveToken, renderToken : RenderToken) =
             x.Resources.Update(token, renderToken)
             mainCommand.Update(token, x.Scope)
-            
+
         override x.UpdateResources(token : AdaptiveToken, renderToken : RenderToken) =
             x.Resources.Update(token, renderToken)
             mainCommand.Update(token, x.Scope)
 
-            
         override x.Release() =
             mainCommand.Free(x.Scope)
             base.Release()
@@ -422,111 +216,6 @@ module RenderTasks =
 
             if RuntimeConfig.SyncUploadsAndFrames then
                 GL.Sync()
-
-
-    type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, debug : bool) as this =
-        inherit AbstractOpenGlRenderTask(man, fboSignature)
-        
-        let ctx = man.Context
-        let deltaWatch = Stopwatch()
-        let subTaskResults = List<Lazy<unit>>()     
-        
-        let add (self : RenderTask) (ro : PreparedCommand) = 
-            let all = ro.Resources
-            for r in all do self.Resources.Add(r)
-            ro.AddCleanup(fun () -> for r in all do self.Resources.Remove r)
-            ro
-            
-        let rec hook (r : IRenderObject) : IRenderObject =
-            match r with
-            | :? HookedRenderObject as o -> HookedRenderObject.map this.HookRenderObject o
-            | :? RenderObject as o -> this.HookRenderObject o
-            | :? MultiRenderObject as o -> MultiRenderObject(o.Children |> List.map hook)
-            | _ -> r
-
-        let preparedObjects = objects |> ASet.map (hook >> PreparedCommand.ofRenderObject fboSignature this.ResourceManager >> add this)
-        let preparedObjectReader = preparedObjects.GetReader()
-
-        let mutable subtasks = Map.empty
-
-        let getSubTask (pass : RenderPass) : AbstractSubTask =
-            match Map.tryFind pass subtasks with
-                | Some task -> task
-                | _ ->
-                    let task = 
-                        match pass.Order with
-                            | RenderPassOrder.Arbitrary ->
-                                new StaticOrderSubTask(ctx, this.Scope, debug) :> AbstractSubTask
-
-                            | _ ->
-                                Log.warn "[GL] no sorting"
-                                new StaticOrderSubTask(ctx, this.Scope, debug) :> AbstractSubTask //new CameraSortedSubTask(order, this) :> AbstractSubTask
-
-                    subtasks <- Map.add pass task subtasks
-                    task
-
-        override x.ProcessDeltas(token, renderToken) =
-            deltaWatch.Restart()
-            
-            let deltas = preparedObjectReader.GetChanges token
-            
-            if not (HashSetDelta.isEmpty deltas) then
-                x.StructureChanged()
-            
-            let mutable added = 0
-            let mutable removed = 0
-            for d in deltas do 
-                match d with
-                    | Add(_,v) ->
-                        let task = getSubTask v.Pass
-                        added <- added + 1
-                        task.Add v
-            
-                    | Rem(_,v) ->
-                        let task = getSubTask v.Pass
-                        removed <- removed + 1
-                        task.Remove v   
-                        v.Dispose()
-                                    
-            if added > 0 || removed > 0 then
-                Log.line "[GL] RenderObjects: +%d/-%d (%dms)" added removed deltaWatch.ElapsedMilliseconds
-            renderToken.RenderObjectDeltas(added, removed)
-
-
-        override x.UpdateResources(token, renderToken) =
-            x.Resources.Update(token, renderToken)
-
-
-        override x.PerformInner(token : AdaptiveToken, renderToken : RenderToken, output : OutputDescription) =
-            subtasks |> Map.iter (fun _ t ->
-                let s = t.Run(token, renderToken, output)
-                subTaskResults.Add(s)
-            )
-
-            if RuntimeConfig.SyncUploadsAndFrames then
-                GL.Sync()
-
-        override x.Update(token, renderToken) = 
-            subtasks |> Map.iter (fun _ t ->
-                    t.Update(token, renderToken)
-                )
-
-        override x.Release() =
-            for ro in preparedObjectReader.State do
-                ro.Dispose()
-
-            subtasks |> Map.iter (fun _ t -> t.Dispose())
-            subtasks <- Map.empty
-            base.Release()
-
-        override x.Use (f : unit -> 'a) =
-            lock x (fun () ->
-                x.RenderTaskLock.Run (fun () ->
-                    lock x.Resources (fun () ->
-                        f()
-                    )
-                )
-            )
 
     type ClearTask(runtime : IRuntime, ctx : Context, signature : IFramebufferSignature, values : aval<ClearValues>) =
         inherit AbstractRenderTask()
@@ -590,5 +279,3 @@ module RenderTasks =
         override x.Runtime = runtime |> Some
 
         override x.Use f = lock x f
-
-

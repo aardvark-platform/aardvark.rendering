@@ -64,7 +64,6 @@ module TestApplication =
         let create (framework : Framework) (debug : IDebugConfig) =
             Config.MajorVersion <- 4
             Config.MinorVersion <- 6
-            RuntimeConfig.UseNewRenderTask <- true
             RuntimeConfig.RobustContextSharing <- true
             RuntimeConfig.PreferHostSideTextureCompression <- true
 

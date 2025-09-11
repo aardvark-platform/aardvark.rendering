@@ -87,11 +87,6 @@ module RuntimeConfig =
     let mutable SuppressSparseBuffers = false
 
     /// <summary>
-    /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands.
-    /// </summary>
-    let mutable UseNewRenderTask = true
-
-    /// <summary>
     /// Use pixel buffer objects for texture uploads and downloads.
     /// </summary>
     let mutable UsePixelBufferObjects =

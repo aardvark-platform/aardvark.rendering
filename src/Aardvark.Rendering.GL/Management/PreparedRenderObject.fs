@@ -1236,26 +1236,6 @@ module PreparedObjectInfoAssembler =
             match prev with
             | ValueSome prev -> x.Render(s, me, prev)
             | ValueNone -> x.Render(s, me)
-    
-            
-type EpilogCommand(ctx : Context) =
-    inherit PreparedCommand(ctx, RenderPass.main) 
-
-    override x.GetResources() = Seq.empty
-    override x.Release() = ()
-    override x.Compile(s, stream, prev) = 
-        stream.SetDepthMask(true)
-        stream.SetStencilMask(true)
-        stream.SetColorMask(true, true, true, true)
-        stream.UseProgram(0)
-        stream.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
-        for i in 0 .. 7 do
-            stream.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
-        NativeStats(InstructionCount = 13)
-
-    override x.EntryState = ValueNone
-    override x.ExitState = ValueNone
-    override x.Signature = ValueNone
 
 type NopCommand(ctx : Context, pass : RenderPass) =
     inherit PreparedCommand(ctx, pass) 
@@ -1378,9 +1358,6 @@ module PreparedCommand =
                     o.Prepare(r, fboSignature) |> ofRenderObject true fboSignature x
                 | _ ->
                     failwithf "expected ILodRuntime for object: %A" o
-
-            | :? CommandRenderObject when not RuntimeConfig.UseNewRenderTask ->
-                failwith "[GL] Render commands only supported with RuntimeConfig.UseNewRenderTask = true"
 
             | _ ->
                 failwithf "bad object: %A" o

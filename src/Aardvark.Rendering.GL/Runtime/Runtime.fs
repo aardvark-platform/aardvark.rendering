@@ -415,11 +415,7 @@ type Runtime(debug : IDebugConfig) =
 
     member x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>) =
         let set = ShaderDebugger.hookRenderObjects set
-
-        if RuntimeConfig.UseNewRenderTask then
-            new RenderTasks.NewRenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
-        else
-            new RenderTasks.RenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
+        new RenderTasks.RenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
 
     member x.PrepareRenderObject(signature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
         PreparedCommand.ofRenderObject signature manager rj :> IPreparedRenderObject
