@@ -17,31 +17,37 @@ type RenderGeometryConfig =
 type RenderCommand =
     internal
         | REmpty
-        | RUnorderedScenes of aset<ISg>
-        | RClear of values : aval<ClearValues>
-        | RGeometries of config : RenderGeometryConfig * geometries : aset<IndexedGeometry>
-        | ROrdered of alist<RenderCommand>
-        | ROrderedConstant of list<RenderCommand>
-        | RIfThenElse of condition : aval<bool> * ifTrue : RenderCommand * ifFalse : RenderCommand
-        | RLodTree of config : RenderGeometryConfig * geometries : LodTreeLoader<Geometry>
+        | RUnorderedScenes of scenes : aset<ISg>
+        | RClear           of values : aval<ClearValues>
+        | RGeometries      of config : RenderGeometryConfig * geometries : aset<IndexedGeometry>
+        | ROrdered         of commands : alist<RenderCommand>
+        | RIfThenElse      of condition : aval<bool> * ifTrue : RenderCommand * ifFalse : RenderCommand
+        | RLodTree         of config : RenderGeometryConfig * geometries : LodTreeLoader<Geometry>
 
     static member Empty = REmpty
 
     static member Clear(values : aval<ClearValues>) = RClear values
     static member Clear(values : ClearValues)       = RenderCommand.Clear(~~values)
 
-    static member Unordered(l : seq<ISg>) = RUnorderedScenes(ASet.ofSeq l)
-    static member Unordered(l : list<ISg>) = RUnorderedScenes(ASet.ofList l)
-    static member Unordered(l : aset<ISg>) = RUnorderedScenes(l)
-    static member Render (s : ISg) = RUnorderedScenes(ASet.single s)
+    static member Unordered(scenes : seq<ISg>) = if Seq.isEmpty scenes then REmpty else RUnorderedScenes(ASet.ofSeq scenes)
+    static member Unordered(scenes : list<ISg>) = match scenes with [] -> REmpty | _  -> RUnorderedScenes(ASet.ofList scenes)
+    static member Unordered(scenes : aset<ISg>) = if scenes.IsConstant && scenes.Content.GetValue().IsEmpty then REmpty else RUnorderedScenes(scenes)
+    static member Render(scene : ISg) = RUnorderedScenes(ASet.single scene)
 
-    static member Ordered(l : seq<ISg>) = ROrderedConstant(l |> Seq.map RenderCommand.Render |> Seq.toList)
-    static member Ordered(l : list<ISg>) = ROrderedConstant(l |> List.map RenderCommand.Render)
-    static member Ordered(l : alist<ISg>) = RenderCommand.Ordered(l |> AList.map RenderCommand.Render)
+    static member Ordered(commands : seq<RenderCommand>) = if Seq.isEmpty commands then REmpty else ROrdered(AList.ofSeq commands)
+    static member Ordered(commands : list<RenderCommand>) = match commands with [] -> REmpty | _ -> ROrdered(AList.ofList commands)
+    static member Ordered(commands : alist<RenderCommand>) = if commands.IsConstant && commands.Content.GetValue().Count = 0 then REmpty else ROrdered commands
+
+    static member Ordered(scenes : seq<ISg>) = RenderCommand.Ordered(scenes |> Seq.map RenderCommand.Render)
+    static member Ordered(scenes : list<ISg>) = RenderCommand.Ordered(scenes |> List.map RenderCommand.Render)
+    static member Ordered(scenes : alist<ISg>)  = RenderCommand.Ordered(scenes |> AList.map RenderCommand.Render)
 
     static member IfThenElse(condition : aval<bool>, ifTrue : RenderCommand, ifFalse : RenderCommand) = RIfThenElse(condition, ifTrue, ifFalse)
+    static member IfThenElse(condition : aval<bool>, ifTrue : ISg, ifFalse : ISg) = RIfThenElse(condition, RenderCommand.Render ifTrue, RenderCommand.Render ifFalse)
     static member When(condition : aval<bool>, ifTrue : RenderCommand) = RIfThenElse(condition, ifTrue, REmpty)
+    static member When(condition : aval<bool>, ifTrue : ISg) = RIfThenElse(condition, RenderCommand.Render ifTrue, REmpty)
     static member WhenNot(condition : aval<bool>, ifFalse : RenderCommand) = RIfThenElse(condition, REmpty, ifFalse)
+    static member WhenNot(condition : aval<bool>, ifFalse : ISg) = RIfThenElse(condition, REmpty, RenderCommand.Render ifFalse)
 
     static member LodTree(config : RenderGeometryConfig, geometries : LodTreeLoader<Geometry>) = RLodTree(config,geometries)
 
@@ -49,21 +55,6 @@ type RenderCommand =
     static member Geometries(config : RenderGeometryConfig,  geometries : seq<IndexedGeometry>) = RGeometries(config, ASet.ofSeq geometries)
     static member Geometries(config : RenderGeometryConfig,  geometries : list<IndexedGeometry>) = RGeometries(config, ASet.ofList geometries)
 
-
-    static member Ordered(cmds : list<RenderCommand>) =
-        match cmds with
-            | [] -> REmpty
-            | _ -> ROrderedConstant cmds
-
-    static member Ordered(cmds : seq<RenderCommand>) =
-        RenderCommand.Ordered(Seq.toList cmds)
-
-    static member Ordered(cmds : alist<RenderCommand>) =
-        if cmds.IsConstant then
-            let list = cmds.Content |> AVal.force |> IndexList.toList
-            RenderCommand.Ordered list
-        else
-            ROrdered cmds
 
 [<AutoOpen>]
 module RenderCommandFSharpExtensions =
@@ -179,10 +170,6 @@ module RuntimeCommandSemantics =
                 | RenderCommand.ROrdered(list) ->
                     let commands = list |> AList.map (ofRenderCommand scope parent)
                     RuntimeCommand.Ordered(commands)
-
-                | RenderCommand.ROrderedConstant(list) ->
-                    let commands = list |> List.map (ofRenderCommand scope parent)
-                    RuntimeCommand.Ordered(AList.ofList commands)
 
                 | RenderCommand.RIfThenElse(c,t,f) ->
                     RuntimeCommand.IfThenElse(c, ofRenderCommand scope parent t, ofRenderCommand scope parent f)

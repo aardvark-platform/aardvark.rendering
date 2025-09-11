@@ -31,6 +31,7 @@ module EmbeddedResource =
 module Rnd =
 
     let rng = RandomSystem(1)
+    let rnd = Random 0
 
     let uint8 : unit -> _  = rng.UniformUInt >> uint8
     let int8 : unit -> _   = rng.UniformInt >> int8
@@ -41,8 +42,21 @@ module Rnd =
     let uint64 : unit -> _ = rng.UniformULong
     let int64 : unit -> _  = rng.UniformLong
     let float32: unit -> _ = rng.UniformFloatClosed
+    let float: unit -> _   = rng.UniformDoubleClosed
+    let bool: unit -> _    = rng.UniformFloatClosed >> (>) 0.5f
 
     let c3b() = C3b(uint8(), uint8(), uint8())
+    let c4b() = C4b(uint8(), uint8(), uint8(), 255uy)
+    let c4f() = C4f(float32(), float32(), float32(), 1.0f)
+
+    let enum<'T>() =
+        let values = Enum.GetValues(typeof<'T>) :?> 'T[]
+        values.[rng.UniformInt values.Length]
+
+    let shuffle (values: 'T seq) =
+        let array = Array.ofSeq values
+        rnd.Shuffle(array)
+        array
 
 
 module Array =

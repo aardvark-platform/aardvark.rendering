@@ -19,6 +19,7 @@ module ``Rendering Tests`` =
         DrawCalls.tests
         Viewport.tests
         ResourceManagement.tests
+        Commands.tests
     ]
 
     [<Tests>]

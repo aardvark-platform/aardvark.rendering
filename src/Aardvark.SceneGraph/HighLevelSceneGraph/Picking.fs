@@ -413,10 +413,6 @@ module PickingSemantics =
                         for cmd in cmds do
                             yield! processCommand cmd
 
-                    | RenderCommand.ROrderedConstant cmds ->
-                        for cmd in cmds do
-                            yield! processCommand cmd
-
                     | RenderCommand.RIfThenElse (condition, ifTrue, ifFalse) ->
                         let! c = condition
                         yield! processCommand (if c then ifTrue else ifFalse)
