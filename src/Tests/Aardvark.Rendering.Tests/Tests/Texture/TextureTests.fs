@@ -15,13 +15,13 @@ module ``Texture Tests`` =
     ]
 
     [<Tests>]
-    let textureCompressionTests =
+    let compressionTests =
         [ TextureCompression.tests ] |> testList "PixImage"
 
     [<Tests>]
-    let textureTestsGL =
+    let testsGL =
         tests |> testBackend Backend.GL "Textures"
 
     [<Tests>]
-    let textureTestsVulkan =
+    let testsVulkan =
         tests |> testBackend Backend.Vulkan "Textures"

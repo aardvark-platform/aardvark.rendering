@@ -23,9 +23,9 @@ module ``Rendering Tests`` =
     ]
 
     [<Tests>]
-    let textureTestsGL =
+    let testsGL =
         tests |> testBackend Backend.GL "Rendering"
 
     [<Tests>]
-    let textureTestsVulkan =
+    let testsVulkan =
         tests |> testBackend Backend.Vulkan "Rendering"

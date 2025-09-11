@@ -16,9 +16,9 @@ module ``Buffer Tests`` =
         ]
 
     [<Tests>]
-    let bufferTestsGL =
+    let testsGL =
         tests |> testBackend Backend.GL "Buffers"
 
     [<Tests>]
-    let bufferTestsVulkan =
+    let testsVulkan =
         tests |> testBackend Backend.Vulkan "Buffers"

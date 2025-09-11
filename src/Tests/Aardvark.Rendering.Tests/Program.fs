@@ -1,73 +1,32 @@
 ﻿open Aardvark.Rendering.Tests
-open Aardvark.Application
 open Expecto
 
 [<EntryPoint>]
 let main argv =
 
-    let backendTests backend =
-        let bufferTests =
-            testBackend backend "Buffers" [
-                Buffer.BufferCopy.tests
-                Buffer.BufferUpload.tests
-                Buffer.BufferDownload.tests
-                Buffer.AttributeBuffer.tests
-            ]
+    let allTests =
+        testList "Tests" [
+            ``Buffer Tests``.testsGL
+            ``Buffer Tests``.testsVulkan
 
-        let textureTests =
-            testBackend backend "Textures" [
-                Texture.TextureUpload.tests
-                Texture.TextureDownload.tests
-                Texture.TextureCreate.tests
-                Texture.TextureCopy.tests
-                Texture.TextureClear.tests
-            ]
+            ``Texture Tests``.compressionTests
+            ``Texture Tests``.testsGL
+            ``Texture Tests``.testsVulkan
 
-        let renderingTests =
-            testBackend backend "Rendering" [
-                Rendering.Culling.tests
-                Rendering.Blending.tests
-                Rendering.ColorMasks.tests
-                Rendering.RenderTasks.tests
-                Rendering.FramebufferSignature.tests
-                Rendering.IntegerAttachments.tests
-                Rendering.Samplers.tests
-                Rendering.Uniforms.tests
-                Rendering.Surfaces.tests
-            ]
+            ``Rendering Tests``.testsGL
+            ``Rendering Tests``.testsVulkan
 
-        let computeTests =
-            testBackend backend "Compute" [
-                Compute.ComputeImages.tests
-                Compute.ComputeBuffers.tests
-                Compute.ComputePrimitives.tests
-                Compute.ComputeSorting.tests
-                Compute.ComputeJpeg.tests
-                Compute.MutableInputBinding.tests
-            ]
+            ``Compute Tests``.testsGL
+            ``Compute Tests``.testsVulkan
 
-        testList $"Tests ({backend})" [
-            bufferTests
-            textureTests
-            renderingTests
-            computeTests
-        ]
-
-    let otherTests =
-        testList "Other tests" [
+            ``Camera Tests``.tests
+            ``IndexedGeometry Tests``.tests
             ``SceneGraph Tests``.tests
             ``CompactSet Tests``.tests
             ``AdaptiveResource Tests``.tests
             ``ContextCreation Tests``.tests
-            ``Camera Tests``.tests
-            ``IndexedGeometry Tests``.tests
-        ]
-
-    let allTests =
-        testList "Tests" [
-            otherTests
-            backendTests Backend.GL
-            backendTests Backend.Vulkan
+            ``Vulkan Wrapper Tests``.tests
+            ``IDictionary StructuralComparer Tests``.tests
         ]
 
     let runManuallyInMain = true
