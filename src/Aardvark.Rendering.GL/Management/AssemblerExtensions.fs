@@ -1321,30 +1321,14 @@ module internal CommandStream =
         if debug then DebugCommandStream asm
         else AssemblerCommandStream asm
 
-type RefRef<'a> =
-    class
-        val mutable public contents : 'a
-        member x.Value
-            with get() = x.contents
-            and set v = x.contents <- v
-
-        new(value : 'a) = { contents = value }
-    end
-
 
 type CompilerInfo =
     {
-        resources               : ResourceInputSet
-        contextHandle           : nativeptr<nativeint>
-        runtimeStats            : nativeptr<V2i>
-        drawBufferCount         : int
-
-        structuralChange        : aval<unit>
-        usedTextureSlots        : RefRef<CountingHashSet<int>>
-        usedUniformBufferSlots  : RefRef<CountingHashSet<int>>
-
-        task                    : IRenderTask
-        tags                    : Map<string, obj>
+        resources       : ResourceInputSet
+        contextHandle   : nativeptr<nativeint>
+        runtimeStats    : nativeptr<V2i>
+        drawBufferCount : int
+        task            : IRenderTask
     }
 
 

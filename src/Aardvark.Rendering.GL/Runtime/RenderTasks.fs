@@ -1,19 +1,13 @@
 ﻿namespace Aardvark.Rendering.GL
 
-open FSharp.Data.Traceable
-
-#nowarn "9"
-
-open System
-open System.Diagnostics
-open System.Collections.Generic
 open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.Assembler
 open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
+
+#nowarn "9"
 
 module RenderTasks =
 
@@ -78,7 +72,6 @@ module RenderTasks =
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
         let manager = new ResourceManager(manager, Some renderTaskLock)
-        let structureChanged = AVal.custom ignore
         let runtimeStats = NativePtr.alloc 1
         let resources = new ResourceInputSet()
 
@@ -95,23 +88,10 @@ module RenderTasks =
                 runtimeStats = runtimeStats
                 contextHandle = contextHandle
                 drawBufferCount = signature.ColorAttachmentSlots
-                usedTextureSlots = RefRef CountingHashSet.empty
-                usedUniformBufferSlots = RefRef CountingHashSet.empty
-                structuralChange = structureChanged
                 task = this
-                tags = Map.empty
             }
 
-        let beforeRender = Event<unit>()
-        let afterRender = Event<unit>()
-
         member x.Resources = resources
-
-        member x.BeforeRender = beforeRender.Publish :> IObservable<_>
-        member x.AfterRender = afterRender.Publish :> IObservable<_>
-
-        member x.StructureChanged() =
-            transact (fun () -> structureChanged.MarkOutdated())
 
         abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
         abstract member UpdateResources : AdaptiveToken * RenderToken -> unit
@@ -163,13 +143,11 @@ module RenderTasks =
 
             Framebuffer.draw signature fbo output.Viewport output.Scissor (fun _ ->
                 renderTaskLock.Run (fun () ->
-                    beforeRender.Trigger()
                     NativePtr.write runtimeStats V2i.Zero
 
                     x.PerformInner(token, renderToken, output)
                     GL.Check "[RenderTask.Run] PerformInner"
 
-                    afterRender.Trigger()
                     let rt = NativePtr.read runtimeStats
                     renderToken.AddDrawCalls(rt.X, rt.Y)
                 )
