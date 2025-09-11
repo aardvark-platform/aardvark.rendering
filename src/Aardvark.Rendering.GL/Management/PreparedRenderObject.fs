@@ -1922,8 +1922,7 @@ module rec Command =
             NopCommand.Instance
 
         | RuntimeCommand.RenderCmd objects ->
-            ManyObjectsCommand(fboSignature, manager, objects, debug)
-            :> Command
+            ofRenderObjects fboSignature manager debug objects
 
         | RuntimeCommand.OrderedCmd commands ->
             commands 
@@ -1945,9 +1944,9 @@ module rec Command =
         | RuntimeCommand.GeometriesSimpleCmd _
         | RuntimeCommand.DispatchCmd _
         | RuntimeCommand.LodTreeCmd _ ->
-            failwith "not implemented"
+            failf $"Runtime command {cmd} not implemented"
 
-    let ofRenderObjects (fboSignature : IFramebufferSignature) (manager : ResourceManager) (debug : bool) (objects : aset<IRenderObject>) =
+    and ofRenderObjects (fboSignature : IFramebufferSignature) (manager : ResourceManager) (debug : bool) (objects : aset<IRenderObject>) =
         let special = 
             objects 
             |> ASet.choose (function :? CommandRenderObject as o -> Some o.Command | _ -> None)
@@ -1960,7 +1959,7 @@ module rec Command =
         let simpleCount =
             if simple.IsConstant then ASet.force simple |> HashSet.count |> ValueSome
             else ValueNone
-            
+
         let specialCount =
             if special.IsConstant then AList.force special |> IndexList.count |> ValueSome
             else ValueNone
@@ -1976,9 +1975,13 @@ module rec Command =
             RuntimeCommand.OrderedCmd special |> ofRuntimeCommand fboSignature manager debug
 
         | struct(_, ValueSome 0) ->
-            RuntimeCommand.RenderCmd simple |> ofRuntimeCommand fboSignature manager debug
+            ManyObjectsCommand(fboSignature, manager, simple, debug)
 
         | _ ->
-            AList.append (AList.single (RuntimeCommand.RenderCmd simple)) special
-            |> RuntimeCommand.OrderedCmd
-            |> ofRuntimeCommand fboSignature manager debug
+            let simple = ManyObjectsCommand(fboSignature, manager, simple, debug) :> Command
+
+            let special =
+                RuntimeCommand.OrderedCmd special
+                |> ofRuntimeCommand fboSignature manager debug
+
+            OrderedCommand(AList.ofList [simple; special])
