@@ -1012,6 +1012,7 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 	auto active = *isActive;
 	if (!active || !drawcount)return;
 	auto buffer = args->Handle;
+	auto offset = args->Offset;
 	auto stride = args->Stride;
 
 	stats->DrawCalls++;
@@ -1026,7 +1027,6 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 		if (buffer != 0)
 		{
 			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-			size_t offset = 0;
 			for (int i = 0; i < drawcount; i++)
 			{
 				glDrawElementsIndirect(m, indexType, (const GLvoid*)offset);
@@ -1064,7 +1064,7 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 		if (buffer != 0)
 		{
 			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-			glMultiDrawElementsIndirect(m, indexType, nullptr, drawcount, stride);
+			glMultiDrawElementsIndirect(m, indexType, (const void*)offset, drawcount, stride);
 		}
 		else
 		{

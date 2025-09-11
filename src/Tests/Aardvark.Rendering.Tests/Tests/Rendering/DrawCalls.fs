@@ -91,7 +91,7 @@ module DrawCalls =
             Expect.equal (rt.InPlaceUpdates.GetOrDefault ResourceKind.DrawCalls) 0 "Unexpected updated draw calls"
             Expect.equal (rt.ReplacedResources.GetOrDefault ResourceKind.DrawCalls) 0 "Unexpected replaced draw calls"
 
-        let indirect (withOffsetAndStride: bool) (correctLayout: bool) (runtime: IRuntime) =
+        let indirect (indexed: bool) (withOffsetAndStride: bool) (correctLayout: bool) (runtime: IRuntime) =
             use signature =
                 runtime.CreateFramebufferSignature([
                     DefaultSemantic.Colors, TextureFormat.Rgba32f
@@ -108,6 +108,12 @@ module DrawCalls =
                 )
                 |> Array.concat
 
+            let indices =
+                if indexed then
+                    Array.init positions.Length id
+                else
+                    null
+
             let indirectBuffer =
                 let array =
                     Array.init colors.Length (fun i ->
@@ -119,8 +125,8 @@ module DrawCalls =
                         )
                     )
 
-                let indexed =
-                    if not correctLayout then
+                let drawCallsIndexed =
+                    if not correctLayout <> indexed then
                         for i = 0 to array.Length - 1 do DrawCallInfo.ToggleIndexed &array.[i]
                         true
                     else
@@ -130,13 +136,14 @@ module DrawCalls =
                     let padded = array |> Array.collect (fun call -> [|  Unchecked.defaultof<_>; DrawCallInfoPadded<uint64> call |])
                     let offset = uint64 sizeof<DrawCallInfoPadded<uint64>>
                     let stride = sizeof<DrawCallInfoPadded<uint64>> * 2
-                    IndirectBuffer.ofBuffer indexed offset stride array.Length (ArrayBuffer padded)
+                    IndirectBuffer.ofBuffer drawCallsIndexed offset stride array.Length (ArrayBuffer padded)
                 else
-                    IndirectBuffer.ofArray' indexed 0 array.Length array
+                    IndirectBuffer.ofArray' drawCallsIndexed 0 array.Length array
 
             use task =
                 Sg.indirectDraw' IndexedGeometryMode.TriangleStrip indirectBuffer
                 |> Sg.vertexArray DefaultSemantic.Positions positions
+                |> if indexed then Sg.index' indices else id
                 |> Sg.instanceArray DefaultSemantic.Colors colors
                 |> Sg.shader {
                     do! DefaultSurfaces.vertexColor
@@ -166,9 +173,14 @@ module DrawCalls =
                 "Automatic FaceVertexCount update (non-indexed)",                           Cases.faceVertexCountUpdate false
                 "Automatic FaceVertexCount update (indexed)",                               Cases.faceVertexCountUpdate true
 
-            "Indirect array",                                                               Cases.indirect false true
-            "Indirect array (with offset and stride)",                                      Cases.indirect true true
-            "Indirect array (automatic layout adjustment)",                                 Cases.indirect false false
-            "Indirect array (with offset and stride, automatic layout adjustment)",         Cases.indirect true false
+            "Indirect array (non-indexed)",                                                          Cases.indirect false false true
+            "Indirect array (non-indexed, with offset and stride)",                                  Cases.indirect false true true
+            "Indirect array (non-indexed, automatic layout adjustment)",                             Cases.indirect false false false
+            "Indirect array (non-indexed, with offset and stride, automatic layout adjustment)",     Cases.indirect false true false
+
+            "Indirect array (indexed)",                                                              Cases.indirect true false true
+            "Indirect array (indexed, with offset and stride)",                                      Cases.indirect true true true
+            "Indirect array (indexed, automatic layout adjustment)",                                 Cases.indirect true false false
+            "Indirect array (indexed, with offset and stride, automatic layout adjustment)",         Cases.indirect true true false
         ]
         |> prepareCases backend "Draw calls"
