@@ -7,6 +7,8 @@ open System
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 
+#nowarn "51"
+
 /// Interface for adaptive buffers, which can be resized and written to in an imperative fashion.
 type IAdaptiveBuffer =
     inherit IAdaptiveResource<IBackendBuffer>
@@ -40,6 +42,30 @@ type IAdaptiveBuffer =
 type AdaptiveBufferExtensions private() =
 
     /// <summary>
+    /// Writes data to the buffer.
+    /// </summary>
+    /// <param name="this">The buffer to write to.</param>
+    /// <param name="data">The data to write.</param>
+    /// <param name="offset">The offset (in bytes) into the buffer.</param>
+    /// <param name="count">The number of elements to write. Default is 1.</param>
+    [<Extension>]
+    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : nativeptr<'T>, offset : uint64,
+                                                [<Optional; DefaultParameterValue(1)>] count : int) =
+        this.Write(data.Address, offset, uint64 count * uint64 sizeof<'T>)
+
+    /// <summary>
+    /// Writes data to the buffer.
+    /// </summary>
+    /// <param name="this">The buffer to write to.</param>
+    /// <param name="data">The data to write.</param>
+    /// <param name="offset">The offset (in bytes) into the buffer.</param>
+    /// <param name="count">The number of elements to write. Default is 1.</param>
+    [<Extension>]
+    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T byref, offset : uint64,
+                                                [<Optional; DefaultParameterValue(1)>] count : int) =
+        this.Write(&&data, offset, count)
+
+    /// <summary>
     /// Writes an array to the buffer.
     /// </summary>
     /// <param name="this">The buffer to write to.</param>
@@ -59,17 +85,17 @@ type AdaptiveBufferExtensions private() =
     /// <param name="data">The array to write.</param>
     /// <param name="offset">The offset (in bytes) into the buffer.</param>
     /// <param name="start">The first index of the data array to write.</param>
-    /// <param name="length">The number of elements to write.</param>
+    /// <param name="count">The number of elements to write.</param>
     [<Extension>]
-    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T[], offset : uint64, start : int, length : int) =
+    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T[], offset : uint64, start : int, count : int) =
         assert (start >= 0 && start < data.Length)
-        assert (start + length <= data.Length)
+        assert (start + count <= data.Length)
 
-        if length > 0 then
+        if count > 0 then
             (start, data) ||> NativePtr.pinArri (fun src ->
-                let size = uint64 length * uint64 sizeof<'T>
+                let size = uint64 count * uint64 sizeof<'T>
                 this.Write(src.Address, offset, size)
-        )
+            )
 
     /// <summary>
     /// Writes an array to the buffer.
@@ -105,13 +131,18 @@ type AdaptiveBufferExtensions private() =
 /// Adaptive buffer that can be resized and written to in an imperative fashion.
 type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : uint64,
                     [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
-                    [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
+                    [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage,
+                    [<Optional; DefaultParameterValue(false)>] discardOnResize : bool) =
     inherit AdaptiveResource<IBackendBuffer>()
 
     let mutable name = null
     let mutable size = sizeInBytes
     let mutable handle : ValueOption<IBackendBuffer> = ValueNone
-    let usage = usage ||| BufferUsage.Read
+    let usage =
+        if discardOnResize then
+            usage ||| BufferUsage.Write
+        else
+            usage ||| BufferUsage.ReadWrite
 
     abstract member CreateHandle : size: uint64 * usage: BufferUsage * storage: BufferStorage -> IBackendBuffer
     default _.CreateHandle(size, usage, storage) = runtime.CreateBuffer(size, usage, storage)
@@ -160,7 +191,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : uint64,
                 size <- sizeInBytes
 
                 if forceImmediate then
-                    x.ComputeHandle(false) |> ignore
+                    x.ComputeHandle(discardOnResize) |> ignore
 
                 transact x.MarkOutdated
         )
@@ -174,7 +205,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : uint64,
     member x.Write(data : nativeint, offset : uint64, sizeInBytes : uint64) =
         lock x (fun _ ->
             assert (offset + sizeInBytes <= x.Size)
-            let handle = x.ComputeHandle(false)
+            let handle = x.ComputeHandle(discardOnResize)
             runtime.Upload(data, handle, offset, sizeInBytes)
         )
 
@@ -187,7 +218,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : uint64,
         size <- 0UL
 
     override x.Compute(_, _) =
-        x.ComputeHandle(false)
+        x.ComputeHandle(discardOnResize)
 
     interface IAdaptiveBuffer with
         member x.Runtime = runtime
