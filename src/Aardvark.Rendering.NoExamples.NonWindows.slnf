@@ -5,6 +5,7 @@
       "Aardvark.GPGPU\\Aardvark.GPGPU.fsproj",
       "Aardvark.Rendering.Common\\Aardvark.Rendering.Common.fsproj",
       "Aardvark.Rendering.GL\\Aardvark.Rendering.GL.fsproj",
+      "Aardvark.Rendering.ImGui\\Aardvark.Rendering.ImGui.fsproj",
       "Aardvark.Rendering.Text\\Aardvark.Rendering.Text.fsproj",
       "Aardvark.Rendering.Vulkan.Wrapper\\Aardvark.Rendering.Vulkan.Wrapper.fsproj",
       "Aardvark.Rendering.Vulkan\\Aardvark.Rendering.Vulkan.fsproj",

@@ -112,6 +112,7 @@ module Utilities =
     type ISimpleRenderWindow =
         inherit IDisposable
 
+        abstract member Control : IRenderControl
         abstract member Runtime : IRuntime
         abstract member Sizes : aval<V2i>
         abstract member Samples : int
@@ -153,6 +154,7 @@ module Utilities =
             win.Dispose()  // Disposes OpenTK.GameWindow and OpenTK.GraphicsContext (depending on backend)
             x.Release() // Application.Dispose / Runtime.Dispose + Context.Dispose
 
+        member x.Control = win :> IRenderControl
         member x.Runtime = win.Runtime
         member x.Sizes = win.Sizes
         member x.Samples = win.Samples
@@ -182,6 +184,7 @@ module Utilities =
             member x.Cursor
                 with get() = x.Cursor
                 and set c = x.Cursor <- c
+            member x.Control = x.Control
             member x.Runtime = x.Runtime
             member x.Sizes = x.Sizes
             member x.Samples = x.Samples
