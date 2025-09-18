@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>Aardvark.Rendering.ImGui</AssemblyName>
     <OutputType>Library</OutputType>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
@@ -16,9 +16,9 @@
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Utilities.fs" />
     <None Include="API.fsx" />
     <Compile Include="API.fs" />
-    <Compile Include="Utilities.fs" />
     <Compile Include="Shader.fs" />
     <Compile Include="Textures.fs" />
     <Compile Include="DrawList.fs" />

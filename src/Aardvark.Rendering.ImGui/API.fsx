@@ -5,6 +5,8 @@ open System.Reflection
 open System.Text
 open System.Text.RegularExpressions
 
+// Generates a simplified and Aardvark-friendly API for Hexa.NET.ImGui
+
 [<AutoOpen>]
 module Constants =
 
@@ -49,6 +51,11 @@ module Utilities =
         [<return: Struct>]
         let (|UInt8|_|) (typ: Type) =
             if typ = typeof<uint8> then ValueSome ()
+            else ValueNone
+
+        [<return: Struct>]
+        let (|Int32|_|) (typ: Type) =
+            if typ = typeof<int32> then ValueSome ()
             else ValueNone
 
         [<return: Struct>]
@@ -186,7 +193,7 @@ module Utilities =
 
 module ApiParser =
 
-    module private ApiOverrides =
+    module ApiOverrides =
 
         let preferRef (_apiName: string) (paramName: string) =
             paramName <> "buf"
@@ -262,6 +269,43 @@ module ApiParser =
             d.["TextColoredV"]   <- [ "col" ]
             d
 
+        type InputTextApi =
+            {
+                Buf         : string
+                BufSize     : string
+                BufSizeType : Type
+                Text        : string
+                Last        : string  // last regular parameter, after which flags and callback follow
+                Flags       : string
+                Callback    : string
+            }
+
+            static member Null =
+                { Buf         = null
+                  BufSize     = null
+                  BufSizeType = null
+                  Text        = null
+                  Last        = null
+                  Flags       = null
+                  Callback    = null }
+
+            static member Default =
+                { Buf         = "buf"
+                  BufSize     = "bufSize"
+                  BufSizeType = typeof<unativeint>
+                  Text        = "text"
+                  Last        = "text"
+                  Flags       = "flags"
+                  Callback    = "callback" }
+
+        let inputTextApis =
+            let d = Dictionary<string, InputTextApi>()
+            d.["InputText"]          <- InputTextApi.Default
+            d.["InputTextEx"]        <- { InputTextApi.Default with Last = "sizeArg"; BufSizeType = typeof<int> }
+            d.["InputTextMultiline"] <- { InputTextApi.Default with Last = "size" }
+            d.["InputTextWithHint"]  <- InputTextApi.Default
+            d
+
     [<CustomEquality; NoComparison>]
     type ApiType =
         | Prim   of Type
@@ -278,11 +322,8 @@ module ApiParser =
         static member String = Prim typeof<string>
         static member Void   = Prim typeof<Void>
 
-        member this.IsByRef =
-            match this with Ref _ -> true | _ -> false
-
-        member this.IsArray =
-            match this with Arr _ -> true | _ -> false
+        member this.IsByRef = match this with Ref _ -> true | _ -> false
+        member this.IsArray = match this with Arr _ -> true | _ -> false
 
         member this.Equals(other: ApiType) =
             match this, other with
@@ -422,14 +463,14 @@ module ApiParser =
         new (apiName: string, signature: ApiSignature) =
             ApiOverload(apiName, signature, List())
 
-        member _.Signature      = signature
-        member _.Methods        = methods.AsReadOnly()
-        member _.Vectorized     = ApiOverrides.vectorizedApis.GetValueOrDefault(apiName, (null, 1))
-        member _.RangeParameter = ApiOverrides.rangeApis.GetValueOrDefault(apiName, null)
-        member _.ReturnString   = methods.Exists (_.ReturnType >> (=) typeof<string>)
-
-        member this.IsVectorized =
-            snd this.Vectorized > 1
+        member _.Signature       = signature
+        member _.Methods         = methods.AsReadOnly()
+        member _.Vectorized      = ApiOverrides.vectorizedApis.GetValueOrDefault(apiName, (null, 1))
+        member this.IsVectorized = snd this.Vectorized > 1
+        member _.RangeParameter  = ApiOverrides.rangeApis.GetValueOrDefault(apiName, null)
+        member _.InputText       = ApiOverrides.inputTextApis.GetValueOrDefault(apiName, ApiOverrides.InputTextApi.Null)
+        member this.IsInputText  = this.InputText <> ApiOverrides.InputTextApi.Null
+        member _.ReturnString    = methods.Exists (_.ReturnType >> (=) typeof<string>)
 
         member this.IsColorParameter(paramName: string) =
             ApiOverrides.colorApis.GetValueOrDefault(apiName, [])
@@ -565,6 +606,28 @@ module ApiParser =
 
                     result.ToArray()
 
+                let replaceInputText (adaptiveInOut: bool) (parameters: ApiParameter[]) =
+                    if basicOverload.IsInputText then
+                        let result = ResizeArray<ApiParameter>()
+                        let inputText = basicOverload.InputText
+
+                        let mutable i = 0
+                        while i < parameters.Length do
+                            let j = min (i + 1) (parameters.Length - 1)
+                            let pi = parameters.[i]
+                            let pj = parameters.[j]
+
+                            if pi.Name = inputText.Buf && pj.Name = inputText.BufSize then
+                                result.Add { pi with Name = inputText.Text; Type = if adaptiveInOut then CVal ApiType.String else Ref ApiType.String }
+                                i <- i + 2
+                            else
+                                result.Add pi
+                                i <- i + 1
+
+                        result.ToArray()
+                    else
+                        parameters
+
                 let getFinalSignature (colorType: Type) (adaptiveInOut: bool) =
                     let returnType =
                         if basicOverload.ReturnString then ApiType.String
@@ -577,6 +640,7 @@ module ApiParser =
                         |> replaceColors colorType
                         |> replaceRanges
                         |> replaceArrays
+                        |> replaceInputText adaptiveInOut
 
                     { ReturnType = returnType; Parameters = parameters }
 
@@ -714,6 +778,14 @@ module Generator =
                         | Range t | Vec (t, _) | Col (t, _) -> $"NativePtr.cast<_, {Type.toString t}> "
                         | _ -> ""
 
+                    let hasParam name =
+                        parameters |> Array.exists (_.Name >> (=) name)
+
+                    let addFlagsAndCallback() =
+                        if not <| hasParam overload.InputText.Flags then
+                            arguments.Add "ImGuiInputTextFlags.CallbackResize"
+                            if not <| hasParam overload.InputText.Callback then arguments.Add "TextBuffer.Shared.InputTextResizeCallback"
+
                     for p in parameters do
                         let n = p.Name
 
@@ -729,6 +801,21 @@ module Generator =
                             fixedArrays.Add n
                             arguments.Add $"{getPtrCast t}{n}Pinned"
                             arguments.Add $"{n}.Length"
+
+                        | Prim _ when overload.IsInputText && n = overload.InputText.Flags ->
+                            arguments.Add $"{n} ||| ImGuiInputTextFlags.CallbackResize"
+                            if not <| hasParam overload.InputText.Callback then arguments.Add "TextBuffer.Shared.InputTextResizeCallback"
+
+                        | Ref (Prim String) | CVal (Prim String) when overload.IsInputText ->
+                            let toSize = match overload.InputText.BufSizeType with Int32 -> "" | t -> $"{Type.toString t} "
+                            isAdaptive <- not p.Type.IsByRef
+                            arguments.Add "TextBuffer.Shared.Handle"
+                            arguments.Add $"{toSize}TextBuffer.Shared.Size"
+                            if n = overload.InputText.Last then addFlagsAndCallback()
+
+                        | Prim _ when overload.IsInputText && n = overload.InputText.Last ->
+                            arguments.Add n
+                            addFlagsAndCallback()
 
                         | Ref (Range _ as t) ->
                             arguments.Add $"{getPtrCast t}&&{n}"
@@ -764,6 +851,16 @@ module Generator =
                         for s in localState do
                             fn $"let mutable {s.Name}State = {s.Name}{s.ToState}"
 
+                        if overload.IsInputText then
+                            if hasParam overload.InputText.Callback then
+                                blk $"let {overload.InputText.Callback} data =" (fun _ ->
+                                    fn "TextBuffer.Shared.InputTextResizeCallback data |> ignore"
+                                    fn $"{overload.InputText.Callback}.Invoke data"
+                                )
+
+                            let getter = if isAdaptive then ".Value" else ""
+                            fn $"TextBuffer.Shared.Text <- {overload.InputText.Text}{getter}"
+
                         let invoke =
                             let arglist = arguments.ToArray() |> String.concat ", "
 
@@ -779,13 +876,17 @@ module Generator =
                             for s in localState do
                                 fn $"{s.Name}{s.Setter} <- {s.Name}State{s.FromState}"
 
+                            if overload.IsInputText then
+                                let setter = if isAdaptive then ".Value" else ""
+                                fn $"{overload.InputText.Text}{setter} <- TextBuffer.Shared.Text"
+
                         let convertResult =
                             match signature.ReturnType with
                             | Vec (Float, (2 | 3 | 4 as d)) -> $"result.ToV{d}f()"
                             | Ptr (Vec _) -> "NativePtr.cast result"
                             | _ -> null
 
-                        if signature.ReturnType <> ApiType.Void && (localState.Count > 0 || convertResult <> null) then
+                        if signature.ReturnType <> ApiType.Void && (localState.Count > 0 || convertResult <> null || overload.IsInputText) then
                             fn $"let result = {invoke}"
 
                             if signature.ReturnType = ApiType.Bool then

@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.ImGui
 
 open Aardvark.Base
+open System
 open System.Text
 open FSharp.NativeInterop
 open Hexa.NET.ImGui
@@ -10,6 +11,41 @@ open Hexa.NET.ImGui.Backends.GLFW
 
 [<AutoOpen>]
 module internal Utilities =
+
+    type TextBuffer() =
+        let mutable handle = NativePtr.zero<uint8>
+        let mutable currentSize = 0
+        static let shared = TextBuffer()
+
+        static member Shared = shared
+        member _.Handle = handle
+        member _.Size = currentSize
+
+        member this.Text
+            with get() =
+                let data = Span<uint8>(NativePtr.toVoidPtr handle, currentSize)
+                let length = max 0 (data.IndexOf 0uy)
+                Encoding.UTF8.GetString(handle, length)
+
+            and set (text: string) =
+                use pText = fixed text
+                let size = Encoding.UTF8.GetMaxByteCount (text.Length + 1)
+                this.Resize size
+                let length = Encoding.UTF8.GetBytes(pText, text.Length, handle, size)
+                handle.[length] <- 0uy
+
+        member _.Resize(size: int) =
+            if currentSize <> size then
+                NativePtr.free handle
+                handle <- NativePtr.alloc<uint8> size
+                currentSize <- size
+
+        member this.InputTextResizeCallback(data: nativeptr<ImGuiInputTextCallbackData>) =
+            let mutable data = NativePtr.toByRef data
+            if data.EventFlag = ImGuiInputTextFlags.CallbackResize then
+                this.Resize data.BufSize
+                data.Buf <- this.Handle
+            0
 
     module String =
 

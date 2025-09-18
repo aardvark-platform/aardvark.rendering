@@ -5943,116 +5943,584 @@ type ImGui =
         Hexa.NET.ImGui.ImGui.InputScalarN(label, dataType, pData, components, format, flags)
 
 
-    static member InputText(label: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputText(label, buf, bufSize, flags, callback, userData)
+    static member InputText(label: string, text: byref<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputText(label: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : bool =
-        Hexa.NET.ImGui.ImGui.InputText(label, buf, bufSize, flags, callback)
+    static member InputText(label: string, text: cval<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
-    static member InputText(label: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputText(label, buf, bufSize, flags)
+    static member InputText(label: string, text: byref<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputText(label: string, buf: nativeptr<uint8>, bufSize: unativeint) : bool =
-        Hexa.NET.ImGui.ImGui.InputText(label, buf, bufSize)
+    static member InputText(label: string, text: cval<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
-    static member InputText(label: string, buf: nativeptr<uint8>, bufSize: unativeint, callback: ImGuiInputTextCallback) : bool =
-        Hexa.NET.ImGui.ImGui.InputText(label, buf, bufSize, callback)
+    static member InputText(label: string, text: byref<string>, flags: ImGuiInputTextFlags) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputText(label: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputText(label, buf, bufSize, flags, userData)
+    static member InputText(label: string, text: cval<string>, flags: ImGuiInputTextFlags) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
-    static member InputText(label: string, buf: nativeptr<uint8>, bufSize: unativeint, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputText(label, buf, bufSize, userData)
+    static member InputText(label: string, text: byref<string>) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputText(label: string, buf: nativeptr<uint8>, bufSize: unativeint, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputText(label, buf, bufSize, callback, userData)
+    static member InputText(label: string, text: cval<string>) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputText(label: string, text: byref<string>, callback: ImGuiInputTextCallback) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputText(label: string, text: cval<string>, callback: ImGuiInputTextCallback) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputText(label: string, text: byref<string>, flags: ImGuiInputTextFlags, userData: voidptr) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputText(label: string, text: cval<string>, flags: ImGuiInputTextFlags, userData: voidptr) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputText(label: string, text: byref<string>, userData: voidptr) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputText(label: string, text: cval<string>, userData: voidptr) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputText(label: string, text: byref<string>, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputText(label: string, text: cval<string>, callback: ImGuiInputTextCallback, userData: voidptr) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputText(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
 
-    static member InputTextEx(label: string, hint: string, buf: nativeptr<uint8>, bufSize: int32, sizeArg: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, buf, bufSize, System.Numerics.Vector2.FromV2f(sizeArg), flags, callback, userData)
+    static member InputTextEx(label: string, hint: string, text: byref<string>, sizeArg: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, TextBuffer.Shared.Handle, TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(sizeArg), flags ||| ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputTextEx(label: string, hint: string, buf: nativeptr<uint8>, bufSize: int32, sizeArg: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, buf, bufSize, System.Numerics.Vector2.FromV2f(sizeArg), flags, callback)
+    static member InputTextEx(label: string, hint: string, text: cval<string>, sizeArg: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, TextBuffer.Shared.Handle, TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(sizeArg), flags ||| ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
-    static member InputTextEx(label: string, hint: string, buf: nativeptr<uint8>, bufSize: int32, sizeArg: V2f, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, buf, bufSize, System.Numerics.Vector2.FromV2f(sizeArg), flags)
+    static member InputTextEx(label: string, hint: string, text: byref<string>, sizeArg: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, TextBuffer.Shared.Handle, TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(sizeArg), flags ||| ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputTextEx(label: string, hint: string, buf: nativeptr<uint8>, bufSize: int32, sizeArg: V2f, flags: ImGuiInputTextFlags, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, buf, bufSize, System.Numerics.Vector2.FromV2f(sizeArg), flags, userData)
+    static member InputTextEx(label: string, hint: string, text: cval<string>, sizeArg: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, TextBuffer.Shared.Handle, TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(sizeArg), flags ||| ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
+    static member InputTextEx(label: string, hint: string, text: byref<string>, sizeArg: V2f, flags: ImGuiInputTextFlags) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, TextBuffer.Shared.Handle, TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(sizeArg), flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, size: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, System.Numerics.Vector2.FromV2f(size), flags, callback, userData)
+    static member InputTextEx(label: string, hint: string, text: cval<string>, sizeArg: V2f, flags: ImGuiInputTextFlags) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, TextBuffer.Shared.Handle, TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(sizeArg), flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, size: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, System.Numerics.Vector2.FromV2f(size), flags, callback)
+    static member InputTextEx(label: string, hint: string, text: byref<string>, sizeArg: V2f, flags: ImGuiInputTextFlags, userData: voidptr) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, TextBuffer.Shared.Handle, TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(sizeArg), flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, size: V2f, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, System.Numerics.Vector2.FromV2f(size), flags)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, size: V2f) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, System.Numerics.Vector2.FromV2f(size))
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, flags)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, size: V2f, callback: ImGuiInputTextCallback) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, System.Numerics.Vector2.FromV2f(size), callback)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, callback: ImGuiInputTextCallback) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, callback)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, flags, callback)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, size: V2f, flags: ImGuiInputTextFlags, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, System.Numerics.Vector2.FromV2f(size), flags, userData)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, size: V2f, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, System.Numerics.Vector2.FromV2f(size), userData)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, userData)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, flags, userData)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, size: V2f, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, System.Numerics.Vector2.FromV2f(size), callback, userData)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, callback, userData)
-
-    static member InputTextMultiline(label: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextMultiline(label, buf, bufSize, flags, callback, userData)
+    static member InputTextEx(label: string, hint: string, text: cval<string>, sizeArg: V2f, flags: ImGuiInputTextFlags, userData: voidptr) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextEx(label, hint, TextBuffer.Shared.Handle, TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(sizeArg), flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
 
-    static member InputTextWithHint(label: string, hint: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, buf, bufSize, flags, callback, userData)
+    static member InputTextMultiline(label: string, text: byref<string>, size: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), flags ||| ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputTextWithHint(label: string, hint: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, buf, bufSize, flags, callback)
+    static member InputTextMultiline(label: string, text: cval<string>, size: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), flags ||| ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
-    static member InputTextWithHint(label: string, hint: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, buf, bufSize, flags)
+    static member InputTextMultiline(label: string, text: byref<string>, size: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), flags ||| ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputTextWithHint(label: string, hint: string, buf: nativeptr<uint8>, bufSize: unativeint) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, buf, bufSize)
+    static member InputTextMultiline(label: string, text: cval<string>, size: V2f, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), flags ||| ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
-    static member InputTextWithHint(label: string, hint: string, buf: nativeptr<uint8>, bufSize: unativeint, callback: ImGuiInputTextCallback) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, buf, bufSize, callback)
+    static member InputTextMultiline(label: string, text: byref<string>, size: V2f, flags: ImGuiInputTextFlags) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputTextWithHint(label: string, hint: string, buf: nativeptr<uint8>, bufSize: unativeint, flags: ImGuiInputTextFlags, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, buf, bufSize, flags, userData)
+    static member InputTextMultiline(label: string, text: cval<string>, size: V2f, flags: ImGuiInputTextFlags) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
-    static member InputTextWithHint(label: string, hint: string, buf: nativeptr<uint8>, bufSize: unativeint, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, buf, bufSize, userData)
+    static member InputTextMultiline(label: string, text: byref<string>, size: V2f) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size))
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
 
-    static member InputTextWithHint(label: string, hint: string, buf: nativeptr<uint8>, bufSize: unativeint, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
-        Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, buf, bufSize, callback, userData)
+    static member InputTextMultiline(label: string, text: cval<string>, size: V2f) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size))
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, flags: ImGuiInputTextFlags) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, flags: ImGuiInputTextFlags) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, size: V2f, callback: ImGuiInputTextCallback) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), callback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, size: V2f, callback: ImGuiInputTextCallback) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), callback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, callback: ImGuiInputTextCallback) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, callback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, callback: ImGuiInputTextCallback) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, callback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, size: V2f, flags: ImGuiInputTextFlags, userData: voidptr) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, size: V2f, flags: ImGuiInputTextFlags, userData: voidptr) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, size: V2f, userData: voidptr) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, size: V2f, userData: voidptr) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, userData: voidptr) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, userData: voidptr) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, flags: ImGuiInputTextFlags, userData: voidptr) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, flags: ImGuiInputTextFlags, userData: voidptr) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, size: V2f, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), callback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, size: V2f, callback: ImGuiInputTextCallback, userData: voidptr) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, System.Numerics.Vector2.FromV2f(size), callback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, callback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, callback: ImGuiInputTextCallback, userData: voidptr) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, callback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextMultiline(label: string, text: byref<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextMultiline(label: string, text: cval<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextMultiline(label, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+
+    static member InputTextWithHint(label: string, hint: string, text: byref<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextWithHint(label: string, hint: string, text: cval<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback, userData: voidptr) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextWithHint(label: string, hint: string, text: byref<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextWithHint(label: string, hint: string, text: cval<string>, flags: ImGuiInputTextFlags, callback: ImGuiInputTextCallback) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextWithHint(label: string, hint: string, text: byref<string>, flags: ImGuiInputTextFlags) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextWithHint(label: string, hint: string, text: cval<string>, flags: ImGuiInputTextFlags) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextWithHint(label: string, hint: string, text: byref<string>) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextWithHint(label: string, hint: string, text: cval<string>) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextWithHint(label: string, hint: string, text: byref<string>, callback: ImGuiInputTextCallback) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextWithHint(label: string, hint: string, text: cval<string>, callback: ImGuiInputTextCallback) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, callback)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextWithHint(label: string, hint: string, text: byref<string>, flags: ImGuiInputTextFlags, userData: voidptr) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextWithHint(label: string, hint: string, text: cval<string>, flags: ImGuiInputTextFlags, userData: voidptr) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, flags ||| ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextWithHint(label: string, hint: string, text: byref<string>, userData: voidptr) : bool =
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextWithHint(label: string, hint: string, text: cval<string>, userData: voidptr) : unit =
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, TextBuffer.Shared.InputTextResizeCallback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
+
+    static member InputTextWithHint(label: string, hint: string, text: byref<string>, callback: ImGuiInputTextCallback, userData: voidptr) : bool =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text <- TextBuffer.Shared.Text
+        result
+
+    static member InputTextWithHint(label: string, hint: string, text: cval<string>, callback: ImGuiInputTextCallback, userData: voidptr) : unit =
+        let callback data =
+            TextBuffer.Shared.InputTextResizeCallback data |> ignore
+            callback.Invoke data
+        TextBuffer.Shared.Text <- text.Value
+        let result = Hexa.NET.ImGui.ImGui.InputTextWithHint(label, hint, TextBuffer.Shared.Handle, unativeint TextBuffer.Shared.Size, ImGuiInputTextFlags.CallbackResize, callback, userData)
+        if result then
+            text.Value <- TextBuffer.Shared.Text
 
 
     static member InsertChars(self: ImGuiInputTextCallbackDataPtr, pos: int32, text: string, textEnd: string) : unit =
