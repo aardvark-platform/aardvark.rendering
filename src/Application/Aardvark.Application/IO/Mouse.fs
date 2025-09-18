@@ -140,7 +140,8 @@ type EventMouse(autoGenerateClickEvents : bool) =
         transact (fun () -> setPos p)
         moveEvent.Emit ((last, p))
 
-    
+    member x.IsDown button = getDown button :> aval<_>
+
     member x.Use(o : IMouse) =
         let pos = o.Position
         let loc() = AVal.force pos
@@ -163,10 +164,9 @@ type EventMouse(autoGenerateClickEvents : bool) =
 
     interface IMouse with
         member x.Position = position :> aval<_>
-        member x.IsDown button = getDown button :> aval<_>
+        member x.IsDown button = x.IsDown button
         member x.TotalScroll = scroll :> aval<_>
         member x.Inside = inside :> aval<_>
-        
         member x.Down = downEvent :> IEvent<_>
         member x.Up = upEvent :> IEvent<_>
         member x.Move = moveEvent :> IEvent<_>

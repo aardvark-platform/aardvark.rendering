@@ -69,6 +69,8 @@ type Instance internal (control: IRenderControl) =
     let afterRenderCb =
         window.AfterRender.Subscribe(fun _ ->
             window.RenderAsFastAsPossible <- true
+            window.DispatchKeyboardEvents <- not io.WantCaptureKeyboard
+            window.DispatchMouseEvents    <- not io.WantCaptureMouse
         )
 
     member internal _.Scene = state.Scene

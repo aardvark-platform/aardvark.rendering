@@ -908,11 +908,8 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
     let keyboard = Aardvark.Application.EventKeyboard()
     let mouse = Aardvark.Application.EventMouse(true)
 
-    // let signature =
-    //     app.Runtime.CreateFramebufferSignature(samples, [
-    //         DefaultSemantic.Colors, RenderbufferFormat.Rgba8
-    //         DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
-    //     ])
+    let mutable dispatchKeyboardEvents = true
+    let mutable dispatchMouseEvents = true
 
     let currentSize =
         let s = getResizeEvent()
@@ -966,39 +963,39 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
         glfw.SetKeyCallback(win, GlfwCallbacks.KeyCallback(fun w k c a m ->
             let name = getKeyName k c
             match Translations.tryGetKey k c name with
-            | ValueSome k -> 
+            | ValueSome k ->
                 match a with
-                | InputAction.Press -> 
+                | InputAction.Press when dispatchKeyboardEvents ->
                     keyboard.KeyDown(k)
                     keyDown.Trigger(KeyEvent(k, c, a, m, name))
-                | InputAction.Repeat -> 
+                | InputAction.Repeat when dispatchKeyboardEvents ->
                     keyboard.KeyDown(k)
                     keyDown.Trigger(KeyEvent(k,c, a, m, name))
-                | InputAction.Release -> 
+                | InputAction.Release when dispatchKeyboardEvents || AVal.force <| keyboard.IsDown k ->
                     keyboard.KeyUp(k)
                     keyUp.Trigger(KeyEvent(k, c, a, m, name))
                 | _ -> ()
             | ValueNone ->
-                ()       
+                ()
         ))
 
     let _inputCallback =
         glfw.SetCharCallback(win, GlfwCallbacks.CharCallback (fun w c ->
-            let str = System.Text.Encoding.UTF32.GetString(System.BitConverter.GetBytes(c))
-            for c in str do keyboard.KeyPress c
-            keyInput.Trigger(str)
+            if dispatchKeyboardEvents then
+                let str = System.Text.Encoding.UTF32.GetString(System.BitConverter.GetBytes(c))
+                for c in str do keyboard.KeyPress c
+                keyInput.Trigger(str)
         ))
 
 
     let _moveCallback =
         glfw.SetCursorPosCallback(win, GlfwCallbacks.CursorPosCallback(fun w a b ->
-            let v = 
+            let visible =
                 glfw.GetWindowAttrib(w, WindowAttributeGetter.Visible) &&
                 not (glfw.GetWindowAttrib(w, WindowAttributeGetter.Iconified))
-            if v then
+            if visible && dispatchMouseEvents then
                 let sfbo = framebufferSize()
                 let p = V2d(a,b) * contentScale()
-                
                 let pp = PixelPosition(V2i(p.Round()), Box2i(V2i.Zero, sfbo))
                 mouse.Move(pp)
                 lastMousePosition <- p
@@ -1013,25 +1010,26 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
             let pos = pos * contentScale()
             let evt = MouseEvent(Translations.toMouseButton button, pos, action, modifiers)
             match action with
-            | InputAction.Press -> 
+            | InputAction.Press when dispatchMouseEvents ->
                 let pp = PixelPosition(V2i(pos.Round()), Box2i(V2i.Zero, sfbo))
                 mouse.Down(pp, evt.Button)
-                mouseDown.Trigger evt    
-            | InputAction.Release -> 
+                mouseDown.Trigger evt
+            | InputAction.Release when dispatchMouseEvents || AVal.force <| mouse.IsDown evt.Button ->
                 let pp = PixelPosition(V2i(pos.Round()), Box2i(V2i.Zero, sfbo))
                 mouse.Up(pp, evt.Button)
                 mouseUp.Trigger evt
-            | _ -> ()       
-        ))    
+            | _ -> ()
+        ))
 
     let _wheelCallback =
         glfw.SetScrollCallback(win, GlfwCallbacks.ScrollCallback(fun w dx dy ->
-            let mutable pos = V2d.Zero
-            glfw.GetCursorPos(win, &pos.X, &pos.Y)
-            let pp = getPixelPostion()
-            mouse.Scroll(pp, dy * 120.0)
-            mouseWheel.Trigger(V2d(dx, dy) * 120.0)
-        ))    
+            if dispatchMouseEvents then
+                let mutable pos = V2d.Zero
+                glfw.GetCursorPos(win, &pos.X, &pos.Y)
+                let pp = getPixelPostion()
+                mouse.Scroll(pp, dy * 120.0)
+                mouseWheel.Trigger(V2d(dx, dy) * 120.0)
+        ))
 
     let _damagedCallback =
         glfw.SetWindowRefreshCallback(win, GlfwCallbacks.WindowRefreshCallback(fun w ->
@@ -1279,6 +1277,14 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
     member x.Keyboard = keyboard :> Aardvark.Application.IKeyboard
     member x.Mouse = mouse :> Aardvark.Application.IMouse
     member x.Gamepads = gamepads :> amap<_,_>
+
+    member _.DispatchMouseEvents
+        with get() = dispatchMouseEvents
+        and set v  = dispatchMouseEvents <- v
+
+    member _.DispatchKeyboardEvents
+        with get() = dispatchKeyboardEvents
+        and set v  = dispatchKeyboardEvents <- v
 
     member x.SubSampling
         with get() = 1.0

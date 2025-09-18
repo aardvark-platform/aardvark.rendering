@@ -80,8 +80,10 @@ type EventKeyboard() =
     default x.KeyPress(c : char) =
         input.Emit c
 
+    member x.IsDown (k : Keys) =
+        let r = isDown.GetOrAdd(k, fun k -> AVal.init (downKeys.Contains k))
+        r :> aval<_>
 
-    
     member x.Use(o : IKeyboard) =
         let subscriptions =
             [
@@ -94,20 +96,16 @@ type EventKeyboard() =
             member x.Dispose() = subscriptions |> List.iter (fun i -> i.Dispose()) 
         }
 
-        
     member x.ClaimsKeyEvents
         with get() = claimEvents
         and set v = claimEvents <- v
-
 
     interface IKeyboard with
         member x.Alt = alt.Value
         member x.Shift = shift.Value
         member x.Control = ctrl.Value
 
-        member x.IsDown (k : Keys) =
-            let r = isDown.GetOrAdd(k, fun k -> AVal.init (downKeys.Contains k))
-            r :> aval<_>
+        member x.IsDown (k : Keys) = x.IsDown k
 
         member x.KeyDown (k : Keys) =
             let e = downEvents.GetOrAdd(k, fun k -> EventSource())
