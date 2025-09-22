@@ -26,15 +26,19 @@ module Naive =
             }
             |> Sg.pass RenderPass.transparent
 
+        let clear =
+            runtime.CompileClear(framebuffer.signature, framebuffer.clearColor)
+
         let task =
             Sg.ofList [ opaque; transparent]
             |> Sg.viewTrafo scene.viewTrafo
             |> Sg.projTrafo scene.projTrafo
             |> Sg.compile runtime framebuffer.signature
 
-        member x.Task = task
+        member x.Task = RenderTask.ofList [clear; task]
 
         member x.Dispose() =
+            clear.Dispose()
             task.Dispose()
 
         interface ITechnique with

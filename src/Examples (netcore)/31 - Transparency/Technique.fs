@@ -10,6 +10,7 @@ type FramebufferInfo =
     {
         size        : aval<V2i>
         signature   : IFramebufferSignature
+        clearColor  : aval<C4b>
     }
 
 type Scene =

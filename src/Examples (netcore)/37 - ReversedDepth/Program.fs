@@ -1,21 +1,13 @@
 ﻿open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.Rendering.Text
+open Aardvark.Rendering.ImGui
 open FSharp.Data.Adaptive
-open FSharp.Data.Adaptive.Operators
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Application.Slim
 open System
 
 // This example illustrates how to implement reversed depth for better depth precision (including infinite far plane).
 // For an in-depth explanation see: https://developer.nvidia.com/content/depth-precision-visualized
-//
-// Controls:
-//   Enter - toggle reversed depth
-//   Space - toggle infinite far plane
-//   +/-   - adjust near plane
-//   R     - toggle rotation
 //
 // To use reverse depth to its fullest extent, you need to do this:
 //
@@ -39,14 +31,15 @@ module Semantic =
 
     module Literal =
 
-        [<Literal>]
-        let Rotation = "Rotation"
-
-        [<Literal>]
-        let RotationSpeed = "RotationSpeed"
+        let [<Literal>] Rotation      = "Rotation"
+        let [<Literal>] RotationSpeed = "RotationSpeed"
+        let [<Literal>] CubeColor     = "CubeColor"
+        let [<Literal>] ErrorColor    = "ErrorColor"
 
     let Rotation      = TypedSymbol<float> Literal.Rotation
     let RotationSpeed = Sym.ofString Literal.RotationSpeed
+    let CubeColor     = TypedSymbol<C3b> Literal.CubeColor
+    let ErrorColor    = TypedSymbol<C3b> Literal.ErrorColor
 
 module Shader =
     open FShade
@@ -55,12 +48,16 @@ module Shader =
         inherit SemanticAttribute(Semantic.Literal.RotationSpeed)
 
     type UniformScope with
-        member x.Rotation : float32 = x?Rotation
+        member x.Rotation   : float32 = x?Rotation
+        member x.CubeColor  : V4f     = x?CubeColor
+        member x.ErrorColor : V4f     = x?ErrorColor
 
     type Vertex = {
         [<Position>]      pos : V4f
+        [<Color>]           c : V4f
         [<Normal>]          n : V3f
         [<RotationSpeed>] spd : float32
+        [<InstanceId>]     id : int
     }
 
     type Fragment = {
@@ -116,19 +113,24 @@ module Shader =
                             n   = V3f(nrot, v.n.Z) }
         }
 
+    let cubeColor (v : Vertex) =
+        vertex {
+            let c = if v.id % 2 = 0 then uniform.CubeColor else uniform.ErrorColor
+            return { v with c = c }
+        }
+
 [<EntryPoint>]
-let main argv =
+let main _argv =
 
     Aardvark.Init()
 
-    let useVulkan = false
-
-    let finiteFarPlane = 2000.0
     let nearPlane = AVal.init 0.01
-    let farPlane = AVal.init finiteFarPlane
+    let farPlane = AVal.init 2000.0
+    let infiniteFarPlane = AVal.init false
     let reversedDepth = AVal.init false
     let rotateCubes = AVal.init false
-    let fov = radians 70.0
+    let errorColor = AVal.init <| C3b(205, 65, 50)
+    let fov = AVal.init <| radians 70.0
 
     // For best results, use a float-based format.
     // Note: For stenciling, we need Depth32fStencil8 which is a 64bit format.
@@ -136,50 +138,50 @@ let main argv =
 
     // Make sure to use [0, 1] NDC depth range
     let depthRange = DepthRange.ZeroToOne
+    Vulkan.RuntimeConfig.DepthRange <- depthRange
+    GL.RuntimeConfig.DepthRange <- depthRange
 
-    use app : Application =
-        if useVulkan then
-            Vulkan.RuntimeConfig.DepthRange <- depthRange
-            new VulkanApplication(debug = DebugLevel.Minimal)
-        else
-            GL.RuntimeConfig.DepthRange <- depthRange
-            new OpenGlApplication(debug = DebugLevel.Minimal)
+    use win =
+        window {
+            display Display.Mono
+            samples 8
+            backend Backend.Vulkan
+            debug true
+            showHelp false
+        }
 
-    use win = app.CreateGameWindow()
+    use gui = win.Control.InitializeImGui()
 
-    // Controls
-    win.Keyboard.Down.Values.Add(function
-        | Keys.Enter ->
-            transact (fun _ ->
-                reversedDepth.Value <- not reversedDepth.Value
-            )
+    gui.Render <- fun () ->
+        if ImGui.Begin("Settings", ImGuiWindowFlags.AlwaysAutoResize) then
+            let depthRange = if depthRange = DepthRange.ZeroToOne then "[0, 1]"  else "[-1, 1]"
+            ImGui.LabelText("Depth format", $"{format}")
+            ImGui.LabelText("Depth range", $"{depthRange}")
 
-        | Keys.Space ->
-            transact (fun _ ->
-                farPlane.Value <-
-                    if isFinite farPlane.Value then
-                        infinity
-                    else
-                        finiteFarPlane
-            )
+            ImGui.Checkbox("Reversed depth", reversedDepth)
+            ImGui.Checkbox("Animate cubes", rotateCubes)
+            ImGui.ColorEdit3("Error color", errorColor, ImGuiColorEditFlags.NoInputs)
 
-        | Keys.R ->
-            transact (fun _ ->
-                rotateCubes.Value <- not rotateCubes.Value
-            )
+            ImGui.SeparatorText "View frustum"
 
-        | _ -> ()
-    )
+            let mutable nearPlaneValue = nearPlane.Value
+            if ImGui.InputDouble("Near plane", &nearPlaneValue, 0.001, "%.3f") then
+                nearPlane.Value <- nearPlaneValue |> clamp 0.001 0.999
 
-    win.Keyboard.DownWithRepeats.Values.Add(function
-        | Keys.OemPlus ->
-            transact (fun _ -> nearPlane.Value <- nearPlane.Value + 0.001)
+            ImGui.BeginDisabled infiniteFarPlane.Value
+            let mutable farPlaneValue = farPlane.Value
+            if ImGui.InputDouble("Far plane", &farPlaneValue, 10.0, "%.2f") then
+                farPlane.Value <- farPlaneValue |> clamp 10.0 9999.0
+            ImGui.EndDisabled()
 
-        | Keys.OemMinus ->
-            transact (fun _ -> nearPlane.Value <- max 0.001 (nearPlane.Value - 0.001))
+            ImGui.SameLine()
+            ImGui.Checkbox("Infinite", infiniteFarPlane)
 
-        | _ -> ()
-    )
+            let mutable fovDegrees = int <| degrees fov.Value
+            if ImGui.SliderInt("Field of view", &fovDegrees, 5, 120, "%d\u00B0") then
+                fov.Value <- radians <| float fovDegrees
+
+        ImGui.End()
 
     // Set depth test to >= for reverse depth
     let depthTest =
@@ -210,7 +212,10 @@ let main argv =
             let! reversed = reversedDepth
             let! near = nearPlane
             let! far = farPlane
+            let! infiniteFar = infiniteFarPlane
+            let! fov = fov
 
+            let far = if infiniteFar then infinity else far
             let aspect = float size.X / float size.Y
 
             if depthRange = DepthRange.ZeroToOne then
@@ -234,36 +239,30 @@ let main argv =
     use task =
         let rnd = RandomSystem(0)
         let count = V2i(400, 400)
+        let totalCount = count.X * count.Y
         let margin = 2.5
         let offset = (V2d (count - 1) * margin) * 0.5
 
         let geometry =
             IndexedGeometryPrimitives.Box.solidBox (Box3d(V3d(-0.5), V3d(0.5))) C4b.Black
 
-        let indirectBuffer =
+        let drawCall =
             DrawCallInfo(
                 FaceVertexCount = geometry.FaceVertexCount,
-                InstanceCount = 2 * count.X * count.Y,
-                FirstInstance = 0,
-                BaseVertex = 0
+                InstanceCount   = 2 * totalCount,
+                FirstInstance   = 0,
+                BaseVertex      = 0
             )
-            |> Array.singleton
-            |> IndirectBuffer.ofArray
-
-        let colors =
-            [| C4b(6, 146, 188); C4b(205, 65, 50) |]
-            |> List.replicate (count.X * count.Y)
-            |> Array.concat
 
         let rotationSpeeds =
-            List.init (count.X * count.Y) (fun _ ->
+            Array.init totalCount (fun _ ->
                 let spd = float32 (1 + rnd.UniformInt 3) * (if rnd.UniformInt 2 = 0 then -1.0f else 1.0f)
                 [| spd; spd |]
             )
             |> Array.concat
 
         let trafos =
-            List.init (count.X * count.Y) (fun i ->
+            Array.init totalCount (fun i ->
                 let x = i % count.X
                 let y = i / count.X
 
@@ -299,86 +298,48 @@ let main argv =
                     return 0.0
             }
 
-        let scene =
-            Sg.indirectDraw geometry.Mode ~~indirectBuffer
-            |> Sg.indexArray geometry.IndexArray
-            |> Sg.vertexArray DefaultSemantic.Positions geometry.IndexedAttributes.[DefaultSemantic.Positions]
-            |> Sg.vertexArray DefaultSemantic.Normals geometry.IndexedAttributes.[DefaultSemantic.Normals]
-            |> Sg.instanceAttribute' DefaultSemantic.Colors colors
-            |> Sg.instanceAttribute' DefaultSemantic.InstanceTrafo instanceTrafo
-            |> Sg.instanceAttribute' DefaultSemantic.InstanceTrafoInv instanceTrafoInv
-            |> Sg.instanceArray Semantic.RotationSpeed rotationSpeeds
-            |> Sg.shader {
-                do! Shader.rotate
-                do! DefaultSurfaces.instanceTrafo
-                do! DefaultSurfaces.trafo
-                do! DefaultSurfaces.vertexColor
-                do! DefaultSurfaces.simpleLighting
-            }
-            |> Sg.uniform Semantic.Rotation rotation
-            |> Sg.viewTrafo viewTrafo
-            |> Sg.projTrafo projTrafo
-            |> Sg.depthTest depthTest
-            |> Sg.cullMode' CullMode.Back
-
-        let overlay =
-            let str =
-                adaptive {
-                    let! reversed = reversedDepth
-                    let! near = nearPlane
-                    let! far = farPlane
-
-                    let range =
-                        if depthRange = DepthRange.ZeroToOne then "[0, 1]"
-                        else "[-1, 1]"
-
-                    return sprintf "Depth range: %s %s\n" range (if reversed then "reversed" else "") +
-                           sprintf "Near plane: %.3f\n" near +
-                           sprintf "Far plane: %g" far
-                }
-
-            let trafo =
-                win.Sizes |> AVal.map (fun size ->
-                    let border = V2d(25.0, 15.0) / V2d size
-                    let pixels = 50.0 / float size.Y
-                    Trafo3d.Scale(pixels) *
-                    Trafo3d.Scale(float size.Y / float size.X, 1.0, 1.0) *
-                    Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, 0.0)
-                )
-
-            Sg.text DefaultFonts.Hack.Regular C4b.White str
-            |> Sg.trafo trafo
-
-        let overlayFormat =
-            let str = sprintf "Format: %A" format
-
-            let trafo =
-                win.Sizes |> AVal.map (fun size ->
-                    let border = V2d(25.0, 20.0) / V2d size
-                    let pixels = 50.0 / float size.Y
-                    Trafo3d.Scale(pixels) *
-                    Trafo3d.Scale(float size.Y / float size.X, 1.0, 1.0) *
-                    Trafo3d.Translation(-1.0 + border.X, -1.0 + border.Y, 0.0)
-                )
-
-            Sg.text DefaultFonts.Hack.Regular C4b.White (AVal.constant str)
-            |> Sg.trafo trafo
-
-        Sg.ofList [scene; overlay; overlayFormat]
+        Sg.render geometry.Mode drawCall
+        |> Sg.indexArray geometry.IndexArray
+        |> Sg.vertexArray DefaultSemantic.Positions geometry.IndexedAttributes.[DefaultSemantic.Positions]
+        |> Sg.vertexArray DefaultSemantic.Normals geometry.IndexedAttributes.[DefaultSemantic.Normals]
+        |> Sg.instanceAttribute' DefaultSemantic.InstanceTrafo instanceTrafo
+        |> Sg.instanceAttribute' DefaultSemantic.InstanceTrafoInv instanceTrafoInv
+        |> Sg.instanceArray Semantic.RotationSpeed rotationSpeeds
+        |> Sg.shader {
+            do! Shader.rotate
+            do! Shader.cubeColor
+            do! DefaultSurfaces.instanceTrafo
+            do! DefaultSurfaces.trafo
+            do! DefaultSurfaces.vertexColor
+            do! DefaultSurfaces.simpleLighting
+        }
+        |> Sg.uniform Semantic.Rotation rotation
+        |> Sg.uniform' Semantic.CubeColor (C3b(6, 146, 188))
+        |> Sg.uniform Semantic.ErrorColor errorColor
+        |> Sg.viewTrafo viewTrafo
+        |> Sg.projTrafo projTrafo
+        |> Sg.depthTest depthTest
+        |> Sg.cullMode' CullMode.Back
         |> Sg.compile win.Runtime signature
 
     let output =
         task |> RenderTask.renderToColorWithAdaptiveClear win.Sizes clearValues
 
-    use fullscreenTask =
-        Sg.fullScreenQuad
-        |> Sg.diffuseTexture output
-        |> Sg.shader {
-            do! Shader.resolve signature.Samples
-        }
-        |> Sg.compile win.Runtime win.FramebufferSignature
+    let scene =
+        let resolved =
+            Sg.fullScreenQuad
+            |> Sg.diffuseTexture output
+            |> Sg.shader {
+                do! Shader.resolve signature.Samples
+            }
 
-    win.RenderTask <- fullscreenTask
+        RenderCommand.Ordered [
+            RenderCommand.Render resolved
+            RenderCommand.Render gui
+        ]
+        |> Sg.execute
+
+    win.Scene <- scene
     win.Run()
 
     0

@@ -16,6 +16,7 @@
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Aardvark.Rendering.ImGui\Aardvark.Rendering.ImGui.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj" />

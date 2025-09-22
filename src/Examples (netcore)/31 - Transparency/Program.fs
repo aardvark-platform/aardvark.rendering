@@ -13,13 +13,12 @@ namespace Transparency
 
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.ImGui
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.Slim
-open Aardvark.Rendering.Text
-open FShade
 
 module Program =
 
@@ -65,7 +64,7 @@ module Program =
         |> Sg.ofList
 
     [<EntryPoint>]
-    let main argv =
+    let main _argv =
 
         Aardvark.Init()
 
@@ -78,16 +77,22 @@ module Program =
         use win = app.CreateGameWindow(samples = 8)
         win.RenderAsFastAsPossible <- true
 
+        use gui = win.InitializeImGui()
+
         let initialView = CameraView.LookAt(V3d(10.0,10.0,10.0), V3d.Zero, V3d.OOI)
         let frustum =
             win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 150.0 (float s.X / float s.Y))
 
         let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
+        let currentTechnique = AVal.init 0
+        let backgroundColor = AVal.init C3b.PaleTurquoise
+
         let framebuffer =
             {
                 size = win.Sizes
                 signature = win.FramebufferSignature
+                clearColor = backgroundColor |> AVal.map c4b
             }
 
         let scene =
@@ -104,78 +109,35 @@ module Program =
                 new WeightedBlended.Technique(runtime, framebuffer, scene) :> ITechnique
             |]
 
+        gui.Render <- fun () ->
+            if ImGui.Begin("Settings", ImGuiWindowFlags.AlwaysAutoResize) then
+                ImGui.ColorEdit3("Background color", backgroundColor, ImGuiColorEditFlags.NoInputs)
+
+                let technique = techniques.[currentTechnique.Value]
+                if ImGui.BeginCombo("##technique", technique.Name) then
+                    for i = 0 to techniques.Length - 1 do
+                        if ImGui.Selectable(techniques.[i].Name, (currentTechnique.Value = i)) then
+                            currentTechnique.Value <- i
+                    ImGui.EndCombo()
+            ImGui.End()
+
         // precompile
         for t in techniques do
             Log.startTimed "[%s] compile scene" t.Name
             t.Task.PrepareForRender()
             Log.stop()
 
-        // use this mutable to switch between techniques.
-        let technique = AVal.init 0
-        let fps = AVal.init 0.0
-
-        win.Keyboard.KeyDown(Keys.V).Values.Add(fun _ ->
-            transact (fun () ->
-                technique.Value <- (technique.Value + 1) % techniques.Length
-                fps.Value <- 0.0
-            )
-            Log.line "using: %s" techniques.[technique.Value].Name
-        )
-
-        win.Keyboard.KeyDown(Keys.OemPlus).Values.Add(fun _ ->
-            transact (fun () ->
-                technique.Value <- (technique.Value + 1) % techniques.Length
-                fps.Value <- 0.0
-            )
-            Log.line "using: %s" techniques.[technique.Value].Name
-        )
-
-        win.Keyboard.KeyDown(Keys.OemMinus).Values.Add(fun _ ->
-            transact (fun () ->
-                technique.Value <- (technique.Value + techniques.Length - 1) % techniques.Length
-                fps.Value <- 0.0
-            )
-            Log.line "using: %s" techniques.[technique.Value].Name
-        )
-
         use task =
             RenderTask.custom (fun (t, rt, desc) ->
-                let current = technique.GetValue(t)
+                let current = currentTechnique.GetValue(t)
                 techniques.[current].Task.Run(t, rt, desc)
             )
 
-        let puller =
-            async {
-                while true do
-                    if not (Fun.IsTiny win.AverageFrameTime.TotalSeconds) then
-                        transact (fun () -> fps.Value <- 1.0 / win.AverageFrameTime.TotalSeconds)
-                    do! Async.Sleep 200
-            }
+        use guiTask =
+            gui
+            |> Sg.compile win.Runtime win.FramebufferSignature
 
-        Async.Start puller
-        let overlayTask =
-            let str =
-                AVal.custom (fun t ->
-                    let variant = technique.GetValue t
-                    let fps = fps.GetValue t
-                    let fps = if fps <= 0.0 then "" else sprintf "%.0ffps" fps
-                    let variant = techniques.[variant].Name
-                    String.concat " " [variant; fps]
-                )
-
-            let trafo =
-                win.Sizes |> AVal.map (fun size ->
-                    let px = 2.0 / V2d size
-                    Trafo3d.Scale(0.05) *
-                    Trafo3d.Scale(1.0, float size.X / float size.Y, 1.0) *
-                    Trafo3d.Translation(-1.0 + 20.0 * px.X, -1.0 + 25.0 * px.Y, 0.0)
-                )
-
-            Sg.text DefaultFonts.Hack.Regular C4b.White str
-                |> Sg.trafo trafo
-                |> Sg.compile runtime win.FramebufferSignature
-
-        win.RenderTask <- RenderTask.ofList [ task; overlayTask ]
+        win.RenderTask <- RenderTask.ofList [ task; guiTask ]
         win.Run()
 
         for t in techniques do

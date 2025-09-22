@@ -3,11 +3,10 @@
 open Aardvark.Base
 
 open Aardvark.Rendering
+open Aardvark.Rendering.ImGui
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open FSharp.Data.Adaptive.Operators
-
 
 // we now need to define some shaders performing the per-pixel blur on a given input texture.
 // since the gaussian filter is separable we create two shaders performing the vertical and horizontal blur.
@@ -76,23 +75,55 @@ module Shaders =
             return v
         }
 
+type Variant =
+    | Final = 0
+    | BlurX = 1
+    | BlurY = 2
+    | Input = 3
+
+module Variant =
+    let toString = function
+        | Variant.Final -> "Final"
+        | Variant.BlurX -> "Blur X"
+        | Variant.BlurY -> "Blur Y"
+        | Variant.Input -> "Input"
+        | _ -> ""
+
 [<EntryPoint>]
-let main argv = 
-    
+let main _argv =
     // first we need to initialize Aardvark's core components
-    
     Aardvark.Init()
 
-
-    let win =
+    use win =
         window {
             backend Backend.GL
             display Display.Mono
-            debug false
+            debug true
             samples 8
+            showHelp false
         }
 
+    use gui = win.Control.InitializeImGui()
+
     let pointSize = AVal.init 50.0
+    let variant = AVal.init Variant.Final
+    let showInput = AVal.init true
+
+    gui.Render <- fun () ->
+        if ImGui.Begin("Settings", ImGuiWindowFlags.AlwaysAutoResize) then
+            let mutable pointSizeValue = pointSize.Value
+            if ImGui.InputDouble("Point size", &pointSizeValue, 5.0, "%.1f") then
+                pointSize.Value <- max 0.0 pointSizeValue
+
+            if ImGui.BeginCombo("##variant", Variant.toString variant.Value) then
+                for v in Enum.GetValues<Variant>() do
+                    if ImGui.Selectable(Variant.toString v, (variant.Value = v)) then
+                        variant.Value <- v
+                ImGui.EndCombo()
+
+            if variant.Value <> Variant.Input then
+                ImGui.Checkbox("Show input", showInput)
+        ImGui.End()
 
     let pointSg = 
         let pointCount = 2048
@@ -115,91 +146,88 @@ let main argv =
             |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (AVal.constant [|V2f.OO; V2f.IO; V2f.OI; V2f.II|])
             |> Sg.depthTest' DepthTest.None
 
-
-
     // so in a first pass we need to render our pointScene to a color texture which
     // is quite simple using the RenderTask utilities provided in Base.Rendering.
     // from the rendering we get an aval<ITexture> which will be outOfDate whenever
     // something changes in pointScene and updated whenever subsequent passes need it.
-    let singleSampledSignature = 
-        win.Runtime.CreateFramebufferSignature([
+    use singleSampledSignature =
+        win.Runtime.CreateFramebufferSignature [
             DefaultSemantic.Colors, TextureFormat.Rgba8; 
             DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
-           ]
-        )
+        ]
 
-    let mainTask =
-        pointSg
-            |> Sg.compile win.Runtime singleSampledSignature
-         
-   
-    let mainResult =
-        mainTask
-            |> RenderTask.renderToColor win.Sizes
+    use mainTask =
+        pointSg |> Sg.compile win.Runtime singleSampledSignature
+
+    let input =
+        mainTask |> RenderTask.renderToColor win.Sizes
 
     // by taking the texture created above and the fullscreen quad we can now apply
     // the first gaussian filter to it and in turn get a new aval<ITexture>     
-    let blurredOnlyX =
+    use blurXTask =
         fullscreenQuad 
-            |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
+            |> Sg.texture DefaultSemantic.DiffuseColorTexture input
             |> Sg.effect [Shaders.gaussX |> toEffect]
             |> Sg.compile win.Runtime singleSampledSignature
-            |> RenderTask.renderToColor win.Sizes
+
+    let blurredOnlyX = blurXTask |> RenderTask.renderToColor win.Sizes
 
     // by taking the texture created above and the fullscreen quad we can now apply
     // the first gaussian filter to it and in turn get a new aval<ITexture>     
-    let blurredOnlyY =
+    use blurYTask =
         fullscreenQuad 
-            |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
+            |> Sg.texture DefaultSemantic.DiffuseColorTexture input
             |> Sg.effect [Shaders.gaussY |> toEffect]
             |> Sg.compile win.Runtime singleSampledSignature
-            |> RenderTask.renderToColor win.Sizes
 
-    // we could now render the blurred result to a texutre too but for our example
-    // we can also render it directly to the screen.
+    let blurredOnlyY = blurYTask |> RenderTask.renderToColor win.Sizes
+
+    // apply the vertical blur to the output of the horizontal blur task to get the final blurred result
+    use blurTask =
+        fullscreenQuad
+            |> Sg.texture DefaultSemantic.DiffuseColorTexture blurredOnlyX
+            |> Sg.effect [Shaders.gaussY |> toEffect]
+            |> Sg.compile win.Runtime singleSampledSignature
+
+    let blurred = blurTask |> RenderTask.renderToColor win.Sizes
+
     let final =
+        let showOverlay =
+            (showInput, variant) ||> AVal.map2 (fun s v -> s && v <> Variant.Input)
+
         let overlayRelativeSize = 0.3
         let overlayPass = RenderPass.main |> RenderPass.after "overlay" RenderPassOrder.Arbitrary
         let overlayOriginal =
             fullscreenQuad
                 |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.diffuseTexture |> toEffect]
-                |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
-                |> Sg.trafo ~~(Trafo3d.Scale(overlayRelativeSize) * Trafo3d.Translation(-1.0 + overlayRelativeSize, 1.0 - overlayRelativeSize, 0.0))
+                |> Sg.texture DefaultSemantic.DiffuseColorTexture input
+                |> Sg.modifySamplerState' DefaultSemantic.DiffuseColorTexture (SamplerState.withAdressMode WrapMode.Clamp)
+                |> Sg.trafo' (Trafo3d.Scale(overlayRelativeSize) * Trafo3d.Translation(1.0 - overlayRelativeSize, -1.0 + overlayRelativeSize, 0.0))
                 |> Sg.pass overlayPass
-                |> Sg.blendMode ~~BlendMode.Blend
+                |> Sg.blendMode' BlendMode.Blend
+                |> Sg.onOff showOverlay
+
+        let result =
+            variant |> AdaptiveResource.bind (function
+                | Variant.Final -> blurred
+                | Variant.BlurX -> blurredOnlyX
+                | Variant.BlurY -> blurredOnlyY
+                | _ -> input
+            )
 
         let mainResult =
-            fullscreenQuad 
-                |> Sg.texture DefaultSemantic.DiffuseColorTexture blurredOnlyX
-                |> Sg.effect [Shaders.gaussY |> toEffect]
-
+            fullscreenQuad
+                |> Sg.texture DefaultSemantic.DiffuseColorTexture result
+                |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
 
         Sg.ofList [mainResult; overlayOriginal] 
-            |> Sg.viewTrafo ~~Trafo3d.Identity 
-            |> Sg.projTrafo ~~Trafo3d.Identity
+            |> Sg.viewTrafo' Trafo3d.Identity
+            |> Sg.projTrafo' Trafo3d.Identity
 
+    let sg =
+        RenderCommand.Ordered [final; gui]
+        |> Sg.execute
 
-    let showTexture t = 
-        fullscreenQuad 
-            |> Sg.texture DefaultSemantic.DiffuseColorTexture t
-            |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
-
-    let variant = AVal.init 0
-    let variants = [| final; showTexture mainResult; showTexture blurredOnlyX; showTexture blurredOnlyY |]
-
-    win.Keyboard.Down.Values.Add(fun k ->
-        match k with
-            | Keys.Up -> transact (fun () -> pointSize.Value <- pointSize.Value + 5.0)
-            | Keys.Down -> transact (fun () -> pointSize.Value <- max 0.0 (pointSize.Value - 5.0))
-            | Keys.V -> 
-                transact (fun _ -> 
-                    variant.Value <- (variant.Value + 1) % variants.Length
-                )
-            | _ -> ()
-    )
-
-    win.Scene <- 
-        AVal.map (fun i -> Array.item i variants) variant |> Sg.dynamic
-
+    win.Scene <- sg
     win.Run()
     0

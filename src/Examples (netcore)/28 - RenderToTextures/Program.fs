@@ -1,5 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.ImGui
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -42,7 +43,7 @@ module Shader =
         }
 
 [<EntryPoint>]
-let main argv = 
+let main _argv =
     
     Aardvark.Init()
     
@@ -53,9 +54,12 @@ let main argv =
         window {
             backend Backend.GL
             display Display.Mono
-            debug false
+            debug true
             samples 1
+            showHelp false
         }
+
+    use gui = win.Control.InitializeImGui()
 
     // define a dynamic transformation depending on the window's time
     // This time is a special value that can be used for animations which
@@ -68,8 +72,22 @@ let main argv =
         )
 
     let box = Box3d(-V3d.III, V3d.III)
-    let color = C4b.Red
-    let size = V2i(512,512) |> cval
+    let color = cval C3b.Red
+    let size = cval 512
+    let mode = AVal.init 0
+    let getModeText = function 0 -> "Color" | _ -> "Positions"
+
+    gui.Render <- fun () ->
+        if ImGui.Begin("Settings", ImGuiWindowFlags.AlwaysAutoResize) then
+            ImGui.SliderInt("Texture size", size, 64, 2048, $"{size.Value} x {size.Value}")
+
+            if ImGui.BeginCombo("Mode", getModeText mode.Value) then
+                for i = 0 to 1 do if ImGui.Selectable(getModeText i, (mode.Value = i)) then mode.Value <- i
+                ImGui.EndCombo()
+
+            if mode.Value = 0 then
+                ImGui.ColorEdit3("Color", color)
+        ImGui.End()
 
     use signature = 
         win.Runtime.CreateFramebufferSignature(
@@ -79,9 +97,12 @@ let main argv =
                 DefaultSemantic.DepthStencil,  TextureFormat.Depth24Stencil8
             ])
 
-    let pass0 = 
+    let pass0 =
+        let size = size |> AVal.map V2i
+        let color = color |> AVal.map C4b
+
         // create a red box with a simple shader
-        Sg.box (AVal.constant color) (AVal.constant box)
+        Sg.box color (AVal.constant box)
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.vertexColor
@@ -100,27 +121,6 @@ let main argv =
                         Sym.ofString "WPos"]
                ) size
 
-    let mode = AVal.init 0
-
-    win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ -> 
-        transact (fun _ -> mode.Value <- (mode.Value + 1) % 2)
-        printfn "%A" mode.Value
-    )
-
-    
-    win.Keyboard.KeyDown(Keys.G).Values.Add(fun _ -> 
-        transact (fun _ ->
-            size.Value <- if size.Value = V2i.II then V2i.II * 1024 else V2i.II)
-        printfn "%A" size.Value
-    )
-
-    win.Keyboard.KeyDown(Keys.D).Values.Add(fun _ -> 
-        let t = (Map.find DefaultSemantic.Colors pass0)
-        let gah = t.GetValue()
-        let tex = win.Runtime.Download(gah)
-        tex.Save("guh.jpg")
-    )
-    
     let finalComposite = 
         Sg.fullScreenQuad
         |> Sg.shader {
@@ -130,7 +130,14 @@ let main argv =
         |> Sg.texture (Sym.ofString "Colors") (Map.find DefaultSemantic.Colors pass0)
         |> Sg.texture (Sym.ofString "WPos") (Map.find (Sym.ofString "WPos") pass0)
 
-    win.Scene <- finalComposite
+    let scene =
+        RenderCommand.Ordered [
+            RenderCommand.Render finalComposite
+            RenderCommand.Render gui
+        ]
+        |> Sg.execute
+
+    win.Scene <- scene
     win.Run()
 
     0

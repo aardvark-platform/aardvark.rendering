@@ -14,7 +14,7 @@ type internal RenderState (runtime: IRuntime) =
 
     let projTrafo =
         display |> AVal.map (fun display ->
-            Trafo3d.OrthoProjectionGL(display.Left, display.Right, display.Bottom, display.Top, 0.0, 1.0)
+            Trafo3d.OrthoProjectionGL(display.Left, display.Right, display.Bottom, display.Top, -1.0, 1.0)
         )
 
     let sg =

@@ -1,5 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.ImGui
 open Aardvark.GPGPU
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
@@ -415,20 +416,19 @@ module Sg =
 
 
 [<EntryPoint>]
-let main argv = 
-    
+let main _argv =
     Aardvark.Init()
-    
+
     let win =
         window {
-            backend Backend.GL
+            backend Backend.Vulkan
             display Display.Mono
-            debug false
+            debug true
             samples 8
+            showHelp false
         }
 
-
-
+    use gui = win.Control.InitializeImGui()
 
     let cps =
         AVal.init [|
@@ -442,25 +442,27 @@ let main argv =
     let rand = RandomSystem()
     let bounds = Box3d(-V3d.III, V3d.III)
 
-    win.Keyboard.DownWithRepeats.Values.Add (fun k ->
-        match k with
-        | Keys.OemPlus -> transact (fun () -> threshold.Value <- threshold.Value + 1.0); Log.warn "threshold: %A" threshold.Value
-        | Keys.OemMinus -> transact (fun () -> threshold.Value <- max 1.0 (threshold.Value - 1.0)); Log.warn "threshold: %A" threshold.Value
-        
-        | Keys.Space -> transact (fun () -> active.Value <- not active.Value)
-        
-        | Keys.Enter -> 
-            transact (fun () -> 
+    gui.Render <- fun () ->
+        if ImGui.Begin("Settings", ImGuiWindowFlags.AlwaysAutoResize) then
+            ImGui.Checkbox("Active", active)
+
+            ImGui.BeginDisabled(not active.Value)
+
+            ImGui.SameLine()
+            if ImGui.Button("Add") then
                 cps.Value <- Array.append cps.Value (Array.init 4 (fun _ -> rand.UniformV3d(bounds)))
-            )
-        | Keys.Back -> 
-            if cps.Value.Length > 4 then
-                transact (fun () -> 
+
+            ImGui.SameLine()
+            if ImGui.Button("Remove") then
+                if cps.Value.Length > 4 then
                     cps.Value <- Array.take (cps.Value.Length - 4) cps.Value
-                )
-        
-        | _ -> ()
-    )
+
+            ImGui.EndDisabled()
+
+            let mutable thresholdValue = threshold.Value
+            if ImGui.InputDouble("Threshold", &thresholdValue, 1.0, "%.1f") then
+                threshold.Value <- max 1.0 thresholdValue
+        ImGui.End()
 
     let sg =
         Sg.ofList [
@@ -482,6 +484,9 @@ let main argv =
         |> AVal.map (function true -> sg | false -> Sg.empty)
         |> Sg.dynamic
 
+    let sg =
+        RenderCommand.Ordered [sg; gui]
+        |> Sg.execute
 
     win.Scene <- sg
     win.Run()

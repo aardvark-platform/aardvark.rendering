@@ -236,12 +236,14 @@ module WeightedBlended =
                 }
 
             let clear =
-                clear { color C4f.Black; depth 1.0 }
+                framebuffer.clearColor |> AVal.map (fun clearColor ->
+                    clear { color clearColor; depth 1.0 }
+                )
 
             let composite = runtime.CompileRender(offscreenPass, sg)
             let output =
                 RenderTask.ofList [opaqueTask; composite]
-                |> RenderTask.renderToWithClear offscreenFbo clear
+                |> RenderTask.renderToWithAdaptiveClear offscreenFbo clear
 
             composite, output.GetOutputTexture DefaultSemantic.Colors
 
