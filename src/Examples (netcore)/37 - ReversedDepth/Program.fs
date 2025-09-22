@@ -154,15 +154,15 @@ let main _argv =
 
     gui.Render <- fun () ->
         if ImGui.Begin("Settings", ImGuiWindowFlags.AlwaysAutoResize) then
-            let depthRange = if depthRange = DepthRange.ZeroToOne then "[0, 1]"  else "[-1, 1]"
-            ImGui.LabelText("Depth format", $"{format}")
-            ImGui.LabelText("Depth range", $"{depthRange}")
+            let depthRange =
+                let n, f = if depthRange = DepthRange.ZeroToOne then 0, 1 else -1, 1
+                if reversedDepth.Value then $"[{f}, {n}]" else $"[{n}, {f}]"
 
-            ImGui.Checkbox("Reversed depth", reversedDepth)
-            ImGui.Checkbox("Animate cubes", rotateCubes)
-            ImGui.ColorEdit3("Error color", errorColor, ImGuiColorEditFlags.NoInputs)
+            ImGui.AlignTextToFramePadding()
+            ImGui.Text($"Depth range: {depthRange}")
 
-            ImGui.SeparatorText "View frustum"
+            ImGui.SameLine()
+            ImGui.Checkbox("Reversed", reversedDepth)
 
             let mutable nearPlaneValue = nearPlane.Value
             if ImGui.InputDouble("Near plane", &nearPlaneValue, 0.001, "%.3f") then
@@ -181,6 +181,8 @@ let main _argv =
             if ImGui.SliderInt("Field of view", &fovDegrees, 5, 120, "%d\u00B0") then
                 fov.Value <- radians <| float fovDegrees
 
+            ImGui.Checkbox("Animate cubes", rotateCubes)
+            ImGui.ColorEdit3("Error color", errorColor, ImGuiColorEditFlags.NoInputs)
         ImGui.End()
 
     // Set depth test to >= for reverse depth
