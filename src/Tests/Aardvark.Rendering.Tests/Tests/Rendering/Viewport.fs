@@ -20,7 +20,7 @@ module Viewport =
 
         type private Mode =
             | Clear  of command: bool
-            | Render of dynamic: bool
+            | Render of dynamic: bool * command: bool
 
         let private viewport (withScissor: bool) (mode: Mode) (runtime: IRuntime) =
             use signature =
@@ -51,12 +51,18 @@ module Viewport =
                 let output = { Framebuffer = framebuffer; Viewport = viewport; Scissor = scissor }
                 task.Run(output)
 
-            | Render dynamic ->
-                use task =
+            | Render (dynamic, command) ->
+                let sg =
                     Sg.fullScreenQuad
                     |> Sg.shader { do! Shader.viewportSize }
                     |> if dynamic then Sg.viewport' viewport else id
                     |> if dynamic then Sg.scissor' scissor else id
+
+                use task =
+                    if command then
+                        RenderCommand.Render sg |> Sg.execute
+                    else
+                        sg
                     |> Sg.compile runtime signature
 
                 let output =
@@ -85,26 +91,34 @@ module Viewport =
 
             PixImage.compare V2i.Zero expected result
 
-        let clearTaskStatic             = viewport false (Clear false)
-        let clearCmdStatic              = viewport false (Clear true)
-        let renderStatic                = viewport false (Render false)
-        let renderDynamic               = viewport false (Render true)
+        let clearTaskStatic                 = viewport false (Clear false)
+        let clearCmdStatic                  = viewport false (Clear true)
+        let renderTaskStatic                = viewport false (Render (false, false))
+        let renderTaskDynamic               = viewport false (Render (true, false))
+        let renderCmdStatic                 = viewport false (Render (false, true))
+        let renderCmdDynamic                = viewport false (Render (true, true))
 
-        let clearTaskStaticWithScissor  = viewport true (Clear false)
-        let clearCmdStaticWithScissor   = viewport true (Clear true)
-        let renderStaticWithScissor     = viewport true (Render false)
-        let renderDynamicWithScissor    = viewport true (Render true)
+        let clearTaskStaticWithScissor      = viewport true (Clear false)
+        let clearCmdStaticWithScissor       = viewport true (Clear true)
+        let renderTaskStaticWithScissor     = viewport true (Render (false, false))
+        let renderTaskDynamicWithScissor    = viewport true (Render (true, false))
+        let renderCmdStaticWithScissor      = viewport true (Render (false, true))
+        let renderCmdDynamicWithScissor     = viewport true (Render (true, true))
 
     let tests (backend: Backend) =
         [
             "Clear task with static viewport",                  Cases.clearTaskStatic
             "Clear command with static viewport",               Cases.clearCmdStatic
-            "Render with static viewport",                      Cases.renderStatic
-            "Render with dynamic viewport",                     Cases.renderDynamic
+            "Render task with static viewport",                 Cases.renderTaskStatic
+            "Render task with dynamic viewport",                Cases.renderTaskDynamic
+            "Render command with static viewport",              Cases.renderCmdStatic
+            "Render command with dynamic viewport",             Cases.renderCmdDynamic
 
             "Clear task with static viewport and scissor",      Cases.clearTaskStaticWithScissor
             "Clear command with static viewport and scissor",   Cases.clearCmdStaticWithScissor
-            "Render with static viewport and scissor",          Cases.renderStaticWithScissor
-            "Render with dynamic viewport and scissor",         Cases.renderDynamicWithScissor
+            "Render task with static viewport and scissor",     Cases.renderTaskStaticWithScissor
+            "Render task with dynamic viewport and scissor",    Cases.renderTaskDynamicWithScissor
+            "Render command with static viewport and scissor",  Cases.renderCmdStaticWithScissor
+            "Render command with dynamic viewport and scissor", Cases.renderCmdDynamicWithScissor
         ]
         |> prepareCases backend "Viewport"

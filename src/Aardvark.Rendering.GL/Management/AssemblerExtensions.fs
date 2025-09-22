@@ -1328,7 +1328,7 @@ type CompilerInfo =
         contextHandle   : nativeptr<nativeint>
         runtimeStats    : nativeptr<V2i>
         drawBufferCount : int
-        task            : IRenderTask
+        task            : AbstractRenderTask
     }
 
 

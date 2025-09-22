@@ -1428,17 +1428,23 @@ module rec Command =
 
     type SingleObjectCommand (dirty : System.Collections.Generic.HashSet<SingleObjectCommand>, signature : IFramebufferSignature, manager : ResourceManager, o : IRenderObject, debug : bool) =
         let mutable fragment : ProgramFragment voption = ValueNone
-        let mutable o = o
         let mutable prepared = ValueNone
 
         let mutable prev : SingleObjectCommand voption = ValueNone
         let mutable next : SingleObjectCommand voption = ValueNone
 
+        static let rec hook (task : AbstractRenderTask) (o : IRenderObject) : IRenderObject =
+            match o with
+            | :? HookedRenderObject as o -> HookedRenderObject.map task.HookRenderObject o
+            | :? RenderObject as o -> task.HookRenderObject o
+            | :? MultiRenderObject as o -> MultiRenderObject(o.Children |> List.map (hook task))
+            | _ -> o
+
         let compile (info : CompilerInfo) (s : IAssemblerStream) (p : IAdaptivePinning) =
             let cmd = 
                 match prepared with
                 | ValueNone ->
-                    let cmd = PreparedCommand.ofRenderObject signature manager o
+                    let cmd = PreparedCommand.ofRenderObject signature manager (hook info.task o)
                     for r in cmd.Resources do
                         info.resources.Add r
                     prepared <- ValueSome cmd
@@ -1446,7 +1452,7 @@ module rec Command =
                 | ValueSome cmd ->
                     cmd
 
-            let pp = prev |> ValueOption.bind (fun p -> p.PreparedCommand)
+            let pp = prev |> ValueOption.bind _.PreparedCommand
             let cs = s |> CommandStream.create debug
             cmd.Compile(info, cs, pp) |> ignore
 
