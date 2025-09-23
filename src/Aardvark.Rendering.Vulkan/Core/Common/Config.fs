@@ -179,13 +179,12 @@ type DebugConfig =
             PlatformInformationVerbosity = 2 }
 
     /// Enables validation layers, printing everything except debug messages.
-    /// Also prints shader code and render task recompilation.
+    /// Also prints GLSL shader code during compilation.
     static member Normal =
         { DebugConfig.Minimal with
             DebugReport                              = Some DebugReportConfig.Normal
             DebugLabels                              = true
             PrintShaderCode                          = true
-            PrintRenderTaskRecompile                 = true
             PrintAccelerationStructureCompactionInfo = true }
 
     /// Enables object trace handling, shader cache integrity checks, and every validation layer feature.
@@ -193,6 +192,7 @@ type DebugConfig =
         { DebugConfig.Normal with
             DebugReport                = Some DebugReportConfig.Full
             ValidationLayer            = Some ValidationLayerConfig.Full
+            PrintRenderTaskRecompile   = true
             VerifyShaderCacheIntegrity = true
             GenerateShaderDebugInfo    = true
             OptimizeShaders            = false }
