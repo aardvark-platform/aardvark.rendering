@@ -7,17 +7,17 @@ open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open System.Collections.Generic
 
-type TraceObject(geometry: AdaptiveTraceGeometry,
-                 usage: AccelerationStructureUsage,
-                 vertexAttributes: IDictionary<Symbol, BufferView> seq,
-                 faceAttributes: IDictionary<Symbol, BufferView> seq,
-                 geometryAttributes: IDictionary<Symbol, IAdaptiveValue> seq,
-                 instanceAttributes: IDictionary<Symbol, IAdaptiveValue>,
-                 hitGroups: aval<Symbol[]>,
-                 transform: aval<Trafo3d>,
-                 frontFace: aval<WindingOrder voption>,
-                 geometryMode: aval<GeometryMode>,
-                 mask: aval<VisibilityMask>) =
+type TraceObject(geometry           : AdaptiveTraceGeometry,
+                 usage              : AccelerationStructureUsage,
+                 vertexAttributes   : IDictionary<Symbol, BufferView> seq,
+                 faceAttributes     : IDictionary<Symbol, BufferView> seq,
+                 geometryAttributes : IDictionary<Symbol, IAdaptiveValue> seq,
+                 instanceAttributes : IDictionary<Symbol, IAdaptiveValue>,
+                 hitGroups          : aval<Symbol[]>,
+                 transform          : aval<Trafo3d>,
+                 frontFace          : aval<WindingOrder voption>,
+                 geometryMode       : aval<GeometryMode>,
+                 mask               : aval<VisibilityMask>) =
 
     /// Geometry data of the instance.
     member val Geometry           = geometry                       with get, set
@@ -53,17 +53,17 @@ type TraceObject(geometry: AdaptiveTraceGeometry,
     /// Visibility mask that is compared against the mask specified by TraceRay().
     member val Mask               = mask                           with get, set
 
-    new (geometry: AdaptiveTraceGeometry,
-         usage: AccelerationStructureUsage,
-         vertexAttributes: IDictionary<Symbol, BufferView>,
-         faceAttributes: IDictionary<Symbol, BufferView>,
-         geometryAttributes: IDictionary<Symbol, IAdaptiveValue>,
-         instanceAttributes: IDictionary<Symbol, IAdaptiveValue>,
-         hitGroup: aval<Symbol>,
-         transform: aval<Trafo3d>,
-         frontFace: aval<WindingOrder voption>,
-         geometryMode: aval<GeometryMode>,
-         mask: aval<VisibilityMask>) =
+    new (geometry           : AdaptiveTraceGeometry,
+         usage              : AccelerationStructureUsage,
+         vertexAttributes   : IDictionary<Symbol, BufferView>,
+         faceAttributes     : IDictionary<Symbol, BufferView>,
+         geometryAttributes : IDictionary<Symbol, IAdaptiveValue>,
+         instanceAttributes : IDictionary<Symbol, IAdaptiveValue>,
+         hitGroup           : aval<Symbol>,
+         transform          : aval<Trafo3d>,
+         frontFace          : aval<WindingOrder voption>,
+         geometryMode       : aval<GeometryMode>,
+         mask               : aval<VisibilityMask>) =
 
         TraceObject(
             geometry, usage,
@@ -80,14 +80,7 @@ module TraceObjectFSharp =
 
         let inline requireUnmanaged<'T when 'T : unmanaged> = ()
 
-        let inline (~~~~) (value : 'T) : IAdaptiveValue =
-            if typeof<IAdaptiveValue>.IsAssignableFrom typeof<'T> then
-                unbox value
-            else
-                ~~value
-
         module IDictionary =
-
             let inline create() =
                 Dictionary() :> IDictionary<_, _>
 
@@ -242,7 +235,7 @@ module TraceObjectFSharp =
         static member inline instanceAttribute (name: ^Name, value: 'T) =
             requireUnmanaged<'T>
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
-            fun (obj : TraceObject) -> obj.InstanceAttributes <- obj.InstanceAttributes |> IDictionary.add sym ~~~~value; obj
+            fun (obj : TraceObject) -> obj.InstanceAttributes <- obj.InstanceAttributes |> IDictionary.add sym ~~value; obj
 
         /// Sets the hit groups for the given trace object.
         static member inline hitGroups (hitConfig: aval<Symbol[]>) =
@@ -261,11 +254,11 @@ module TraceObjectFSharp =
         static member inline hitGroup (group: Symbol) =
             TraceObject.hitGroups [| group |]
 
-        /// Sets the transform for the given trace object.
+        /// Sets the instance transform for the given trace object.
         static member inline transform (trafo: aval<Trafo3d>) =
             fun (obj : TraceObject) -> obj.Transform <- trafo; obj
 
-        /// Sets the transform for the given trace object.
+        /// Sets the instance transform for the given trace object.
         static member inline transform (trafo: Trafo3d) =
             TraceObject.transform ~~trafo
 
@@ -347,9 +340,15 @@ module TraceObjectFSharp =
         static member inline mask (value : int32) =
             TraceObject.mask (VisibilityMask value)
 
-        /// Creates a trace object from the given indexed geometry.
-        static member ofIndexedGeometry (micromap : aval<#IMicromap>) =
-            fun (flags : aval<GeometryFlags>) (trafo : aval<Trafo3d>) (geometry : IndexedGeometry) ->
+        /// <summary>
+        /// Creates a trace object from the given indexed geometry and micromap.
+        /// </summary>
+        /// <remarks>
+        /// The given transform is applied to the geometry.
+        /// Use <see cref="TraceObject.transform"/> to apply an instance transform.
+        /// </remarks>
+        static member ofIndexedGeometryWithMicromap (flags : aval<GeometryFlags>) =
+            fun (trafo : aval<Trafo3d>) (micromap : aval<#IMicromap>) (geometry : IndexedGeometry) ->
                 let geometry = geometry.ToNonStripped()
 
                 let attributes = Dictionary()
@@ -370,16 +369,34 @@ module TraceObjectFSharp =
                 |> TraceObject.vertexAttributes attributes
                 |> TraceObject.usage usage
 
+        /// <summary>
         /// Creates a trace object from the given indexed geometry.
+        /// </summary>
+        /// <remarks>
+        /// The given transform is applied to the geometry.
+        /// Use <see cref="TraceObject.transform"/> to apply an instance transform.
+        /// </remarks>
         static member ofIndexedGeometry (flags : aval<GeometryFlags>) =
             fun (trafo : aval<Trafo3d>) (geometry : IndexedGeometry) ->
-                TraceObject.ofIndexedGeometry<IMicromap> ~~null flags trafo geometry
+                TraceObject.ofIndexedGeometryWithMicromap<IMicromap> flags trafo ~~null geometry
 
-        /// Creates a trace object from the given indexed geometry.
-        static member ofIndexedGeometry (micromap : IMicromap) =
-            fun (flags : GeometryFlags) (trafo : Trafo3d) (geometry : IndexedGeometry) ->
-                TraceObject.ofIndexedGeometry ~~micromap ~~flags ~~trafo geometry
+        /// <summary>
+        /// Creates a trace object from the given indexed geometry and micromap.
+        /// </summary>
+        /// <remarks>
+        /// The given transform is applied to the geometry.
+        /// Use <see cref="TraceObject.transform"/> to apply an instance transform.
+        /// </remarks>
+        static member ofIndexedGeometryWithMicromap (flags : GeometryFlags) =
+            fun (trafo : Trafo3d) (micromap : IMicromap) (geometry : IndexedGeometry) ->
+                TraceObject.ofIndexedGeometryWithMicromap ~~flags ~~trafo ~~micromap geometry
 
+        /// <summary>
         /// Creates a trace object from the given indexed geometry.
+        /// </summary>
+        /// <remarks>
+        /// The given transform is applied to the geometry.
+        /// Use <see cref="TraceObject.transform"/> to apply an instance transform.
+        /// </remarks>
         static member inline ofIndexedGeometry (flags : GeometryFlags) =
             fun (trafo : Trafo3d) (geometry : IndexedGeometry) -> TraceObject.ofIndexedGeometry ~~flags ~~trafo geometry
