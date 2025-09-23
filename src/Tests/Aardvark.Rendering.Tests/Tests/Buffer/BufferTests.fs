@@ -13,6 +13,7 @@ module ``Buffer Tests`` =
             BufferDownload.tests
             BufferToArray.tests
             AttributeBuffer.tests
+            ManagedBuffer.tests
         ]
 
     [<Tests>]
