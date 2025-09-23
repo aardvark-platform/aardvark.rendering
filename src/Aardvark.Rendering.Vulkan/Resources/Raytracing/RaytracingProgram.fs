@@ -352,7 +352,7 @@ module RaytracingProgram =
 
         let private tryGetCacheFile (device : Device) (id : string) =
             device.ShaderCachePath |> Option.map (fun prefix ->
-                let hash = ShaderProgram.FileCacheName.ofEffectId device id
+                let hash = ShaderProgram.FileCacheName.ofEffectId device false id
                 Path.combine [prefix; hash + ".rtx"]
             )
 

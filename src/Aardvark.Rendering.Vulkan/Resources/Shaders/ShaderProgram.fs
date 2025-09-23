@@ -360,16 +360,23 @@ module ShaderProgram =
                   layered    = key.layout.PerLayerUniforms
                   layerCount = key.layout.LayerCount
                   depthRange = FShadeConfig.depthRange
-                  extensions = FShadeConfig.availableExtensions device
-                }
+                  extensions = FShadeConfig.availableExtensions device }
 
             getHash signature
 
-        let ofEffectId (device: Device) (id: string) =
-            getHash (id, device.DebugConfig.GenerateShaderDebugInfo, device.DebugConfig.OptimizeShaders)
+        // Used for dynamic surfaces, compute shaders, and raytracing shaders.
+        let ofEffectId (device: Device) (respectDepthRange: bool) (id: string) =
+            let signature =
+                { id         = id
+                  debug      = device.DebugConfig.GenerateShaderDebugInfo
+                  optimized  = device.DebugConfig.OptimizeShaders
+                  outputs    = Map.empty
+                  layered    = Set.empty
+                  layerCount = 0
+                  depthRange = if respectDepthRange then FShadeConfig.depthRange else Range1f()
+                  extensions = FShadeConfig.availableExtensions device }
 
-        let ofString (value : string) =
-            getHash value
+            getHash signature
 
     module internal ShaderProgramData =
 
@@ -574,7 +581,7 @@ module ShaderProgram =
         device.GetCached(moduleCache, hash, fun hash ->
             match device.ShaderCachePath with
             | Some shaderCachePath ->
-                let fileName = FileCacheName.ofString hash
+                let fileName = FileCacheName.ofEffectId device true hash
                 let cacheFile = Path.Combine(shaderCachePath, fileName + ".module")
                 match tryRead inputLayout cacheFile device with
                 | Some p -> p
