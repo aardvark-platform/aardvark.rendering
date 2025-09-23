@@ -112,19 +112,9 @@ type InterfaceSlots =
     }
 
 type internal LayoutedIndirectData(data: Aardvark.Rendering.IndirectBuffer) =
-    let mutable ptr, sizeInBytes =
+    let buffer =
         match data.Buffer with
-        | :? INativeBuffer as nb ->
-            let dst = Marshal.AllocHGlobal(nativeint nb.SizeInBytes)
-
-            nb.Use (fun src ->
-                let offset = nativeint data.Offset
-                let stride = nativeint data.Stride
-                DrawCallInfo.ToggleIndexedCopy(src + offset, dst + offset, stride, data.Count)
-            )
-
-            dst, nb.SizeInBytes
-
+        | :? INativeBuffer as nb -> nb
         | _ ->
             if data.Indexed then
                 failf "Indirect buffer contains indexed data but expected non-indexed data"
@@ -132,6 +122,21 @@ type internal LayoutedIndirectData(data: Aardvark.Rendering.IndirectBuffer) =
                 failf "Indirect buffer contains non-indexed data but expected indexed data"
 
     member _.Data = data
+    member _.SizeInBytes = buffer.SizeInBytes
+
+    member _.Use(action: nativeint -> 'T) =
+        let dst = Marshal.AllocHGlobal(nativeint buffer.SizeInBytes)
+
+        try
+            buffer.Use (fun src ->
+                let offset = nativeint data.Offset
+                let stride = nativeint data.Stride
+                DrawCallInfo.ToggleIndexedCopy(src + offset, dst + offset, stride, data.Count)
+            )
+
+            action dst
+        finally
+            Marshal.FreeHGlobal dst
 
     override this.Equals(obj: obj) =
         match obj with
@@ -141,21 +146,9 @@ type internal LayoutedIndirectData(data: Aardvark.Rendering.IndirectBuffer) =
     override this.GetHashCode() =
         data.GetHashCode()
 
-    member _.Use(action: nativeint -> 'T) =
-        if ptr = 0n then raise <| ObjectDisposedException("LayoutedIndirectData")
-        action ptr
-
-    member _.Dispose() =
-        Marshal.FreeHGlobal ptr
-        sizeInBytes <- 0UL
-        ptr <- 0n
-
     interface INativeBuffer with
-        member _.SizeInBytes = sizeInBytes
+        member this.SizeInBytes = this.SizeInBytes
         member this.Use action = this.Use action
-
-    interface IDisposable with
-        member this.Dispose() = this.Dispose()
 
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskLock : Option<RenderTaskLock>) =
@@ -329,7 +322,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun data ->
                 let buffer =
                     if data.Indexed <> indexed then
-                        use layouted = new LayoutedIndirectData(data)
+                        let layouted = LayoutedIndirectData(data)
                         bufferManager.Create(name, layouted)
                     else
                         bufferManager.Create(name, data.Buffer)
@@ -339,7 +332,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun handle data ->
                 let buffer =
                     if data.Indexed <> indexed then
-                        use layouted = new LayoutedIndirectData(data)
+                        let layouted = LayoutedIndirectData(data)
                         bufferManager.Update(name, handle.Buffer, layouted)
                     else
                         bufferManager.Update(name, handle.Buffer, data.Buffer)
