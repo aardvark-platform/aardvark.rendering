@@ -14,6 +14,15 @@ module AttributeBuffer =
     open FSharp.Quotations
     open TypeMeta
 
+    type C3f with
+        member this.ToC4uiAsFloat() =
+            let s = 4294967295.999999f
+            C4ui(
+                uint (this.R * s),
+                uint (this.G * s),
+                uint (this.B * s)
+            )
+
     module private AttributeShader =
         type private Vertex<'T> = { [<Color>] c : 'T }
 
@@ -293,6 +302,48 @@ module AttributeBuffer =
                 C3ui.BurlyWood (C3ui.BurlyWood.ToC3fExact().ToArray())
                 perInstance singleValue interleaved true runtime
 
+        let attributeC3bToC4us (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<C3b, C4us> <@ c4us @>)
+                TextureFormat.Rgba16ui
+                C3b.Brown (C3b.Brown.ToC4us().ToArray())
+                perInstance singleValue interleaved false runtime
+
+        let attributeC3bToC4ui (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<C3b, C4ui> <@ c4ui @>)
+                TextureFormat.Rgba32ui
+                C3b.Brown (C3b.Brown.ToC4ui().ToArray())
+                perInstance singleValue interleaved false runtime
+
+        let attributeC3bToC4f (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<C3b, C4f> <@ c4f @>)
+                TextureFormat.Rgba32f
+                C3b.Brown (C3b.Brown.ToC4f().ToArray())
+                perInstance singleValue interleaved false runtime
+
+        let attributeC3fToC4b (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<C3f, C4b> <@ c4b @>)
+                TextureFormat.Rgba32ui
+                C3f.Brown (C3f.Brown.ToC4b().ToV4ui().ToArray())
+                perInstance singleValue interleaved false runtime
+
+        let attributeC3fToC4us (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<C3f, C4us> <@ c4us @>)
+                TextureFormat.Rgba16ui
+                C3f.Brown (C3f.Brown.ToC4us().ToArray())
+                perInstance singleValue interleaved false runtime
+
+        let attributeC3fToC4ui (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<C3f, C4ui> <@ c4ui @>)
+                TextureFormat.Rgba32ui
+                C3f.Brown (C3f.Brown.ToC4uiAsFloat().ToArray())
+                perInstance singleValue interleaved false runtime
+
         let attributeV4f (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
             renderAttribute
                 AttributeShader.Effect<V4f> TextureFormat.Rgba32f
@@ -394,6 +445,12 @@ module AttributeBuffer =
             "V3f from C3us normalized",       attributeV3fFromC3usNorm
             "V3f from C3us scaled",           attributeV3fFromC3usScaled
             "V3f from C3ui normalized",       attributeV3fFromC3uiNorm
+            "C3b to C4us",                    attributeC3bToC4us
+            "C3b to C4ui",                    attributeC3bToC4ui
+            "C3b to C4f",                     attributeC3bToC4f
+            "C3f to C4b",                     attributeC3fToC4b
+            "C3f to C4us",                    attributeC3fToC4us
+            "C3f to C4ui",                    attributeC3fToC4ui
             "V4f",                            attributeV4f
             "V2i",                            attributeV2i
             "V3i",                            attributeV3i
@@ -424,6 +481,15 @@ module AttributeBuffer =
 
     let tests (backend : Backend) =
         [
+            let bgrLayoutTests =
+                Set.ofList [
+                    "uint8 from C4b"
+                    "V3f from C4b scaled"
+                    "C3b to C4us"
+                    "C3b to C4ui"
+                    "C3b to C4f"
+                ]
+
             for mode in Mode.All do
                 for name, case in Cases.all do
 
@@ -438,7 +504,7 @@ module AttributeBuffer =
                 // GL_BGRA constant for buffers. Unfortunately, this
                 // only works for normalized float attributes.
                 // For single values we just fix the layout ourselves.
-                if backend = Backend.GL && (name = "uint8 from C4b" || name = "V3f from C4b scaled") && not singleValue then
+                if backend = Backend.GL && Set.contains name bgrLayoutTests && not singleValue then
                     ()
 
                 // Vulkan does not support converting double to float on-the-fly.

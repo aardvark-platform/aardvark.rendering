@@ -85,6 +85,12 @@ module GLSLType =
             Float(32), typeof<float32>
             Float(64), typeof<float32>
 
+            Vec(3, Int(false, 8)), typeof<C3b>
+            Vec(4, Int(false, 8)), typeof<C4b>
+
+            Vec(3, Int(false, 16)), typeof<C3us>
+            Vec(4, Int(false, 16)), typeof<C4us>
+
             Vec(2, Int(true, 32)), typeof<V2i>
             Vec(3, Int(true, 32)), typeof<V3i>
             Vec(4, Int(true, 32)), typeof<V4i>
