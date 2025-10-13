@@ -94,9 +94,8 @@ module private RadixSortShaders =
 
                 let mutable p = key * uint32 RADIXGROUPS
                 let ppos = p + uint32 tpos
-                
-                Preprocessor.unroll()
-                for i in 0 .. 15 do
+
+                for i in unroll 0 .. 15 do
                     if tmod = i && pos < elements then
                         sRadixSum.[int ppos] <- sRadixSum.[int ppos] + 1u
                     barrier()
@@ -267,9 +266,8 @@ module private RadixSortShaders =
                 key <- (key >>> shift) &&& RADIXMASK
                 let p = key * uint32 RADIXGROUPS
                 let ppos = int p + tpos
-                    
-                Preprocessor.unroll()
-                for i in 0 .. 15 do
+
+                for i in unroll 0 .. 15 do
                     if tmod = i && pos < elements then
                         let index = int sRadixSum.[ppos]
                         sRadixSum.[ppos] <- sRadixSum.[ppos] + 1u
@@ -348,9 +346,8 @@ module private RadixSortShaders =
                 key <- (key >>> shift) &&& RADIXMASK
                 let p = key * uint32 RADIXGROUPS
                 let ppos = int p + tpos
-                    
-                Preprocessor.unroll()
-                for i in 0 .. 15 do
+
+                for i in unroll 0 .. 15 do
                     if tmod = i && pos < elements then
                         let index = int sRadixSum.[ppos]
                         sRadixSum.[ppos] <- sRadixSum.[ppos] + 1u

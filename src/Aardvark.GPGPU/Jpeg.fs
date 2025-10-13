@@ -789,7 +789,7 @@ module private JpegKernels =
 
     [<Inline>]
     let quantify (i : int) (v : V3f) =
-        let ql = V3i.Max(V3i.III, uniform.Quantization.[i].XYZ)
+        let ql = max V3i.III uniform.Quantization.[i].XYZ
         let t = v / V3f ql
         V3i(int (round t.X), int (round t.Y), int (round t.Z))
    
