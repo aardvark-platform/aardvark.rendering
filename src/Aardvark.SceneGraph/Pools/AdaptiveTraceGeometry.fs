@@ -8,21 +8,37 @@ open FSharp.Data.Adaptive.Operators
 open System
 open System.Runtime.InteropServices
 
-/// Describes a buffer containing V3f vertices.
-type AdaptiveVertexData(buffer: aval<IBuffer>, count: uint32, offset: uint64, stride: uint64) =
+/// <summary>
+/// Describes an adaptive buffer containing <see cref="V3f"/> vertices.
+/// </summary>
+type AdaptiveVertexData =
 
-    /// Buffer containing the data.
-    member val Buffer = buffer
+    /// Adaptive buffer containing the data.
+    val Buffer : aval<IBuffer>
 
     /// Number of vertices in the buffer.
-    member val Count = count
+    val Count : uint32
 
     /// Offset in bytes into the buffer.
-    member val Offset = offset
+    val Offset : uint64
 
     /// Stride in bytes between each vertex.
-    member val Stride = stride
+    val Stride : uint64
 
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveVertexData"/> instance.
+    /// </summary>
+    /// <param name="buffer">Adaptive buffer containing the data.</param>
+    /// <param name="count">Number of vertices in the buffer.</param>
+    /// <param name="offset">Offset in bytes into the buffer.</param>
+    /// <param name="stride">Number of bytes between two consecutive vertices.</param>
+    new (buffer: aval<IBuffer>, count: uint32, offset: uint64, stride: uint64) =
+        { Buffer = buffer; Count = count; Offset = offset; Stride = stride }
+
+    /// <summary>
+    /// Creates new <see cref="AdaptiveVertexData"/> from constant vertex data.
+    /// </summary>
+    /// <param name="data">Constant vertex data.</param>
     new (data: VertexData) =
         AdaptiveVertexData(~~data.Buffer, data.Count, data.Offset, data.Stride)
 
@@ -43,28 +59,50 @@ type AdaptiveVertexData(buffer: aval<IBuffer>, count: uint32, offset: uint64, st
     interface IEquatable<AdaptiveVertexData> with
         member this.Equals other = this.Equals other
 
-/// Describes a buffer containing index data.
+/// Describes an adaptive buffer containing index data.
 [<AllowNullLiteral>]
-type AdaptiveIndexData(indexType: IndexType, buffer: aval<IBuffer>, offset: uint64) =
+type AdaptiveIndexData =
 
-    /// The type of the index data.
-    member val Type = indexType
+    /// Type of the index data.
+    val Type : IndexType
 
-    /// Buffer containing the data.
-    member val Buffer = buffer
+    /// Adaptive buffer containing the data.
+    val Buffer : aval<IBuffer>
+
+    /// Number of indices in the buffer.
+    val Count : uint32
 
     /// Offset in bytes into the buffer.
-    member val Offset = offset
+    val Offset : uint64
 
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveIndexData"/> instance.
+    /// </summary>
+    /// <param name="indexType">Type of the index data.</param>
+    /// <param name="buffer">Adaptive buffer containing the data.</param>
+    /// <param name="count">Number of indices in the buffer.</param>
+    /// <param name="offset">Offset in bytes into the buffer.</param>
+    new (indexType: IndexType, buffer: aval<IBuffer>, count: uint32, offset: uint64) =
+        { Type = indexType; Buffer = buffer; Count = count; Offset = offset }
+
+    /// <summary>
+    /// Creates new <see cref="AdaptiveIndexData"/> from constant index data.
+    /// </summary>
+    /// <param name="data">Constant index data.</param>
     new (data: IndexData) =
-        AdaptiveIndexData(data.Type, ~~data.Buffer, data.Offset)
+        AdaptiveIndexData(data.Type, ~~data.Buffer, data.Count, data.Offset)
 
+    /// <summary>
+    /// Creates new <see cref="AdaptiveIndexData"/> from constant index data.
+    /// Returns <c>null</c> if <paramref name="data"/> is null.
+    /// </summary>
+    /// <param name="data">Constant index data or <c>null</c>.</param>
     static member inline FromIndexData(data: IndexData) =
         if isNull data then null
         else AdaptiveIndexData data
 
     member inline internal this.GetValue(token: AdaptiveToken) =
-        IndexData(this.Type, this.Buffer.GetValue token, this.Offset)
+        IndexData(this.Type, this.Buffer.GetValue token, this.Count, this.Offset)
 
     member inline private this.Equals(other: AdaptiveIndexData) =
         this.Type = other.Type && this.Buffer = other.Buffer && this.Offset = other.Offset
@@ -80,59 +118,210 @@ type AdaptiveIndexData(indexType: IndexType, buffer: aval<IBuffer>, offset: uint
     interface IEquatable<AdaptiveIndexData> with
         member this.Equals other = this.Equals other
 
-/// Trace geometry described by a triangle mesh.
-type AdaptiveTriangleMesh(vertices: AdaptiveVertexData, indices: AdaptiveIndexData, primitives: uint32, transform: aval<Trafo3d>,
-                          flags: aval<GeometryFlags>, micromap: aval<IMicromap>) =
+/// Trace geometry described by an adaptive list of triangles.
+type AdaptiveTriangleMesh =
 
     /// Vertices of the mesh.
-    member val Vertices = vertices
+    val Vertices : AdaptiveVertexData
 
-    /// Indices of the mesh (or null if not indexed).
-    member val Indices = indices
+    /// <summary>
+    /// Indices of the mesh or <c>null</c> if not indexed.
+    /// </summary>
+    val Indices : AdaptiveIndexData
 
-    /// Micromap of the mesh (value can be null).
-    member val Micromap = micromap
+    /// <summary>
+    /// Micromap of the mesh (value can be <c>null</c>).
+    /// </summary>
+    val Micromap : aval<IMicromap>
 
-    /// Number of triangles in the mesh.
-    member val Primitives = primitives
-
-    /// Transformation to apply on the mesh.
-    member val Transform = transform
+    /// Transformation to apply to the mesh.
+    val Transform : aval<Trafo3d>
 
     /// Geometry flags of the mesh.
-    member val Flags = flags
+    val Flags : aval<GeometryFlags>
 
+    /// Returns the effective number of vertices in the mesh (i.e. the index count if indexed and the vertex count if non-indexed).
+    member inline this.FaceVertexCount =
+        if isNull this.Indices then this.Vertices.Count
+        else this.Indices.Count
+
+    /// <summary>
+    /// Returns the number of triangles in the mesh, computed as <c>FaceVertexCount / 3</c>.
+    /// </summary>
+    member inline this.Primitives = this.FaceVertexCount / 3u
+
+    /// Returns whether the mesh is indexed.
+    member inline this.IsIndexed = notNull this.Indices
+
+    /// Returns whether the mesh has a micromap.
+    member inline this.HasMicromap = this.Micromap |> AVal.mapNonAdaptive notNull
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from vertex and index data.
+    /// </summary>
+    /// <param name="vertices">Vertices of the mesh.</param>
+    /// <param name="indices">Indices of the mesh or <c>null</c> if not indexed.</param>
+    /// <param name="transform">Transformation to apply to the mesh.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    /// <param name="micromap">Micromap of the mesh (value can be <c>null</c>).</param>
+    new (vertices: AdaptiveVertexData, indices: AdaptiveIndexData, transform: aval<Trafo3d>, flags: aval<GeometryFlags>, micromap: aval<IMicromap>) =
+        { Vertices = vertices; Indices = indices; Micromap = micromap; Transform = transform; Flags = flags }
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from vertex and index data.
+    /// </summary>
+    /// <param name="vertices">Vertices of the mesh.</param>
+    /// <param name="indices">Indices of the mesh or <c>null</c> if not indexed.</param>
+    /// <param name="transform">Transformation to apply to the mesh.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    new (vertices: AdaptiveVertexData, indices: AdaptiveIndexData, transform: aval<Trafo3d>, flags: aval<GeometryFlags>) =
+        AdaptiveTriangleMesh(vertices, indices, transform, flags, ~~null)
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from vertex and index data.
+    /// </summary>
+    /// <param name="vertices">Vertices of the mesh.</param>
+    /// <param name="indices">Indices of the mesh or <c>null</c> if not indexed.</param>
+    /// <param name="transform">Transformation to apply to the mesh.</param>
+    new (vertices: AdaptiveVertexData, indices: AdaptiveIndexData, transform: aval<Trafo3d>) =
+        AdaptiveTriangleMesh(vertices, indices, transform, ~~GeometryFlags.None)
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from vertex and index data.
+    /// </summary>
+    /// <param name="vertices">Vertices of the mesh.</param>
+    /// <param name="indices">Indices of the mesh or <c>null</c> if not indexed.</param>
+    /// <param name="transform">Transformation to apply to the mesh.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    /// <param name="micromap">Micromap of the mesh (can be <c>null</c>).</param>
+    new (vertices: AdaptiveVertexData, indices: AdaptiveIndexData, transform: Trafo3d,
+         [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags,
+         [<Optional; DefaultParameterValue(null : IMicromap)>] micromap: IMicromap) =
+        AdaptiveTriangleMesh(vertices, indices, ~~transform, ~~flags, ~~micromap)
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from vertex and index data.
+    /// </summary>
+    /// <param name="vertices">Vertices of the mesh.</param>
+    /// <param name="indices">Indices of the mesh or <c>null</c> if not indexed.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    /// <param name="micromap">Micromap of the mesh (value can be <c>null</c>).</param>
+    new (vertices: AdaptiveVertexData, indices: AdaptiveIndexData, flags: aval<GeometryFlags>, micromap: aval<IMicromap>) =
+        AdaptiveTriangleMesh(vertices, indices, ~~Trafo3d.Identity, flags, micromap)
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from vertex and index data.
+    /// </summary>
+    /// <param name="vertices">Vertices of the mesh.</param>
+    /// <param name="indices">Indices of the mesh or <c>null</c> if not indexed.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    new (vertices: AdaptiveVertexData, indices: AdaptiveIndexData, flags: aval<GeometryFlags>) =
+        AdaptiveTriangleMesh(vertices, indices, flags, ~~null)
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from vertex and index data.
+    /// </summary>
+    /// <param name="vertices">Vertices of the mesh.</param>
+    /// <param name="indices">Indices of the mesh or <c>null</c> if not indexed.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    /// <param name="micromap">Micromap of the mesh (can be <c>null</c>).</param>
+    new (vertices: AdaptiveVertexData, indices: AdaptiveIndexData,
+         [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags,
+         [<Optional; DefaultParameterValue(null : IMicromap)>] micromap: IMicromap) =
+        AdaptiveTriangleMesh(vertices, indices, ~~flags, ~~micromap)
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from a constant triangle mesh.
+    /// </summary>
+    /// <param name="mesh">Constant triangle mesh.</param>
     new (mesh: TriangleMesh) =
         AdaptiveTriangleMesh(
             AdaptiveVertexData mesh.Vertices, AdaptiveIndexData.FromIndexData mesh.Indices,
-            mesh.Primitives, ~~mesh.Transform, ~~mesh.Flags, ~~null
+            ~~mesh.Transform, ~~mesh.Flags, ~~mesh.Micromap
         )
 
+    /// <summary>
+    /// Creates an adaptive triangle mesh from the given <see cref="IndexedGeometry"/>.
+    /// </summary>
+    /// <param name="geometry">Geometry data; must be a triangle list or strip.</param>
+    /// <param name="transform">Transformation to apply to the mesh.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    /// <param name="micromap">Micromap of the mesh (value can be <c>null</c>).</param>
+    /// <exception cref="NotSupportedException">if geometry topology is not <see cref="IndexedGeometryMode.TriangleList"/> or <see cref="IndexedGeometryMode.TriangleStrip"/>.</exception>
     static member FromIndexedGeometry(geometry: IndexedGeometry, transform: aval<Trafo3d>, flags: aval<GeometryFlags>, micromap: aval<#IMicromap>) =
         let mesh = TriangleMesh.FromIndexedGeometry(geometry)
         AdaptiveTriangleMesh(
             AdaptiveVertexData mesh.Vertices, AdaptiveIndexData.FromIndexData mesh.Indices,
-            mesh.Primitives, transform, flags, micromap |> AdaptiveResource.map (fun m -> m :> IMicromap)
+            transform, flags, micromap |> AdaptiveResource.map (fun m -> m :> IMicromap)
         )
 
+    /// <summary>
+    /// Creates an adaptive triangle mesh from the given <see cref="IndexedGeometry"/>.
+    /// </summary>
+    /// <param name="geometry">Geometry data; must be a triangle list or strip.</param>
+    /// <param name="transform">Transformation to apply to the mesh.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    /// <exception cref="NotSupportedException">if geometry topology is not <see cref="IndexedGeometryMode.TriangleList"/> or <see cref="IndexedGeometryMode.TriangleStrip"/>.</exception>
+    static member inline FromIndexedGeometry(geometry: IndexedGeometry, transform: aval<Trafo3d>, flags: aval<GeometryFlags>) =
+        AdaptiveTriangleMesh.FromIndexedGeometry(geometry, transform, flags, ~~null)
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from the given <see cref="IndexedGeometry"/>.
+    /// </summary>
+    /// <param name="geometry">Geometry data; must be a triangle list or strip.</param>
+    /// <param name="transform">Transformation to apply to the mesh.</param>
+    /// <exception cref="NotSupportedException">if geometry topology is not <see cref="IndexedGeometryMode.TriangleList"/> or <see cref="IndexedGeometryMode.TriangleStrip"/>.</exception>
+    static member inline FromIndexedGeometry(geometry: IndexedGeometry, transform: aval<Trafo3d>) =
+        AdaptiveTriangleMesh.FromIndexedGeometry(geometry, transform, ~~GeometryFlags.None, ~~null)
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from the given <see cref="IndexedGeometry"/>.
+    /// </summary>
+    /// <param name="geometry">Geometry data; must be a triangle list or strip.</param>
+    /// <param name="transform">Transformation to apply to the mesh.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    /// <param name="micromap">Micromap of the mesh (can be <c>null</c>).</param>
+    /// <exception cref="NotSupportedException">if geometry topology is not <see cref="IndexedGeometryMode.TriangleList"/> or <see cref="IndexedGeometryMode.TriangleStrip"/>.</exception>
     static member inline FromIndexedGeometry(geometry: IndexedGeometry, transform: Trafo3d,
                                              [<DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags,
                                              [<Optional; DefaultParameterValue(null : IMicromap)>] micromap: IMicromap) =
         AdaptiveTriangleMesh.FromIndexedGeometry(geometry, ~~transform, ~~flags, ~~micromap)
 
+    /// <summary>
+    /// Creates an adaptive triangle mesh from the given <see cref="IndexedGeometry"/>.
+    /// </summary>
+    /// <param name="geometry">Geometry data; must be a triangle list or strip.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    /// <param name="micromap">Micromap of the mesh (value can be <c>null</c>).</param>
+    /// <exception cref="NotSupportedException">if geometry topology is not <see cref="IndexedGeometryMode.TriangleList"/> or <see cref="IndexedGeometryMode.TriangleStrip"/>.</exception>
+    static member inline FromIndexedGeometry(geometry: IndexedGeometry, flags: aval<GeometryFlags>, micromap: aval<#IMicromap>) =
+        AdaptiveTriangleMesh.FromIndexedGeometry(geometry, ~~Trafo3d.Identity, flags, micromap)
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from the given <see cref="IndexedGeometry"/>.
+    /// </summary>
+    /// <param name="geometry">Geometry data; must be a triangle list or strip.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    /// <exception cref="NotSupportedException">if geometry topology is not <see cref="IndexedGeometryMode.TriangleList"/> or <see cref="IndexedGeometryMode.TriangleStrip"/>.</exception>
+    static member inline FromIndexedGeometry(geometry: IndexedGeometry, flags: aval<GeometryFlags>) =
+        AdaptiveTriangleMesh.FromIndexedGeometry(geometry, flags, ~~null)
+
+    /// <summary>
+    /// Creates an adaptive triangle mesh from the given <see cref="IndexedGeometry"/>.
+    /// </summary>
+    /// <param name="geometry">Geometry data; must be a triangle list or strip.</param>
+    /// <param name="flags">Geometry flags of the mesh.</param>
+    /// <param name="micromap">Micromap of the mesh (can be <c>null</c>).</param>
+    /// <exception cref="NotSupportedException">if geometry topology is not <see cref="IndexedGeometryMode.TriangleList"/> or <see cref="IndexedGeometryMode.TriangleStrip"/>.</exception>
     static member inline FromIndexedGeometry(geometry: IndexedGeometry,
                                              [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags,
                                              [<Optional; DefaultParameterValue(null : IMicromap)>] micromap: IMicromap) =
-        AdaptiveTriangleMesh.FromIndexedGeometry(geometry, Trafo3d.Identity, flags, micromap)
-
-    /// Returns whether the mesh is indexed.
-    member inline this.IsIndexed = not <| obj.ReferenceEquals(this.Indices, null)
+        AdaptiveTriangleMesh.FromIndexedGeometry(geometry, ~~flags, ~~micromap)
 
     member inline internal this.GetValue(token: AdaptiveToken) =
         let indices = if this.IsIndexed then this.Indices.GetValue token else null
         TriangleMesh(
-            this.Vertices.GetValue token,
-            indices, this.Primitives,
+            this.Vertices.GetValue token, indices,
             this.Transform.GetValue token,
             this.Flags.GetValue token,
             this.Micromap.GetValue token
@@ -161,21 +350,82 @@ type AdaptiveTriangleMesh(vertices: AdaptiveVertexData, indices: AdaptiveIndexDa
     interface IEquatable<AdaptiveTriangleMesh> with
         member this.Equals other = this.Equals other
 
-/// Trace geometry described by axis-aligned bounding boxes.
-type AdaptiveBoundingBoxes(data: aval<AABBsData>, count: uint32, flags: aval<GeometryFlags>) =
+/// Trace geometry represented by adaptive axis-aligned bounding boxes.
+type AdaptiveBoundingBoxes =
 
     /// Bounding box data.
-    member val Data = data
+    val Data : aval<AABBsData>
 
     /// Number of bounding boxes.
-    member val Count = count
+    val Count : uint32
 
     /// Geometry flags of the bounding boxes.
-    member val Flags = flags
+    val Flags : aval<GeometryFlags>
 
-    new (boundingBoxes: BoundingBoxes) =
-        AdaptiveBoundingBoxes(~~boundingBoxes.Data, boundingBoxes.Count, ~~boundingBoxes.Flags)
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance.
+    /// </summary>
+    /// <param name="data">Adaptive bounding box data.</param>
+    /// <param name="count">Number of bounding boxes.</param>
+    /// <param name="flags">Geometry flags of the bounding boxes.</param>
+    new (data: aval<AABBsData>, count: uint32, flags: aval<GeometryFlags>) =
+        { Data = data; Count = count; Flags = flags }
 
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance.
+    /// </summary>
+    /// <param name="data">Adaptive bounding box data.</param>
+    /// <param name="count">Number of bounding boxes.</param>
+    /// <param name="flags">Geometry flags of the bounding boxes.</param>
+    new (data: aval<AABBsData>, count: uint32, [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
+        AdaptiveBoundingBoxes(data, count, ~~flags)
+
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance from a single adaptive <see cref="Box3f"/>.
+    /// </summary>
+    /// <param name="box">Adaptive axis-aligned bounding box.</param>
+    /// <param name="flags">Geometry flags of the bounding box.</param>
+    new (box: aval<Box3f>, flags: aval<GeometryFlags>) =
+        let buffer = box |> AVal.map (fun box -> AABBsData(ArrayBuffer [| box |]))
+        AdaptiveBoundingBoxes(buffer, 1u, flags)
+
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance from a single adaptive <see cref="Box3f"/>.
+    /// </summary>
+    /// <param name="box">Adaptive axis-aligned bounding box.</param>
+    /// <param name="flags">Geometry flags of the bounding box.</param>
+    new (box: aval<Box3f>, [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
+        AdaptiveBoundingBoxes(box, ~~flags)
+
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance from a single adaptive <see cref="Box3d"/>.
+    /// </summary>
+    /// <param name="box">Adaptive axis-aligned bounding box.</param>
+    /// <param name="flags">Geometry flags of the bounding box.</param>
+    new (box: aval<Box3d>, flags: aval<GeometryFlags>) =
+        AdaptiveBoundingBoxes(box |> AVal.map Box3f, flags)
+
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance from a single adaptive <see cref="Box3d"/>.
+    /// </summary>
+    /// <param name="box">Adaptive axis-aligned bounding box.</param>
+    /// <param name="flags">Geometry flags of the bounding box.</param>
+    new (box: aval<Box3d>, [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
+        AdaptiveBoundingBoxes(box, ~~flags)
+
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance from a constant <see cref="BoundingBoxes"/> instance.
+    /// </summary>
+    /// <param name="boxes">Constant bounding boxes.</param>
+    new (boxes: BoundingBoxes) =
+        AdaptiveBoundingBoxes(~~boxes.Data, boxes.Count, ~~boxes.Flags)
+
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance for a sphere with the given position and radius.
+    /// </summary>
+    /// <param name="position">Center of the sphere.</param>
+    /// <param name="radius">Radius of the sphere.</param>
+    /// <param name="flags">Geometry flags of the bounding box.</param>
     static member inline FromCenterAndRadius(position: aval<V3f>, radius: aval<float32>, flags: aval<GeometryFlags>) =
         let data =
             (position, radius) ||> AVal.map2 (fun position radius ->
@@ -184,26 +434,36 @@ type AdaptiveBoundingBoxes(data: aval<AABBsData>, count: uint32, flags: aval<Geo
             )
         AdaptiveBoundingBoxes(data, 1u, flags)
 
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance for a sphere with the given position and radius.
+    /// </summary>
+    /// <param name="position">Center of the sphere.</param>
+    /// <param name="radius">Radius of the sphere.</param>
+    /// <param name="flags">Geometry flags of the bounding box.</param>
     static member inline FromCenterAndRadius(position: aval<V3f>, radius: aval<float32>,
                                              [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
         AdaptiveBoundingBoxes.FromCenterAndRadius(position, radius, ~~flags)
 
-    static member inline FromCenterAndRadius(position: V3f, radius: float32,
-                                             [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
-        AdaptiveBoundingBoxes.FromCenterAndRadius(~~position, ~~radius, ~~flags)
-
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance for a sphere with the given position and radius.
+    /// </summary>
+    /// <param name="position">Center of the sphere.</param>
+    /// <param name="radius">Radius of the sphere.</param>
+    /// <param name="flags">Geometry flags of the bounding box.</param>
     static member inline FromCenterAndRadius(position: aval<V3d>, radius: aval<float>, flags: aval<GeometryFlags>) =
         let position = position |> AVal.map v3f
         let radius = radius |> AVal.map float32
         AdaptiveBoundingBoxes.FromCenterAndRadius(position, radius, flags)
 
+    /// <summary>
+    /// Creates a new <see cref="AdaptiveBoundingBoxes"/> instance for a sphere with the given position and radius.
+    /// </summary>
+    /// <param name="position">Center of the sphere.</param>
+    /// <param name="radius">Radius of the sphere.</param>
+    /// <param name="flags">Geometry flags of the bounding box.</param>
     static member inline FromCenterAndRadius(position: aval<V3d>, radius: aval<float>,
                                              [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
         AdaptiveBoundingBoxes.FromCenterAndRadius(position, radius, ~~flags)
-
-    static member inline FromCenterAndRadius(position: V3d, radius: float,
-                                             [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
-        AdaptiveBoundingBoxes.FromCenterAndRadius(~~position, ~~radius, ~~flags)
 
     member inline internal this.GetValue(token: AdaptiveToken) =
         BoundingBoxes(this.Data.GetValue token, this.Count, this.Flags.GetValue token)

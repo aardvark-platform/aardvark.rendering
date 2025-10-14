@@ -7,57 +7,127 @@ open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open System.Collections.Generic
 
-type TraceObject(geometry           : AdaptiveTraceGeometry,
-                 usage              : AccelerationStructureUsage,
-                 vertexAttributes   : IDictionary<Symbol, BufferView> seq,
-                 faceAttributes     : IDictionary<Symbol, BufferView> seq,
-                 geometryAttributes : IDictionary<Symbol, IAdaptiveValue> seq,
-                 instanceAttributes : IDictionary<Symbol, IAdaptiveValue>,
-                 hitGroups          : aval<Symbol[]>,
-                 transform          : aval<Trafo3d>,
-                 frontFace          : aval<WindingOrder voption>,
-                 geometryMode       : aval<GeometryMode>,
-                 mask               : aval<VisibilityMask>) =
+/// <summary>
+/// Represents an instance in a raytracing scene managed with a <see cref="ManagedTracePool"/>.
+/// </summary>
+type TraceObject private (geometry           : AdaptiveTraceGeometry,
+                          usage              : AccelerationStructureUsage,
+                          vertexAttributes   : IDictionary<Symbol, BufferView>[],
+                          faceAttributes     : IDictionary<Symbol, BufferView>[],
+                          geometryAttributes : IDictionary<Symbol, IAdaptiveValue>[],
+                          instanceAttributes : IDictionary<Symbol, IAdaptiveValue>,
+                          hitGroups          : aval<Symbol[]>,
+                          transform          : aval<Trafo3d>,
+                          frontFace          : aval<WindingOrder voption>,
+                          geometryMode       : aval<GeometryMode>,
+                          mask               : aval<VisibilityMask>) =
 
-    /// Geometry data of the instance.
+    /// Geometry data of the instance; may consist of multiple geometries of the same type.
     member val Geometry           = geometry                       with get, set
 
     /// Usage flags of the underlying acceleration structure.
     member val Usage              = usage                          with get, set
 
-    /// Vertex attributes of each geometry (ignored for AABBs).
+    /// <summary>
+    /// Vertex attributes of each geometry; must contain at least <c>Geometry.Count</c> elements.
+    /// </summary>
+    /// <remarks>
+    /// Ignored if <see cref="Geometry"/> consists of axis-aligned bounding boxes.
+    /// </remarks>
     member val VertexAttributes   = Seq.asArray vertexAttributes   with get, set
 
-    /// Face attributes of each geometry (ignored for AABBs).
+    /// <summary>
+    /// Face attributes of each geometry; must contain at least <c>Geometry.Count</c> elements.
+    /// </summary>
+    /// <remarks>
+    /// Ignored if <see cref="Geometry"/> consists of axis-aligned bounding boxes.
+    /// </remarks>
     member val FaceAttributes     = Seq.asArray faceAttributes     with get, set
 
-    /// Attributes of each geometry.
+    /// <summary>
+    /// Attributes of each geometry; must contain at least <c>Geometry.Count</c> elements.
+    /// </summary>
     member val GeometryAttributes = Seq.asArray geometryAttributes with get, set
 
     /// Attributes of the instance.
     member val InstanceAttributes = instanceAttributes             with get, set
 
-    /// The hit groups for each geometry of the instance.
+    /// <summary>
+    /// Hit group of each geometry; must contain at least <c>Geometry.Count</c> elements.
+    /// </summary>
     member val HitGroups          = hitGroups                      with get, set
 
-    /// The transformation of the instance.
+    /// Transformation of the instance.
     member val Transform          = transform                      with get, set
 
-    /// The winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the instance.
-    /// Only has an effect if TraceRay() is called with one of the cull flags.
+    /// <summary>
+    /// Winding order of triangles considered to be front-facing, or <c>ValueNone</c> if back-face culling is to be disabled for the instance.
+    /// </summary>
+    /// <remarks>
+    /// Only has an effect if <c>TraceRay()</c> is called with one of the cull flags.
+    /// </remarks>
     member val FrontFace          = frontFace                      with get, set
 
     /// Optionally overrides flags set in the geometry.
     member val GeometryMode       = geometryMode                   with get, set
 
-    /// Visibility mask that is compared against the mask specified by TraceRay().
+    /// <summary>
+    /// Visibility mask that is compared against the mask specified by <c>TraceRay()</c>.
+    /// </summary>
     member val Mask               = mask                           with get, set
 
+    /// <summary>
+    /// Creates a new <see cref="TraceObject"/> instance.
+    /// </summary>
+    /// <param name="geometry">Geometry data of the instance; may consist of multiple geometries of the same type.</param>
+    /// <param name="usage">Usage flags of the underlying acceleration structure.</param>
+    /// <param name="vertexAttributes">Vertex attributes of each geometry; must contain at least <c>Geometry.Count</c> elements (ignored for AABBs).</param>
+    /// <param name="faceAttributes">Face attributes of each geometry; must contain at least <c>Geometry.Count</c> elements (ignore for AABBs).</param>
+    /// <param name="geometryAttributes">Attributes of each geometry; must contain at least <c>Geometry.Count</c> elements.</param>
+    /// <param name="instanceAttributes">Attributes of the instance.</param>
+    /// <param name="hitGroups">Hit group of each geometry; must contain at least <c>Geometry.Count</c> elements.</param>
+    /// <param name="transform">Transformation of the instance.</param>
+    /// <param name="frontFace">Winding order of triangles considered to be front-facing, or <c>ValueNone</c> if back-face culling is to be disabled for the instance.</param>
+    /// <param name="geometryMode">Optionally overrides flags set in the geometry.</param>
+    /// <param name="mask">Visibility mask that is compared against the mask specified by <c>TraceRay()</c>.</param>
+    new (geometry           : AdaptiveTraceGeometry,
+         usage              : AccelerationStructureUsage,
+         vertexAttributes   : IDictionary<Symbol, BufferView> seq,
+         faceAttributes     : IDictionary<Symbol, BufferView> seq,
+         geometryAttributes : IDictionary<Symbol, IAdaptiveValue> seq,
+         instanceAttributes : IDictionary<Symbol, IAdaptiveValue>,
+         hitGroups          : aval<Symbol[]>,
+         transform          : aval<Trafo3d>,
+         frontFace          : aval<WindingOrder voption>,
+         geometryMode       : aval<GeometryMode>,
+         mask               : aval<VisibilityMask>) =
+
+        TraceObject(
+            geometry, usage,
+            Seq.asArray vertexAttributes,
+            Seq.asArray faceAttributes,
+            Seq.asArray geometryAttributes,
+            instanceAttributes, hitGroups,
+            transform, frontFace, geometryMode, mask
+        )
+
+    /// <summary>
+    /// Creates a new <see cref="TraceObject"/> instance for a single geometry.
+    /// </summary>
+    /// <param name="geometry">Geometry data of the instance; must consist of a single geometry.</param>
+    /// <param name="usage">Usage flags of the underlying acceleration structure.</param>
+    /// <param name="vertexAttributes">Vertex attributes of the geometry.</param>
+    /// <param name="faceAttributes">Face attributes of the geometry.</param>
+    /// <param name="instanceAttributes">Attributes of the instance.</param>
+    /// <param name="hitGroup">Hit group of the instance.</param>
+    /// <param name="transform">Transformation of the instance.</param>
+    /// <param name="frontFace">Winding order of triangles considered to be front-facing, or <c>ValueNone</c> if back-face culling is to be disabled for the instance.</param>
+    /// <param name="geometryMode">Optionally overrides flags set in the geometry.</param>
+    /// <param name="mask">Visibility mask that is compared against the mask specified by <c>TraceRay()</c>.</param>
     new (geometry           : AdaptiveTraceGeometry,
          usage              : AccelerationStructureUsage,
          vertexAttributes   : IDictionary<Symbol, BufferView>,
          faceAttributes     : IDictionary<Symbol, BufferView>,
-         geometryAttributes : IDictionary<Symbol, IAdaptiveValue>,
          instanceAttributes : IDictionary<Symbol, IAdaptiveValue>,
          hitGroup           : aval<Symbol>,
          transform          : aval<Trafo3d>,
@@ -67,7 +137,7 @@ type TraceObject(geometry           : AdaptiveTraceGeometry,
 
         TraceObject(
             geometry, usage,
-            [| vertexAttributes |], [| faceAttributes |], [| geometryAttributes |], instanceAttributes,
+            [| vertexAttributes |], [| faceAttributes |], [| Dictionary() :> IDictionary<_, _> |], instanceAttributes,
             hitGroup |> AVal.map Array.singleton,
             transform, frontFace, geometryMode, mask
         )
@@ -123,20 +193,39 @@ module TraceObjectFSharp =
             |> TraceObject.ofAdaptiveGeometry
             |> TraceObject.usage AccelerationStructureUsage.Static
 
-        /// Sets vertex attributes for the given trace object.
+        /// <summary>
+        /// Sets vertex attributes for the geometries of the given trace object.
         /// The names can be string or Symbol.
+        /// </summary>
+        /// <remarks>
+        /// Vertex attributes are ignored if the trace object consists of axis-aligned bounding boxes.
+        /// </remarks>
+        /// <param name="attributes">Vertex attributes for each geometry; must contain an element for each geometry in the trace object.</param>
         static member inline vertexAttributes (attributes: #IDictionary< ^Name, BufferView> seq) =
             let conv = Symbol.convert Symbol.Converters.untyped
             let attributes = attributes |> Seq.asArray |> Array.map (IDictionary.mapKeys conv)
             fun (obj : TraceObject) -> obj.VertexAttributes <- attributes; obj
 
+        /// <summary>
         /// Sets vertex attributes for the given trace object with a single geometry.
         /// The names can be string or Symbol.
+        /// </summary>
+        /// <remarks>
+        /// Vertex attributes are ignored if the trace object consists of axis-aligned bounding boxes.
+        /// </remarks>
+        /// <param name="attributes">Vertex attributes for the geometry.</param>
         static member inline vertexAttributes (attributes: IDictionary< ^Name, BufferView>) =
             TraceObject.vertexAttributes [| attributes |]
 
-        /// Sets a vertex attribute for the given trace object.
+        /// <summary>
+        /// Sets a vertex attribute for the geometries of the given trace object.
         /// The name can be a string or Symbol.
+        /// </summary>
+        /// <remarks>
+        /// Vertex attributes are ignored if the trace object consists of axis-aligned bounding boxes.
+        /// </remarks>
+        /// <param name="name">Name of the attribute; can be a string or Symbol.</param>
+        /// <param name="values">Vertex attribute values for each geometry; must contain an element for each geometry in the trace object.</param>
         static member inline vertexAttribute (name: ^Name, values: BufferView seq) =
             let sym = name |> Symbol.convert Symbol.Converters.untyped
             let values = Seq.asArray values
@@ -147,25 +236,51 @@ module TraceObjectFSharp =
                     obj.VertexAttributes.[i] <- obj.VertexAttributes.[i] |> IDictionary.add sym values.[i]
                 obj
 
+        /// <summary>
         /// Sets a vertex attribute for the given trace object with a single geometry.
-        /// The name can be a string or Symbol.
+        /// The names can be string or Symbol.
+        /// </summary>
+        /// <remarks>
+        /// Vertex attributes are ignored if the trace object consists of axis-aligned bounding boxes.
+        /// </remarks>
+        /// <param name="name">Name of the attribute; can be a string or Symbol.</param>
+        /// <param name="values">Vertex attribute values for the geometry.</param>
         static member inline vertexAttribute (name: ^Name, values: BufferView) =
             TraceObject.vertexAttribute (name, [| values |])
 
-        /// Sets face attributes for the given trace object.
+        /// <summary>
+        /// Sets face attributes for the geometries of the given trace object.
         /// The names can be string or Symbol.
+        /// </summary>
+        /// <remarks>
+        /// Face attributes are ignored if the trace object consists of axis-aligned bounding boxes.
+        /// </remarks>
+        /// <param name="attributes">Face attributes for each geometry; must contain an element for each geometry in the trace object.</param>
         static member inline faceAttributes (attributes: #IDictionary< ^Name, BufferView> seq) =
             let conv = Symbol.convert Symbol.Converters.untyped
             let attributes = attributes |> Seq.asArray |> Array.map (IDictionary.mapKeys conv)
             fun (obj : TraceObject) -> obj.FaceAttributes <- attributes; obj
 
+        /// <summary>
         /// Sets face attributes for the given trace object with a single geometry.
         /// The names can be string or Symbol.
+        /// </summary>
+        /// <remarks>
+        /// Face attributes are ignored if the trace object consists of axis-aligned bounding boxes.
+        /// </remarks>
+        /// <param name="attributes">Face attributes for the geometry.</param>
         static member inline faceAttributes (attributes: IDictionary< ^Name, BufferView>) =
             TraceObject.faceAttributes [| attributes |]
 
-        /// Sets a face attribute for the given trace object.
+        /// <summary>
+        /// Sets a face attribute for the geometries of the given trace object.
         /// The name can be a string or Symbol.
+        /// </summary>
+        /// <remarks>
+        /// Face attributes are ignored if the trace object consists of axis-aligned bounding boxes.
+        /// </remarks>
+        /// <param name="name">Name of the attribute; can be a string or Symbol.</param>
+        /// <param name="values">Face attribute values for each geometry; must contain an element for each geometry in the trace object.</param>
         static member inline faceAttribute (name: ^Name, values: BufferView seq) =
             let sym = name |> Symbol.convert Symbol.Converters.untyped
             let values = Seq.asArray values
@@ -176,21 +291,36 @@ module TraceObjectFSharp =
                     obj.FaceAttributes.[i] <- obj.FaceAttributes.[i] |> IDictionary.add sym values.[i]
                 obj
 
+        /// <summary>
         /// Sets a face attribute for the given trace object with a single geometry.
-        /// The name can be a string or Symbol.
+        /// The names can be string or Symbol.
+        /// </summary>
+        /// <remarks>
+        /// Face attributes are ignored if the trace object consists of axis-aligned bounding boxes.
+        /// </remarks>
+        /// <param name="name">Name of the attribute; can be a string or Symbol.</param>
+        /// <param name="values">Face attribute values for the geometry.</param>
         static member inline faceAttribute (name: ^Name, values: BufferView) =
             TraceObject.faceAttribute (name, [| values |])
 
+        /// <summary>
         /// Sets geometry attributes for the given trace object.
         /// The names can be string or Symbol.
+        /// </summary>
+        /// <param name="attributes">Attributes for each geometry; must contain an element for each geometry in the trace object.</param>
+        /// <param name="obj">Trace object to apply the attributes to.</param>
         static member inline geometryAttributes (attributes: #IDictionary< ^Name, IAdaptiveValue> seq) (obj: TraceObject) =
             let conv = Symbol.convert Symbol.Converters.untyped
             let attributes = attributes |> Seq.asArray |> Array.map (IDictionary.mapKeys conv)
             obj.GeometryAttributes <- attributes
             obj
 
+        /// <summary>
         /// Sets a geometry attribute for the given trace object.
-        /// The name can be a string or Symbol, or TypedSymbol<'T>.
+        /// The name can be a string, Symbol, or TypedSymbol&lt;'T&gt;.
+        /// </summary>
+        /// <param name="name">Name of the attribute; can be a string, Symbol, or TypedSymbol&lt;'T&gt;.</param>
+        /// <param name="values">Attribute values for each geometry; must contain an element for each geometry in the trace object.</param>
         static member inline geometryAttribute (name: ^Name, values: #aval<'T> seq) =
             requireUnmanaged<'T>
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
@@ -202,8 +332,12 @@ module TraceObjectFSharp =
                     obj.GeometryAttributes.[i] <- obj.GeometryAttributes.[i] |> IDictionary.add sym values.[i]
                 obj
 
+        /// <summary>
         /// Sets a geometry attribute for the given trace object.
-        /// The name can be a string or Symbol, or TypedSymbol<'T>.
+        /// The name can be a string, Symbol, or TypedSymbol&lt;'T&gt;.
+        /// </summary>
+        /// <param name="name">Name of the attribute; can be a string, Symbol, or TypedSymbol&lt;'T&gt;.</param>
+        /// <param name="values">Attribute values for each geometry; must contain an element for each geometry in the trace object.</param>
         static member inline geometryAttribute (name : ^Name, values : seq<'T>) =
             requireUnmanaged<'T>
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
@@ -215,42 +349,66 @@ module TraceObjectFSharp =
                     obj.GeometryAttributes.[i] <- obj.GeometryAttributes.[i] |> IDictionary.add sym values.[i]
                 obj
 
+        /// <summary>
         /// Sets instance attributes for the given trace object.
         /// The names can be string or Symbol.
+        /// </summary>
+        /// <param name="attributes">Attributes for the instance.</param>
+        /// <param name="obj">Trace object to apply the attributes to.</param>
         static member inline instanceAttributes (attributes: IDictionary< ^Name, IAdaptiveValue>) (obj: TraceObject) =
             let conv = Symbol.convert Symbol.Converters.untyped
             let attributes = attributes |> IDictionary.mapKeys conv
             obj.InstanceAttributes <- attributes
             obj
 
+        /// <summary>
         /// Sets an instance attribute for the given trace object.
-        /// The name can be a string or Symbol, or TypedSymbol<'T>.
+        /// The name can be a string, Symbol, or TypedSymbol&lt;'T&gt;.
+        /// </summary>
+        /// <param name="name">Name of the attribute; can be a string, Symbol, or TypedSymbol&lt;'T&gt;.</param>
+        /// <param name="value">Attribute value.</param>
         static member inline instanceAttribute (name: ^Name, value: aval<'T>) =
             requireUnmanaged<'T>
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
             fun (obj : TraceObject) -> obj.InstanceAttributes <- obj.InstanceAttributes |> IDictionary.add sym value; obj
 
+        /// <summary>
         /// Sets an instance attribute for the given trace object.
-        /// The name can be a string or Symbol, or TypedSymbol<'T>.
+        /// The name can be a string, Symbol, or TypedSymbol&lt;'T&gt;.
+        /// </summary>
+        /// <param name="name">Name of the attribute; can be a string, Symbol, or TypedSymbol&lt;'T&gt;.</param>
+        /// <param name="value">Attribute value.</param>
         static member inline instanceAttribute (name: ^Name, value: 'T) =
             requireUnmanaged<'T>
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
             fun (obj : TraceObject) -> obj.InstanceAttributes <- obj.InstanceAttributes |> IDictionary.add sym ~~value; obj
 
-        /// Sets the hit groups for the given trace object.
-        static member inline hitGroups (hitConfig: aval<Symbol[]>) =
-            fun (obj : TraceObject) -> obj.HitGroups <- hitConfig; obj
+        /// <summary>
+        /// Sets the hit groups for the geometries of the given trace object.
+        /// </summary>
+        /// <param name="groups">Hit group for each geometry; must contain an element for each geometry in the trace object.</param>
+        static member inline hitGroups (groups: aval<Symbol[]>) =
+            fun (obj : TraceObject) -> obj.HitGroups <- groups; obj
 
-        /// Sets the hit groups for the given trace object.
-        static member inline hitGroups (hitConfig: Symbol[]) =
-            TraceObject.hitGroups ~~hitConfig
+        /// <summary>
+        /// Sets the hit groups for the geometries of the given trace object.
+        /// </summary>
+        /// <param name="groups">Hit group for each geometry must contain an element for each geometry in the trace object.</param>
+        static member inline hitGroups (groups: Symbol[]) =
+            TraceObject.hitGroups ~~groups
 
+        /// <summary>
         /// Sets the hit group for the given trace object with a single geometry.
+        /// </summary>
+        /// <param name="group">Hit group for the trace object.</param>
         static member inline hitGroup (group: aval<Symbol>) =
             let groups = group |> AVal.map Array.singleton
             TraceObject.hitGroups groups
 
+        /// <summary>
         /// Sets the hit group for the given trace object with a single geometry.
+        /// </summary>
+        /// <param name="group">Hit group for the trace object.</param>
         static member inline hitGroup (group: Symbol) =
             TraceObject.hitGroups [| group |]
 
@@ -262,33 +420,57 @@ module TraceObjectFSharp =
         static member inline transform (trafo: Trafo3d) =
             TraceObject.transform ~~trafo
 
-        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given trace object.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        /// <summary>
+        /// Sets the winding order of triangles considered to be front-facing, or <c>ValueNone</c> if back-face culling is to be disabled for the given trace object.
+        /// </summary>
+        /// <remarks>
+        /// Only has an effect if <c>TraceRay()</c> is called with one of the cull flags.
+        /// </remarks>
         static member inline frontFace (front: aval<WindingOrder voption>) =
             fun (obj : TraceObject) -> obj.FrontFace <- front; obj
 
-        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given trace object.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        /// <summary>
+        /// Sets the winding order of triangles considered to be front-facing, or <c>None</c> if back-face culling is to be disabled for the given trace object.
+        /// </summary>
+        /// <remarks>
+        /// Only has an effect if <c>TraceRay()</c> is called with one of the cull flags.
+        /// </remarks>
         static member inline frontFace (front: aval<WindingOrder option>) =
             TraceObject.frontFace (front |> AVal.mapNonAdaptive Option.toValueOption)
 
+        /// <summary>
         /// Sets the winding order of triangles considered to be front-facing for the given trace object.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        /// </summary>
+        /// <remarks>
+        /// Only has an effect if <c>TraceRay()</c> is called with one of the cull flags.
+        /// </remarks>
         static member inline frontFace (front: aval<WindingOrder>) =
             TraceObject.frontFace (front |> AVal.mapNonAdaptive ValueSome)
 
-        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given trace object.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        /// <summary>
+        /// Sets the winding order of triangles considered to be front-facing, or <c>ValueNone</c> if back-face culling is to be disabled for the given trace object.
+        /// </summary>
+        /// <remarks>
+        /// Only has an effect if <c>TraceRay()</c> is called with one of the cull flags.
+        /// </remarks>
         static member inline frontFace (front: WindingOrder voption) =
             TraceObject.frontFace ~~front
 
-        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given trace object.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        /// <summary>
+        /// Sets the winding order of triangles considered to be front-facing, or <c>None</c> if back-face culling is to be disabled for the given trace object.
+        /// </summary>
+        /// <remarks>
+        /// Only has an effect if <c>TraceRay()</c> is called with one of the cull flags.
+        /// </remarks>
         static member inline frontFace (front: WindingOrder option) =
             TraceObject.frontFace ~~front
 
+        /// <summary>
         /// Sets the winding order of triangles considered to be front-facing for the given trace object.
-        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        /// </summary>
+        /// <remarks>
+        /// Only has an effect if <c>TraceRay()</c> is called with one of the cull flags.
+        /// </remarks>
         static member inline frontFace (front: WindingOrder) =
             TraceObject.frontFace (ValueSome front)
 

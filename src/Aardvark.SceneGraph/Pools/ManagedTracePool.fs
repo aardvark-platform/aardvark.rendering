@@ -238,7 +238,7 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
         d.[DefaultSemantic.Indices] <- indexBuffer
 
         let add kind buffers =
-            for (KeyValue(name, buffer)) in buffers do
+            for KeyValue(name, buffer) in buffers do
                 if d.ContainsKey name then failf $"Cannot add {kind} attribute '{name}' to uniform provider as an attribute with that name already exists."
                 d.[name] <- buffer
 
@@ -594,7 +594,7 @@ module ManagedTracePoolSceneExtensions =
 
             let add (deltas : List<_>) (o : TraceObject) =
                 match mtos.TryGetValue o with
-                | (true, _) -> ()
+                | true, _ -> ()
                 | _ ->
                     let mto = pool.Add(o)
                     mtos.Add(o, mto)
@@ -602,7 +602,7 @@ module ManagedTracePoolSceneExtensions =
 
             let rem (deltas : List<_>) (o : TraceObject) =
                 match mtos.TryRemove o with
-                | (true, mto) ->
+                | true, mto ->
                     deltas.Add(SetOperation.rem mto)
                     mto.Dispose()
                 | _ -> ()
