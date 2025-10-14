@@ -182,7 +182,7 @@ module Effect =
             let shadowed =
                 let direction = Vec.normalize (uniform.LightLocation - position)
                 let flags = RayFlags.SkipClosestHitShader ||| RayFlags.TerminateOnFirstHit ||| RayFlags.Opaque ||| RayFlags.CullFrontFacingTriangles
-                mainScene.TraceRay<bool>(position, direction, payload = true, miss = "MissShadow", flags = flags, minT = 0.01f, cullMask = mask)
+                mainScene.TraceRay<bool>(position, direction, payload = true, miss = MissShader.Shadow, flags = flags, minT = 0.01f, cullMask = mask)
 
             let color =
                 let diffuse = diffuse * diffuseLighting normal position

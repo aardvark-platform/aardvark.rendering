@@ -19,6 +19,7 @@ module internal FShadeConfig =
             GLSLExtension.ARBGpuShaderInt64,                       device.EnabledFeatures.Shaders.Int64
             GLSLExtension.ARBTessellationShader,                   device.EnabledFeatures.Shaders.TessellationShader
             GLSLExtension.EXTDebugPrintf,                          device.IsExtensionEnabled KHRShaderNonSemanticInfo.Name
+            GLSLExtension.EXTOpacityMicromap,                      device.IsExtensionEnabled EXTOpacityMicromap.Name
             GLSLExtension.EXTRayTracing,                           device.EnabledFeatures.Raytracing.Pipeline
             GLSLExtension.EXTRayTracingPositionFetch,              device.EnabledFeatures.Raytracing.PositionFetch
             GLSLExtension.EXTShader8bitStorage,                    device.IsExtensionEnabled KHR8bitStorage.Name
@@ -280,7 +281,7 @@ module ShaderProgram =
     let private versionRx = System.Text.RegularExpressions.Regex @"\#version.*$"
     let private layoutRx = System.Text.RegularExpressions.Regex @"layout[ \t]*\([ \t]*set[ \t]*\=[ \t]*(?<set>[0-9]+),[ \t]*binding[ \t]*\=[ \t]*(?<binding>[0-9]+)[ \t]*\)[ \t\r\n]*uniform[ \t]+(?<name>[_a-zA-Z0-9]+)[ \t\r\n]*\{"
 
-    let private ofGLSLInteral (iface : FShade.GLSL.GLSLProgramInterface) (inputLayout : Option<EffectInputLayout>)
+    let private ofGLSLInteral (iface : GLSLProgramInterface) (inputLayout : Option<EffectInputLayout>)
                               (code : string) (layers : int) (perLayer : Set<string>) (device : Device) =
         let code =
             layoutRx.Replace(code, fun m ->
@@ -309,13 +310,13 @@ module ShaderProgram =
         let layout = PipelineLayout.ofProgramInterface inputLayout iface layers perLayer device
         new ShaderProgram(device, shaders, layout, code, iface)
 
-    let ofGLSL (code : FShade.GLSL.GLSLShader) (device : Device) =
+    let ofGLSL (code : GLSLShader) (device : Device) =
         ofGLSLInteral code.iface None code.code 1 Set.empty device
 
 
     type internal EffectCacheKey =
         {
-            effect : FShade.Effect
+            effect : Effect
             layout : FramebufferLayout
             topology : IndexedGeometryMode
             deviceCount : int
@@ -327,7 +328,7 @@ module ShaderProgram =
     type internal ShaderProgramData =
         {
             shader   : GLSLShader
-            binary   : Map<FShade.ShaderSlot, byte[]>
+            binary   : Map<ShaderSlot, byte[]>
             layers   : int
             perLayer : Set<string>
         }
@@ -461,7 +462,7 @@ module ShaderProgram =
 
             let shader = GLSLShader.deserialize src
 
-            r.ReadType<Map<FShade.ShaderSlot, byte[]>>()
+            r.ReadType<Map<ShaderSlot, byte[]>>()
 
             let binary =
                 let count = r.ReadInt32()
@@ -516,12 +517,10 @@ module ShaderProgram =
         let shaders =
             data.binary
             |> Map.toArray
-            |> Array.map (fun (slot, arr) ->
-                device.CreateShaderModule(slot, arr)
-            )
+            |> Array.map device.CreateShaderModule
 
         Report.Begin(4, "Interface")
-        let str = FShade.GLSL.GLSLProgramInterface.toString data.shader.iface
+        let str = GLSLProgramInterface.toString data.shader.iface
         for line in str.Split([|"\r\n"|], StringSplitOptions.None) do
             Report.Line(4, "{0}", line)
         Report.End(4) |> ignore
@@ -571,7 +570,7 @@ module ShaderProgram =
                 try
                     module_
                     |> FShade.Imperative.ModuleCompiler.compile backend
-                    |> FShade.GLSL.Assembler.assemble backend
+                    |> Assembler.assemble backend
                 with exn ->
                     Log.error "%s" exn.Message
                     reraise()
@@ -593,7 +592,7 @@ module ShaderProgram =
                 compile()
         )
 
-    let ofEffect (effect : FShade.Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
+    let ofEffect (effect : Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
         let key : EffectCacheKey =
             {
                 effect = effect
@@ -609,7 +608,7 @@ module ShaderProgram =
                     key.effect
                     |> Effect.link pass key.topology false
                     |> FShade.Imperative.ModuleCompiler.compile backend
-                    |> FShade.GLSL.Assembler.assemble backend
+                    |> Assembler.assemble backend
                 with exn ->
                     Log.error "%s" exn.Message
                     reraise()
