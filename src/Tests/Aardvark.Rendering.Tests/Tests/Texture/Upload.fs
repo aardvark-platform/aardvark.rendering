@@ -79,7 +79,7 @@ module TextureUpload =
             let regionOffset = V3i(region.Min, 0, 0)
             let regionSize = V3i(region.Size, 1, 1)
             let data = PixVolume.random32ui regionSize
-            let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.empty
+            let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.None
 
             let texture =
                 if count > 1 then
@@ -222,7 +222,7 @@ module TextureUpload =
                     Box2i(V2i.Zero, s)
 
             let data = randomPix region.Size
-            let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.empty
+            let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.None
 
             let texture =
                 if count > 1 then
@@ -377,7 +377,7 @@ module TextureUpload =
             (randomPix : V2i -> PixImage<'T>) (zero : 'T) (expectedFormat : TextureFormat)
             (runtime : IRuntime) (bgra : bool) (size : V2i) (levels : int) (textureParams : TextureParams) =
 
-            let expectedLevels = if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
+            let expectedLevels = if textureParams.HasWantMipMaps then Fun.MipmapLevels(size) else 1
 
             let data =
                 Array.init levels (fun level ->
@@ -407,33 +407,33 @@ module TextureUpload =
             let size = V2i(256)
             uploadAndDownloadPixTexture2D
                 PixImage.random16ui 0us TextureFormat.Rgba16
-                runtime false size 1 TextureParams.empty
+                runtime false size 1 TextureParams.None
 
         let pixTexture2DBgra (runtime : IRuntime) =
             let size = V2i(256)
             uploadAndDownloadPixTexture2D
                 PixImage.random16ui 0us TextureFormat.Rgba16
-                runtime true size 1 TextureParams.empty
+                runtime true size 1 TextureParams.None
 
         let pixTexture2DSrgb (runtime : IRuntime) =
             let size = V2i(256)
             uploadAndDownloadPixTexture2D
                 PixImage.random8ui 0uy TextureFormat.Srgb8Alpha8
-                runtime false size 1 TextureParams.srgb
+                runtime false size 1 TextureParams.PreferSrgb
 
         let pixTexture2DMipmapped (mipmapInput : MipmapInput) (runtime : IRuntime) =
             let size = V2i(435, 231)
             let levels = mipmapInput.GetLevels(size)
             uploadAndDownloadPixTexture2D
                 PixImage.random16ui 0us TextureFormat.Rgba16
-                runtime false size levels TextureParams.mipmapped
+                runtime false size levels TextureParams.WantMipMaps
 
         let pixTexture2DMipmappedInteger (mipmapInput : MipmapInput) (runtime : IRuntime) =
             let size = V2i(435, 231)
             let levels = mipmapInput.GetLevels(size)
             uploadAndDownloadPixTexture2D
                 PixImage.random32ui 0u TextureFormat.Rgba32ui
-                runtime false size levels TextureParams.mipmapped
+                runtime false size levels TextureParams.WantMipMaps
 
         let pixTexture2DPixVolume (runtime : IRuntime) =
             let size = V2i(256)
@@ -441,7 +441,7 @@ module TextureUpload =
 
             let texture =
                 let data = data :> PixImage
-                let pix = PixTexture2d(PixImageMipMap data, TextureParams.empty)
+                let pix = PixTexture2d(PixImageMipMap data, TextureParams.None)
                 runtime.PrepareTexture pix
 
             try
@@ -485,7 +485,8 @@ module TextureUpload =
 
         let pixTexture2DCompressed (generateMipmap : bool) (runtime : IRuntime) =
             let data = EmbeddedResource.loadPixImage<uint8> "data/spiral.png"
-            let texture = PixTexture2d(data, { TextureParams.compressed with wantMipMaps = generateMipmap })
+            let flags = if generateMipmap then TextureParams.WantMipMaps ||| TextureParams.Compress else TextureParams.Compress
+            let texture = PixTexture2d(data, flags)
             runtime |> texture2DOnTheFlyCompressed TextureFormat.CompressedRgbaS3tcDxt5 data texture generateMipmap
 
         let streamTextureCompressed (generateMipmap : bool) (runtime : IRuntime) =
@@ -493,12 +494,13 @@ module TextureUpload =
                 EmbeddedResource.get "data/spiral.png"
 
             let data = PixImage.Load(getStream()).AsPixImage<uint8>()
-            let texture = StreamTexture(getStream, { TextureParams.compressed with wantMipMaps = generateMipmap })
+            let flags = if generateMipmap then TextureParams.WantMipMaps ||| TextureParams.Compress else TextureParams.Compress
+            let texture = StreamTexture(getStream, flags)
             runtime |> texture2DOnTheFlyCompressed TextureFormat.CompressedRgbaS3tcDxt5 data texture generateMipmap
 
         let private texture2DCompressed (expectedFormat : TextureFormat) (pathReference : string) (path : string) (level : int) (runtime : IRuntime) =
             let reference = EmbeddedResource.loadPixImage<uint8> pathReference
-            let compressed = EmbeddedResource.getTexture TextureParams.mipmappedCompressed path
+            let compressed = EmbeddedResource.getTexture (TextureParams.WantMipMaps ||| TextureParams.Compress) path
 
             use signature =
                 runtime.CreateFramebufferSignature([
@@ -825,7 +827,7 @@ module TextureUpload =
                     Box3i(V3i.Zero, s)
 
             let data = PixVolume.random32ui region.Size
-            let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.empty
+            let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.None
 
             let texture =
                 runtime.CreateTexture3D(size, fmt, levels)
@@ -886,7 +888,7 @@ module TextureUpload =
 
         let private uploadAndDownloadPixTexture3D (runtime : IRuntime) (size : V3i) (levels : int) (textureParams : TextureParams) =
             let expectedLevels =
-                if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
+                if textureParams.HasWantMipMaps then Fun.MipmapLevels(size) else 1
 
             let data = PixVolume.random16ui size
 
@@ -907,16 +909,16 @@ module TextureUpload =
 
         let pixTexture3D (runtime : IRuntime) =
             let size = V3i(64)
-            uploadAndDownloadPixTexture3D runtime size 1 TextureParams.empty
+            uploadAndDownloadPixTexture3D runtime size 1 TextureParams.None
 
         let pixTexture3DSrgb (runtime : IRuntime) =
             let size = V3i(64)
-            uploadAndDownloadPixTexture3D runtime size 1 TextureParams.srgb
+            uploadAndDownloadPixTexture3D runtime size 1 TextureParams.PreferSrgb
 
         let pixTexture3DMipmapGeneration (runtime : IRuntime) =
             let size = V3i(67)
             let levels = Fun.MipmapLevels(size)
-            uploadAndDownloadPixTexture3D runtime size levels TextureParams.srgb
+            uploadAndDownloadPixTexture3D runtime size levels TextureParams.PreferSrgb
 
 
         let private uploadAndDownloadTextureCube (runtime : IRuntime)
@@ -933,7 +935,7 @@ module TextureUpload =
             let regionOffset = V3i(region.Min, 0)
             let regionSize = V3i(region.Size, 1)
             let data = PixVolume.random32ui regionSize
-            let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.empty
+            let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.None
 
             let texture =
                 if count > 1 then
@@ -984,7 +986,7 @@ module TextureUpload =
 
         let private uploadAndDownloadPixTextureCube (runtime : IRuntime) (size : int) (levels : int) (textureParams : TextureParams) =
             let expectedLevels =
-                if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
+                if textureParams.HasWantMipMaps then Fun.MipmapLevels(size) else 1
 
             let data =
                 Array.init 6 (fun _ ->
@@ -1021,16 +1023,16 @@ module TextureUpload =
 
         let pixTextureCube (runtime : IRuntime) =
             let size = 128
-            uploadAndDownloadPixTextureCube runtime size 1 TextureParams.empty
+            uploadAndDownloadPixTextureCube runtime size 1 TextureParams.None
 
         let pixTextureCubeSrgb (runtime : IRuntime) =
             let size = 128
-            uploadAndDownloadPixTextureCube runtime size 1 TextureParams.srgb
+            uploadAndDownloadPixTextureCube runtime size 1 TextureParams.PreferSrgb
 
         let pixTextureCubeMipmapped (mipmapInput : MipmapInput) (runtime : IRuntime) =
             let size = 128
             let levels = mipmapInput.GetLevels(size)
-            uploadAndDownloadPixTextureCube runtime size levels TextureParams.mipmapped
+            uploadAndDownloadPixTextureCube runtime size levels TextureParams.WantMipMaps
 
         let textureCubeNull (runtime : IRuntime) =
             let diffuseSampler =

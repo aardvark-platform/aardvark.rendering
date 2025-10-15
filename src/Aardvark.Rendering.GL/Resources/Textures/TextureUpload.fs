@@ -206,7 +206,7 @@ module internal TextureUploadImplementation =
 
 
         let uploadPixCube (texture : Texture) (wantMipmap : bool)
-                               (baseLevel : int) (slice : int) (offset : V2i) (data : PixCube) =
+                          (baseLevel : int) (slice : int) (offset : V2i) (data : PixCube) =
             let generateMipmap =
                 wantMipmap && data.MipMapArray |> Array.exists (fun i -> i.LevelCount < texture.MipMapLevels)
 
@@ -258,7 +258,7 @@ module ContextTextureUploadExtensions =
                                    (size : V3i) (slices : int) (samples : int) (uploadLevels : int) (info : TextureParams) (context : Context) =
             let format =
                 let baseFormat = TextureFormat.ofPixFormat format info
-                if info.wantCompressed then
+                if info.HasCompress then
                     match TextureFormat.toCompressed baseFormat with
                     | Some fmt -> fmt
                     | _ ->
@@ -267,7 +267,7 @@ module ContextTextureUploadExtensions =
                 else
                     baseFormat
 
-            context |> create dimension format size slices samples uploadLevels info.wantMipMaps
+            context |> create dimension format size slices samples uploadLevels info.HasWantMipMaps
 
         let createOfFormat2D (format : PixFormat) (size : V2i) (uploadLevels : int) (info : TextureParams) (context : Context) =
             let size = V3i(size, 1)
@@ -331,7 +331,7 @@ module ContextTextureUploadExtensions =
 
                     // Always try to load compressed data first
                     let compressed =
-                        stream |> DdsTexture.tryLoadCompressedFromStream info.wantMipMaps
+                        stream |> DdsTexture.tryLoadCompressedFromStream info.HasWantMipMaps
 
                     match compressed with
                     | Some t -> this.CreateTexture(t, properties)
@@ -339,7 +339,7 @@ module ContextTextureUploadExtensions =
                         stream.Position <- initialPos
 
                         let pi =
-                            if info.wantMipMaps then
+                            if info.HasWantMipMaps then
                                 PixImageMipMap.Load(stream, loader)
                             else
                                 PixImageMipMap [| PixImage.Load(stream, loader) |]
@@ -348,19 +348,19 @@ module ContextTextureUploadExtensions =
 
                 | PixTexture2D(info, data) ->
                     let texture = this |> Texture.createOfFormat2D data.BaseImage.PixFormat data.[0].Size data.LevelCount info
-                    Texture.uploadPixImageMipMap texture info.wantMipMaps 0 0 V2i.Zero data
+                    Texture.uploadPixImageMipMap texture info.HasWantMipMaps 0 0 V2i.Zero data
                     texture
 
                 | PixTextureCube(info, data) ->
                     let img = data.[CubeSide.NegativeX]
                     let levels = data.MipMapArray |> Array.map (fun pi -> pi.LevelCount) |> Array.min
                     let texture = this |> Texture.createOfFormatCube img.BaseImage.PixFormat img.[0].Size.X levels info
-                    Texture.uploadPixCube texture info.wantMipMaps 0 0 V2i.Zero data
+                    Texture.uploadPixCube texture info.HasWantMipMaps 0 0 V2i.Zero data
                     texture
 
                 | PixTexture3D(info, data) ->
                     let texture = this |> Texture.createOfFormat3D data.PixFormat data.Size 1 info
-                    Texture.uploadPixVolume texture info.wantMipMaps 0 V3i.Zero data
+                    Texture.uploadPixVolume texture info.HasWantMipMaps 0 V3i.Zero data
                     texture
 
                 | :? NullTexture ->

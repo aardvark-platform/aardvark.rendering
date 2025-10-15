@@ -116,7 +116,7 @@ module TextureDownload =
                     )
                 )
 
-            let format = TextureFormat.ofPixFormat data.[0].[0].PixFormat TextureParams.empty
+            let format = TextureFormat.ofPixFormat data.[0].[0].PixFormat TextureParams.None
             let t = runtime.CreateTexture2DArray(size, format, levels = levels, count = count)
 
             try
@@ -144,7 +144,7 @@ module TextureDownload =
 
 
         let private texture2DCompressed (expectedFormat : TextureFormat) (path : string) (window : Box2i option) (runtime : IRuntime) =
-            let compressed = EmbeddedResource.getTexture TextureParams.mipmappedCompressed path
+            let compressed = EmbeddedResource.getTexture TextureParams.WantMipMaps path
 
             use signature =
                 runtime.CreateFramebufferSignature([
@@ -239,7 +239,7 @@ module TextureDownload =
                     data |> PixImage.resized size
                 )
 
-            let format = TextureFormat.ofPixFormat data.[CubeSide.PositiveX].PixFormat TextureParams.empty
+            let format = TextureFormat.ofPixFormat data.[CubeSide.PositiveX].PixFormat TextureParams.None
             let t = runtime.CreateTextureCube(size.X, format, levels = levels)
 
             try
@@ -274,7 +274,7 @@ module TextureDownload =
                     )
                 )
 
-            let format = TextureFormat.ofPixFormat data.[0].[CubeSide.PositiveX].PixFormat TextureParams.empty
+            let format = TextureFormat.ofPixFormat data.[0].[CubeSide.PositiveX].PixFormat TextureParams.None
             let t = runtime.CreateTextureCubeArray(size.X, format, levels = levels, count = count)
 
             try
@@ -312,7 +312,7 @@ module TextureDownload =
                     data |> PixImage.resized size
                 )
 
-            let format = TextureFormat.ofPixFormat data.[0].PixFormat TextureParams.empty
+            let format = TextureFormat.ofPixFormat data.[0].PixFormat TextureParams.None
             let t = runtime.CreateTexture2D(size, format, levels = levels)
 
             try
@@ -342,7 +342,7 @@ module TextureDownload =
                     data |> PixImage.resized size
                 )
 
-            let format = TextureFormat.ofPixFormat data.[CubeSide.PositiveX].PixFormat TextureParams.empty
+            let format = TextureFormat.ofPixFormat data.[CubeSide.PositiveX].PixFormat TextureParams.None
             let t = runtime.CreateTextureCube(size.X, format, levels = levels)
 
             try
@@ -376,7 +376,7 @@ module TextureDownload =
                     )
                 )
 
-            let format = TextureFormat.ofPixFormat data.[0].[CubeSide.PositiveX].PixFormat TextureParams.empty
+            let format = TextureFormat.ofPixFormat data.[0].[CubeSide.PositiveX].PixFormat TextureParams.None
             let t = runtime.CreateTextureCubeArray(size.X, format, levels = levels, count = count)
 
             try

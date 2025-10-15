@@ -78,7 +78,7 @@ let main argv =
 
     let texture = 
         let path = Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "data"; "transfer.png"]
-        FileTexture(path, TextureParams.empty) :> ITexture
+        FileTexture(path, TextureParams.None)
 
     let scale =
         let sw = System.Diagnostics.Stopwatch()

@@ -122,7 +122,7 @@ let main argv =
             rand.UniformC3f().ToC4b()
         ) |> ignore
             
-        PixTexture2d(PixImageMipMap([| img :> PixImage |]), TextureParams.mipmapped) :> ITexture
+        PixTexture2d(img)
 
     let textures = Array.init 28 (fun i -> rndTex())
 

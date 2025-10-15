@@ -35,7 +35,7 @@ module Jpeg =
 
         // load the input
         let input = PixImage.Load @"C:\volumes\dog2.tif"
-        let tex = runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| input |], TextureParams.empty))
+        let tex = runtime.PrepareTexture(PixTexture2d(input, TextureParams.None))
 
 
         // compress the image

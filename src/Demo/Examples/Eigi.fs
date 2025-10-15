@@ -61,7 +61,7 @@ module Eigi =
                 Assimp.PostProcessSteps.Triangulate
 
             let (~~) n = Path.Combine(basePath, n)
-            let (!) n = { Loader.coordIndex = 0; Loader.texture = FileTexture(Path.Combine(basePath, n), TextureParams.mipmapped) :> ITexture }
+            let (!) n = { Loader.coordIndex = 0; Loader.texture = FileTexture(Path.Combine(basePath, n)) :> ITexture }
 
             let sBody = Loader.Assimp.Load(~~"body.obj", flags)
             let sEyes = Loader.Assimp.Load(~~"eyes.obj", flags)

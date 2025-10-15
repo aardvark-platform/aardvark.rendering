@@ -300,7 +300,8 @@ type TensorImageCube(faces : TensorImageMipMap[]) =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TensorImage =
     let create<'a when 'a : unmanaged> (size : V3i) (format : Col.Format) (srgb : bool) (memory : IDeviceMemory) : TensorImage<'a> =
-        let imageFormat = memory.Device.GetSupportedFormat(VkImageTiling.Optimal, PixFormat(typeof<'a>, format), { TextureParams.empty with wantSrgb = srgb })
+        let textureParams = if srgb then TextureParams.PreferSrgb else TextureParams.None
+        let imageFormat = memory.Device.GetSupportedFormat(VkImageTiling.Optimal, PixFormat(typeof<'a>, format), textureParams)
         let format = PixFormat(VkFormat.expectedType imageFormat, VkFormat.toColFormat imageFormat)
 
         if format.Type <> typeof<'a> then

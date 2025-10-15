@@ -435,7 +435,7 @@ module Loader =
                                             | Some file -> file
                                             | None -> map.[Symbol.Empty]
 
-                                    sem, { texture = FileTexture(file, { wantCompressed = false; wantMipMaps = true; wantSrgb = false }) :> ITexture; coordIndex = slot.UVIndex }
+                                    sem, { texture = FileTexture(file); coordIndex = slot.UVIndex }
 
                                 | None ->
                                     sem, { texture = nullTexture; coordIndex = slot.UVIndex }

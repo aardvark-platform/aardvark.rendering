@@ -108,22 +108,55 @@ type TextureAspect =
     | Stencil      = 0x00000004
     | DepthStencil = 0x00000006
 
+/// Flags controlling mipmap generation, compression, and format selection during texture creation.
+[<Flags>]
 type TextureParams =
-    {
-        wantMipMaps : bool
-        wantSrgb : bool
-        wantCompressed : bool
-    }
+    /// Do not upload or generate a mipmap chain, use linear RGB formats, and do not compress the texture.
+    | None = 0
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module TextureParams =
+    /// <summary>
+    /// Upload or generate a mipmap chain if not all levels are provided.
+    /// </summary>
+    /// <remarks>
+    /// If this flag is not set, only the base level will be uploaded to the texture.
+    /// </remarks>
+    | WantMipMaps = 1
 
-    let empty = { wantMipMaps = false; wantSrgb = false; wantCompressed = false}
-    let srgb = { wantMipMaps = false; wantSrgb = true; wantCompressed = false}
-    let compressed = { wantMipMaps = false; wantSrgb = false; wantCompressed = true }
-    let mipmapped = { wantMipMaps = true; wantSrgb = false; wantCompressed = false }
-    let mipmappedSrgb = { wantMipMaps = true; wantSrgb = true; wantCompressed = false }
-    let mipmappedCompressed = { wantMipMaps = true; wantSrgb = false; wantCompressed = true }
+    /// <summary>
+    /// Prefer sRGB formats are over linear RGB formats.
+    /// </summary>
+    /// <remarks>
+    /// Ignored if the texture data is already compressed.
+    /// </remarks>
+    | PreferSrgb = 2
+
+    /// <summary>
+    /// Compress the texture during upload.
+    /// </summary>
+    /// <remarks>
+    /// Ignored if the texture data is already compressed.
+    /// </remarks>
+    | Compress = 4
+
+[<AutoOpen>]
+module TextureParamsExtensions =
+
+    type TextureParams with
+
+        /// <summary>
+        /// Returns whether the <see cref="WantMipMaps"/> flag is set.
+        /// </summary>
+        member inline this.HasWantMipMaps = this.HasFlag TextureParams.WantMipMaps
+
+        /// <summary>
+        /// Returns whether the <see cref="PreferSrgb"/> flag is set.
+        /// </summary>
+        member inline this.HasPreferSrgb = this.HasFlag TextureParams.PreferSrgb
+
+        /// <summary>
+        /// Returns whether the <see cref="Compress"/> flag is set.
+        /// </summary>
+        member inline this.HasCompress = this.HasFlag TextureParams.Compress
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TextureFormat =
@@ -193,9 +226,8 @@ module TextureFormat =
 
     let ofPixFormat =
 
-        let buildLookup (rgb, srgb) = function
-            | { wantSrgb = true } -> srgb
-            | _ -> rgb
+        let buildLookup (rgb, srgb) (flags: TextureParams) =
+            if flags.HasPreferSrgb then srgb else rgb
 
         let rgb8 = buildLookup(TextureFormat.Rgb8, TextureFormat.Srgb8)
         let rgba8 = buildLookup(TextureFormat.Rgba8, TextureFormat.Srgb8Alpha8)

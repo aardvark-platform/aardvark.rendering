@@ -174,7 +174,7 @@ module TextureCreate =
             check()
 
             // Compressed
-            let t8 = runtime.PrepareTexture <| EmbeddedResource.getTexture TextureParams.mipmappedCompressed "data/bc1.dds"
+            let t8 = runtime.PrepareTexture <| EmbeddedResource.getTexture TextureParams.WantMipMaps "data/bc1.dds"
 
             let sizeInBytes =
                 let mode = t8.Format.CompressionMode

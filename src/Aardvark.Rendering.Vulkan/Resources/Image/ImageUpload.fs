@@ -18,7 +18,7 @@ module ImageUploadExtensions =
 
             let toTextureFormat (info : TextureParams) (format : PixFormat) =
                 let baseFormat = TextureFormat.ofPixFormat format info
-                if info.wantCompressed then
+                if info.HasCompress then
                     match TextureFormat.toCompressed baseFormat with
                     | Some fmt -> fmt
                     | _ ->
@@ -153,7 +153,7 @@ module ImageUploadExtensions =
                 let format = PixFormat.toTextureFormat info pix.[0].BaseImage.PixFormat
 
                 let levelCount =
-                    if info.wantMipMaps then Fun.MipmapLevels(pix.[0].[0].Size) else 1
+                    if info.HasWantMipMaps then Fun.MipmapLevels(pix.[0].[0].Size) else 1
 
                 if format |> TextureFormat.supportsMipmapGeneration device |> not then
                     for i = 0 to pix.Length - 1 do
@@ -302,19 +302,19 @@ module ImageUploadExtensions =
 
         let ofPixImageMipMap (data : PixImageMipMap) (info : TextureParams) (export : bool) (device : Device) =
             let buffers = device |> ImageBufferArray.ofPixImageMipMaps info [| data |]
-            device |> ofImageBufferArray TextureDimension.Texture2D info.wantMipMaps export buffers
+            device |> ofImageBufferArray TextureDimension.Texture2D info.HasWantMipMaps export buffers
 
         let ofPixVolume (data : PixVolume) (info : TextureParams) (export : bool) (device : Device) =
             let buffer = device |> ImageBuffer.ofPixVolume info data
-            device |> ofImageBuffer TextureDimension.Texture3D info.wantMipMaps buffer export
+            device |> ofImageBuffer TextureDimension.Texture3D info.HasWantMipMaps buffer export
 
         let ofPixCube (data : PixCube) (info : TextureParams) (export : bool) (device : Device) =
             let buffers = device |> ImageBufferArray.ofPixImageMipMaps info data.MipMapArray
-            device |> ofImageBufferArray TextureDimension.TextureCube info.wantMipMaps export buffers
+            device |> ofImageBufferArray TextureDimension.TextureCube info.HasWantMipMaps export buffers
 
         let ofStreamWithLoader (stream : IO.Stream) (loader : IPixLoader) (info : TextureParams) (export : bool) (device : Device) =
             let pix =
-                if info.wantMipMaps then
+                if info.HasWantMipMaps then
                     PixImageMipMap.Load(stream, loader)
                 else
                     PixImageMipMap [| PixImage.Load(stream, loader) |]
@@ -356,7 +356,7 @@ module ImageUploadExtensions =
 
                 // Always try to load compressed data first
                 let compressed =
-                    stream |> DdsTexture.tryLoadCompressedFromStream t.TextureParams.wantMipMaps
+                    stream |> DdsTexture.tryLoadCompressedFromStream t.TextureParams.HasWantMipMaps
 
                 match compressed with
                 | Some t ->

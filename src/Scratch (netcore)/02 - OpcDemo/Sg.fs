@@ -21,15 +21,13 @@ let createFlatISg' pickle unpickle (patchHierarchies) (trafos : list<Trafo3d>) :
                 |> List.map(fun y -> (x.opcPaths, y, trafo)))
 
     let sg =
-        let config = { wantMipMaps = true; wantSrgb = false; wantCompressed = false }
-
         leaves
         |> List.map(fun (opcPaths,patch,trafo) -> (Patch.load opcPaths mode patch.info, opcPaths, patch.info, trafo))
         |> List.map(fun ((a,_),c,d,e) -> (a,c,d,e))
         |> List.map (fun (g,opcPaths,info,trafo) ->
 
             let texPath = Patch.extractTexturePath opcPaths info 0
-            let tex = FileTexture(texPath,config) :> ITexture
+            let tex = FileTexture(texPath)
 
             Sg.ofIndexedGeometry g
                 |> Sg.trafo (AVal.constant (info.Local2Global * trafo))

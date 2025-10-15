@@ -103,11 +103,7 @@ let main argv =
     )
 
     // finally we can create a texture using our modified image and show it
-    let texture =
-        PixTexture2d(
-            PixImageMipMap [| resultImage :> PixImage |],
-            TextureParams.empty
-        )
+    let texture = PixTexture2d(resultImage, TextureParams.None)
         
     // show the scene in a simple window
     show {
@@ -117,7 +113,7 @@ let main argv =
         samples 8
         scene (
             Sg.fullScreenQuad
-                |> Sg.diffuseTexture (AVal.constant (texture :> ITexture))
+                |> Sg.diffuseTexture' texture
                 |> Sg.shader {
                     do! DefaultSurfaces.diffuseTexture
                 }

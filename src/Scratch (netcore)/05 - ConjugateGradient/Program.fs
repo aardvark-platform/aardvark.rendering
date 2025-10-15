@@ -333,7 +333,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
     let secondMulD = runtime.CreateComputeShader (ConjugateGradientShaders.polynomial2d<'f, 'v> epoly'' rreal.toV4)
     
     let createTexture (img : PixImage) =
-        let t = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
+        let t = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.None, 1, 1)
         t.Upload(img)
         t
 
@@ -699,7 +699,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         )
 
     let createTexture (img : PixImage) =
-        let t = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
+        let t = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.None, 1, 1)
         t.Upload(img)
         t
 
@@ -1010,14 +1010,14 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
         res
 
     member this.CreateTexture(img : PixImage) =
-        let res = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
+        let res = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.None, 1, 1)
         res.Upload(img)
         res
         
 
     member this.CreateTempTexture(img : PixImage) =
         let levels = 1 + int(Fun.Floor(Fun.Log2 (max img.Size.X img.Size.Y)))
-        let res = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, levels, 1)
+        let res = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.None, levels, 1)
         res.Upload(img)
         res
 

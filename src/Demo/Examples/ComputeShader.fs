@@ -225,7 +225,7 @@ module ComputeShader =
         //checkerboardPix.SaveAsImage @"input.png"
 
         let checkerboard =
-            PixTexture3d(checkerboardPix, TextureParams.empty)  :> ITexture
+            PixTexture3d(checkerboardPix, TextureParams.None)  :> ITexture
             //PixTexture2d( [| checkerboardPix :> PixImage |], false) :> ITexture
 
         let img = runtime.PrepareTexture(checkerboard)

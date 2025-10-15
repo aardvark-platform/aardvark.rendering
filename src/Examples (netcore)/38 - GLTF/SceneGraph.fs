@@ -67,7 +67,7 @@ module Skybox =
                     )
                 |]
 
-            PixTextureCube(env, TextureParams.mipmapped) :> ITexture
+            PixTextureCube(env)
         )
 
 
@@ -383,7 +383,7 @@ module SceneSg =
     let private white =
         let img = PixImage<byte>(Col.Format.RGBA, V2i.II)
         img.GetMatrix<C4b>().Set(C4b.White) |> ignore
-        PixTexture2d(PixImageMipMap [| img :> PixImage  |], TextureParams.empty) :> ITexture |> AVal.constant
+        PixTexture2d(img, TextureParams.None) :> ITexture |> AVal.constant
 
 
     let private meshSg (m : Mesh) =

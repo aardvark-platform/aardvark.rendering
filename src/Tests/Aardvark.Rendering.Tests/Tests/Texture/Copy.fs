@@ -359,7 +359,7 @@ module TextureCopy =
                     )
                 )
 
-            let format = TextureFormat.ofPixFormat data.[0].[0].PixFormat TextureParams.empty
+            let format = TextureFormat.ofPixFormat data.[0].[0].PixFormat TextureParams.None
             use src = runtime.CreateTexture2DArray(size, format, levels = levels, count = count)
             use dst = runtime.CreateTexture2DArray(size, format, levels = levels, count = count)
 
@@ -555,7 +555,7 @@ module TextureCopy =
                     data |> PixImage.resized size
                 )
 
-            let format = TextureFormat.ofPixFormat data.[CubeSide.PositiveX].PixFormat TextureParams.empty
+            let format = TextureFormat.ofPixFormat data.[CubeSide.PositiveX].PixFormat TextureParams.None
             let src = runtime.CreateTextureCube(size.X, format, levels = levels)
             let dst = runtime.CreateTextureCube(size.X, format, levels = levels)
 
@@ -594,7 +594,7 @@ module TextureCopy =
                     )
                 )
 
-            let format = TextureFormat.ofPixFormat data.[0].[CubeSide.PositiveX].PixFormat TextureParams.empty
+            let format = TextureFormat.ofPixFormat data.[0].[CubeSide.PositiveX].PixFormat TextureParams.None
             let src = runtime.CreateTextureCubeArray(size.X, format, levels = levels, count = count)
             let dst = runtime.CreateTextureCubeArray(size.X, format, levels = levels, count = count)
 

@@ -160,7 +160,7 @@ module internal EnvironmentMap =
         img.GetMatrix<C4f>().SetByIndex (fun _ ->
             rand.UniformV4f().ToC4f()
         ) |> ignore
-        PixTexture2d(PixImageMipMap [| img :> PixImage |], TextureParams.empty) :> ITexture
+        PixTexture2d(img, TextureParams.None)
 
     let levelCount = 8
 

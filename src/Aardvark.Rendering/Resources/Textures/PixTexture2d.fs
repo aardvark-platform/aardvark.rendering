@@ -1,31 +1,86 @@
 ﻿namespace Aardvark.Rendering
 
-open Aardvark.Base
+open System
 open System.Runtime.InteropServices
+open Aardvark.Base
 
-type PixTexture2d(data : PixImageMipMap, textureParams : TextureParams) =
+/// <summary>
+/// 2D texture with data stored in a <see cref="PixImageMipMap"/>.
+/// The image data is not uploaded until the texture is used and prepared.
+/// </summary>
+type PixTexture2d =
 
-    member x.PixImageMipMap = data
-    member x.TextureParams = textureParams
+    /// Image data.
+    val PixImageMipMap : PixImageMipMap
 
-    new(data : PixImageMipMap, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
-        PixTexture2d(data, { TextureParams.empty with wantMipMaps = wantMipMaps })
+    /// Flags controlling texture creation and upload.
+    val TextureParams : TextureParams
 
-    new(data : PixImage, textureParams : TextureParams) =
+    /// <summary>
+    /// Creates a new <see cref="PixTexture2d"/> instance from a <see cref="PixImageMipMap"/>.
+    /// </summary>
+    /// <remarks>
+    /// The image data is not uploaded until the texture is used and prepared.
+    /// </remarks>
+    /// <param name="data">Image mipmap chain.</param>
+    /// <param name="textureParams">Flags controlling texture creation and upload.</param>
+    /// <exception cref="ArgumentNullException">if <paramref name="data"/> is <c>null</c>.</exception>
+    new (data: PixImageMipMap, textureParams: TextureParams) =
+        if isNull data then raise <| ArgumentNullException(nameof data)
+        { PixImageMipMap = data; TextureParams = textureParams }
+
+    /// <summary>
+    /// Creates a new <see cref="PixTexture2d"/> instance from a <see cref="PixImageMipMap"/>.
+    /// </summary>
+    /// <remarks>
+    /// The image data is not uploaded until the texture is used and prepared.
+    /// </remarks>
+    /// <param name="data">Image mipmap chain.</param>
+    /// <param name="wantMipMaps">If true, the whole mipmap chain is uploaded and missing levels are generated; if false, only the base level is uploaded without generating the other levels.</param>
+    /// <exception cref="ArgumentNullException">if <paramref name="data"/> is <c>null</c>.</exception>
+    new (data: PixImageMipMap, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
+        let flags = if wantMipMaps then TextureParams.WantMipMaps else TextureParams.None
+        PixTexture2d(data, flags)
+
+    /// <summary>
+    /// Creates a new <see cref="PixTexture2d"/> instance from a <see cref="PixImage"/>.
+    /// </summary>
+    /// <remarks>
+    /// The image data is not uploaded until the texture is used and prepared.
+    /// </remarks>
+    /// <param name="data">Image data.</param>
+    /// <param name="textureParams">Flags controlling texture creation and upload.</param>
+    /// <exception cref="ArgumentNullException">if <paramref name="data"/> is <c>null</c>.</exception>
+    new (data: PixImage, textureParams: TextureParams) =
+        if isNull data then raise <| ArgumentNullException(nameof data)
         PixTexture2d(PixImageMipMap(data), textureParams)
 
-    new(data : PixImage, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
-        PixTexture2d(PixImageMipMap(data), wantMipMaps)
+    /// <summary>
+    /// Creates a new <see cref="PixTexture2d"/> instance from a <see cref="PixImage"/>.
+    /// </summary>
+    /// <remarks>
+    /// The image data is not uploaded until the texture is used and prepared.
+    /// </remarks>
+    /// <param name="data">Image data.</param>
+    /// <param name="wantMipMaps">If true, a mipmap chain is generated after upload; if false, no mipmap chain is generated.</param>
+    /// <exception cref="ArgumentNullException">if <paramref name="data"/> is <c>null</c>.</exception>
+    new (data: PixImage, [<Optional; DefaultParameterValue(true)>] wantMipMaps: bool) =
+        let flags = if wantMipMaps then TextureParams.WantMipMaps else TextureParams.None
+        PixTexture2d(data, flags)
 
-    override x.GetHashCode() =
-        HashCode.Combine(data.GetHashCode(), textureParams.GetHashCode())
+    override this.GetHashCode() =
+        HashCode.Combine(this.PixImageMipMap.GetHashCode(), this.TextureParams.GetHashCode())
 
-    override x.Equals o =
-        match o with
-        | :? PixTexture2d as o ->
-            data = o.PixImageMipMap && textureParams = o.TextureParams
-        | _ ->
-            false
+    member inline private this.Equals(other: PixTexture2d) =
+        this.PixImageMipMap = other.PixImageMipMap && this.TextureParams = other.TextureParams
+
+    override this.Equals(obj: obj) =
+        match obj with
+        | :? PixTexture2d as other -> this.Equals(other)
+        | _ -> false
+
+    interface IEquatable<PixTexture2d> with
+        member this.Equals(other) = this.Equals(other)
 
     interface ITexture with
-        member x.WantMipMaps = textureParams.wantMipMaps
+        member this.WantMipMaps = this.TextureParams.HasFlag TextureParams.WantMipMaps

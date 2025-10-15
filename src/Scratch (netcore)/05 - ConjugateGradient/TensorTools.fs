@@ -316,7 +316,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
         )
 
     let withImage (img : PixImage) (action : IBackendTexture -> 'r) =
-        let tex = runtime.CreateTexture2D (img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
+        let tex = runtime.CreateTexture2D (img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.None, 1, 1)
         tex.Upload(img)
         try action tex
         finally runtime.DeleteTexture tex

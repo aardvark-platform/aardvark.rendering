@@ -42,19 +42,19 @@ module TextureCompression =
 
         [<Benchmark>]
         member x.Upload() =
-            app.Runtime.PrepareTexture(PixTexture2d(image, TextureParams.empty)) |> ignore
+            app.Runtime.PrepareTexture(PixTexture2d(image, TextureParams.None)) |> ignore
             finish()
 
         [<Benchmark>]
         member x.UploadCompressed() =
             GL.RuntimeConfig.PreferHostSideTextureCompression <- false
-            app.Runtime.PrepareTexture(PixTexture2d(image, TextureParams.compressed)) |> ignore
+            app.Runtime.PrepareTexture(PixTexture2d(image, TextureParams.Compress)) |> ignore
             finish()
 
         [<Benchmark>]
         member x.UploadHostCompressed() =
             GL.RuntimeConfig.PreferHostSideTextureCompression <- true
-            app.Runtime.PrepareTexture(PixTexture2d(image, TextureParams.compressed)) |> ignore
+            app.Runtime.PrepareTexture(PixTexture2d(image, TextureParams.Compress)) |> ignore
             finish()
 
 
