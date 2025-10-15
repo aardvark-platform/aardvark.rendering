@@ -1,13 +1,10 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open System
-open System.Threading
 open Aardvark.Base
 
 open Aardvark.Rendering
-open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL
 
 type UniformBufferManager(ctx : Context) =
@@ -49,7 +46,6 @@ type UniformBufferManager(ctx : Context) =
     let manager = new Management.ChunkedMemoryManager<_>(bufferMemory, 1n <<< 20)
 
     let viewCache = ResourceCache<UniformBufferView, int>(None, None)
-    let rw = new ReaderWriterLockSlim()
 
     member x.CreateUniformBuffer(block : FShade.GLSL.GLSLUniformBuffer, scope : Ag.Scope, uniforms : IUniformProvider) : IResource<UniformBufferView, int> =
         let values =
@@ -114,7 +110,7 @@ type UniformBufferManager(ctx : Context) =
 
                                 UniformBufferView(block.Memory.Value, block.Offset, nativeint block.Size)
 
-                        for (value, writer) in writers do
+                        for value, writer in writers do
                             writer.Write(token, value, store)
 
                         GL.Dispatch.NamedBufferSubData(handle.Buffer.Handle, handle.Offset, handle.Size, store)

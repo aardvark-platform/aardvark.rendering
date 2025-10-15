@@ -1,36 +1,8 @@
-﻿#if INTERACTIVE
-#I @"E:\Development\Aardvark-2015\build\Release\AMD64"
-#r "Aardvark.Base.TypeProviders.dll"
-#r "Aardvark.Base.dll"
-#r "Aardvark.Base.FSharp.dll"
-#r "OpenTK.dll"
-#r "FSharp.PowerPack.dll"
-#r "FSharp.PowerPack.Linq.dll"
-#r "FSharp.PowerPack.Metadata.dll"
-#r "FSharp.PowerPack.Parallel.Seq.dll"
-#r "Aardvark.Rendering.GL.dll"
-open Aardvark.Rendering.GL
-#else
-namespace Aardvark.Rendering.GL
-#endif
-open System
-open System.Collections.Generic
+﻿namespace Aardvark.Rendering.GL
+
 open System.Threading
-open System.Collections.Concurrent
 open System.Runtime.InteropServices
-open Aardvark.Base
-open OpenTK
-open OpenTK.Platform
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
-open Microsoft.FSharp.Quotations
-open FSharp.Data.Adaptive
-open System.Reflection
-open Aardvark.Rendering.ShaderReflection
-open Aardvark.Rendering.GL
-
-#nowarn "9"
-
 
 [<AutoOpen>]
 module private BufferMemoryUsage =
@@ -62,7 +34,7 @@ module private BufferMemoryUsage =
         Interlocked.Decrement(&ctx.MemoryUsage.UniformBufferViewCount) |> ignore
         Interlocked.Add(&ctx.MemoryUsage.UniformBufferViewMemory,-size) |> ignore
 
-type UniformBuffer(ctx : Context, handle : int, size : int, block : ShaderBlock) =
+type UniformBuffer(ctx : Context, handle : int, size : int) =
     let data = Marshal.AllocHGlobal(size)
     let mutable dirty = true
 
@@ -70,7 +42,6 @@ type UniformBuffer(ctx : Context, handle : int, size : int, block : ShaderBlock)
     member x.Context = ctx
     member x.Handle = handle
     member x.Size = size
-    member x.Block = block
     member x.Data = data
     member x.Dirty 
         with get() = dirty
@@ -82,61 +53,37 @@ type UniformBufferView =
         val mutable public Offset : nativeint
         val mutable public Size : nativeint
 
-        new(b,o,s) = { Buffer = b; Offset = o; Size = s }
-
+        new(buffer, offset, size) = { Buffer = buffer; Offset = offset; Size = size }
     end
-
-
 
 [<AutoOpen>]
 module UniformBufferExtensions =
-    open System.Linq
-    open System.Collections.Generic
-    open System.Runtime.CompilerServices
-    open System.Diagnostics
 
     type Context with
         member x.CreateUniformBuffer(dataSize : nativeint) =
-            Operators.using x.ResourceLock (fun _ ->
-                
-                let handle = GL.Dispatch.CreateBuffer()
-                GL.Check "could not create uniform buffer"
+            use _ = x.ResourceLock
 
-                GL.Dispatch.NamedBufferData(handle, dataSize, 0n, BufferUsageHint.DynamicDraw)
-                GL.Check "could not allocate uniform buffer"
+            let handle = GL.Dispatch.CreateBuffer()
+            GL.Check "could not create uniform buffer"
 
-                addUniformBuffer x (int64 dataSize)
-                UniformBuffer(x, handle, int dataSize, Unchecked.defaultof<ShaderBlock>)
-            )
+            GL.Dispatch.NamedBufferData(handle, dataSize, 0n, BufferUsageHint.DynamicDraw)
+            GL.Check "could not allocate uniform buffer"
 
-
-        member x.CreateUniformBuffer(block : ShaderBlock) =
-            Operators.using x.ResourceLock (fun _ ->
-                
-                let handle = GL.Dispatch.CreateBuffer()
-                GL.Check "could not create uniform buffer"
-
-                GL.Dispatch.NamedBufferData(handle, nativeint block.DataSize, 0n, BufferUsageHint.DynamicDraw)
-                GL.Check "could not allocate uniform buffer"
-
-                addUniformBuffer x (int64 block.DataSize)
-                UniformBuffer(x, handle, block.DataSize, block)
-            )
+            addUniformBuffer x (int64 dataSize)
+            UniformBuffer(x, handle, int dataSize)
 
         member x.Delete(b : UniformBuffer) =
-            Operators.using x.ResourceLock (fun _ ->
-                GL.DeleteBuffer(b.Handle)
-                GL.Check "could not delete uniform buffer"
+            use _ = x.ResourceLock
 
-                removeUniformBuffer x (int64 b.Size)
-                b.Free()
-            )
+            GL.DeleteBuffer(b.Handle)
+            GL.Check "could not delete uniform buffer"
+
+            removeUniformBuffer x (int64 b.Size)
+            b.Free()
 
         member x.Upload(b : UniformBuffer) =
             if b.Dirty then
+                use _ = x.ResourceLock
                 b.Dirty <- false
-                Operators.using x.ResourceLock (fun _ ->
-                    GL.Dispatch.NamedBufferSubData(b.Handle, 0n, nativeint b.Size, b.Data)
-                    GL.Check "could not upload uniform buffer" 
-                )
-    
+                GL.Dispatch.NamedBufferSubData(b.Handle, 0n, nativeint b.Size, b.Data)
+                GL.Check "could not upload uniform buffer"

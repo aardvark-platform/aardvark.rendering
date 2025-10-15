@@ -70,7 +70,6 @@
     <Compile Include="Resources\Buffers\UniformBuffer.fs" />
     <Compile Include="Resources\Buffers\SparseBuffer.fs" />
     <Compile Include="Resources\Buffers\MappedBuffer.fs" />
-    <Compile Include="Resources\Shaders\ShaderReflector.fs" />
     <Compile Include="Resources\Shaders\Program.fs" />
     <Compile Include="Resources\Shaders\ComputeProgram.fs" />
     <Compile Include="Resources\Attribute.fs" />

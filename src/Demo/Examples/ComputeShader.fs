@@ -1,6 +1,5 @@
 namespace Examples
 
-
 open System
 open Aardvark.Base
 open FSharp.Data.Adaptive
@@ -8,13 +7,8 @@ open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open FSharp.Data.Adaptive.Operators
 open Aardvark.GPGPU
 open Aardvark.Rendering
-open Aardvark.Rendering.ShaderReflection
-open Aardvark.Rendering.Text
-open System.Runtime.InteropServices
-open Aardvark.SceneGraph
 
 module ComputeShader =
 

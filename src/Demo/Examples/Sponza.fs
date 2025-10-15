@@ -1,22 +1,10 @@
 ﻿namespace Examples
 
-
-open System
-open System.IO
 open Aardvark.Base
-open FSharp.Data.Adaptive
-
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Application.WinForms
-open FSharp.Data.Adaptive.Operators
 open Aardvark.Rendering
-open Aardvark.Rendering.ShaderReflection
-open Aardvark.Rendering.Text
-open System.Runtime.InteropServices
-open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Assimp
-open FShade
 
 module Sponza =
     let run() =
