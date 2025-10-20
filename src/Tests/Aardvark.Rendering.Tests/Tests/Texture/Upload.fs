@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Tests.Texture
 
+open System
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
@@ -434,6 +435,21 @@ module TextureUpload =
             uploadAndDownloadPixTexture2D
                 PixImage.random32ui 0u TextureFormat.Rgba32ui
                 runtime false size levels TextureParams.WantMipMaps
+
+        let pixTexture2DMipmappedInvalid (wrongSize : bool) (runtime : IRuntime) =
+            let size = V2i(435, 231)
+
+            let data = Array.zeroCreate 2
+            data.[0] <- PixImage<uint32>(Col.Format.RGBA, PixImage.random32ui size)
+            data.[1] <-
+                let size = Fun.MipmapLevelSize(size, 1) + if wrongSize then V2i.IO else V2i.OO
+                let format = if wrongSize then Col.Format.RGBA else Col.Format.BGRA
+                PixImage<uint32>(format, PixImage.random32ui size)
+
+            let data = data |> Array.map (fun pi -> pi :> PixImage)
+            let pix = PixTexture2d(PixImageMipMap data)
+
+            Expect.throwsT<ArgumentException> (fun _ -> runtime.PrepareTexture pix |> ignore) "Expected ArgumentException"
 
         let pixTexture2DPixVolume (runtime : IRuntime) =
             let size = V2i(256)
@@ -1034,6 +1050,21 @@ module TextureUpload =
             let levels = mipmapInput.GetLevels(size)
             uploadAndDownloadPixTextureCube runtime size levels TextureParams.WantMipMaps
 
+        let pixTextureCubeMipmappedInvalid (wrongSize : bool) (runtime : IRuntime) =
+            let size = V2i(231)
+
+            let data =
+                Array.init 6 (fun slice ->
+                    let format = if slice = 0 || wrongSize then Col.Format.RGBA else Col.Format.BGRA
+                    let size = size + if wrongSize then (slice * V2i.IO) else V2i.OO
+                    PixImage<uint32>(format, PixImage.random32ui size)
+                )
+
+            let data = data |> Array.map (fun pi -> pi :> PixImage)
+            let pix = PixTextureCube(PixCube data)
+
+            Expect.throwsT<ArgumentException> (fun _ -> runtime.PrepareTexture pix |> ignore) "Expected ArgumentException"
+
         let textureCubeNull (runtime : IRuntime) =
             let diffuseSampler =
                 samplerCube {
@@ -1119,6 +1150,9 @@ module TextureUpload =
             "2D PixTexture mipmap generation",                  Cases.pixTexture2DMipmapped MipmapInput.None
             "2D PixTexture mipmap partial generation",          Cases.pixTexture2DMipmapped MipmapInput.Partial
 
+            "2D PixTexture mipmapped wrong size",               Cases.pixTexture2DMipmappedInvalid true
+            "2D PixTexture mipmapped wrong format",             Cases.pixTexture2DMipmappedInvalid false
+
             if backend <> Backend.GL then   // not supported
                 "2D PixTexture mipmap integer generation",          Cases.pixTexture2DMipmappedInteger MipmapInput.None
                 "2D PixTexture mipmap integer partial generation",  Cases.pixTexture2DMipmappedInteger MipmapInput.Partial
@@ -1188,5 +1222,8 @@ module TextureUpload =
             "Cube PixTexture mipmapped",                 Cases.pixTextureCubeMipmapped MipmapInput.Full
             "Cube PixTexture mipmap generation",         Cases.pixTextureCubeMipmapped MipmapInput.None
             "Cube PixTexture mipmap partial generation", Cases.pixTextureCubeMipmapped MipmapInput.Partial
+
+            "Cube PixTexture mipmapped wrong size",      Cases.pixTextureCubeMipmappedInvalid true
+            "Cube PixTexture mipmapped wrong format",    Cases.pixTextureCubeMipmappedInvalid false
         ]
         |> prepareCases backend "Upload"

@@ -266,6 +266,19 @@ module ResourceValidation =
             | :? NullTexture -> raise <| ArgumentException("Cannot prepare a NullTexture.")
             | _ -> ()
 
+        let inline validatePixImage (expectedFormat : PixFormat) (baseSize : V2i) (slice : int) (level : int) (image : PixImage) =
+            if isNull image then
+                raise <| ArgumentNullException(null, $"PixImage for slice {slice} and level {level} is null.")
+
+            if image.PixFormat <> expectedFormat then
+                raise <| ArgumentException($"PixImage for slice {slice} and level {level} has format {image.PixFormat} but expected {expectedFormat}.")
+
+            let expectedSize = Fun.MipmapLevelSize(baseSize, level)
+            if image.Size <> expectedSize then
+                let baseSizeMsg = if level > 0 then $" (base size = {baseSize})" else ""
+                raise <| ArgumentException($"PixImage for slice {slice} and level {level} has size {image.Size} but expected {expectedSize}{baseSizeMsg}.")
+
+
     module Buffers =
 
         module private Utils =

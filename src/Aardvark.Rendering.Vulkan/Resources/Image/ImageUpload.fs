@@ -150,26 +150,33 @@ module ImageUploadExtensions =
                 buffers |> create levelCount
 
             let ofPixImageMipMaps (info : TextureParams) (pix : PixImageMipMap[]) (device : Device) =
-                let format = PixFormat.toTextureFormat info pix.[0].BaseImage.PixFormat
+                let baseSize = pix.[0].BaseSize
+                let baseFormat = pix.[0].BaseImage.PixFormat
+                let format = PixFormat.toTextureFormat info baseFormat
 
                 let levelCount =
-                    if info.HasWantMipMaps then Fun.MipmapLevels(pix.[0].[0].Size) else 1
+                    if info.HasWantMipMaps then Fun.MipmapLevels(pix.[0].BaseSize) else 1
 
                 if format |> TextureFormat.supportsMipmapGeneration device |> not then
                     for i = 0 to pix.Length - 1 do
                         if pix.[i].LevelCount < levelCount then
-                            pix.[i] <- PixImageMipMap.Create(pix.[i].[0])
+                            pix.[i] <- PixImageMipMap.Create(pix.[i].BaseImage)
 
                 let levels =
-                    pix |> Array.map (fun i -> i.LevelCount) |> Array.min
+                    pix |> Array.map _.LevelCount |> Array.min
 
-                let buffers =
-                    Array.init (pix.Length * levels) (fun i ->
+                let buffers = Array.zeroCreate (pix.Length * levels)
+
+                try
+                    for i = 0 to buffers.Length - 1 do
                         let slice = i / levels
                         let level = i % levels
 
-                        device |> ImageBuffer.ofPixImage format pix.[slice].[level]
-                    )
+                        pix.[slice].[level] |> ResourceValidation.Textures.validatePixImage baseFormat baseSize slice level
+                        buffers.[i] <- device |> ImageBuffer.ofPixImage format pix.[slice].[level]
+                with _ ->
+                    for b in buffers do if notNull b then b.Dispose()
+                    reraise()
 
                 buffers |> create levels
 
