@@ -123,7 +123,7 @@ type TextureParams =
     | WantMipMaps = 1
 
     /// <summary>
-    /// Prefer sRGB formats are over linear RGB formats.
+    /// Prefer sRGB formats over linear RGB formats.
     /// </summary>
     /// <remarks>
     /// Ignored if the texture data is already compressed.
