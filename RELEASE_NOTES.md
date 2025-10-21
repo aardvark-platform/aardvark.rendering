@@ -1,3 +1,26 @@
+### 5.6.0-prerelease0010
+- Changed `DrawCalls.Direct` from list to array
+- Reworked `BufferView` constructors
+- Reworked `TexureParams` as enum and improved documentation
+- Added size and format validation for `PixTexture2d` and `PixTextureCube`
+- Added offset parameter for indirect buffers
+- Added framebuffer clear extensions
+- Added support for dynamic viewport and scissor
+- Added `discardOnResize` parameter for AdaptiveBuffer
+- Added support for color-based vertex attributes
+- Added Aardvark.Rendering.ImGui
+- [Raytracing] Reworked `GeometryMode`
+- [Raytracing] Added comments and overloads for geometry-related types
+- [Sg] Fixed automatic computation of `FaceVertexCount`
+- [Sg] Added `Sg.indirectDraw'`
+- [Vulkan] Fixed interleaved attributes
+- [Vulkan] Improved detection of debug printf messages
+- [Vulkan] Disabled render task recompilation message for `DebugLevel.Normal`
+- [Vulkan] Fixed computation of shader file cache name
+- [GL] Deleted old render task implementation
+- [GL] Fixed handling of nested runtime commands
+- [GL] Fixed `AbstractRenderTask.HookRenderObject` with render commands
+
 ### 5.6.0-prerelease0009
 - [Vulkan] Fixed memory leaks related to cstr
 - [Vulkan] Added micromap pipeline creation flag
