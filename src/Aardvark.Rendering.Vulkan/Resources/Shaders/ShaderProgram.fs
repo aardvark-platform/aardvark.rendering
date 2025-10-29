@@ -336,6 +336,13 @@ module ShaderProgram =
     module internal FileCacheName =
         let private pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
+        let private fsharpCoreVersion =
+            try
+                let asm = typedefof<int option>.Assembly
+                asm.GetName().Version.ToString()
+            with _ ->
+                ""
+
         let private getHash (value : obj) =
             let hash = pickler.ComputeHash value
             hash.Hash |> Guid |> string
@@ -363,7 +370,7 @@ module ShaderProgram =
                   depthRange = FShadeConfig.depthRange
                   extensions = FShadeConfig.availableExtensions device }
 
-            getHash signature
+            getHash (fsharpCoreVersion, signature)
 
         // Used for dynamic surfaces, compute shaders, and raytracing shaders.
         let ofEffectId (device: Device) (respectDepthRange: bool) (id: string) =
@@ -377,7 +384,7 @@ module ShaderProgram =
                   depthRange = if respectDepthRange then FShadeConfig.depthRange else Range1f()
                   extensions = FShadeConfig.availableExtensions device }
 
-            getHash signature
+            getHash (fsharpCoreVersion, signature)
 
     module internal ShaderProgramData =
 

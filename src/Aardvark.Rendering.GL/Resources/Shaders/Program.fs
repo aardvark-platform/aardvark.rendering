@@ -733,6 +733,13 @@ module ProgramExtensions =
 
         let private pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
+        let private fsharpCoreVersion =
+            try
+                let asm = typedefof<int option>.Assembly
+                asm.GetName().Version.ToString()
+            with _ ->
+                ""
+
         let private tryGetCacheFile (extension : string) (context : Context) (key : ShaderCacheKey) =
             context.ShaderCachePath |> Option.map (fun prefix ->
                 // NOTE: context.Diver represents information obtained by primary context
@@ -771,7 +778,7 @@ module ProgramExtensions =
                           layerCount          = 0
                           layeredShaderInputs = false }
 
-                let hash = pickler.ComputeHash(key).Hash |> System.Guid
+                let hash = pickler.ComputeHash((fsharpCoreVersion, key)).Hash |> Guid
                 Path.combine [prefix; string hash + "." + extension]
             )
 
