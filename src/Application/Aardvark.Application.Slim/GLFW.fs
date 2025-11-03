@@ -618,7 +618,12 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
     let visibleWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
     do Instance.IsMainThread_ <- true
 
-    let aardvarkIcon = IconLoader.getIcon()
+    let aardvarkIcon =
+        if Aardvark.GetOSPlatform() <> OSPlatform.OSX then
+            IconLoader.getIcon()
+        else
+            // Cannot set window icon on MacOS
+            None
 
     new(runtime, swap) = new Instance(runtime, swap, false)
 

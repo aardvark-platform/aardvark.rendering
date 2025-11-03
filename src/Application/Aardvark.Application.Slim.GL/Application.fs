@@ -307,7 +307,7 @@ module private OpenGL =
                 else
                     None
         else
-            Log.warn "[GL] could not query sample count of default framebuffer."
+            Log.warn "[GL] Could not query sample count of default framebuffer."
             None
 
     let createSurface (runtime : Runtime) (cfg: WindowConfig) (glfw : Glfw) (win : nativeptr<WindowHandle>) =
@@ -329,9 +329,25 @@ module private OpenGL =
             let mutable desc = Unchecked.defaultof<_>
             let error = glfw.GetError(&desc)
             if error <> Silk.NET.GLFW.ErrorCode.NoError then
-                Log.error "[GLFW] error after making trying to make context current: %A" error
+                let errorMessage =
+                    let str =
+                        if NativePtr.isNullPtr desc then
+                            null
+                        else
+                            let mutable len = 0
+                            while desc.[len] <> 0uy do inc &len
+                            System.Text.Encoding.UTF8.GetString(desc, len)                    
+                    
+                    if String.IsNullOrEmpty str then
+                        $"Error after making trying to make context current"
+                    else
+                        str
+                     
+                Log.error $"[GLFW] {errorMessage} (Error code: {error})"
+
             if current <> win then
-                Log.error "[GLFW] could not make context current"
+                Log.error "[GLFW] Could not make context current"
+
             ctx.LoadAll()
             glfw.SwapInterval(if cfg.vsync then 1 else 0)
             samples <- getFramebufferSamples() |> Option.defaultValue cfg.samples
