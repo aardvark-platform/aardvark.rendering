@@ -35,9 +35,6 @@ type internal FramebufferSignature(
 module internal FramebufferSignatureContextExtensions =
     open OpenTK.Graphics.OpenGL4
 
-    type GetPName with
-        static member MaxFramebufferSamples = unbox<GetPName> 0x9318
-
     type Context with
 
         member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,

@@ -194,7 +194,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                         Some dbg
 
                     | _ ->
-                        Log.warn "Failed to initialize debug output"
+                        Log.warn "[GL] Failed to initialize debug output"
                         None
         )
 

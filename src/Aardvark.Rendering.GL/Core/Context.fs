@@ -368,7 +368,11 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     member x.MaxFramebufferSamples =
         getOrQuery "max framebuffer samples" &maxFramebufferSamples (fun _ ->
-            GL.GetInteger(unbox<GetPName> 0x9318)
+            if x.Driver.version >= Version(4, 3, 0) then
+                GL.GetInteger(GetPName.MaxFramebufferSamples)
+            else
+                Log.warn "[GL] Cannot query GL_MAX_FRAMEBUFFER_SAMPLES"
+                64
         )
 
     member x.DebugLabelsEnabled = debugLabelsEnabled

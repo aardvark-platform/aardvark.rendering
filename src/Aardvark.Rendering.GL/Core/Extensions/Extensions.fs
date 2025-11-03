@@ -95,3 +95,9 @@ module ExtensionHelpers =
             action()
         finally
             GL.BindTexture(target, old)
+
+[<AutoOpen>]
+module PropertyExtensions =
+
+    type GetPName with
+        static member MaxFramebufferSamples = unbox<GetPName> 0x9318
