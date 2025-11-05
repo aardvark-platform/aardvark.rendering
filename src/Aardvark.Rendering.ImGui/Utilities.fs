@@ -5,7 +5,6 @@ open System
 open System.Text
 open FSharp.NativeInterop
 open Hexa.NET.ImGui
-open Hexa.NET.ImGui.Backends.GLFW
 
 #nowarn "9"
 
@@ -92,6 +91,3 @@ module internal Utilities =
                 float this.DisplayPos.X, float this.DisplayPos.Y,
                 float this.DisplaySize.X, float this.DisplaySize.Y
             )
-
-    type Aardvark.Glfw.Window with
-        member inline this.HandlePtr = GLFWwindowPtr(NativePtr.cast this.Handle)

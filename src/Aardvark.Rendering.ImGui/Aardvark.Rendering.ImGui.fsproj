@@ -23,6 +23,7 @@
     <Compile Include="Textures.fs" />
     <Compile Include="DrawList.fs" />
     <Compile Include="RenderState.fs" />
+    <Compile Include="Platform.fs" />
     <Compile Include="Instance.fs" />
     <None Include="paket.references" />
   </ItemGroup>

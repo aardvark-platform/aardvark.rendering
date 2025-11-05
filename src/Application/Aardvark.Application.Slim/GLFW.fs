@@ -1204,6 +1204,7 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
 
             refreshTitle()
 
+    member x.Instance = instance
     member x.Handle = win
     member x.Surface = surface
 

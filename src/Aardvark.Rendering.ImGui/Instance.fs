@@ -12,7 +12,6 @@ open System.Runtime.CompilerServices
 open System.Text
 open FSharp.Data.Adaptive
 open Hexa.NET.ImGui
-open Hexa.NET.ImGui.Backends.GLFW
 
 #nowarn "9"
 
@@ -39,11 +38,7 @@ type Instance internal (control: IRenderControl) =
         &io.BackendFlags |||= ImGuiBackendFlags.RendererHasTextures
         io
 
-    do
-        ImGuiImplGLFW.SetCurrentContext context
-        if not <| ImGuiImplGLFW.InitForOther(window.HandlePtr, true) then
-            ImGui.DestroyContext context
-            failwith "[ImGui] Failed to initialize GLFW backend."
+    let platform = new Platform(window, io)
 
     let mutable render : Action<unit> = ignore
     let state = new RenderState(window.Runtime)
@@ -53,7 +48,7 @@ type Instance internal (control: IRenderControl) =
     let beforeRenderCb =
         window.BeforeRender.Subscribe(fun _ ->
             useTransaction transaction (fun _ ->
-                ImGuiImplGLFW.NewFrame()
+                platform.NewFrame()
                 ImGui.NewFrame()
                 render.Invoke()
                 ImGui.Render()
@@ -130,8 +125,7 @@ type Instance internal (control: IRenderControl) =
             afterRenderCb.Dispose()
             beforeRenderCb.Dispose()
             state.Dispose()
-            ImGuiImplGLFW.Shutdown()
-            ImGuiImplGLFW.SetCurrentContext ImGuiContextPtr.Null
+            platform.Dispose()
             ImGui.DestroyContext context
             NativePtr.free pConfigFile
             isInitialized <- 0

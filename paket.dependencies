@@ -33,7 +33,6 @@ nuget CommonMark.NET                                ~> 0.15.1
 nuget GLSLangSharp                                  ~> 0.5.0
 
 nuget Hexa.NET.ImGui                                ~> 2.2.8.5
-nuget Hexa.NET.ImGui.Backends.GLFW                  ~> 1.0.17.4
 nuget Unofficial.LibTessDotNet                      ~> 2.0.2
 nuget Aardvark.Data.Assimp                          ~> 1.0.1
 nuget Offler                                        ~> 2.1.1
