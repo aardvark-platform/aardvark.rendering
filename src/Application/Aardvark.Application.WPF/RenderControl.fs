@@ -62,17 +62,21 @@ type RenderControl() as self =
 
     static let setCursor (ctrl : FrameworkElement) (c : Cursor) =
         match c with
-        | Cursor.Default -> ctrl.Cursor <- Input.Cursors.Arrow
-        | Cursor.None -> ctrl.Cursor <- Input.Cursors.None
-        | Cursor.Arrow -> ctrl.Cursor <- Input.Cursors.Arrow
-        | Cursor.Hand -> ctrl.Cursor <- Input.Cursors.Hand
-        | Cursor.Crosshair -> ctrl.Cursor <- Input.Cursors.Cross
-        | Cursor.HorizontalResize -> ctrl.Cursor <- Input.Cursors.SizeWE
-        | Cursor.VerticalResize -> ctrl.Cursor <- Input.Cursors.SizeNS
-        | Cursor.Text -> ctrl.Cursor <- Input.Cursors.IBeam
+        | Cursor.Default ->    ctrl.Cursor <- Input.Cursors.Arrow
+        | Cursor.None ->       ctrl.Cursor <- Input.Cursors.None
+        | Cursor.Arrow ->      ctrl.Cursor <- Input.Cursors.Arrow
+        | Cursor.Hand ->       ctrl.Cursor <- Input.Cursors.Hand
+        | Cursor.Crosshair ->  ctrl.Cursor <- Input.Cursors.Cross
+        | Cursor.ResizeH ->    ctrl.Cursor <- Input.Cursors.SizeWE
+        | Cursor.ResizeV ->    ctrl.Cursor <- Input.Cursors.SizeNS
+        | Cursor.ResizeNESW -> ctrl.Cursor <- Input.Cursors.SizeNESW
+        | Cursor.ResizeNWSE -> ctrl.Cursor <- Input.Cursors.SizeNWSE
+        | Cursor.ResizeAll ->  ctrl.Cursor <- Input.Cursors.SizeAll
+        | Cursor.NotAllowed -> ctrl.Cursor <- Input.Cursors.No
+        | Cursor.Wait       -> ctrl.Cursor <- Input.Cursors.Wait
+        | Cursor.Text ->       ctrl.Cursor <- Input.Cursors.IBeam
         | Cursor.Custom _ -> 
             Log.error "[WPF] custom cursors not supported atm."
-        
 
     member x.SetControl (self : RenderControl) (c : FrameworkElement) (cr : IRenderTarget) =
         match impl with

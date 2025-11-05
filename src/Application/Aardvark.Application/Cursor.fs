@@ -8,8 +8,13 @@ type Cursor =
     | Default
     | Arrow
     | Hand
-    | HorizontalResize
-    | VerticalResize
+    | ResizeH
+    | ResizeV
+    | ResizeNESW
+    | ResizeNWSE
+    | ResizeAll
+    | NotAllowed
+    | Wait
     | Text
     | Crosshair
     | Custom of PixImage<byte> * V2i

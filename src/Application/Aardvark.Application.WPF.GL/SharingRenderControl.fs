@@ -715,15 +715,21 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             if c <> cursor then
                 cursor <- c
                 match c with
-                | Cursor.Default -> base.Cursor <- null
-                | Cursor.None -> base.Cursor <- Input.Cursors.None
-                | Cursor.Arrow -> base.Cursor <- Input.Cursors.Arrow
-                | Cursor.Hand -> base.Cursor <- Input.Cursors.Hand
-                | Cursor.Crosshair -> base.Cursor <- Input.Cursors.Cross
-                | Cursor.HorizontalResize -> base.Cursor <- Input.Cursors.SizeWE
-                | Cursor.VerticalResize -> base.Cursor <- Input.Cursors.SizeNS
-                | Cursor.Text -> base.Cursor <- Input.Cursors.IBeam
-                | Cursor.Custom _ -> Log.error "[WPF] custom cursors not supported atm."
+                | Cursor.Default ->    base.Cursor <- null
+                | Cursor.None ->       base.Cursor <- Input.Cursors.None
+                | Cursor.Arrow ->      base.Cursor <- Input.Cursors.Arrow
+                | Cursor.Hand ->       base.Cursor <- Input.Cursors.Hand
+                | Cursor.Crosshair ->  base.Cursor <- Input.Cursors.Cross
+                | Cursor.ResizeH ->    base.Cursor <- Input.Cursors.SizeWE
+                | Cursor.ResizeV ->    base.Cursor <- Input.Cursors.SizeNS
+                | Cursor.ResizeNESW -> base.Cursor <- Input.Cursors.SizeNESW
+                | Cursor.ResizeNWSE -> base.Cursor <- Input.Cursors.SizeNWSE
+                | Cursor.ResizeAll ->  base.Cursor <- Input.Cursors.SizeAll
+                | Cursor.NotAllowed -> base.Cursor <- Input.Cursors.No
+                | Cursor.Wait       -> base.Cursor <- Input.Cursors.Wait
+                | Cursor.Text ->       base.Cursor <- Input.Cursors.IBeam
+                | Cursor.Custom _ ->
+                    Log.error "[WPF] custom cursors not supported atm."
 
     interface IRenderTarget with
         member x.FramebufferSignature = x.FramebufferSignature

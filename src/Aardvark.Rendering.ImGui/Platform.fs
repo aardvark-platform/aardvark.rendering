@@ -240,15 +240,15 @@ module internal ImGuiMouseCursor =
               ImGuiMouseCursor.None,       Cursor.None
               ImGuiMouseCursor.Arrow,      Cursor.Arrow
               ImGuiMouseCursor.TextInput,  Cursor.Text
-              ImGuiMouseCursor.ResizeAll,  Cursor.Arrow
-              ImGuiMouseCursor.ResizeNs,   Cursor.VerticalResize
-              ImGuiMouseCursor.ResizeEw,   Cursor.HorizontalResize
-              ImGuiMouseCursor.ResizeNesw, Cursor.Arrow
-              ImGuiMouseCursor.ResizeNwse, Cursor.Arrow
+              ImGuiMouseCursor.ResizeAll,  Cursor.ResizeAll
+              ImGuiMouseCursor.ResizeNs,   Cursor.ResizeV
+              ImGuiMouseCursor.ResizeEw,   Cursor.ResizeH
+              ImGuiMouseCursor.ResizeNesw, Cursor.ResizeNESW
+              ImGuiMouseCursor.ResizeNwse, Cursor.ResizeNWSE
               ImGuiMouseCursor.Hand,       Cursor.Hand
-              ImGuiMouseCursor.Wait,       Cursor.Arrow
+              ImGuiMouseCursor.Wait,       Cursor.Wait
               ImGuiMouseCursor.Progress,   Cursor.Arrow
-              ImGuiMouseCursor.NotAllowed, Cursor.Arrow
+              ImGuiMouseCursor.NotAllowed, Cursor.NotAllowed
         ]
         >> ValueOption.defaultValue Cursor.Arrow
 

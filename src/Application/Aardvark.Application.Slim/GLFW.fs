@@ -1222,14 +1222,19 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
                     if cursor = Cursor.None then glfw.SetInputMode(win, CursorStateAttribute.Cursor, CursorModeValue.CursorNormal)
                     let handle = 
                         match c with
-                        | Cursor.None -> NativePtr.zero // unreachable
-                        | Cursor.Default -> NativePtr.zero
-                        | Cursor.Arrow -> glfw.CreateStandardCursor(CursorShape.Arrow)
-                        | Cursor.Hand -> glfw.CreateStandardCursor(CursorShape.Hand)
-                        | Cursor.HorizontalResize -> glfw.CreateStandardCursor(CursorShape.HResize)
-                        | Cursor.VerticalResize -> glfw.CreateStandardCursor(CursorShape.VResize)
-                        | Cursor.Text -> glfw.CreateStandardCursor(CursorShape.IBeam)
-                        | Cursor.Crosshair -> glfw.CreateStandardCursor(CursorShape.Crosshair)
+                        | Cursor.None ->       NativePtr.zero // unreachable
+                        | Cursor.Default ->    NativePtr.zero
+                        | Cursor.Arrow ->      glfw.CreateStandardCursor CursorShape.Arrow
+                        | Cursor.Hand ->       glfw.CreateStandardCursor CursorShape.Hand
+                        | Cursor.ResizeH ->    glfw.CreateStandardCursor CursorShape.HResize
+                        | Cursor.ResizeV ->    glfw.CreateStandardCursor CursorShape.VResize
+                        | Cursor.ResizeNESW -> glfw.CreateStandardCursor CursorShape.NeswResize
+                        | Cursor.ResizeNWSE -> glfw.CreateStandardCursor CursorShape.NwseResize
+                        | Cursor.ResizeAll ->  glfw.CreateStandardCursor CursorShape.AllResize
+                        | Cursor.NotAllowed -> glfw.CreateStandardCursor CursorShape.NotAllowed
+                        | Cursor.Wait ->       glfw.CreateStandardCursor CursorShape.Arrow
+                        | Cursor.Text ->       glfw.CreateStandardCursor CursorShape.IBeam
+                        | Cursor.Crosshair ->  glfw.CreateStandardCursor CursorShape.Crosshair
                         | Cursor.Custom(img, hot) ->
                             let img = img.ToPixImage<byte>(Col.Format.RGBA)
                             NativeVolume.using img.Volume (fun pSrc ->

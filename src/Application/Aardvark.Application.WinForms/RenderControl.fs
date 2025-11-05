@@ -134,15 +134,21 @@ type RenderControl() as this =
             if cursor <> c then
                 cursor <- c
                 match c with
-                | Cursor.None -> base.Cursor <- null
-                | Cursor.Default -> base.Cursor <- System.Windows.Forms.Cursors.Default
-                | Cursor.Arrow -> base.Cursor <- System.Windows.Forms.Cursors.Arrow
-                | Cursor.Crosshair -> base.Cursor <- System.Windows.Forms.Cursors.Cross
-                | Cursor.Hand -> base.Cursor <- System.Windows.Forms.Cursors.Hand
-                | Cursor.Text -> base.Cursor <- System.Windows.Forms.Cursors.IBeam
-                | Cursor.HorizontalResize -> base.Cursor <- System.Windows.Forms.Cursors.SizeWE
-                | Cursor.VerticalResize -> base.Cursor <- System.Windows.Forms.Cursors.SizeNS
-                | Cursor.Custom _ -> Log.error "custom cursors are not supported by WinForms atm."
+                | Cursor.None ->       base.Cursor <- null
+                | Cursor.Default ->    base.Cursor <- Cursors.Default
+                | Cursor.Arrow ->      base.Cursor <- Cursors.Arrow
+                | Cursor.Crosshair ->  base.Cursor <- Cursors.Cross
+                | Cursor.Hand ->       base.Cursor <- Cursors.Hand
+                | Cursor.Text ->       base.Cursor <- Cursors.IBeam
+                | Cursor.ResizeH ->    base.Cursor <- Cursors.SizeWE
+                | Cursor.ResizeV ->    base.Cursor <- Cursors.SizeNS
+                | Cursor.ResizeNESW -> base.Cursor <- Cursors.SizeNESW
+                | Cursor.ResizeNWSE -> base.Cursor <- Cursors.SizeNWSE
+                | Cursor.ResizeAll ->  base.Cursor <- Cursors.SizeAll
+                | Cursor.NotAllowed -> base.Cursor <- Cursors.No
+                | Cursor.Wait       -> base.Cursor <- Cursors.WaitCursor
+                | Cursor.Custom _ ->
+                    Log.error "custom cursors are not supported by WinForms atm."
 
     member x.Location =
         locationAndSub.Value |> snd
