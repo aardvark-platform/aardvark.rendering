@@ -40,9 +40,9 @@ nuget FSharp.Data                                   ~> 6.4.0
 
 nuget Unofficial.OpenTK                             ~> 3.0.21
 nuget Unofficial.OpenTK.GLControl                   ~> 3.0.21
-nuget Silk.NET.GLFW                                 = 2.15.0
-nuget Silk.NET.Core                                 = 2.15.0
-nuget Silk.NET.Direct3D9                            = 2.15.0
+nuget Silk.NET.GLFW                                 = 2.22.0
+nuget Silk.NET.Core                                 = 2.22.0
+nuget Silk.NET.Direct3D9                            = 2.22.0
 
 // Examples
 nuget Aardvark.PixImage.DevIL                       ~> 5.2.33

@@ -179,19 +179,23 @@ module WGLDXExtensions =
 
 [<AutoOpen>]
 module WGLDXContextExtensions =
+    open Silk.NET.Core
+    open Silk.NET.Direct3D9
 
     let inline spanny<'a when 'a : unmanaged> (ptr : nativeptr<'a>) =
         System.Span<'a>(NativePtr.toVoidPtr ptr, 1)
 
-    open Silk.NET.Direct3D9
+    let inline private checkHResult (result: int) =
+        if result <> 0 then raise <| Marshal.GetExceptionForHR(result)
+
     type ShareContext private(ctx : Context, d3d : nativeptr<IDirect3D9Ex>, device : nativeptr<IDirect3DDevice9Ex>, shareDevice : WglDxShareDevice) =
         static member Create(ctx : Context) =
             use __ = ctx.ResourceLock
 
-            let d3d = D3D9.GetApi()
-            let mutable d3d9exptr = Unchecked.defaultof<_>
-            let _ = d3d.Direct3DCreate9Ex(32u, &d3d9exptr)
-            let d3d = d3d9exptr //System.Span<IDirect3D9Ex>(NativePtr.toVoidPtr d3d9exptr, 1)
+            let d3d = D3D9.GetApi(null)
+            let mutable d3d9ex = Unchecked.defaultof<_>
+
+            d3d.Direct3DCreate9Ex(uint32 D3D9.SdkVersion, &d3d9ex) |> checkHResult
 
             let pDevice = 
                 let hndl = GetDesktopWindow()
@@ -199,43 +203,33 @@ module WGLDXContextExtensions =
                     PresentParameters(
                         backBufferWidth = Nullable 10u,
                         backBufferHeight = Nullable 10u ,
-                        backBufferFormat = Nullable Format.FmtA8R8G8B8,
+                        backBufferFormat = Nullable Format.A8R8G8B8,
                         backBufferCount = Nullable 0u,
                         multiSampleType = Nullable MultisampleType.MultisampleNone,
                         multiSampleQuality = Nullable 0u,
-                        swapEffect = Nullable Swapeffect.SwapeffectDiscard,
-                        windowed = Nullable 1,// SharpDX.Mathematics.Interop.RawBool(true),
-                        //deviceWindowHandle = hndl, 
+                        swapEffect = Nullable Swapeffect.Discard,
+                        windowed = Nullable (Bool32 true),
                         hDeviceWindow = Nullable hndl,
-                        presentationInterval = Nullable 0u//PresentInterval.Default
+                        presentationInterval = Nullable (uint32 D3D9.PresentIntervalDefault)
                     )
-                
-                //SharpDX.Direct3D9.CreateFlags.FpuPreserve ||| 
-                //SharpDX.Direct3D9.CreateFlags.HardwareVertexProcessing ||| 
-                //SharpDX.Direct3D9.CreateFlags.Multithreaded
-                let createFlags = 0x4u ||| 0x2u ||| 0x40u
+
+                let createFlags = D3D9.CreateFpuPreserve ||| D3D9.CreateMultithreaded ||| D3D9.CreateHardwareVertexprocessing
                 let mutable dev = Unchecked.defaultof<_>
-                printfn "before"
-                let result = 
-                    spanny(d3d).[0].CreateDeviceEx(
-                        0u, 
-                        Devtype.DevtypeHal, 
-                        0n, 
-                        createFlags, 
-                        &parameters,
-                        NativePtr.zero,
-                        &dev
-                    )
-                if result <> 0 then
-                    raise <| Marshal.GetExceptionForHR(result)
-                printfn "after "
+
+                spanny(d3d9ex).[0].CreateDeviceEx(
+                    0u,
+                    Devtype.Hal,
+                    0n,
+                    uint32 createFlags,
+                    &parameters,
+                    NativePtr.zero,
+                    &dev
+                ) |> checkHResult
+
                 dev
+
             let shareDevice = WGL.OpenDevice(NativePtr.toNativeInt pDevice)
-
-            ShareContext(ctx, d3d, pDevice, shareDevice)
-
-
-
+            ShareContext(ctx, d3d9ex, pDevice, shareDevice)
 
         member x.Context = ctx
         member x.ShareDevice = shareDevice
@@ -329,8 +323,8 @@ module WGLDXContextExtensions =
 
     let private dxFormat =
         LookupTable.lookup [
-            TextureFormat.Rgba8, Format.FmtA8R8G8B8
-            TextureFormat.Depth24Stencil8, Format.FmtD24S8
+            TextureFormat.Rgba8, Format.A8R8G8B8
+            TextureFormat.Depth24Stencil8, Format.D24S8
         ]
 
     type Context with
@@ -357,7 +351,7 @@ module WGLDXContextExtensions =
                     uint32 size.X, uint32 size.Y, 
                     dxFormat,
                     MultisampleType.MultisampleNone, 0u,
-                    1,
+                    Bool32 true,
                     &surface,
                     &wddmHandle
                 )
