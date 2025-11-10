@@ -2,6 +2,7 @@
 
 open Aardvark.Base
 open System
+open System.Numerics
 open System.Text
 open FSharp.NativeInterop
 open Hexa.NET.ImGui
@@ -63,6 +64,9 @@ module internal Utilities =
                 for i = 0 to data.Length - 1 do ptr.[i] <- data.[i]
                 ptr.[data.Length] <- 0uy
                 ptr
+
+    type Vector2 with
+        member inline this.V2f = V2f(this.X, this.Y)
 
     type ImTextureRect with
         member inline this.Size = V2i(int this.W, int this.H)

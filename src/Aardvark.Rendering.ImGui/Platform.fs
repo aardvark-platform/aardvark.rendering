@@ -7,6 +7,7 @@ open Hexa.NET.ImGui
 open System
 open System.Diagnostics
 open System.Numerics
+open System.Runtime.InteropServices
 
 // Based on the official ImGui GLFW backend
 // Reimplemented here to avoid issues with native dependencies
@@ -270,6 +271,15 @@ type internal Platform(window: Aardvark.Glfw.Window, io: ImGuiIOPtr) =
     let isKeyPressed key =
         glfw.GetKey(window.Handle, key) = int InputAction.Press
 
+    let getContentScale() =
+        if Aardvark.GetOSPlatform() <> OSPlatform.OSX then
+            let monitor = glfw.GetPrimaryMonitor()
+            let mutable scale = V2f.One
+            glfw.GetMonitorContentScale(monitor, &scale.X, &scale.Y)
+            scale.X
+        else
+            1.0f
+
     let updateKeyModifiers() =
         io.AddKeyEvent(ImGuiKey.ModCtrl, isKeyPressed Keys.ControlLeft || isKeyPressed Keys.ControlRight)
         io.AddKeyEvent(ImGuiKey.ModShift, isKeyPressed Keys.ShiftLeft || isKeyPressed Keys.ShiftRight)
@@ -328,6 +338,13 @@ type internal Platform(window: Aardvark.Glfw.Window, io: ImGuiIOPtr) =
         prevScrollCb      <- glfw.SetScrollCallback(window.Handle, GlfwCallbacks.ScrollCallback onScroll)
         prevKeyCb         <- glfw.SetKeyCallback(window.Handle, GlfwCallbacks.KeyCallback onKey)
         prevCharCb        <- glfw.SetCharCallback(window.Handle, GlfwCallbacks.CharCallback onChar)
+
+        let style = ImGui.GetStyle()
+        let scale = getContentScale()
+        style.ScaleAllSizes scale
+        style.FontScaleDpi <- scale
+        io.ConfigDpiScaleFonts <- true
+        io.ConfigDpiScaleViewports <- true
 
     do initialize()
 

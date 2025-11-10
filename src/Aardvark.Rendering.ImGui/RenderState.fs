@@ -26,7 +26,7 @@ type internal RenderState (runtime: IRuntime) =
         |> Sg.projTrafo projTrafo
         |> Sg.surface Shader.Effect
 
-    let updateDrawLists (display: Box2i) (data: ImVector<ImDrawListPtr> inref) =
+    let updateDrawLists (display: Box2i) (framebufferScale: V2f) (data: ImVector<ImDrawListPtr> inref) =
         let currentCount = drawLists.Count
 
         // Add and remove draw lists if the count has changed
@@ -40,7 +40,7 @@ type internal RenderState (runtime: IRuntime) =
         // Update the draw lists
         let mutable i = 0
         for list in drawLists do
-            list.Update(data.[i], &display)
+            list.Update(data.[i], &display, framebufferScale)
             inc &i
 
     member _.Scene = sg
@@ -48,7 +48,7 @@ type internal RenderState (runtime: IRuntime) =
     member _.Update(data: ImDrawDataPtr) =
         display.Value <- data.Display
         textures.Update &data.Textures
-        updateDrawLists (Box2i data.Display) &data.CmdLists
+        updateDrawLists (Box2i data.Display) data.FramebufferScale.V2f &data.CmdLists
 
     member _.Dispose() =
         for list in drawLists do list.Dispose()
