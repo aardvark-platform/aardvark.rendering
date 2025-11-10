@@ -45,10 +45,29 @@ type Application(runtime : IRuntime, interop : IWindowInterop, hideCocoaMenuBar 
                               [<Optional; DefaultParameterValue(true)>] vsync : bool) =
         x.CreateGameWindow {
             WindowConfig.Default with
-                samples = samples
+                samples      = samples
                 physicalSize = physicalSize
-                vsync = vsync
+                vsync        = vsync
         }
+
+    member x.CreateGameWindow(width : int, height : int,
+                              [<Optional; DefaultParameterValue(1)>] samples : int,
+                              [<Optional; DefaultParameterValue(false)>] physicalSize : bool,
+                              [<Optional; DefaultParameterValue(true)>] vsync : bool) =
+        x.CreateGameWindow {
+            WindowConfig.Default with
+                width        = width
+                height       = height
+                samples      = samples
+                physicalSize = physicalSize
+                vsync        = vsync
+        }
+
+    member x.CreateGameWindow(size : V2i,
+                              [<Optional; DefaultParameterValue(1)>] samples : int,
+                              [<Optional; DefaultParameterValue(false)>] physicalSize : bool,
+                              [<Optional; DefaultParameterValue(true)>] vsync : bool) =
+        x.CreateGameWindow(size.X, size.Y, samples, physicalSize, vsync)
 
     member x.Dispose() =
         x.Destroy()
