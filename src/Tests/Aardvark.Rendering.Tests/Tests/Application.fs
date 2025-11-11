@@ -7,7 +7,10 @@ open Aardvark.Application
 open OpenTK.Graphics.OpenGL4
 
 open System
+open System.Runtime.InteropServices
 open System.Reflection
+
+open Expecto
 
 [<Struct; RequireQualifiedAccess>]
 type Framework =
@@ -104,6 +107,9 @@ module TestApplication =
         open Aardvark.Rendering.Vulkan
 
         let create (debug : IDebugConfig) =
+            if Aardvark.GetOSPlatform() = OSPlatform.OSX then
+                skiptest "Vulkan not supported on MacOS at the moment"
+
             let headless = new HeadlessVulkanApplication(debug)
 
             let app =

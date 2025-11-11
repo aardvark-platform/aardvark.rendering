@@ -621,3 +621,21 @@ module ``Test Utilities`` =
         match runtime with
         | :? Vulkan.Runtime as runtime when not <| check runtime.Device.EnabledFeatures -> skiptest message
         | _ -> ()
+
+    let requireGL (check: GL.Context -> bool) (message: string) (runtime: IRuntime) =
+        match runtime with
+        | :? GL.Runtime as runtime ->
+            use _ = runtime.Context.ResourceLock
+            if not <| check runtime.Context then skiptest message
+        | _ -> ()
+
+    let requireExtensionGL (candidates: string seq) (runtime: IRuntime) =
+        let message =
+            if Seq.length candidates = 1 then
+                $"{Seq.head candidates} not supported"
+            else
+                $"None of {Seq.toList candidates} supported"
+
+        runtime |> requireGL (fun _ ->
+            candidates |> Seq.exists (GL.ExtensionHelpers.isSupported (System.Version(999, 999)))
+        ) message

@@ -8,6 +8,7 @@ open Aardvark.Application
 open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open FShade
+open FShade.GLSL.GLSLExtension
 open Expecto
 
 module AttributeBuffer =
@@ -192,6 +193,8 @@ module AttributeBuffer =
                 perInstance singleValue interleaved false runtime
 
         let attributeInt8 (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireExtensionGL [NVGpuShader5]
+
             renderAttribute
                 (AttributeShader.EffectWithView<int8, int32> <@ int32 @>)
                 TextureFormat.R8i -101y [| -101y |]
@@ -199,6 +202,7 @@ module AttributeBuffer =
 
         let attributeInt16 (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
             runtime |> requireFeatures _.Shaders.StorageInputOutput16 "Device does not support 16bit inputs and outputs"
+            runtime |> requireExtensionGL [AMDGpuShaderInt16; NVGpuShader5]
 
             renderAttribute
                 (AttributeShader.EffectWithView<int16, int32> <@ int32 @>)
@@ -212,6 +216,8 @@ module AttributeBuffer =
                 perInstance singleValue interleaved false runtime
 
         let attributeUInt8 (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireExtensionGL [NVGpuShader5]
+
             renderAttribute
                 (AttributeShader.EffectWithView<uint8, uint32> <@ uint32 @>)
                 TextureFormat.R8ui 101uy [| 101uy |]
@@ -219,6 +225,8 @@ module AttributeBuffer =
 
         // Treat color as integer and take care of BGRA layout (not possible in GL unless single value)
         let attributeUInt8FromC4b (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireExtensionGL [NVGpuShader5]
+
             renderAttribute
                 (AttributeShader.EffectWithView<uint8, uint32> <@ uint32 @>)
                 TextureFormat.R8ui (C4b(101uy, 1uy, 2uy, 3uy)) [| 101uy |]
@@ -226,6 +234,7 @@ module AttributeBuffer =
 
         let attributeUInt16 (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
             runtime |> requireFeatures _.Shaders.StorageInputOutput16 "Device does not support 16-bit inputs and outputs"
+            runtime |> requireExtensionGL [AMDGpuShaderInt16; NVGpuShader5]
 
             renderAttribute
                 (AttributeShader.EffectWithView<uint16, uint32> <@ uint32 @>)
@@ -235,6 +244,7 @@ module AttributeBuffer =
         // Treat color as integer
         let attributeUInt16FromC3us (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
             runtime |> requireFeatures _.Shaders.StorageInputOutput16 "Device does not support 16-bit inputs and outputs"
+            runtime |> requireExtensionGL [AMDGpuShaderInt16; NVGpuShader5]
 
             renderAttribute
                 (AttributeShader.EffectWithView<uint16, uint32> <@ uint32 @>)
@@ -303,6 +313,8 @@ module AttributeBuffer =
                 perInstance singleValue interleaved true runtime
 
         let attributeC3bToC4us (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireExtensionGL [NVGpuShader5]
+
             renderAttribute
                 (AttributeShader.EffectWithView<C3b, C4us> <@ c4us @>)
                 TextureFormat.Rgba16ui
@@ -310,6 +322,8 @@ module AttributeBuffer =
                 perInstance singleValue interleaved false runtime
 
         let attributeC3bToC4ui (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireExtensionGL [NVGpuShader5]
+
             renderAttribute
                 (AttributeShader.EffectWithView<C3b, C4ui> <@ c4ui @>)
                 TextureFormat.Rgba32ui
@@ -317,6 +331,8 @@ module AttributeBuffer =
                 perInstance singleValue interleaved false runtime
 
         let attributeC3bToC4f (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireExtensionGL [NVGpuShader5]
+
             renderAttribute
                 (AttributeShader.EffectWithView<C3b, C4f> <@ c4f @>)
                 TextureFormat.Rgba32f
@@ -324,6 +340,8 @@ module AttributeBuffer =
                 perInstance singleValue interleaved false runtime
 
         let attributeC3fToC4b (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireExtensionGL [NVGpuShader5]
+
             renderAttribute
                 (AttributeShader.EffectWithView<C3f, C4b> <@ c4b @>)
                 TextureFormat.Rgba32ui
@@ -331,6 +349,8 @@ module AttributeBuffer =
                 perInstance singleValue interleaved false runtime
 
         let attributeC3fToC4us (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireExtensionGL [AMDGpuShaderInt16; NVGpuShader5]
+
             renderAttribute
                 (AttributeShader.EffectWithView<C3f, C4us> <@ c4us @>)
                 TextureFormat.Rgba16ui
