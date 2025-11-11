@@ -22,8 +22,6 @@ type internal DrawCmd(drawCalls: IAdaptiveResource<IBackendBuffer>, index: int) 
 
     member _.Scene = sg
 
-    member _.Offset = offset
-
     member _.Texture
         with get() = texture.Value
         and set value = texture.Value <- value
@@ -42,6 +40,7 @@ type internal DrawList(runtime: IRuntime, textures: Textures) =
     let indexBuffer    = createBuffer "ImGui Index Buffer" BufferUsage.Index
     let vertexBuffer   = createBuffer "ImGui Vertex Buffer" BufferUsage.Vertex
     let indirectBuffer = createBuffer "ImGui Indirect Buffer" BufferUsage.Indirect
+    let mutable drawCalls = Array.empty<DrawCallInfo>
 
     let positions = BufferView(vertexBuffer, typeof<V2f>, 0,  sizeof<ImDrawVert>)
     let texCoords = BufferView(vertexBuffer, typeof<V2f>, 8,  sizeof<ImDrawVert>)
@@ -63,10 +62,15 @@ type internal DrawList(runtime: IRuntime, textures: Textures) =
         if buffer.Size < requiredSize || buffer.Size > 2UL * alignedSize then
             buffer.Resize alignedSize
 
+    let allocateDrawCalls (requiredCount : int) =
+        let alignedCount = Fun.NextPowerOfTwo(requiredCount)
+        if drawCalls.Length < requiredCount || drawCalls.Length > 2 * alignedCount then
+            drawCalls <- Array.zeroCreate alignedCount
+
     let updateBuffer (data: ImVector<'T>) (buffer: AdaptiveBuffer) =
         let totalSize = uint64 data.Size * uint64 sizeof<'T>
         buffer |> resizeBuffer totalSize
-        buffer.Write(data.Data.Address, 0UL, totalSize)
+        buffer.Write(data.Data.Address, 0UL, totalSize, discard = true)
 
     member _.Scene = sg
 
@@ -84,16 +88,19 @@ type internal DrawList(runtime: IRuntime, textures: Textures) =
             commands.Remove(commands.MaxIndex) |> ignore
 
         // Update draw calls and textures
-        indirectBuffer |> resizeBuffer (uint64 data.CmdBuffer.Size * uint64 sizeof<DrawCallInfo>)
+        let newCount = data.CmdBuffer.Size
+        indirectBuffer |> resizeBuffer (uint64 newCount * uint64 sizeof<DrawCallInfo>)
+        allocateDrawCalls newCount
 
         let mutable i = 0
         for cmd in commands do
             let data = data.CmdBuffer.[i]
 
             if IntPtr data.UserCallback <> 0n then
+                drawCalls.[i].InstanceCount <- 0
                 Log.warn "[ImGui] User callbacks are not supported."
             else
-                let mutable drawCall =
+                drawCalls.[i] <-
                     DrawCallInfo(
                         FirstInstance   = 0,
                         InstanceCount   = 1,
@@ -108,12 +115,13 @@ type internal DrawList(runtime: IRuntime, textures: Textures) =
                         data.ClipRect.Z, float32 display.SizeY - data.ClipRect.Y
                     ).Scaled framebufferScale
 
-                DrawCallInfo.ToggleIndexed &drawCall
-                indirectBuffer.Write(&drawCall, cmd.Offset)
+                DrawCallInfo.ToggleIndexed &drawCalls.[i]
                 cmd.Texture <- textures.[data.GetTexID()]
                 cmd.Scissor <- Box2i scissor
 
             inc &i
+
+        indirectBuffer.Write(drawCalls, 0UL, 0, newCount, discard = true)
 
     member _.Dispose() =
         (commands :> alist<_>).Content.Outputs.Clear()
@@ -121,6 +129,7 @@ type internal DrawList(runtime: IRuntime, textures: Textures) =
         indirectBuffer.Release()
         indexBuffer.Release()
         vertexBuffer.Release()
+        drawCalls <- Array.empty
 
     interface IDisposable with
         member this.Dispose() = this.Dispose()
