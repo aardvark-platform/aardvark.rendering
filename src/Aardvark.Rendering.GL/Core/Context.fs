@@ -329,16 +329,24 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     member x.MaxComputeWorkGroupSize =
         getOrQuery "max compute work group size" &maxComputeWorkGroupSize (fun _ ->
-            let mutable res = V3i.Zero
-            GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 0, &res.X)
-            GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 1, &res.Y)
-            GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 2, &res.Z)
-            res
+            if GL.ARB_compute_shader then
+                let mutable res = V3i.Zero
+                GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 0, &res.X)
+                GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 1, &res.Y)
+                GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 2, &res.Z)
+                res
+            else
+                Log.warn "[GL] Cannot query GL_MAX_COMPUTE_WORK_GROUP_SIZE"
+                V3i.Zero
         )
 
     member x.MaxComputeWorkGroupInvocations =
         getOrQuery "max compute work group invocations" &maxComputeWorkGroupInvocations (fun _ ->
-            GL.GetInteger(GetPName.MaxComputeWorkGroupInvocations)
+            if GL.ARB_compute_shader then
+                GL.GetInteger(GetPName.MaxComputeWorkGroupInvocations)
+            else
+                Log.warn "[GL] Cannot query GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS"
+                0
         )
 
     member x.NumProgramBinaryFormats =
