@@ -134,10 +134,11 @@ type Runtime(debug : IDebugConfig) =
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         member x.CreateBuffer(size : uint64, _ : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, storage) :> IBackendBuffer
-        member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : uint64, size : uint64) = x.Upload(src, dst, dstOffset, size)
+        member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : uint64, size : uint64, discard : bool) =
+            x.Upload(src, dst, dstOffset, size, discard)
         member x.Download(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, size : uint64) = x.Download(src, srcOffset, dst, size)
-        member x.Copy(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, size : uint64) =
-            x.Copy(src, srcOffset, dst, dstOffset, size)
+        member x.Copy(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, size : uint64, discard : bool) =
+            x.Copy(src, srcOffset, dst, dstOffset, size, discard)
 
         member x.DownloadAsync(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, size : uint64) : unit -> unit =
             raise <| NotImplementedException()
@@ -345,12 +346,20 @@ type Runtime(debug : IDebugConfig) =
     member x.CreateBuffer(size : uint64, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
         ctx.CreateBuffer(nativeint size, storage)
 
-    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : uint64, sizeInBytes : uint64) =
+    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : uint64, sizeInBytes : uint64,
+                    [<Optional; DefaultParameterValue(false)>] discard : bool) =
         dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
 
         use __ = ctx.ResourceLock
-        GL.Dispatch.NamedBufferSubData(int dst.Handle, nativeint dstOffset, nativeint sizeInBytes, src)
+        let dst = unbox<Buffer> dst
+
+        if discard && int dst.UsageHint <> 0 then
+            GL.Dispatch.NamedBufferData(dst.Handle, dst.SizeInBytes, 0n, dst.UsageHint)
+            GL.Check "could not reallocate buffer data"
+
+        GL.Dispatch.NamedBufferSubData(dst.Handle, nativeint dstOffset, nativeint sizeInBytes, src)
         GL.Check "could not upload buffer data"
+
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
@@ -363,13 +372,22 @@ type Runtime(debug : IDebugConfig) =
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
-    member x.Copy(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, sizeInBytes : uint64) =
+    member x.Copy(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, sizeInBytes : uint64,
+                  [<Optional; DefaultParameterValue(false)>] discard : bool) =
         src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
         dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
 
         use __ = ctx.ResourceLock
-        GL.Dispatch.CopyNamedBufferSubData(int src.Handle, int dst.Handle, nativeint srcOffset, nativeint dstOffset, nativeint sizeInBytes)
+        let src = unbox<Buffer> src
+        let dst = unbox<Buffer> dst
+
+        if discard && int dst.UsageHint <> 0 then
+            GL.Dispatch.NamedBufferData(dst.Handle, dst.SizeInBytes, 0n, dst.UsageHint)
+            GL.Check "could not reallocate buffer data"
+
+        GL.Dispatch.CopyNamedBufferSubData(src.Handle, dst.Handle, nativeint srcOffset, nativeint dstOffset, nativeint sizeInBytes)
         GL.Check "could not copy buffer data"
+
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 

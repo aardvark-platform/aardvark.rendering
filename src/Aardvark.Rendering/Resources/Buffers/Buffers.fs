@@ -114,7 +114,9 @@ and IBufferRuntime =
     ///<param name="dst">The buffer to copy data to.</param>
     ///<param name="dstOffset">Offset (in bytes) into the buffer.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
-    abstract member Upload : src : nativeint * dst : IBackendBuffer * dstOffset : uint64 * sizeInBytes : uint64 -> unit
+    ///<param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
+    abstract member Upload : src : nativeint * dst : IBackendBuffer * dstOffset : uint64 * sizeInBytes : uint64 *
+                             [<Optional; DefaultParameterValue(false)>] discard : bool -> unit
 
     ///<summary>Copies data from a buffer to host memory.</summary>
     ///<param name="src">The buffer to copy data from.</param>
@@ -137,4 +139,6 @@ and IBufferRuntime =
     ///<param name="dst">The buffer to copy data to.</param>
     ///<param name="dstOffset">Offset (in bytes) into the destination buffer.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
-    abstract member Copy : src : IBackendBuffer * srcOffset : uint64 * dst : IBackendBuffer * dstOffset : uint64 * sizeInBytes : uint64 -> unit
+    ///<param name="discard">Indicates whether the current content of the destination buffer may be discarded. Default is <c>false</c>.</param>
+    abstract member Copy : src : IBackendBuffer * srcOffset : uint64 * dst : IBackendBuffer * dstOffset : uint64 * sizeInBytes : uint64 *
+                           [<Optional; DefaultParameterValue(false)>] discard : bool -> unit

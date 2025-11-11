@@ -22,6 +22,7 @@ type internal RefCountedBuffer(ctx, create : unit -> Buffer, destroy : unit -> u
             if notNull name && isNull b.Name then b.Name <- name
             x.Handle <- b.Handle
             x.SizeInBytes <- b.SizeInBytes
+            x.UsageHint <- b.UsageHint
             handle <- b
 
     member x.Release() =

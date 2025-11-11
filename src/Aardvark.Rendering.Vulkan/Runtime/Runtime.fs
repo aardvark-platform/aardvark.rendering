@@ -625,13 +625,13 @@ type Runtime(device : Device) as this =
 
         member x.CreateBuffer(size : uint64, usage : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, 0UL, usage, storage) :> IBackendBuffer
 
-        member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : uint64, size : uint64) =
+        member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : uint64, size : uint64, _discard : bool) =
             x.Upload(src, dst, dstOffset, size)
 
         member x.Download(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, size : uint64) =
             x.Download(src, srcOffset, dst, size)
 
-        member x.Copy(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, size : uint64) =
+        member x.Copy(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, size : uint64, _discard : bool) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
 
         member x.DownloadAsync(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, size : uint64) =

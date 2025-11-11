@@ -24,9 +24,11 @@ type IBackendBufferExtensions private() =
     ///<param name="dstOffset">Offset (in bytes) into the buffer.</param>
     ///<param name="src">Location of the data to copy.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
+    ///<param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
     [<Extension>]
-    static member inline Upload(dst : IBackendBuffer, dstOffset : uint64, src : nativeint, sizeInBytes : uint64) =
-        dst.Runtime.Upload(src, dst, dstOffset, sizeInBytes)
+    static member inline Upload(dst : IBackendBuffer, dstOffset : uint64, src : nativeint, sizeInBytes : uint64,
+                                [<Optional; DefaultParameterValue(false)>] discard : bool) =
+        dst.Runtime.Upload(src, dst, dstOffset, sizeInBytes, discard)
 
     ///<summary>Copies data from a buffer to host memory.</summary>
     ///<param name="src">The buffer to copy data from.</param>
@@ -53,9 +55,11 @@ type IBackendBufferExtensions private() =
     ///<param name="dst">The buffer to copy data to.</param>
     ///<param name="dstOffset">Offset (in bytes) into the destination buffer.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
+    /// ///<param name="discard">Indicates whether the current content of the destination buffer may be discarded. Default is <c>false</c>.</param>
     [<Extension>]
-    static member inline CopyTo(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, sizeInBytes : uint64) =
-        src.Runtime.Copy(src, srcOffset, dst, dstOffset, sizeInBytes)
+    static member inline CopyTo(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, sizeInBytes : uint64,
+                                [<Optional; DefaultParameterValue(false)>] discard : bool) =
+        src.Runtime.Copy(src, srcOffset, dst, dstOffset, sizeInBytes, discard)
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -97,9 +101,11 @@ type IBufferRangeExtensions private() =
     ///<param name="dst">The buffer range to copy data to.</param>
     ///<param name="src">Location of the data to copy.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
+    ///<param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
     [<Extension>]
-    static member inline Upload(dst : IBufferRange, src : nativeint, sizeInBytes : uint64) =
-        dst.Buffer.Upload(dst.Offset, src, sizeInBytes)
+    static member inline Upload(dst : IBufferRange, src : nativeint, sizeInBytes : uint64,
+                                [<Optional; DefaultParameterValue(false)>] discard : bool) =
+        dst.Buffer.Upload(dst.Offset, src, sizeInBytes, discard)
 
     ///<summary>Copies elements from an array to a buffer range.</summary>
     ///<param name="dst">The buffer range to copy data to.</param>
@@ -107,40 +113,48 @@ type IBufferRangeExtensions private() =
     ///<param name="srcIndex">Index at which copying from the data array begins.</param>
     ///<param name="dstIndex">Index at which copying to the buffer range begins.</param>
     ///<param name="count">Number of elements to copy.</param>
+    ///<param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
     [<Extension>]
-    static member Upload(dst : IBufferRange<'T>, src : 'T[], srcIndex : int, dstIndex : int, count : int) =
+    static member Upload(dst : IBufferRange<'T>, src : 'T[], srcIndex : int, dstIndex : int, count : int,
+                         [<Optional; DefaultParameterValue(false)>] discard : bool) =
         count |> checkNonNegative "count"
         srcIndex |> checkNonNegative "srcIndex"
         (srcIndex, count) ||> checkArrayBounds src
 
         if count > 0 then
             (srcIndex, src) ||> NativePtr.pinArri (fun pSrc ->
-                dst.Buffer.Upload(dst.Offset + byteSize<'T> dstIndex, pSrc.Address, byteSize<'T> count)
+                dst.Buffer.Upload(dst.Offset + byteSize<'T> dstIndex, pSrc.Address, byteSize<'T> count, discard)
             )
 
     ///<summary>Copies elements from an array to a buffer range.</summary>
     ///<param name="dst">The buffer range to copy data to.</param>
     ///<param name="src">The data array to copy from.</param>
     ///<param name="count">Number of elements to copy.</param>
+    ///<param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
     [<Extension>]
-    static member inline Upload(dst : IBufferRange<'T>, src : 'T[], count : int) =
-        dst.Upload(src, 0, 0, count)
+    static member inline Upload(dst : IBufferRange<'T>, src : 'T[], count : int,
+                                [<Optional; DefaultParameterValue(false)>] discard : bool) =
+        dst.Upload(src, 0, 0, count, discard)
 
     ///<summary>Copies elements from an array to a buffer range.</summary>
     ///<param name="dst">The buffer range to copy data to.</param>
     ///<param name="src">The data array to copy from.</param>
+    ///<param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
     [<Extension>]
-    static member inline Upload(dst : IBufferRange<'T>, src : 'T[]) =
-        dst.Upload(src, min src.Length dst.Count)
+    static member inline Upload(dst : IBufferRange<'T>, src : 'T[],
+                                [<Optional; DefaultParameterValue(false)>] discard : bool) =
+        dst.Upload(src, min src.Length dst.Count, discard)
 
     ///<summary>Copies elements from a span to a buffer range.</summary>
     ///<param name="dst">The buffer range to copy data to.</param>
     ///<param name="src">The data span to copy from.</param>
+    ///<param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
     [<Extension>]
-    static member Upload(dst : IBufferRange<'T>, src : Span<'T>) =
+    static member Upload(dst : IBufferRange<'T>, src : Span<'T>,
+                         [<Optional; DefaultParameterValue(false)>] discard : bool) =
         let count = min src.Length dst.Count
         SpanPinning.Pin(src, fun pSrc ->
-            dst.Upload(pSrc, byteSize<'T> count)
+            dst.Upload(pSrc, byteSize<'T> count, discard)
         )
 
     ///<summary>Copies elements from an array to a buffer subrange.</summary>
@@ -308,9 +322,11 @@ type IBufferRangeExtensions private() =
     /// </summary>
     ///<param name="src">The buffer range to copy data from.</param>
     ///<param name="dst">The buffer range to copy data to.</param>
+    ///<param name="discard">Indicates whether the current content of the destination buffer may be discarded. Default is <c>false</c>.</param>
     [<Extension>]
-    static member inline CopyTo(src : IBufferRange, dst : IBufferRange) =
-        src.Buffer.CopyTo(src.Offset, dst.Buffer, dst.Offset, min src.SizeInBytes dst.SizeInBytes)
+    static member inline CopyTo(src : IBufferRange, dst : IBufferRange,
+                                [<Optional; DefaultParameterValue(false)>] discard : bool) =
+        src.Buffer.CopyTo(src.Offset, dst.Buffer, dst.Offset, min src.SizeInBytes dst.SizeInBytes, discard)
 
     ///<summary>Copies elements from a buffer range to a buffer subrange.</summary>
     ///<param name="range">The buffer range to upload to.</param>

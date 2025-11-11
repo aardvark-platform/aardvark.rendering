@@ -34,6 +34,7 @@ type Buffer =
         val mutable public Handle : int
         val mutable public Context : Context
         val mutable public SizeInBytes : nativeint
+        val mutable public UsageHint : BufferUsageHint
         val mutable private name : string
 
         abstract member Name : string with get, set
@@ -66,8 +67,11 @@ type Buffer =
             member x.Name with get() = x.Name and set name = x.Name <- name
             member x.Dispose() = x.Dispose()
 
-        new(ctx : Context, size : nativeint, handle : int) =
-            { Context = ctx; SizeInBytes = size; Handle = handle; name = null }
+        new (ctx : Context, size : nativeint, handle : int, usageHint : BufferUsageHint) =
+            { Context = ctx; SizeInBytes = size; Handle = handle; UsageHint = usageHint; name = null }
+
+        new (ctx : Context, size : nativeint, handle : int) =
+            new Buffer(ctx, size, handle, enum<BufferUsageHint> 0)
     end
 
 type internal SharedBuffer(ctx, size, handle, external : IExportedBackendBuffer, memory : SharedMemoryBlock) =
@@ -129,19 +133,20 @@ module BufferExtensions =
         /// </summary>
         member x.CreateBuffer(data : nativeint, sizeInBytes : nativeint, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
             ResourceCounts.addBuffer x (int64 sizeInBytes)
+            let usageHint = BufferStorage.toUsageHint storage
 
             let handle =
                 using x.ResourceLock (fun _ ->
                     let handle = GL.Dispatch.CreateBuffer()
                     GL.Check "failed to create buffer"
 
-                    GL.Dispatch.NamedBufferData(handle, (nativeint sizeInBytes), data, BufferStorage.toUsageHint storage)
+                    GL.Dispatch.NamedBufferData(handle, (nativeint sizeInBytes), data, usageHint)
                     GL.Check "failed to upload buffer"
 
                     handle
                 )
 
-            new Buffer(x, sizeInBytes, handle)
+            new Buffer(x, sizeInBytes, handle, usageHint)
 
         /// <summary>
         /// creates a new buffer and initializes its size (allocates GPU memory)
