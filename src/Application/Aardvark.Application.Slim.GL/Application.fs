@@ -337,12 +337,12 @@ module private OpenGL =
                             let mutable len = 0
                             while desc.[len] <> 0uy do inc &len
                             System.Text.Encoding.UTF8.GetString(desc, len)                    
-                    
+
                     if String.IsNullOrEmpty str then
-                        $"Error after making trying to make context current"
+                        $"Error after trying to make context current"
                     else
                         str
-                     
+
                 Log.error $"[GLFW] {errorMessage} (Error code: {error})"
 
             if current <> win then
