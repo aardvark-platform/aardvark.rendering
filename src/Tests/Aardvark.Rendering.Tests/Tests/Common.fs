@@ -22,7 +22,7 @@ module ``Unit Test Utilities`` =
     let prepareCases (backend : Backend) (name : string) (cases : List<string * (IRuntime -> unit)>) =
         let backend =
             match backend with
-            | Backend.GL -> TestBackend.GL (if Aardvark.GetOSPlatform() = OSPlatform.OSX then Framework.GLFW else Framework.OpenTK)
+            | Backend.GL -> TestBackend.GL (if Aardvark.GetOSPlatform() <> OSPlatform.Windows then Framework.GLFW else Framework.OpenTK)
             | Backend.Vulkan -> TestBackend.Vulkan
 
         cases |> List.map (fun (name, test) ->

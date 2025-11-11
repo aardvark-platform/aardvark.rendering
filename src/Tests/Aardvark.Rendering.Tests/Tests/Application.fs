@@ -44,6 +44,9 @@ module TestApplication =
         open Aardvark.Rendering.GL
 
         let private createOpenTK (debug : IDebugConfig) =
+            if Aardvark.GetOSPlatform() <> OSPlatform.Windows then
+                skiptest "OpenTK only works on Windows"
+
             let toolkit = Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative))
 
             let runtime = new Runtime(debug)
