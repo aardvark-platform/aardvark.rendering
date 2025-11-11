@@ -619,7 +619,7 @@ module TextureUpload =
             runtime |> texture2DCompressed TextureFormat.CompressedRgbaBptcUnorm "data/rgba.png" "data/bc7.dds" 1
 
         let texture2DCompressedSubwindow (runtime : IRuntime) =
-            runtime |> requireExtensionGL ["GL_ARB_get_texture_subimage"]
+            runtime |> requireExtensionGL ["GL_ARB_get_texture_sub_image"]
             let data = EmbeddedResource.loadPixImage<uint8> "data/spiral.png"
 
             let texture =

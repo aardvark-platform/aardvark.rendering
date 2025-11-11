@@ -6,13 +6,13 @@ open Aardvark.Base
 open Aardvark.Rendering.GL
 
 [<AutoOpen>]
-module ARB_get_texture_subimage =
+module ARB_get_texture_sub_image =
 
     type GL private() =
 
         static let supported = ExtensionHelpers.isSupported (Version(4,5)) "GL_ARB_get_texture_sub_image"
 
-        static member ARB_get_texture_subimage = supported
+        static member ARB_get_texture_sub_image = supported
 
     type GL.Dispatch with
 
@@ -20,7 +20,7 @@ module ARB_get_texture_subimage =
                                          level : int, xoffset : int, yoffset : int, zoffset : int,
                                          width : int, height : int, depth : int, format : PixelFormat,
                                          typ : PixelType, bufferSize : int, pixels : nativeint) =
-            if GL.ARB_get_texture_subimage then
+            if GL.ARB_get_texture_sub_image then
                 GL.GetTextureSubImage(texture, level, xoffset, yoffset, zoffset,
                                           width, height, depth,
                                           format, typ, bufferSize, pixels)
@@ -40,7 +40,7 @@ module ARB_get_texture_subimage =
                                                    xoffset : int, yoffset : int, zoffset : int,
                                                    width : int, height : int, depth : int,
                                                    bufferSize : int, pixels : nativeint) =
-            if GL.ARB_get_texture_subimage then
+            if GL.ARB_get_texture_sub_image then
                 GL.GetCompressedTextureSubImage(texture, level, xoffset, yoffset, zoffset,
                                                     width, height, depth,
                                                     bufferSize, pixels)

@@ -55,7 +55,7 @@ module internal TextureDownloadImplementation =
                         GL.GetCompressedTexImage(targetSlice, level, pixels)
 
                 else
-                    if GL.ARB_get_texture_subimage then
+                    if GL.ARB_get_texture_sub_image then
                         let offset =
                             if texture.Dimension = TextureDimension.Texture1D then offset.XZO
                             else offset
@@ -66,7 +66,7 @@ module internal TextureDownloadImplementation =
                         | PixelData.Compressed d ->
                             GL.Dispatch.GetCompressedTextureSubImage(texture.Handle, level, offset, d.Size, int info.SizeInBytes, pixels)
 
-                    // We want to download a subregion but don't have GL_ARB_get_texture_subimage
+                    // We want to download a subregion but don't have GL_ARB_get_texture_sub_image
                     // Use readPixels with FBO as fallback
                     else
                         match data, info with

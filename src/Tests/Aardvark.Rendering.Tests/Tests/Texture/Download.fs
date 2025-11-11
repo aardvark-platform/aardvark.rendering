@@ -191,7 +191,7 @@ module TextureDownload =
             runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt1 "data/bc1.dds" None
 
         let texture2DCompressedBC1Subwindow (runtime : IRuntime) =
-            runtime |> requireExtensionGL ["GL_ARB_get_texture_subimage"]
+            runtime |> requireExtensionGL ["GL_ARB_get_texture_sub_image"]
             let window = Box2i.FromMinAndSize(V2i(3, 7), V2i(67, 31))
             runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt1 "data/bc1.dds" (Some window)
 
@@ -200,7 +200,7 @@ module TextureDownload =
             runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt3 "data/bc2.dds" None
 
         let texture2DCompressedBC2Subwindow (runtime : IRuntime) =
-            runtime |> requireExtensionGL ["GL_ARB_get_texture_subimage"]
+            runtime |> requireExtensionGL ["GL_ARB_get_texture_sub_image"]
             let window = Box2i.FromMinAndSize(V2i(4, 16), V2i(64, 32))
             runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt3 "data/bc2.dds" (Some window)
 
@@ -209,7 +209,7 @@ module TextureDownload =
             runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt5 "data/bc3.dds" None
 
         let texture2DCompressedBC3Subwindow (runtime : IRuntime) =
-            runtime |> requireExtensionGL ["GL_ARB_get_texture_subimage"]
+            runtime |> requireExtensionGL ["GL_ARB_get_texture_sub_image"]
             let window = Box2i.FromMinAndSize(V2i(0, 0), V2i(3, 2))
             runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt5 "data/bc3.dds" (Some window)
 
@@ -218,7 +218,7 @@ module TextureDownload =
             runtime |> texture2DCompressed TextureFormat.CompressedRedRgtc1 "data/bc4.dds" None
 
         let texture2DCompressedBC4uSubwindow (runtime : IRuntime) =
-            runtime |> requireExtensionGL ["GL_ARB_get_texture_subimage"]
+            runtime |> requireExtensionGL ["GL_ARB_get_texture_sub_image"]
             let window = Box2i(V2i(40, 87), V2i(253, 128))
             runtime |> texture2DCompressed TextureFormat.CompressedRedRgtc1 "data/bc4.dds" (Some window)
 
@@ -227,7 +227,7 @@ module TextureDownload =
             runtime |> texture2DCompressed TextureFormat.CompressedRgRgtc2 "data/bc5.dds" None
 
         let texture2DCompressedBC5uSubwindow (runtime : IRuntime) =
-            runtime |> requireExtensionGL ["GL_ARB_get_texture_subimage"]
+            runtime |> requireExtensionGL ["GL_ARB_get_texture_sub_image"]
             let window = Box2i(V2i(40, 87), V2i(251, 126))
             runtime |> texture2DCompressed TextureFormat.CompressedRgRgtc2 "data/bc5.dds" (Some window)
 
@@ -451,7 +451,7 @@ module TextureDownload =
         let textureDepth32fStencil8 = textureDepthStencil TextureFormat.Depth32fStencil8
 
         let textureStencilIndex8 (runtime : IRuntime) =
-            runtime |> requireExtensionGL ["GL_ARB_get_texture_subimage"]
+            runtime |> requireExtensionGL ["GL_ARB_texture_stencil8"]
             let size = V2i(256)
 
             renderToDepthStencil runtime TextureFormat.StencilIndex8 size (fun buffer ->
