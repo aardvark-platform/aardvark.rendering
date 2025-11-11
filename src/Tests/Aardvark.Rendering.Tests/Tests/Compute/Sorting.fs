@@ -105,4 +105,4 @@ module ComputeSorting =
             "Radix permute uint32", Cases.radixSortPermuteUInt32
             "Radix permute float32", Cases.radixSortPermuteFloat32
         ]
-        |> prepareCases backend "Sorting"
+        |> prepareComputeCases backend "Sorting"

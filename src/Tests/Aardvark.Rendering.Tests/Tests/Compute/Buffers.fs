@@ -226,4 +226,4 @@ module ComputeBuffers =
             "Fill",                             Cases.fill
             "Adaptive reverse & increment",     Cases.adaptiveReverseAndIncrement
         ]
-        |> prepareCases backend "Buffers"
+        |> prepareComputeCases backend "Buffers"

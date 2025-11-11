@@ -6,6 +6,14 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.Application
 
+[<AutoOpen>]
+module ``Common Compute Test Utilities`` =
+    open Aardvark.Rendering.GL.ARB_compute_shader
+
+    let prepareComputeCases backend name =
+        validateRuntimeForCases (requireGL (fun _ -> GL.ARB_compute_shader) "Compute shaders not supported")
+        >> prepareCases backend name
+
 module ComputeImages =
 
     module private Shader =
@@ -147,4 +155,4 @@ module ComputeImages =
             "2D copy rgba16",   Cases.copy2Drgba16
             "2D copy rgba32f",  Cases.copy2Drgba32f
         ]
-        |> prepareCases backend "Images"
+        |> prepareComputeCases backend "Images"

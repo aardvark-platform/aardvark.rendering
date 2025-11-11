@@ -103,4 +103,4 @@ module MutableInputBinding =
             "Textures",       Cases.textures
             "Texture levels", Cases.textureLevels
         ]
-        |> prepareCases backend "Mutable input binding"
+        |> prepareComputeCases backend "Mutable input binding"

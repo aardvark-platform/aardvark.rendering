@@ -34,4 +34,4 @@ module ComputeJpeg =
         [
             "Compress", Cases.compress
         ]
-        |> prepareCases backend "Jpeg"
+        |> prepareComputeCases backend "Jpeg"

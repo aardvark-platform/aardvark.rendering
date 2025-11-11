@@ -16,6 +16,9 @@ module ``Unit Test Utilities`` =
         let name = sprintf "[%s] %s" (string backend) name
         testList name (tests |> List.map (fun t -> t backend))
 
+    let validateRuntimeForCases (validate: IRuntime -> unit) (cases : List<string * (IRuntime -> unit)>) =
+        cases |> List.map (fun (s, f) -> s, (fun r -> validate r; r) >> f)
+
     let prepareCases (backend : Backend) (name : string) (cases : List<string * (IRuntime -> unit)>) =
         let backend =
             match backend with

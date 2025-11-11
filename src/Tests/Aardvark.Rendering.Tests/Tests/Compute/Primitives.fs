@@ -202,4 +202,4 @@ module ComputePrimitives =
             "Fold",         Cases.fold
             "Map reduce",   Cases.mapReduce
         ]
-        |> prepareCases backend "Primitives"
+        |> prepareComputeCases backend "Primitives"
