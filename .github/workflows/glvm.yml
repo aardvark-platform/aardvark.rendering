@@ -39,7 +39,7 @@ jobs:
           path: lib/Native/Aardvark.Rendering.GL/linux/AMD64/          
   macos-x64:
     name: MacOS (x64)
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:  
       - name: Checkout
         uses: actions/checkout@v4

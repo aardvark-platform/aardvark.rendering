@@ -1,11 +1,11 @@
 name: VKVM
 on:
   workflow_dispatch:
-  push:
-    branches: 
-      - v56
-    paths:
-      - .github/workflows/vkvm.yml
+  # push:
+  #   branches: 
+  #     - v56
+  #   paths:
+  #     - .github/workflows/vkvm.yml
 jobs:
   windows-x64:
     name: Windows (x64)
@@ -49,7 +49,7 @@ jobs:
           path: lib/Native/Aardvark.Rendering.Vulkan/linux/AMD64/          
   macos-x64:
     name: MacOS (x64)
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:  
       - name: Checkout
         uses: actions/checkout@v4
