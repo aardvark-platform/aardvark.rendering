@@ -1,8 +1,8 @@
 ![Build](https://github.com/aardvark-platform/aardvark.rendering/workflows/Build/badge.svg)
 ![Publish](https://github.com/aardvark-platform/aardvark.rendering/workflows/Publish/badge.svg)
 
-[![Discord](https://badgen.net/discord/online-members/UyecnhM)](https://discord.gg/UyecnhM)
-[![license](https://img.shields.io/github/license/aardvark-platform/aardvark.base.svg)](https://github.com/aardvark-platform/aardvark.rendering/blob/master/LICENSE)
+[![Discord](https://img.shields.io/discord/611129394764840960?label=Discord)](https://discord.gg/UyecnhM)
+[![License](https://img.shields.io/github/license/aardvark-platform/aardvark.base.svg?label=License)](https://github.com/aardvark-platform/aardvark.rendering/blob/master/LICENSE)
 
 [The Aardvark Platform](https://aardvarkians.com/) |
 [Gallery](https://github.com/aardvark-platform/aardvark.docs/wiki/Gallery) | 
