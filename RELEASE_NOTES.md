@@ -1,3 +1,6 @@
+### 5.6.0
+- https://github.com/aardvark-platform/aardvark.rendering/wiki/Aardvark-Rendering-5.6-changelog
+
 ### 5.6.0-prerelease0010
 - Changed `DrawCalls.Direct` from list to array
 - Reworked `BufferView` constructors
@@ -73,6 +76,8 @@
 - [Vulkan] Fixed alignment and size issues with empty buffers
 - [Vulkan] Added debug config flag for generating shader debug info
 - [Vulkan] Replaced obsolete VK_EXT_validation_features with VK_EXT_layer_settings
+- [Vulkan] Fixed ImageSamplerArrayResource leaking deltas
+- [GL] Removed UnmanagedFunctions.wrap usage
 
 ### 5.6.0-prerelease0002
 - Switched to Aardvark.Data.Assimp
@@ -87,9 +92,6 @@
 ### 5.6.0-prerelease0001
 - [Vulkan] Improved queue submission
 - [Vulkan] Integrated VMA for memory management
-
-- [GL] Removed UnmanagedFunctions.wrap usage
-- [Vulkan] Fixed ImageSamplerArrayResource leaking deltas
 
 ### 5.5.17  
 - [GL] fixed quadbuffer stereo rendering
