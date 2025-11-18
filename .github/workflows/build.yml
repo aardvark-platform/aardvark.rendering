@@ -3,11 +3,11 @@ name: Build
 on: 
   push:
     paths-ignore:
-    - 'README.md'
+    - '**/README.md'
     - 'docs/'
   pull_request:
     paths-ignore:
-    - 'README.md'
+    - '**/README.md'
     - 'docs/'
     
 jobs:
