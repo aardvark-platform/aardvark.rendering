@@ -1,4 +1,5 @@
 - [Vulkan] Fixed swapchain creation for Wayland
+- [GLFW] Avoid printing error due to unsupported window icon
 
 ### 5.6.0
 - https://github.com/aardvark-platform/aardvark.rendering/wiki/Aardvark-Rendering-5.6-changelog

@@ -326,24 +326,14 @@ module private OpenGL =
         if not (isNull ctx) then
             glfw.MakeContextCurrent(win)
             let current = glfw.GetCurrentContext()
-            let mutable desc = Unchecked.defaultof<_>
-            let error = glfw.GetError(&desc)
+
+            let error, errorMessage = glfw.GetErrorMessage()
             if error <> Silk.NET.GLFW.ErrorCode.NoError then
-                let errorMessage =
-                    let str =
-                        if NativePtr.isNullPtr desc then
-                            null
-                        else
-                            let mutable len = 0
-                            while desc.[len] <> 0uy do inc &len
-                            System.Text.Encoding.UTF8.GetString(desc, len)                    
+                let description =
+                    if String.IsNullOrWhiteSpace errorMessage then "Error after trying to make context current"
+                    else errorMessage
 
-                    if String.IsNullOrEmpty str then
-                        $"Error after trying to make context current"
-                    else
-                        str
-
-                Log.error $"[GLFW] {errorMessage} (Error code: {error})"
+                Log.error $"[GLFW] {description} (Error code: {error})"
 
             if current <> win then
                 Log.error "[GLFW] Could not make context current"

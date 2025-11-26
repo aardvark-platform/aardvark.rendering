@@ -275,9 +275,7 @@ module MissingGlfwFunctions =
 
             if err <> ErrorCode.NoError && not <| NativePtr.isNull ptr then
                 let mutable len = 0
-                while NativePtr.get ptr len <> 0uy do
-                    inc &len
-
+                while ptr.[len] <> 0uy do inc &len
                 msg <- Encoding.UTF8.GetString(ptr, len)
 
             err, msg
@@ -731,7 +729,7 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
                     if String.IsNullOrWhiteSpace msg then "Could not create window"
                     else msg
 
-                let msg = $"[GLFW] {description} (error: {err})"
+                let msg = $"[GLFW] {description} (Error code: {err})"
                 Report.Error msg
                 failwith msg
 
@@ -1566,8 +1564,8 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
                 | None ->
                     glfw.SetWindowIcon(win, 0, NativePtr.zero)  
 
-                                  
-                icon <- v                            
+                glfw.GetError() |> ignore // Not all platforms support setting the icon (e.g., Wayland), clear the error just in case
+                icon <- v
             )
 
     member x.WindowPosition
