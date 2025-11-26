@@ -3,34 +3,32 @@
 open System
 open Aardvark.Base
 open Aardvark.Rendering
-open FSharp.Data.Adaptive
 open Aardvark.Rendering.Vulkan
 open System.Runtime.CompilerServices
-open Microsoft.FSharp.NativeInterop
 open KHRSwapchain
 open KHRSurface
 
 #nowarn "9"
 #nowarn "51"
 
-[<AutoOpen>]          
+[<AutoOpen>]
 module ImageTrafoExtensions =
     type Box3i with
         member x.Transformed(t : ImageTrafo) =
             match t with
-                | ImageTrafo.Identity -> 
-                    x
+            | ImageTrafo.Identity ->
+                x
 
-                | ImageTrafo.MirrorX -> 
-                    Box3i(V3i(x.Max.X, x.Min.Y, x.Min.Z), V3i(x.Min.X, x.Max.Y, x.Max.Z))
-                    
-                | ImageTrafo.MirrorY -> 
-                    Box3i(V3i(x.Min.X, x.Max.Y, x.Min.Z), V3i(x.Max.X, x.Min.Y, x.Max.Z))
+            | ImageTrafo.MirrorX ->
+                Box3i(V3i(x.Max.X, x.Min.Y, x.Min.Z), V3i(x.Min.X, x.Max.Y, x.Max.Z))
 
-                | _ ->
-                    failwithf "box cannot be transformed using %A" t
+            | ImageTrafo.MirrorY ->
+                Box3i(V3i(x.Min.X, x.Max.Y, x.Min.Z), V3i(x.Max.X, x.Min.Y, x.Max.Z))
 
-type Swapchain(device : Device, description : SwapchainDescription) =
+            | _ ->
+                failwithf "box cannot be transformed using %A" t
+
+type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescription) =
     let fence = device.CreateFence()
     let surface = description.surface
     let renderPass = description.renderPass
@@ -179,7 +177,11 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
     let update() =
         if surface.Handle.IsValid && disposed = 0 then
-            let newSize = surface.Size
+            let newSize =
+                let surfaceSize = surface.Size
+                let currentSize = if surfaceSize <> V2i.Zero then surfaceSize else initialSize
+                currentSize |> clamp surface.MinSize surface.MaxSize
+
             if newSize <> size || handle.IsNull then
                 // delete old things
 
@@ -193,7 +195,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 buffers |> Array.iter Disposable.dispose
 
                 //handle, buffers, framebuffer, resolvedView
-                let (newHandle, newBuffers, newFramebuffer, newResolvedImage) = recreate handle newSize
+                let newHandle, newBuffers, newFramebuffer, newResolvedImage = recreate handle newSize
                 if handle.IsValid then VkRaw.vkDestroySwapchainKHR(device.Handle, handle, NativePtr.zero)
 
                 handle <- newHandle
@@ -202,6 +204,10 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 framebuffer <- Some newFramebuffer
                 resolvedImage <- newResolvedImage
                 currentBuffer <- 0u
+
+    [<Obsolete>]
+    new (device : Device, description : SwapchainDescription) =
+        new Swapchain(device, V2i(1024, 768), description)
 
     member x.Size = update(); size
     member x.Description = description
@@ -384,12 +390,21 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Swapchain =
+
+    let create2 (size : V2i) (description : SwapchainDescription) (device : Device) =
+        new Swapchain(device, size, description)
+
+    [<Obsolete("Use Swapchain.create2 instead.")>]
     let create (desc : SwapchainDescription) (device : Device) =
-        new Swapchain(device, desc)
+        create2 (V2i(1024, 768)) desc device
 
 [<AbstractClass; Sealed; Extension>]
 type DeviceSwapchainExtensions private() =
 
     [<Extension>]
+    static member CreateSwapchain(this : Device, size : V2i, description : SwapchainDescription) =
+        this |> Swapchain.create2 size description
+
+    [<Extension>]
     static member CreateSwapchain(this : Device, description : SwapchainDescription) =
-        this |> Swapchain.create description
+        this.CreateSwapchain(V2i(1024, 768), description)

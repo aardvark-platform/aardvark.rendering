@@ -62,10 +62,10 @@ module private Vulkan =
             device.CreateSwapchainDescription(surf, graphicsMode)
 
         { new IWindowSurface with
-            override __.Signature = 
+            override _.Signature =
                 description.renderPass :> IFramebufferSignature
             override this.CreateSwapchain(size: V2i) = 
-                let swap = device.CreateSwapchain(description)
+                let swap = device.CreateSwapchain(size, description)
                 { new ISwapchain with
                     override this.Dispose() = 
                         swap.Dispose()
@@ -87,16 +87,16 @@ module private Vulkan =
 
     let interop =
         { new IWindowInterop with
-            override __.Boot(_) =
+            override _.Boot(_) =
                 ()
 
-            override __.CreateSurface(runtime : IRuntime, cfg: WindowConfig, glfw: Glfw, win: nativeptr<WindowHandle>) = 
+            override _.CreateSurface(runtime : IRuntime, cfg: WindowConfig, glfw: Glfw, win: nativeptr<WindowHandle>) =
                 createSurface (runtime :?> _) cfg glfw win
 
-            override __.WindowHints(cfg: WindowConfig, glfw: Glfw) = 
+            override _.WindowHints(cfg: WindowConfig, glfw: Glfw) =
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.NoApi)
 
-            override __.Dispose() =
+            override _.Dispose() =
                 ()
         }
 

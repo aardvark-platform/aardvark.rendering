@@ -97,7 +97,6 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
 
     let physical = device.PhysicalDevice
     let family = device.GraphicsFamily
-        
 
     let supported =
         native {
@@ -107,25 +106,34 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
             return !!ptr
         }
 
-    let surfaceCaps = 
-        if supported <> 0u then
-            native {
-                let! pSurfaceCaps = VkSurfaceCapabilitiesKHR()
-                VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.Handle, handle, pSurfaceCaps) 
-                    |> check "could not get Surface capabilities"
-                return !!pSurfaceCaps
-            }
-        else 
-            VkSurfaceCapabilitiesKHR()
-        
+    let getSurfaceCaps() =
+        let mutable result = VkSurfaceCapabilitiesKHR.Empty
+
+        if supported = VkTrue then
+            use ptr = fixed &result
+            VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.Handle, handle, ptr)
+                |> check "could not get Surface capabilities"
+        else
+            result.minImageCount <- 1u
+            result.maxImageCount <- UInt32.MaxValue
+            result.maxImageArrayLayers <- UInt32.MaxValue
+            result.maxImageExtent <- VkExtent2D(UInt32.MaxValue, UInt32.MaxValue)
+
+        result
+
+    let toInt =
+        min <| (uint32 Int32.MaxValue) >> int
+
+    let surfaceCaps = getSurfaceCaps()
+
     let supportedTransforms = unbox<VkSurfaceTransformFlagsKHR> (int surfaceCaps.supportedTransforms) |> VkSurfaceTransformFlagsKHR.toImageTrafos
     let supportedCompositeAlpha = unbox<VkCompositeAlphaFlagsKHR> (int surfaceCaps.supportedCompositeAlpha)
     let supportedUsage = surfaceCaps.supportedUsageFlags
-    let minSize = V2i(int surfaceCaps.minImageExtent.width, int surfaceCaps.minImageExtent.height)
-    let maxSize = V2i(int surfaceCaps.maxImageExtent.width, int surfaceCaps.maxImageExtent.height)
-    let maxSlices = int surfaceCaps.maxImageArrayLayers
-    let minImageCount = int surfaceCaps.minImageCount
-    let maxImageCount = int surfaceCaps.maxImageCount
+    let minSize = V2i(toInt surfaceCaps.minImageExtent.width, toInt surfaceCaps.minImageExtent.height)
+    let maxSize = V2i(toInt surfaceCaps.maxImageExtent.width, toInt surfaceCaps.maxImageExtent.height)
+    let maxSlices = toInt surfaceCaps.maxImageArrayLayers
+    let minImageCount = toInt surfaceCaps.minImageCount
+    let maxImageCount = toInt surfaceCaps.maxImageCount
 
 
     let presentModes =
@@ -184,20 +192,18 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
     member x.MaxArraySlices = maxSlices
     member x.MinImageCount = minImageCount
     member x.MaxImageCount = maxImageCount
-       
+
     member x.Size =
         if supported <> 0u && handle.IsValid then
-            let surfaceCaps =
-                native {
-                    let! ptr = VkSurfaceCapabilitiesKHR()
-                    VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.Handle, handle, ptr) 
-                        |> check "could not get Surface capabilities"
-                    return !!ptr
-                }
-            V2i(int surfaceCaps.currentExtent.width, int surfaceCaps.currentExtent.height)
+            let surfaceCaps = getSurfaceCaps()
+            let size = V2ui(surfaceCaps.currentExtent.width, surfaceCaps.currentExtent.height)
+            if size <> V2ui(0xFFFFFFFFu) then
+                V2i(toInt size.X, toInt size.Y)
+            else
+                V2i.Zero // See doc for VkSurfaceCapabilitiesKHR.currentExtent
         else
             V2i.Zero
-        
+
     member x.HasCompositeAlpha (t : VkCompositeAlphaFlagsKHR) = (t &&& supportedCompositeAlpha) = t
     member x.HasUsage (t : VkImageUsageFlags) = (t &&& supportedUsage) = t
 
