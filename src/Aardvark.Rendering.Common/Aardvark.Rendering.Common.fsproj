@@ -35,6 +35,7 @@
     <Compile Include="Camera\CameraView.fs" />
     <Compile Include="Camera\Camera.fs" />
     <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

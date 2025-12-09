@@ -27,6 +27,8 @@
     <Compile Include="ModExtensions.fs" />
     <Compile Include="DefaultCameraController.fs" />
     <Compile Include="Screenshots.fs" />
+    <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />

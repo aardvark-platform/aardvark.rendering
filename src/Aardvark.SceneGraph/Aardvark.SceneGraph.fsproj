@@ -55,6 +55,8 @@
     <Compile Include="Imperative.fs" />
     <Compile Include="SgCSharp.fs" />
     <Compile Include="RuntimeExtensions.fs" />
+    <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />

@@ -22,6 +22,8 @@
     <Compile Include="Text.fs" />
     <Compile Include="SceneGraph.fs" />
     <Compile Include="Markdown.fs" />
+    <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />

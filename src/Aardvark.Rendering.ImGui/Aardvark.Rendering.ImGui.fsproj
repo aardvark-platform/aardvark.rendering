@@ -26,6 +26,7 @@
     <Compile Include="Platform.fs" />
     <Compile Include="Instance.fs" />
     <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />

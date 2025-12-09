@@ -22,6 +22,8 @@
     <Compile Include="Jpeg.fs" />
     <Compile Include="Sorting.fs" />
     <Compile Include="RadixSort.fs" />
+    <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />

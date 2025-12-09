@@ -15,6 +15,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Application.fs" />
+    <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />

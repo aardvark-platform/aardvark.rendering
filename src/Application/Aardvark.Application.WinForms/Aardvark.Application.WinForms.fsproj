@@ -24,6 +24,8 @@
     <Compile Include="RenderControl.fs" />
     <Compile Include="SimpleRenderWindow.fs" />
     <Compile Include="MessageLoop.fs" />
+    <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aardvark.Application\Aardvark.Application.fsproj" />

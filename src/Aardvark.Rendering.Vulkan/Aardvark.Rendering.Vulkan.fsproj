@@ -111,6 +111,7 @@
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\Headless.fs" />
     <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aardvark.Rendering.Vulkan.Wrapper\Aardvark.Rendering.Vulkan.Wrapper.fsproj" />

@@ -21,6 +21,8 @@
     <Compile Include="Surface.fs" />
     <Compile Include="VulkanControl.fs" />
     <Compile Include="Application.fs" />
+    <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />

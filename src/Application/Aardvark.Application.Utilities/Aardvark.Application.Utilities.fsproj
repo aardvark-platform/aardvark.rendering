@@ -31,6 +31,8 @@
     <Compile Include="SynchronizationContextHelper.fs" />
     <None Include="FsiHelper.fsx" />
     <Compile Include="Window.fs" />
+    <None Include="paket.references" />
+    <None Include="paket.template" />
   </ItemGroup>
   <Import Project="..\..\..\.paket\Paket.Restore.targets" />
 </Project>
