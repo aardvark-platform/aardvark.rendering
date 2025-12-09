@@ -5,64 +5,101 @@ open System.Collections.Concurrent
 open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.FontProvider
 
 type PathSegment = Aardvark.Base.Fonts.PathSegment
 type Path        = Aardvark.Base.Fonts.Path
 type Shape       = Aardvark.Base.Fonts.Shape
 type Font        = Aardvark.Base.Fonts.Font
+type FontStyle   = Aardvark.Base.Fonts.FontStyle
 type CodePoint   = Aardvark.Base.Fonts.CodePoint
 type Glyph       = Aardvark.Base.Fonts.Glyph
 
 module DefaultFonts =
 
+    module Types =
+
+        /// https://www.fontsquirrel.com/fonts/hack
+        type Hack internal() =
+            let regular    = lazy Font.LoadFromAssembly("hack.zip", "Hack-Regular.ttf")
+            let bold       = lazy Font.LoadFromAssembly("hack.zip", "Hack-Bold.ttf")
+            let italic     = lazy Font.LoadFromAssembly("hack.zip", "Hack-Italic.ttf")
+            let boldItalic = lazy Font.LoadFromAssembly("hack.zip", "Hack-BoldItalic.ttf")
+
+            static let instance = Hack()
+            static member internal Instance = instance
+
+            member _.Regular         : Font = regular.Value
+            member _.Bold            : Font = bold.Value
+            member _.Italic          : Font = italic.Value
+            member _.BoldItalic      : Font = boldItalic.Value
+
+        /// https://www.fontsquirrel.com/fonts/courier-prime
+        type CourierPrime internal() =
+            let regular    = lazy Font.LoadFromAssembly("courier-prime.zip", "Courier Prime.ttf")
+            let bold       = lazy Font.LoadFromAssembly("courier-prime.zip", "Courier Prime Bold.ttf")
+            let italic     = lazy Font.LoadFromAssembly("courier-prime.zip", "Courier Prime Italic.ttf")
+            let boldItalic = lazy Font.LoadFromAssembly("courier-prime.zip", "Courier Prime Bold Italic.ttf")
+
+            static let instance = CourierPrime()
+            static member internal Instance = instance
+
+            member _.Regular         : Font = regular.Value
+            member _.Bold            : Font = bold.Value
+            member _.Italic          : Font = italic.Value
+            member _.BoldItalic      : Font = boldItalic.Value
+
+        /// https://www.fontsquirrel.com/fonts/noto-sans
+        [<Sealed>]
+        type NotoSans internal() =
+            let regular    = lazy Font.LoadFromAssembly("noto-sans.zip", "NotoSans-Regular.ttf")
+            let bold       = lazy Font.LoadFromAssembly("noto-sans.zip", "NotoSans-Bold.ttf")
+            let italic     = lazy Font.LoadFromAssembly("noto-sans.zip", "NotoSans-Italic.ttf")
+            let boldItalic = lazy Font.LoadFromAssembly("noto-sans.zip", "NotoSans-BoldItalic.ttf")
+
+            static let instance = NotoSans()
+            static member internal Instance = instance
+
+            member _.Regular         : Font = regular.Value
+            member _.Bold            : Font = bold.Value
+            member _.Italic          : Font = italic.Value
+            member _.BoldItalic      : Font = boldItalic.Value
+
     /// https://www.fontsquirrel.com/fonts/hack
-    module Hack =
-
-        /// Contains the types provided by Aardvark.FontProvider
-        module Types =
-            let [<Literal>] private family = "Hack"
-            type Regular    = FontSquirrelProvider<Family = family, Bold = false, Italic = false>
-            type Bold       = FontSquirrelProvider<Family = family, Bold = true,  Italic = false>
-            type Italic     = FontSquirrelProvider<Family = family, Bold = false, Italic = true>
-            type BoldItalic = FontSquirrelProvider<Family = family, Bold = true,  Italic = true>
-
-        let Regular    = Types.Regular.Font
-        let Bold       = Types.Bold.Font
-        let Italic     = Types.Italic.Font
-        let BoldItalic = Types.BoldItalic.Font
+    [<Sealed; AbstractClass>]
+    type Hack =
+        static member Regular    : Font = Types.Hack.Instance.Regular
+        static member Bold       : Font = Types.Hack.Instance.Bold
+        static member Italic     : Font = Types.Hack.Instance.Italic
+        static member BoldItalic : Font = Types.Hack.Instance.BoldItalic
 
     /// https://www.fontsquirrel.com/fonts/courier-prime
-    module CourierPrime =
-
-        /// Contains the types provided by Aardvark.FontProvider
-        module Types =
-            let [<Literal>] private family = "Courier Prime"
-            type Regular    = FontSquirrelProvider<Family = family, Bold = false, Italic = false>
-            type Bold       = FontSquirrelProvider<Family = family, Bold = true,  Italic = false>
-            type Italic     = FontSquirrelProvider<Family = family, Bold = false, Italic = true>
-            type BoldItalic = FontSquirrelProvider<Family = family, Bold = true,  Italic = true>
-
-        let Regular    = Types.Regular.Font
-        let Bold       = Types.Bold.Font
-        let Italic     = Types.Italic.Font
-        let BoldItalic = Types.BoldItalic.Font
+    [<Sealed; AbstractClass>]
+    type CourierPrime internal() =
+        static member Regular    : Font = Types.CourierPrime.Instance.Regular
+        static member Bold       : Font = Types.CourierPrime.Instance.Bold
+        static member Italic     : Font = Types.CourierPrime.Instance.Italic
+        static member BoldItalic : Font = Types.CourierPrime.Instance.BoldItalic
 
     /// https://www.fontsquirrel.com/fonts/noto-sans
-    module NotoSans =
+    [<Sealed; AbstractClass>]
+    type NotoSans internal() =
+        static member Regular    : Font = Types.NotoSans.Instance.Regular
+        static member Bold       : Font = Types.NotoSans.Instance.Bold
+        static member Italic     : Font = Types.NotoSans.Instance.Italic
+        static member BoldItalic : Font = Types.NotoSans.Instance.BoldItalic
 
-        /// Contains the types provided by Aardvark.FontProvider
-        module Types =
-            let [<Literal>] private family = "Noto Sans"
-            type Regular    = FontSquirrelProvider<Family = family, Bold = false, Italic = false>
-            type Bold       = FontSquirrelProvider<Family = family, Bold = true,  Italic = false>
-            type Italic     = FontSquirrelProvider<Family = family, Bold = false, Italic = true>
-            type BoldItalic = FontSquirrelProvider<Family = family, Bold = true,  Italic = true>
+[<AutoOpen>]
+module DefaultFontsExtensions =
 
-        let Regular    = Types.Regular.Font
-        let Bold       = Types.Bold.Font
-        let Italic     = Types.Italic.Font
-        let BoldItalic = Types.BoldItalic.Font
+    type Fonts.Font with
+        /// https://www.fontsquirrel.com/fonts/hack
+        static member Hack = DefaultFonts.Types.Hack.Instance
+
+        /// https://www.fontsquirrel.com/fonts/courier-prime
+        static member CourierPrime = DefaultFonts.Types.CourierPrime.Instance
+
+        /// https://www.fontsquirrel.com/fonts/noto-sans
+        static member NotoSans = DefaultFonts.Types.NotoSans.Instance
 
 [<AutoOpen>]
 module ShapeExtensions =

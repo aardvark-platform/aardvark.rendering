@@ -16,7 +16,9 @@
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="resources\Symbola.ttf" />
+    <EmbeddedResource Include="fonts/hack.zip" />
+    <EmbeddedResource Include="fonts/courier-prime.zip" />
+    <EmbeddedResource Include="fonts/noto-sans.zip" />
     <Compile Include="Path.fs" />
     <Compile Include="Font.fs" />
     <Compile Include="Text.fs" />

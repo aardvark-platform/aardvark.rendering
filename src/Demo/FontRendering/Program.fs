@@ -5,7 +5,6 @@ open System
 open FShade
 open Aardvark.Base
 open Aardvark.Base.Fonts
-open Aardvark.FontProvider
 
 open FSharp.Data.Adaptive
 open Aardvark.Rendering
@@ -585,17 +584,9 @@ let ellipseTest() =
     win.Run()
 
 
-
-open Aardvark.Rendering.Text
-
 module Fonts =
 
-    module Types =
-        type LeafyGlade = FontSquirrelProvider<Family = "Leafy glade">
-        type Roboto     = FontSquirrelProvider<Family = "Roboto">
-
-    let LeafyGlade = Types.LeafyGlade.Font
-    let Roboto     = Types.Roboto.Font
+    let LeafyGlade = Font.LoadFromAssembly("leafy-glade.zip", "Leafy-Glade.ttf")
 
 [<EntryPoint; STAThread>]
 let main argv = 
@@ -871,7 +862,7 @@ let main argv =
     //let bb = r.bounds
 
     let label3 =
-        Sg.text DefaultFonts.Hack.Regular C4b.White message
+        Sg.text Font.CourierPrime.Italic C4b.White message
         |> Sg.scale 0.1
         |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, 0.2)))
 
@@ -881,7 +872,7 @@ let main argv =
         |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, 0.0)))
 
     let label5 =
-        Sg.text Fonts.Roboto C4b.White (AVal.constant "or just regular ones")
+        Sg.text Font.NotoSans.Regular C4b.White (AVal.constant "or just regular ones")
         |> Sg.scale 0.1
         |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, -0.2)))
 
