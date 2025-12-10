@@ -20,10 +20,10 @@ module DefaultFonts =
 
         /// https://www.fontsquirrel.com/fonts/hack
         type Hack internal() =
-            let regular    = lazy Font.LoadFromAssembly("hack.zip", "Hack-Regular.ttf")
-            let bold       = lazy Font.LoadFromAssembly("hack.zip", "Hack-Bold.ttf")
-            let italic     = lazy Font.LoadFromAssembly("hack.zip", "Hack-Italic.ttf")
-            let boldItalic = lazy Font.LoadFromAssembly("hack.zip", "Hack-BoldItalic.ttf")
+            let regular    = lazy Font.LoadFromAssembly(typeof<Hack>.Assembly, "hack.zip", "Hack-Regular.ttf")
+            let bold       = lazy Font.LoadFromAssembly(typeof<Hack>.Assembly, "hack.zip", "Hack-Bold.ttf")
+            let italic     = lazy Font.LoadFromAssembly(typeof<Hack>.Assembly, "hack.zip", "Hack-Italic.ttf")
+            let boldItalic = lazy Font.LoadFromAssembly(typeof<Hack>.Assembly, "hack.zip", "Hack-BoldItalic.ttf")
 
             static let instance = Hack()
             static member internal Instance = instance
@@ -35,10 +35,10 @@ module DefaultFonts =
 
         /// https://www.fontsquirrel.com/fonts/courier-prime
         type CourierPrime internal() =
-            let regular    = lazy Font.LoadFromAssembly("courier-prime.zip", "Courier Prime.ttf")
-            let bold       = lazy Font.LoadFromAssembly("courier-prime.zip", "Courier Prime Bold.ttf")
-            let italic     = lazy Font.LoadFromAssembly("courier-prime.zip", "Courier Prime Italic.ttf")
-            let boldItalic = lazy Font.LoadFromAssembly("courier-prime.zip", "Courier Prime Bold Italic.ttf")
+            let regular    = lazy Font.LoadFromAssembly(typeof<CourierPrime>.Assembly, "courier-prime.zip", "Courier Prime.ttf")
+            let bold       = lazy Font.LoadFromAssembly(typeof<CourierPrime>.Assembly, "courier-prime.zip", "Courier Prime Bold.ttf")
+            let italic     = lazy Font.LoadFromAssembly(typeof<CourierPrime>.Assembly, "courier-prime.zip", "Courier Prime Italic.ttf")
+            let boldItalic = lazy Font.LoadFromAssembly(typeof<CourierPrime>.Assembly, "courier-prime.zip", "Courier Prime Bold Italic.ttf")
 
             static let instance = CourierPrime()
             static member internal Instance = instance
@@ -51,10 +51,10 @@ module DefaultFonts =
         /// https://www.fontsquirrel.com/fonts/noto-sans
         [<Sealed>]
         type NotoSans internal() =
-            let regular    = lazy Font.LoadFromAssembly("noto-sans.zip", "NotoSans-Regular.ttf")
-            let bold       = lazy Font.LoadFromAssembly("noto-sans.zip", "NotoSans-Bold.ttf")
-            let italic     = lazy Font.LoadFromAssembly("noto-sans.zip", "NotoSans-Italic.ttf")
-            let boldItalic = lazy Font.LoadFromAssembly("noto-sans.zip", "NotoSans-BoldItalic.ttf")
+            let regular    = lazy Font.LoadFromAssembly(typeof<NotoSans>.Assembly, "noto-sans.zip", "NotoSans-Regular.ttf")
+            let bold       = lazy Font.LoadFromAssembly(typeof<NotoSans>.Assembly, "noto-sans.zip", "NotoSans-Bold.ttf")
+            let italic     = lazy Font.LoadFromAssembly(typeof<NotoSans>.Assembly, "noto-sans.zip", "NotoSans-Italic.ttf")
+            let boldItalic = lazy Font.LoadFromAssembly(typeof<NotoSans>.Assembly, "noto-sans.zip", "NotoSans-BoldItalic.ttf")
 
             static let instance = NotoSans()
             static member internal Instance = instance
