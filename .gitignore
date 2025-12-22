@@ -58,3 +58,4 @@ src/Aardvark.Rendering.Interactive/bin/
 /src/GLVM/build/
 **/.vscode/
 /src/VKVM/build/
+/.boss
