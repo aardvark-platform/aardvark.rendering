@@ -95,3 +95,61 @@ src/
 - **Shaders**: Written in F# via FShade DSL, not raw GLSL
 - **Resources**: Ref-counted (Acquire/Release), not garbage collected
 - **Native libs**: GLVM/VKVM are pre-built; only rebuild if modifying C++ source
+
+## For Consumer Projects
+
+AI agents working on projects that **use** Aardvark.Rendering should note these patterns.
+
+### Common Consumer Patterns
+
+| Pattern | Description | Look For |
+|---------|-------------|----------|
+| Adaptify | Model type code generation | `.g.fs` files, `[<ModelType>]` attributes |
+| Aardium | Electron-based desktop wrapper | `aardium/` directory |
+| FDA | Incremental computation | `aval`, `aset`, `transact` usage |
+
+### Adaptify Workflow
+
+Projects using `[<ModelType>]` require regeneration after model changes:
+
+```
+dotnet adaptify --lenses --local --force
+```
+
+Generated files (`.g.fs`) should not be edited manually.
+
+### Version Compatibility
+
+| Aardvark.Rendering | .NET SDK | Notes |
+|--------------------|----------|-------|
+| 5.5.x | 8.0+ | Stable, most consumer projects |
+| 5.6.x-prerelease | 8.0+ | Pre-release features |
+
+### Consumer Debugging
+
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| Shader compilation fails | FShade version mismatch | `dotnet paket why FShade` |
+| Scene not rendering | Missing applicator | Check SG-PATTERNS.md gotchas |
+| Adaptive updates stale | Missing transact/force | Wrap mutations in `transact` |
+| Native crash (GLVM/VKVM) | ABI mismatch | Update Aardvark packages |
+
+### Application Layer Decision
+
+| Type | Package | Use When |
+|------|---------|----------|
+| Slim.GL | Application.Slim.GL | Headless, CLI, offscreen |
+| Slim.Vulkan | Application.Slim.Vulkan | Headless with Vulkan |
+| Aardium | Application.Slim + Aardium | Web UI + native rendering |
+| WinForms | Application.WinForms | Windows desktop embedding |
+| WPF | Application.WPF | Windows XAML integration |
+
+### Consumer Documentation
+
+| Document | Purpose |
+|----------|---------|
+| ai/CONSUMER-PATTERNS.md | Application init, scene graph, adaptive patterns |
+| ai/CSHARP-INTEGRATION.md | C# projects using Aardvark |
+| ai/TEMPLATE-CONSUMER.md | Starting template for consumer AGENTS.md |
+
+Copy `ai/TEMPLATE-CONSUMER.md` to your project's `AGENTS.md` and customize.

@@ -14,6 +14,9 @@ Index for AI coding assistants. Read only the doc you need.
 | OpenGL and Vulkan backends | BACKENDS.md | ~8 KB |
 | Windowing, application layer, platforms | APPLICATION.md | ~7 KB |
 | Native C++ components (GLVM, VKVM) | NATIVE.md | ~6 KB |
+| Consumer project patterns | CONSUMER-PATTERNS.md | ~4 KB |
+| C# integration | CSHARP-INTEGRATION.md | ~3 KB |
+| Creating consumer project docs | TEMPLATE-CONSUMER.md | ~2 KB |
 
 ## By Type
 
@@ -50,6 +53,11 @@ Index for AI coding assistants. Read only the doc you need.
 - GLVM (GL command batching) -> NATIVE.md
 - VKVM (Vulkan helpers) -> NATIVE.md
 - P/Invoke patterns -> NATIVE.md
+
+### Consumer Integration
+- Application initialization patterns -> CONSUMER-PATTERNS.md
+- C# adaptive values, scene graph -> CSHARP-INTEGRATION.md
+- Consumer AGENTS.md template -> TEMPLATE-CONSUMER.md
 
 ## Quick Reference
 
