@@ -1,3 +1,5 @@
+### 5.6.1
+- [GeometryPool] culling shader workaround (FShade write bug)
 - [Vulkan] Fixed swapchain creation for Wayland
 - [GLFW] Avoid printing error due to unsupported window icon
 
