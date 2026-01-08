@@ -102,11 +102,12 @@ module CullingShader =
             if id < count then
                 let b = bounds.[id]
                 let rootId = int (b.Max.W + 0.5f)
-
+                let mutable ic = infos.[id]
                 if isActive.[rootId] <> 0 && CullingInfo.intersectsViewProj viewProjs.[rootId] b then
-                    infos.[id].InstanceCount <- CullingInfo.instanceCount b
+                    ic.InstanceCount <- CullingInfo.instanceCount b
                 else
-                    infos.[id].InstanceCount <- 0
+                    ic.InstanceCount <- 0
+                infos.[id] <- ic
         }
 
     type UniformScope with
@@ -905,7 +906,7 @@ module GeometryPoolData =
 
         static let cullingCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Lazy<ComputeProgram>>()
         static let boundCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Lazy<Program>>()
-        
+
         let initialCapacity = Fun.NextPowerOfTwo initialCapacity
         let adjust (call : DrawCallInfo) =
             if indexed then
