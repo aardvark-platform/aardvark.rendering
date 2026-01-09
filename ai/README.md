@@ -12,6 +12,7 @@ Index for AI coding assistants. Read only the doc you need.
 | IRuntime, resources, render objects, tasks | RENDER-CORE.md | ~6 KB |
 | Rendering usage patterns, offscreen, gotchas | RENDER-PATTERNS.md | ~6 KB |
 | OpenGL and Vulkan backends | BACKENDS.md | ~8 KB |
+| Debugging, shader printing, validation layers | DEBUG.md | ~10 KB |
 | Windowing, application layer, platforms | APPLICATION.md | ~7 KB |
 | Native C++ components (GLVM, VKVM) | NATIVE.md | ~6 KB |
 | Consumer project patterns | CONSUMER-PATTERNS.md | ~4 KB |
@@ -42,6 +43,9 @@ Index for AI coding assistants. Read only the doc you need.
 - `Aardvark.Rendering.GL.Runtime` -> BACKENDS.md
 - `Aardvark.Rendering.Vulkan.Runtime` -> BACKENDS.md
 - Context management, resource caching -> BACKENDS.md
+- Debug configuration, shader printing -> DEBUG.md
+- `DebugLevel`, `DebugConfig`, validation layers -> DEBUG.md
+- `PrintShaderCode`, `Debug.Printfn()`, RenderDoc, Nsight -> DEBUG.md
 
 ### Application
 - `OpenGlApplication`, `VulkanApplication` -> APPLICATION.md
@@ -76,5 +80,6 @@ Index for AI coding assistants. Read only the doc you need.
 | Draw calls, buffers, textures, framebuffers, tasks | RENDER-CORE.md |
 | Rendering examples, offscreen, large scenes, gotchas | RENDER-PATTERNS.md |
 | Runtime init, context issues, backend bugs | BACKENDS.md |
+| Debug config, shader printing, validation, debuggers | DEBUG.md |
 | Windowing, input, VR, platform issues | APPLICATION.md |
 | Native C++ (GLVM/VKVM) | NATIVE.md |

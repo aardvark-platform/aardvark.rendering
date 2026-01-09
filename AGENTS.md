@@ -70,6 +70,8 @@ Primary entry point for AI agents working with Aardvark.Rendering.
 | SDK 8.0.0 not found | Old .NET SDK | Install .NET 8.0+ |
 | Silk.NET version conflict | Pinned at 2.22.0 | Check `paket why Silk.NET.*` |
 | Tests not discovered | Test SDK issue | Ensure Expecto test adapter in paket.references |
+| Shader code not printing | Cache hit | Enable `PrintShaderCode` and delete shader cache or use `VerifyShaderCacheIntegrity = true` |
+| Validation layer errors | Vulkan debugging | See ai/DEBUG.md for ValidationLayerConfig and DebugReportConfig |
 
 ## Project Structure
 
