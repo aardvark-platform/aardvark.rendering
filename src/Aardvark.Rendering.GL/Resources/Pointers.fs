@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Rendering.GL
+namespace Aardvark.Rendering.GL
 
 open System
 open Aardvark.Base
@@ -113,6 +113,10 @@ module PointerContextExtensions =
 
                 Dictionary.ofListV (primitives @ vectors @ colors @ matrices)
 
+            let private resolveType (typ: Type) =
+                if typ.IsEnum then typ.GetEnumUnderlyingType()
+                else typ
+
             let bindings (attributes : struct (int * Attribute)[]) =
                 let buffers = System.Collections.Generic.List<_>()
                 let values = System.Collections.Generic.List<_>()
@@ -127,7 +131,9 @@ module PointerContextExtensions =
                             | PerVertex -> 0
                             | PerInstances i -> i
 
-                        match Dictionary.tryFindV att.Type attributeTable with
+                        let typ = resolveType att.Type
+
+                        match Dictionary.tryFindV typ attributeTable with
                         | ValueSome (s, t, typeSize) ->
                             if s.Y > 1 then
                                 let rowSize = typeSize * s.X
@@ -141,15 +147,15 @@ module PointerContextExtensions =
                                     buffers.Add ptr
 
                             else
-                                match att.Type with
+                                match typ with
                                 | ColorOf(d, UInt8) ->
                                     // C3b does not seem to work :/
                                     if d <> 4 then
-                                        failf "cannot use %A for vertex or instance attribute buffers. Try any other color type instead." att.Type
+                                        failf "cannot use %A for vertex or instance attribute buffers. Try any other color type instead." typ
 
                                     // Only works if normalized = true, i.e. only can be used for floating point attributes
                                     if att.Format <> VertexAttributeFormat.Normalized then
-                                        failf "%A vertex or instance attribute buffers can only be used for normalized floating point attributes." att.Type
+                                        failf "%A vertex or instance attribute buffers can only be used for normalized floating point attributes." typ
 
                                     // See: https://registry.khronos.org/OpenGL-Refpages/gl4/html/glVertexAttribPointer.xhtml
                                     let ptr =
@@ -169,7 +175,7 @@ module PointerContextExtensions =
                             failf "cannot use %A buffer as vertex or instance attribute buffer" att.Type
 
                     | Attribute.Value (value, format) ->
-                        let typ = value.GetType()
+                        let typ = resolveType <| value.GetType()
 
                         let struct (dim, attributeType, typeSize) =
                             match Dictionary.tryFindV typ attributeTable with

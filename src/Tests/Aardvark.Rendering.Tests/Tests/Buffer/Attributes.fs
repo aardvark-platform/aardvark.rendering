@@ -41,6 +41,11 @@ module AttributeBuffer =
             val mutable Color    : 'Color
             new (position: V3f, color: 'Color) = { Position = position; Color = color }
 
+        type private UInt32Enum =
+            | A = 0u
+            | B = 1u
+            | C = 7u
+
         // Conversions according to Vk / GL >= 4.2 spec
         let inline private unorm (value : 'T) =
             let bits = uint64 sizeof<'T> * 8UL
@@ -264,6 +269,12 @@ module AttributeBuffer =
                 TextureFormat.R32ui C3ui.BurlyWood [| C3ui.BurlyWood.R |]
                 perInstance singleValue interleaved false runtime
 
+        let attributeUInt32Enum (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<UInt32Enum, int32> <@ fun (value: UInt32Enum) -> if value = UInt32Enum.C then 42 else 1 @>)
+                TextureFormat.R32i UInt32Enum.C [| 42 |]
+                perInstance singleValue interleaved false runtime
+
         let attributeV2f (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
             renderAttribute
                 AttributeShader.Effect<V2f> TextureFormat.Rg32f
@@ -458,6 +469,7 @@ module AttributeBuffer =
             "int32",                          attributeInt32
             "uint32",                         attributeUInt32
             "uint32 from C3ui",               attributeUInt32FromC3ui
+            "uint32 enum",                    attributeUInt32Enum
             "V2f",                            attributeV2f
             "V3f from V3d",                   attributeV3fFromV3d
             "V3f from C4b normalized",        attributeV3fFromC4bNorm

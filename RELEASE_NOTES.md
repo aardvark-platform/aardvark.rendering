@@ -1,3 +1,5 @@
+- Added support for enum types as vertex and instance attributes
+
 ### 5.6.1
 - [GeometryPool] culling shader workaround (FShade write bug)
 - [Vulkan] Fixed swapchain creation for Wayland

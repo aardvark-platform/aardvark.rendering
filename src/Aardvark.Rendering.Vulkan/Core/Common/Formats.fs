@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Rendering.Vulkan
+namespace Aardvark.Rendering.Vulkan
 
 open System
 open Aardvark.Base
@@ -1428,6 +1428,7 @@ module VkFormat =
         | ColorOf(d, t) | VectorOf(d, t) -> Some (d, t)
         | MatrixOf(s, t) -> Some (s.X, t)
         | Numeric -> Some (1, t)
+        | Enum -> Some (1, t.GetEnumUnderlyingType())
         | _ -> None
 
     let inline private isBgr (t : Type) =
