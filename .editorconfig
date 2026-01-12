@@ -2,9 +2,6 @@ root = true
 
 [*]
 charset = utf-8
-insert_final_newline = true
-trim_trailing_whitespace = true
-end_of_line = lf
 
 [*.{fs,fsi,fsx}]
 indent_style = space
