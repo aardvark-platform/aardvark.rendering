@@ -207,7 +207,10 @@ module RenderTasks =
                         match values.[att.Name] with
                         | Some c ->
                             if att.Format.IsIntegerFormat then
-                                GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
+                               if att.Format.IsSigned then
+                                   GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
+                               else
+                                   GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToV4ui().ToArray())
                             else
                                 GL.ClearBuffer(ClearBuffer.Color, i, c.Float.ToArray())
                             GL.Check "could not clear buffer"

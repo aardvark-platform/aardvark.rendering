@@ -663,8 +663,10 @@ type Runtime(debug : IDebugConfig) =
                         GL.Clear(combinedClearMask)
 
                     // clear color layer individually
-                    GL.ClearBuffer(ClearBuffer.Color, 0, c.Integer.ToArray())
-
+                    if att.Format.IsSigned then
+                        GL.ClearBuffer(ClearBuffer.Color, 0, c.Integer.ToArray())
+                    else
+                        GL.ClearBuffer(ClearBuffer.Color, 0, c.Integer.ToV4ui().ToArray())
                 else
                     GL.ClearColor(c.Float.X, c.Float.Y, c.Float.Z, c.Float.W)
                     GL.Clear(ClearBufferMask.ColorBufferBit ||| combinedClearMask)
@@ -680,7 +682,10 @@ type Runtime(debug : IDebugConfig) =
                 match values.[att.Name] with
                 | Some c ->
                     if att.Format.IsIntegerFormat then
-                        GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
+                        if att.Format.IsSigned then
+                            GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
+                        else
+                            GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToV4ui().ToArray())
                     else
                         GL.ClearBuffer(ClearBuffer.Color, i, c.Float.ToArray())
                     GL.Check "could not clear buffer"
@@ -740,7 +745,10 @@ type Runtime(debug : IDebugConfig) =
                 | Some color ->
                     GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
                     if texture.Format.IsIntegerFormat then
-                        GL.ClearBuffer(ClearBuffer.Color, 0, color.Integer.ToArray())
+                        if texture.Format.IsSigned then
+                            GL.ClearBuffer(ClearBuffer.Color, 0, color.Integer.ToArray())
+                        else
+                            GL.ClearBuffer(ClearBuffer.Color, 0, color.Integer.ToV4ui().ToArray())
                     else
                         GL.ClearBuffer(ClearBuffer.Color, 0, color.Float.ToArray())
 
