@@ -306,38 +306,53 @@ module FramebufferSignature =
             finally
                 result.Release()
 
-        let renderToCubeArrayLayered (dynamic: bool) (runtime : IRuntime) =
+        let renderTo (dimension: TextureDimension) (dynamic: bool) (layered: bool) (count: int) (levels: int) (samples: int) (runtime: IRuntime) =
+            let totalCount = if dimension = TextureDimension.TextureCube then count * 6 else count
+            let layers = if layered then totalCount else 1
+            let slice = if layered then -1 else totalCount - 1
+
             use signature =
-                runtime.CreateFramebufferSignature(
-                    [ DefaultSemantic.Colors, TextureFormat.Rgba8],
-                    layers = 12, perLayerUniforms = [ "Color" ]
+                runtime.CreateFramebufferSignature (
+                    [
+                        DefaultSemantic.Colors,       TextureFormat.Rgba8
+                        DefaultSemantic.DepthStencil, TextureFormat.DepthComponent32f
+                    ],
+                    samples = samples, layers = layers, perLayerUniforms = [ "Color" ]
                 )
 
-            let colorBuffer =
-                runtime.CreateTextureCubeArray(512, TextureFormat.Rgba8, count = 2)
+            let createBuffer (format: TextureFormat) =
+                let size =
+                    let size3D = V3i(123, 178, 77)
+
+                    match dimension with
+                    | TextureDimension.Texture1D -> size3D.XII
+                    | TextureDimension.Texture2D -> size3D.XYI
+                    | TextureDimension.Texture3D -> size3D
+                    | TextureDimension.TextureCube -> size3D.XXI
+                    | _ -> failwith ""
+
+                if count > 1 then
+                    runtime.CreateTextureArray(size, dimension, format, levels = levels, count = count, samples = samples)
+                else
+                    runtime.CreateTexture(size, dimension, format, levels = levels, samples = samples)
+
+            use colorBuffer = createBuffer TextureFormat.Rgba8
+            use depthBuffer = createBuffer TextureFormat.DepthComponent32f
 
             use framebuffer =
                 runtime.CreateFramebuffer(signature, [
-                    DefaultSemantic.Colors, colorBuffer.GetOutputView()
+                    DefaultSemantic.Colors,       colorBuffer.GetOutputView(level = levels - 1, slice = slice)
+                    DefaultSemantic.DepthStencil, depthBuffer.GetOutputView(level = levels - 1, slice = slice)
                 ])
 
-            let colors =
-                [|
-                    C4f.Aqua
-                    C4f.Azure
-                    C4f.Beige
-                    C4f.BurlyWood
-                    C4f.CadetBlue
-                    C4f.Crimson
-                    C4f.DeepPink
-                    C4f.Gold
-                    C4f.Indigo
-                    C4f.Linen
-                    C4f.Moccasin
-                    C4f.Tomato
-                |]
-
+            let colors = Array.init totalCount (ignore >> Rnd.c4b)
             let activeShader = AVal.init 0
+
+            let applyColor =
+                if layered then
+                    Sg.uniform' "Color" colors
+                else
+                    Sg.uniform' "Color" colors.[slice]
 
             let applySurface =
                 let rgbaEffect = toEffect DefaultSurfaces.sgColor
@@ -348,29 +363,38 @@ module FramebufferSignature =
                 else
                     Sg.surface rgbaEffect
 
+            let colorToArray (color: C4b) =
+                if activeShader.Value = 0 then
+                    [| color.R; color.G; color.B; color.A |]
+                else
+                    [| color.B; color.G; color.R; color.A |]
+
             use task =
-                Sg.fullScreenQuad
-                |> Sg.uniform' "Color" colors
+                Sg.draw IndexedGeometryMode.TriangleStrip
+                |> Sg.vertexAttribute' DefaultSemantic.Positions [| V3f(-1, -1, 0); V3f(1, -1, 0); V3f(-1, 1, 0); V3f(1, 1, 0) |]
+                |> applyColor
                 |> applySurface
                 |> Sg.compile runtime signature
 
-            try
-                let check (colorArr: C4b -> byte[]) =
-                    for i = 0 to colors.Length - 1 do
-                        let pi = colorBuffer.Download(slice = i).AsPixImage<uint8>()
-                        let c = C4b colors.[i]
-                        pi |> PixImage.isColor (colorArr c)
-
+            let runAndCheck() =
+                framebuffer.Clear(C4b.Black, 1.0f)
                 task.Run framebuffer
-                check (fun c -> [| c.R; c.G; c.B; c.A |])
 
-                if dynamic then
-                    transact (fun _ -> activeShader.Value <- 1)
-                    task.Run framebuffer
-                    check (fun c -> [| c.B; c.G; c.R; c.A |])
+                let s, e = if slice = -1 then 0, totalCount - 1 else slice, slice
 
-            finally
-                runtime.DeleteTexture colorBuffer
+                for i = s to e do
+                    let pi = colorBuffer.Download(level = levels - 1, slice = i).AsPixImage<uint8>()
+                    pi |> PixImage.isColor (colorToArray colors.[i])
+
+                    if samples = 1 || not (runtime :? Vulkan.Runtime) then
+                        let depth = depthBuffer.DownloadDepth(level = levels - 1, slice = i)
+                        Expect.validDepthResult depth Accuracy.medium pi.Size 0.5 0.5
+
+            runAndCheck()
+
+            if dynamic then
+                transact (fun _ -> activeShader.Value <- 1)
+                runAndCheck()
 
         let renderPreparedWithIncompatibleSignature (runtime: IRuntime) =
             use signaturePrepared =
@@ -422,8 +446,55 @@ module FramebufferSignature =
                 "Render combined",     Cases.renderCombined
                 "Render multisampled", Cases.renderToMultisampled
 
-            "Render to cube array layered",              Cases.renderToCubeArrayLayered false
-            "Render to cube array layered (dynamic)",    Cases.renderToCubeArrayLayered true
+            "Render to 1D",                                 Cases.renderTo TextureDimension.Texture1D false false 1 1 1
+            "Render to 1D (dynamic)",                       Cases.renderTo TextureDimension.Texture1D true  false 1 1 1
+            "Render to 1D (mipmap)",                        Cases.renderTo TextureDimension.Texture1D false false 1 3 1
+            "Render to 1D (mipmap, dynamic)",               Cases.renderTo TextureDimension.Texture1D true  false 1 3 1
+            "Render to 1D array slice",                     Cases.renderTo TextureDimension.Texture1D false false 6 1 1
+            "Render to 1D array slice (dynamic)",           Cases.renderTo TextureDimension.Texture1D true  false 6 1 1
+            "Render to 1D array slice (mipmap)",            Cases.renderTo TextureDimension.Texture1D false false 6 3 1
+            "Render to 1D array slice (mipmap, dynamic)",   Cases.renderTo TextureDimension.Texture1D true  false 6 3 1
+            "Render to 1D array layered",                   Cases.renderTo TextureDimension.Texture1D false true  6 1 1
+            "Render to 1D array layered (dynamic)",         Cases.renderTo TextureDimension.Texture1D true  true  6 1 1
+            "Render to 1D array layered (mipmap)",          Cases.renderTo TextureDimension.Texture1D false true  6 3 1
+            "Render to 1D array layered (mipmap, dynamic)", Cases.renderTo TextureDimension.Texture1D true  true  6 3 1
+
+            "Render to 2D",                                 Cases.renderTo TextureDimension.Texture2D false false 1 1 1
+            "Render to 2D (dynamic)",                       Cases.renderTo TextureDimension.Texture2D true  false 1 1 1
+            "Render to 2D (mipmap)",                        Cases.renderTo TextureDimension.Texture2D false false 1 3 1
+            "Render to 2D (mipmap, dynamic)",               Cases.renderTo TextureDimension.Texture2D true  false 1 3 1
+            "Render to 2D array slice",                     Cases.renderTo TextureDimension.Texture2D false false 6 1 1
+            "Render to 2D array slice (dynamic)",           Cases.renderTo TextureDimension.Texture2D true  false 6 1 1
+            "Render to 2D array slice (mipmap)",            Cases.renderTo TextureDimension.Texture2D false false 6 3 1
+            "Render to 2D array slice (mipmap, dynamic)",   Cases.renderTo TextureDimension.Texture2D true  false 6 3 1
+            "Render to 2D array layered",                   Cases.renderTo TextureDimension.Texture2D false true  6 1 1
+            "Render to 2D array layered (dynamic)",         Cases.renderTo TextureDimension.Texture2D true  true  6 1 1
+            "Render to 2D array layered (mipmap)",          Cases.renderTo TextureDimension.Texture2D false true  6 3 1
+            "Render to 2D array layered (mipmap, dynamic)", Cases.renderTo TextureDimension.Texture2D true  true  6 3 1
+
+            "Render to 2D multisampled",                         Cases.renderTo TextureDimension.Texture2D false false 1 1 2
+            "Render to 2D multisampled (dynamic)",               Cases.renderTo TextureDimension.Texture2D true  false 1 1 2
+            "Render to 2D multisampled array slice",             Cases.renderTo TextureDimension.Texture2D false false 6 1 2
+            "Render to 2D multisampled array slice (dynamic)",   Cases.renderTo TextureDimension.Texture2D true  false 6 1 2
+            "Render to 2D multisampled array layered",           Cases.renderTo TextureDimension.Texture2D false true  6 1 2
+            "Render to 2D multisampled array layered (dynamic)", Cases.renderTo TextureDimension.Texture2D true  true  6 1 2
+
+            "Render to cube slice",                           Cases.renderTo TextureDimension.TextureCube false false 1 1 1
+            "Render to cube slice (dynamic)",                 Cases.renderTo TextureDimension.TextureCube true  false 1 1 1
+            "Render to cube slice (mipmap)",                  Cases.renderTo TextureDimension.TextureCube false false 1 3 1
+            "Render to cube slice (mipmap, dynamic)",         Cases.renderTo TextureDimension.TextureCube true  false 1 3 1
+            "Render to cube layered",                         Cases.renderTo TextureDimension.TextureCube false true  1 1 1
+            "Render to cube layered (dynamic)",               Cases.renderTo TextureDimension.TextureCube true  true  1 1 1
+            "Render to cube layered (mipmap)",                Cases.renderTo TextureDimension.TextureCube false true  1 3 1
+            "Render to cube layered (mipmap, dynamic)",       Cases.renderTo TextureDimension.TextureCube true  true  1 3 1
+            "Render to cube array slice",                     Cases.renderTo TextureDimension.TextureCube false false 2 1 1
+            "Render to cube array slice (dynamic)",           Cases.renderTo TextureDimension.TextureCube true  false 2 1 1
+            "Render to cube array slice (mipmap)",            Cases.renderTo TextureDimension.TextureCube false false 2 3 1
+            "Render to cube array slice (mipmap, dynamic)",   Cases.renderTo TextureDimension.TextureCube true  false 2 3 1
+            "Render to cube array layered",                   Cases.renderTo TextureDimension.TextureCube false true  2 1 1
+            "Render to cube array layered (dynamic)",         Cases.renderTo TextureDimension.TextureCube true  true  2 1 1
+            "Render to cube array layered (mipmap)",          Cases.renderTo TextureDimension.TextureCube false true  2 3 1
+            "Render to cube array layered (mipmap, dynamic)", Cases.renderTo TextureDimension.TextureCube true  true  2 3 1
 
             "Render prepared object with incompatible signature", Cases.renderPreparedWithIncompatibleSignature
         ]

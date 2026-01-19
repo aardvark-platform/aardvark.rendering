@@ -1,5 +1,6 @@
 - Added support for enum types as vertex and instance attributes
 - Implemented download / upload for PixImage as 3D slices
+- Improved support for non-2D framebuffer outputs
 
 ### 5.6.1
 - [GeometryPool] culling shader workaround (FShade write bug)

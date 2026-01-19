@@ -53,13 +53,13 @@ module Framebuffer =
             |> Array.map (fun sem ->
                 match Map.tryFind sem views with
                 | Some view -> 
-                    let s = view.Image.Size.XY / (1 <<< view.MipLevelRange.Max)
+                    let s = Fun.MipmapLevelSize(view.Image.Size.XY, view.MipLevelRange.Max)
                     let l = 1 + view.ArrayRange.Max - view.ArrayRange.Min
 
                     if l < pass.LayerCount then
                         failf "framebuffer attachment %A does not have enough layers for render pass (attachment has %d, render pass requires %d)" sem l pass.LayerCount
 
-                    minSize <- V2i(min minSize.X s.X, min minSize.Y s.Y)
+                    minSize <- min minSize s
                     sem, view
                 | _ -> failf "missing framebuffer attachment %A" sem
             )
@@ -67,11 +67,11 @@ module Framebuffer =
         let attachmentMap =
             attachments |> Map.ofArray
 
-        let attachmentArray =
-            attachments |> Array.map snd
+        let attachmentHandles =
+            attachments |> Array.map (snd >> _.Handle)
 
         native {
-            let! pAttachments = attachmentArray |> Array.map (fun a -> a.Handle)
+            let! pAttachments = attachmentHandles
             let! pInfo =
                 VkFramebufferCreateInfo(
                     VkFramebufferCreateFlags.None,

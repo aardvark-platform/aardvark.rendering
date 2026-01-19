@@ -67,21 +67,16 @@ type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Cont
         member x.Attachments = outputBySem
         member x.Dispose() = x.Dispose()
 
-//    static member Default (ctx : Context, size : V2i, samples : int) =
-//        let bindings = [0,DefaultSemantic.Colors,Texture(ctx, 0, TextureDimension.Texture2D, 1, samples, V3i(size.X, size.Y, 1), 1, ChannelType.RGBA8).Output 0 :> IFramebufferOutput]
-//        let depth = Renderbuffer(ctx, 0, V2i.II, TextureFormat.Depth24Stencil8, 1) :> IFramebufferOutput
-//        new Framebuffer(ctx, (fun _ -> 0), (fun _ -> ()), bindings, Some depth)
-
 [<AutoOpen>]
 module FramebufferExtensions =
 
-    let private destroy (handle : int) =
+    let private destroyFramebuffer (handle : int) =
         GL.DeleteFramebuffer handle
         GL.Check "could not delete framebuffer"
 
-    let private init (signature : IFramebufferSignature) (bindings : list<int * Symbol * IFramebufferOutput>) (depthStencil : Option<IFramebufferOutput>)
-                     (context : ContextHandle) : int =
-
+    let private createFramebuffer (signature : IFramebufferSignature)
+                                  (bindings : list<int * Symbol * IFramebufferOutput>)
+                                  (depthStencil : Option<IFramebufferOutput>) =
         let mutable oldFbo = 0
         GL.GetInteger(GetPName.DrawFramebufferBinding, &oldFbo)
 
@@ -112,27 +107,34 @@ module FramebufferExtensions =
                 validateLayerCount slices
 
                 if slices > 1 then
-                    if baseSlice <> 0 || slices <> (if o.Dimension = TextureDimension.TextureCube then 6 * o.Count else o.Count) then // TODO: Is it possible to bind a cubemap array as texture layers?
-                        failf "sub-layers not supported atm."
+                    if baseSlice <> 0 || slices <> o.Slices then
+                        failf $"attaching subrange of texture slices to framebuffer is not supported (texture has {o.Slices} slices, trying to attach {r.Slices})."
   
                     GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, attachment, o.Handle, level)
-                    GL.Check "could not attach texture"
+
+                elif o.IsArray then
+                    GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, attachment, o.Handle, level, baseSlice)
 
                 else
                     match o.Dimension with
                     | TextureDimension.TextureCube ->
-                        let (_,target) = TextureTarget.cubeSides.[baseSlice]
-                        if o.IsArray then
-                            failf "cubemaparray currently not implemented"
-                        else
-                            GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, attachment, target, o.Handle, level)
-                        GL.Check "could not attach texture"
-                    | _ ->
-                        if o.IsArray then
-                            GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, attachment, o.Handle, level, baseSlice)
-                        else
-                            GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)
-                        GL.Check "could not attach texture"
+                        let _, target = TextureTarget.cubeSides.[baseSlice]
+                        GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, attachment, target, o.Handle, level)
+
+                    | TextureDimension.Texture1D ->
+                        GL.FramebufferTexture1D(FramebufferTarget.DrawFramebuffer, attachment, TextureTarget.Texture1D, o.Handle, level)
+
+                    | TextureDimension.Texture2D ->
+                        let target = if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D
+                        GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, attachment, target, o.Handle, level)
+
+                    | TextureDimension.Texture3D ->
+                        GL.FramebufferTexture3D(FramebufferTarget.DrawFramebuffer, attachment, TextureTarget.Texture3D, o.Handle, level, baseSlice)
+
+                    | dim ->
+                        failf $"cannot attach {dim} textures to framebuffer"
+
+                GL.Check "could not attach texture"
 
             | v ->
                 failf "unsupported view: %A" v
@@ -167,23 +169,22 @@ module FramebufferExtensions =
 
         if status <> FramebufferErrorCode.FramebufferComplete then
             // cleanup and raise exception
-            destroy handle
-            raise <| OpenGLException(ErrorCode.InvalidFramebufferOperation, sprintf "framebuffer incomplete: %A" status)
+            destroyFramebuffer handle
+            raise <| OpenGLException(ErrorCode.InvalidFramebufferOperation, $"Framebuffer incomplete: {status}")
 
         handle
-
 
     type Context with
 
         member x.CreateFramebuffer (signature : IFramebufferSignature, bindings : list<int * Symbol * IFramebufferOutput>, depthStencil : Option<IFramebufferOutput>) =
-            let init = init signature bindings depthStencil
             addVirtualFbo x
-            new Framebuffer(x, signature, init, destroy, bindings, depthStencil)
+            let create _ = createFramebuffer signature bindings depthStencil
+            new Framebuffer(x, signature, create, destroyFramebuffer, bindings, depthStencil)
 
         member x.Delete(f : Framebuffer) =
             removeVirtualFbo x
             f.DestroyHandles()
 
         member x.Update (f : Framebuffer, bindings : list<int * Symbol * IFramebufferOutput>, depthStencil : Option<IFramebufferOutput>) =
-            let init = init f.Signature bindings depthStencil
-            f.Update(init, bindings, depthStencil)
+            let create _ = createFramebuffer f.Signature bindings depthStencil
+            f.Update(create, bindings, depthStencil)
