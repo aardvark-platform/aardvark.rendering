@@ -100,9 +100,13 @@ module RenderTasks =
             try
                 let _ = output.GetValue(AdaptiveToken.Top, { RenderToken.Empty with Queries = [query] })
                 let samples = query.GetResult()
+                let expectedSamples = uint64 (size.X * size.Y)
+
+                // For Vulkan, AMD seems to count the clear task as well
+                let valid = samples = expectedSamples || samples = expectedSamples * 2UL
 
                 Expect.isGreaterThan samples 0UL "Non-positive sample count"
-                Expect.equal samples (uint64 (size.X * size.Y)) "Unexpected sample count"
+                Expect.isTrue valid $"Expected sample count {expectedSamples} but got {samples}"
             finally
                 output.Release()
 

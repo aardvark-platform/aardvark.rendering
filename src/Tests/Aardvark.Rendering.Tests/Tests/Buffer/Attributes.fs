@@ -324,6 +324,7 @@ module AttributeBuffer =
                 perInstance singleValue interleaved true runtime
 
         let attributeC3bToC4us (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireVertexFormat Vulkan.VkFormat.B8g8r8Uint
             runtime |> requireExtensionGL [NVGpuShader5]
 
             renderAttribute
@@ -333,6 +334,7 @@ module AttributeBuffer =
                 perInstance singleValue interleaved false runtime
 
         let attributeC3bToC4ui (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireVertexFormat Vulkan.VkFormat.B8g8r8Uint
             runtime |> requireExtensionGL [NVGpuShader5]
 
             renderAttribute
@@ -342,6 +344,7 @@ module AttributeBuffer =
                 perInstance singleValue interleaved false runtime
 
         let attributeC3bToC4f (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            runtime |> requireVertexFormat Vulkan.VkFormat.B8g8r8Uint
             runtime |> requireExtensionGL [NVGpuShader5]
 
             renderAttribute

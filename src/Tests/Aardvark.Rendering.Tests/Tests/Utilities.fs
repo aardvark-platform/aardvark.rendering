@@ -629,6 +629,14 @@ module ``Test Utilities`` =
             if not <| check runtime.Context then skiptest message
         | _ -> ()
 
+    let requireVertexFormat (format: Vulkan.VkFormat) (runtime: IRuntime) =
+       match runtime with
+       | :? Vulkan.Runtime as runtime ->
+           let formatFeatures = runtime.Device.PhysicalDevice.GetBufferFormatFeatures format
+           if not <| formatFeatures.HasFlag Vulkan.VkFormatFeatureFlags.VertexBufferBit then
+               skiptest $"Device does not support {format} vertex attributes"
+       | _ -> ()
+
     let requireExtensionGL (candidates: string seq) (runtime: IRuntime) =
         let message =
             if Seq.length candidates = 1 then
