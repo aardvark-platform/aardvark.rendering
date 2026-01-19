@@ -861,6 +861,25 @@ module TextureUpload =
             finally
                 runtime.DeleteTexture(texture)
 
+        let private uploadAndDownloadTexture3DSlice (runtime : IRuntime)
+                                                    (size : V3i) (levels : int)
+                                                    (level : int) (slice : int)
+                                                    (window : Box2i option) =
+            let region =
+                match window with
+                | Some r -> r
+                | None ->
+                    let s = max 1 (size >>> level)
+                    Box2i(V2i.Zero, s.XY)
+
+            let data = PixImage.random32ui region.Size
+            let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.None
+
+            use texture = runtime.CreateTexture3D(size, fmt, levels)
+            texture.Upload(data, level, slice, region.Min, region.Size)
+            let result = texture.Download(level, slice, region).AsPixImage<uint32>()
+            PixImage.compare V2i.Zero data result
+
         let texture3D (runtime : IRuntime) =
             let size = V3i(100, 75, 66)
             uploadAndDownloadTexture3D runtime size 1 0 None
@@ -878,6 +897,24 @@ module TextureUpload =
             let size = V3i(100, 75, 66)
             let region = Some <| Box3i(13, 5, 7, 47, 30, 31)
             uploadAndDownloadTexture3D runtime size 4 1 region
+
+        let texture3DSlice (runtime : IRuntime) =
+            let size = V3i(100, 75, 66)
+            uploadAndDownloadTexture3DSlice runtime size 1 0 3 None
+
+        let texture3DSliceSubwindow (runtime : IRuntime) =
+            let size = V3i(100, 75, 66)
+            let region = Some <| Box2i(11, 23, 88, 67)
+            uploadAndDownloadTexture3DSlice runtime size 1 0 3 region
+
+        let texture3DSliceLevel (runtime : IRuntime) =
+            let size = V3i(100, 75, 66)
+            uploadAndDownloadTexture3DSlice runtime size 4 2 3 None
+
+        let texture3DSliceLevelSubwindow (runtime : IRuntime) =
+            let size = V3i(100, 75, 66)
+            let region = Some <| Box2i(13, 5, 47, 30)
+            uploadAndDownloadTexture3DSlice runtime size 4 1 3 region
 
         let texture3DNull (runtime : IRuntime) =
             let diffuseSampler =
@@ -1198,6 +1235,11 @@ module TextureUpload =
             "3D subwindow",                 Cases.texture3DSubwindow
             "3D level",                     Cases.texture3DLevel
             "3D level subwindow",           Cases.texture3DLevelSubwindow
+
+            "3D slice",                     Cases.texture3DSlice
+            "3D slice subwindow",           Cases.texture3DSliceSubwindow
+            "3D slice level",               Cases.texture3DSliceLevel
+            "3D slice level subwindow",     Cases.texture3DSliceLevelSubwindow
 
             "3D NullTexture",               Cases.texture3DNull
 

@@ -271,11 +271,17 @@ type ITextureRuntimeExtensions private() =
             else
                 size
 
+        let struct (texture, offset) =
+            if texture.Texture.Dimension = TextureDimension.Texture3D && texture.Slice > 0 then
+                texture.Texture.[texture.Aspect, texture.Level, 0], V3i(offset, texture.Slice)
+            else
+                texture, offset.XYO
+
         source.Visit
             { new PixVisitors.PixImageVisitor() with
                 member x.VisitUnit(img : PixImage<'T>) =
                     NativeVolume.using img.Volume (fun src ->
-                        this.Upload(texture, src.ToXYWTensor4'(), img.Format, offset.XYO, size.XYI)
+                        this.Upload(texture, src.ToXYWTensor4'(), img.Format, offset, size.XYI)
                     )
             } |> ignore
 
@@ -361,11 +367,17 @@ type ITextureRuntimeExtensions private() =
             else
                 size
 
+        let struct (texture, offset) =
+            if texture.Texture.Dimension = TextureDimension.Texture3D && texture.Slice > 0 then
+                texture.Texture.[texture.Aspect, texture.Level, 0], V3i(offset, texture.Slice)
+            else
+                texture, offset.XYO
+
         target.Visit
             { new PixVisitors.PixImageVisitor() with
                 member x.VisitUnit(img : PixImage<'T>) =
                     NativeVolume.using img.Volume (fun dst ->
-                        this.Download(texture, dst.ToXYWTensor4'(), img.Format, offset.XYO, size.XYI)
+                        this.Download(texture, dst.ToXYWTensor4'(), img.Format, offset, size.XYI)
                     )
             } |> ignore
 
