@@ -337,15 +337,20 @@ module ContextHandleOpenTK =
         let window, context =
             let prev = ContextHandle.Current
 
-            let mode = Graphics.GraphicsMode(ColorFormat(Config.BitsPerPixel), Config.DepthBits, Config.StencilBits, 1, ColorFormat.Empty, Config.Buffers, false)
+            let mode = GraphicsMode(ColorFormat(Config.BitsPerPixel), Config.DepthBits, Config.StencilBits, 1, ColorFormat.Empty, Config.Buffers, false)
             let window = new NativeWindow(16, 16, "background", GameWindowFlags.Default, mode, DisplayDevice.Default)
+
+            let contextFlags =
+                match debug with
+                | :? DebugConfig as cfg when cfg.DebugOutputEnabled -> Config.ContextFlags ||| GraphicsContextFlags.Debug
+                | _ -> Config.ContextFlags
 
             let context =
                 match parent with
                 | Some p ->
-                    new GraphicsContext(GraphicsMode.Default, window.WindowInfo, p.Handle, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
+                    new GraphicsContext(GraphicsMode.Default, window.WindowInfo, p.Handle, Config.MajorVersion, Config.MinorVersion, contextFlags);
                 | _ ->
-                    new GraphicsContext(GraphicsMode.Default, window.WindowInfo, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
+                    new GraphicsContext(GraphicsMode.Default, window.WindowInfo, Config.MajorVersion, Config.MinorVersion, contextFlags);
 
             context.MakeCurrent(window.WindowInfo)
             let ctx = context |> unbox<IGraphicsContextInternal>

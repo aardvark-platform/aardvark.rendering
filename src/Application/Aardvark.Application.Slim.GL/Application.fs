@@ -29,12 +29,14 @@ module private OpenGL =
 
     let mutable version = System.Version(3,3)
     let mutable supportsNoError = false
+    let mutable supportsDebugContext = false
 
-    let private tryCreateOffscreenWindow (version : Version) (useNoError : bool) (glfw : Glfw) =
+    let private tryCreateOffscreenWindow (version : Version) (debugContext : bool) (useNoError : bool) (glfw : Glfw) =
         glfw.DefaultWindowHints()
         glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
         glfw.WindowHint(WindowHintInt.ContextVersionMajor, version.Major)
         glfw.WindowHint(WindowHintInt.ContextVersionMinor, version.Minor)
+        glfw.WindowHint(WindowHintBool.OpenGLDebugContext, debugContext)
         glfw.WindowHint(WindowHintBool.ContextNoError, useNoError)
         glfw.WindowHint(WindowHintRobustness.ContextRobustness, Robustness.LoseContextOnReset)
         glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
@@ -52,11 +54,19 @@ module private OpenGL =
             true
 
     let queryNoErrorSupport (version : Version) (glfw : Glfw) =
-        if tryCreateOffscreenWindow version true glfw then
+        if tryCreateOffscreenWindow version false true glfw then
             true
         else
             let error, _ = glfw.GetError()
             Report.Line(2, $"OpenGL does not support KHR_no_error ({error})")
+            false
+
+    let queryDebugContextSupport (version : Version) (glfw : Glfw) =
+        if tryCreateOffscreenWindow version true false glfw then
+            true
+        else
+            let error, _ = glfw.GetError()
+            Report.Line(2, $"OpenGL does not support debug context ({error})")
             false
 
     let initVersion (glfw : Glfw) =
@@ -78,7 +88,7 @@ module private OpenGL =
             versions
             |> List.skipWhile ((<>) defaultVersion)
             |> List.tryFind (fun v ->
-                if tryCreateOffscreenWindow v false glfw then
+                if tryCreateOffscreenWindow v false false glfw then
                     Log.line "OpenGL %A working" v
                     true
                 else
@@ -91,6 +101,7 @@ module private OpenGL =
         | Some b ->
             version <- b
             supportsNoError <- glfw |> queryNoErrorSupport b
+            supportsDebugContext <- glfw |> queryDebugContextSupport b
         | None -> failwith "no compatible OpenGL version found"
 
     type MyWindowInfo(win : nativeptr<WindowHandle>) =
@@ -415,14 +426,14 @@ module private OpenGL =
                     getCurrentContextDelegate <- null
 
         { new IWindowInterop with
-            override __.Boot(glfw) =
+            override _.Boot(glfw) =
                 initVersion glfw
                 install glfw
 
-            override __.CreateSurface(runtime : IRuntime, cfg: WindowConfig, glfw: Glfw, win: nativeptr<WindowHandle>) =
+            override _.CreateSurface(runtime : IRuntime, cfg: WindowConfig, glfw: Glfw, win: nativeptr<WindowHandle>) =
                 createSurface (runtime :?> _) cfg glfw win
 
-            override __.WindowHints(cfg: WindowConfig, glfw: Glfw) =
+            override _.WindowHints(cfg: WindowConfig, glfw: Glfw) =
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
                 glfw.WindowHint(WindowHintInt.ContextVersionMajor, version.Major)
                 glfw.WindowHint(WindowHintInt.ContextVersionMinor, version.Minor)
@@ -441,7 +452,7 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
                 glfw.WindowHint(WindowHintBool.DoubleBuffer, true)
                 glfw.WindowHint(WindowHintBool.Stereo, cfg.stereo)
-                glfw.WindowHint(WindowHintBool.OpenGLDebugContext, false)
+                glfw.WindowHint(WindowHintBool.OpenGLDebugContext, debug.DebugOutput.IsSome && supportsDebugContext)
                 glfw.WindowHint(WindowHintBool.ContextNoError, disableErrorChecks && supportsNoError)
                 glfw.WindowHint(WindowHintBool.SrgbCapable, false)
                 if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
