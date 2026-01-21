@@ -11,6 +11,7 @@ open KHRBufferDeviceAddress
 open KHRShaderFloat16Int8
 open KHR8bitStorage
 open KHRExternalMemoryCapabilities
+open KHRPortabilitySubset
 open EXTOpacityMicromap
 open EXTCustomBorderColor
 open EXTDescriptorIndexing
@@ -73,7 +74,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
         globalExtensions |> Array.exists (fun e -> e.name = name)
 
     let queryFeatures (hasExtension: string -> bool) =
-        let f, pm, memp, ycbcr, cbc, s8, s16, f16i8, vp, sdp, idx, rtp, rtpos, rtir, rtv, acc, omm, rq, bda, dflt =
+        let f, pm, memp, ycbcr, cbc, s8, s16, f16i8, vp, sdp, idx, psub, rtp, rtpos, rtir, rtv, acc, omm, rq, bda, dflt =
             use chain = new VkStructChain()
             let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
             let pMemPrior   = chain.Add<VkPhysicalDeviceMemoryPriorityFeaturesEXT>             (hasExtension EXTMemoryPriority.Name)
@@ -85,6 +86,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             let pVarPtrs    = chain.Add<VkPhysicalDeviceVariablePointersFeatures>()
             let pDrawParams = chain.Add<VkPhysicalDeviceShaderDrawParametersFeatures>()
             let pIdx        = chain.Add<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>         (hasExtension EXTDescriptorIndexing.Name)
+            let pPSub       = chain.Add<VkPhysicalDevicePortabilitySubsetFeaturesKHR>          (hasExtension KHRPortabilitySubset.Name)
             let pRTP        = chain.Add<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>         (hasExtension KHRRayTracingPipeline.Name)
             let pRTPos      = chain.Add<VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR>    (hasExtension KHRRayTracingPositionFetch.Name)
             let pRTIR       = chain.Add<VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV> (hasExtension NVRayTracingInvocationReorder.Name)
@@ -98,22 +100,35 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
 
             VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
 
+            let psub =
+                // If the VK_KHR_portability_subset extension is not supported we have a
+                // fully conformant implementation (e.g., all the features are supported)
+                if NativePtr.isNull pPSub then
+                    VkPhysicalDevicePortabilitySubsetFeaturesKHR(
+                        VkTrue, VkTrue, VkTrue, VkTrue, VkTrue,
+                        VkTrue, VkTrue, VkTrue, VkTrue, VkTrue,
+                        VkTrue, VkTrue, VkTrue, VkTrue, VkTrue
+                    )
+                else
+                    !!pPSub
+
             (!!pFeatures).features, !!pMem, NativePtr.readOrEmpty pMemPrior, !!pYcbcr, NativePtr.readOrEmpty pCbc,
             NativePtr.readOrEmpty p8bit, !!p16bit, NativePtr.readOrEmpty pf16i8,
-            !!pVarPtrs, !!pDrawParams, NativePtr.readOrEmpty pIdx, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTPos,
+            !!pVarPtrs, !!pDrawParams, NativePtr.readOrEmpty pIdx, psub, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTPos,
             NativePtr.readOrEmpty pRTIR, NativePtr.readOrEmpty pRTV, NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pOmm, NativePtr.readOrEmpty pRQ,
             NativePtr.readOrEmpty pDevAddr, NativePtr.readOrEmpty pDevFault
 
-        f |> DeviceFeatures.create pm memp ycbcr cbc s8 s16 f16i8 vp sdp idx rtp rtpos rtir rtv acc omm rq bda dflt
+        f |> DeviceFeatures.create pm memp ycbcr cbc s8 s16 f16i8 vp sdp idx psub rtp rtpos rtir rtv acc omm rq bda dflt
 
     let features =
         queryFeatures hasExtension
 
     let properties =
-        let properties, main, devId, cbc, rtp, rtir, acc, omm =
+        let properties, main, devId, psub, cbc, rtp, rtir, acc, omm =
             use chain = new VkStructChain()
             let pMain       = chain.Add<VkPhysicalDeviceMaintenance3Properties>()
             let pDevId      = chain.Add<VkPhysicalDeviceIDPropertiesKHR>()
+            let pPSub       = chain.Add<VkPhysicalDevicePortabilitySubsetPropertiesKHR>          (hasExtension KHRPortabilitySubset.Name)
             let pCbc        = chain.Add<VkPhysicalDeviceCustomBorderColorPropertiesEXT>          (hasExtension EXTCustomBorderColor.Name)
             let pRTP        = chain.Add<VkPhysicalDeviceRayTracingPipelinePropertiesKHR>         (hasExtension KHRRayTracingPipeline.Name)
             let pRTIR       = chain.Add<VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV> (hasExtension NVRayTracingInvocationReorder.Name)
@@ -124,7 +139,9 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             VkRaw.vkGetPhysicalDeviceProperties2(handle, VkStructChain.toNativePtr chain)
 
             (!!pProperties).properties, !!pMain, !!pDevId,
-            NativePtr.readOrEmpty pCbc, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTIR, NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pOmm
+            NativePtr.readOrEmpty pPSub,
+            NativePtr.readOrEmpty pCbc, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTIR,
+            NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pOmm
 
         {
             Name          = properties.deviceName.Value
@@ -134,7 +151,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             DriverVersion = Version.FromVulkan properties.driverVersion
             UniqueId      = sprintf "{ GUID = %A; Mask = %d }" devId.deviceUUID devId.deviceNodeMask
             NodeMask      = if devId.deviceLUIDValid = VkTrue then devId.deviceNodeMask else 1u
-            Limits        = properties.limits |> DeviceLimits.create main cbc rtp rtir acc omm
+            Limits        = properties.limits |> DeviceLimits.create main psub cbc rtp rtir acc omm
         }
 
     let queueFamilyInfos =
@@ -263,6 +280,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
 
     member x.AvailableLayers = availableLayers
     member x.GlobalExtensions : ExtensionInfo[] = globalExtensions
+    member x.HasExtension name = globalExtensions |> Array.exists (_.name >> (=) name)
     member x.QueueFamilies = queueFamilyInfos
     member x.MemoryTypes = memoryTypes
     member x.MemoryHeaps = memoryHeaps
