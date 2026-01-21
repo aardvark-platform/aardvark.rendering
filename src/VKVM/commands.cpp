@@ -14,21 +14,21 @@ typedef struct {
 	VkPipeline CurrentPipeline;
 } CommandState;
 
-static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, CommandType op, void* data)
+static void enqueueCommand (const VKVM* pVkvm, CommandState* state, VkCommandBuffer buffer, CommandType op, void* data)
 {
 	VkPipeline pipe;
 
 	switch (op)
 	{
 	case CmdBindPipeline:
-		vkCmdBindPipeline(
+		pVkvm->vkCmdBindPipeline(
 			buffer,
 			get(BindPipeline, data)->PipelineBindPoint,
 			get(BindPipeline, data)->Pipeline
 		);
 		break;
 	case CmdSetViewport:
-		vkCmdSetViewport(
+		pVkvm->vkCmdSetViewport(
 			buffer,
 			get(SetViewport, data)->FirstViewport,
 			get(SetViewport, data)->ViewportCount,
@@ -36,7 +36,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdSetScissor:
-		vkCmdSetScissor(
+		pVkvm->vkCmdSetScissor(
 			buffer,
 			get(SetScissor, data)->FirstScissor,
 			get(SetScissor, data)->ScissorCount,
@@ -44,13 +44,13 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdSetLineWidth:
-		vkCmdSetLineWidth(
+		pVkvm->vkCmdSetLineWidth(
 			buffer,
 			get(SetLineWidth, data)->LineWidth
 		);
 		break;
 	case CmdSetDepthBias:
-		vkCmdSetDepthBias(
+		pVkvm->vkCmdSetDepthBias(
 			buffer,
 			get(SetDepthBias, data)->DepthBiasConstantFactor,
 			get(SetDepthBias, data)->DepthBiasClamp,
@@ -58,41 +58,41 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdSetBlendConstants:
-		vkCmdSetBlendConstants(
+		pVkvm->vkCmdSetBlendConstants(
 			buffer,
 			get(SetBlendConstants, data)->BlendConstants
 		);
 		break;
 	case CmdSetDepthBounds:
-		vkCmdSetDepthBounds(
+		pVkvm->vkCmdSetDepthBounds(
 			buffer,
 			get(SetDepthBounds, data)->MinDepth,
 			get(SetDepthBounds, data)->MaxDepth
 		);
 		break;
 	case CmdSetStencilCompareMask:
-		vkCmdSetStencilCompareMask(
+		pVkvm->vkCmdSetStencilCompareMask(
 			buffer,
 			get(SetStencilCompareMask, data)->FaceMask,
 			get(SetStencilCompareMask, data)->CompareMask
 		);
 		break;
 	case CmdSetStencilWriteMask:
-		vkCmdSetStencilWriteMask(
+		pVkvm->vkCmdSetStencilWriteMask(
 			buffer,
 			get(SetStencilWriteMask, data)->FaceMask,
 			get(SetStencilWriteMask, data)->WriteMask
 		);
 		break;
 	case CmdSetStencilReference:
-		vkCmdSetStencilReference(
+		pVkvm->vkCmdSetStencilReference(
 			buffer,
 			get(SetStencilReference, data)->FaceMask,
 			get(SetStencilReference, data)->Reference
 		);
 		break;
 	case CmdBindDescriptorSets:
-		vkCmdBindDescriptorSets(
+		pVkvm->vkCmdBindDescriptorSets(
 			buffer,
 			get(BindDescriptorSets, data)->PipelineBindPoint,
 			get(BindDescriptorSets, data)->Layout,
@@ -104,7 +104,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdBindIndexBuffer:
-		vkCmdBindIndexBuffer(
+		pVkvm->vkCmdBindIndexBuffer(
 			buffer,
 			get(BindIndexBuffer, data)->Buffer,
 			get(BindIndexBuffer, data)->Offset,
@@ -112,7 +112,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdBindVertexBuffers:
-		vkCmdBindVertexBuffers(
+		pVkvm->vkCmdBindVertexBuffers(
 			buffer,
 			get(BindVertexBuffers, data)->FirstBinding,
 			get(BindVertexBuffers, data)->BindingCount,
@@ -121,7 +121,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdDraw:
-		vkCmdDraw(
+		pVkvm->vkCmdDraw(
 			buffer,
 			get(Draw, data)->VertexCount,
 			get(Draw, data)->InstanceCount,
@@ -130,7 +130,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdDrawIndexed:
-		vkCmdDrawIndexed(
+		pVkvm->vkCmdDrawIndexed(
 			buffer,
 			get(DrawIndexed, data)->IndexCount,
 			get(DrawIndexed, data)->InstanceCount,
@@ -140,7 +140,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdDrawIndirect:
-		vkCmdDrawIndirect(
+		pVkvm->vkCmdDrawIndirect(
 			buffer,
 			get(DrawIndirect, data)->Buffer,
 			get(DrawIndirect, data)->Offset,
@@ -149,7 +149,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdDrawIndexedIndirect:
-		vkCmdDrawIndexedIndirect(
+		pVkvm->vkCmdDrawIndexedIndirect(
 			buffer,
 			get(DrawIndexedIndirect, data)->Buffer,
 			get(DrawIndexedIndirect, data)->Offset,
@@ -158,7 +158,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdDispatch:
-		vkCmdDispatch(
+		pVkvm->vkCmdDispatch(
 			buffer,
 			get(Dispatch, data)->GroupCountX,
 			get(Dispatch, data)->GroupCountY,
@@ -166,14 +166,14 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdDispatchIndirect:
-		vkCmdDispatchIndirect(
+		pVkvm->vkCmdDispatchIndirect(
 			buffer,
 			get(DispatchIndirect, data)->Buffer,
 			get(DispatchIndirect, data)->Offset
 		);
 		break;
 	case CmdCopyBuffer:
-		vkCmdCopyBuffer(
+		pVkvm->vkCmdCopyBuffer(
 			buffer,
 			get(CopyBuffer, data)->SrcBuffer,
 			get(CopyBuffer, data)->DstBuffer,
@@ -182,7 +182,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdCopyImage:
-		vkCmdCopyImage(
+		pVkvm->vkCmdCopyImage(
 			buffer,
 			get(CopyImage, data)->SrcImage,
 			get(CopyImage, data)->SrcImageLayout,
@@ -193,7 +193,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdBlitImage:
-		vkCmdBlitImage(
+		pVkvm->vkCmdBlitImage(
 			buffer,
 			get(BlitImage, data)->SrcImage,
 			get(BlitImage, data)->SrcImageLayout,
@@ -205,7 +205,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdCopyBufferToImage:
-		vkCmdCopyBufferToImage(
+		pVkvm->vkCmdCopyBufferToImage(
 			buffer,
 			get(CopyBufferToImage, data)->SrcBuffer,
 			get(CopyBufferToImage, data)->DstImage,
@@ -215,7 +215,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdCopyImageToBuffer:
-		vkCmdCopyImageToBuffer(
+		pVkvm->vkCmdCopyImageToBuffer(
 			buffer,
 			get(CopyImageToBuffer, data)->SrcImage,
 			get(CopyImageToBuffer, data)->SrcImageLayout,
@@ -225,7 +225,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdUpdateBuffer:
-		vkCmdUpdateBuffer(
+		pVkvm->vkCmdUpdateBuffer(
 			buffer,
 			get(UpdateBuffer, data)->DstBuffer,
 			get(UpdateBuffer, data)->DstOffset,
@@ -234,7 +234,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdFillBuffer:
-		vkCmdFillBuffer(
+		pVkvm->vkCmdFillBuffer(
 			buffer,
 			get(FillBuffer, data)->DstBuffer,
 			get(FillBuffer, data)->DstOffset,
@@ -243,7 +243,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdClearColorImage:
-		vkCmdClearColorImage(
+		pVkvm->vkCmdClearColorImage(
 			buffer,
 			get(ClearColorImage, data)->Image,
 			get(ClearColorImage, data)->ImageLayout,
@@ -253,7 +253,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdClearDepthStencilImage:
-		vkCmdClearDepthStencilImage(
+		pVkvm->vkCmdClearDepthStencilImage(
 			buffer,
 			get(ClearDepthStencilImage, data)->Image,
 			get(ClearDepthStencilImage, data)->ImageLayout,
@@ -263,7 +263,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdClearAttachments:
-		vkCmdClearAttachments(
+		pVkvm->vkCmdClearAttachments(
 			buffer,
 			get(ClearAttachments, data)->AttachmentCount,
 			getptr(ClearAttachments, Attachments, VkClearAttachment),
@@ -272,7 +272,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdResolveImage:
-		vkCmdResolveImage(
+		pVkvm->vkCmdResolveImage(
 			buffer,
 			get(ResolveImage, data)->SrcImage,
 			get(ResolveImage, data)->SrcImageLayout,
@@ -283,21 +283,21 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdSetEvent:
-		vkCmdSetEvent(
+		pVkvm->vkCmdSetEvent(
 			buffer,
 			get(SetEvent, data)->Event,
 			get(SetEvent, data)->StageMask
 		);
 		break;
 	case CmdResetEvent:
-		vkCmdResetEvent(
+		pVkvm->vkCmdResetEvent(
 			buffer,
 			get(ResetEvent, data)->Event,
 			get(ResetEvent, data)->StageMask
 		);
 		break;
 	case CmdWaitEvents:
-		vkCmdWaitEvents(
+		pVkvm->vkCmdWaitEvents(
 			buffer,
 			get(WaitEvents, data)->EventCount,
 			get(WaitEvents, data)->Events,
@@ -312,7 +312,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdPipelineBarrier:
-		vkCmdPipelineBarrier(
+		pVkvm->vkCmdPipelineBarrier(
 			buffer,
 			get(PipelineBarrier, data)->SrcStageMask,
 			get(PipelineBarrier, data)->DstStageMask,
@@ -326,7 +326,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdBeginQuery:
-		vkCmdBeginQuery(
+		pVkvm->vkCmdBeginQuery(
 			buffer,
 			get(BeginQuery, data)->QueryPool,
 			get(BeginQuery, data)->Query,
@@ -334,14 +334,14 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdEndQuery:
-		vkCmdEndQuery(
+		pVkvm->vkCmdEndQuery(
 			buffer,
 			get(EndQuery, data)->QueryPool,
 			get(EndQuery, data)->Query
 		);
 		break;
 	case CmdResetQueryPool:
-		vkCmdResetQueryPool(
+		pVkvm->vkCmdResetQueryPool(
 			buffer,
 			get(ResetQueryPool, data)->QueryPool,
 			get(ResetQueryPool, data)->FirstQuery,
@@ -349,7 +349,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdWriteTimestamp:
-		vkCmdWriteTimestamp(
+		pVkvm->vkCmdWriteTimestamp(
 			buffer,
 			get(WriteTimestamp, data)->PipelineStage,
 			get(WriteTimestamp, data)->QueryPool,
@@ -357,7 +357,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdCopyQueryPoolResults:
-		vkCmdCopyQueryPoolResults(
+		pVkvm->vkCmdCopyQueryPoolResults(
 			buffer,
 			get(CopyQueryPoolResults, data)->QueryPool,
 			get(CopyQueryPoolResults, data)->FirstQuery,
@@ -369,7 +369,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdPushConstants:
-		vkCmdPushConstants(
+		pVkvm->vkCmdPushConstants(
 			buffer,
 			get(PushConstants, data)->Layout,
 			get(PushConstants, data)->StageFlags,
@@ -379,23 +379,23 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		);
 		break;
 	case CmdBeginRenderPass:
-		vkCmdBeginRenderPass(
+		pVkvm->vkCmdBeginRenderPass(
 			buffer,
 			getptr(BeginRenderPass, RenderPassBegin, VkRenderPassBeginInfo),
 			get(BeginRenderPass, data)->Contents
 		);
 		break;
 	case CmdNextSubpass:
-		vkCmdNextSubpass(
+		pVkvm->vkCmdNextSubpass(
 			buffer,
 			get(NextSubpass, data)->Contents
 		);
 		break;
 	case CmdEndRenderPass:
-		vkCmdEndRenderPass(buffer);
+		pVkvm->vkCmdEndRenderPass(buffer);
 		break;
 	case CmdExecuteCommands:
-		vkCmdExecuteCommands(
+		pVkvm->vkCmdExecuteCommands(
 			buffer,
 			get(ExecuteCommands, data)->CommandBufferCount,
 			getptr(ExecuteCommands, CommandBuffers, VkCommandBuffer)
@@ -403,7 +403,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		break;
 
 	case CmdCallFragment:
-		vmRun(buffer, get(CallFragment, data)->FragmentToCall);
+		vmRun(pVkvm, buffer, get(CallFragment, data)->FragmentToCall);
 		break;
 
 	case CmdCustom:
@@ -414,7 +414,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		pipe = *get(IndirectBindPipeline, data)->Pipeline;
 		if (state->CurrentPipeline != pipe) {
 			state->CurrentPipeline = pipe;
-			vkCmdBindPipeline(
+			pVkvm->vkCmdBindPipeline(
 				buffer,
 				get(IndirectBindPipeline, data)->PipelineBindPoint,
 				pipe
@@ -423,24 +423,28 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		break;
 	case CmdIndirectBindDescriptorSets:
 		vmBindDescriptorSets(
+			pVkvm,
 			buffer,
 			get(IndirectBindDescriptorSets, data)->Binding
 		);
 		break;
 	case CmdIndirectBindIndexBuffer:
 		vmBindIndexBuffer(
+			pVkvm,
 			buffer,
 			get(IndirectBindIndexBuffer, data)->Binding
 		);
 		break;
 	case CmdIndirectBindVertexBuffers:
 		vmBindVertexBuffers(
+			pVkvm,
 			buffer,
 			get(IndirectBindVertexBuffers, data)->Binding
 		);
 		break;
 	case CmdIndirectDraw:
 		vmDraw(
+			pVkvm,
 			buffer,
 			get(IndirectDraw, data)->Stats,
 			get(IndirectDraw, data)->IsActive,
@@ -457,7 +461,7 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 #undef get
 #undef getptr
 
-DllExport(void) vmRun(VkCommandBuffer buffer, CommandFragment* fragment)
+DllExport(void) vmRun(const VKVM* pVkvm, VkCommandBuffer buffer, CommandFragment* fragment)
 {
 #ifdef _DEBUG
 	std::unordered_set<CommandFragment*> set;
@@ -481,7 +485,7 @@ DllExport(void) vmRun(VkCommandBuffer buffer, CommandFragment* fragment)
 			auto length = *(uint32_t*)(ptr);
 			auto op = *(CommandType*)(ptr + 4);
 
-			enqueueCommand(&state, buffer, op, (void*)ptr);
+			enqueueCommand(pVkvm, &state, buffer, op, (void*)ptr);
 
 			ptr = ptr + length;
 		}

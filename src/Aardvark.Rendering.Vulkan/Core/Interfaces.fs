@@ -3,6 +3,7 @@
 open System
 
 type IDevice =
+    abstract member VKVM : VKVM
     abstract member Handle : VkDevice
     abstract member Instance : Instance
     abstract member PhysicalDevice : PhysicalDevice

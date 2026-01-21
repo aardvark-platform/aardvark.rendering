@@ -33,7 +33,7 @@ type IDeviceMemory =
                                   [<Optional; DefaultParameterValue(true)>] bind: bool *
                                   [<Optional; DefaultParameterValue(false)>] mayAlias: bool -> struct (VkImage * DevicePtr)
 
-type internal MemoryAllocator (device: IDevice) =
+type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativeint, pVkGetDeviceProcAddr: nativeint) =
     let mutable allocator = VmaAllocator.Zero
     do
         let flags =
@@ -58,12 +58,18 @@ type internal MemoryAllocator (device: IDevice) =
             ]
             |> List.fold (|||) VmaAllocatorCreateFlags.None
 
+        let mutable vulkanFunctions =
+            { VmaVulkanFunctions.Empty with
+                vkGetDeviceProcAddr   = pVkGetDeviceProcAddr
+                vkGetInstanceProcAddr = pVkGetInstanceProcAddr  }
+
         let mutable createInfo =
             { VmaAllocatorCreateInfo.Empty with
                 instance         = device.Instance.Handle
                 physicalDevice   = device.PhysicalDevice.Handle
                 device           = device.Handle
                 vulkanApiVersion = device.Instance.APIVersion.ToVulkan()
+                pVulkanFunctions = &&vulkanFunctions
                 flags            = flags }
 
         Vma.createAllocator(&&createInfo, &&allocator)

@@ -163,6 +163,7 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
     let mutable computeFamily : DeviceQueueFamily option = None
     let mutable transferFamily : DeviceQueueFamily option = None
 
+    let mutable vkvm : VKVM = Unchecked.defaultof<_>
     let mutable memoryAllocator : MemoryAllocator = Unchecked.defaultof<_>
     let mutable hostMemory : IDeviceMemory = Unchecked.defaultof<_>
     let mutable deviceMemory : IDeviceMemory = Unchecked.defaultof<_>
@@ -191,11 +192,23 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
         computeFamily <- computeFamilyInfo |> Option.map getFamily
         transferFamily <- transferFamilyInfo |> Option.map getFamily
 
-        memoryAllocator <- new MemoryAllocator(this)
+        let loadVulkanProc =
+            let lib = Aardvark.LoadLibrary("vulkan-1", typeof<VKVM.CommandStream>.Assembly)
+            fun (name: string) ->
+                let addr = Aardvark.GetProcAddress(lib, name)
+                if addr = 0n then failf $"Could not get address of function '{name}'"
+                addr
+
+        let pVkGetInstanceProcAddr = loadVulkanProc "vkGetInstanceProcAddr"
+        let pVkGetDeviceProcAddr = loadVulkanProc "vkGetDeviceProcAddr"
+
+        memoryAllocator <- new MemoryAllocator(this, pVkGetInstanceProcAddr, pVkGetDeviceProcAddr)
         hostMemory <- memoryAllocator.GetMemory(preferDevice = true, hostAccess = HostAccess.WriteOnly)
         deviceMemory <- memoryAllocator.GetMemory(preferDevice = true, hostAccess = HostAccess.None)
         stagingMemory <- memoryAllocator.GetMemory(preferDevice = false, hostAccess = HostAccess.WriteOnly)
         readbackMemory <- memoryAllocator.GetMemory(preferDevice = false, hostAccess = HostAccess.ReadWrite)
+
+        vkvm <- new VKVM(device, pVkGetDeviceProcAddr)
 
     static member Create(physicalDevice: PhysicalDevice, wantedExtensions: string seq, selectFeatures: DeviceFeatures -> DeviceFeatures) =
         let device = new Device(physicalDevice, wantedExtensions, selectFeatures)
@@ -311,21 +324,23 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
     member x.OnDispose = onDisposeObservable :> IObservable<_>
 
     member x.Dispose() =
-        if not instance.IsDisposed then
-            let o = Interlocked.Exchange(&isDisposed, 1)
-            if o = 0 then 
-                if copyEngine.IsValueCreated then
-                    copyEngine.Value.Dispose()
+        if not instance.IsDisposed && Interlocked.Exchange(&isDisposed, 1) = 0 then
+            if copyEngine.IsValueCreated then
+                copyEngine.Value.Dispose()
 
-                onDispose.Trigger()
-                memoryAllocator.Dispose()
-                for f in queueFamilies do f.Dispose()
-                VkRaw.vkDestroyDevice(device, NativePtr.zero)
-                device <- VkDevice.Zero
+            onDispose.Trigger()
+            memoryAllocator.Dispose()
+            for f in queueFamilies do f.Dispose()
+            VkRaw.vkDestroyDevice(device, NativePtr.zero)
+            device <- VkDevice.Zero
 
-                if queueFamilies.Length > 0 then
-                    NativePtr.free pAllQueueFamilyIndices
+            if queueFamilies.Length > 0 then
+                NativePtr.free pAllQueueFamilyIndices
 
+            vkvm.Dispose()
+            vkvm <- Unchecked.defaultof<_>
+
+    member x.VKVM = vkvm
     member x.Handle = device
 
     member x.PhysicalDevice = physicalDevice
@@ -337,6 +352,7 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
         memoryAllocator.PrintUsage verbosity
 
     interface IDevice with
+        member x.VKVM = x.VKVM
         member x.Handle = x.Handle
         member x.Instance = x.Instance
         member x.PhysicalDevice = x.PhysicalDevice

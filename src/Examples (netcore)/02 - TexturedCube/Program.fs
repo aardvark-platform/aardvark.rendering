@@ -35,9 +35,9 @@ let main argv =
 
     // show the scene in a simple window
     show {
-        backend Backend.GL
+        backend Backend.Vulkan
         display Display.Mono
-        debug false
+        debug true
         samples 8
         scene sg
     }
