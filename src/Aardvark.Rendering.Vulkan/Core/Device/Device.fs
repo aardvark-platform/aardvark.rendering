@@ -79,10 +79,16 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
         ]
 
     let wantedExtensions =
-        if instance.DebugConfig.DebugPrintEnabled || instance.DebugConfig.GenerateShaderDebugInfo then
-            List.ofSeq wantedExtensions @ [KHRShaderNonSemanticInfo.Name]
-        else
-            List.ofSeq wantedExtensions
+        [
+            yield! wantedExtensions
+
+            // if the device supports VK_KHR_portability_subset, it must be enabled
+            if physicalDevice.HasExtension KHRPortabilitySubset.Name then
+                yield KHRPortabilitySubset.Name
+
+            if instance.DebugConfig.DebugPrintEnabled || instance.DebugConfig.GenerateShaderDebugInfo then
+                yield KHRShaderNonSemanticInfo.Name
+        ]
 
     let enabledExtensions =
         let availableExtensions = physicalDevice.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
@@ -103,8 +109,10 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
 
         enabledExtensions
 
+    let isExtensionEnabled = flip List.contains enabledExtensions
+
     let enabledFeatures =
-        physicalDevice.GetFeatures(flip List.contains enabledExtensions)
+        physicalDevice.GetFeatures(isExtensionEnabled)
         |> selectFeatures
 
     let mutable isDisposed = 0
@@ -138,7 +146,8 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
                 )
 
             use pNext =
-                DeviceFeatures.toNativeChain enabledFeatures
+                enabledFeatures
+                |> DeviceFeatures.toNativeChain isExtensionEnabled
                 |> if isGroup then VkStructChain.add groupInfo else id
 
             let! pInfo =
@@ -259,8 +268,7 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
 
     member x.EnabledExtensions = enabledExtensions
 
-    member x.IsExtensionEnabled(extension) =
-        enabledExtensions |> List.contains extension
+    member x.IsExtensionEnabled(extension) = isExtensionEnabled extension
 
     /// Returns whether descriptors may be updated after being bound.
     member x.UpdateDescriptorsAfterBind =

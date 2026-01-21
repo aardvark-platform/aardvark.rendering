@@ -234,16 +234,20 @@ type VertexLimits =
         /// the maximum vertex input binding stride that can be specified in a vertex input binding.
         MaxInputBindingStride : uint
 
+        /// the minimum alignment for vertex input strides.
+        MinInputBindingStrideAlignment : uint
+
         /// the maximum number of components of output variables which can be output by a vertex shader.
         MaxOutputComponents : uint
     }
 
     member internal x.Print(l : ILogger) =
-        l.line "max in attributes:  %d" x.MaxInputAttributes
-        l.line "max in bindings:    %d" x.MaxInputBindings
-        l.line "max in offset:      %d" x.MaxInputAttributeOffset
-        l.line "max in stride:      %d" x.MaxInputBindingStride
-        l.line "max out components: %d" x.MaxOutputComponents
+        l.line "max in attributes:       %d" x.MaxInputAttributes
+        l.line "max in bindings:         %d" x.MaxInputBindings
+        l.line "max in offset:           %d" x.MaxInputAttributeOffset
+        l.line "max in stride:           %d" x.MaxInputBindingStride
+        l.line "min in stride alignment: %d" x.MinInputBindingStrideAlignment
+        l.line "max out components:      %d" x.MaxOutputComponents
 
 type TessControlLimits =
     {
@@ -371,16 +375,16 @@ type ComputeLimits =
 
 type ShaderLimits =
     {
-        /// the minimum offset value for the ConstOffset image operand of any of the OpImageSample* or OpImageFetch* image instructions.
+        /// the minimum offset value for the ConstOffset image operand of the OpImageSample* or OpImageFetch* image instructions.
         MinTexelOffset : int
 
-        /// the maximum offset value for the ConstOffset image operand of any of the OpImageSample* or OpImageFetch* image instructions.
+        /// the maximum offset value for the ConstOffset image operand of the OpImageSample* or OpImageFetch* image instructions.
         MaxTexelOffset : int
 
-        /// the minimum offset value for the Offset or ConstOffsets image operands of any of the OpImage*Gather image instructions.
+        /// the minimum offset value for the Offset or ConstOffsets image operands of the OpImage*Gather image instructions.
         MinTexelGatherOffset : int
 
-        /// the maximum offset value for the Offset or ConstOffsets image operands of any of the OpImage*Gather image instructions.
+        /// the maximum offset value for the Offset or ConstOffsets image operands of the OpImage*Gather image instructions.
         MaxTexelGatherOffset : int
 
         /// the minimum negative offset value for the offset operand of the InterpolateAtOffset extended instruction.
@@ -680,9 +684,11 @@ module DeviceLimits =
     open KHRRayTracingPipeline
     open KHRAccelerationStructure
     open KHRMaintenance3
+    open KHRPortabilitySubset
     open NVRayTracingInvocationReorder
 
     let create (maintenance3Properties : VkPhysicalDeviceMaintenance3PropertiesKHR)
+               (psubProperties : VkPhysicalDevicePortabilitySubsetPropertiesKHR)
                (cbcProperties : VkPhysicalDeviceCustomBorderColorPropertiesEXT)
                (rtpProperties : VkPhysicalDeviceRayTracingPipelinePropertiesKHR)
                (rtirProperties : VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV)
@@ -764,11 +770,12 @@ module DeviceLimits =
 
             Vertex =
                 {
-                    MaxInputAttributes      = limits.maxVertexInputAttributes
-                    MaxInputBindings        = limits.maxVertexInputBindings
-                    MaxInputAttributeOffset = limits.maxVertexInputAttributeOffset
-                    MaxInputBindingStride   = limits.maxVertexInputBindingStride
-                    MaxOutputComponents     = limits.maxVertexOutputComponents
+                    MaxInputAttributes             = limits.maxVertexInputAttributes
+                    MaxInputBindings               = limits.maxVertexInputBindings
+                    MaxInputAttributeOffset        = limits.maxVertexInputAttributeOffset
+                    MaxInputBindingStride          = limits.maxVertexInputBindingStride
+                    MinInputBindingStrideAlignment = psubProperties.minVertexInputBindingStrideAlignment
+                    MaxOutputComponents            = limits.maxVertexOutputComponents
                 }
 
             Tessellation =
