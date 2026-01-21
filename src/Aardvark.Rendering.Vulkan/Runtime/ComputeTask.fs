@@ -559,7 +559,7 @@ module internal ComputeTaskInternals =
             { new IPreparedCommand with
                 member x.Run(_,_, _) = () }
 
-        let ofCompiled (getSecondaryCommandBuffer : unit -> CommandBuffer) (taskName : string) = function
+        let ofCompiled (vkvm : VKVM) (getSecondaryCommandBuffer : unit -> CommandBuffer) (taskName : string) = function
             | CompiledCommand.Host (HostCommand.Upload (src, dst, dstOffset, size)) ->
                 UploadCmd(src, dst, dstOffset, uint64 size) :> IPreparedCommand
 
@@ -576,7 +576,7 @@ module internal ComputeTaskInternals =
                     let inner = getSecondaryCommandBuffer()
                     inner.Begin(CommandBufferUsage.None, true)
                     inner.AppendCommand()
-                    stream.Run(inner.Handle)
+                    vkvm.Run(inner.Handle, stream)
                     inner.End()
 
                     DeviceCmd(inner, taskName) :> IPreparedCommand
@@ -636,7 +636,7 @@ module internal ComputeTaskInternals =
                         secondaryAvailable.Enqueue cmd
 
                     for c in compiler.State.Commands do
-                        let p = c |> PreparedCommand.ofCompiled getSecondaryCommandBuffer this.Name
+                        let p = c |> PreparedCommand.ofCompiled device.VKVM getSecondaryCommandBuffer this.Name
                         prepared.Add p
 
                 action()

@@ -2266,7 +2266,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                 }
 
                 inner.AppendCommand()
-                compiled.Stream.Run(inner.Handle)
+                device.VKVM.Run(inner.Handle, compiled.Stream)
 
                 inner.End()
 

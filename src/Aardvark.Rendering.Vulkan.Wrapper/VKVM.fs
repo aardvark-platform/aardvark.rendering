@@ -3,6 +3,7 @@
 open System
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
+open System.Security
 open Aardvark.Base
 open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
@@ -133,7 +134,7 @@ module IndirectCommands =
                 { Buffer = buffer; Offset = offset; Type = indexType }
         end
 
-module VKVM = 
+module VKVM =
 
     type CommandFragment =
         struct
@@ -732,10 +733,17 @@ module VKVM =
                 val mutable public Calls : nativeptr<DrawCall>
             end
 
-    [<AutoOpen>]
-    module VM =
+    [<SuppressUnmanagedCodeSecurity>]
+    module internal Native =
+
         [<DllImport("vkvm")>]
-        extern void vmRun(VkCommandBuffer cmd, CommandFragment* fragment)
+        extern bool vmInit(VkDevice device, nativeint pVkGetDeviceProcAddr, nativeint* pVkvm)
+
+        [<DllImport("vkvm")>]
+        extern void vmFree(nativeint vkvm)
+
+        [<DllImport("vkvm")>]
+        extern void vmRun(nativeint vkvm, VkCommandBuffer cmd, CommandFragment* fragment)
 
     [<AutoOpen>]
     module private Helpers =
@@ -1649,10 +1657,6 @@ module VKVM =
 
         member x.Handle = handle
 
-
-        member x.Run(cmd : VkCommandBuffer) =
-            VM.vmRun(cmd, handle)
-
         interface IDisposable with
             member x.Dispose() = x.Dispose()
    
@@ -1664,3 +1668,18 @@ module VKVM =
             member x.Next
                 with get() = x.Next
                 and set n = x.Next <- n
+
+type VKVM(device: VkDevice, pVkGetDeviceProcAddr: nativeint) =
+    let mutable handle = 0n
+    do if not <| VKVM.Native.vmInit(device, pVkGetDeviceProcAddr, &&handle) then
+        failwith "[Vulkan] Failed to initialize VKVM."
+
+    member _.Run(buffer: VkCommandBuffer, stream: VKVM.CommandStream) =
+        VKVM.Native.vmRun(handle, buffer, stream.Handle)
+
+    member _.Dispose() =
+        VKVM.Native.vmFree handle
+        handle <- 0n
+
+    interface IDisposable with
+        member this.Dispose() = this.Dispose()

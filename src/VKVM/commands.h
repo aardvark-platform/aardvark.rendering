@@ -495,5 +495,4 @@ typedef struct {
 } Command;
 */
 
-DllExport(void) vmRun(VkCommandBuffer buffer, CommandFragment* fragment);
-
+DllExport(void) vmRun(const VKVM* pVkvm, VkCommandBuffer buffer, CommandFragment* fragment);
