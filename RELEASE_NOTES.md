@@ -1,8 +1,10 @@
+### 5.6.2
 - Added support for enum types as vertex and instance attributes
 - Implemented download / upload for PixImage as 3D slices
 - Improved support for non-2D framebuffer outputs
 - [GL] Create debug context when debug output is enabled
 - [GL] Fixed issue with clearing textures with unsigned integer formats
+- [Vulkan] Fixed regression with swapchain creation
 
 ### 5.6.1
 - [GeometryPool] culling shader workaround (FShade write bug)
