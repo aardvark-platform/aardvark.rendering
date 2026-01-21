@@ -178,9 +178,9 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
     let update() =
         if surface.Handle.IsValid && disposed = 0 then
             let newSize =
-                let surfaceSize = surface.Size
-                let currentSize = if surfaceSize <> V2i.Zero then surfaceSize else initialSize
-                currentSize |> clamp surface.MinSize surface.MaxSize
+                let extent = surface.Extent
+                let currentSize = if extent.Current <> V2i.Zero then extent.Current else initialSize
+                currentSize |> clamp extent.Min extent.Max
 
             if newSize <> size || handle.IsNull then
                 // delete old things

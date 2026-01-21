@@ -109,7 +109,7 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
     let getSurfaceCaps() =
         let mutable result = VkSurfaceCapabilitiesKHR.Empty
 
-        if supported = VkTrue then
+        if supported = VkTrue && handle.IsValid then
             use ptr = fixed &result
             VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.Handle, handle, ptr)
                 |> check "could not get Surface capabilities"
@@ -121,20 +121,17 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
 
         result
 
-    let toInt =
-        min <| (uint32 Int32.MaxValue) >> int
+    let toInt (value: uint32) = value |> min (uint32 Int32.MaxValue) |> int
+    let toInt2D (value: VkExtent2D) = V2i(toInt value.width, toInt value.height)
 
     let surfaceCaps = getSurfaceCaps()
 
     let supportedTransforms = unbox<VkSurfaceTransformFlagsKHR> (int surfaceCaps.supportedTransforms) |> VkSurfaceTransformFlagsKHR.toImageTrafos
     let supportedCompositeAlpha = unbox<VkCompositeAlphaFlagsKHR> (int surfaceCaps.supportedCompositeAlpha)
     let supportedUsage = surfaceCaps.supportedUsageFlags
-    let minSize = V2i(toInt surfaceCaps.minImageExtent.width, toInt surfaceCaps.minImageExtent.height)
-    let maxSize = V2i(toInt surfaceCaps.maxImageExtent.width, toInt surfaceCaps.maxImageExtent.height)
     let maxSlices = toInt surfaceCaps.maxImageArrayLayers
     let minImageCount = toInt surfaceCaps.minImageCount
     let maxImageCount = toInt surfaceCaps.maxImageCount
-
 
     let presentModes =
         if supported = 0u then
@@ -187,22 +184,29 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
     member x.Transforms = supportedTransforms
     member x.CompositeAlpha = supportedCompositeAlpha
     member x.Usage = supportedUsage
-    member x.MinSize = minSize
-    member x.MaxSize = maxSize
     member x.MaxArraySlices = maxSlices
     member x.MinImageCount = minImageCount
     member x.MaxImageCount = maxImageCount
 
-    member x.Size =
-        if supported <> 0u && handle.IsValid then
-            let surfaceCaps = getSurfaceCaps()
-            let size = V2ui(surfaceCaps.currentExtent.width, surfaceCaps.currentExtent.height)
-            if size <> V2ui(0xFFFFFFFFu) then
-                V2i(toInt size.X, toInt size.Y)
-            else
+    member x.Extent =
+        let caps = getSurfaceCaps()
+
+        let current =
+            if caps.currentExtent.width = 0xFFFFFFFFu && caps.currentExtent.height = 0xFFFFFFFFu then
                 V2i.Zero // See doc for VkSurfaceCapabilitiesKHR.currentExtent
-        else
-            V2i.Zero
+            else
+                toInt2D caps.currentExtent
+
+        {| Current = current; Min = toInt2D caps.minImageExtent; Max = toInt2D caps.maxImageExtent |}
+
+    [<Obsolete("Use Extent.Current instead.")>]
+    member x.Size = x.Extent.Current
+
+    [<Obsolete("Use Extent.Min instead.")>]
+    member x.MinSize = x.Extent.Min
+
+    [<Obsolete("Use Extent.Max instead.")>]
+    member x.MaxSize = x.Extent.Max
 
     member x.HasCompositeAlpha (t : VkCompositeAlphaFlagsKHR) = (t &&& supportedCompositeAlpha) = t
     member x.HasUsage (t : VkImageUsageFlags) = (t &&& supportedUsage) = t
