@@ -99,6 +99,7 @@ and CopyEngine(family: DeviceQueueFamily) =
     let mutable vDone = 0UL
     let run (_threadName : string) (queue : DeviceQueue) () =
         let device = queue.DeviceInterface
+        let vkvm = device.VKVM
         let fence = new Fence(device)
         use pool : CommandPool = queue.Family.CreateCommandPool()
         use cmd : CommandBuffer = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
@@ -213,7 +214,7 @@ and CopyEngine(family: DeviceQueueFamily) =
                             |]
                         ) |> ignore
 
-                stream.Run cmd.Handle
+                vkvm.Run(cmd.Handle, stream)
                 cmd.End()
 
                 cmd.Handle |> NativePtr.pin (fun pCmd ->
