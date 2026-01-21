@@ -106,6 +106,9 @@ type DescriptorFeatures =
 
         /// Indicates whether the implementation supports the SPIR-V RuntimeDescriptorArray capability.
         RuntimeDescriptorArray: bool
+
+        /// Indicates whether the implementation allows descriptors with comparison samplers to be updated.
+        MutableComparisonSamplers: bool
     }
 
     member internal x.Print(l : ILogger) =
@@ -122,6 +125,7 @@ type DescriptorFeatures =
         l.line "partially bound:             %A" x.BindingPartiallyBound
         l.line "variable count:              %A" x.BindingVariableDescriptorCount
         l.line "runtime array:               %A" x.RuntimeDescriptorArray
+        l.line "mutable comparison samplers: %A" x.MutableComparisonSamplers
 
 [<CLIMutable>]
 type ImageFeatures =
@@ -131,21 +135,39 @@ type ImageFeatures =
         /// corresponding SampledCubeArray and ImageCubeArray SPIR-V capabilities can be used in shader code.
         ImageCubeArray: bool
 
-        /// Specifies whether all of the ETC2 and EAC compressed texture formats are supported.
+        /// Specifies whether multisampled 2D array images are supported.
+        ImageMultisampleArray: bool
+
+        /// Specifies whether image views with a texel format containing a different number of components, or a different number
+        /// of bits in each component, than the texel format of the underlying VkImage can be created.
+        ImageViewFormatReinterpretation: bool
+
+        /// Specifies whether remapping format components using VkImageViewCreateInfo.components is supported.
+        ImageViewFormatSwizzle: bool
+
+        /// Specifies whether an image can be created with the VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT flag set, permitting
+        /// a 2D or 2D array image view to be created on a 3D image.
+        ImageView2DOn3DImage: bool
+
+        /// Specifies whether all the ETC2 and EAC compressed texture formats are supported.
         CompressionETC2: bool
 
-        /// Specifies whether all of the ASTC LDR compressed texture formats are supported.
+        /// Specifies whether all the ASTC LDR compressed texture formats are supported.
         CompressionASTC_LDR: bool
 
-        /// Specifies whether all of the BC compressed texture formats are supported.
+        /// Specifies whether all the BC compressed texture formats are supported.
         CompressionBC: bool
     }
 
     member internal x.Print(l : ILogger) =
-        l.line "cube arrays:              %A" x.ImageCubeArray
-        l.line "ETC2 compression:         %A" x.CompressionETC2
-        l.line "ASTC LDR compression:     %A" x.CompressionASTC_LDR
-        l.line "BC compression:           %A" x.CompressionBC
+        l.line "cube arrays:                        %A" x.ImageCubeArray
+        l.line "multisampled 2D arrays:             %A" x.ImageMultisampleArray
+        l.line "image view format reinterpretation: %A" x.ImageViewFormatReinterpretation
+        l.line "image view format swizzle:          %A" x.ImageViewFormatSwizzle
+        l.line "image view 2D on 3D:                %A" x.ImageView2DOn3DImage
+        l.line "ETC2 compression:                   %A" x.CompressionETC2
+        l.line "ASTC LDR compression:               %A" x.CompressionASTC_LDR
+        l.line "BC compression:                     %A" x.CompressionBC
 
 [<CLIMutable>]
 type SamplerFeatures =
@@ -155,6 +177,9 @@ type SamplerFeatures =
 
         /// Specifies whether the implementation supports sampler Y′CBCR conversion.
         YcbcrConversion: bool
+
+        /// Specifies whether the implementation supports setting a mipmap LOD bias value when creating a sampler.
+        MipLodBias: bool
 
         /// Specifies whether the implementation supports custom border colors for samplers.
         CustomBorderColors: bool
@@ -166,6 +191,7 @@ type SamplerFeatures =
     member internal x.Print(l : ILogger) =
         l.line "anisotropy:               %A" x.Anisotropy
         l.line "ycbcr:                    %A" x.YcbcrConversion
+        l.line "mipmap LOD bias:          %A" x.MipLodBias
         l.section "custom border colors:" (fun _ ->
             l.line "supported:              %A" x.CustomBorderColors
             l.line "without format:         %A" x.CustomBorderColorsWithoutFormat
@@ -179,6 +205,14 @@ type ShaderFeatures =
 
         /// Specifies whether tessellation control and evaluation shaders are supported.
         TessellationShader: bool
+
+        /// Specifies whether tessellation isoline output is supported.
+        /// This member is only meaningful if the TessellationShader feature is supported.
+        TessellationIsolines: bool
+
+        /// Specifies whether tessellation point output is supported.
+        /// This member is only meaningful if the TessellationShader feature is supported.
+        TessellationPointMode: bool
 
         /// Specifies whether storage buffers and images support stores and atomic operations in the vertex, tessellation, and geometry shader stages.
         VertexPipelineStoresAndAtomics: bool
@@ -306,14 +340,23 @@ type ShaderFeatures =
 
         /// Specifies whether shader draw parameters are supported.
         DrawParameters: bool
+
+        /// Specifies whether fragment shaders can use the InterpolationFunction capability and the extended instructions
+        /// InterpolateAtCentroid, InterpolateAtOffset, and InterpolateAtSample from the GLSL.std.450 extended instruction set.
+        /// This member is only meaningful if the RasterizerFeatures.SampleRateShading is true.
+        SampleRateInterpolationFunctions: bool
     }
 
     member internal x.Print(l : ILogger) =
-        l.line "geometry:                          %A" x.GeometryShader
-        l.line "tesselation:                       %A" x.TessellationShader
-        l.line "geometry / tesselation point size: %A" x.TessellationAndGeometryPointSize
-        l.line "vertex stores / atomics:           %A" x.VertexPipelineStoresAndAtomics
-        l.line "fragment stores / atomics:         %A" x.FragmentStoresAndAtomics
+        l.line "geometry:                           %A" x.GeometryShader
+        l.section "tessellation: " (fun () ->
+            l.line "supported:                        %A" x.TessellationShader
+            l.line "isolines:                         %A" x.TessellationIsolines
+            l.line "points:                           %A" x.TessellationPointMode
+        )
+        l.line "geometry / tessellation point size: %A" x.TessellationAndGeometryPointSize
+        l.line "vertex stores / atomics:            %A" x.VertexPipelineStoresAndAtomics
+        l.line "fragment stores / atomics:          %A" x.FragmentStoresAndAtomics
         l.line "image gather:                 %A" x.ImageGatherExtended
         l.section "storage images: " (fun () ->
             l.line "extended formats:           %A" x.StorageImageExtendedFormats
@@ -363,9 +406,10 @@ type ShaderFeatures =
             l.line "residency:                  %A" x.ResourceResidency
             l.line "min lod:                    %A" x.ResourceMinLod
         )
-        l.line "variable pointers:                  %A" x.VariablePointers
-        l.line "variable pointers (storage buffer): %A" x.VariablePointersStorageBuffer
-        l.line "draw parameters:                    %A" x.DrawParameters
+        l.line "variable pointers:                   %A" x.VariablePointers
+        l.line "variable pointers (storage buffer):  %A" x.VariablePointersStorageBuffer
+        l.line "draw parameters:                     %A" x.DrawParameters
+        l.line "sample rate interpolation functions: %A" x.SampleRateInterpolationFunctions
 
 [<CLIMutable>]
 type QueryFeatures =
@@ -386,6 +430,16 @@ type QueryFeatures =
         l.line "inherited queries:   %A" x.InheritedQueries
 
 [<CLIMutable>]
+type SynchronizationFeatures =
+    {
+        /// Specifies whether synchronization using events is supported.
+        Events: bool
+    }
+
+    member internal x.Print(l : ILogger) =
+        l.line "events:              %A" x.Events
+
+[<CLIMutable>]
 type DepthFeatures =
     {
         /// Specifies whether depth clamping is supported.
@@ -404,6 +458,16 @@ type DepthFeatures =
         l.line "bounds test:   %A" x.BoundsTest
 
 [<CLIMutable>]
+type StencilFeatures =
+    {
+        /// Specifies whether separate front and back stencil test reference values are supported.
+        SeparateMaskRef: bool
+    }
+
+    member internal x.Print(l : ILogger) =
+        l.line "separate mask reference values: %A" x.SeparateMaskRef
+
+[<CLIMutable>]
 type BlendFeatures =
     {
         /// Specifies whether the VkPipelineColorBlendAttachmentState settings are controlled independently per-attachment.
@@ -414,12 +478,16 @@ type BlendFeatures =
 
         /// Specifies whether logic operations are supported.
         LogicOp: bool
+
+        /// Specifies whether this implementation supports constant alpha blend factors used as source or destination color blending.
+        ConstantAlphaColorBlendFactors: bool
     }
 
     member internal x.Print(l : ILogger) =
         l.line "per-attachment:   %A" x.IndependentBlend
         l.line "dual-source:      %A" x.DualSrcBlend
         l.line "logic operations: %A" x.LogicOp
+        l.line "constant alpha:   %A" x.ConstantAlphaColorBlendFactors
 
 [<CLIMutable>]
 type DrawingFeatures =
@@ -432,12 +500,20 @@ type DrawingFeatures =
 
         /// Specifies whether indirect draw calls support the firstInstance parameter.
         DrawIndirectFirstInstance: bool
+
+        /// Specifies whether the triangle fan primitive topology is supported.
+        TriangleFans: bool
+
+        /// Specifies whether accessing a vertex input attribute beyond the stride of the corresponding vertex input binding is supported.
+        VertexAttributeAccessBeyondStride: bool
     }
 
     member internal x.Print(l : ILogger) =
-        l.line "full 32-bit indices:          %A" x.FullDrawIndexUint32
-        l.line "multi draw indirect:          %A" x.MultiDrawIndirect
-        l.line "draw indirect first instance: %A" x.DrawIndirectFirstInstance
+        l.line "full 32-bit indices:                   %A" x.FullDrawIndexUint32
+        l.line "multi draw indirect:                   %A" x.MultiDrawIndirect
+        l.line "draw indirect first instance:          %A" x.DrawIndirectFirstInstance
+        l.line "triangle fans:                         %A" x.TriangleFans
+        l.line "vertex attribute access beyond stride: %A" x.VertexAttributeAccessBeyondStride
 
 [<CLIMutable>]
 type MultiviewFeatures =
@@ -461,7 +537,10 @@ type RasterizerFeatures =
         /// Specifies whether point and wireframe fill modes are supported.
         FillModeNonSolid: bool
 
-        /// Specifies whether Sample Shading and multisample interpolation are supported.
+        /// Specifies whether point fill mode is supported.
+        FillModePoint: bool
+
+        /// Specifies whether sample shading and multisample interpolation are supported.
         SampleRateShading: bool
 
         /// Specifies whether the implementation is able to replace the alpha value of the color fragment output from
@@ -477,6 +556,7 @@ type RasterizerFeatures =
         l.line "wide lines:                %A" x.WideLines
         l.line "large points:              %A" x.LargePoints
         l.line "non-solid fill mode:       %A" x.FillModeNonSolid
+        l.line "point fill mode:           %A" x.FillModePoint
         l.line "sample rate shading:       %A" x.SampleRateShading
         l.line "alpha to one:              %A" x.AlphaToOne
         l.line "variable multisample rate: %A" x.VariableMultisampleRate
@@ -485,6 +565,7 @@ type RasterizerFeatures =
 type GraphicsPipelineFeatures =
     {
         Depth: DepthFeatures
+        Stencil: StencilFeatures
         Blending: BlendFeatures
         Drawing: DrawingFeatures
         Multiview: MultiviewFeatures
@@ -493,6 +574,7 @@ type GraphicsPipelineFeatures =
 
     member internal x.Print(l : ILogger) =
         l.section "depth:" (fun () -> x.Depth.Print(l))
+        l.section "stencil:" (fun () -> x.Stencil.Print(l))
         l.section "blending:" (fun () -> x.Blending.Print(l))
         l.section "drawing:" (fun () -> x.Drawing.Print(l))
         l.section "multiview: " (fun () -> x.Multiview.Print(l))
@@ -598,6 +680,7 @@ type DeviceFeatures =
         Samplers         : SamplerFeatures
         Shaders          : ShaderFeatures
         Queries          : QueryFeatures
+        Synchronization  : SynchronizationFeatures
         GraphicsPipeline : GraphicsPipelineFeatures
         Raytracing       : RaytracingFeatures
         Debugging        : DebuggingFeatures
@@ -610,6 +693,7 @@ type DeviceFeatures =
         l.section "samplers: " (fun () -> x.Samplers.Print(l))
         l.section "shaders:" (fun () -> x.Shaders.Print(l))
         l.section "queries:" (fun () -> x.Queries.Print(l))
+        l.section "synchronization:" (fun () -> x.Synchronization.Print(l))
         l.section "graphics pipeline:" (fun () -> x.GraphicsPipeline.Print(l))
         l.section "raytracing:" (fun () -> x.Raytracing.Print(l))
         l.section "debugging:" (fun () -> x.Debugging.Print(l))
@@ -623,6 +707,7 @@ module DeviceFeatures =
     open KHRBufferDeviceAddress
     open KHRShaderFloat16Int8
     open KHR8bitStorage
+    open KHRPortabilitySubset
     open EXTCustomBorderColor
     open EXTDescriptorIndexing
     open EXTMemoryPriority
@@ -638,7 +723,7 @@ module DeviceFeatures =
     let private toVkBool (value : bool) =
         if value then 1u else 0u
 
-    let internal toNativeChain (features : DeviceFeatures) =
+    let internal toNativeChain (hasExtension : string -> bool) (features : DeviceFeatures) =
         let mem =
             VkPhysicalDeviceProtectedMemoryFeatures(
                 toVkBool features.Memory.ProtectedMemory
@@ -774,6 +859,25 @@ module DeviceFeatures =
                 toVkBool features.Debugging.VendorBinaryDump
             )
 
+        let psub =
+            VkPhysicalDevicePortabilitySubsetFeaturesKHR(
+                toVkBool features.GraphicsPipeline.Blending.ConstantAlphaColorBlendFactors,
+                toVkBool features.Synchronization.Events,
+                toVkBool features.Images.ImageViewFormatReinterpretation,
+                toVkBool features.Images.ImageViewFormatSwizzle,
+                toVkBool features.Images.ImageView2DOn3DImage,
+                toVkBool features.Images.ImageMultisampleArray,
+                toVkBool features.Descriptors.MutableComparisonSamplers,
+                toVkBool features.GraphicsPipeline.Rasterizer.FillModePoint,
+                toVkBool features.Samplers.MipLodBias,
+                toVkBool features.GraphicsPipeline.Stencil.SeparateMaskRef,
+                toVkBool features.Shaders.SampleRateInterpolationFunctions,
+                toVkBool features.Shaders.TessellationIsolines,
+                toVkBool features.Shaders.TessellationPointMode,
+                toVkBool features.GraphicsPipeline.Drawing.TriangleFans,
+                toVkBool features.GraphicsPipeline.Drawing.VertexAttributeAccessBeyondStride
+            )
+
         let features =
             VkPhysicalDeviceFeatures2(
                 VkPhysicalDeviceFeatures(
@@ -837,24 +941,25 @@ module DeviceFeatures =
 
         VkStructChain.empty()
         |> VkStructChain.add mem
-        |> if not memp.IsEmpty then VkStructChain.add memp else id
+        |> if hasExtension EXTMemoryPriority.Name then VkStructChain.add memp else id
         |> VkStructChain.add ycbcr
-        |> if not cbc.IsEmpty then VkStructChain.add cbc else id
-        |> if not s8.IsEmpty then VkStructChain.add s8 else id
+        |> if hasExtension EXTCustomBorderColor.Name then VkStructChain.add cbc else id
+        |> if hasExtension KHR8bitStorage.Name then VkStructChain.add s8 else id
         |> VkStructChain.add s16
-        |> if not f16i8.IsEmpty then VkStructChain.add f16i8 else id
+        |> if hasExtension KHRShaderFloat16Int8.Name then VkStructChain.add f16i8 else id
         |> VkStructChain.add vp
         |> VkStructChain.add dp
-        |> if not idx.IsEmpty then VkStructChain.add idx else id
-        |> if not rtp.IsEmpty then VkStructChain.add rtp else id
-        |> if not rtpos.IsEmpty then VkStructChain.add rtpos else id
-        |> if not rtir.IsEmpty then VkStructChain.add rtir else id
-        |> if not rtv.IsEmpty then VkStructChain.add rtv else id
-        |> if not acc.IsEmpty then VkStructChain.add acc else id
-        |> if not omm.IsEmpty then VkStructChain.add omm else id
-        |> if not rq.IsEmpty  then VkStructChain.add rq  else id
-        |> if not bda.IsEmpty then VkStructChain.add bda else id
-        |> if not dflt.IsEmpty then VkStructChain.add dflt else id
+        |> if hasExtension EXTDescriptorIndexing.Name then VkStructChain.add idx else id
+        |> if hasExtension KHRRayTracingPipeline.Name then VkStructChain.add rtp else id
+        |> if hasExtension KHRRayTracingPositionFetch.Name then VkStructChain.add rtpos else id
+        |> if hasExtension NVRayTracingInvocationReorder.Name then VkStructChain.add rtir else id
+        |> if hasExtension NVRayTracingValidation.Name then VkStructChain.add rtv else id
+        |> if hasExtension KHRAccelerationStructure.Name then VkStructChain.add acc else id
+        |> if hasExtension EXTOpacityMicromap.Name then VkStructChain.add omm else id
+        |> if hasExtension KHRRayQuery.Name  then VkStructChain.add rq  else id
+        |> if hasExtension KHRBufferDeviceAddress.Name then VkStructChain.add bda else id
+        |> if hasExtension EXTDeviceFault.Name then VkStructChain.add dflt else id
+        |> if hasExtension KHRPortabilitySubset.Name then VkStructChain.add psub else id
         |> VkStructChain.add features
 
     let create (protectedMemoryFeatures : VkPhysicalDeviceProtectedMemoryFeatures)
@@ -867,6 +972,7 @@ module DeviceFeatures =
                (variablePointerFeatures : VkPhysicalDeviceVariablePointersFeatures)
                (shaderDrawParametersFeatures : VkPhysicalDeviceShaderDrawParametersFeatures)
                (descriptorIndexingFeatures : VkPhysicalDeviceDescriptorIndexingFeaturesEXT)
+               (portabilitySubsetFeatures : VkPhysicalDevicePortabilitySubsetFeaturesKHR)
                (raytracingPipelineFeatures : VkPhysicalDeviceRayTracingPipelineFeaturesKHR)
                (raytracingPositionFetchFeatures : VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR)
                (raytracingInvocationReorderFeatures : VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV)
@@ -911,20 +1017,26 @@ module DeviceFeatures =
                     BindingPartiallyBound =                       toBool descriptorIndexingFeatures.descriptorBindingPartiallyBound
                     BindingVariableDescriptorCount =              toBool descriptorIndexingFeatures.descriptorBindingVariableDescriptorCount
                     RuntimeDescriptorArray =                      toBool descriptorIndexingFeatures.runtimeDescriptorArray
+                    MutableComparisonSamplers =                   toBool portabilitySubsetFeatures.mutableComparisonSamplers
                 }
 
             Images =
                 {
-                    ImageCubeArray =      toBool features.imageCubeArray
-                    CompressionETC2 =     toBool features.textureCompressionETC2
-                    CompressionASTC_LDR = toBool features.textureCompressionASTC_LDR
-                    CompressionBC =       toBool features.textureCompressionBC
+                    ImageCubeArray =                  toBool features.imageCubeArray
+                    ImageMultisampleArray =           toBool portabilitySubsetFeatures.multisampleArrayImage
+                    ImageViewFormatReinterpretation = toBool portabilitySubsetFeatures.imageViewFormatReinterpretation
+                    ImageViewFormatSwizzle =          toBool portabilitySubsetFeatures.imageViewFormatSwizzle
+                    ImageView2DOn3DImage =            toBool portabilitySubsetFeatures.imageView2DOn3DImage
+                    CompressionETC2 =                 toBool features.textureCompressionETC2
+                    CompressionASTC_LDR =             toBool features.textureCompressionASTC_LDR
+                    CompressionBC =                   toBool features.textureCompressionBC
                 }
 
             Samplers =
                 {
                     Anisotropy                      = toBool features.samplerAnisotropy
                     YcbcrConversion                 = toBool samplerYcbcrConversionFeatures.samplerYcbcrConversion
+                    MipLodBias                      = toBool portabilitySubsetFeatures.samplerMipLodBias
                     CustomBorderColors              = toBool customBorderColorFeatures.customBorderColors
                     CustomBorderColorsWithoutFormat = toBool customBorderColorFeatures.customBorderColorWithoutFormat
                 }
@@ -933,6 +1045,8 @@ module DeviceFeatures =
                 {
                     GeometryShader =                            toBool features.geometryShader
                     TessellationShader =                        toBool features.tessellationShader
+                    TessellationIsolines =                      toBool portabilitySubsetFeatures.tessellationIsolines
+                    TessellationPointMode =                     toBool portabilitySubsetFeatures.tessellationPointMode
                     VertexPipelineStoresAndAtomics =            toBool features.vertexPipelineStoresAndAtomics
                     FragmentStoresAndAtomics =                  toBool features.fragmentStoresAndAtomics
                     TessellationAndGeometryPointSize =          toBool features.shaderTessellationAndGeometryPointSize
@@ -974,6 +1088,7 @@ module DeviceFeatures =
                     VariablePointers =                          toBool variablePointerFeatures.variablePointers
                     VariablePointersStorageBuffer =             toBool variablePointerFeatures.variablePointersStorageBuffer
                     DrawParameters =                            toBool shaderDrawParametersFeatures.shaderDrawParameters
+                    SampleRateInterpolationFunctions =          toBool portabilitySubsetFeatures.shaderSampleRateInterpolationFunctions
                 }
 
             Queries =
@@ -981,6 +1096,11 @@ module DeviceFeatures =
                     OcclusionQueryPrecise = toBool features.occlusionQueryPrecise
                     PipelineStatistics =    toBool features.pipelineStatisticsQuery
                     InheritedQueries =      toBool features.inheritedQueries
+                }
+
+            Synchronization =
+                {
+                    Events = toBool portabilitySubsetFeatures.events
                 }
 
             GraphicsPipeline =
@@ -992,18 +1112,26 @@ module DeviceFeatures =
                             BoundsTest = toBool features.depthBounds
                         }
 
+                    Stencil =
+                        {
+                            SeparateMaskRef = toBool portabilitySubsetFeatures.separateStencilMaskRef
+                        }
+
                     Blending =
                         {
-                            IndependentBlend = toBool features.independentBlend
-                            DualSrcBlend =     toBool features.dualSrcBlend
-                            LogicOp =          toBool features.logicOp
+                            IndependentBlend =               toBool features.independentBlend
+                            DualSrcBlend =                   toBool features.dualSrcBlend
+                            LogicOp =                        toBool features.logicOp
+                            ConstantAlphaColorBlendFactors = toBool portabilitySubsetFeatures.constantAlphaColorBlendFactors
                         }
 
                     Drawing =
                         {
-                            FullDrawIndexUint32 =       toBool features.fullDrawIndexUint32
-                            MultiDrawIndirect =         toBool features.multiDrawIndirect
-                            DrawIndirectFirstInstance = toBool features.drawIndirectFirstInstance
+                            FullDrawIndexUint32 =               toBool features.fullDrawIndexUint32
+                            MultiDrawIndirect =                 toBool features.multiDrawIndirect
+                            DrawIndirectFirstInstance =         toBool features.drawIndirectFirstInstance
+                            TriangleFans =                      toBool portabilitySubsetFeatures.triangleFans
+                            VertexAttributeAccessBeyondStride = toBool portabilitySubsetFeatures.vertexAttributeAccessBeyondStride
                         }
 
                     Multiview =
@@ -1016,6 +1144,7 @@ module DeviceFeatures =
                              WideLines =               toBool features.wideLines
                              LargePoints =             toBool features.largePoints
                              FillModeNonSolid =        toBool features.fillModeNonSolid
+                             FillModePoint =           toBool portabilitySubsetFeatures.pointPolygons
                              SampleRateShading =       toBool features.sampleRateShading
                              AlphaToOne =              toBool features.alphaToOne
                              VariableMultisampleRate = toBool features.variableMultisampleRate
