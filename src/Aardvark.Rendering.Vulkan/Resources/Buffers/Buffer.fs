@@ -10,6 +10,7 @@ open Microsoft.FSharp.NativeInterop
 
 open Vulkan11
 open KHRBufferDeviceAddress
+open KHRAccelerationStructure
 
 #nowarn "9"
 #nowarn "51"
@@ -303,6 +304,18 @@ module Buffer =
     let private createInternal (concurrent: bool) (export: bool) (usage: VkBufferUsageFlags)
                                (alignment: uint64) (size: uint64) (memory: IDeviceMemory) =
         let device = memory.Device
+
+        let mutable usage = usage
+
+        if not device.EnabledFeatures.Memory.BufferDeviceAddress then
+            usage <- usage &&& ~~~VkBufferUsageFlags.ShaderDeviceAddressBitKhr
+
+        if not device.EnabledFeatures.Raytracing.AccelerationStructure then
+            usage <-
+                usage &&& ~~~(
+                    VkBufferUsageFlags.AccelerationStructureStorageBitKhr |||
+                    VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyBitKhr
+                )
 
         let externalMemoryInfo =
             VkExternalMemoryBufferCreateInfo VkExternalMemoryHandleTypeFlags.OpaqueBit

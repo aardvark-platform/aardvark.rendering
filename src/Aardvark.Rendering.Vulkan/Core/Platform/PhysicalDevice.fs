@@ -98,7 +98,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
 
             VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
 
-            (!!pFeatures).features, !!pMem, !!pMemPrior, !!pYcbcr, NativePtr.readOrEmpty pCbc,
+            (!!pFeatures).features, !!pMem, NativePtr.readOrEmpty pMemPrior, !!pYcbcr, NativePtr.readOrEmpty pCbc,
             NativePtr.readOrEmpty p8bit, !!p16bit, NativePtr.readOrEmpty pf16i8,
             !!pVarPtrs, !!pDrawParams, NativePtr.readOrEmpty pIdx, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTPos,
             NativePtr.readOrEmpty pRTIR, NativePtr.readOrEmpty pRTV, NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pOmm, NativePtr.readOrEmpty pRQ,

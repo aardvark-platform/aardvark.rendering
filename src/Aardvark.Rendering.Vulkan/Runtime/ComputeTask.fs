@@ -156,7 +156,7 @@ module internal ComputeTaskInternals =
             type VKVM.CommandStream with
                 member x.Sync(buffer : Buffer, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags, queueFlags : QueueFlags) =
                     let supportedStages =
-                        VkPipelineStageFlags.ofQueueFlags queueFlags
+                        VkPipelineStageFlags.ofQueueFlags buffer.Device.EnabledFeatures queueFlags
 
                     let srcStage, srcAccess =
                         let stage = VkBufferUsageFlags.toSrcStageFlags buffer.Usage
@@ -180,7 +180,7 @@ module internal ComputeTaskInternals =
 
                 member x.Sync(img : ImageSubresourceRange, layout : VkImageLayout, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags, queueFlags : QueueFlags) =
                     let supportedStages =
-                        VkPipelineStageFlags.ofQueueFlags queueFlags
+                        VkPipelineStageFlags.ofQueueFlags img.Image.Device.EnabledFeatures queueFlags
 
                     let srcStage, srcAccess =
                         let stage = VkImageLayout.toSrcStageFlags layout
@@ -208,7 +208,7 @@ module internal ComputeTaskInternals =
                 member x.TransformLayout(img : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
                     if source <> target then
                         let supportedStages =
-                            VkPipelineStageFlags.ofQueueFlags QueueFlags.Compute
+                            VkPipelineStageFlags.ofQueueFlags img.Image.Device.EnabledFeatures QueueFlags.Compute
 
                         let srcStage, srcAccess =
                             let stage = VkImageLayout.toSrcStageFlags source

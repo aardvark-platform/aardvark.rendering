@@ -426,7 +426,7 @@ module Resources =
 
                 member x.UpdateAfterBind =
                     updateAfterBindEnabled &&
-                    x.GetUpdateAfterBindFeature &device.PhysicalDevice.Features.Descriptors
+                    x.GetUpdateAfterBindFeature &device.EnabledFeatures.Descriptors
 
                 member x.Acquire() = resource.Acquire()
                 member x.Release() = resource.Release()

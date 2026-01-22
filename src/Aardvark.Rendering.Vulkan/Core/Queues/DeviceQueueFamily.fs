@@ -12,17 +12,7 @@ type DeviceQueueFamily private (device: IDevice, info: QueueFamilyInfo) =
     let mutable availableQueueCount : SemaphoreSlim = null
 
     let supportedStages =
-        let features = device.PhysicalDevice.Features.Shaders
-        let mutable stages = info.flags |> VkPipelineStageFlags.ofQueueFlags
-
-        if not features.GeometryShader then
-            stages <- stages &&& (~~~VkPipelineStageFlags.GeometryShaderBit)
-
-        if not features.TessellationShader then
-            stages <- stages &&& (~~~VkPipelineStageFlags.TessellationControlShaderBit)
-            stages <- stages &&& (~~~VkPipelineStageFlags.TessellationEvaluationShaderBit)
-
-        stages
+        info.flags |> VkPipelineStageFlags.ofQueueFlags device.EnabledFeatures
 
     let releaseQueueHandle (handle: DeviceQueueHandle) =
         currentQueue.Value <- ValueNone

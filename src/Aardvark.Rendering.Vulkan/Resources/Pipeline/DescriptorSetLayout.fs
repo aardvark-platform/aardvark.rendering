@@ -69,7 +69,7 @@ module DescriptorSetLayout =
         )
 
         let features =
-            device.PhysicalDevice.Features.Descriptors
+            device.EnabledFeatures.Descriptors
 
         native {
             let! pBindings = bindings |> Array.map (fun b -> b.Handle)

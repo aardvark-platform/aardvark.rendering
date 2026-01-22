@@ -1,3 +1,5 @@
+- [Vulkan] Improved handling of unavailable or disabled features
+
 ### 5.6.2
 - Added support for enum types as vertex and instance attributes
 - Implemented download / upload for PixImage as 3D slices

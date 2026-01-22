@@ -355,7 +355,8 @@ module ShaderProgram =
               layered    : Set<string>
               layerCount : int
               depthRange : Range1f
-              extensions : Map<string, bool> }
+              extensions : Map<string, bool>
+              features   : ShaderFeatures }
 
         let ofEffectKey (device: Device) (key: EffectCacheKey) =
             let signature =
@@ -368,7 +369,8 @@ module ShaderProgram =
                   layered    = key.layout.PerLayerUniforms
                   layerCount = key.layout.LayerCount
                   depthRange = FShadeConfig.depthRange
-                  extensions = FShadeConfig.availableExtensions device }
+                  extensions = FShadeConfig.availableExtensions device
+                  features   = device.EnabledFeatures.Shaders }
 
             getHash (fsharpCoreVersion, signature)
 
@@ -382,7 +384,8 @@ module ShaderProgram =
                   layered    = Set.empty
                   layerCount = 0
                   depthRange = if respectDepthRange then FShadeConfig.depthRange else Range1f()
-                  extensions = FShadeConfig.availableExtensions device }
+                  extensions = FShadeConfig.availableExtensions device
+                  features   = device.EnabledFeatures.Shaders }
 
             getHash (fsharpCoreVersion, signature)
 
@@ -609,6 +612,13 @@ module ShaderProgram =
             }
 
         let compile() =
+            if not device.EnabledFeatures.Shaders.GeometryShader && (pass.LayerCount > 1 || effect.GeometryShader.IsSome) then
+                let reason = if pass.LayerCount > 1 then " (required for layered rendering)" else ""
+                failf $"device does not support geometry shaders{reason}"
+
+            if not device.EnabledFeatures.Shaders.TessellationShader && (effect.TessControlShader.IsSome || effect.TessEvalShader.IsSome) then
+                failf "device does not support tessellation shaders"
+
             let glsl =
                 let backend = FShadeConfig.backend device
                 try

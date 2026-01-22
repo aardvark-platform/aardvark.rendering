@@ -459,7 +459,7 @@ type Runtime(device : Device) as this =
         new TimeQuery(device) :> ITimeQuery
 
     member x.CreateOcclusionQuery([<Optional; DefaultParameterValue(true)>] precise : bool) =
-        let features = &device.PhysicalDevice.Features.Queries
+        let features = &device.EnabledFeatures.Queries
 
         if features.InheritedQueries then
             new OcclusionQuery(device, precise && features.OcclusionQueryPrecise) :> IOcclusionQuery

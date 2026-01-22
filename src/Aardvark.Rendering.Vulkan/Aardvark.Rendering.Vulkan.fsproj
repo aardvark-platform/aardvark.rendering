@@ -27,9 +27,9 @@
     <Compile Include="Core\Common\Config.fs" />
     <Compile Include="Core\Common\Info.fs" />
     <Compile Include="Core\Common\Formats.fs" />
+    <Compile Include="Core\Common\Features.fs" />
     <Compile Include="Core\Common\Flags.fs" />
     <Compile Include="Core\Common\Limits.fs" />
-    <Compile Include="Core\Common\Features.fs" />
     <Compile Include="Core\Common\ShaderInterface.fs" />
     <Compile Include="Core\Platform\PhysicalDevice.fs" />
     <Compile Include="Core\Platform\PhysicalDeviceGroup.fs" />

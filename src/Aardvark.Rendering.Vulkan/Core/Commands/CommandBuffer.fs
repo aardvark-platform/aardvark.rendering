@@ -58,7 +58,7 @@ type CommandBuffer internal (pool: ICommandPool, level: CommandBufferLevel, remo
 
     let beginSecondary (pass: VkRenderPass) (framebuffer: VkFramebuffer) (inheritQueries: bool) (usage: CommandBufferUsage) =
         let occlusion, control, statistics =
-            let features = device.PhysicalDevice.Features.Queries
+            let features = device.EnabledFeatures.Queries
 
             if inheritQueries && features.InheritedQueries then
                 let control =

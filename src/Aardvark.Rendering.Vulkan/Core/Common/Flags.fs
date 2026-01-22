@@ -58,8 +58,23 @@ module internal VkPipelineStageFlags =
                QueueFlags.SparseBinding, general
             ]
 
-    let ofQueueFlags (flags : QueueFlags) =
-        flags |> Enum.convertFlags Conversion.ofQueueFlags VkPipelineStageFlags.None
+    let ofQueueFlags (features : DeviceFeatures) (flags : QueueFlags) =
+        let mutable stages = flags |> Enum.convertFlags Conversion.ofQueueFlags VkPipelineStageFlags.None
+
+        if not features.Shaders.GeometryShader then
+            stages <- stages &&& ~~~VkPipelineStageFlags.GeometryShaderBit
+
+        if not features.Shaders.TessellationShader then
+            stages <- stages &&& ~~~VkPipelineStageFlags.TessellationControlShaderBit
+            stages <- stages &&& ~~~VkPipelineStageFlags.TessellationEvaluationShaderBit
+
+        if not features.Raytracing.Pipeline then
+            stages <- stages &&& ~~~VkPipelineStageFlags.RayTracingShaderBitKhr
+
+        if not features.Raytracing.AccelerationStructure then
+            stages <- stages &&& ~~~VkPipelineStageFlags.AccelerationStructureBuildBitKhr
+
+        stages
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkAccessFlags =
