@@ -309,7 +309,8 @@ module VkBufferUsageFlags =
                 VkBufferUsageFlags.StorageBufferBit,                               VkAccessFlags.ShaderReadBit ||| VkAccessFlags.ShaderWriteBit
                 VkBufferUsageFlags.UniformTexelBufferBit,                          VkAccessFlags.ShaderReadBit
                 VkBufferUsageFlags.StorageTexelBufferBit,                          VkAccessFlags.ShaderReadBit ||| VkAccessFlags.ShaderWriteBit
-                VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyBitKhr,  VkAccessFlags.AccelerationStructureReadBitKhr
+                VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyBitKhr,  VkAccessFlags.AccelerationStructureReadBitKhr |||
+                                                                                   VkAccessFlags.ShaderReadBit
                 VkBufferUsageFlags.AccelerationStructureStorageBitKhr,             VkAccessFlags.AccelerationStructureReadBitKhr |||
                                                                                    VkAccessFlags.AccelerationStructureWriteBitKhr
             ]

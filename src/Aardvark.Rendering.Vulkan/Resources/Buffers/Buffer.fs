@@ -407,8 +407,11 @@ module Buffer =
                     hostBuffer.Memory.Mapped writer
 
                     device.eventually {
-                        try do! Command.Copy(hostBuffer, buffer)
-                        finally hostBuffer.Dispose()
+                        try
+                            do! Command.Copy(hostBuffer, buffer)
+                            do! Command.Sync(buffer, VkPipelineStageFlags.TransferBit, VkAccessFlags.TransferWriteBit)
+                        finally
+                            hostBuffer.Dispose()
                     }
 
                 | UploadMode.Async ->
