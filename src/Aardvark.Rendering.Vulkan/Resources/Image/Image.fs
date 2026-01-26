@@ -116,6 +116,7 @@ type Image =
         val public Samples : int
         val public Dimension : TextureDimension
         val public Format : VkFormat
+        val public Usage : VkImageUsageFlags
         val public Memory : DevicePtr
         val public PeerHandles : VkImage[]
         val public SamplerLayout : VkImageLayout
@@ -192,27 +193,31 @@ type Image =
             sprintf "0x%08X" x.Handle.Handle
 
         internal new (device: Device, handle: VkImage, size: V3i, levels: int, layers: int, samples: int,
-                      dimension: TextureDimension, format: VkFormat, memory: DevicePtr, layout: VkImageLayout,
+                      dimension: TextureDimension, format: VkFormat, usage: VkImageUsageFlags, memory: DevicePtr, layout: VkImageLayout,
                       samplerLayout, peerHandles, name) =
             {
                 inherit Resource<_>(device, handle);
                 Size = size; MipMapLevels = levels; Layers = layers; Samples = samples
-                Dimension = dimension; Format = format; Memory = memory; Layout = layout
+                Dimension = dimension; Format = format; Usage = usage; Memory = memory; Layout = layout
                 SamplerLayout = samplerLayout; PeerHandles = peerHandles; name = name
             }
 
         internal new (other: Image) =
             new Image(
                 other.Device, other.Handle,other.Size, other.MipMapLevels, other.Layers, other.Samples,
-                other.Dimension, other.Format, other.Memory, other.Layout, other.SamplerLayout, other.PeerHandles, other.Name
+                other.Dimension, other.Format, other.Usage, other.Memory, other.Layout, other.SamplerLayout,
+                other.PeerHandles, other.Name
             )
 
         new (device: Device, handle: VkImage, size: V3i, levels: int, layers: int, samples: int,
-             dimension: TextureDimension, format: VkFormat, memory: DevicePtr, layout: VkImageLayout,
+             dimension: TextureDimension, format: VkFormat, usage: VkImageUsageFlags, memory: DevicePtr, layout: VkImageLayout,
              [<Optional; DefaultParameterValue(VkImageLayout.ShaderReadOnlyOptimal)>] samplerLayout: VkImageLayout,
              [<Optional; DefaultParameterValue(null : VkImage[])>] peerHandles: VkImage[]) =
             let peerHandles = if isNull peerHandles then [||] else peerHandles
-            new Image(device, handle, size, levels, layers, samples, dimension, format, memory, layout, samplerLayout, peerHandles, null)
+            new Image(
+                device, handle, size, levels, layers, samples, dimension, format, usage,
+                memory, layout, samplerLayout, peerHandles, null
+            )
     end
 
 and internal ExportedImage =
@@ -228,7 +233,7 @@ and internal ExportedImage =
             member x.IsArray = x.IsArray
             member x.Memory = x.ExternalMemory
 
-        new(device, handle, size, levels, layers, samples, dimension, format, preferArray, memory: DevicePtr, layout,
+        new(device, handle, size, levels, layers, samples, dimension, format, usage, preferArray, memory: DevicePtr, layout,
             [<Optional; DefaultParameterValue(VkImageLayout.ShaderReadOnlyOptimal)>] samplerLayout : VkImageLayout,
             [<Optional; DefaultParameterValue(null : VkImage[])>] peerHandles : VkImage[]) =
 
@@ -238,7 +243,7 @@ and internal ExportedImage =
                   Size   = memory.Size }
 
             {
-                inherit Image(device, handle, size, levels, layers, samples, dimension, format, memory, layout, samplerLayout, peerHandles)
+                inherit Image(device, handle, size, levels, layers, samples, dimension, format, usage, memory, layout, samplerLayout, peerHandles)
                 PreferArray = preferArray
                 ExternalMemory = externalMemory
             }
@@ -1123,14 +1128,14 @@ module Image =
 
                 let result =
                     new Image(
-                        device, handles.[0], size, mipMapLevels, layers, samples, dimension, format, memory,
+                        device, handles.[0], size, mipMapLevels, layers, samples, dimension, format, usage, memory,
                         VkImageLayout.Undefined,
                         peerHandles = Array.skip 1 handles
                     )
 
                 device.perform {
                     for i in 1 .. handles.Length - 1 do
-                        let img = new Image(device, handles.[i], size, mipMapLevels, layers, samples, dimension, format, memory, VkImageLayout.Undefined)
+                        let img = new Image(device, handles.[i], size, mipMapLevels, layers, samples, dimension, format, usage, memory, VkImageLayout.Undefined)
                         do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
                 }
 
@@ -1142,11 +1147,11 @@ module Image =
                 match export with
                 | ImageExport.Enable preferArray ->
                     new ExportedImage(
-                        device, handle, size, mipMapLevels, layers, samples, dimension, format, preferArray, memory, VkImageLayout.Undefined
+                        device, handle, size, mipMapLevels, layers, samples, dimension, format, usage, preferArray, memory, VkImageLayout.Undefined
                     )
 
                 | _ ->
-                    new Image(device, handle, size, mipMapLevels, layers, samples, dimension, format, memory, VkImageLayout.Undefined)
+                    new Image(device, handle, size, mipMapLevels, layers, samples, dimension, format, usage, memory, VkImageLayout.Undefined)
 
     let create (dimension : TextureDimension) (usage : VkImageUsageFlags) (format : VkFormat)
                (mipMapLevels : int) (count : int) (samples : int) (size : V3i) (device : Device) : Image =

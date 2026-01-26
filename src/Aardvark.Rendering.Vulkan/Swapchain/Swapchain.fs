@@ -36,14 +36,14 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
     let presentTrafo = VkSurfaceTransformFlagsKHR.ofImageTrafo description.presentTrafo
 
     let recreate (old : VkSwapchainKHR) (size : V2i) =
+        let colorUsage =
+            if description.samples = 1 then VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit
+            else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit
+
         let handle = 
             native {
                 let extent = VkExtent2D(size.X, size.Y)
                 let surface = description.surface
-
-                let colorUsage =
-                    if description.samples = 1 then VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit
-                    else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit
 
                 let! pInfo =
                     VkSwapchainCreateInfoKHR(
@@ -96,6 +96,7 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
                             1, 1, 1,
                             TextureDimension.Texture2D,
                             description.colorFormat,
+                            colorUsage,
                             Unchecked.defaultof<_>,
                             VkImageLayout.Undefined
                         )
