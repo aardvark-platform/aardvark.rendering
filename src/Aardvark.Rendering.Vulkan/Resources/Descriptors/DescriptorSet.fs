@@ -157,13 +157,16 @@ module DescriptorSet =
             descriptors
             |> Array.map (fun desc ->
                 match desc with
-                | StorageBuffer (binding, b, offset, size) ->
+                | StorageBuffer (binding, buffer, offset, size) ->
                     let info =
                         VkDescriptorBufferInfo(
-                            b.Handle,
+                            buffer.Handle,
                             offset,
                             if size > 0UL then size else VkWholeSize
                         )
+
+                    if not <| buffer.Usage.HasFlag VkBufferUsageFlags.StorageBufferBit then
+                        failf $"cannot use buffer as storage buffer descriptor (usage is {buffer.Usage})"
 
                     NativePtr.write bufferInfos info
                     let ptr = bufferInfos
@@ -178,13 +181,16 @@ module DescriptorSet =
                         NativePtr.zero
                     )
 
-                | UniformBuffer (binding, ub) ->
+                | UniformBuffer (binding, buffer) ->
                     let info =
                         VkDescriptorBufferInfo(
-                            ub.Handle,
+                            buffer.Handle,
                             0UL,
-                            if ub.Storage.Size > 0 then uint64 ub.Storage.Size else VkWholeSize
+                            if buffer.Storage.Size > 0 then uint64 buffer.Storage.Size else VkWholeSize
                         )
+
+                    if not <| buffer.Usage.HasFlag VkBufferUsageFlags.UniformBufferBit then
+                        failf $"cannot use buffer as uniform buffer descriptor (usage is {buffer.Usage})"
 
                     NativePtr.write bufferInfos info
                     let ptr = bufferInfos
@@ -207,6 +213,9 @@ module DescriptorSet =
                             layout
                         )
 
+                    if not <| view.Image.Usage.HasFlag VkImageUsageFlags.SampledBit then
+                        failf $"cannot use image as combined image sampler descriptor (usage is {view.Image.Usage})"
+
                     NativePtr.write imageInfos info
                     let ptr = imageInfos
                     imageInfos <- NativePtr.step 1 imageInfos
@@ -227,6 +236,9 @@ module DescriptorSet =
                             view.Handle,
                             VkImageLayout.General
                         )
+
+                    if not <| view.Image.Usage.HasFlag VkImageUsageFlags.StorageBit then
+                        failf $"cannot use image as storage image descriptor (usage is {view.Image.Usage})"
 
                     NativePtr.write imageInfos info
                     let ptr = imageInfos
