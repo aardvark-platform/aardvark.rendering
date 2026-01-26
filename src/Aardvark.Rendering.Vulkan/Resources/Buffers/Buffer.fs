@@ -325,13 +325,13 @@ module Buffer =
 
         let pNext =
             if export then
-                if device.IsExtensionEnabled Instance.Extensions.ExternalMemory then
+                if device.IsExtensionEnabled Extensions.ExternalMemory then
                     if device.PhysicalDevice.GetBufferExportable(VkBufferCreateFlags.None, usage) then
                         pExternalMemoryInfo.Handle
                     else
                         failf $"Cannot export buffer with usage {usage}"
                 else
-                    failf $"Cannot export buffer memory because {Instance.Extensions.ExternalMemory} is not supported"
+                    failf $"Cannot export buffer memory because {Extensions.ExternalMemory} is not supported"
             else
                 0n
 

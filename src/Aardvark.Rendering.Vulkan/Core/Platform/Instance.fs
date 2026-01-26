@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Collections.Generic
 open System.Runtime.InteropServices
 open System.Threading
 open Microsoft.FSharp.NativeInterop
@@ -14,90 +13,6 @@ open Vulkan11
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Instance =
-    module Extensions =
-        let Surface                         = KHRSurface.Name
-        let SwapChain                       = KHRSwapchain.Name
-        let Display                         = KHRDisplay.Name
-        let DisplaySwapChain                = KHRDisplaySwapchain.Name
-
-        let AndroidSurface                  = KHRAndroidSurface.Name
-        let WaylandSurface                  = KHRWaylandSurface.Name
-        let Win32Surface                    = KHRWin32Surface.Name
-        let XcbSurface                      = KHRXcbSurface.Name
-        let XlibSurface                     = KHRXlibSurface.Name
-        let GetPhysicalDeviceProperties2    = KHRGetPhysicalDeviceProperties2.Name
-
-        let ShaderSubgroupVote              = EXTShaderSubgroupVote.Name
-        let ShaderSubgroupBallot            = EXTShaderSubgroupBallot.Name
-
-        let ConservativeRasterization       = EXTConservativeRasterization.Name
-
-        let CustomBorderColor               = EXTCustomBorderColor.Name
-
-        let Debug                           = EXTDebugUtils.Name
-
-        let DeviceFault                     = EXTDeviceFault.Name
-
-        let MemoryBudget                    = EXTMemoryBudget.Name
-
-        let MemoryPriority                  = EXTMemoryPriority.Name
-
-        let Shader8Bit16Bit = [
-            KHR8bitStorage.Name
-            KHRShaderFloat16Int8.Name
-        ]
-
-        let Maintenance = [
-            KHRMaintenance4.Name
-            KHRMaintenance5.Name
-            KHRDynamicRendering.Name
-            KHRDepthStencilResolve.Name
-            KHRCreateRenderpass2.Name
-        ]
-
-        let Raytracing (validation: bool) = [
-                KHRRayTracingPipeline.Name
-                KHRRayTracingPositionFetch.Name
-                KHRAccelerationStructure.Name
-                KHRBufferDeviceAddress.Name
-                KHRDeferredHostOperations.Name
-                EXTDescriptorIndexing.Name
-                KHRSpirv14.Name
-                KHRShaderFloatControls.Name
-                NVRayTracingInvocationReorder.Name
-                EXTOpacityMicromap.Name
-                KHRSynchronization2.Name
-                if validation then NVRayTracingValidation.Name
-            ]
-
-        let ExternalMemory =
-            if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
-                KHRExternalMemoryWin32.Name
-            else
-                KHRExternalMemoryFd.Name
-
-        let Sharing = [
-                KHRGetPhysicalDeviceProperties2.Name
-                KHRExternalMemoryCapabilities.Name
-                KHRExternalMemory.Name
-                KHRExternalFenceCapabilities.Name
-                KHRExternalFence.Name
-                KHRExternalSemaphoreCapabilities.Name
-                KHRExternalSemaphore.Name
-                EXTExternalMemoryHost.Name
-
-                if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
-                    KHRExternalMemoryWin32.Name
-                    KHRExternalFenceWin32.Name
-                    KHRExternalSemaphoreWin32.Name
-                else
-                    KHRExternalMemoryFd.Name
-                    KHRExternalFenceFd.Name
-                    KHRExternalSemaphoreFd.Name
-
-                    if RuntimeInformation.IsOSPlatform OSPlatform.Linux then
-                        EXTExternalMemoryDmaBuf.Name
-            ]
 
     module Layers =
         let ApiDump             = "VK_LAYER_LUNARG_api_dump"
@@ -160,9 +75,9 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
     let enabledLayers, availableExtensions, enabledExtensions =
         let extensions =
             if debug.DebugReportEnabled || debug.ValidationLayerEnabled || debug.DebugLabels then
-                List.ofSeq extensions @ [Instance.Extensions.Debug]
+                List.ofSeq extensions @ [Extensions.Debug]
             else
-                extensions |> List.ofSeq |> List.filter ((<>) Instance.Extensions.Debug)
+                extensions |> List.ofSeq |> List.filter ((<>) Extensions.Debug)
 
         let layers =
             if debug.ValidationLayerEnabled then
@@ -198,7 +113,7 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
     let isLayerEnabled = flip Set.contains enabledLayers
     let isExtensionEnabled = flip Set.contains enabledExtensions
 
-    let debugUtilsEnabled = isExtensionEnabled Instance.Extensions.Debug
+    let debugUtilsEnabled = isExtensionEnabled Extensions.Debug
 
     let mutable instance, apiVersion =
         let layers = Set.toArray enabledLayers
