@@ -990,6 +990,13 @@ module Image =
 
         let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
 
+        let usage =
+            // Metal does not support multisampled storage images
+            if samples > 1 && not device.EnabledFeatures.Shaders.StorageImageMultisample then
+                usage &&& ~~~VkImageUsageFlags.StorageBit
+            else
+                usage
+
         if features = VkFormatFeatureFlags.None then
             match VkFormat.tryGetNextBetter format with
             | Some format -> create' concurrent export dimension usage format mipMapLevels count samples size device
