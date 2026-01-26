@@ -17,19 +17,19 @@ type HeadlessVulkanApplication(debug: IDebugConfig,
             if instanceExtensions <> null then
                 yield! instanceExtensions
 
-            yield Instance.Extensions.ShaderSubgroupVote
-            yield Instance.Extensions.ShaderSubgroupBallot
-            yield! Instance.Extensions.Shader8Bit16Bit
-            yield Instance.Extensions.GetPhysicalDeviceProperties2
-            yield Instance.Extensions.ConservativeRasterization
-            yield Instance.Extensions.CustomBorderColor
-            yield Instance.Extensions.MemoryBudget
-            yield Instance.Extensions.MemoryPriority
-            yield Instance.Extensions.DeviceFault
+            yield Extensions.ShaderSubgroupVote
+            yield Extensions.ShaderSubgroupBallot
+            yield! Extensions.Shader8Bit16Bit
+            yield Extensions.GetPhysicalDeviceProperties2
+            yield Extensions.ConservativeRasterization
+            yield Extensions.CustomBorderColor
+            yield Extensions.MemoryBudget
+            yield Extensions.MemoryPriority
+            yield Extensions.DeviceFault
 
-            yield! Instance.Extensions.Maintenance
-            yield! Instance.Extensions.Raytracing debug.RaytracingValidationEnabled
-            yield! Instance.Extensions.Sharing
+            yield! Extensions.Maintenance
+            yield! Extensions.Raytracing debug.RaytracingValidationEnabled
+            yield! Extensions.Sharing
         ]
 
     let requestedLayers =

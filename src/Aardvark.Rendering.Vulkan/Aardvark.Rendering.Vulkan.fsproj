@@ -34,6 +34,7 @@
     <Compile Include="Core\Platform\PhysicalDevice.fs" />
     <Compile Include="Core\Platform\PhysicalDeviceGroup.fs" />
     <Compile Include="Core\Platform\LayerSettings.fs" />
+    <Compile Include="Core\Platform\Extensions.fs" />
     <Compile Include="Core\Platform\Instance.fs" />
     <Compile Include="Core\Platform\DeviceChooser.fs" />
     <Compile Include="Core\Platform\DeviceChooserConsole.fs" />
