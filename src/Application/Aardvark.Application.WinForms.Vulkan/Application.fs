@@ -67,18 +67,8 @@ type VulkanApplication(debug: IDebugConfig,
         [
         ]
 
-    let instance = 
-        let availableExtensions =
-            Instance.GlobalExtensions |> Seq.map _.name |> Set.ofSeq
-
-        let availableLayers =
-            Instance.AvailableLayers |> Seq.map _.name |> Set.ofSeq
-
-        // create an instance
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
-    
-        new Instance(enabledLayers, enabledExtensions, debug)
+    let instance =
+        new Instance(requestedLayers, requestedExtensions, debug)
 
     // choose a physical device
     let physicalDevice = 
@@ -91,20 +81,15 @@ type VulkanApplication(debug: IDebugConfig,
     do instance.PrintInfo(physicalDevice, debug.PlatformInformationVerbosity)
 
     // create a device
-    let device = 
-        let availableExtensions =
-            physicalDevice.GlobalExtensions |> Seq.map _.name |> Set.ofSeq
-  
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
+    let device =
         let selectFeatures = if isNull deviceFeatures then DeviceFeatures.getDefault else deviceFeatures.Invoke
-
-        physicalDevice.CreateDevice(enabledExtensions, selectFeatures)
+        physicalDevice.CreateDevice(requestedExtensions, selectFeatures)
 
     // create a runtime
     let runtime = new Runtime(device)
 
     let canCreateRenderControl =
-        List.contains Instance.Extensions.SwapChain device.EnabledExtensions
+        device.IsExtensionEnabled Instance.Extensions.SwapChain
 
     member x.Runtime = runtime
 
