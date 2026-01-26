@@ -126,10 +126,15 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
             let! ptr = properties
             VkRaw.vkEnumerateInstanceLayerProperties(pCount, ptr)
                 |> check "could not get available instance layers"
-            return properties |> Array.map LayerInfo.ofVulkan
+
+            return properties |> Array.map (fun p ->
+                let info = LayerInfo.ofVulkan p
+                info.name, info
+            )
+            |> Map.ofArray
         }
 
-    static let globalExtensions =
+    static let availableGlobalExtensions =
         native {
             let! pCount = 0u
             VkRaw.vkEnumerateInstanceExtensionProperties(null, pCount, NativePtr.zero)
@@ -139,73 +144,65 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
             let! ptr = properties
             VkRaw.vkEnumerateInstanceExtensionProperties(null, pCount, ptr)
                 |> check "could not get available instance layers"
-            return properties |> Array.map ExtensionInfo.ofVulkan
+
+            return properties |> Array.map (fun p ->
+                let info = ExtensionInfo.ofVulkan p
+                info.name, info
+            )
+            |> Map.ofArray
         }
-
-    static let availableLayerNames = availableLayers |> Seq.map (fun l -> l.name.ToLower(), l) |> Map.ofSeq
-    static let globalExtensionNames = globalExtensions |> Seq.map (fun p -> p.name.ToLower(), p.name) |> Map.ofSeq
-
-    static let filterLayersAndExtensions (wantedLayers : list<string>) (wantedExtensions : list<string>) =
-        let availableExtensions = Dictionary globalExtensionNames
-
-        let enabledLayers =
-            wantedLayers |> List.distinct |> List.filter (fun name ->
-                let name = name.ToLower()
-                match Map.tryFind name availableLayerNames with
-                | Some layer ->
-                    Log.Vulkan.debug "enabled layer %A" name
-                    for e in layer.extensions do
-                        availableExtensions.[e.name.ToLower()] <- e.name
-                    true
-                | _ ->
-                    false
-            )
-
-        let enabledExtensions =
-            wantedExtensions |> List.choose (fun name ->
-                let name = name.ToLower()
-                match availableExtensions.TryGetValue name with
-                | (true, realName) ->
-                    Log.Vulkan.debug "enabled instance extension %A" name
-                    Some realName
-                | _ ->
-                    None
-            )
-
-        enabledLayers, enabledExtensions
 
     let mutable isDisposed = 0
     let beforeDispose = Event<unit>()
 
     let debug = DebugConfig.unbox debug
 
-    let extensions =
-        if debug.DebugReportEnabled || debug.ValidationLayerEnabled || debug.DebugLabels then
-            List.ofSeq extensions @ [Instance.Extensions.Debug]
-        else
-            extensions |> List.ofSeq |> List.filter ((<>) Instance.Extensions.Debug)
-        |> List.distinct
+    let enabledLayers, availableExtensions, enabledExtensions =
+        let extensions =
+            if debug.DebugReportEnabled || debug.ValidationLayerEnabled || debug.DebugLabels then
+                List.ofSeq extensions @ [Instance.Extensions.Debug]
+            else
+                extensions |> List.ofSeq |> List.filter ((<>) Instance.Extensions.Debug)
 
-    let layers =
-        if debug.ValidationLayerEnabled then
-            List.ofSeq layers @ [Instance.Layers.Validation]
-        else
-            layers |> List.ofSeq |> List.filter ((<>) Instance.Layers.Validation)
+        let layers =
+            if debug.ValidationLayerEnabled then
+                List.ofSeq layers @ [Instance.Layers.Validation]
+            else
+                layers |> List.ofSeq |> List.filter ((<>) Instance.Layers.Validation)
 
-    let layers, instanceExtensions = filterLayersAndExtensions layers extensions
+        let mutable availableExtensions = availableGlobalExtensions
 
-    let hasInstanceExtension name =
-        instanceExtensions |> List.contains name
+        let enabledLayers =
+            layers |> Set.ofList |> Set.filter (fun name ->
+                match Map.tryFind name availableLayers with
+                | Some layer ->
+                    Log.Vulkan.debug "enabled layer %A" name
+                    for e in layer.extensions do
+                        availableExtensions <- availableExtensions |> Map.add e.name e
+                    true
+                | _ ->
+                    false
+            )
 
-    let debugUtilsEnabled =
-        instanceExtensions |> List.contains Instance.Extensions.Debug
+        let enabledExtensions =
+            extensions |> Set.ofList |> Set.filter (fun name ->
+                if availableExtensions |> Map.containsKey name then
+                    Log.Vulkan.debug "enabled instance extension %A" name
+                    true
+                else
+                    false
+            )
 
-    let validationEnabled =
-        layers |> List.contains Instance.Layers.Validation
+        enabledLayers, availableExtensions, enabledExtensions
+
+    let isLayerEnabled = flip Set.contains enabledLayers
+    let isExtensionEnabled = flip Set.contains enabledExtensions
+
+    let debugUtilsEnabled = isExtensionEnabled Instance.Extensions.Debug
 
     let mutable instance, apiVersion =
-        let layers = List.toArray layers
-        let extensions = List.toArray instanceExtensions
+        let layers = Set.toArray enabledLayers
+        let extensions = Set.toArray enabledExtensions
 
         let rec tryCreate (apiVersion : Version) =
             native {
@@ -230,7 +227,7 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
 
                     new LayerSettings([
                         match debug.ValidationLayer with
-                        | Some cfg when validationEnabled ->
+                        | Some cfg when isLayerEnabled Instance.Layers.Validation ->
                             validationSetting "validate_best_practices" cfg.BestPracticesValidation
                             validationSetting "validate_sync" cfg.SynchronizationValidation
                             validationSetting "gpuav_enable" (cfg.ShaderBasedValidation = ShaderValidation.GpuAssisted)
@@ -286,7 +283,7 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
             VkRaw.vkEnumeratePhysicalDevices(instance, pDeviceCount, ptr)
                 |> check "could not get physical devices"
 
-            return devices |> Array.map (fun d -> PhysicalDevice(this, d, hasInstanceExtension))
+            return devices |> Array.map (fun device -> PhysicalDevice(this, device))
         }
 
     let groups =    
@@ -310,7 +307,7 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                                 let handle = d.physicalDevices.[ii]
                                 devices |> Array.find (fun dd -> dd.Handle = handle)
                             )
-                        new PhysicalDeviceGroup(this, devices, hasInstanceExtension)
+                        new PhysicalDeviceGroup(this, devices)
                     )
                     |> Array.filter (fun g -> g.Devices.Length > 1)
             }
@@ -320,19 +317,18 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
     let devicesAndGroups =
         Array.append devices (groups |> Array.map (fun a -> a :> _))
 
-
-    new (layers: list<string>, extensions: list<string>, debug: IDebugConfig) =
+    new (layers: seq<string>, extensions: seq<string>, debug: IDebugConfig) =
         new Instance(defaultVersion, layers, extensions, debug)
 
-    new (apiVersion: Version, layers: list<string>, extensions: list<string>) =
+    new (apiVersion: Version, layers: seq<string>, extensions: seq<string>) =
         new Instance(apiVersion, layers, extensions, DebugConfig.None)
 
-    new (layers: list<string>, extensions: list<string>) =
+    new (layers: seq<string>, extensions: seq<string>) =
         new Instance(defaultVersion, layers, extensions)
 
     static member DefaultVersion = defaultVersion
     static member AvailableLayers = availableLayers
-    static member GlobalExtensions = globalExtensions
+    static member AvailableGlobalExtensions = availableGlobalExtensions
 
     [<CLIEvent>]
     member x.BeforeDispose = beforeDispose.Publish
@@ -355,8 +351,10 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
     override x.Finalize() = x.Dispose false
 
     member x.APIVersion = apiVersion
-    member x.EnabledLayers = layers
-    member x.EnabledExtensions = instanceExtensions
+    member x.EnabledLayers = enabledLayers
+    member x.IsLayerEnabled name = isLayerEnabled name
+    member x.EnabledExtensions = enabledExtensions
+    member x.IsExtensionEnabled name = isExtensionEnabled name
 
     member x.DebugReportEnabled = debugUtilsEnabled
     member x.DebugLabelsEnabled = debugUtilsEnabled && debug.DebugLabels
@@ -391,16 +389,14 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
         let l = Logger.Get verbosity
         l.section "instance:" (fun () ->
             l.section "layers:" (fun () ->
-                for layer in availableLayers do
-                    let isEnabled = List.contains layer.name layers
-                    let suffix = if isEnabled then "(X)" else "( )"
+                for layer in Map.values availableLayers do
+                    let suffix = if isLayerEnabled layer.name then "(X)" else "( )"
                     l.line "%s (v%A) %s" layer.name layer.specification suffix
             )
 
             l.section "extensions:" (fun () ->
-                for ext in globalExtensions do
-                    let isEnabled = List.contains ext.name instanceExtensions
-                    let suffix = if isEnabled then "(X)" else "( )"
+                for ext in Map.values availableExtensions do
+                    let suffix = if isExtensionEnabled ext.name then "(X)" else "( )"
                     l.line "%s (v%A) %s" ext.name ext.specification suffix
             )
 
@@ -421,13 +417,8 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                         l.line "version:  %A" d.APIVersion
                         l.line "driver:   %A" d.DriverVersion
 
-                        l.section "layers:" (fun () ->
-                            for layer in d.AvailableLayers do
-                                l.line "%s (v%A)" layer.name layer.specification
-                        )
-
                         l.section "extensions:" (fun () ->
-                            for ext in d.GlobalExtensions do
+                            for ext in Map.values d.AvailableExtensions do
                                 l.line "%s (v%A)" ext.name ext.specification
                         )
 

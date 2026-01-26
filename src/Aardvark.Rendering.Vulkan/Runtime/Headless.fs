@@ -35,19 +35,8 @@ type HeadlessVulkanApplication(debug: IDebugConfig,
     let requestedLayers =
         []
 
-    let instance = 
-        let availableExtensions =
-            Instance.GlobalExtensions |> Seq.map _.name |> Set.ofSeq
-
-        let availableLayers =
-            Instance.AvailableLayers |> Seq.map _.name |> Set.ofSeq
-
-        // create an instance
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
-    
-        new Instance(enabledLayers, enabledExtensions, debug)
-
+    let instance =
+        new Instance(requestedLayers, requestedExtensions, debug)
 
     // choose a physical device
     let physicalDevice =
@@ -60,15 +49,10 @@ type HeadlessVulkanApplication(debug: IDebugConfig,
     do instance.PrintInfo(physicalDevice, debug.PlatformInformationVerbosity)
 
     // create a device
-    let device = 
-        let availableExtensions =
-            physicalDevice.GlobalExtensions |> Seq.map _.name |> Set.ofSeq
-
+    let device =
         let deviceExtensions =
             if isNull deviceExtensions then Seq.empty
-            else
-                deviceExtensions.Invoke physicalDevice
-                |> Seq.filter (flip Set.contains availableExtensions)
+            else deviceExtensions.Invoke physicalDevice
 
         let selectFeatures = if isNull deviceFeatures then DeviceFeatures.getDefault else deviceFeatures.Invoke
         physicalDevice.CreateDevice(Seq.append requestedExtensions deviceExtensions, selectFeatures)

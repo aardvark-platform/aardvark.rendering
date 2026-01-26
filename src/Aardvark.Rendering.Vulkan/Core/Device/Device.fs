@@ -19,7 +19,7 @@ type UploadMode =
     | Sync
     | Async
 
-type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string seq, selectFeatures: DeviceFeatures -> DeviceFeatures) =
+type Device private (physicalDevice: PhysicalDevice, extensions: string seq, selectFeatures: DeviceFeatures -> DeviceFeatures) =
     let isGroup, physicalDevices =
         match physicalDevice with
         | :? PhysicalDeviceGroup as g -> true, g.Devices
@@ -78,9 +78,9 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
             "Vulkan"
         ]
 
-    let wantedExtensions =
+    let extensions =
         [
-            yield! wantedExtensions
+            yield! extensions
 
             // if the device supports VK_KHR_portability_subset, it must be enabled
             if physicalDevice.HasExtension KHRPortabilitySubset.Name then
@@ -91,25 +91,20 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
         ]
 
     let enabledExtensions =
-        let availableExtensions = physicalDevice.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
+        extensions
+        |> Set.ofList
+        |> Set.filter (fun name ->
+            if instance.IsExtensionEnabled name then
+                false
+            elif physicalDevice.HasExtension name then
+                Log.Vulkan.debug "enabled device extension %A" name
+                true
+            else
+                Log.Vulkan.debug "requested extension %A is not available" name
+                false
+        )
 
-        let enabledExtensions =
-            wantedExtensions
-            |> List.filter (fun e -> instance.EnabledExtensions |> List.contains e |> not)
-            |> List.choose (fun name ->
-                let name = name.ToLower()
-                match availableExtensions.TryGetValue name with
-                | true, realName ->
-                    Log.Vulkan.debug "enabled device extension %A" name
-                    Some realName
-                | _ ->
-                    Log.Vulkan.debug "requested extension %A is not available" name
-                    None
-            )
-
-        enabledExtensions
-
-    let isExtensionEnabled = flip List.contains enabledExtensions
+    let isExtensionEnabled = flip Set.contains enabledExtensions
 
     let enabledFeatures =
         physicalDevice.GetFeatures(isExtensionEnabled)
@@ -134,7 +129,7 @@ type Device private (physicalDevice: PhysicalDevice, wantedExtensions: string se
 
         native {
             let! pQueueCreateInfos = queueCreateInfos
-            let extensions = List.toArray enabledExtensions
+            let extensions = Set.toArray enabledExtensions
             let! pExtensions = extensions
 
             let deviceHandles = physicalDevices |> Array.map _.Handle

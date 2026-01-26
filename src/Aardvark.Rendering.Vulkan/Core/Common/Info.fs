@@ -79,38 +79,6 @@ module LayerInfo =
             LayerInfo.extensions = layerExtensions
         }
 
-    let internal ofVulkanDevice (device : VkPhysicalDevice) (prop : VkLayerProperties) =
-        let name = prop.layerName.Value
-        
-        let properties =
-            native {
-                let! pCount = 0u
-                VkRaw.vkEnumerateDeviceExtensionProperties(device, name, pCount, NativePtr.zero)
-                    |> check "could not get available instance layers"
-                    
-                let properties = Array.zeroCreate (int !!pCount)
-                let! ptr = properties
-                VkRaw.vkEnumerateDeviceExtensionProperties(device, name, pCount, ptr)
-                    |> check "could not get available instance layers"
-               
-                return properties
-            }
-
-
-        let layerExtensions = 
-            properties 
-                |> Array.toList 
-                |> List.map ExtensionInfo.ofVulkan
-
-        {
-            LayerInfo.name = prop.layerName.Value
-            LayerInfo.description = prop.description.Value
-            LayerInfo.implementation = Version.FromVulkan prop.implementationVersion
-            LayerInfo.specification = Version.FromVulkan prop.specVersion
-            LayerInfo.extensions = layerExtensions
-        }
-
-
 
 // =======================================================================
 // Queue Flags

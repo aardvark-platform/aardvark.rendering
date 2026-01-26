@@ -40,24 +40,10 @@ type DeviceProperties =
         else
             $"{this.Vendor} {this.Name}"
 
-type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice, hasInstanceExtension: string -> bool) =
+type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice) =
     static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
 
-    let availableLayers =
-        native {
-            let! pCount = 0u
-            VkRaw.vkEnumerateDeviceLayerProperties(handle, pCount, NativePtr.zero)
-                |> check "could not get device-layers"
-
-            let props = Array.zeroCreate (int !!pCount)
-            let! ptr = props
-            VkRaw.vkEnumerateDeviceLayerProperties(handle, pCount, ptr)
-                |> check "could not get device-layers"
-
-            return props |> Array.map (LayerInfo.ofVulkanDevice handle)
-        }
-
-    let globalExtensions =
+    let availableExtensions =
         native {
             let! pCount = 0u
             VkRaw.vkEnumerateDeviceExtensionProperties(handle, null, pCount, NativePtr.zero)
@@ -67,11 +53,15 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             let! ptr = props
             VkRaw.vkEnumerateDeviceExtensionProperties(handle, null, pCount, ptr)
                 |> check "could not get device-layers"
-            return props |> Array.map ExtensionInfo.ofVulkan
+
+            return props |> Array.map (fun p ->
+                let info = ExtensionInfo.ofVulkan p
+                info.name, info
+            )
+            |> Map.ofArray
         }
 
-    let hasExtension (name : string) =
-        globalExtensions |> Array.exists (fun e -> e.name = name)
+    let hasExtension = flip Map.containsKey availableExtensions
 
     let queryFeatures (hasExtension: string -> bool) =
         let f, pm, memp, ycbcr, cbc, s8, s16, f16i8, vp, sdp, idx, psub, rtp, rtpos, rtir, rtv, acc, omm, rq, bda, dflt =
@@ -120,7 +110,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
 
         f |> DeviceFeatures.create pm memp ycbcr cbc s8 s16 f16i8 vp sdp idx psub rtp rtpos rtir rtv acc omm rq bda dflt
 
-    let features =
+    let availableFeatures =
         queryFeatures hasExtension
 
     let properties =
@@ -278,9 +268,8 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
         let properties = x.GetExternalBufferProperties(flags, usage)
         properties.externalMemoryProperties.IsExportable
 
-    member x.AvailableLayers = availableLayers
-    member x.GlobalExtensions : ExtensionInfo[] = globalExtensions
-    member x.HasExtension name = globalExtensions |> Array.exists (_.name >> (=) name)
+    member x.AvailableExtensions = availableExtensions
+    member x.HasExtension name = hasExtension name
     member x.QueueFamilies = queueFamilyInfos
     member x.MemoryTypes = memoryTypes
     member x.MemoryHeaps = memoryHeaps
@@ -295,7 +284,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
     member x.DriverVersion : Version = properties.DriverVersion
 
     member internal x.InstanceInterface = instance
-    member x.Features : DeviceFeatures = features
+    member x.Features : DeviceFeatures = availableFeatures
     member x.Limits : DeviceLimits = properties.Limits
 
     member internal x.GetFeatures(hasExtension: string -> bool) = queryFeatures hasExtension
