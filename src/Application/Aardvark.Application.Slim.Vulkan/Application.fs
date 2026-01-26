@@ -104,9 +104,9 @@ type VulkanApplication private (app : HeadlessVulkanApplication, hideCocoaMenuBa
     inherit Application(app.Runtime, Vulkan.interop, hideCocoaMenuBar)
 
     static let surfaceExtensions =
-        let all = Instance.GlobalExtensions
-        all
-        |> Array.choose (fun e ->
+        Instance.AvailableGlobalExtensions
+        |> Map.values
+        |> Seq.choose (fun e ->
             match e.name with
             | "VK_KHR_surface"
             | "VK_KHR_swapchain"
@@ -117,7 +117,7 @@ type VulkanApplication private (app : HeadlessVulkanApplication, hideCocoaMenuBa
                 if e.name.EndsWith "_surface" then Some e.name
                 else None
         )
-        |> Set.ofArray
+        |> Set.ofSeq
         |> Set.add "VK_KHR_swapchain"
 
     static let getExtensions (user : string seq) =

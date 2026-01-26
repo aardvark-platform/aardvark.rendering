@@ -3,8 +3,8 @@
 open Aardvark.Base
 open System
 
-type PhysicalDeviceGroup internal(instance: IVulkanInstance, devices: PhysicalDevice[], hasInstanceExtension: string -> bool) =
-    inherit PhysicalDevice(instance, devices.[0].Handle, hasInstanceExtension)
+type PhysicalDeviceGroup internal(instance: IVulkanInstance, devices: PhysicalDevice[]) =
+    inherit PhysicalDevice(instance, devices.[0].Handle)
 
     let mask = (0u, devices) ||> Array.fold (fun s d -> s ||| d.DeviceMask)
 
