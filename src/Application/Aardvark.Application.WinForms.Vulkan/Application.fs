@@ -42,25 +42,25 @@ type VulkanApplication(debug: IDebugConfig,
             if extensions <> null then
                 yield! extensions
 
-            yield Instance.Extensions.Surface
-            yield Instance.Extensions.SwapChain
-            yield Instance.Extensions.Win32Surface
-            yield Instance.Extensions.XcbSurface
-            yield Instance.Extensions.XlibSurface
+            yield Extensions.Surface
+            yield Extensions.SwapChain
+            yield Extensions.Win32Surface
+            yield Extensions.XcbSurface
+            yield Extensions.XlibSurface
 
-            yield Instance.Extensions.ShaderSubgroupVote
-            yield Instance.Extensions.ShaderSubgroupBallot
-            yield! Instance.Extensions.Shader8Bit16Bit
-            yield Instance.Extensions.GetPhysicalDeviceProperties2
-            yield Instance.Extensions.ConservativeRasterization
-            yield Instance.Extensions.CustomBorderColor
-            yield Instance.Extensions.MemoryBudget
-            yield Instance.Extensions.MemoryPriority
-            yield Instance.Extensions.DeviceFault
+            yield Extensions.ShaderSubgroupVote
+            yield Extensions.ShaderSubgroupBallot
+            yield! Extensions.Shader8Bit16Bit
+            yield Extensions.GetPhysicalDeviceProperties2
+            yield Extensions.ConservativeRasterization
+            yield Extensions.CustomBorderColor
+            yield Extensions.MemoryBudget
+            yield Extensions.MemoryPriority
+            yield Extensions.DeviceFault
 
-            yield! Instance.Extensions.Maintenance
-            yield! Instance.Extensions.Raytracing debug.RaytracingValidationEnabled
-            yield! Instance.Extensions.Sharing
+            yield! Extensions.Maintenance
+            yield! Extensions.Raytracing debug.RaytracingValidationEnabled
+            yield! Extensions.Sharing
         ]
 
     let requestedLayers =
@@ -89,7 +89,7 @@ type VulkanApplication(debug: IDebugConfig,
     let runtime = new Runtime(device)
 
     let canCreateRenderControl =
-        device.IsExtensionEnabled Instance.Extensions.SwapChain
+        device.IsExtensionEnabled Extensions.SwapChain
 
     member x.Runtime = runtime
 
@@ -101,7 +101,7 @@ type VulkanApplication(debug: IDebugConfig,
                     let impl = new VulkanRenderControl(runtime, mode)
                     ctrl.Implementation <- impl
                 else
-                    failwithf "[Vulkan] cannot initialize RenderControl since device-extension (%s) is missing" Instance.Extensions.SwapChain
+                    failwithf "[Vulkan] cannot initialize RenderControl since device-extension (%s) is missing" Extensions.SwapChain
 
             | _ ->
                 failwithf "[Vulkan] unsupported RenderControl-Type %A" ctrl

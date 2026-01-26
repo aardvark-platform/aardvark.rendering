@@ -1032,8 +1032,8 @@ module Image =
             let properties, externalMemoryProperties =
                 let external =
                     if export.IsEnabled then
-                        if not <| device.IsExtensionEnabled Instance.Extensions.ExternalMemory then
-                            failf $"Cannot export image memory because {Instance.Extensions.ExternalMemory} is not supported"
+                        if not <| device.IsExtensionEnabled Extensions.ExternalMemory then
+                            failf $"Cannot export image memory because {Extensions.ExternalMemory} is not supported"
 
                         VkExternalMemoryHandleTypeFlags.OpaqueBit
                     else
