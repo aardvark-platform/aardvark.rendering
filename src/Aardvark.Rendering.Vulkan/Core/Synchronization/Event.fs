@@ -9,6 +9,9 @@ type Event internal (device: IDevice) =
     let mutable handle = VkEvent.Null
 
     do
+        if not device.EnabledFeatures.Synchronization.Events then
+            failf "device does not support events"
+
         let mutable createInfo = VkEventCreateInfo.Empty
         VkRaw.vkCreateEvent(device.Handle, &&createInfo, NativePtr.zero, &&handle)
             |> check "could not create event"
