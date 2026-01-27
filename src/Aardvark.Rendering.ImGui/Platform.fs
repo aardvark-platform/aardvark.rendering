@@ -350,13 +350,11 @@ type internal Platform(window: Aardvark.Glfw.Window, io: ImGuiIOPtr) =
 
     member private _.SizeAndScale =
         let mutable windowSize = V2i.Zero
-        let mutable displaySize = V2i.Zero
         glfw.GetWindowSize(window.Handle, &windowSize.X, &windowSize.Y)
-        glfw.GetFramebufferSize(window.Handle, &displaySize.X, &displaySize.Y)
 
         let framebufferScale =
             if windowSize.X > 0 && windowSize.Y > 0 then
-                V2f displaySize / V2f windowSize
+                V2f window.FramebufferSize / V2f windowSize
             else
                 V2f.One
 

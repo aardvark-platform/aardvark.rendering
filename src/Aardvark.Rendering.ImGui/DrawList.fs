@@ -74,7 +74,7 @@ type internal DrawList(runtime: IRuntime, textures: Textures) =
 
     member _.Scene = sg
 
-    member _.Update(data: ImDrawListPtr, display: Box2i inref, framebufferScale: V2f) =
+    member _.Update(data: ImDrawListPtr, display: Box2f inref, framebufferScale: V2f) =
         indexBuffer |> updateBuffer data.IdxBuffer
         vertexBuffer |> updateBuffer data.VtxBuffer
 
@@ -111,8 +111,8 @@ type internal DrawList(runtime: IRuntime, textures: Textures) =
 
                 let scissor =
                     Box2f(
-                        data.ClipRect.X, float32 display.SizeY - data.ClipRect.W,
-                        data.ClipRect.Z, float32 display.SizeY - data.ClipRect.Y
+                        data.ClipRect.X, display.SizeY - data.ClipRect.W,
+                        data.ClipRect.Z, display.SizeY - data.ClipRect.Y
                     ).Scaled framebufferScale
 
                 DrawCallInfo.ToggleIndexed &drawCalls.[i]
