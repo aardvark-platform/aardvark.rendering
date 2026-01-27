@@ -270,6 +270,8 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
     member x.IsLayerEnabled name = isLayerEnabled name
     member x.EnabledExtensions = enabledExtensions
     member x.IsExtensionEnabled name = isExtensionEnabled name
+    member x.AvailableExtensions = availableExtensions
+    member x.IsExtensionAvailable name = availableExtensions |> Map.containsKey name
 
     member x.DebugReportEnabled = debugUtilsEnabled
     member x.DebugLabelsEnabled = debugUtilsEnabled && debug.DebugLabels

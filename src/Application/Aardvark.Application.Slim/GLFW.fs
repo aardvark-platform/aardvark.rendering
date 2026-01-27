@@ -229,7 +229,7 @@ module Translations =
         | _ -> Aardvark.Application.MouseButtons.None
 
 [<AutoOpen>]
-module MissingGlfwFunctions =
+module GlfwExtensions =
     open System.Text
 
     type private GetWindowContentScaleDel = delegate of nativeptr<WindowHandle> * byref<float32> * byref<float32> -> unit
@@ -250,35 +250,38 @@ module MissingGlfwFunctions =
             Marshal.GetDelegateForFunctionPointer(m, typeof<GetKeyNameDel>) |> unbox<GetKeyNameDel>
         )
 
+    module String =
+        let ofUTF8 (ptr: nativeptr<uint8>) =
+            if NativePtr.isNull ptr then
+                String.Empty
+            else
+                let mutable len = 0
+                while ptr.[len] <> 0uy do inc &len
+                Encoding.UTF8.GetString(ptr, len)
+
     type Glfw with
         member x.GetWindowContentScale(win : nativeptr<WindowHandle>, [<Out>] sx : byref<float32>, [<Out>] sy : byref<float32>) =
             getWindowScale(x).Invoke(win, &sx, &sy)
 
         member x.GetKeyNamePtr(key : Keys, code : int) =
-            let mutable ptr = getKeyName(x).Invoke(key, code) |> NativePtr.ofNativeInt<byte>
-
-            if ptr = NativePtr.zero then 
-                ""
-            else
-                let l = System.Collections.Generic.List<byte>()
-                let mutable c = NativePtr.read ptr
-                while c <> 0uy do
-                    l.Add c
-                    ptr <- NativePtr.add ptr 1
-                    c <- NativePtr.read ptr
-
-                System.Text.Encoding.UTF8.GetString(l.ToArray())
+            getKeyName(x).Invoke(key, code)
+            |> NativePtr.ofNativeInt<byte>
+            |> String.ofUTF8
 
         member x.GetErrorMessage() =
             let err, ptr = x.GetError()
-            let mutable msg = String.Empty
 
-            if err <> ErrorCode.NoError && not <| NativePtr.isNull ptr then
-                let mutable len = 0
-                while ptr.[len] <> 0uy do inc &len
-                msg <- Encoding.UTF8.GetString(ptr, len)
+            let msg =
+                if err <> ErrorCode.NoError then
+                    String.ofUTF8 ptr
+                else
+                    String.Empty
 
             err, msg
+
+    type WindowHintBool with
+        static member CocoaRetinaFramebuffer = unbox<WindowHintBool> 0x00023001
+        static member ScaleToMonitor = unbox<WindowHintBool> 0x0002200C
 
 type WindowEvent =
     | Resize
@@ -583,7 +586,7 @@ type IWindowSurface =
 
 type IWindowInterop =
     inherit IDisposable
-    abstract Boot : Glfw -> unit
+    abstract Boot : IRuntime * Glfw -> unit
     abstract CreateSurface : IRuntime * WindowConfig * Glfw * nativeptr<WindowHandle> -> IWindowSurface
     abstract WindowHints : WindowConfig * Glfw -> unit
 
@@ -601,7 +604,7 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
         if not (glfw.Init()) then
             failwith "GLFW init failed"
 
-        interop.Boot glfw
+        interop.Boot(runtime, glfw)
 
     // For GL we need to specify a parent window to enable context sharing
     // Simply use the one that was created first, assuming it is still valid and unused.
@@ -714,7 +717,7 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
             let retina =
                 if RuntimeInformation.IsOSPlatform OSPlatform.OSX then cfg.physicalSize
                 else false
-            glfw.WindowHint(unbox<WindowHintBool> 0x00023001, retina)
+            glfw.WindowHint(WindowHintBool.CocoaRetinaFramebuffer, retina)
             glfw.WindowHint(WindowHintBool.TransparentFramebuffer, cfg.transparent)
             glfw.WindowHint(WindowHintBool.Visible, false)
             glfw.WindowHint(WindowHintBool.Resizable, cfg.resizable)
