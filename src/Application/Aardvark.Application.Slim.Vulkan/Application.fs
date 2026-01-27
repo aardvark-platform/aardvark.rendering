@@ -87,8 +87,19 @@ module private Vulkan =
 
     let interop =
         { new IWindowInterop with
-            override _.Boot(_) =
-                ()
+            override _.Boot(runtime, glfw) =
+                let runtime = unbox<Runtime> runtime
+                let instance = runtime.Device.Instance
+
+                let mutable count = 0u
+                let pExtensions = glfw.GetRequiredInstanceExtensions(&count)
+
+                for i = 0 to int count - 1 do
+                    let extension = String.ofUTF8 pExtensions.[i]
+
+                    if not <| instance.IsExtensionEnabled extension then
+                        let status = if instance.IsExtensionAvailable extension then "enabled" else "available"
+                        raise <| NotSupportedException $"GLFW requires instance extension {extension} but it is not {status}."
 
             override _.CreateSurface(runtime : IRuntime, cfg: WindowConfig, glfw: Glfw, win: nativeptr<WindowHandle>) =
                 createSurface (runtime :?> _) cfg glfw win
