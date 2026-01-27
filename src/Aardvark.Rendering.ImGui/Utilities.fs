@@ -91,7 +91,7 @@ module internal Utilities =
 
     type ImDrawDataPtr with
         member inline this.Display =
-            Box2d.FromMinAndSize(
-                float this.DisplayPos.X, float this.DisplayPos.Y,
-                float this.DisplaySize.X, float this.DisplaySize.Y
+            Box2f.FromMinAndSize(
+                float32 this.DisplayPos.X, float32 this.DisplayPos.Y,
+                float32 this.DisplaySize.X, float32 this.DisplaySize.Y
             )

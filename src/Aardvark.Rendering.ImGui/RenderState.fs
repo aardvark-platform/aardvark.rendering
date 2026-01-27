@@ -10,11 +10,11 @@ open Hexa.NET.ImGui
 type internal RenderState (runtime: IRuntime) =
     let textures = new Textures(runtime)
     let drawLists = clist<DrawList>()
-    let display = AVal.init Box2d.Unit
+    let display = AVal.init Box2f.Unit
 
     let projTrafo =
         display |> AVal.map (fun display ->
-            Trafo3d.OrthoProjectionGL(display.Left, display.Right, display.Bottom, display.Top, -1.0, 1.0)
+            Trafo3d(Trafo3f.OrthoProjectionGL(display.Left, display.Right, display.Bottom, display.Top, -1.0f, 1.0f))
         )
 
     let sg =
@@ -26,7 +26,7 @@ type internal RenderState (runtime: IRuntime) =
         |> Sg.projTrafo projTrafo
         |> Sg.surface Shader.Effect
 
-    let updateDrawLists (display: Box2i) (framebufferScale: V2f) (data: ImVector<ImDrawListPtr> inref) =
+    let updateDrawLists (display: Box2f) (framebufferScale: V2f) (data: ImVector<ImDrawListPtr> inref) =
         let currentCount = drawLists.Count
 
         // Add and remove draw lists if the count has changed
@@ -48,7 +48,7 @@ type internal RenderState (runtime: IRuntime) =
     member _.Update(data: ImDrawDataPtr) =
         display.Value <- data.Display
         textures.Update &data.Textures
-        updateDrawLists (Box2i data.Display) data.FramebufferScale.V2f &data.CmdLists
+        updateDrawLists data.Display data.FramebufferScale.V2f &data.CmdLists
 
     member _.Dispose() =
         for list in drawLists do list.Dispose()
