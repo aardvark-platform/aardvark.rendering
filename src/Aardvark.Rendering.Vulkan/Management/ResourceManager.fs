@@ -880,6 +880,10 @@ module Resources =
     type VertexInputStateResource(owner : IResourceCache, key : list<obj>, prog : PipelineInfo, input : aval<Map<Symbol, VertexInputDescription>>) =
         inherit AbstractPointerResource<VkPipelineVertexInputStateCreateInfo>(owner, key)
 
+        let struct (maxStride, minStrideAlignment) =
+            let limits = owner.Device.PhysicalDevice.Properties.Limits.Vertex
+            limits.MaxInputBindingStride, limits.MinInputBindingStrideAlignment
+
         override x.Update(handle, user, token, renderToken) =
             let state = input.GetValue(user, token, renderToken)
 
@@ -889,8 +893,22 @@ module Resources =
                 inputs |> List.map (fun p ->
                     let sem = Symbol.Create p.paramSemantic
                     match Map.tryFind sem state with
-                    | Some desc -> struct (p.paramLocation, desc)
-                    | None -> failf "could not get vertex input-type for %A" p
+                    | Some desc ->
+                        let stride = uint32 desc.stride
+
+                        if stride > maxStride then
+                            failf $"stride of vertex input '{sem}' exceeds device maximum (stride is {stride}, maximum is {maxStride})"
+
+                        if stride < minStrideAlignment then
+                            failf $"stride of vertex input '{sem}' is smaller than device minimum (stride is {stride}, minimum is {minStrideAlignment})"
+
+                        if minStrideAlignment > 0u && stride % minStrideAlignment <> 0u then
+                            failf $"stride of vertex input '{sem}' is misaligned (stride is {stride}, required alignment is {minStrideAlignment})"
+
+                        struct (p.paramLocation, desc)
+
+                    | None ->
+                        failf $"could not get description for vertex input '{sem}'"
                 )
 
             let inputBindings =
