@@ -38,8 +38,8 @@ type internal LayerSettings(settings: LayerSetting[]) =
             | Bool    -> VkLayerSettingTypeEXT.Bool32
             | Int32   -> VkLayerSettingTypeEXT.Int32
             | Int64   -> VkLayerSettingTypeEXT.Int64
-            | UInt32  -> VkLayerSettingTypeEXT.Int32
-            | UInt64  -> VkLayerSettingTypeEXT.Int64
+            | UInt32  -> VkLayerSettingTypeEXT.Uint32
+            | UInt64  -> VkLayerSettingTypeEXT.Uint64
             | Float32 -> VkLayerSettingTypeEXT.Float32
             | Float64 -> VkLayerSettingTypeEXT.Float64
             | String  -> VkLayerSettingTypeEXT.String
