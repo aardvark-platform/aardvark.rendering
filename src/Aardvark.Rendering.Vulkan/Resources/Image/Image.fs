@@ -23,11 +23,11 @@ module ``Image Format Extensions`` =
             if VkFormat.hasDepth format || VkFormat.hasStencil format then
                 false
             else
-                let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
+                let features = device.PhysicalDevice.GetImageFormatFeatures(format)
                 features.HasFlag VkFormatFeatureFlags.SampledImageFilterLinearBit
 
         let supportsMipmapGeneration (device : Device) (format : VkFormat) =
-            let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
+            let features = device.PhysicalDevice.GetImageFormatFeatures(format)
             features.HasFlag (
                 VkFormatFeatureFlags.BlitSrcBit |||
                 VkFormatFeatureFlags.BlitDstBit
@@ -72,7 +72,7 @@ module ``Image Format Extensions`` =
             | Col.Format.BGRP   -> retry Col.Format.RGBP
             | _ ->
                 let test = VkFormat.ofPixFormat fmt t
-                let features = x.PhysicalDevice.GetFormatFeatures(tiling, test)
+                let features = x.PhysicalDevice.GetImageFormatFeatures(test, tiling)
 
                 if features <> VkFormatFeatureFlags.None then
                     test
@@ -988,7 +988,7 @@ module Image =
                     (dimension : TextureDimension) (usage : VkImageUsageFlags) (format : VkFormat)
                     (mipMapLevels : int) (count : int) (samples : int) (size : V3i) (device : Device) : Image =
 
-        let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
+        let features = device.PhysicalDevice.GetImageFormatFeatures(format)
 
         if features = VkFormatFeatureFlags.None then
             match VkFormat.tryGetNextBetter format with
