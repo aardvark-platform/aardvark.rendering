@@ -29,10 +29,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(vkvm SHARED commands.h vkvm.h vkvm.cpp commands.cpp vma.cpp)
 
-find_package(Vulkan REQUIRED)
+if(APPLE)
+    find_package(Vulkan REQUIRED COMPONENTS MoltenVK)
+else()
+    find_package(Vulkan REQUIRED)
+endif()
+
 target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIRS})
 target_include_directories(${PROJECT_NAME} PUBLIC "$ENV{VULKAN_SDK}/Include/vulkan")
 target_link_libraries(${PROJECT_NAME})
 
 install(TARGETS vkvm DESTINATION ${OS}/${ARCH})
-
+if(APPLE)
+    get_filename_component(MOLTENVK_LIB_DIR "${Vulkan_MoltenVK_LIBRARY}" DIRECTORY)
+    install(FILES "${MOLTENVK_LIB_DIR}/libMoltenVK.dylib" DESTINATION ${OS}/${ARCH})
+endif()
