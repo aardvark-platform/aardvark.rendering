@@ -56,6 +56,7 @@
     <Compile Include="Core\Queues\DeviceToken.fs" />
     <Compile Include="Core\Queues\DeviceQueueFamily.fs" />
     <Compile Include="Core\Device\DeviceCache.fs" />
+    <Compile Include="Core\Device\PipelineCache.fs" />
     <Compile Include="Core\Device\CopyEngine.fs" />
     <Compile Include="Core\Device\Device.fs" />
     <Compile Include="Core\Commands.fs" />

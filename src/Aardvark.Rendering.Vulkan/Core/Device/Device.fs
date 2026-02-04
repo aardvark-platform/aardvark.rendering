@@ -174,6 +174,8 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
     let mutable stagingMemory : IDeviceMemory = Unchecked.defaultof<_>
     let mutable readbackMemory : IDeviceMemory = Unchecked.defaultof<_>
 
+    let mutable pipelineCache : PipelineCache = Unchecked.defaultof<_>
+
     let mutable runtime = Unchecked.defaultof<IRuntime>
 
     let copyEngine = 
@@ -213,6 +215,8 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
         readbackMemory <- memoryAllocator.GetMemory(preferDevice = false, hostAccess = HostAccess.ReadWrite)
 
         vkvm <- new VKVM(device, pVkGetDeviceProcAddr)
+
+        pipelineCache <- PipelineCache.Deserialize(this)
 
     static member Create(physicalDevice: PhysicalDevice, wantedExtensions: string seq, selectFeatures: DeviceFeatures -> DeviceFeatures) =
         let device = new Device(physicalDevice, wantedExtensions, selectFeatures)
@@ -283,6 +287,7 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
     member internal x.QueueFamilyCount = uint32 queueFamilies.Length
     member internal x.QueueFamilyIndices = pAllQueueFamilyIndices
     member internal x.SharingMode = sharingMode
+    member internal x.PipelineCache = pipelineCache
 
     member x.GraphicsFamily : DeviceQueueFamily  = 
         match graphicsFamily with
@@ -332,6 +337,10 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
                 copyEngine.Value.Dispose()
 
             onDispose.Trigger()
+
+            pipelineCache.Serialize()
+            pipelineCache.Dispose()
+
             memoryAllocator.Dispose()
             for f in queueFamilies do f.Dispose()
             VkRaw.vkDestroyDevice(device, NativePtr.zero)

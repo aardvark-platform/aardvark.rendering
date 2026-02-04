@@ -106,7 +106,7 @@ module RaytracingPipeline =
 
             let mutable handle = VkPipeline.Null
             VkRaw.vkCreateRayTracingPipelinesKHR(
-                device.Handle, VkDeferredOperationKHR.Null, VkPipelineCache.Null,
+                device.Handle, VkDeferredOperationKHR.Null, device.PipelineCache.Handle,
                 1u, &&createInfo, NativePtr.zero, &&handle
             )
             |> check "Failed to create raytracing pipeline"
