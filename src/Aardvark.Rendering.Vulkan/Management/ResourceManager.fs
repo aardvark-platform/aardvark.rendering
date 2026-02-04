@@ -2178,7 +2178,7 @@ type ResourceManager(device : Device) =
                         pass.ColorAttachments
                         |> Map.tryFind i
                         |> Option.map (fun (_, fmt) ->
-                            let features = pass.Device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt)
+                            let features = pass.Device.PhysicalDevice.GetImageFormatFeatures(fmt)
                             features.HasFlag VkFormatFeatureFlags.ColorAttachmentBlendBit
                         )
                         |> Option.defaultValue false

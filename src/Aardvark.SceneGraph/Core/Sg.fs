@@ -254,7 +254,7 @@ module Sg =
 
         new(test : aval<DepthTest>, child : ISg) = DepthTestApplicator(test, AVal.constant child)
 
-     type DepthBiasApplicator(bias : aval<DepthBias>, child : aval<ISg>) =
+    type DepthBiasApplicator(bias : aval<DepthBias>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.State = bias

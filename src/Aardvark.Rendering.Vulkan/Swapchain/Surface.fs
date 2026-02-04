@@ -172,7 +172,7 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
         supportedFormats |> Map.toSeq |> Seq.map fst |> Set.ofSeq
 
     let availableDepthFormats =
-        depthFormats |> Set.filter (fun fmt -> physical.GetFormatFeatures(VkImageTiling.Optimal, fmt).HasFlag(VkFormatFeatureFlags.DepthStencilAttachmentBit))
+        depthFormats |> Set.filter (fun fmt -> physical.GetImageFormatFeatures(fmt).HasFlag(VkFormatFeatureFlags.DepthStencilAttachmentBit))
 
     [<CLIEvent>]
     member x.OnDispose = onDispose.Publish

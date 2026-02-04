@@ -2,6 +2,8 @@
 
 open Aardvark.Base
 open System
+open System.Collections.Concurrent
+open System.Runtime.InteropServices
 open Vulkan11
 open KHRRayTracingPipeline
 open KHRRayTracingPositionFetch
@@ -41,8 +43,6 @@ type DeviceProperties =
             $"{this.Vendor} {this.Name}"
 
 type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice) =
-    static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
-
     let availableExtensions =
         native {
             let! pCount = 0u
@@ -183,30 +183,31 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             { MemoryInfo.index = i; MemoryInfo.heap = memoryHeaps.[int info.heapIndex]; MemoryInfo.flags = unbox (int info.propertyFlags) }
         )
 
-    let formatProperties =
-        Dictionary.ofList [
-            for fmt in allFormats do
-                let props =
-                    NativePtr.temp (fun pProps ->
-                        VkRaw.vkGetPhysicalDeviceFormatProperties(handle, fmt, pProps)
-                        pProps.[0]
-                    )
-                yield fmt, props
-        ]
+    let formatProperties = ConcurrentDictionary<_, VkFormatProperties>()
+    let imageFormatProperties = ConcurrentDictionary<_, VkImageFormatProperties * VkExternalMemoryProperties>()
+    let externalBufferProperties = ConcurrentDictionary<_, VkExternalBufferProperties>()
 
-    let imageFormatProperties = FastConcurrentDict()
-    let externalBufferProperties = FastConcurrentDict()
+    member x.GetFormatProperties(format: VkFormat) =
+        formatProperties.GetOrAdd(format, fun format ->
+            NativePtr.temp (fun pProperties ->
+                VkRaw.vkGetPhysicalDeviceFormatProperties(handle, format, pProperties)
+                !!pProperties
+            )
+        )
 
+    member x.GetImageFormatFeatures(format: VkFormat, [<Optional; DefaultParameterValue(VkImageTiling.Optimal)>] tiling: VkImageTiling) =
+        let properties = x.GetFormatProperties(format)
+        if tiling = VkImageTiling.Optimal then properties.optimalTilingFeatures else properties.linearTilingFeatures
+
+    [<Obsolete("Use GetImageFormatFeatures instead.")>]
     member x.GetFormatFeatures(tiling : VkImageTiling, fmt : VkFormat) =
-        match tiling with
-        | VkImageTiling.Linear -> formatProperties.[fmt].linearTilingFeatures
-        | _ -> formatProperties.[fmt].optimalTilingFeatures
+        x.GetImageFormatFeatures(fmt, tiling)
 
     member internal x.GetImageProperties(format : VkFormat, typ : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags,
                                          flags : VkImageCreateFlags, external : VkExternalMemoryHandleTypeFlags) =
         let key = (format, typ, tiling, usage, flags, external)
 
-        imageFormatProperties.GetOrCreate(key, fun _ ->
+        imageFormatProperties.GetOrAdd(key, fun _ ->
             native {
                 let! pExternalImageFormatInfo =
                     VkPhysicalDeviceExternalImageFormatInfo external
@@ -244,13 +245,14 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
         let _, externalMemoryProperties = x.GetImageProperties(format, typ, tiling, usage, flags, VkExternalMemoryHandleTypeFlags.OpaqueBit)
         externalMemoryProperties.IsExportable
 
-    member x.GetBufferFormatFeatures(fmt : VkFormat) =
-        formatProperties.[fmt].bufferFeatures
+    member x.GetBufferFormatFeatures(format: VkFormat) =
+        let properties = x.GetFormatProperties(format)
+        properties.bufferFeatures
 
     member x.GetExternalBufferProperties(flags : VkBufferCreateFlags, usage : VkBufferUsageFlags) =
         let key = (flags, usage)
 
-        externalBufferProperties.GetOrCreate(key, fun _ ->
+        externalBufferProperties.GetOrAdd(key, fun _ ->
             native {
                 let! pExternalBufferInfo =
                     VkPhysicalDeviceExternalBufferInfo(
