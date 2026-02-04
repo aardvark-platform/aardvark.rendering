@@ -138,7 +138,7 @@ module ComputeProgram =
                 )
 
             let! pPipeline = VkPipeline.Null
-            VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, pPipelineInfo, NativePtr.zero, pPipeline)
+            VkRaw.vkCreateComputePipelines(device.Handle, device.PipelineCache.Handle, 1u, pPipelineInfo, NativePtr.zero, pPipeline)
                 |> check "could not create compute pipeline"
 
             return new ComputeProgram(device, !!pPipeline, layout, module_, groupSize, glsl)

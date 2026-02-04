@@ -26,14 +26,15 @@ type IVulkanInstance = interface end
 
 type DeviceProperties =
     {
-        Name          : string
-        Vendor        : string
-        Type          : VkPhysicalDeviceType
-        APIVersion    : Version
-        DriverVersion : Version
-        UniqueId      : string
-        NodeMask      : uint32
-        Limits        : DeviceLimits
+        Name            : string
+        Vendor          : string
+        Type            : VkPhysicalDeviceType
+        APIVersion      : Version
+        DriverVersion   : Version
+        UniqueId        : string
+        PipelineCacheId : string
+        NodeMask        : uint32
+        Limits          : DeviceLimits
     }
 
     member inline this.FullName =
@@ -134,14 +135,15 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pOmm
 
         {
-            Name          = properties.deviceName.Value
-            Vendor        = PCI.vendorName <| int properties.vendorID
-            Type          = properties.deviceType
-            APIVersion    = Version.FromVulkan properties.apiVersion
-            DriverVersion = Version.FromVulkan properties.driverVersion
-            UniqueId      = sprintf "{ GUID = %A; Mask = %d }" devId.deviceUUID devId.deviceNodeMask
-            NodeMask      = if devId.deviceLUIDValid = VkTrue then devId.deviceNodeMask else 1u
-            Limits        = properties.limits |> DeviceLimits.create main psub cbc rtp rtir acc omm
+            Name            = properties.deviceName.Value
+            Vendor          = PCI.vendorName <| int properties.vendorID
+            Type            = properties.deviceType
+            APIVersion      = Version.FromVulkan properties.apiVersion
+            DriverVersion   = Version.FromVulkan properties.driverVersion
+            UniqueId        = if devId.deviceLUIDValid = VkTrue then $"{devId.deviceUUID}_{devId.deviceNodeMask}" else $"{devId.deviceUUID}"
+            PipelineCacheId = string properties.pipelineCacheUUID
+            NodeMask        = if devId.deviceLUIDValid = VkTrue then devId.deviceNodeMask else 1u
+            Limits          = properties.limits |> DeviceLimits.create main psub cbc rtp rtir acc omm
         }
 
     let queueFamilyInfos =

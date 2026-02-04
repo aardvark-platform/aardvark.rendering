@@ -1366,7 +1366,7 @@ module Resources =
                     -1
                 )
 
-            VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, &&createInfo, NativePtr.zero, &&result)
+            VkRaw.vkCreateGraphicsPipelines(device.Handle, device.PipelineCache.Handle, 1u, &&createInfo, NativePtr.zero, &&result)
                 |> check "could not create pipeline"
 
             if x.HasHandle then
