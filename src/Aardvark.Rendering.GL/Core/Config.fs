@@ -17,7 +17,7 @@ module Config =
     /// <summary>
     /// The minor GL Version for default contexts
     /// </summary>
-    let mutable MinorVersion = 6
+    let mutable MinorVersion = if RuntimeInformation.IsOSPlatform OSPlatform.OSX then 1 else 6
 
     /// <summary>
     /// The number of subsamples for default windows
