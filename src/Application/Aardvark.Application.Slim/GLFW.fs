@@ -586,6 +586,7 @@ type IWindowSurface =
 
 type IWindowInterop =
     inherit IDisposable
+    abstract Init : Glfw -> unit
     abstract Boot : IRuntime * Glfw -> unit
     abstract CreateSurface : IRuntime * WindowConfig * Glfw * nativeptr<WindowHandle> -> IWindowSurface
     abstract WindowHints : WindowConfig * Glfw -> unit
@@ -597,6 +598,8 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
 
     let glfw = Glfw.GetApi()
     do
+        interop.Init(glfw)
+
         if hideCocoaMenuBar then
             Log.line "hiding cocoa menubar"
             glfw.InitHint(Silk.NET.GLFW.InitHint.CocoaMenubar, false) // glfwInitHint(GLFW_COCOA_MENUBAR, GLFW_FALSE);
