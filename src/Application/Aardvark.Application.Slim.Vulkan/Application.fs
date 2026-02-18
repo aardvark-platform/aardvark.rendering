@@ -14,7 +14,23 @@ open System.Runtime.InteropServices
 
 #nowarn "9"
 
-module private Vulkan =
+module internal Vulkan =
+
+    [<AutoOpen>]
+    module GlfwExtensions =
+        type private InitVulkanLoaderDel = delegate of pVkGetInstanceProcAddr: nativeint -> unit
+        let private initVulkanLoaderDict = System.Collections.Concurrent.ConcurrentDictionary<Glfw, InitVulkanLoaderDel>()
+
+        let private getInitVulkanLoaderDel (glfw : Glfw) =
+            initVulkanLoaderDict.GetOrAdd(glfw, fun (glfw: Glfw) ->
+                let m = glfw.Context.GetProcAddress "glfwInitVulkanLoader"
+                Marshal.GetDelegateForFunctionPointer(m, typeof<InitVulkanLoaderDel>) |> unbox<InitVulkanLoaderDel>
+            )
+
+        type Glfw with
+            member this.InitVulkanLoader(pVkGetInstanceProcAddr: nativeint) =
+                getInitVulkanLoaderDel(this).Invoke(pVkGetInstanceProcAddr)
+
     let getSupportedSamples (runtime : Runtime) =
         let limits = runtime.Device.PhysicalDevice.Limits.Framebuffer
 
@@ -87,6 +103,13 @@ module private Vulkan =
 
     let interop =
         { new IWindowInterop with
+            override _.Init(glfw) =
+                let pVkGetInstanceProcAddr = VulkanLoader.GetProcAddress("vkGetInstanceProcAddr")
+                if pVkGetInstanceProcAddr = 0n then
+                    failwith "[GLFW] Failed to retrieve address of Vulkan function 'vkGetInstanceProcAddr'."
+
+                glfw.InitVulkanLoader(pVkGetInstanceProcAddr)
+
             override _.Boot(runtime, glfw) =
                 let runtime = unbox<Runtime> runtime
                 let instance = runtime.Device.Instance

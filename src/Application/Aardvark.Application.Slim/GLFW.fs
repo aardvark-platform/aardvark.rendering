@@ -638,6 +638,7 @@ type IWindowSurface =
 
 type IWindowInterop =
     inherit IDisposable
+    abstract Init : Glfw -> unit
     abstract Boot : IRuntime * Glfw -> unit
     abstract CreateSurface : IRuntime * WindowConfig * Glfw * nativeptr<WindowHandle> -> IWindowSurface
     abstract WindowHints : WindowConfig * Glfw -> unit
@@ -649,6 +650,8 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
 
     let glfw = Glfw.GetApi()
     do
+        interop.Init(glfw)
+
         if ActivationPolicy.isSupported() || hideCocoaMenuBar then
             glfw.InitHint(InitHint.CocoaMenubar, false)
 

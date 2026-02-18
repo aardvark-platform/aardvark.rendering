@@ -419,6 +419,7 @@ module private OpenGL =
                     getCurrentContextDelegate <- null
 
         { new IWindowInterop with
+            override _.Init(glfw) = ()
             override _.Boot(_, glfw) =
                 initVersion glfw
                 install glfw
