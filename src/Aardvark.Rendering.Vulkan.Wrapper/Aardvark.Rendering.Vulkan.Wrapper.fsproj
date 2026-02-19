@@ -19,6 +19,7 @@
     <None Include="vk.xml" />
     <None Include="Generator.fsx" />
     <Compile Include="Types.fs" />
+    <Compile Include="Loader.fs" />
     <Compile Include="Vulkan.fs" />
     <Compile Include="PCI.fs" />
     <Compile Include="VKVM.fs" />

@@ -85,6 +85,7 @@
     <Compile Include="Tests\Other\ContextCreation.fs" />
     <Compile Include="Tests\Other\StatsBench.fs" />
     <Compile Include="Tests\Other\VulkanWrapper.fs" />
+    <Compile Include="Tests\Other\VulkanBench.fs" />
     <Compile Include="Tests\Other\StructuralComparerTests.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />

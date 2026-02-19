@@ -1,14 +1,83 @@
 ﻿namespace Aardvark.Rendering.Tests
 
+open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.Memory
 open Aardvark.Rendering.Vulkan.Vulkan14
 open KHRAccelerationStructure
 open KHRFragmentShadingRate
 open NVClusterAccelerationStructure
+open KHRTimelineSemaphore
+open KHRGetPhysicalDeviceProperties2
 open Expecto
+open System
+open FSharp.NativeInterop
+
+#nowarn "9"
+#nowarn "51"
 
 module ``Vulkan Wrapper Tests`` =
+
+    [<AutoOpen>]
+    module Utilities =
+
+        module VkResult =
+            let check result =
+                if result <> VkResult.Success then
+                    failwithf "Vulkan returned %A" result
+
+        module VkInstance =
+            let create (version: Version) (extensions: string seq) =
+                let mutable appInfo = VkApplicationInfo.Empty
+                appInfo.apiVersion <- version.ToVulkan()
+                appInfo.pApplicationName <- CStr.malloc "Test"
+                appInfo.pEngineName <- CStr.malloc "No Engine"
+
+                let pExtensions = extensions |> Seq.map CStr.malloc |> Seq.toArray
+                use ppExtensions = fixed pExtensions
+
+                let mutable createInfo = VkInstanceCreateInfo.Empty
+                createInfo.pApplicationInfo <- &&appInfo
+                createInfo.enabledExtensionCount <- uint32 pExtensions.Length
+                createInfo.ppEnabledExtensionNames <- ppExtensions
+
+                let mutable instance = VkInstance.Zero
+                VkRaw.vkCreateInstance(&&createInfo, NativePtr.zero, &&instance) |> VkResult.check
+
+                pExtensions |> Array.iter CStr.free
+                CStr.free appInfo.pEngineName
+                CStr.free appInfo.pApplicationName
+
+                instance
+
+            let getPhysicalDevice (instance: VkInstance) =
+                let mutable count = 0u
+                VkRaw.vkEnumeratePhysicalDevices(instance, &&count, NativePtr.zero) |> VkResult.check
+
+                let physicalDevices = Array.zeroCreate (int count)
+                use pPhysicalDevices = fixed physicalDevices
+                VkRaw.vkEnumeratePhysicalDevices(instance, &&count, pPhysicalDevices) |> VkResult.check
+
+                pPhysicalDevices.[0]
+
+        module VkDevice =
+
+            let create (physicalDevice: VkPhysicalDevice) (extensions: string seq) =
+                let pExtensions = extensions |> Seq.map CStr.malloc |> Seq.toArray
+                use ppExtensions = fixed pExtensions
+
+                let mutable features = VkPhysicalDeviceFeatures.Empty
+                let mutable createInfo = VkDeviceCreateInfo.Empty
+                createInfo.enabledExtensionCount <- uint32 <| pExtensions.Length
+                createInfo.pEnabledFeatures <- &&features
+                createInfo.ppEnabledExtensionNames <- ppExtensions
+
+                let mutable device = VkDevice.Zero
+                VkRaw.vkCreateDevice(physicalDevice, &&createInfo, NativePtr.zero, &&device) |> VkResult.check
+
+                pExtensions |> Array.iter CStr.free
+
+                device
 
     module Arrays =
 
@@ -187,6 +256,274 @@ module ``Vulkan Wrapper Tests`` =
                 Expect.equal inst.opacityMicromapIndexType opacityMicromapIndexType "bad index type after setter"
             }
 
+    module EntryPoints =
+
+        let private version = Version(1, 0, 0)
+
+        let private init() =
+            VkRaw.EntryPoints.ReportEntryPointAddresses <- true
+            { new IDisposable with
+                member _.Dispose() =
+                    Expect.equal VkRaw.EntryPoints.LoadedInstance 0n "unexpected LoadedInstance"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion 0u "unexpected LoadedInstanceVersion"
+                    Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+            }
+
+        let loadGlobal =
+            test "Load global entry points" {
+                use _ = init()
+                let result = VkRaw.vkGetInstanceProcAddr(VkInstance.Zero, "blub")
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance 0n "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion 0u "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+                Expect.equal result 0n "unexpected entry point"
+            }
+
+        let loadInstance =
+            test "Load instance entry points" {
+                use _ = init()
+
+                for _ = 1 to 2 do
+                    let instance = VkInstance.create version []
+
+                    Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion (version.ToVulkan()) "unexpected LoadedInstanceVersion"
+                    Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+
+                    VkInstance.getPhysicalDevice instance |> ignore
+                    VkRaw.vkDestroyInstance(instance, NativePtr.zero)
+
+                    Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstance 0n "unexpected LoadedInstance"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion 0u "unexpected LoadedInstanceVersion"
+                    Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+            }
+
+        let loadInstanceExtension =
+            test "Load instance extension entry points" {
+                use _ = init()
+
+                for _ = 1 to 2 do
+                    let instance = VkInstance.create version [ KHRGetPhysicalDeviceProperties2.Name ]
+                    let physicalDevice = VkInstance.getPhysicalDevice instance
+
+                    Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion (version.ToVulkan()) "unexpected LoadedInstanceVersion"
+                    Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+
+                    let mutable features = VkPhysicalDeviceFeatures2KHR.Empty
+                    VkRaw.vkGetPhysicalDeviceFeatures2KHR(physicalDevice, &&features)
+
+                    VkRaw.vkDestroyInstance(instance, NativePtr.zero)
+
+                    Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstance 0n "unexpected LoadedInstance"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion 0u "unexpected LoadedInstanceVersion"
+                    Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance 0n "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion 0u "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+            }
+
+        let loadDevice =
+            test "Load device entry points" {
+                use _ = init()
+
+                let instance = VkInstance.create version []
+                let physicalDevice = VkInstance.getPhysicalDevice instance
+
+                for _ = 1 to 2 do
+                    let device = VkDevice.create physicalDevice []
+
+                    Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion (version.ToVulkan()) "unexpected LoadedInstanceVersion"
+                    Expect.sequenceEqual VkRaw.EntryPoints.LoadedDevices [ device ] "unexpected LoadedDevices"
+                    Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) (version.ToVulkan()) "unexpected GetDeviceVersion"
+
+                    let mutable pool = VkCommandPool.Null
+                    let mutable info = VkCommandPoolCreateInfo.Empty
+                    VkRaw.vkCreateCommandPool(device, &&info, NativePtr.zero, &&pool) |> VkResult.check
+                    VkRaw.vkDestroyCommandPool(device, pool, NativePtr.zero)
+
+                    VkRaw.vkDestroyDevice(device, NativePtr.zero)
+
+                    Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion (version.ToVulkan()) "unexpected LoadedInstanceVersion"
+                    Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+                    Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) 0u "unexpected GetDeviceVersion"
+
+                VkRaw.vkDestroyInstance(instance, NativePtr.zero)
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance 0n "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion 0u "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+            }
+
+        let loadDeviceExtension =
+            test "Load device extension entry points" {
+                use _ = init()
+
+                let instance = VkInstance.create version []
+                let physicalDevice = VkInstance.getPhysicalDevice instance
+
+                for _ = 1 to 2 do
+                    let device = VkDevice.create physicalDevice [ KHRTimelineSemaphore.Name ]
+
+                    Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion (version.ToVulkan()) "unexpected LoadedInstanceVersion"
+                    Expect.sequenceEqual VkRaw.EntryPoints.LoadedDevices [ device ] "unexpected LoadedDevices"
+                    Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) (version.ToVulkan()) "unexpected GetDeviceVersion"
+
+                    let mutable typeCreateInfo = VkSemaphoreTypeCreateInfoKHR.Empty
+                    typeCreateInfo.initialValue <- 42UL
+                    typeCreateInfo.semaphoreType <- VkSemaphoreTypeKHR.Timeline
+
+                    let mutable createInfo = VkSemaphoreCreateInfo.Empty
+                    createInfo.pNext <- NativePtr.toNativeInt &&typeCreateInfo
+
+                    let mutable semaphore = VkSemaphore.Null
+                    VkRaw.vkCreateSemaphore(device, &&createInfo, NativePtr.zero, &&semaphore) |> VkResult.check
+
+                    let mutable value = 0UL
+                    VkRaw.vkGetSemaphoreCounterValueKHR(device, semaphore, &&value) |> VkResult.check
+
+                    VkRaw.vkDestroySemaphore(device, semaphore, NativePtr.zero)
+
+                    VkRaw.vkDestroyDevice(device, NativePtr.zero)
+
+                    Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                    Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion (version.ToVulkan()) "unexpected LoadedInstanceVersion"
+                    Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+                    Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) 0u "unexpected GetDeviceVersion"
+
+                VkRaw.vkDestroyInstance(instance, NativePtr.zero)
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance 0n "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion 0u "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+            }
+
+        let validation =
+            test "Validation" {
+                use _ = init()
+                let ver = Version(9, 9, 9).ToVulkan()
+                let noext _ = false
+
+                // Device before instance -> fail
+                Expect.throwsT<InvalidOperationException> (fun _ ->
+                    VkRaw.EntryPoints.LoadDevice(1n, ver, noext)
+                ) "Invalid LoadDevice did not throw expected exception"
+
+                let instance = VkInstance.create version []
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion (version.ToVulkan()) "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+
+                VkRaw.EntryPoints.LoadInstance(instance, ver, noext) // multiple calls with same instance are allowed
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion ver "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+
+                VkRaw.EntryPoints.UnloadInstance instance
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance 0n "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion 0u "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+
+                VkRaw.EntryPoints.UnloadInstance instance // no effect but success
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance 0n "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion 0u "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+
+                VkRaw.EntryPoints.LoadInstance(instance, ver, noext)
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion ver "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+
+                let device = VkDevice.create (VkInstance.getPhysicalDevice instance) []
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion ver "unexpected LoadedInstanceVersion"
+                Expect.sequenceEqual VkRaw.EntryPoints.LoadedDevices [ device ] "unexpected LoadedDevices"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) ver "unexpected GetDeviceVersion"
+
+                VkRaw.EntryPoints.LoadDevice(device, ver, noext) // multiple calls with same device are okay
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion ver "unexpected LoadedInstanceVersion"
+                Expect.sequenceEqual VkRaw.EntryPoints.LoadedDevices [ device ] "unexpected LoadedDevices"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) ver "unexpected GetDeviceVersion"
+
+                VkRaw.EntryPoints.LoadDevice(device + 1n, 1u, noext)
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion ver "unexpected LoadedInstanceVersion"
+                Expect.sequenceEqual VkRaw.EntryPoints.LoadedDevices [ device; device + 1n ] "unexpected LoadedDevices"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) ver "unexpected GetDeviceVersion"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion (device + 1n)) 1u "unexpected GetDeviceVersion"
+
+                VkRaw.EntryPoints.LoadDevice(device, ver, noext)
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion ver "unexpected LoadedInstanceVersion"
+                Expect.sequenceEqual VkRaw.EntryPoints.LoadedDevices [ device; device + 1n ] "unexpected LoadedDevices"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) ver "unexpected GetDeviceVersion"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion (device + 1n)) 1u "unexpected GetDeviceVersion"
+
+                VkRaw.EntryPoints.UnloadDevice(device + 1n)
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion ver "unexpected LoadedInstanceVersion"
+                Expect.sequenceEqual VkRaw.EntryPoints.LoadedDevices [ device ] "unexpected LoadedDevices"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) ver "unexpected GetDeviceVersion"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion (device + 1n)) 0u "unexpected GetDeviceVersion"
+
+                VkRaw.vkDestroyDevice(device, NativePtr.zero)
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion ver "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) 0u "unexpected GetDeviceVersion"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion (device + 1n)) 0u "unexpected GetDeviceVersion"
+
+                VkRaw.vkDestroyInstance(instance, NativePtr.zero)
+
+                Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
+                Expect.equal VkRaw.EntryPoints.LoadedInstance 0n "unexpected LoadedInstance"
+                Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion 0u "unexpected LoadedInstanceVersion"
+                Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) 0u "unexpected GetDeviceVersion"
+                Expect.equal (VkRaw.EntryPoints.GetDeviceVersion (device + 1n)) 0u "unexpected GetDeviceVersion"
+
+                VkRaw.EntryPoints.UnloadDevice device // no effect but success
+            }
+
     [<Tests>]
     let tests =
         testList "VulkanWrapper" [
@@ -210,5 +547,14 @@ module ``Vulkan Wrapper Tests`` =
             testList "Bitfields" [
                 Bitfields.VkAccelerationStructureInstanceKHR
                 Bitfields.VkClusterAccelerationStructureBuildTriangleClusterInfoNV
+            ]
+
+            testList "Entry points" [
+                EntryPoints.loadGlobal
+                EntryPoints.loadInstance
+                EntryPoints.loadInstanceExtension
+                EntryPoints.loadDevice
+                EntryPoints.loadDeviceExtension
+                EntryPoints.validation
             ]
         ]
