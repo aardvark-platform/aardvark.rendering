@@ -198,15 +198,8 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
         computeFamily <- computeFamilyInfo |> Option.map getFamily
         transferFamily <- transferFamilyInfo |> Option.map getFamily
 
-        let loadVulkanProc =
-            let lib = Aardvark.LoadLibrary("vulkan-1", typeof<VKVM.CommandStream>.Assembly)
-            fun (name: string) ->
-                let addr = Aardvark.GetProcAddress(lib, name)
-                if addr = 0n then failf $"Could not get address of function '{name}'"
-                addr
-
-        let pVkGetInstanceProcAddr = loadVulkanProc "vkGetInstanceProcAddr"
-        let pVkGetDeviceProcAddr = loadVulkanProc "vkGetDeviceProcAddr"
+        let pVkGetInstanceProcAddr = VulkanLoader.GetProcAddress "vkGetInstanceProcAddr"
+        let pVkGetDeviceProcAddr = VulkanLoader.GetProcAddress "vkGetDeviceProcAddr"
 
         memoryAllocator <- new MemoryAllocator(this, pVkGetInstanceProcAddr, pVkGetDeviceProcAddr)
         hostMemory <- memoryAllocator.GetMemory(preferDevice = true, hostAccess = HostAccess.WriteOnly)

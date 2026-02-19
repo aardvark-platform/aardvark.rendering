@@ -30,9 +30,17 @@ put numeric parameter values in assertion or exception context.
 | Regular GPU backends | `prepareCasesGpu` | `GL`, `Vulkan` |
 | Explicit target set | `prepareCasesFor` | Targets supplied by the caller |
 | Mixed CPU/GPU cases | `prepareCases` | Cases selected by the entry point |
+| Explicit targets, no runtime | `prepareCasesWithoutRuntimeFor` | Targets supplied by the caller |
 
-`prepareCasesCpu` accepts `unit -> unit` implementations. The other helpers accept
-`IRuntime -> unit` implementations.
+`prepareCasesCpu` and `prepareCasesWithoutRuntimeFor` accept `unit -> unit`
+implementations. The other helpers accept `IRuntime -> unit` implementations.
+
+`prepareCasesWithoutRuntimeFor` selects targets like `prepareCasesFor` but runs the
+cases without creating a test application. Use it for tests that need a backend to be
+present on the machine but must not have a runtime alive while they run, such as the
+Vulkan entry point tests in `Tests/Other/VulkanEntryPoints.fs`, which assert on the
+state of the Vulkan loader. Do not use `prepareCasesCpu` for such tests: the CPU target
+runs on machines without a GPU driver.
 
 Use `target.IsGpu` for logic shared by the regular OpenGL and Vulkan targets. `GLFW` and
 `OpenTK` are special OpenGL framework targets; use them only when testing behavior of

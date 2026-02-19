@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Tests.Other
 
+open Aardvark.Base
 open Aardvark.Rendering.Tests
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.Memory
@@ -8,8 +9,87 @@ open KHRAccelerationStructure
 open KHRFragmentShadingRate
 open NVClusterAccelerationStructure
 open Expecto
+open System
+open FSharp.NativeInterop
+
+#nowarn "9"
+#nowarn "51"
 
 module VulkanWrapper =
+
+    [<AutoOpen>]
+    module Utilities =
+
+        module VkResult =
+            let check result =
+                if result <> VkResult.Success then
+                    failwithf "Vulkan returned %A" result
+
+        module VkInstance =
+            let create (version: Version) (extensions: string seq) =
+                let mutable appInfo = VkApplicationInfo.Empty
+                appInfo.apiVersion <- version.ToVulkan()
+                appInfo.pApplicationName <- CStr.malloc "Test"
+                appInfo.pEngineName <- CStr.malloc "No Engine"
+
+                let pExtensions = extensions |> Seq.map CStr.malloc |> Seq.toArray
+                use ppExtensions = fixed pExtensions
+
+                let mutable createInfo = VkInstanceCreateInfo.Empty
+                createInfo.pApplicationInfo <- &&appInfo
+                createInfo.enabledExtensionCount <- uint32 pExtensions.Length
+                createInfo.ppEnabledExtensionNames <- ppExtensions
+
+                let mutable instance = VkInstance.Zero
+                VkRaw.vkCreateInstance(&&createInfo, NativePtr.zero, &&instance) |> VkResult.check
+
+                pExtensions |> Array.iter CStr.free
+                CStr.free appInfo.pEngineName
+                CStr.free appInfo.pApplicationName
+
+                instance
+
+            let getPhysicalDevice (instance: VkInstance) =
+                let mutable count = 0u
+                VkRaw.vkEnumeratePhysicalDevices(instance, &&count, NativePtr.zero) |> VkResult.check
+
+                let physicalDevices = Array.zeroCreate (int count)
+                use pPhysicalDevices = fixed physicalDevices
+                VkRaw.vkEnumeratePhysicalDevices(instance, &&count, pPhysicalDevices) |> VkResult.check
+
+                pPhysicalDevices.[0]
+
+        module VkDevice =
+
+            /// Creates a device with one queue of the first queue family, the given extensions
+            /// and the feature structs chained in pNext.
+            let createWithFeatures (physicalDevice: VkPhysicalDevice) (extensions: string seq) (pNext: nativeint) =
+                let pExtensions = extensions |> Seq.map CStr.malloc |> Seq.toArray
+                use ppExtensions = fixed pExtensions
+
+                let mutable priority = 1.0f
+                let mutable queueInfo = VkDeviceQueueCreateInfo.Empty
+                queueInfo.queueCount <- 1u
+                queueInfo.pQueuePriorities <- &&priority
+
+                let mutable features = VkPhysicalDeviceFeatures.Empty
+                let mutable createInfo = VkDeviceCreateInfo.Empty
+                createInfo.pNext <- pNext
+                createInfo.queueCreateInfoCount <- 1u
+                createInfo.pQueueCreateInfos <- &&queueInfo
+                createInfo.enabledExtensionCount <- uint32 <| pExtensions.Length
+                createInfo.pEnabledFeatures <- &&features
+                createInfo.ppEnabledExtensionNames <- ppExtensions
+
+                let mutable device = VkDevice.Zero
+                VkRaw.vkCreateDevice(physicalDevice, &&createInfo, NativePtr.zero, &&device) |> VkResult.check
+
+                pExtensions |> Array.iter CStr.free
+
+                device
+
+            let create (physicalDevice: VkPhysicalDevice) (extensions: string seq) =
+                createWithFeatures physicalDevice extensions 0n
 
     module Arrays =
 

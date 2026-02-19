@@ -706,6 +706,7 @@ module Command =
 type Handle =
     {
         name : string
+        parent : string option
         nonDispatchable : bool
     }
 
@@ -802,6 +803,13 @@ module VkVersion =
         | VkVersion13 -> Some "Vulkan13"
         | VkVersion14 -> Some "Vulkan14"
 
+    let toUInt32 = function
+        | VkVersion10 -> (1u <<< 22)
+        | VkVersion11 -> (1u <<< 22) ||| (1u <<< 12)
+        | VkVersion12 -> (1u <<< 22) ||| (2u <<< 12)
+        | VkVersion13 -> (1u <<< 22) ||| (3u <<< 12)
+        | VkVersion14 -> (1u <<< 22) ||| (4u <<< 12)
+
 [<RequireQualifiedAccess>]
 type Module =
     | Core of VkVersion
@@ -854,8 +862,30 @@ type Require =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Require =
+    let empty =
+        {
+            enumExtensions = Map.empty
+            enums          = List.empty
+            structs        = List.empty
+            aliases        = List.empty
+            commands       = List.empty
+            funcpointers   = List.empty
+            typedefs       = List.empty
+            handles        = List.empty
+            comment        = None
+            depends        = Dependency.Empty
+            parent         = Module.Core VkVersion10
+        }
+
     let isEmpty (r : Require) =
-        Map.isEmpty r.enumExtensions && List.isEmpty r.enums && List.isEmpty r.structs && List.isEmpty r.commands
+        Map.isEmpty r.enumExtensions &&
+        List.isEmpty r.enums &&
+        List.isEmpty r.structs &&
+        List.isEmpty r.aliases &&
+        List.isEmpty r.commands &&
+        List.isEmpty r.funcpointers &&
+        List.isEmpty r.typedefs &&
+        List.isEmpty r.handles
 
     let union (x : Require) (y : Require) =
 
@@ -1272,7 +1302,7 @@ module XmlReader =
             |> Seq.filter (fun t -> attrib t "category" = Some "handle")
             |> Seq.choose (fun e ->
                 match child e "name" with
-                | Some name -> Some (name, { name = name; nonDispatchable = e.Value.Contains "NON_DISPATCHABLE" })
+                | Some name -> Some (name, { name = name; parent = attrib e "parent"; nonDispatchable = e.Value.Contains "NON_DISPATCHABLE" })
                 | _ -> None
             )
             |> Map.ofSeq
@@ -1357,17 +1387,37 @@ module FSharpWriter =
     let getFullyQualifiedTypeName (location: Location) (name : string) =
         tryGetTypeAlias location name |> Option.defaultValue name
 
-    let tryGetCommandAlias (location : Location) (name : string) =
-        match definitionLocations.TryGetValue name with
-        | true, aliasLocation when aliasLocation <> location ->
-            let path = aliasLocation.RelativePath(location)
-            Some $"{path}VkRaw.{name}"
+    let knownHandles = Collections.Generic.Dictionary<string, Handle>()
 
-        | true, _ ->
-            None
+    type CommandType =
+        | Device = 0
+        | Instance = 1
+        | Global = 2
 
+    let getCommandType (command: string) (firstParameterType: Type) =
+        let rec find name =
+            if name = "VkDevice" then CommandType.Device
+            elif name = "VkInstance" then CommandType.Instance
+            else
+                match knownHandles.TryGetValue name with
+                | true, handle ->
+                    match handle.parent with
+                    | Some parent -> find parent
+                    | _ -> CommandType.Global
+                | _ ->
+                    Console.WriteLine($"WARNING: Unknown handle type '{name}' for {command}")
+                    CommandType.Global
+
+        // We treat the vkGetInstanceProcAddr as a global function even though it is an instance function.
+        // This is because we need it to load other instance functions.
+        // Similarily, we treat vkGetDeviceProcAddr as an instance function even though it is a device function.
+        match command with
+        | "vkGetInstanceProcAddr" -> CommandType.Global
+        | "vkGetDeviceProcAddr" -> CommandType.Instance
         | _ ->
-            failwith $"Location for definition {name} is unknown."
+            match firstParameterType with
+            | Literal name -> find name
+            | _ -> CommandType.Global
 
     let private uppercase = Regex @"[A-Z0-9]+"
     let private startsWithNumber = Regex @"^[0-9]+"
@@ -1576,7 +1626,7 @@ module FSharpWriter =
             "size_t", "uint64"
 
             // for extern stuff only
-            "void", "void"
+            "void", "unit"
 
             "HANDLE", "nativeint"
             "HINSTANCE", "nativeint"
@@ -1857,7 +1907,7 @@ module FSharpWriter =
             let name = getFullyQualifiedTypeName location x.name
             let alias = typeName location x.baseType
             if name <> alias then
-                printfn "%stype %s = %s" indent name alias
+                printfn "%stype %s = %s" indent x.name alias
 
         for t in l do
             t.ArrayType |> Option.iter (fun arr ->
@@ -2204,9 +2254,8 @@ module FSharpWriter =
                 if n.StartsWith "Vk" || n.StartsWith "PFN" then getFullyQualifiedTypeName location n
                 elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
                 else "nativeint" //failwithf "strange type: %A" n
-        | Ptr (Ptr t) -> "nativeint*"
         | Ptr t ->
-            sprintf "%s*" (externTypeName location t)
+            sprintf "nativeptr<%s>" (externTypeName location t)
         | FixedArray(t, s) ->
             let t = externTypeName location t
             sprintf "%s_%d" t s
@@ -2214,126 +2263,60 @@ module FSharpWriter =
             let t = externTypeName location t
             sprintf "%s_%d" t (w * h)
 
-    let coreCommands (indent : string) (location : Location) (l : list<Command>) =
+    let commands (indent : string) (location : Location) (dependency: Dependency) (commands : list<Command>) =
         let printfn fmt =
             Printf.kprintf (fun str ->
                 if str = "" then printfn "" else printfn "%s%s" indent str
             ) fmt
 
-        printfn "module VkRaw ="
+        if not commands.IsEmpty then
+            printfn "module VkRaw ="
 
-        let isVersion10 =
-            (location = Global VkVersion10)
-
-        if isVersion10 then
-            printfn "    [<CompilerMessage(\"activeInstance is for internal use only\", 1337, IsError=false, IsHidden=true)>]"
-            printfn "    let mutable internal activeInstance : VkInstance = 0n"
-            printfn ""
-            printfn "    [<Literal>]"
-            printfn "    let lib = \"vulkan-1\""
-        else
-            printfn "    open VkRaw"
-        printfn ""
-
-        for c in l do
-            if c.name = "vkCreateInstance" then
-                let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName location t) (fsharpName n)) |> String.concat ", "
-                printfn "    [<DllImport(lib, EntryPoint=\"%s\"); SuppressUnmanagedCodeSecurity>]" c.name
-                printfn "    extern %s private _%s(%s)" (externTypeName location c.returnType) c.name args
-
-
-
-                let argDef = c.parameters |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName location t)) |> String.concat ", "
-                let argUse = c.parameters |> List.map (fun (t,n) -> fsharpName n) |> String.concat ", "
-                let instanceArgName = c.parameters |> List.pick (fun (t,n) -> match t with | Ptr(Literal "VkInstance") -> Some n | _ -> None)
-
-                printfn "    let vkCreateInstance(%s) =" argDef
-                printfn "        let res = _vkCreateInstance(%s)" argUse
-                printfn "        if res = VkResult.Success then"
-                printfn "            activeInstance <- NativePtr.read %s" instanceArgName
-                printfn "        res"
+            if location = Location.Global VkVersion.VkVersion10 then
+                printfn "    /// Container class for delegates of Vulkan functions."
+                printfn "    /// We cannot use mutable let bindings in recursive modules (Extensions module), so we need to use a class."
+                printfn "    /// Using a static val field avoids F# static initialization checks (see: https://github.com/dotnet/fsharp/issues/6454)"
+                printfn "    [<AbstractClass; Sealed>]"
+                printfn "    type internal Static<'T> ="
+                printfn "        [<DefaultValue>] static val mutable private value : 'T"
                 printfn ""
+                printfn "        static member Value"
+                printfn "            with get() = Static<'T>.value"
+                printfn "            and set v = Static<'T>.value <- v"
             else
-                match tryGetCommandAlias location c.name with
-                | None ->
-                    let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName location t) (fsharpName n)) |> String.concat ", "
-                    printfn "    [<DllImport(lib); SuppressUnmanagedCodeSecurity>]"
-                    printfn "    extern %s %s(%s)" (externTypeName location c.returnType) c.name args
-                | Some alias ->
-                    printfn "    let %s = %s" c.name alias
+                printfn "    open VkRaw"
 
-                printfn ""
-
-        if isVersion10 then
-            printfn "    [<CompilerMessage(\"vkImportInstanceDelegate is for internal use only\", 1337, IsError=false, IsHidden=true)>]"
-            printfn "    let vkImportInstanceDelegate<'T>(name : string) ="
-            printfn "        let ptr = vkGetInstanceProcAddr(activeInstance, name)"
-            printfn "        if ptr = 0n then"
-            printfn "            Log.warn \"could not load function: %%s\" name"
-            printfn "            Unchecked.defaultof<'T>"
-            printfn "        else"
-            printfn "            Report.Line(3, sprintf \"loaded function %%s (0x%%08X)\" name ptr)"
-            printfn "            Marshal.GetDelegateForFunctionPointer(ptr, typeof<'T>) |> unbox<'T>"
-
-    let extensionCommands (indent : string) (location : Location) (l : list<Command>) =
-        let printfn fmt =
-            Printf.kprintf (fun str ->
-                if str = "" then printfn "" else printfn "%s%s" indent str
-            ) fmt
-
-        let extension =
-            match location with
-            | Extension(name, dep) ->
-                let name = Extension.toModuleName name
-                match Dependency.toString dep with
-                | Some sub -> sprintf "%s -> %s" name sub
-                | _ -> name
-
-            | _ ->
-                failwithf "Cannot invoke extensionCommands for location %A" location
-
-        let exists name = tryGetCommandAlias location name |> Option.isSome
-        let existAll = l |> List.map (fun c -> exists c.name) |> List.forall id
-
-        printfn "module VkRaw ="
-        for c in l do
-            if not (exists c.name) then
-                let delegateName = c.name.Substring(0, 1).ToUpper() + c.name.Substring(1) + "Del"
-                let targs = c.parameters |> List.map (fst >> typeName location) |> String.concat " * "
-                let ret =
-                    match typeName location c.returnType with
-                    | "void" -> "unit"
-                    | n -> n
-
-                let tDel = sprintf "%s -> %s" targs ret
-                printfn "    [<SuppressUnmanagedCodeSecurity>]"
-                printfn "    type %s = delegate of %s" delegateName tDel
-
-        if not existAll then
             printfn ""
-            printfn "    [<AbstractClass; Sealed>]"
-            printfn "    type private Loader<'T> private() ="
-            printfn "        static do Report.Begin(3, \"[Vulkan] loading %s\")" extension
+            printfn "    [<AutoOpen; SuppressUnmanagedCodeSecurity>]"
+            printfn "    module internal Delegates ="
 
-            for c in l do
-                if not (exists c.name) then
-                    let delegateName = c.name.Substring(0, 1).ToUpper() + c.name.Substring(1) + "Del"
-                    printfn "        static let s_%sDel = VkRaw.vkImportInstanceDelegate<%s> \"%s\"" c.name delegateName c.name
+            for cmd in commands do
+                let args = cmd.parameters |> List.map (fst >> externTypeName location) |> String.concat " * "
+                let returnType = externTypeName location cmd.returnType
+                printfn $"        type {cmd.name}Del = delegate of {args} -> {returnType}"
 
-            printfn "        static do Report.End(3) |> ignore"
+            printfn ""
 
-            for c in l do
-                if not (exists c.name) then
-                    printfn "        static member %s = s_%sDel" c.name c.name
+            for cmd in commands do
+                match Dependency.toString dependency with
+                | Some dep -> printfn $"    /// Requires {dep}."
+                | _ -> ()
 
-        for c in l do
-            match tryGetCommandAlias location c.name with
-            | None ->
-                let argDef = c.parameters |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName location t)) |> String.concat ", "
-                let argUse = c.parameters |> List.map (fun (_,n) -> (fsharpName n)) |> String.concat ", "
-                printfn "    let %s(%s) = Loader<unit>.%s.Invoke(%s)" c.name argDef c.name argUse
-            | Some alias ->
-                printfn "    let %s = %s" c.name alias
+                // We want to create stubs for the following commands, so we can load entry points in time
+                let name =
+                    let commandType =
+                        let t = cmd.parameters |> List.tryHead |> Option.map (fst >> getCommandType cmd.name)
+                        t |> Option.defaultValue CommandType.Global
+
+                    let requireStub =
+                        match cmd.name with
+                        | "vkCreateInstance" | "vkDestroyInstance" | "vkCreateDevice" | "vkDestroyDevice" -> true
+                        | _ -> commandType = CommandType.Global
+
+                    if requireStub then $"internal _{cmd.name}" else cmd.name
+
+                let args = cmd.parameters |> List.map (snd >> fsharpName) |> String.concat ", "
+                printfn $"    let {name}({args}) = Static<{cmd.name}Del>.Value.Invoke({args})"
 
     let require (indent : int) (vendorTags : list<string>) (structureTypes : Map<string, string>) (require : Require) =
         let name = require.depends |> Dependency.toString
@@ -2361,12 +2344,7 @@ module FSharpWriter =
         enums (subindent 0) vendorTags location require.enums
         structs (subindent 0) structureTypes location (Struct.topologicalSort require.structs)
         enumExtensions (subindent 0) vendorTags location require.enumExtensions
-
-        if not require.commands.IsEmpty then
-            if Module.isCore require.parent then
-                coreCommands (subindent 0) location require.commands
-            else
-                extensionCommands (subindent 0) location require.commands
+        commands (subindent 0) location require.depends require.commands
 
         printfn ""
 
@@ -2431,11 +2409,12 @@ module FSharpWriter =
 
             let requires =
                 e.requires
-                |> List.groupBy (fun r -> r.depends)
+                |> List.groupBy _.depends
                 |> List.map (snd >> Require.unionMany)
 
             for r in requires do
-                r |> require 2 vendorTags structureTypes
+                if not <| Require.isEmpty r then
+                    r |> require 2 vendorTags structureTypes
 
     let extensions (vendorTags : list<string>) (structureTypes : Map<string, string>) (exts : Extension list) =
         let sorted = exts |> List.sortBy _.number
@@ -2446,6 +2425,433 @@ module FSharpWriter =
 
         for e in sorted do
             extension vendorTags structureTypes e
+
+    [<RequireQualifiedAccess>]
+    type private CommandSource =
+        | Core of version: VkVersion
+        | Extension of extension: Extension * require: Require
+
+        member this.ExtensionType =
+            match this with
+            | Extension (e, _) -> Some e.typ
+            | _ -> None
+
+        member this.ModuleName =
+            match this with
+            | Extension (e, r) ->
+                let mdl = Extension.toModuleName e.name
+
+                match Dependency.toString r.depends with
+                | Some dep -> Some $"{mdl}.``{dep}``"
+                | _ -> Some mdl
+
+            | Core v ->
+                VkVersion.toModuleName v
+
+    type private CommandDescription =
+        { CommandType       : CommandType
+          CommandName       : string
+          CommandParameters : string list
+          Source            : CommandSource }
+
+    let loader (features : Feature list) (extensions : Extension list) =
+        let mutable indent = 0
+
+        let ln() =
+            printfn ""
+
+        let fn fmt =
+            let indent = String.replicate indent "    "
+            Printf.kprintf (fun str ->
+                let str = indent + str
+                printfn $"{str}"
+            ) fmt
+
+        let blk fmt (f: unit -> unit) =
+            fn fmt
+            indent <- indent + 1
+            f()
+            indent <- indent - 1
+
+        let commands =
+            let getRequireCommands (source: CommandSource) (require: Require) =
+                require.commands |> List.map (fun cmd ->
+                    let commandType =
+                        let t = cmd.parameters |> List.tryHead |> Option.map (fst >> getCommandType cmd.name)
+                        t |> Option.defaultValue CommandType.Global
+
+                    // Instance level extension cannot have device level functions (e.g., vkSetDebugUtilsObjectNameEXT from VK_EXT_debug_utils)
+                    let commandType =
+                        if source.ExtensionType |> Option.contains ExtensionType.Instance && commandType = CommandType.Device then
+                            CommandType.Instance
+                        else
+                            commandType
+
+                    let parameters =
+                        cmd.parameters |> List.map (snd >> fsharpName)
+
+                    { CommandType = commandType; CommandName = cmd.name; CommandParameters = parameters; Source = source }
+                )
+
+            let cmdf =
+                features |> List.collect (fun f ->
+                    let source = CommandSource.Core f.version
+                    f.requires |> List.collect (getRequireCommands source)
+                )
+
+            let cmde =
+                extensions |> List.collect (fun e ->
+                    e.requires |> List.collect (fun r ->
+                        let source = CommandSource.Extension (e, r)
+                        getRequireCommands source r
+                    )
+                )
+
+            // If we have an extension, group by extension type. Otherwise, group by command type.
+            // We load instance-level commands of device-level extensions when initializing device-level commands.
+            cmdf @ cmde
+            |> List.groupBy (fun cmd ->
+                match cmd.Source.ExtensionType with
+                | Some ExtensionType.Device   -> CommandType.Device
+                | Some ExtensionType.Instance -> CommandType.Instance
+                | _ -> cmd.CommandType
+            )
+            |> List.map (fun (typ, cmds) -> typ, cmds |> List.groupBy _.Source |> Map.ofList )
+            |> Map.ofList
+
+        let importCommandDelegates (version: string) (typ: CommandType) =
+            for KeyValue(src, cmds) in commands.[typ] do
+                let printCmds() =
+                    for cmd in cmds do
+                        let prefix =
+                            match cmd.Source.ModuleName with
+                            | Some name -> $"{name}.VkRaw."
+                            | _ -> ""
+
+                        let delegateName =
+                            $"{prefix}Delegates.{cmd.CommandName}Del"
+
+                        let importDelegate =
+                            match cmd.CommandType with
+                            | CommandType.Global -> "EntryPoints.ImportGlobalDelegate"
+                            | CommandType.Device -> "EntryPoints.ImportDeviceDelegate"
+                            | _ -> "EntryPoints.ImportInstanceDelegate"
+
+                        fn $"Static<{delegateName}>.Value <- {importDelegate}<{delegateName}> \"{cmd.CommandName}\""
+
+                match src with
+                | CommandSource.Core v ->
+                    blk $"if {version} >= {VkVersion.toUInt32 v}u then" printCmds
+
+                | CommandSource.Extension (e, _) ->
+                    blk $"if hasExtension \"{e.name}\" then" printCmds
+
+        // For all global commands we want to make sure the global delegates are imported first.
+        let printGlobalStubs =
+            fun (prefix: string) (cmds : CommandDescription list) ->
+                for cmd in cmds do
+                    if cmd.CommandName <> "vkCreateInstance" then // Defined manually
+                        ln()
+                        let args = cmd.CommandParameters |> String.concat ", "
+                        blk $"let {cmd.CommandName}({args}) =" (fun _ ->
+                            fn $"{prefix}EntryPoints.LoadGlobal()"
+                            fn $"{prefix}_{cmd.CommandName}({args})"
+                        )
+
+        fn "[<AutoOpen>]"
+        blk "module Stubs =" (fun _ ->
+            fn "open System.Collections.Generic"
+            fn "open VkRaw"
+            ln()
+            blk "module VkRaw =" (fun _ ->
+                ln()
+                fn "/// Utilities for loading entry points of Vulkan functions."
+                fn "[<AbstractClass; Sealed>]"
+                blk "type EntryPoints =" (fun _ ->
+                    fn "static let initLock = obj()"
+                    fn "static let mutable loadedGlobal = false"
+                    fn "static let mutable loadedInstance = VkInstance.Zero"
+                    fn "static let mutable loadedInstanceVersion = 0u"
+                    fn "static let loadedDevices = Dictionary<VkDevice, uint32>()"
+                    ln()
+                    fn "static let mutable getInstanceProcAddr = VulkanLoader.GetProcAddress"
+                    fn "static let mutable getDeviceProcAddr = VulkanLoader.GetProcAddress"
+                    ln()
+                    blk "static member private ImportDelegate<'T>(name: string, getProcAddr: string -> nativeint) =" (fun _ ->
+                        fn "let ptr = getProcAddr name"
+                        blk "if ptr = 0n then" (fun _ ->
+                            fn "if EntryPoints.MissingEntryPointWarning then Log.warn $\"[Vulkan] Could not load function '{name}'\""
+                            fn "Unchecked.defaultof<'T>"
+                        )
+                        blk "else" (fun _ ->
+                            fn "if EntryPoints.ReportEntryPointAddresses then Report.Line(3, $\"[Vulkan] Loaded function '{name}' (0x%%08X{ptr})\")"
+                            fn "Marshal.GetDelegateForFunctionPointer(ptr, typeof<'T>) |> unbox<'T>"
+                        )
+                    )
+                    ln()
+                    fn "static member inline private ImportGlobalDelegate<'T> (name: string) : 'T = EntryPoints.ImportDelegate<'T>(name, VulkanLoader.GetProcAddress)"
+                    fn "static member inline private ImportInstanceDelegate<'T> (name: string) : 'T = EntryPoints.ImportDelegate<'T>(name, getInstanceProcAddr)"
+                    fn "static member inline private ImportDeviceDelegate<'T> (name: string) : 'T = EntryPoints.ImportDelegate<'T>(name, getDeviceProcAddr)"
+                    ln()
+                    blk "static member private ImportGlobalCommands() =" (fun _ ->
+                        importCommandDelegates $"{UInt32.MaxValue}u" CommandType.Global
+                    )
+                    ln()
+                    blk "static member private ImportInstanceCommands(version: uint32, hasExtension: string -> bool) =" (fun _ ->
+                        importCommandDelegates "version" CommandType.Instance
+                    )
+                    ln()
+                    blk "static member private ImportDeviceCommands(version: uint32, hasExtension: string -> bool) =" (fun _ ->
+                        importCommandDelegates "version" CommandType.Device
+                    )
+                    ln()
+                    fn "/// Indicates whether the addresses of loaded entry points are reported. Default is false."
+                    fn "static member val ReportEntryPointAddresses = false with get, set"
+                    ln()
+                    fn "/// Indicates whether a warning is logged when an entry point cannot be found. Default is true."
+                    fn "static member val MissingEntryPointWarning = true with get, set"
+                    ln()
+                    fn "/// Indicates whether global entry points have been loaded."
+                    fn "static member LoadedGlobal = loadedGlobal"
+                    ln()
+                    fn "/// Instance for which entry points have been loaded."
+                    fn "static member LoadedInstance = loadedInstance"
+                    ln()
+                    fn "/// API version for which instance entry points have been loaded. Zero if unloaded."
+                    fn "static member LoadedInstanceVersion = loadedInstanceVersion"
+                    ln()
+                    fn "/// Devices for which entry points have been loaded."
+                    fn "static member LoadedDevices = loadedDevices.Keys :> IReadOnlyCollection<_>"
+                    ln()
+                    fn "/// <summary>"
+                    fn "/// Returns whether entry points for the given device have been loaded."
+                    fn "/// </summary>"
+                    fn "/// <param name=\"device\">Device to query.</param>"
+                    fn "static member IsDeviceLoaded(device) = loadedDevices.ContainsKey device"
+                    ln()
+                    fn "/// <summary>"
+                    fn "/// Returns the API version for which entry points for the given device have been loaded. Returns zero if the device is unloaded."
+                    fn "/// </summary>"
+                    fn "/// <param name=\"device\">Device to query.</param>"
+                    fn "static member GetDeviceVersion(device) = loadedDevices.GetOrDefault(device, 0u)"
+                    ln()
+                    fn "/// <summary>"
+                    fn "/// Loads the entry points of the global Vulkan functions."
+                    fn "/// </summary>"
+                    blk "static member LoadGlobal() =" (fun _ ->
+                        blk "lock initLock (fun _ ->" (fun _ ->
+                            blk "if not loadedGlobal then" (fun _ ->
+                                fn "Report.BeginTimed(3, \"[Vulkan] Loading global functions\")"
+                                fn "EntryPoints.ImportGlobalCommands()"
+                                fn "Report.EndTimed(3) |> ignore"
+                                ln()
+                                fn "loadedGlobal <- true"
+                            )
+                        )
+                        fn ")"
+                    )
+                    ln()
+                    fn "/// <summary>"
+                    fn "/// Loads the entry points of the instance-level Vulkan functions."
+                    fn "/// </summary>"
+                    fn "/// <remarks>"
+                    fn "/// <c>EntryPoints.LoadGlobal</c> must have been called before invoking this function."
+                    fn "/// </remarks>"
+                    fn "/// <seealso cref=\"EntryPoints.UnloadInstance\"/>"
+                    fn "/// <param name=\"instance\">Instance to load the entry points for.</param>"
+                    fn "/// <param name=\"version\">Highest Vulkan version to be used. Entry points of functions requiring a higher version are not loaded.</param>"
+                    fn "/// <param name=\"hasExtension\">Function returning if the specified instance extension is enabled. Entry points of functions from disabled extensions are not loaded.</param>"
+                    blk "static member LoadInstance(instance: VkInstance, version: uint32, hasExtension: string -> bool) =" (fun _ ->
+                        blk "if instance <> VkInstance.Zero then" (fun _ ->
+                            blk "lock initLock (fun _ ->" (fun _ ->
+                                blk "if instance <> loadedInstance && loadedInstance <> VkInstance.Zero then" (fun _ ->
+                                    fn "Log.warn $\"[Vulkan] Loading entry points for instance 0x%%08X{instance} while instance 0x%%08X{loadedInstance} has not been destroyed yet\""
+                                )
+                                ln()
+                                fn "getInstanceProcAddr <- fun name -> VkRaw._vkGetInstanceProcAddr(instance, name)"
+                                ln()
+                                fn "Report.BeginTimed(3, \"[Vulkan] Loading instance functions\")"
+                                fn "EntryPoints.ImportInstanceCommands(version, hasExtension)"
+                                fn "Report.EndTimed(3) |> ignore"
+                                ln()
+                                fn "loadedInstance <- instance"
+                                fn "loadedInstanceVersion <- version"
+                            )
+                            fn ")"
+                        )
+                    )
+                    ln()
+                    fn "/// <summary>"
+                    fn "/// Unloads the entry points of the instance-level Vulkan functions."
+                    fn "/// </summary>"
+                    fn "/// <param name=\"instance\">Instance to unload the entry points for.</param>"
+                    blk "static member UnloadInstance(instance: VkInstance) =" (fun _ ->
+                        blk "if instance <> VkInstance.Zero then" (fun _ ->
+                            blk "lock initLock (fun _ ->" (fun _ ->
+                                blk "if instance = loadedInstance then" (fun _ ->
+                                    fn "let w = EntryPoints.MissingEntryPointWarning"
+                                    ln()
+                                    fn "EntryPoints.MissingEntryPointWarning <- false"
+                                    fn "getInstanceProcAddr <- fun _ -> 0n"
+                                    ln()
+                                    fn "Report.Line(3, \"[Vulkan] Unloading instance functions\")"
+                                    fn $"EntryPoints.ImportInstanceCommands(EntryPoints.LoadedInstanceVersion, fun _ -> true)"
+                                    ln()
+                                    fn "EntryPoints.MissingEntryPointWarning <- w"
+                                    fn "getInstanceProcAddr <- VulkanLoader.GetProcAddress"
+                                    fn "loadedInstance <- VkInstance.Zero"
+                                    fn "loadedInstanceVersion <- 0u"
+                                )
+                            )
+                            fn ")"
+                        )
+                    )
+                    ln()
+                    fn "/// <summary>"
+                    fn "/// Loads the entry points of the device-level Vulkan functions."
+                    fn "/// </summary>"
+                    fn "/// <remarks>"
+                    fn "/// <c>EntryPoints.LoadInstance</c> must have been called before invoking this function."
+                    fn "/// </remarks>"
+                    fn "/// <seealso cref=\"EntryPoints.UnloadDevice\"/>"
+                    fn "/// <param name=\"device\">Device to load the entry points for.</param>"
+                    fn "/// <param name=\"version\">Highest Vulkan version to be used. Entry points of functions requiring a higher version are not loaded.</param>"
+                    fn "/// <param name=\"hasExtension\">Function returning if the specified device extension is enabled. Entry points of functions from disabled extensions are not loaded.</param>"
+                    blk "static member LoadDevice(device: VkDevice, version: uint32, hasExtension: string -> bool) =" (fun _ ->
+                        blk "if device <> VkDevice.Zero then" (fun _ ->
+                            blk "lock initLock (fun _ ->" (fun _ ->
+                                blk "if loadedInstance = VkInstance.Zero then" (fun _ ->
+                                    fn "raise <| InvalidOperationException(\"Cannot load device-level entry points unless instance-level entry points are loaded.\")"
+                                )
+                                ln()
+                                blk "if loadedDevices.Count = 0 || (loadedDevices.Count = 1 && loadedDevices.ContainsKey device) then" (fun _ ->
+                                    fn "getDeviceProcAddr <- fun name -> VkRaw.vkGetDeviceProcAddr(device, name)"
+                                    ln()
+                                    fn "Report.BeginTimed(3, \"[Vulkan] Loading device functions\")"
+                                    fn "EntryPoints.ImportDeviceCommands(version, hasExtension)"
+                                    fn "Report.EndTimed(3) |> ignore"
+                                )
+                                ln()
+                                fn "// If we have multiple devices, we must use the instance-level entry points"
+                                blk "else" (fun _ ->
+                                    fn "getDeviceProcAddr <- getInstanceProcAddr"
+                                    ln()
+                                    fn "Report.BeginTimed(3, \"[Vulkan] Loading device functions for multi-device dispatch\")"
+                                    fn "EntryPoints.ImportDeviceCommands(version, hasExtension)"
+                                    fn "Report.EndTimed(3) |> ignore"
+                                )
+                                ln()
+                                fn "loadedDevices.[device] <- version"
+                            )
+                            fn ")"
+                        )
+                    )
+                    ln()
+                    fn "/// <summary>"
+                    fn "/// Unloads the entry points of the device-level Vulkan functions."
+                    fn "/// </summary>"
+                    fn "/// <param name=\"device\">Device to unload the entry points for.</param>"
+                    blk "static member UnloadDevice(device: VkDevice) =" (fun _ ->
+                        blk "lock initLock (fun _ ->" (fun _ ->
+                            blk "if device <> VkDevice.Zero then" (fun _ ->
+                                blk "if loadedDevices.ContainsKey device then" (fun _ ->
+                                    blk "if loadedDevices.Count = 1 then" (fun _ ->
+                                        fn "let w = EntryPoints.MissingEntryPointWarning"
+                                        fn "let g = getInstanceProcAddr"
+                                        ln()
+                                        fn "EntryPoints.MissingEntryPointWarning <- false"
+                                        fn "getInstanceProcAddr <- fun _ -> 0n"
+                                        fn "getDeviceProcAddr <- fun _ -> 0n"
+                                        ln()
+                                        fn "Report.Line(3, \"[Vulkan] Unloading device functions\")"
+                                        fn $"EntryPoints.ImportDeviceCommands(loadedDevices.[device], fun _ -> true)"
+                                        ln()
+                                        fn "EntryPoints.MissingEntryPointWarning <- w"
+                                        fn "getInstanceProcAddr <- g"
+                                        fn "getDeviceProcAddr <- VulkanLoader.GetProcAddress"
+                                    )
+                                    ln()
+                                    fn "loadedDevices.Remove device |> ignore"
+                                )
+                            )
+                        )
+                        fn ")"
+                    )
+                )
+                ln()
+                blk "let vkCreateInstance(pCreateInfo, pAllocator, pInstance) =" (fun _ ->
+                    fn "EntryPoints.LoadGlobal()"
+                    fn "let result = _vkCreateInstance(pCreateInfo, pAllocator, pInstance)"
+                    ln()
+                    blk "if result = VkResult.Success then" (fun _ ->
+                        fn "let createInfo = NativePtr.toByRef pCreateInfo"
+                        fn "let appInfo = NativePtr.toByRef createInfo.pApplicationInfo"
+                        ln()
+                        blk "let hasExtension =" (fun _ ->
+                            fn "let ppEnabledExtensionNames = createInfo.ppEnabledExtensionNames"
+                            ln()
+                            fn "Array.init (int32 createInfo.enabledExtensionCount) (NativePtr.get ppEnabledExtensionNames >> CStr.toString)"
+                            fn "|> HashSet.ofArray"
+                            fn "|> flip HashSet.contains"
+                        )
+                        ln()
+                        fn "EntryPoints.LoadInstance(pInstance.[0], appInfo.apiVersion, hasExtension)"
+                    )
+                    ln()
+                    fn "result"
+                )
+                ln()
+                blk "let vkDestroyInstance(instance, pAllocator) =" (fun _ ->
+                    fn "_vkDestroyInstance(instance, pAllocator)"
+                    fn "EntryPoints.UnloadInstance instance"
+                )
+                ln()
+                blk "let vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice) =" (fun _ ->
+                    fn "let result = _vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice)"
+                    ln()
+                    blk "if result = VkResult.Success then" (fun _ ->
+                        fn "let createInfo = NativePtr.toByRef pCreateInfo"
+                        ln()
+                        blk "let hasExtension =" (fun _ ->
+                            fn "let ppEnabledExtensionNames = createInfo.ppEnabledExtensionNames"
+                            ln()
+                            fn "Array.init (int32 createInfo.enabledExtensionCount) (NativePtr.get ppEnabledExtensionNames >> CStr.toString)"
+                            fn "|> HashSet.ofArray"
+                            fn "|> flip HashSet.contains"
+                        )
+                        ln()
+                        fn "EntryPoints.LoadDevice(pDevice.[0], EntryPoints.LoadedInstanceVersion, hasExtension)"
+                    )
+                    ln()
+                    fn "result"
+                )
+                ln()
+                blk "let vkDestroyDevice(device, pAllocator) =" (fun _ ->
+                    fn "_vkDestroyDevice(device, pAllocator)"
+                    fn "EntryPoints.UnloadDevice device"
+                )
+
+                // For all global commands we want to make sure the global delegates are imported first.
+                for KeyValue(source, cmds) in commands.[CommandType.Global] do
+                    if source.ModuleName.IsNone then
+                        printGlobalStubs "" cmds
+            )
+
+            // For all global commands we want to make sure the global delegates are imported first.
+            for KeyValue(source, cmds) in commands.[CommandType.Global] do
+                match source.ModuleName with
+                | Some moduleName ->
+                    ln()
+                    blk $"module {moduleName} =" (fun _ ->
+                        fn $"open {moduleName}"
+                        ln()
+                        blk "module VkRaw =" (fun _ ->
+                            printGlobalStubs "VkRaw." cmds
+                        )
+                    )
+
+                | _ -> ()
+        )
 
     // Finds and stores the location of all type definitions.
     // If there are multiple possible locations, the best one is selected based on some simple rules.
@@ -2474,6 +2880,7 @@ module FSharpWriter =
                 addDefinitionLocation r.Location f.name
 
             for h in r.handles do
+                knownHandles.[h.name] <- h
                 addType r.Location h.ArrayType h.name
 
             for t in r.typedefs do
@@ -2487,9 +2894,6 @@ module FSharpWriter =
 
             for s in r.structs do
                 addType r.Location s.ArrayType s.name
-
-            for c in r.commands do
-                addDefinitionLocation r.Location c.name
 
         for p in primitiveTypeArrays do
             addDefinitionLocation (Location.Global VkVersion10) p.Name
@@ -2587,6 +2991,7 @@ let run () =
     FSharpWriter.primitiveArrays()
     FSharpWriter.features vendorTags structureTypes features
     FSharpWriter.extensions vendorTags structureTypes extensions
+    FSharpWriter.loader features extensions
 
     let str = FSharpWriter.builder.ToString()
     FSharpWriter.builder.Clear() |> ignore
@@ -2594,7 +2999,7 @@ let run () =
     let file = Path.Combine(__SOURCE_DIRECTORY__, "Vulkan.fs")
 
     File.WriteAllText(file, str)
-    printfn "Generated 'Vulkan.fs' successfully!"
+    Console.WriteLine "Generated 'Vulkan.fs' successfully!"
 
 //module PCI =
 //    open System

@@ -85,6 +85,12 @@ module ``Unit Test Utilities`` =
     let prepareCasesGpu (name: string) (target: TestTarget) (cases: List<string * (IRuntime -> unit)>) =
         cases |> prepareCasesFor name target [TestTarget.GL; TestTarget.Vulkan]
 
+    /// Only test for the given targets, running the cases without a runtime.
+    let prepareCasesWithoutRuntimeFor (name: string) (target: TestTarget) (targets: TestTarget seq) (cases: List<string * (unit -> unit)>) =
+        let cases = if Seq.contains target targets then cases else []
+        cases |> List.map (fun (name, run) -> testCase name run |> testSequenced)
+        |> testList name
+
     /// Only test for CPU target.
     let prepareCasesCpu (name: string) (target: TestTarget) (cases: List<string * (unit -> unit)>) =
         cases |> List.map (fun (name, run) -> name, fun _ -> run())
