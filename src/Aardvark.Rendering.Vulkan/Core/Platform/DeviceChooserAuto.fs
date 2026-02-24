@@ -19,18 +19,24 @@ type DeviceChooserAuto =
         | VkPhysicalDeviceType.Cpu -> 2
         | _ -> 1
 
+    static let scorePortability (device: PhysicalDevice) =
+        if device.HasExtension KHRPortabilitySubset.Name then 0
+        else 100
+
     /// Selects the device with the highest score according to the given function.
     new (score: PhysicalDevice -> int) =
         { inherit DeviceChooser(); score = score }
 
     /// Prefers either dedicated or integrated GPUs.
+    /// Non-conformant devices are chosen last.
     new (preferDedicated: bool) =
-        let score = if preferDedicated then deviceTypeScoreDedicated else deviceTypeScoreIntegrated
-        DeviceChooserAuto(fun device -> score device.Type)
+        let typeScore = if preferDedicated then deviceTypeScoreDedicated else deviceTypeScoreIntegrated
+        DeviceChooserAuto(fun device -> scorePortability device + typeScore device.Type)
 
     /// Selects the first reported device.
+    /// Non-conformant devices are chosen last.
     new () =
-        DeviceChooserAuto(fun _ -> 0)
+        DeviceChooserAuto(scorePortability)
 
     override _.IgnoreCache = true
-    override this.Choose(devices) = devices |> Array.sortByDescending this.score |> Array.head
+    override this.Choose(devices) = devices |> Seq.sortByDescending this.score |> Seq.head

@@ -26,6 +26,7 @@ type HeadlessVulkanApplication(debug: IDebugConfig,
             yield Extensions.MemoryBudget
             yield Extensions.MemoryPriority
             yield Extensions.DeviceFault
+            yield Extensions.PortabilityEnumeration
 
             yield! Extensions.Maintenance
             yield! Extensions.Raytracing debug.RaytracingValidationEnabled
