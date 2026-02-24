@@ -2228,7 +2228,7 @@ module FSharpWriter =
             inlineArray "" (Global VkVersion10) t
         printfn ""
 
-    let rec externTypeName (location: Location) (n: Type) =
+    let rec externTypeName (marshal: bool) (location: Location) (n: Type) =
         match n with
         | FixedArray(Literal "int32_t", 2) -> "V2i"
         | FixedArray(Literal "int32_t", 3) -> "V3i"
@@ -2243,7 +2243,7 @@ module FSharpWriter =
 
         | BitField(l, s) -> failwith "Bit fields should be handled as a whole"
 
-        | Ptr(Literal "char") -> "string"
+        | Ptr(Literal "char") when marshal -> "string"
         | FixedArray(Literal "char", s) -> sprintf "String%d" s
         | Ptr(Literal "void") -> "nativeint"
 
@@ -2255,12 +2255,12 @@ module FSharpWriter =
                 elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
                 else "nativeint" //failwithf "strange type: %A" n
         | Ptr t ->
-            sprintf "nativeptr<%s>" (externTypeName location t)
+            sprintf "nativeptr<%s>" (externTypeName marshal location t)
         | FixedArray(t, s) ->
-            let t = externTypeName location t
+            let t = externTypeName marshal location t
             sprintf "%s_%d" t s
         | FixedArray2d(t, w, h) ->
-            let t = externTypeName location t
+            let t = externTypeName marshal location t
             sprintf "%s_%d" t (w * h)
 
     let commands (indent : string) (location : Location) (dependency: Dependency) (commands : list<Command>) =
@@ -2291,8 +2291,8 @@ module FSharpWriter =
             printfn "    module internal Delegates ="
 
             for cmd in commands do
-                let args = cmd.parameters |> List.map (fst >> externTypeName location) |> String.concat " * "
-                let returnType = externTypeName location cmd.returnType
+                let args = cmd.parameters |> List.map (fst >> externTypeName false location) |> String.concat " * "
+                let returnType = externTypeName false location cmd.returnType
                 printfn $"        type {cmd.name}Del = delegate of {args} -> {returnType}"
 
             printfn ""
@@ -2316,7 +2316,18 @@ module FSharpWriter =
                     if requireStub then $"internal _{cmd.name}" else cmd.name
 
                 let args = cmd.parameters |> List.map (snd >> fsharpName) |> String.concat ", "
-                printfn $"    let {name}({args}) = Static<{cmd.name}Del>.Value.Invoke({args})"
+
+                let stringArgs =
+                    cmd.parameters |> List.choose (fun (t, n) ->
+                        if externTypeName true location t = "string" then Some <| fsharpName n
+                        else None
+                    )
+
+                let rec invoke = function
+                    | [] -> $"Static<{cmd.name}Del>.Value.Invoke({args})"
+                    | arg :: rest -> $"CStr.using {arg} (fun {arg} -> {invoke rest})"
+
+                printfn $"    let {name}({args}) = {invoke stringArgs}"
 
     let require (indent : int) (vendorTags : list<string>) (structureTypes : Map<string, string>) (require : Require) =
         let name = require.depends |> Dependency.toString
