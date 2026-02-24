@@ -7,6 +7,7 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Rendering
 open EXTLayerSettings
+open KHRPortabilityEnumeration
 open Vulkan11
 
 #nowarn "9"
@@ -156,6 +157,12 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                 let! pLayerSettingsCreateInfo =
                     VkLayerSettingsCreateInfoEXT(uint32 layerSettings.Count, layerSettings.Pointer)
 
+                let flags =
+                    if isExtensionEnabled KHRPortabilityEnumeration.Name then
+                        VkInstanceCreateFlags.EnumeratePortabilityBitKhr
+                    else
+                        VkInstanceCreateFlags.None
+
                 let pNext =
                     if layerSettings.Count > 0 then
                         pLayerSettingsCreateInfo.Address
@@ -165,20 +172,22 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                 let! pInfo =
                     VkInstanceCreateInfo(
                         pNext,
-                        VkInstanceCreateFlags.None,
+                        flags,
                         pApplicationInfo,
                         uint32 layers.Length, pLayers,
                         uint32 extensions.Length, pExtensions
                     )
 
                 let! pInstance = VkInstance.Zero
+                let result = VkRaw.vkCreateInstance(pInfo, NativePtr.zero, pInstance)
 
-                let res = VkRaw.vkCreateInstance(pInfo, NativePtr.zero, pInstance)
-                let instance = NativePtr.read pInstance
-                if res = VkResult.Success then
-                    return Some (instance, apiVersion)
+                if result = VkResult.Success then
+                    return Some (!!pInstance, apiVersion)
+
                 elif apiVersion.Minor > 0 then
+                    Log.warn $"[Vulkan] Failed to create instance for version {apiVersion} ({result})"
                     return tryCreate (Version(apiVersion.Major, apiVersion.Minor - 1, apiVersion.Build))
+
                 else
                     return None
             }

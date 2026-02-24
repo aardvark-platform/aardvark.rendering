@@ -31,6 +31,8 @@ module Extensions =
 
     let MemoryPriority                  = EXTMemoryPriority.Name
 
+    let PortabilityEnumeration          = KHRPortabilityEnumeration.Name
+
     let Shader8Bit16Bit = [
         KHR8bitStorage.Name
         KHRShaderFloat16Int8.Name
