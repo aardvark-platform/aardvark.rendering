@@ -46,18 +46,18 @@ module internal NativeUtilities =
                 finally gc.Free()
 
         member inline x.Bind<'r>(value : string, f : nativeptr<byte> -> 'r) =
-            let ptr = Marshal.StringToHGlobalAnsi value
-            try f (NativePtr.ofNativeInt ptr)
-            finally Marshal.FreeHGlobal ptr
+            let ptr = CStr.malloc value
+            try f ptr
+            finally CStr.free ptr
 
         member inline x.Bind<'r>(values : string[], f : nativeptr<nativeptr<byte>> -> 'r) =
-            let arr = values |> Array.map (Marshal.StringToHGlobalAnsi >> NativePtr.ofNativeInt<byte>)
+            let arr = values |> Array.map CStr.malloc
             let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
             try
                 f (NativePtr.ofNativeInt (gc.AddrOfPinnedObject()))
             finally
                 gc.Free()
-                for ptr in arr do Marshal.FreeHGlobal (NativePtr.toNativeInt ptr)
+                for ptr in arr do CStr.free ptr
 
 
         member inline x.Bind<'a,'r when 'a : unmanaged>(m : Option<'a>, f : nativeptr<'a> -> 'r) =

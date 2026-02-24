@@ -1,6 +1,8 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open Aardvark.Base
+open System
+open System.Text
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 
@@ -41,97 +43,56 @@ type cstr = nativeptr<byte>
 
 module CStr =
 
-    //let writeTo (ptr : cstr) (str : System.String) =
-    //    let arr = System.Text.ASCIIEncoding.ASCII.GetBytes str
-    //    let mutable ptr = ptr
-    //    for b in arr do
-    //        NativePtr.write ptr b
-    //        ptr <- ptr |> NativePtr.step 1
-    //    NativePtr.write ptr 0uy
-    //    ptr |> NativePtr.step 1
+    [<Struct>]
+    type Handle =
+        val Value : cstr
+        new (ptr: cstr) = { Value = ptr }
 
-    let strlen(str : cstr) =
-        let mutable l = 0
-        while NativePtr.get str l <> 0uy do
-            l <- l + 1
-        l
+        member this.Dispose() = NativePtr.free this.Value
 
+        interface IDisposable with
+            member this.Dispose() = this.Dispose()
 
-    //let inline salloc (str : string) =
-    //    let ptr = NativePtr.stackalloc (str.Length - 1)
-    //    str |> writeTo ptr |> ignore
-    //    ptr
+    /// Length in bytes.
+    let sizeInBytes (str: cstr) =
+        if NativePtr.isNullPtr str then 0
+        else
+            let mutable count = 0
+            while str.[count] <> 0uy do inc &count
+            count
 
-    //[<System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)>]
-    //let suse (f : cstr -> 'r) (str : string) =
-    //    let ptr = NativePtr.stackalloc (str.Length - 1)
-    //    str |> writeTo ptr |> ignore
-    //    f ptr
+    /// Length in UTF8 characters.
+    let length (str: cstr) =
+        let size = sizeInBytes str
+        Encoding.UTF8.GetCharCount(str, size)
 
-    //let inline sallocMany (strs : seq<string>) =
-    //    let mutable length = 0
-    //    let mutable count = 0
-    //    for s in strs do
-    //        length <- length + s.Length + 1
-    //        count <- count + 1
+    /// Allocates a native null-terminated UTF-8 string on the heap.
+    let malloc (str: string) =
+        if isNull str then NativePtr.zero
+        else
+            let size = Encoding.UTF8.GetByteCount str
+            let ptr = NativePtr.alloc (size + 1)
+            use pSrc = fixed str
+            Encoding.UTF8.GetBytes(pSrc, str.Length, ptr, size) |> ignore
+            ptr.[size] <- 0uy
+            ptr
 
-    //    let content = NativePtr.stackalloc length
-    //    let ptrs = NativePtr.stackalloc count
+    /// Frees a native string.
+    let inline free (str: cstr) =
+        NativePtr.free str
 
-    //    let mutable currentPtr = ptrs
-    //    let mutable current = content
-    //    for s in strs do
-    //        NativePtr.write currentPtr current
-    //        current <- s |> writeTo current
-    //        currentPtr <- currentPtr |> NativePtr.step 1
+    /// Allocates a native null-terminated UTF-8 string on the heap, returning a disposable handle.
+    let inline pinned (str: string) =
+        new Handle(malloc str)
 
-    //    ptrs
+    /// Temporarily allocates a native null-terminated UTF-8 string.
+    let inline using (str: string) ([<InlineIfLambda>] action: cstr -> 'T) =
+        use cstr = pinned str
+        action cstr.Value
 
-    //let susemany (f : int -> nativeptr<cstr> -> 'r) (strings : seq<string>) =
-    //    let mutable length = 0
-    //    let mutable count = 0
-    //    for s in strings do
-    //        length <- length + s.Length + 1
-    //        count <- count + 1
-
-    //    let content : byte[] = Array.zeroCreate length
-        
-    //    let gc = GCHandle.Alloc(content, GCHandleType.Pinned)
-    //    try
-    //        let pData = gc.AddrOfPinnedObject()
-    //        let mutable i = 0
-    //        let mutable o = 0
-    //        let offsets = Array.zeroCreate count
-
-    //        for s in strings do
-    //            let arr = System.Text.Encoding.ASCII.GetBytes(s)
-    //            offsets.[i] <- pData + nativeint o
-    //            arr.CopyTo(content, o)
-    //            content.[o + arr.Length] <- 0uy
-    //            o <- o + arr.Length + 1
-    //            i <- i + 1
-
-                
-    //        let gc = GCHandle.Alloc(offsets, GCHandleType.Pinned)
-    //        try
-    //            let pStrs = gc.AddrOfPinnedObject()
-    //            f count (NativePtr.ofNativeInt pStrs)
-    //        finally
-    //            gc.Free()
-
-    //    finally 
-    //        gc.Free()
-
-
-    let inline malloc (str : string) =
-        Marshal.StringToHGlobalAnsi str |> NativePtr.ofNativeInt<byte>
-
-    let inline free (str : cstr) =
-        Marshal.FreeHGlobal str.Address
-
-    let inline using (str : string) ([<InlineIfLambda>] action : cstr -> 'T) =
-        let ptr = malloc str
-        try action ptr finally free ptr
-
-    let inline toString (str : cstr) =
-        Marshal.PtrToStringAnsi(str |> NativePtr.toNativeInt)
+    /// Converts a native null-terminated UTF-8 string to a .NET string.
+    let inline toString (str: cstr) =
+        if NativePtr.isNullPtr str then null
+        else
+            let size = sizeInBytes str
+            Encoding.UTF8.GetString(str, size)
