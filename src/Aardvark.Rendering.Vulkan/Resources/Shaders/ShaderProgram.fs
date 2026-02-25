@@ -540,15 +540,15 @@ module ShaderProgram =
 
     let private tryRead (inputLayout : Option<EffectInputLayout>) (file : string) (device : Device) : Option<ShaderProgram> =
         if File.Exists file then
-            Report.BeginTimed(4, $"[Vulkan] Reading shader program file cache '%s{file}'")
+            Report.BeginTimed(4, $"[Vulkan] Reading shader program file cache '{file}'")
 
             try
                 let data = File.ReadAllBytes file
                 let result = ofByteArray inputLayout data device
-                Report.EndTimed(4, ": success") |> ignore
+                Report.EndTimed(4, " - success") |> ignore
                 Some result
             with exn ->
-                Report.EndTimed(4, ": failed") |> ignore
+                Report.EndTimed(4, " - failed") |> ignore
                 Log.warn "[Vulkan] Failed to read from shader program file cache '%s': %s" file exn.Message
                 None
         else
