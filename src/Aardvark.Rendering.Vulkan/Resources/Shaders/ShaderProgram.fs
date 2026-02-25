@@ -529,12 +529,6 @@ module ShaderProgram =
             |> Map.toArray
             |> Array.map device.CreateShaderModule
 
-        Report.Begin(4, "Interface")
-        let str = GLSLProgramInterface.toString data.shader.iface
-        for line in str.Split([|"\r\n"|], StringSplitOptions.None) do
-            Report.Line(4, "{0}", line)
-        Report.End(4) |> ignore
-
         let layout = PipelineLayout.ofProgramInterface inputLayout data.shader.iface data.layers data.perLayer device
         new ShaderProgram(device, shaders, layout, data.shader.code, data.shader.iface)
 
@@ -544,18 +538,19 @@ module ShaderProgram =
         with _ ->
             None
 
-    let private tryRead (inputLayout : Option<EffectInputLayout>) (file : string)  (device : Device) : Option<ShaderProgram> =
+    let private tryRead (inputLayout : Option<EffectInputLayout>) (file : string) (device : Device) : Option<ShaderProgram> =
         if File.Exists file then
-            Report.Begin(4, "[Vulkan] loading shader {0}", Path.GetFileName file)
+            Report.BeginTimed(4, $"[Vulkan] Reading shader program file cache '%s{file}'")
+
             try
-                try
-                    let data = File.ReadAllBytes file
-                    Some <| ofByteArray inputLayout data device
-                with exn ->
-                    Log.warn "[Vulkan] Failed to read from shader program file cache '%s': %s" file exn.Message
-                    None
-            finally
-                Report.End(4) |> ignore
+                let data = File.ReadAllBytes file
+                let result = ofByteArray inputLayout data device
+                Report.EndTimed(4, ": success") |> ignore
+                Some result
+            with exn ->
+                Report.EndTimed(4, ": failed") |> ignore
+                Log.warn "[Vulkan] Failed to read from shader program file cache '%s': %s" file exn.Message
+                None
         else
             None
 
