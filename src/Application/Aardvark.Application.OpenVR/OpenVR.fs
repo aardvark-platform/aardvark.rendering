@@ -759,14 +759,16 @@ type VrSystem(appType : VrApplicationType) =
 
 
 [<AbstractClass>]
-type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
+type VrRenderer(system : VrSystem, [<Optional; DefaultParameterValue(null : Func<V2i, V2i>)>] adjustSize: Func<V2i, V2i>) =
     
     static let sEyeIndex = Symbol.Create "EyeIndex"
     static let sRCoord = Symbol.Create "RCoord"
     static let sGCoord = Symbol.Create "GCoord"
     static let sBCoord = Symbol.Create "BCoord"
 
-    let mutable adjustSize = adjustSize
+    let mutable adjustSize =
+        if notNull adjustSize then adjustSize
+        else id
 
     let hiddenAreaMesh =
         let lMesh = system.System.GetHiddenAreaMesh(EVREye.Eye_Left, EHiddenAreaMeshType.k_eHiddenAreaMesh_Standard)
@@ -921,7 +923,7 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
             let mutable width = 0u
             let mutable height = 0u
             system.System.GetRecommendedRenderTargetSize(&width,&height)
-            let s = adjustSize(V2i(int width, int height))
+            let s = adjustSize.Invoke(V2i(int width, int height))
             let s = V2i(max 1 s.X, max 1 s.Y)
             desiredSize <- Some s
             s
@@ -1178,7 +1180,7 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
         with get() = adjustSize
         and set v = 
             lock x (fun () ->
-                adjustSize <- v
+                adjustSize <- if notNull v then v else id
                 infos <- null
                 desiredSize <- None
                 match textures with
@@ -1195,6 +1197,5 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    new() = new VrRenderer(id, VrSystem(VrApplicationType.Scene))
-    new(adjustSize) = new VrRenderer(adjustSize, VrSystem(VrApplicationType.Scene))
-    new(system : VrSystem) = new VrRenderer(id, system)
+    new([<Optional; DefaultParameterValue(null : Func<V2i, V2i>)>] adjustSize: Func<V2i, V2i>) =
+        new VrRenderer(VrSystem(VrApplicationType.Scene), adjustSize)
