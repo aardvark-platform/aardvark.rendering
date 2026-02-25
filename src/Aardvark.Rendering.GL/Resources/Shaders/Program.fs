@@ -801,7 +801,7 @@ module ProgramExtensions =
 
         let private tryRead (unpickle : byte[] -> 'T) (file : string) : 'T option =
             if File.Exists file then
-                Report.BeginTimed(4, $"[GL] Reading shader program file cache '%s{file}")
+                Report.BeginTimed(4, $"[GL] Reading shader program file cache '%s{file}'")
 
                 try
                     let result = unpickle <| File.readAllBytes file

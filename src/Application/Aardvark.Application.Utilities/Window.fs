@@ -638,7 +638,7 @@ module Utilities =
             | Display.OpenVR -> createOpenVR cfg
 
     let runConfig (cfg : RenderConfig) =
-        let win = createWindow cfg
+        use win = createWindow cfg
         win.Scene <- cfg.scene
         win.Run()
 
