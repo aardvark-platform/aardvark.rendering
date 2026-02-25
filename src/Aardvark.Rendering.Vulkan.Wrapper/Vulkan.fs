@@ -16186,9 +16186,9 @@ module Vulkan14 =
 module rec Extensions =
 
     module KHRSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_surface"
-        let Number = 1
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_surface"
+        let [<Literal>] Number = 1
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -16336,9 +16336,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module KHRSwapchain =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_swapchain"
-        let Number = 2
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_swapchain"
+        let [<Literal>] Number = 2
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -16755,9 +16755,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module KHRDisplay =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_display"
-        let Number = 3
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_display"
+        let [<Literal>] Number = 3
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -17066,9 +17066,9 @@ module rec Extensions =
 
     /// Requires KHRSwapchain, KHRDisplay.
     module KHRDisplaySwapchain =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_display_swapchain"
-        let Number = 4
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_display_swapchain"
+        let [<Literal>] Number = 4
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkDisplayPresentInfoKHR =
@@ -17123,9 +17123,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module KHRXlibSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_xlib_surface"
-        let Number = 5
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_xlib_surface"
+        let [<Literal>] Number = 5
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkXlibSurfaceCreateInfoKHR =
@@ -17177,9 +17177,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module KHRXcbSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_xcb_surface"
-        let Number = 6
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_xcb_surface"
+        let [<Literal>] Number = 6
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkXcbSurfaceCreateInfoKHR =
@@ -17231,9 +17231,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module KHRWaylandSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_wayland_surface"
-        let Number = 7
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_wayland_surface"
+        let [<Literal>] Number = 7
 
         [<Flags>]
         type VkWaylandSurfaceCreateFlagsKHR =
@@ -17291,9 +17291,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module KHRAndroidSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_android_surface"
-        let Number = 9
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_android_surface"
+        let [<Literal>] Number = 9
 
         type ANativeWindow = nativeint
 
@@ -17342,9 +17342,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module KHRWin32Surface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_win32_surface"
-        let Number = 10
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_win32_surface"
+        let [<Literal>] Number = 10
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkWin32SurfaceCreateInfoKHR =
@@ -17396,9 +17396,9 @@ module rec Extensions =
 
     /// Deprecated by EXTDebugUtils.
     module EXTDebugReport =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_debug_report"
-        let Number = 12
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_debug_report"
+        let [<Literal>] Number = 12
 
         type PFN_vkDebugReportCallbackEXT = nativeint
 
@@ -17526,9 +17526,9 @@ module rec Extensions =
 
     /// Deprecated.
     module NVGlslShader =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_glsl_shader"
-        let Number = 13
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_glsl_shader"
+        let [<Literal>] Number = 13
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -17537,15 +17537,15 @@ module rec Extensions =
 
 
     module EXTDepthRangeUnrestricted =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_depth_range_unrestricted"
-        let Number = 14
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_depth_range_unrestricted"
+        let [<Literal>] Number = 14
 
     /// Promoted to Vulkan12.
     module KHRSamplerMirrorClampToEdge =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_sampler_mirror_clamp_to_edge"
-        let Number = 15
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_sampler_mirror_clamp_to_edge"
+        let [<Literal>] Number = 15
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -17555,9 +17555,9 @@ module rec Extensions =
 
 
     module IMGFilterCubic =
-        let Type = ExtensionType.Device
-        let Name = "VK_IMG_filter_cubic"
-        let Number = 16
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_IMG_filter_cubic"
+        let [<Literal>] Number = 16
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -17569,9 +17569,9 @@ module rec Extensions =
 
 
     module AMDRasterizationOrder =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_rasterization_order"
-        let Number = 19
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_rasterization_order"
+        let [<Literal>] Number = 19
 
         type VkRasterizationOrderAMD =
             | Strict = 0
@@ -17611,21 +17611,21 @@ module rec Extensions =
 
 
     module AMDShaderTrinaryMinmax =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_shader_trinary_minmax"
-        let Number = 21
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_shader_trinary_minmax"
+        let [<Literal>] Number = 21
 
     module AMDShaderExplicitVertexParameter =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_shader_explicit_vertex_parameter"
-        let Number = 22
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_shader_explicit_vertex_parameter"
+        let [<Literal>] Number = 22
 
     /// Requires EXTDebugReport.
     /// Promoted to EXTDebugUtils.
     module EXTDebugMarker =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_debug_marker"
-        let Number = 23
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_debug_marker"
+        let [<Literal>] Number = 23
 
         type VkDebugReportObjectTypeEXT = EXTDebugReport.VkDebugReportObjectTypeEXT
 
@@ -17760,9 +17760,9 @@ module rec Extensions =
 
     /// Requires (Vulkan11, KHRSynchronization2) | Vulkan13.
     module KHRVideoQueue =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_queue"
-        let Number = 24
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_queue"
+        let [<Literal>] Number = 24
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -18517,9 +18517,9 @@ module rec Extensions =
 
     /// Requires KHRVideoQueue, (KHRSynchronization2 | Vulkan13).
     module KHRVideoDecodeQueue =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_decode_queue"
-        let Number = 25
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_decode_queue"
+        let [<Literal>] Number = 25
 
         [<Flags>]
         type VkVideoDecodeCapabilityFlagsKHR =
@@ -18692,15 +18692,15 @@ module rec Extensions =
 
 
     module AMDGcnShader =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_gcn_shader"
-        let Number = 26
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_gcn_shader"
+        let [<Literal>] Number = 26
 
     /// Deprecated by KHRDedicatedAllocation.
     module NVDedicatedAllocation =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_dedicated_allocation"
-        let Number = 27
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_dedicated_allocation"
+        let [<Literal>] Number = 27
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkDedicatedAllocationBufferCreateInfoNV =
@@ -18799,9 +18799,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTTransformFeedback =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_transform_feedback"
-        let Number = 29
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_transform_feedback"
+        let [<Literal>] Number = 29
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceTransformFeedbackFeaturesEXT =
@@ -18961,9 +18961,9 @@ module rec Extensions =
             let vkCmdDrawIndirectByteCountEXT(commandBuffer, instanceCount, firstInstance, counterBuffer, counterBufferOffset, counterOffset, vertexStride) = Static<vkCmdDrawIndirectByteCountEXTDel>.Value.Invoke(commandBuffer, instanceCount, firstInstance, counterBuffer, counterBufferOffset, counterOffset, vertexStride)
 
     module NVXBinaryImport =
-        let Type = ExtensionType.Device
-        let Name = "VK_NVX_binary_import"
-        let Number = 30
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NVX_binary_import"
+        let [<Literal>] Number = 30
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -19179,9 +19179,9 @@ module rec Extensions =
 
 
     module NVXImageViewHandle =
-        let Type = ExtensionType.Device
-        let Name = "VK_NVX_image_view_handle"
-        let Number = 31
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NVX_image_view_handle"
+        let [<Literal>] Number = 31
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImageViewAddressPropertiesNVX =
@@ -19268,9 +19268,9 @@ module rec Extensions =
 
     /// Promoted to KHRDrawIndirectCount.
     module AMDDrawIndirectCount =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_draw_indirect_count"
-        let Number = 34
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_draw_indirect_count"
+        let [<Literal>] Number = 34
 
         module VkRaw =
             open VkRaw
@@ -19285,26 +19285,26 @@ module rec Extensions =
 
     /// Incompatible with KHRMaintenance1.
     module AMDNegativeViewportHeight =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_negative_viewport_height"
-        let Number = 36
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_negative_viewport_height"
+        let [<Literal>] Number = 36
 
     /// Deprecated by KHRShaderFloat16Int8.
     module AMDGpuShaderHalfFloat =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_gpu_shader_half_float"
-        let Number = 37
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_gpu_shader_half_float"
+        let [<Literal>] Number = 37
 
     module AMDShaderBallot =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_shader_ballot"
-        let Number = 38
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_shader_ballot"
+        let [<Literal>] Number = 38
 
     /// Requires KHRVideoEncodeQueue.
     module KHRVideoEncodeH264 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_encode_h264"
-        let Number = 39
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_encode_h264"
+        let [<Literal>] Number = 39
 
         [<Flags>]
         type VkVideoEncodeH264CapabilityFlagsKHR =
@@ -19979,9 +19979,9 @@ module rec Extensions =
 
     /// Requires KHRVideoEncodeQueue.
     module KHRVideoEncodeH265 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_encode_h265"
-        let Number = 40
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_encode_h265"
+        let [<Literal>] Number = 40
 
         [<Flags>]
         type VkVideoEncodeH265CapabilityFlagsKHR =
@@ -20696,9 +20696,9 @@ module rec Extensions =
 
     /// Requires KHRVideoDecodeQueue.
     module KHRVideoDecodeH264 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_decode_h264"
-        let Number = 41
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_decode_h264"
+        let [<Literal>] Number = 41
 
         [<Flags>]
         type VkVideoDecodeH264PictureLayoutFlagsKHR =
@@ -20924,9 +20924,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module AMDTextureGatherBiasLod =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_texture_gather_bias_lod"
-        let Number = 42
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_texture_gather_bias_lod"
+        let [<Literal>] Number = 42
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkTextureLODGatherFormatPropertiesAMD =
@@ -20961,9 +20961,9 @@ module rec Extensions =
 
 
     module AMDShaderInfo =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_shader_info"
-        let Number = 43
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_shader_info"
+        let [<Literal>] Number = 43
 
         type VkShaderInfoTypeAMD =
             | Statistics = 0
@@ -21058,9 +21058,9 @@ module rec Extensions =
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRDepthStencilResolve) | Vulkan12.
     /// Promoted to Vulkan13.
     module KHRDynamicRendering =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_dynamic_rendering"
-        let Number = 45
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_dynamic_rendering"
+        let [<Literal>] Number = 45
 
         type VkRenderingFlagsKHR = Vulkan13.VkRenderingFlags
 
@@ -21096,15 +21096,15 @@ module rec Extensions =
             let vkCmdEndRenderingKHR(commandBuffer) = Static<vkCmdEndRenderingKHRDel>.Value.Invoke(commandBuffer)
 
     module AMDShaderImageLoadStoreLod =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_shader_image_load_store_lod"
-        let Number = 47
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_shader_image_load_store_lod"
+        let [<Literal>] Number = 47
 
     /// Requires KHRSurface.
     module GGPStreamDescriptorSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_GGP_stream_descriptor_surface"
-        let Number = 50
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_GGP_stream_descriptor_surface"
+        let [<Literal>] Number = 50
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkStreamDescriptorSurfaceCreateInfoGGP =
@@ -21151,9 +21151,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVCornerSampledImage =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_corner_sampled_image"
-        let Number = 51
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_corner_sampled_image"
+        let [<Literal>] Number = 51
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceCornerSampledImageFeaturesNV =
@@ -21195,9 +21195,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan11.
     module KHRMultiview =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_multiview"
-        let Number = 54
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_multiview"
+        let [<Literal>] Number = 54
 
         type VkPhysicalDeviceMultiviewFeaturesKHR = Vulkan11.VkPhysicalDeviceMultiviewFeatures
 
@@ -21214,9 +21214,9 @@ module rec Extensions =
 
     /// Deprecated.
     module IMGFormatPvrtc =
-        let Type = ExtensionType.Device
-        let Name = "VK_IMG_format_pvrtc"
-        let Number = 55
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_IMG_format_pvrtc"
+        let [<Literal>] Number = 55
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -21233,9 +21233,9 @@ module rec Extensions =
 
     /// Deprecated by KHRExternalMemoryCapabilities.
     module NVExternalMemoryCapabilities =
-        let Type = ExtensionType.Instance
-        let Name = "VK_NV_external_memory_capabilities"
-        let Number = 56
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_NV_external_memory_capabilities"
+        let [<Literal>] Number = 56
 
         [<Flags>]
         type VkExternalMemoryHandleTypeFlagsNV =
@@ -21299,9 +21299,9 @@ module rec Extensions =
     /// Requires NVExternalMemoryCapabilities.
     /// Deprecated by KHRExternalMemory.
     module NVExternalMemory =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_external_memory"
-        let Number = 57
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_external_memory"
+        let [<Literal>] Number = 57
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkExportMemoryAllocateInfoNV =
@@ -21368,9 +21368,9 @@ module rec Extensions =
     /// Requires NVExternalMemory.
     /// Deprecated by KHRExternalMemoryWin32.
     module NVExternalMemoryWin32 =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_external_memory_win32"
-        let Number = 58
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_external_memory_win32"
+        let [<Literal>] Number = 58
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkExportMemoryWin32HandleInfoNV =
@@ -21451,9 +21451,9 @@ module rec Extensions =
     /// Requires NVExternalMemoryWin32.
     /// Promoted to KHRWin32KeyedMutex.
     module NVWin32KeyedMutex =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_win32_keyed_mutex"
-        let Number = 59
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_win32_keyed_mutex"
+        let [<Literal>] Number = 59
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkWin32KeyedMutexAcquireReleaseInfoNV =
@@ -21507,9 +21507,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan11.
     module KHRGetPhysicalDeviceProperties2 =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_get_physical_device_properties2"
-        let Number = 60
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_get_physical_device_properties2"
+        let [<Literal>] Number = 60
 
         type VkFormatProperties2KHR = Vulkan11.VkFormatProperties2
 
@@ -21554,9 +21554,9 @@ module rec Extensions =
     /// Requires KHRDeviceGroupCreation.
     /// Promoted to Vulkan11.
     module KHRDeviceGroup =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_device_group"
-        let Number = 61
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_device_group"
+        let [<Literal>] Number = 61
 
         type VkPeerMemoryFeatureFlagsKHR = Vulkan11.VkPeerMemoryFeatureFlags
         type VkMemoryAllocateFlagsKHR = Vulkan11.VkMemoryAllocateFlags
@@ -21667,9 +21667,9 @@ module rec Extensions =
 
     /// Deprecated by EXTLayerSettings.
     module EXTValidationFlags =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_validation_flags"
-        let Number = 62
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_validation_flags"
+        let [<Literal>] Number = 62
 
         type VkValidationCheckEXT =
             | All = 0
@@ -21713,9 +21713,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module NNViSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_NN_vi_surface"
-        let Number = 63
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_NN_vi_surface"
+        let [<Literal>] Number = 63
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkViSurfaceCreateInfoNN =
@@ -21762,28 +21762,28 @@ module rec Extensions =
 
     /// Promoted to Vulkan11.
     module KHRShaderDrawParameters =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_draw_parameters"
-        let Number = 64
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_draw_parameters"
+        let [<Literal>] Number = 64
 
     /// Deprecated by Vulkan12.
     module EXTShaderSubgroupBallot =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_subgroup_ballot"
-        let Number = 65
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_subgroup_ballot"
+        let [<Literal>] Number = 65
 
     /// Deprecated by Vulkan11.
     module EXTShaderSubgroupVote =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_subgroup_vote"
-        let Number = 66
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_subgroup_vote"
+        let [<Literal>] Number = 66
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module EXTTextureCompressionAstcHdr =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_texture_compression_astc_hdr"
-        let Number = 67
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_texture_compression_astc_hdr"
+        let [<Literal>] Number = 67
 
         type VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT = Vulkan13.VkPhysicalDeviceTextureCompressionASTCHDRFeatures
 
@@ -21809,9 +21809,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTAstcDecodeMode =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_astc_decode_mode"
-        let Number = 68
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_astc_decode_mode"
+        let [<Literal>] Number = 68
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImageViewASTCDecodeModeEXT =
@@ -21878,9 +21878,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan14.
     module EXTPipelineRobustness =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_pipeline_robustness"
-        let Number = 69
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_pipeline_robustness"
+        let [<Literal>] Number = 69
 
         type VkPipelineRobustnessBufferBehaviorEXT = Vulkan14.VkPipelineRobustnessBufferBehavior
         type VkPipelineRobustnessImageBehaviorEXT = Vulkan14.VkPipelineRobustnessImageBehavior
@@ -21908,9 +21908,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan11.
     module KHRMaintenance1 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_maintenance1"
-        let Number = 70
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_maintenance1"
+        let [<Literal>] Number = 70
 
         type VkCommandPoolTrimFlagsKHR = VkCommandPoolTrimFlags
 
@@ -21935,9 +21935,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan11.
     module KHRDeviceGroupCreation =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_device_group_creation"
-        let Number = 71
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_device_group_creation"
+        let [<Literal>] Number = 71
 
         type VkDeviceGroupDeviceCreateInfoKHR = Vulkan11.VkDeviceGroupDeviceCreateInfo
 
@@ -21961,9 +21961,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan11.
     module KHRExternalMemoryCapabilities =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_external_memory_capabilities"
-        let Number = 72
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_external_memory_capabilities"
+        let [<Literal>] Number = 72
 
         type VkExternalMemoryHandleTypeFlagsKHR = Vulkan11.VkExternalMemoryHandleTypeFlags
         type VkExternalMemoryFeatureFlagsKHR = Vulkan11.VkExternalMemoryFeatureFlags
@@ -22008,9 +22008,9 @@ module rec Extensions =
     /// Requires KHRExternalMemoryCapabilities | Vulkan11.
     /// Promoted to Vulkan11.
     module KHRExternalMemory =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_external_memory"
-        let Number = 73
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_external_memory"
+        let [<Literal>] Number = 73
 
         type VkExportMemoryAllocateInfoKHR = Vulkan11.VkExportMemoryAllocateInfo
 
@@ -22027,9 +22027,9 @@ module rec Extensions =
 
     /// Requires KHRExternalMemory | Vulkan11.
     module KHRExternalMemoryWin32 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_external_memory_win32"
-        let Number = 74
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_external_memory_win32"
+        let [<Literal>] Number = 74
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkExportMemoryWin32HandleInfoKHR =
@@ -22180,9 +22180,9 @@ module rec Extensions =
 
     /// Requires KHRExternalMemory | Vulkan11.
     module KHRExternalMemoryFd =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_external_memory_fd"
-        let Number = 75
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_external_memory_fd"
+        let [<Literal>] Number = 75
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImportMemoryFdInfoKHR =
@@ -22294,9 +22294,9 @@ module rec Extensions =
 
     /// Requires KHRExternalMemoryWin32.
     module KHRWin32KeyedMutex =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_win32_keyed_mutex"
-        let Number = 76
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_win32_keyed_mutex"
+        let [<Literal>] Number = 76
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkWin32KeyedMutexAcquireReleaseInfoKHR =
@@ -22351,9 +22351,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan11.
     module KHRExternalSemaphoreCapabilities =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_external_semaphore_capabilities"
-        let Number = 77
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_external_semaphore_capabilities"
+        let [<Literal>] Number = 77
 
         type VkExternalSemaphoreHandleTypeFlagsKHR = Vulkan11.VkExternalSemaphoreHandleTypeFlags
         type VkExternalSemaphoreFeatureFlagsKHR = Vulkan11.VkExternalSemaphoreFeatureFlags
@@ -22389,9 +22389,9 @@ module rec Extensions =
     /// Requires KHRExternalSemaphoreCapabilities.
     /// Promoted to Vulkan11.
     module KHRExternalSemaphore =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_external_semaphore"
-        let Number = 78
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_external_semaphore"
+        let [<Literal>] Number = 78
 
         type VkSemaphoreImportFlagsKHR = Vulkan11.VkSemaphoreImportFlags
 
@@ -22406,9 +22406,9 @@ module rec Extensions =
 
     /// Requires KHRExternalSemaphore.
     module KHRExternalSemaphoreWin32 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_external_semaphore_win32"
-        let Number = 79
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_external_semaphore_win32"
+        let [<Literal>] Number = 79
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkD3D12FenceSubmitInfoKHR =
@@ -22574,9 +22574,9 @@ module rec Extensions =
 
     /// Requires KHRExternalSemaphore | Vulkan11.
     module KHRExternalSemaphoreFd =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_external_semaphore_fd"
-        let Number = 80
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_external_semaphore_fd"
+        let [<Literal>] Number = 80
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImportSemaphoreFdInfoKHR =
@@ -22665,9 +22665,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan14.
     module KHRPushDescriptor =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_push_descriptor"
-        let Number = 81
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_push_descriptor"
+        let [<Literal>] Number = 81
 
         type VkPhysicalDevicePushDescriptorPropertiesKHR = Vulkan14.VkPhysicalDevicePushDescriptorProperties
 
@@ -22707,9 +22707,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTConditionalRendering =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_conditional_rendering"
-        let Number = 82
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_conditional_rendering"
+        let [<Literal>] Number = 82
 
         [<Flags>]
         type VkConditionalRenderingFlagsEXT =
@@ -22844,9 +22844,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan12.
     module KHRShaderFloat16Int8 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_float16_int8"
-        let Number = 83
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_float16_int8"
+        let [<Literal>] Number = 83
 
         type VkPhysicalDeviceFloat16Int8FeaturesKHR = Vulkan12.VkPhysicalDeviceShaderFloat16Int8Features
 
@@ -22857,9 +22857,9 @@ module rec Extensions =
     /// Requires (KHRGetPhysicalDeviceProperties2, KHRStorageBufferStorageClass) | Vulkan11.
     /// Promoted to Vulkan11.
     module KHR16bitStorage =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_16bit_storage"
-        let Number = 84
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_16bit_storage"
+        let [<Literal>] Number = 84
 
         type VkPhysicalDevice16BitStorageFeaturesKHR = Vulkan11.VkPhysicalDevice16BitStorageFeatures
 
@@ -22867,9 +22867,9 @@ module rec Extensions =
 
     /// Requires KHRSwapchain.
     module KHRIncrementalPresent =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_incremental_present"
-        let Number = 85
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_incremental_present"
+        let [<Literal>] Number = 85
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkRectLayerKHR =
@@ -22961,9 +22961,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan11.
     module KHRDescriptorUpdateTemplate =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_descriptor_update_template"
-        let Number = 86
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_descriptor_update_template"
+        let [<Literal>] Number = 86
 
         type VkDescriptorUpdateTemplateKHR = Vulkan11.VkDescriptorUpdateTemplate
         type VkDescriptorUpdateTemplateCreateFlagsKHR = VkDescriptorUpdateTemplateCreateFlags
@@ -23021,9 +23021,9 @@ module rec Extensions =
 
 
     module NVClipSpaceWScaling =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_clip_space_w_scaling"
-        let Number = 88
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_clip_space_w_scaling"
+        let [<Literal>] Number = 88
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkViewportWScalingNV =
@@ -23103,9 +23103,9 @@ module rec Extensions =
 
     /// Requires KHRDisplay.
     module EXTDirectModeDisplay =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_direct_mode_display"
-        let Number = 89
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_direct_mode_display"
+        let [<Literal>] Number = 89
 
         module VkRaw =
             open VkRaw
@@ -23118,9 +23118,9 @@ module rec Extensions =
 
     /// Requires EXTDirectModeDisplay.
     module EXTAcquireXlibDisplay =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_acquire_xlib_display"
-        let Number = 90
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_acquire_xlib_display"
+        let [<Literal>] Number = 90
 
         module VkRaw =
             open VkRaw
@@ -23135,9 +23135,9 @@ module rec Extensions =
 
     /// Requires KHRDisplay.
     module EXTDisplaySurfaceCounter =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_display_surface_counter"
-        let Number = 91
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_display_surface_counter"
+        let [<Literal>] Number = 91
 
         [<Flags>]
         type VkSurfaceCounterFlagsEXT =
@@ -23218,9 +23218,9 @@ module rec Extensions =
 
     /// Requires EXTDisplaySurfaceCounter, KHRSwapchain.
     module EXTDisplayControl =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_display_control"
-        let Number = 92
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_display_control"
+        let [<Literal>] Number = 92
 
         type VkDisplayPowerStateEXT =
             | Off = 0
@@ -23372,9 +23372,9 @@ module rec Extensions =
 
     /// Requires KHRSwapchain.
     module GOOGLEDisplayTiming =
-        let Type = ExtensionType.Device
-        let Name = "VK_GOOGLE_display_timing"
-        let Number = 93
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_GOOGLE_display_timing"
+        let [<Literal>] Number = 93
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPastPresentationTimingGOOGLE =
@@ -23503,25 +23503,25 @@ module rec Extensions =
             let vkGetPastPresentationTimingGOOGLE(device, swapchain, pPresentationTimingCount, pPresentationTimings) = Static<vkGetPastPresentationTimingGOOGLEDel>.Value.Invoke(device, swapchain, pPresentationTimingCount, pPresentationTimings)
 
     module NVSampleMaskOverrideCoverage =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_sample_mask_override_coverage"
-        let Number = 95
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_sample_mask_override_coverage"
+        let [<Literal>] Number = 95
 
     module NVGeometryShaderPassthrough =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_geometry_shader_passthrough"
-        let Number = 96
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_geometry_shader_passthrough"
+        let [<Literal>] Number = 96
 
     module NVViewportArray2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_viewport_array2"
-        let Number = 97
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_viewport_array2"
+        let [<Literal>] Number = 97
 
     /// Requires KHRMultiview | Vulkan11.
     module NVXMultiviewPerViewAttributes =
-        let Type = ExtensionType.Device
-        let Name = "VK_NVX_multiview_per_view_attributes"
-        let Number = 98
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NVX_multiview_per_view_attributes"
+        let [<Literal>] Number = 98
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX =
@@ -23599,9 +23599,9 @@ module rec Extensions =
 
 
     module NVViewportSwizzle =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_viewport_swizzle"
-        let Number = 99
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_viewport_swizzle"
+        let [<Literal>] Number = 99
 
         type VkViewportCoordinateSwizzleNV =
             | PositiveX = 0
@@ -23685,9 +23685,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTDiscardRectangles =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_discard_rectangles"
-        let Number = 100
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_discard_rectangles"
+        let [<Literal>] Number = 100
 
         type VkDiscardRectangleModeEXT =
             | Inclusive = 0
@@ -23786,9 +23786,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTConservativeRasterization =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_conservative_rasterization"
-        let Number = 102
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_conservative_rasterization"
+        let [<Literal>] Number = 102
 
         type VkConservativeRasterizationModeEXT =
             | Disabled = 0
@@ -23890,9 +23890,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTDepthClipEnable =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_depth_clip_enable"
-        let Number = 103
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_depth_clip_enable"
+        let [<Literal>] Number = 103
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceDepthClipEnableFeaturesEXT =
@@ -23961,9 +23961,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module EXTSwapchainColorspace =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_swapchain_colorspace"
-        let Number = 105
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_swapchain_colorspace"
+        let [<Literal>] Number = 105
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -23986,9 +23986,9 @@ module rec Extensions =
 
     /// Requires KHRSwapchain.
     module EXTHdrMetadata =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_hdr_metadata"
-        let Number = 106
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_hdr_metadata"
+        let [<Literal>] Number = 106
 
         /// Chromaticity coordinate
         [<StructLayout(LayoutKind.Sequential)>]
@@ -24080,9 +24080,9 @@ module rec Extensions =
     /// Requires (((KHRGetPhysicalDeviceProperties2, KHRMaintenance2) | Vulkan11), KHRImageFormatList) | Vulkan12.
     /// Promoted to Vulkan12.
     module KHRImagelessFramebuffer =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_imageless_framebuffer"
-        let Number = 109
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_imageless_framebuffer"
+        let [<Literal>] Number = 109
 
         type VkFramebufferAttachmentImageInfoKHR = Vulkan12.VkFramebufferAttachmentImageInfo
 
@@ -24102,9 +24102,9 @@ module rec Extensions =
     /// Requires (KHRMultiview, KHRMaintenance2) | Vulkan11.
     /// Promoted to Vulkan12.
     module KHRCreateRenderpass2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_create_renderpass2"
-        let Number = 110
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_create_renderpass2"
+        let [<Literal>] Number = 110
 
         type VkAttachmentDescription2KHR = Vulkan12.VkAttachmentDescription2
 
@@ -24138,9 +24138,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module IMGRelaxedLineRasterization =
-        let Type = ExtensionType.Device
-        let Name = "VK_IMG_relaxed_line_rasterization"
-        let Number = 111
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_IMG_relaxed_line_rasterization"
+        let [<Literal>] Number = 111
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceRelaxedLineRasterizationFeaturesIMG =
@@ -24176,9 +24176,9 @@ module rec Extensions =
 
     /// Requires KHRSwapchain, KHRGetSurfaceCapabilities2, (KHRGetPhysicalDeviceProperties2 | Vulkan11).
     module KHRSharedPresentableImage =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shared_presentable_image"
-        let Number = 112
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shared_presentable_image"
+        let [<Literal>] Number = 112
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkSharedPresentSurfaceCapabilitiesKHR =
@@ -24231,9 +24231,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan11.
     module KHRExternalFenceCapabilities =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_external_fence_capabilities"
-        let Number = 113
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_external_fence_capabilities"
+        let [<Literal>] Number = 113
 
         type VkExternalFenceHandleTypeFlagsKHR = Vulkan11.VkExternalFenceHandleTypeFlags
         type VkExternalFenceFeatureFlagsKHR = Vulkan11.VkExternalFenceFeatureFlags
@@ -24268,9 +24268,9 @@ module rec Extensions =
     /// Requires KHRExternalFenceCapabilities.
     /// Promoted to Vulkan11.
     module KHRExternalFence =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_external_fence"
-        let Number = 114
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_external_fence"
+        let [<Literal>] Number = 114
 
         type VkFenceImportFlagsKHR = Vulkan11.VkFenceImportFlags
 
@@ -24285,9 +24285,9 @@ module rec Extensions =
 
     /// Requires KHRExternalFence.
     module KHRExternalFenceWin32 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_external_fence_win32"
-        let Number = 115
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_external_fence_win32"
+        let [<Literal>] Number = 115
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkExportFenceWin32HandleInfoKHR =
@@ -24414,9 +24414,9 @@ module rec Extensions =
 
     /// Requires KHRExternalFence | Vulkan11.
     module KHRExternalFenceFd =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_external_fence_fd"
-        let Number = 116
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_external_fence_fd"
+        let [<Literal>] Number = 116
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkFenceGetFdInfoKHR =
@@ -24504,9 +24504,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module KHRPerformanceQuery =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_performance_query"
-        let Number = 117
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_performance_query"
+        let [<Literal>] Number = 117
 
         [<Flags>]
         type VkPerformanceCounterDescriptionFlagsKHR =
@@ -24868,9 +24868,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan11.
     module KHRMaintenance2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_maintenance2"
-        let Number = 118
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_maintenance2"
+        let [<Literal>] Number = 118
 
         type VkPointClippingBehaviorKHR = Vulkan11.VkPointClippingBehavior
         type VkTessellationDomainOriginKHR = Vulkan11.VkTessellationDomainOrigin
@@ -24904,9 +24904,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module KHRGetSurfaceCapabilities2 =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_get_surface_capabilities2"
-        let Number = 120
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_get_surface_capabilities2"
+        let [<Literal>] Number = 120
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceSurfaceInfo2KHR =
@@ -25013,9 +25013,9 @@ module rec Extensions =
     /// Requires (KHRGetPhysicalDeviceProperties2, KHRStorageBufferStorageClass) | Vulkan11.
     /// Promoted to Vulkan11.
     module KHRVariablePointers =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_variable_pointers"
-        let Number = 121
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_variable_pointers"
+        let [<Literal>] Number = 121
 
         type VkPhysicalDeviceVariablePointerFeaturesKHR = Vulkan11.VkPhysicalDeviceVariablePointersFeatures
 
@@ -25025,9 +25025,9 @@ module rec Extensions =
 
     /// Requires KHRDisplay.
     module KHRGetDisplayProperties2 =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_get_display_properties2"
-        let Number = 122
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_get_display_properties2"
+        let [<Literal>] Number = 122
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkDisplayModeProperties2KHR =
@@ -25201,9 +25201,9 @@ module rec Extensions =
     /// Requires KHRSurface.
     /// Deprecated by EXTMetalSurface.
     module MVKIosSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_MVK_ios_surface"
-        let Number = 123
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_MVK_ios_surface"
+        let [<Literal>] Number = 123
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkIOSSurfaceCreateInfoMVK =
@@ -25251,9 +25251,9 @@ module rec Extensions =
     /// Requires KHRSurface.
     /// Deprecated by EXTMetalSurface.
     module MVKMacosSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_MVK_macos_surface"
-        let Number = 124
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_MVK_macos_surface"
+        let [<Literal>] Number = 124
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkMacOSSurfaceCreateInfoMVK =
@@ -25300,9 +25300,9 @@ module rec Extensions =
 
     /// Requires KHRExternalMemoryFd.
     module EXTExternalMemoryDmaBuf =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_external_memory_dma_buf"
-        let Number = 126
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_external_memory_dma_buf"
+        let [<Literal>] Number = 126
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -25312,16 +25312,16 @@ module rec Extensions =
 
     /// Requires KHRExternalMemory | Vulkan11.
     module EXTQueueFamilyForeign =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_queue_family_foreign"
-        let Number = 127
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_queue_family_foreign"
+        let [<Literal>] Number = 127
 
     /// Requires KHRGetMemoryRequirements2 | Vulkan11.
     /// Promoted to Vulkan11.
     module KHRDedicatedAllocation =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_dedicated_allocation"
-        let Number = 128
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_dedicated_allocation"
+        let [<Literal>] Number = 128
 
         type VkMemoryDedicatedAllocateInfoKHR = Vulkan11.VkMemoryDedicatedAllocateInfo
 
@@ -25330,9 +25330,9 @@ module rec Extensions =
 
 
     module EXTDebugUtils =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_debug_utils"
-        let Number = 129
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_debug_utils"
+        let [<Literal>] Number = 129
 
         type PFN_vkDebugUtilsMessengerCallbackEXT = nativeint
 
@@ -25612,9 +25612,9 @@ module rec Extensions =
 
     /// Requires ((KHRSamplerYcbcrConversion, KHRExternalMemory, KHRDedicatedAllocation) | Vulkan11), EXTQueueFamilyForeign.
     module ANDROIDExternalMemoryAndroidHardwareBuffer =
-        let Type = ExtensionType.Device
-        let Name = "VK_ANDROID_external_memory_android_hardware_buffer"
-        let Number = 130
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_ANDROID_external_memory_android_hardware_buffer"
+        let [<Literal>] Number = 130
 
         type AHardwareBuffer = nativeint
 
@@ -25897,9 +25897,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan12.
     module EXTSamplerFilterMinmax =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_sampler_filter_minmax"
-        let Number = 131
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_sampler_filter_minmax"
+        let [<Literal>] Number = 131
 
         type VkSamplerReductionModeEXT = Vulkan12.VkSamplerReductionMode
 
@@ -25920,21 +25920,21 @@ module rec Extensions =
 
     /// Promoted to Vulkan11.
     module KHRStorageBufferStorageClass =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_storage_buffer_storage_class"
-        let Number = 132
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_storage_buffer_storage_class"
+        let [<Literal>] Number = 132
 
     /// Deprecated by KHRShaderFloat16Int8.
     module AMDGpuShaderInt16 =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_gpu_shader_int16"
-        let Number = 133
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_gpu_shader_int16"
+        let [<Literal>] Number = 133
 
     /// Requires ((KHRSynchronization2, KHRSpirv14, EXTExtendedDynamicState) | Vulkan13), KHRMaintenance5, KHRPipelineLibrary.
     module AMDXShaderEnqueue =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMDX_shader_enqueue"
-        let Number = 135
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMDX_shader_enqueue"
+        let [<Literal>] Number = 135
 
         [<StructLayout(LayoutKind.Explicit)>]
         type VkDeviceOrHostAddressConstAMDX =
@@ -26258,9 +26258,9 @@ module rec Extensions =
 
 
     module AMDMixedAttachmentSamples =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_mixed_attachment_samples"
-        let Number = 137
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_mixed_attachment_samples"
+        let [<Literal>] Number = 137
 
         [<AutoOpen>]
         module ``Vulkan13 | KHRDynamicRendering`` =
@@ -26303,16 +26303,16 @@ module rec Extensions =
 
 
     module AMDShaderFragmentMask =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_shader_fragment_mask"
-        let Number = 138
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_shader_fragment_mask"
+        let [<Literal>] Number = 138
 
     /// Requires (KHRGetPhysicalDeviceProperties2, KHRMaintenance1) | Vulkan11.
     /// Promoted to Vulkan13.
     module EXTInlineUniformBlock =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_inline_uniform_block"
-        let Number = 139
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_inline_uniform_block"
+        let [<Literal>] Number = 139
 
         type VkDescriptorPoolInlineUniformBlockCreateInfoEXT = Vulkan13.VkDescriptorPoolInlineUniformBlockCreateInfo
 
@@ -26330,15 +26330,15 @@ module rec Extensions =
 
 
     module EXTShaderStencilExport =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_stencil_export"
-        let Number = 141
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_stencil_export"
+        let [<Literal>] Number = 141
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTSampleLocations =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_sample_locations"
-        let Number = 144
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_sample_locations"
+        let [<Literal>] Number = 144
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkSampleLocationEXT =
@@ -26619,15 +26619,15 @@ module rec Extensions =
 
     /// Promoted to Vulkan11.
     module KHRRelaxedBlockLayout =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_relaxed_block_layout"
-        let Number = 145
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_relaxed_block_layout"
+        let [<Literal>] Number = 145
 
     /// Promoted to Vulkan11.
     module KHRGetMemoryRequirements2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_get_memory_requirements2"
-        let Number = 147
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_get_memory_requirements2"
+        let [<Literal>] Number = 147
 
         type VkBufferMemoryRequirementsInfo2KHR = Vulkan11.VkBufferMemoryRequirementsInfo2
 
@@ -26655,9 +26655,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan12.
     module KHRImageFormatList =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_image_format_list"
-        let Number = 148
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_image_format_list"
+        let [<Literal>] Number = 148
 
         type VkImageFormatListCreateInfoKHR = Vulkan12.VkImageFormatListCreateInfo
 
@@ -26665,9 +26665,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTBlendOperationAdvanced =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_blend_operation_advanced"
-        let Number = 149
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_blend_operation_advanced"
+        let [<Literal>] Number = 149
 
         type VkBlendOverlapEXT =
             | Uncorrelated = 0
@@ -26841,9 +26841,9 @@ module rec Extensions =
 
 
     module NVFragmentCoverageToColor =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_fragment_coverage_to_color"
-        let Number = 150
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_fragment_coverage_to_color"
+        let [<Literal>] Number = 150
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPipelineCoverageToColorStateCreateInfoNV =
@@ -26885,9 +26885,9 @@ module rec Extensions =
 
     /// Requires ((Vulkan11, EXTDescriptorIndexing, KHRBufferDeviceAddress) | Vulkan12), KHRDeferredHostOperations.
     module KHRAccelerationStructure =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_acceleration_structure"
-        let Number = 151
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_acceleration_structure"
+        let [<Literal>] Number = 151
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -27844,9 +27844,9 @@ module rec Extensions =
 
 
     module NVFramebufferMixedSamples =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_framebuffer_mixed_samples"
-        let Number = 153
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_framebuffer_mixed_samples"
+        let [<Literal>] Number = 153
 
         type VkCoverageModulationModeNV =
             | None = 0
@@ -27906,9 +27906,9 @@ module rec Extensions =
 
 
     module NVFillRectangle =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_fill_rectangle"
-        let Number = 154
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_fill_rectangle"
+        let [<Literal>] Number = 154
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -27918,9 +27918,9 @@ module rec Extensions =
 
     /// Requires Vulkan11.
     module NVShaderSmBuiltins =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_shader_sm_builtins"
-        let Number = 155
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_shader_sm_builtins"
+        let [<Literal>] Number = 155
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderSMBuiltinsFeaturesNV =
@@ -27988,16 +27988,16 @@ module rec Extensions =
 
 
     module EXTPostDepthCoverage =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_post_depth_coverage"
-        let Number = 156
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_post_depth_coverage"
+        let [<Literal>] Number = 156
 
     /// Requires (KHRMaintenance1, KHRBindMemory2, KHRGetMemoryRequirements2, KHRGetPhysicalDeviceProperties2) | Vulkan11.
     /// Promoted to Vulkan11.
     module KHRSamplerYcbcrConversion =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_sampler_ycbcr_conversion"
-        let Number = 157
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_sampler_ycbcr_conversion"
+        let [<Literal>] Number = 157
 
         type VkSamplerYcbcrConversionKHR = Vulkan11.VkSamplerYcbcrConversion
         type VkSamplerYcbcrModelConversionKHR = Vulkan11.VkSamplerYcbcrModelConversion
@@ -28105,9 +28105,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan11.
     module KHRBindMemory2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_bind_memory2"
-        let Number = 158
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_bind_memory2"
+        let [<Literal>] Number = 158
 
         type VkBindBufferMemoryInfoKHR = Vulkan11.VkBindBufferMemoryInfo
 
@@ -28132,9 +28132,9 @@ module rec Extensions =
 
     /// Requires (((KHRBindMemory2, KHRGetPhysicalDeviceProperties2, KHRSamplerYcbcrConversion) | Vulkan11), KHRImageFormatList) | Vulkan12.
     module EXTImageDrmFormatModifier =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_image_drm_format_modifier"
-        let Number = 159
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_image_drm_format_modifier"
+        let [<Literal>] Number = 159
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkDrmFormatModifierPropertiesEXT =
@@ -28423,9 +28423,9 @@ module rec Extensions =
 
 
     module EXTValidationCache =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_validation_cache"
-        let Number = 161
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_validation_cache"
+        let [<Literal>] Number = 161
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -28532,9 +28532,9 @@ module rec Extensions =
     /// Requires (KHRGetPhysicalDeviceProperties2, KHRMaintenance3) | Vulkan11.
     /// Promoted to Vulkan12.
     module EXTDescriptorIndexing =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_descriptor_indexing"
-        let Number = 162
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_descriptor_indexing"
+        let [<Literal>] Number = 162
 
         type VkDescriptorBindingFlagsEXT = Vulkan12.VkDescriptorBindingFlags
 
@@ -28566,15 +28566,15 @@ module rec Extensions =
 
     /// Promoted to Vulkan12.
     module EXTShaderViewportIndexLayer =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_viewport_index_layer"
-        let Number = 163
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_viewport_index_layer"
+        let [<Literal>] Number = 163
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module KHRPortabilitySubset =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_portability_subset"
-        let Number = 164
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_portability_subset"
+        let [<Literal>] Number = 164
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePortabilitySubsetFeaturesKHR =
@@ -28682,9 +28682,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVShadingRateImage =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_shading_rate_image"
-        let Number = 165
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_shading_rate_image"
+        let [<Literal>] Number = 165
 
         type VkShadingRatePaletteEntryNV =
             | NoInvocations = 0
@@ -28963,9 +28963,9 @@ module rec Extensions =
     /// Requires (KHRGetPhysicalDeviceProperties2, KHRGetMemoryRequirements2) | Vulkan11.
     /// Deprecated by KHRRayTracingPipeline.
     module NVRayTracing =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_ray_tracing"
-        let Number = 166
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_ray_tracing"
+        let [<Literal>] Number = 166
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -29593,9 +29593,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVRepresentativeFragmentTest =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_representative_fragment_test"
-        let Number = 167
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_representative_fragment_test"
+        let [<Literal>] Number = 167
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV =
@@ -29662,9 +29662,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan11.
     module KHRMaintenance3 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_maintenance3"
-        let Number = 169
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_maintenance3"
+        let [<Literal>] Number = 169
 
         type VkDescriptorSetLayoutSupportKHR = Vulkan11.VkDescriptorSetLayoutSupport
 
@@ -29682,9 +29682,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan12.
     module KHRDrawIndirectCount =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_draw_indirect_count"
-        let Number = 170
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_draw_indirect_count"
+        let [<Literal>] Number = 170
 
         module VkRaw =
             open VkRaw
@@ -29698,9 +29698,9 @@ module rec Extensions =
             let vkCmdDrawIndexedIndirectCountKHR(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) = Static<vkCmdDrawIndexedIndirectCountKHRDel>.Value.Invoke(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride)
 
     module EXTFilterCubic =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_filter_cubic"
-        let Number = 171
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_filter_cubic"
+        let [<Literal>] Number = 171
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkFilterCubicImageViewImageFormatPropertiesEXT =
@@ -29775,9 +29775,9 @@ module rec Extensions =
 
 
     module QCOMRenderPassShaderResolve =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_render_pass_shader_resolve"
-        let Number = 172
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_render_pass_shader_resolve"
+        let [<Literal>] Number = 172
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -29788,9 +29788,9 @@ module rec Extensions =
 
     /// Promoted to KHRGlobalPriority.
     module EXTGlobalPriority =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_global_priority"
-        let Number = 175
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_global_priority"
+        let [<Literal>] Number = 175
 
         type VkQueueGlobalPriorityEXT = Vulkan14.VkQueueGlobalPriority
 
@@ -29811,9 +29811,9 @@ module rec Extensions =
     /// Requires Vulkan11.
     /// Promoted to Vulkan12.
     module KHRShaderSubgroupExtendedTypes =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_subgroup_extended_types"
-        let Number = 176
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_subgroup_extended_types"
+        let [<Literal>] Number = 176
 
         type VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR = Vulkan12.VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures
 
@@ -29822,9 +29822,9 @@ module rec Extensions =
     /// Requires (KHRGetPhysicalDeviceProperties2, KHRStorageBufferStorageClass) | Vulkan11.
     /// Promoted to Vulkan12.
     module KHR8bitStorage =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_8bit_storage"
-        let Number = 178
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_8bit_storage"
+        let [<Literal>] Number = 178
 
         type VkPhysicalDevice8BitStorageFeaturesKHR = Vulkan12.VkPhysicalDevice8BitStorageFeatures
 
@@ -29832,9 +29832,9 @@ module rec Extensions =
 
     /// Requires KHRExternalMemory | Vulkan11.
     module EXTExternalMemoryHost =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_external_memory_host"
-        let Number = 179
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_external_memory_host"
+        let [<Literal>] Number = 179
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImportMemoryHostPointerInfoEXT =
@@ -29946,9 +29946,9 @@ module rec Extensions =
             let vkGetMemoryHostPointerPropertiesEXT(device, handleType, pHostPointer, pMemoryHostPointerProperties) = Static<vkGetMemoryHostPointerPropertiesEXTDel>.Value.Invoke(device, handleType, pHostPointer, pMemoryHostPointerProperties)
 
     module AMDBufferMarker =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_buffer_marker"
-        let Number = 180
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_buffer_marker"
+        let [<Literal>] Number = 180
 
         module VkRaw =
             open VkRaw
@@ -29974,9 +29974,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan12.
     module KHRShaderAtomicInt64 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_atomic_int64"
-        let Number = 181
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_atomic_int64"
+        let [<Literal>] Number = 181
 
         type VkPhysicalDeviceShaderAtomicInt64FeaturesKHR = Vulkan12.VkPhysicalDeviceShaderAtomicInt64Features
 
@@ -29984,9 +29984,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module KHRShaderClock =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_clock"
-        let Number = 182
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_clock"
+        let [<Literal>] Number = 182
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderClockFeaturesKHR =
@@ -30024,9 +30024,9 @@ module rec Extensions =
 
 
     module AMDPipelineCompilerControl =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_pipeline_compiler_control"
-        let Number = 184
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_pipeline_compiler_control"
+        let [<Literal>] Number = 184
 
         [<Flags>]
         type VkPipelineCompilerControlFlagsAMD =
@@ -30069,9 +30069,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to KHRCalibratedTimestamps.
     module EXTCalibratedTimestamps =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_calibrated_timestamps"
-        let Number = 185
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_calibrated_timestamps"
+        let [<Literal>] Number = 185
 
         type VkTimeDomainEXT = KHRCalibratedTimestamps.VkTimeDomainKHR
 
@@ -30099,9 +30099,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module AMDShaderCoreProperties =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_shader_core_properties"
-        let Number = 186
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_shader_core_properties"
+        let [<Literal>] Number = 186
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderCorePropertiesAMD =
@@ -30176,9 +30176,9 @@ module rec Extensions =
 
     /// Requires KHRVideoDecodeQueue.
     module KHRVideoDecodeH265 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_decode_h265"
-        let Number = 188
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_decode_h265"
+        let [<Literal>] Number = 188
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkVideoDecodeH265CapabilitiesKHR =
@@ -30400,9 +30400,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan14.
     module KHRGlobalPriority =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_global_priority"
-        let Number = 189
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_global_priority"
+        let [<Literal>] Number = 189
 
         type VkQueueGlobalPriorityKHR = Vulkan14.VkQueueGlobalPriority
 
@@ -30425,9 +30425,9 @@ module rec Extensions =
 
 
     module AMDMemoryOverallocationBehavior =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_memory_overallocation_behavior"
-        let Number = 190
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_memory_overallocation_behavior"
+        let [<Literal>] Number = 190
 
         type VkMemoryOverallocationBehaviorAMD =
             | Default = 0
@@ -30470,9 +30470,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to KHRVertexAttributeDivisor.
     module EXTVertexAttributeDivisor =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_vertex_attribute_divisor"
-        let Number = 191
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_vertex_attribute_divisor"
+        let [<Literal>] Number = 191
 
         type VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT = Vulkan14.VkPhysicalDeviceVertexAttributeDivisorFeatures
 
@@ -30514,9 +30514,9 @@ module rec Extensions =
 
     /// Requires KHRSwapchain, GGPStreamDescriptorSurface.
     module GGPFrameToken =
-        let Type = ExtensionType.Device
-        let Name = "VK_GGP_frame_token"
-        let Number = 192
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_GGP_frame_token"
+        let [<Literal>] Number = 192
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPresentFrameTokenGGP =
@@ -30552,9 +30552,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan13.
     module EXTPipelineCreationFeedback =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_pipeline_creation_feedback"
-        let Number = 193
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_pipeline_creation_feedback"
+        let [<Literal>] Number = 193
 
         type VkPipelineCreationFeedbackFlagsEXT = Vulkan13.VkPipelineCreationFeedbackFlags
 
@@ -30574,9 +30574,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan12.
     module KHRDriverProperties =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_driver_properties"
-        let Number = 197
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_driver_properties"
+        let [<Literal>] Number = 197
 
         type VkDriverIdKHR = Vulkan12.VkDriverId
 
@@ -30605,9 +30605,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan12.
     module KHRShaderFloatControls =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_float_controls"
-        let Number = 198
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_float_controls"
+        let [<Literal>] Number = 198
 
         type VkShaderFloatControlsIndependenceKHR = Vulkan12.VkShaderFloatControlsIndependence
 
@@ -30624,9 +30624,9 @@ module rec Extensions =
 
     /// Requires Vulkan11.
     module NVShaderSubgroupPartitioned =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_shader_subgroup_partitioned"
-        let Number = 199
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_shader_subgroup_partitioned"
+        let [<Literal>] Number = 199
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -30637,9 +30637,9 @@ module rec Extensions =
     /// Requires KHRCreateRenderpass2 | Vulkan12.
     /// Promoted to Vulkan12.
     module KHRDepthStencilResolve =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_depth_stencil_resolve"
-        let Number = 200
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_depth_stencil_resolve"
+        let [<Literal>] Number = 200
 
         type VkResolveModeFlagsKHR = Vulkan12.VkResolveModeFlags
 
@@ -30660,9 +30660,9 @@ module rec Extensions =
 
     /// Requires KHRSwapchain, (KHRMaintenance2 | Vulkan11), (KHRImageFormatList | Vulkan12).
     module KHRSwapchainMutableFormat =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_swapchain_mutable_format"
-        let Number = 201
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_swapchain_mutable_format"
+        let [<Literal>] Number = 201
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -30673,9 +30673,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to KHRComputeShaderDerivatives.
     module NVComputeShaderDerivatives =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_compute_shader_derivatives"
-        let Number = 202
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_compute_shader_derivatives"
+        let [<Literal>] Number = 202
 
         type VkPhysicalDeviceComputeShaderDerivativesFeaturesNV = KHRComputeShaderDerivatives.VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
 
@@ -30683,9 +30683,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVMeshShader =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_mesh_shader"
-        let Number = 203
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_mesh_shader"
+        let [<Literal>] Number = 203
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkDrawMeshTasksIndirectCommandNV =
@@ -30856,9 +30856,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to KHRFragmentShaderBarycentric.
     module NVFragmentShaderBarycentric =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_fragment_shader_barycentric"
-        let Number = 204
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_fragment_shader_barycentric"
+        let [<Literal>] Number = 204
 
         type VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV = KHRFragmentShaderBarycentric.VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR
 
@@ -30866,9 +30866,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVShaderImageFootprint =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_shader_image_footprint"
-        let Number = 205
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_shader_image_footprint"
+        let [<Literal>] Number = 205
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderImageFootprintFeaturesNV =
@@ -30904,9 +30904,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVScissorExclusive =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_scissor_exclusive"
-        let Number = 206
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_scissor_exclusive"
+        let [<Literal>] Number = 206
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceExclusiveScissorFeaturesNV =
@@ -30991,9 +30991,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVDeviceDiagnosticCheckpoints =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_device_diagnostic_checkpoints"
-        let Number = 207
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_device_diagnostic_checkpoints"
+        let [<Literal>] Number = 207
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkCheckpointDataNV =
@@ -31149,9 +31149,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan12.
     module KHRTimelineSemaphore =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_timeline_semaphore"
-        let Number = 208
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_timeline_semaphore"
+        let [<Literal>] Number = 208
 
         type VkSemaphoreTypeKHR = Vulkan12.VkSemaphoreType
         type VkSemaphoreWaitFlagsKHR = Vulkan12.VkSemaphoreWaitFlags
@@ -31192,9 +31192,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module INTELShaderIntegerFunctions2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_INTEL_shader_integer_functions2"
-        let Number = 210
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_INTEL_shader_integer_functions2"
+        let [<Literal>] Number = 210
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL =
@@ -31229,9 +31229,9 @@ module rec Extensions =
 
 
     module INTELPerformanceQuery =
-        let Type = ExtensionType.Device
-        let Name = "VK_INTEL_performance_query"
-        let Number = 211
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_INTEL_performance_query"
+        let [<Literal>] Number = 211
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -31564,9 +31564,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan12.
     module KHRVulkanMemoryModel =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_vulkan_memory_model"
-        let Number = 212
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_vulkan_memory_model"
+        let [<Literal>] Number = 212
 
         type VkPhysicalDeviceVulkanMemoryModelFeaturesKHR = Vulkan12.VkPhysicalDeviceVulkanMemoryModelFeatures
 
@@ -31574,9 +31574,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTPciBusInfo =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_pci_bus_info"
-        let Number = 213
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_pci_bus_info"
+        let [<Literal>] Number = 213
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePCIBusInfoPropertiesEXT =
@@ -31621,9 +31621,9 @@ module rec Extensions =
 
     /// Requires (KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRGetSurfaceCapabilities2, KHRSwapchain.
     module AMDDisplayNativeHdr =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_display_native_hdr"
-        let Number = 214
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_display_native_hdr"
+        let [<Literal>] Number = 214
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkDisplayNativeHdrSurfaceCapabilitiesAMD =
@@ -31702,9 +31702,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module FUCHSIAImagepipeSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_FUCHSIA_imagepipe_surface"
-        let Number = 215
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_FUCHSIA_imagepipe_surface"
+        let [<Literal>] Number = 215
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImagePipeSurfaceCreateInfoFUCHSIA =
@@ -31752,9 +31752,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module KHRShaderTerminateInvocation =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_terminate_invocation"
-        let Number = 216
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_terminate_invocation"
+        let [<Literal>] Number = 216
 
         type VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR = Vulkan13.VkPhysicalDeviceShaderTerminateInvocationFeatures
 
@@ -31762,9 +31762,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module EXTMetalSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_metal_surface"
-        let Number = 218
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_metal_surface"
+        let [<Literal>] Number = 218
 
         type CAMetalLayer = nativeint
 
@@ -31813,9 +31813,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTFragmentDensityMap =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_fragment_density_map"
-        let Number = 219
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_fragment_density_map"
+        let [<Literal>] Number = 219
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceFragmentDensityMapFeaturesEXT =
@@ -31994,30 +31994,30 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan12.
     module EXTScalarBlockLayout =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_scalar_block_layout"
-        let Number = 222
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_scalar_block_layout"
+        let [<Literal>] Number = 222
 
         type VkPhysicalDeviceScalarBlockLayoutFeaturesEXT = Vulkan12.VkPhysicalDeviceScalarBlockLayoutFeatures
 
 
 
     module GOOGLEHlslFunctionality1 =
-        let Type = ExtensionType.Device
-        let Name = "VK_GOOGLE_hlsl_functionality1"
-        let Number = 224
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_GOOGLE_hlsl_functionality1"
+        let [<Literal>] Number = 224
 
     module GOOGLEDecorateString =
-        let Type = ExtensionType.Device
-        let Name = "VK_GOOGLE_decorate_string"
-        let Number = 225
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_GOOGLE_decorate_string"
+        let [<Literal>] Number = 225
 
     /// Requires Vulkan11.
     /// Promoted to Vulkan13.
     module EXTSubgroupSizeControl =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_subgroup_size_control"
-        let Number = 226
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_subgroup_size_control"
+        let [<Literal>] Number = 226
 
         type VkPhysicalDeviceSubgroupSizeControlFeaturesEXT = Vulkan13.VkPhysicalDeviceSubgroupSizeControlFeatures
 
@@ -32035,9 +32035,9 @@ module rec Extensions =
 
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRCreateRenderpass2) | Vulkan12.
     module KHRFragmentShadingRate =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_fragment_shading_rate"
-        let Number = 227
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_fragment_shading_rate"
+        let [<Literal>] Number = 227
 
         type VkFragmentShadingRateCombinerOpKHR =
             | Keep = 0
@@ -32370,9 +32370,9 @@ module rec Extensions =
 
     /// Requires AMDShaderCoreProperties.
     module AMDShaderCoreProperties2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_shader_core_properties2"
-        let Number = 228
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_shader_core_properties2"
+        let [<Literal>] Number = 228
 
         [<Flags>]
         type VkShaderCorePropertiesFlagsAMD =
@@ -32417,9 +32417,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module AMDDeviceCoherentMemory =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_device_coherent_memory"
-        let Number = 230
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_device_coherent_memory"
+        let [<Literal>] Number = 230
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceCoherentMemoryFeaturesAMD =
@@ -32462,9 +32462,9 @@ module rec Extensions =
     /// Requires KHRDynamicRendering | Vulkan13.
     /// Promoted to Vulkan14.
     module KHRDynamicRenderingLocalRead =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_dynamic_rendering_local_read"
-        let Number = 233
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_dynamic_rendering_local_read"
+        let [<Literal>] Number = 233
 
         type VkPhysicalDeviceDynamicRenderingLocalReadFeaturesKHR = Vulkan14.VkPhysicalDeviceDynamicRenderingLocalReadFeatures
 
@@ -32491,9 +32491,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTShaderImageAtomicInt64 =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_image_atomic_int64"
-        let Number = 235
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_image_atomic_int64"
+        let [<Literal>] Number = 235
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT =
@@ -32532,9 +32532,9 @@ module rec Extensions =
 
     /// Requires Vulkan11, KHRVulkanMemoryModel, KHRShaderMaximalReconvergence.
     module KHRShaderQuadControl =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_quad_control"
-        let Number = 236
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_quad_control"
+        let [<Literal>] Number = 236
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderQuadControlFeaturesKHR =
@@ -32571,15 +32571,15 @@ module rec Extensions =
     /// Requires Vulkan11, KHRShaderFloatControls.
     /// Promoted to Vulkan12.
     module KHRSpirv14 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_spirv_1_4"
-        let Number = 237
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_spirv_1_4"
+        let [<Literal>] Number = 237
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTMemoryBudget =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_memory_budget"
-        let Number = 238
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_memory_budget"
+        let [<Literal>] Number = 238
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceMemoryBudgetPropertiesEXT =
@@ -32618,9 +32618,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTMemoryPriority =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_memory_priority"
-        let Number = 239
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_memory_priority"
+        let [<Literal>] Number = 239
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkMemoryPriorityAllocateInfoEXT =
@@ -32686,9 +32686,9 @@ module rec Extensions =
 
     /// Requires Vulkan11, KHRGetSurfaceCapabilities2.
     module KHRSurfaceProtectedCapabilities =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_surface_protected_capabilities"
-        let Number = 240
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_surface_protected_capabilities"
+        let [<Literal>] Number = 240
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkSurfaceProtectedCapabilitiesKHR =
@@ -32724,9 +32724,9 @@ module rec Extensions =
 
     /// Requires (KHRDedicatedAllocation, KHRGetPhysicalDeviceProperties2) | Vulkan11.
     module NVDedicatedAllocationImageAliasing =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_dedicated_allocation_image_aliasing"
-        let Number = 241
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_dedicated_allocation_image_aliasing"
+        let [<Literal>] Number = 241
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV =
@@ -32763,9 +32763,9 @@ module rec Extensions =
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRCreateRenderpass2) | Vulkan12.
     /// Promoted to Vulkan12.
     module KHRSeparateDepthStencilLayouts =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_separate_depth_stencil_layouts"
-        let Number = 242
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_separate_depth_stencil_layouts"
+        let [<Literal>] Number = 242
 
         type VkAttachmentDescriptionStencilLayoutKHR = Vulkan12.VkAttachmentDescriptionStencilLayout
 
@@ -32786,9 +32786,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Deprecated by KHRBufferDeviceAddress.
     module EXTBufferDeviceAddress =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_buffer_device_address"
-        let Number = 245
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_buffer_device_address"
+        let [<Literal>] Number = 245
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkBufferDeviceAddressCreateInfoEXT =
@@ -32881,9 +32881,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan13.
     module EXTToolingInfo =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_tooling_info"
-        let Number = 246
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_tooling_info"
+        let [<Literal>] Number = 246
 
         type VkToolPurposeFlagsEXT = Vulkan13.VkToolPurposeFlags
 
@@ -32935,9 +32935,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan12.
     module EXTSeparateStencilUsage =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_separate_stencil_usage"
-        let Number = 247
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_separate_stencil_usage"
+        let [<Literal>] Number = 247
 
         type VkImageStencilUsageCreateInfoEXT = Vulkan12.VkImageStencilUsageCreateInfo
 
@@ -32945,9 +32945,9 @@ module rec Extensions =
 
     /// Deprecated by EXTLayerSettings.
     module EXTValidationFeatures =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_validation_features"
-        let Number = 248
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_validation_features"
+        let [<Literal>] Number = 248
 
         type VkValidationFeatureEnableEXT =
             | GpuAssisted = 0
@@ -33010,9 +33010,9 @@ module rec Extensions =
 
     /// Requires KHRSwapchain, KHRPresentId.
     module KHRPresentWait =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_present_wait"
-        let Number = 249
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_present_wait"
+        let [<Literal>] Number = 249
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePresentWaitFeaturesKHR =
@@ -33056,9 +33056,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVCooperativeMatrix =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_cooperative_matrix"
-        let Number = 250
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_cooperative_matrix"
+        let [<Literal>] Number = 250
 
         type VkScopeNV = KHRCooperativeMatrix.VkScopeKHR
         type VkComponentTypeNV = KHRCooperativeMatrix.VkComponentTypeKHR
@@ -33209,9 +33209,9 @@ module rec Extensions =
 
     /// Requires NVFramebufferMixedSamples, (KHRGetPhysicalDeviceProperties2 | Vulkan11).
     module NVCoverageReductionMode =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_coverage_reduction_mode"
-        let Number = 251
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_coverage_reduction_mode"
+        let [<Literal>] Number = 251
 
         type VkCoverageReductionModeNV =
             | Merge = 0
@@ -33332,9 +33332,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTFragmentShaderInterlock =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_fragment_shader_interlock"
-        let Number = 252
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_fragment_shader_interlock"
+        let [<Literal>] Number = 252
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT =
@@ -33376,9 +33376,9 @@ module rec Extensions =
 
     /// Requires KHRSamplerYcbcrConversion | Vulkan11.
     module EXTYcbcrImageArrays =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_ycbcr_image_arrays"
-        let Number = 253
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_ycbcr_image_arrays"
+        let [<Literal>] Number = 253
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceYcbcrImageArraysFeaturesEXT =
@@ -33415,9 +33415,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan12.
     module KHRUniformBufferStandardLayout =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_uniform_buffer_standard_layout"
-        let Number = 254
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_uniform_buffer_standard_layout"
+        let [<Literal>] Number = 254
 
         type VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR = Vulkan12.VkPhysicalDeviceUniformBufferStandardLayoutFeatures
 
@@ -33425,9 +33425,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTProvokingVertex =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_provoking_vertex"
-        let Number = 255
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_provoking_vertex"
+        let [<Literal>] Number = 255
 
         type VkProvokingVertexModeEXT =
             | FirstVertex = 0
@@ -33534,9 +33534,9 @@ module rec Extensions =
 
     /// Requires (KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRSurface, KHRGetSurfaceCapabilities2, KHRSwapchain.
     module EXTFullScreenExclusive =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_full_screen_exclusive"
-        let Number = 256
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_full_screen_exclusive"
+        let [<Literal>] Number = 256
 
         type VkFullScreenExclusiveEXT =
             | Default = 0
@@ -33672,9 +33672,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module EXTHeadlessSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_headless_surface"
-        let Number = 257
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_headless_surface"
+        let [<Literal>] Number = 257
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkHeadlessSurfaceCreateInfoEXT =
@@ -33719,9 +33719,9 @@ module rec Extensions =
     /// Requires (KHRGetPhysicalDeviceProperties2, KHRDeviceGroup) | Vulkan11.
     /// Promoted to Vulkan12.
     module KHRBufferDeviceAddress =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_buffer_device_address"
-        let Number = 258
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_buffer_device_address"
+        let [<Literal>] Number = 258
 
         type VkBufferDeviceAddressInfoKHR = Vulkan12.VkBufferDeviceAddressInfo
 
@@ -33762,9 +33762,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to KHRLineRasterization.
     module EXTLineRasterization =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_line_rasterization"
-        let Number = 260
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_line_rasterization"
+        let [<Literal>] Number = 260
 
         type VkLineRasterizationModeEXT = Vulkan14.VkLineRasterizationMode
 
@@ -33796,9 +33796,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTShaderAtomicFloat =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_atomic_float"
-        let Number = 261
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_atomic_float"
+        let [<Literal>] Number = 261
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderAtomicFloatFeaturesEXT =
@@ -33868,9 +33868,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan12.
     module EXTHostQueryReset =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_host_query_reset"
-        let Number = 262
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_host_query_reset"
+        let [<Literal>] Number = 262
 
         type VkPhysicalDeviceHostQueryResetFeaturesEXT = Vulkan12.VkPhysicalDeviceHostQueryResetFeatures
 
@@ -33887,9 +33887,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to KHRIndexTypeUint8.
     module EXTIndexTypeUint8 =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_index_type_uint8"
-        let Number = 266
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_index_type_uint8"
+        let [<Literal>] Number = 266
 
         type VkPhysicalDeviceIndexTypeUint8FeaturesEXT = Vulkan14.VkPhysicalDeviceIndexTypeUint8Features
 
@@ -33903,9 +33903,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module EXTExtendedDynamicState =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_extended_dynamic_state"
-        let Number = 268
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_extended_dynamic_state"
+        let [<Literal>] Number = 268
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceExtendedDynamicStateFeaturesEXT =
@@ -33986,9 +33986,9 @@ module rec Extensions =
             let vkCmdSetStencilOpEXT(commandBuffer, faceMask, failOp, passOp, depthFailOp, compareOp) = Static<vkCmdSetStencilOpEXTDel>.Value.Invoke(commandBuffer, faceMask, failOp, passOp, depthFailOp, compareOp)
 
     module KHRDeferredHostOperations =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_deferred_host_operations"
-        let Number = 269
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_deferred_host_operations"
+        let [<Literal>] Number = 269
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -34030,9 +34030,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module KHRPipelineExecutableProperties =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_pipeline_executable_properties"
-        let Number = 270
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_pipeline_executable_properties"
+        let [<Literal>] Number = 270
 
         type VkPipelineExecutableStatisticFormatKHR =
             | Bool32 = 0
@@ -34318,9 +34318,9 @@ module rec Extensions =
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRCopyCommands2, KHRFormatFeatureFlags2) | Vulkan13.
     /// Promoted to Vulkan14.
     module EXTHostImageCopy =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_host_image_copy"
-        let Number = 271
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_host_image_copy"
+        let [<Literal>] Number = 271
 
         type VkHostImageCopyFlagsEXT = Vulkan14.VkHostImageCopyFlags
 
@@ -34379,9 +34379,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan14.
     module KHRMapMemory2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_map_memory2"
-        let Number = 272
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_map_memory2"
+        let [<Literal>] Number = 272
 
         type VkMemoryUnmapFlagsKHR = Vulkan14.VkMemoryUnmapFlags
 
@@ -34403,9 +34403,9 @@ module rec Extensions =
 
     /// Requires KHRMapMemory2 | Vulkan14.
     module EXTMapMemoryPlaced =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_map_memory_placed"
-        let Number = 273
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_map_memory_placed"
+        let [<Literal>] Number = 273
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkMemoryMapPlacedInfoEXT =
@@ -34514,9 +34514,9 @@ module rec Extensions =
 
     /// Requires EXTShaderAtomicFloat.
     module EXTShaderAtomicFloat2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_atomic_float2"
-        let Number = 274
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_atomic_float2"
+        let [<Literal>] Number = 274
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT =
@@ -34585,9 +34585,9 @@ module rec Extensions =
 
     /// Requires KHRSurface, KHRGetSurfaceCapabilities2.
     module EXTSurfaceMaintenance1 =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_surface_maintenance1"
-        let Number = 275
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_surface_maintenance1"
+        let [<Literal>] Number = 275
 
         [<Flags>]
         type VkPresentScalingFlagsEXT =
@@ -34715,9 +34715,9 @@ module rec Extensions =
 
     /// Requires KHRSwapchain, EXTSurfaceMaintenance1, (KHRGetPhysicalDeviceProperties2 | Vulkan11).
     module EXTSwapchainMaintenance1 =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_swapchain_maintenance1"
-        let Number = 276
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_swapchain_maintenance1"
+        let [<Literal>] Number = 276
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT =
@@ -34938,9 +34938,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module EXTShaderDemoteToHelperInvocation =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_demote_to_helper_invocation"
-        let Number = 277
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_demote_to_helper_invocation"
+        let [<Literal>] Number = 277
 
         type VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT = Vulkan13.VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures
 
@@ -34948,9 +34948,9 @@ module rec Extensions =
 
     /// Requires (Vulkan11, KHRBufferDeviceAddress) | Vulkan12.
     module NVDeviceGeneratedCommands =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_device_generated_commands"
-        let Number = 278
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_device_generated_commands"
+        let [<Literal>] Number = 278
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -35525,9 +35525,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVInheritedViewportScissor =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_inherited_viewport_scissor"
-        let Number = 279
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_inherited_viewport_scissor"
+        let [<Literal>] Number = 279
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkCommandBufferInheritanceViewportScissorInfoNV =
@@ -35600,9 +35600,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module KHRShaderIntegerDotProduct =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_integer_dot_product"
-        let Number = 281
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_integer_dot_product"
+        let [<Literal>] Number = 281
 
         type VkPhysicalDeviceShaderIntegerDotProductFeaturesKHR = Vulkan13.VkPhysicalDeviceShaderIntegerDotProductFeatures
 
@@ -35613,9 +35613,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module EXTTexelBufferAlignment =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_texel_buffer_alignment"
-        let Number = 282
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_texel_buffer_alignment"
+        let [<Literal>] Number = 282
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT =
@@ -35652,9 +35652,9 @@ module rec Extensions =
 
 
     module QCOMRenderPassTransform =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_render_pass_transform"
-        let Number = 283
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_render_pass_transform"
+        let [<Literal>] Number = 283
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkCommandBufferInheritanceRenderPassTransformInfoQCOM =
@@ -35728,9 +35728,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTDepthBiasControl =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_depth_bias_control"
-        let Number = 284
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_depth_bias_control"
+        let [<Literal>] Number = 284
 
         type VkDepthBiasRepresentationEXT =
             | LeastRepresentableValueFormat = 0
@@ -35858,9 +35858,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTDeviceMemoryReport =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_device_memory_report"
-        let Number = 285
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_device_memory_report"
+        let [<Literal>] Number = 285
 
         type PFN_vkDeviceMemoryReportCallbackEXT = nativeint
 
@@ -35990,9 +35990,9 @@ module rec Extensions =
 
     /// Requires EXTDirectModeDisplay.
     module EXTAcquireDrmDisplay =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_acquire_drm_display"
-        let Number = 286
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_acquire_drm_display"
+        let [<Literal>] Number = 286
 
         module VkRaw =
             open VkRaw
@@ -36007,9 +36007,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTRobustness2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_robustness2"
-        let Number = 287
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_robustness2"
+        let [<Literal>] Number = 287
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceRobustness2FeaturesEXT =
@@ -36084,9 +36084,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTCustomBorderColor =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_custom_border_color"
-        let Number = 288
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_custom_border_color"
+        let [<Literal>] Number = 288
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceCustomBorderColorFeaturesEXT =
@@ -36193,14 +36193,14 @@ module rec Extensions =
 
 
     module GOOGLEUserType =
-        let Type = ExtensionType.Device
-        let Name = "VK_GOOGLE_user_type"
-        let Number = 290
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_GOOGLE_user_type"
+        let [<Literal>] Number = 290
 
     module KHRPipelineLibrary =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_pipeline_library"
-        let Number = 291
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_pipeline_library"
+        let [<Literal>] Number = 291
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPipelineLibraryCreateInfoKHR =
@@ -36244,9 +36244,9 @@ module rec Extensions =
 
     /// Requires (KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRSurface, KHRGetSurfaceCapabilities2, KHRSwapchain.
     module NVPresentBarrier =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_present_barrier"
-        let Number = 293
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_present_barrier"
+        let [<Literal>] Number = 293
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePresentBarrierFeaturesNV =
@@ -36342,15 +36342,15 @@ module rec Extensions =
 
     /// Promoted to Vulkan13.
     module KHRShaderNonSemanticInfo =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_non_semantic_info"
-        let Number = 294
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_non_semantic_info"
+        let [<Literal>] Number = 294
 
     /// Requires KHRSwapchain, KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module KHRPresentId =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_present_id"
-        let Number = 295
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_present_id"
+        let [<Literal>] Number = 295
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePresentIdFeaturesKHR =
@@ -36420,9 +36420,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module EXTPrivateData =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_private_data"
-        let Number = 296
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_private_data"
+        let [<Literal>] Number = 296
 
         type VkPrivateDataSlotEXT = Vulkan13.VkPrivateDataSlot
         type VkPrivateDataSlotCreateFlagsEXT = Vulkan13.VkPrivateDataSlotCreateFlags
@@ -36457,9 +36457,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module EXTPipelineCreationCacheControl =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_pipeline_creation_cache_control"
-        let Number = 298
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_pipeline_creation_cache_control"
+        let [<Literal>] Number = 298
 
 
         type VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT = Vulkan13.VkPhysicalDevicePipelineCreationCacheControlFeatures
@@ -36479,9 +36479,9 @@ module rec Extensions =
 
     /// Requires KHRVideoQueue, (KHRSynchronization2 | Vulkan13).
     module KHRVideoEncodeQueue =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_encode_queue"
-        let Number = 300
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_encode_queue"
+        let [<Literal>] Number = 300
 
         [<Flags>]
         type VkVideoEncodeFlagsKHR =
@@ -37004,9 +37004,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVDeviceDiagnosticsConfig =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_device_diagnostics_config"
-        let Number = 301
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_device_diagnostics_config"
+        let [<Literal>] Number = 301
 
         [<Flags>]
         type VkDeviceDiagnosticsConfigFlagsNV =
@@ -37081,9 +37081,9 @@ module rec Extensions =
 
 
     module QCOMRenderPassStoreOps =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_render_pass_store_ops"
-        let Number = 302
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_render_pass_store_ops"
+        let [<Literal>] Number = 302
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -37092,9 +37092,9 @@ module rec Extensions =
 
 
     module NVCudaKernelLaunch =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_cuda_kernel_launch"
-        let Number = 308
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_cuda_kernel_launch"
+        let [<Literal>] Number = 308
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -37345,9 +37345,9 @@ module rec Extensions =
 
 
     module NVLowLatency =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_low_latency"
-        let Number = 311
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_low_latency"
+        let [<Literal>] Number = 311
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkQueryLowLatencySupportNV =
@@ -37382,9 +37382,9 @@ module rec Extensions =
 
 
     module EXTMetalObjects =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_metal_objects"
-        let Number = 312
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_metal_objects"
+        let [<Literal>] Number = 312
 
         type MTLDevice_id = nativeint
         type MTLCommandQueue_id = nativeint
@@ -37802,9 +37802,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module KHRSynchronization2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_synchronization2"
-        let Number = 315
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_synchronization2"
+        let [<Literal>] Number = 315
 
         type VkFlags64 = uint64
         type VkPipelineStageFlags2KHR = Vulkan13.VkPipelineStageFlags2
@@ -38045,9 +38045,9 @@ module rec Extensions =
 
     /// Requires ((((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRBufferDeviceAddress, EXTDescriptorIndexing) | Vulkan12), KHRSynchronization2) | Vulkan13.
     module EXTDescriptorBuffer =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_descriptor_buffer"
-        let Number = 317
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_descriptor_buffer"
+        let [<Literal>] Number = 317
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkBufferCaptureDescriptorDataInfoEXT =
@@ -38715,9 +38715,9 @@ module rec Extensions =
 
     /// Requires (KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRPipelineLibrary.
     module EXTGraphicsPipelineLibrary =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_graphics_pipeline_library"
-        let Number = 321
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_graphics_pipeline_library"
+        let [<Literal>] Number = 321
 
         [<Flags>]
         type VkGraphicsPipelineLibraryFlagsEXT =
@@ -38834,9 +38834,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module AMDShaderEarlyAndLateFragmentTests =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_shader_early_and_late_fragment_tests"
-        let Number = 322
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_shader_early_and_late_fragment_tests"
+        let [<Literal>] Number = 322
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD =
@@ -38872,9 +38872,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module KHRFragmentShaderBarycentric =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_fragment_shader_barycentric"
-        let Number = 323
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_fragment_shader_barycentric"
+        let [<Literal>] Number = 323
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR =
@@ -38940,9 +38940,9 @@ module rec Extensions =
 
     /// Requires Vulkan11.
     module KHRShaderSubgroupUniformControlFlow =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_subgroup_uniform_control_flow"
-        let Number = 324
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_subgroup_uniform_control_flow"
+        let [<Literal>] Number = 324
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR =
@@ -38979,9 +38979,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module KHRZeroInitializeWorkgroupMemory =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_zero_initialize_workgroup_memory"
-        let Number = 326
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_zero_initialize_workgroup_memory"
+        let [<Literal>] Number = 326
 
         type VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR = Vulkan13.VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures
 
@@ -38989,9 +38989,9 @@ module rec Extensions =
 
     /// Requires KHRFragmentShadingRate.
     module NVFragmentShadingRateEnums =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_fragment_shading_rate_enums"
-        let Number = 327
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_fragment_shading_rate_enums"
+        let [<Literal>] Number = 327
 
         type VkFragmentShadingRateNV =
             | D1InvocationPerPixel = 0
@@ -39126,9 +39126,9 @@ module rec Extensions =
 
     /// Requires KHRRayTracingPipeline.
     module NVRayTracingMotionBlur =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_ray_tracing_motion_blur"
-        let Number = 328
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_ray_tracing_motion_blur"
+        let [<Literal>] Number = 328
 
         type VkAccelerationStructureMotionInstanceTypeNV =
             | Static = 0
@@ -39477,9 +39477,9 @@ module rec Extensions =
 
     /// Requires KHRSpirv14.
     module EXTMeshShader =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_mesh_shader"
-        let Number = 329
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_mesh_shader"
+        let [<Literal>] Number = 329
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkDrawMeshTasksIndirectCommandEXT =
@@ -39720,9 +39720,9 @@ module rec Extensions =
     /// Requires KHRSamplerYcbcrConversion | Vulkan11.
     /// Promoted to Vulkan13.
     module EXTYcbcr2plane444Formats =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_ycbcr_2plane_444_formats"
-        let Number = 331
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_ycbcr_2plane_444_formats"
+        let [<Literal>] Number = 331
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT =
@@ -39766,9 +39766,9 @@ module rec Extensions =
 
     /// Requires EXTFragmentDensityMap.
     module EXTFragmentDensityMap2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_fragment_density_map2"
-        let Number = 333
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_fragment_density_map2"
+        let [<Literal>] Number = 333
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceFragmentDensityMap2FeaturesEXT =
@@ -39848,9 +39848,9 @@ module rec Extensions =
 
     /// Requires KHRCopyCommands2 | Vulkan13.
     module QCOMRotatedCopyCommands =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_rotated_copy_commands"
-        let Number = 334
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_rotated_copy_commands"
+        let [<Literal>] Number = 334
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkCopyCommandTransformInfoQCOM =
@@ -39887,9 +39887,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module EXTImageRobustness =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_image_robustness"
-        let Number = 336
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_image_robustness"
+        let [<Literal>] Number = 336
 
         type VkPhysicalDeviceImageRobustnessFeaturesEXT = Vulkan13.VkPhysicalDeviceImageRobustnessFeatures
 
@@ -39897,9 +39897,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module KHRWorkgroupMemoryExplicitLayout =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_workgroup_memory_explicit_layout"
-        let Number = 337
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_workgroup_memory_explicit_layout"
+        let [<Literal>] Number = 337
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR =
@@ -39945,9 +39945,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module KHRCopyCommands2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_copy_commands2"
-        let Number = 338
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_copy_commands2"
+        let [<Literal>] Number = 338
 
         type VkBlitImageInfo2KHR = Vulkan13.VkBlitImageInfo2
 
@@ -39993,9 +39993,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTImageCompressionControl =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_image_compression_control"
-        let Number = 339
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_image_compression_control"
+        let [<Literal>] Number = 339
 
         [<Flags>]
         type VkImageCompressionFlagsEXT =
@@ -40155,9 +40155,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTAttachmentFeedbackLoopLayout =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_attachment_feedback_loop_layout"
-        let Number = 340
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_attachment_feedback_loop_layout"
+        let [<Literal>] Number = 340
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT =
@@ -40207,9 +40207,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module EXT4444Formats =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_4444_formats"
-        let Number = 341
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_4444_formats"
+        let [<Literal>] Number = 341
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevice4444FormatsFeaturesEXT =
@@ -40254,9 +40254,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTDeviceFault =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_device_fault"
-        let Number = 342
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_device_fault"
+        let [<Literal>] Number = 342
 
         type VkDeviceFaultAddressTypeEXT =
             /// Currently unused
@@ -40501,9 +40501,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to EXTRasterizationOrderAttachmentAccess.
     module ARMRasterizationOrderAttachmentAccess =
-        let Type = ExtensionType.Device
-        let Name = "VK_ARM_rasterization_order_attachment_access"
-        let Number = 343
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_ARM_rasterization_order_attachment_access"
+        let [<Literal>] Number = 343
 
         type VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesARM = EXTRasterizationOrderAttachmentAccess.VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT
 
@@ -40523,9 +40523,9 @@ module rec Extensions =
 
     /// Requires KHRSamplerYcbcrConversion | Vulkan11.
     module EXTRgba10x6Formats =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_rgba10x6_formats"
-        let Number = 345
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_rgba10x6_formats"
+        let [<Literal>] Number = 345
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT =
@@ -40561,9 +40561,9 @@ module rec Extensions =
 
     /// Requires EXTDirectModeDisplay.
     module NVAcquireWinrtDisplay =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_acquire_winrt_display"
-        let Number = 346
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_acquire_winrt_display"
+        let [<Literal>] Number = 346
 
         module VkRaw =
             open VkRaw
@@ -40578,9 +40578,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module EXTDirectfbSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_directfb_surface"
-        let Number = 347
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_directfb_surface"
+        let [<Literal>] Number = 347
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkDirectFBSurfaceCreateInfoEXT =
@@ -40632,9 +40632,9 @@ module rec Extensions =
 
     /// Requires KHRSpirv14, KHRAccelerationStructure.
     module KHRRayTracingPipeline =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_ray_tracing_pipeline"
-        let Number = 348
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_ray_tracing_pipeline"
+        let [<Literal>] Number = 348
 
         type VkRayTracingShaderGroupTypeKHR =
             | General = 0
@@ -40990,9 +40990,9 @@ module rec Extensions =
 
     /// Requires KHRSpirv14, KHRAccelerationStructure.
     module KHRRayQuery =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_ray_query"
-        let Number = 349
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_ray_query"
+        let [<Literal>] Number = 349
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceRayQueryFeaturesKHR =
@@ -41029,9 +41029,9 @@ module rec Extensions =
     /// Requires KHRMaintenance3.
     /// Promoted to EXTMutableDescriptorType.
     module VALVEMutableDescriptorType =
-        let Type = ExtensionType.Device
-        let Name = "VK_VALVE_mutable_descriptor_type"
-        let Number = 352
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_VALVE_mutable_descriptor_type"
+        let [<Literal>] Number = 352
 
         type VkMutableDescriptorTypeCreateInfoVALVE = EXTMutableDescriptorType.VkMutableDescriptorTypeCreateInfoEXT
 
@@ -41052,9 +41052,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTVertexInputDynamicState =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_vertex_input_dynamic_state"
-        let Number = 353
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_vertex_input_dynamic_state"
+        let [<Literal>] Number = 353
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT =
@@ -41181,9 +41181,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTPhysicalDeviceDrm =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_physical_device_drm"
-        let Number = 354
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_physical_device_drm"
+        let [<Literal>] Number = 354
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceDrmPropertiesEXT =
@@ -41234,9 +41234,9 @@ module rec Extensions =
 
     /// Requires (KHRGetPhysicalDeviceProperties2 | Vulkan11), EXTDebugUtils.
     module EXTDeviceAddressBindingReport =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_device_address_binding_report"
-        let Number = 355
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_device_address_binding_report"
+        let [<Literal>] Number = 355
 
         [<Flags>]
         type VkDeviceAddressBindingFlagsEXT =
@@ -41327,9 +41327,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTDepthClipControl =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_depth_clip_control"
-        let Number = 356
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_depth_clip_control"
+        let [<Literal>] Number = 356
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceDepthClipControlFeaturesEXT =
@@ -41395,9 +41395,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTPrimitiveTopologyListRestart =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_primitive_topology_list_restart"
-        let Number = 357
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_primitive_topology_list_restart"
+        let [<Literal>] Number = 357
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT =
@@ -41437,9 +41437,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module KHRFormatFeatureFlags2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_format_feature_flags2"
-        let Number = 361
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_format_feature_flags2"
+        let [<Literal>] Number = 361
 
         type VkFormatFeatureFlags2KHR = Vulkan13.VkFormatFeatureFlags2
 
@@ -41494,9 +41494,9 @@ module rec Extensions =
 
     /// Requires KHRSwapchain.
     module EXTPresentModeFifoLatestReady =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_present_mode_fifo_latest_ready"
-        let Number = 362
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_present_mode_fifo_latest_ready"
+        let [<Literal>] Number = 362
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT =
@@ -41537,9 +41537,9 @@ module rec Extensions =
 
     /// Requires (KHRExternalMemoryCapabilities, KHRExternalMemory) | Vulkan11.
     module FUCHSIAExternalMemory =
-        let Type = ExtensionType.Device
-        let Name = "VK_FUCHSIA_external_memory"
-        let Number = 365
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_FUCHSIA_external_memory"
+        let [<Literal>] Number = 365
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImportMemoryZirconHandleInfoFUCHSIA =
@@ -41656,9 +41656,9 @@ module rec Extensions =
 
     /// Requires KHRExternalSemaphoreCapabilities, KHRExternalSemaphore.
     module FUCHSIAExternalSemaphore =
-        let Type = ExtensionType.Device
-        let Name = "VK_FUCHSIA_external_semaphore"
-        let Number = 366
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_FUCHSIA_external_semaphore"
+        let [<Literal>] Number = 366
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImportSemaphoreZirconHandleInfoFUCHSIA =
@@ -41751,9 +41751,9 @@ module rec Extensions =
 
     /// Requires FUCHSIAExternalMemory, (KHRSamplerYcbcrConversion | Vulkan11).
     module FUCHSIABufferCollection =
-        let Type = ExtensionType.Device
-        let Name = "VK_FUCHSIA_buffer_collection"
-        let Number = 367
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_FUCHSIA_buffer_collection"
+        let [<Literal>] Number = 367
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -42197,9 +42197,9 @@ module rec Extensions =
 
     /// Requires ((KHRCreateRenderpass2 | Vulkan12), KHRSynchronization2) | Vulkan13.
     module HUAWEISubpassShading =
-        let Type = ExtensionType.Device
-        let Name = "VK_HUAWEI_subpass_shading"
-        let Number = 370
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_HUAWEI_subpass_shading"
+        let [<Literal>] Number = 370
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceSubpassShadingFeaturesHUAWEI =
@@ -42317,9 +42317,9 @@ module rec Extensions =
 
     /// Requires KHRRayTracingPipeline, (KHRSynchronization2 | Vulkan13).
     module HUAWEIInvocationMask =
-        let Type = ExtensionType.Device
-        let Name = "VK_HUAWEI_invocation_mask"
-        let Number = 371
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_HUAWEI_invocation_mask"
+        let [<Literal>] Number = 371
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceInvocationMaskFeaturesHUAWEI =
@@ -42372,9 +42372,9 @@ module rec Extensions =
 
     /// Requires KHRExternalMemory | Vulkan11.
     module NVExternalMemoryRdma =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_external_memory_rdma"
-        let Number = 372
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_external_memory_rdma"
+        let [<Literal>] Number = 372
 
         type VkRemoteAddressNV = nativeint
 
@@ -42460,9 +42460,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTPipelineProperties =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_pipeline_properties"
-        let Number = 373
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_pipeline_properties"
+        let [<Literal>] Number = 373
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePipelinePropertiesFeaturesEXT =
@@ -42537,9 +42537,9 @@ module rec Extensions =
             let vkGetPipelinePropertiesEXT(device, pPipelineInfo, pPipelineProperties) = Static<vkGetPipelinePropertiesEXTDel>.Value.Invoke(device, pPipelineInfo, pPipelineProperties)
 
     module EXTFrameBoundary =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_frame_boundary"
-        let Number = 376
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_frame_boundary"
+        let [<Literal>] Number = 376
 
         [<Flags>]
         type VkFrameBoundaryFlagsEXT =
@@ -42636,9 +42636,9 @@ module rec Extensions =
 
     /// Requires (KHRCreateRenderpass2, KHRDepthStencilResolve) | Vulkan12.
     module EXTMultisampledRenderToSingleSampled =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_multisampled_render_to_single_sampled"
-        let Number = 377
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_multisampled_render_to_single_sampled"
+        let [<Literal>] Number = 377
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkMultisampledRenderToSingleSampledInfoEXT =
@@ -42743,9 +42743,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan13.
     module EXTExtendedDynamicState2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_extended_dynamic_state2"
-        let Number = 378
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_extended_dynamic_state2"
+        let [<Literal>] Number = 378
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceExtendedDynamicState2FeaturesEXT =
@@ -42814,9 +42814,9 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module QNXScreenSurface =
-        let Type = ExtensionType.Instance
-        let Name = "VK_QNX_screen_surface"
-        let Number = 379
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_QNX_screen_surface"
+        let [<Literal>] Number = 379
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkScreenSurfaceCreateInfoQNX =
@@ -42868,9 +42868,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTColorWriteEnable =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_color_write_enable"
-        let Number = 382
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_color_write_enable"
+        let [<Literal>] Number = 382
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceColorWriteEnableFeaturesEXT =
@@ -42952,9 +42952,9 @@ module rec Extensions =
 
     /// Requires EXTTransformFeedback.
     module EXTPrimitivesGeneratedQuery =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_primitives_generated_query"
-        let Number = 383
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_primitives_generated_query"
+        let [<Literal>] Number = 383
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT =
@@ -43001,9 +43001,9 @@ module rec Extensions =
 
     /// Requires KHRAccelerationStructure.
     module KHRRayTracingMaintenance1 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_ray_tracing_maintenance1"
-        let Number = 387
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_ray_tracing_maintenance1"
+        let [<Literal>] Number = 387
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR =
@@ -43147,9 +43147,9 @@ module rec Extensions =
     /// Requires EXTGlobalPriority, (KHRGetPhysicalDeviceProperties2 | Vulkan11).
     /// Promoted to KHRGlobalPriority.
     module EXTGlobalPriorityQuery =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_global_priority_query"
-        let Number = 389
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_global_priority_query"
+        let [<Literal>] Number = 389
 
         type VkPhysicalDeviceGlobalPriorityQueryFeaturesEXT = Vulkan14.VkPhysicalDeviceGlobalPriorityQueryFeatures
 
@@ -43159,9 +43159,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTImageViewMinLod =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_image_view_min_lod"
-        let Number = 392
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_image_view_min_lod"
+        let [<Literal>] Number = 392
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImageViewMinLodCreateInfoEXT =
@@ -43227,9 +43227,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTMultiDraw =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_multi_draw"
-        let Number = 393
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_multi_draw"
+        let [<Literal>] Number = 393
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkMultiDrawIndexedInfoEXT =
@@ -43358,9 +43358,9 @@ module rec Extensions =
 
     /// Requires (KHRMaintenance1, KHRGetPhysicalDeviceProperties2) | Vulkan11.
     module EXTImage2dViewOf3d =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_image_2d_view_of_3d"
-        let Number = 394
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_image_2d_view_of_3d"
+        let [<Literal>] Number = 394
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceImage2DViewOf3DFeaturesEXT =
@@ -43404,9 +43404,9 @@ module rec Extensions =
 
 
     module KHRPortabilityEnumeration =
-        let Type = ExtensionType.Instance
-        let Name = "VK_KHR_portability_enumeration"
-        let Number = 395
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_KHR_portability_enumeration"
+        let [<Literal>] Number = 395
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -43416,9 +43416,9 @@ module rec Extensions =
 
     /// Requires Vulkan13.
     module EXTShaderTileImage =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_tile_image"
-        let Number = 396
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_tile_image"
+        let [<Literal>] Number = 396
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderTileImageFeaturesEXT =
@@ -43496,9 +43496,9 @@ module rec Extensions =
 
     /// Requires KHRAccelerationStructure, (KHRSynchronization2 | Vulkan13).
     module EXTOpacityMicromap =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_opacity_micromap"
-        let Number = 397
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_opacity_micromap"
+        let [<Literal>] Number = 397
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -44066,9 +44066,9 @@ module rec Extensions =
 
     /// Requires EXTOpacityMicromap.
     module NVDisplacementMicromap =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_displacement_micromap"
-        let Number = 398
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_displacement_micromap"
+        let [<Literal>] Number = 398
 
         type VkDisplacementMicromapFormatNV =
             | D64Triangles64Bytes = 1
@@ -44224,9 +44224,9 @@ module rec Extensions =
 
     /// Promoted to KHRLoadStoreOpNone.
     module EXTLoadStoreOpNone =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_load_store_op_none"
-        let Number = 401
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_load_store_op_none"
+        let [<Literal>] Number = 401
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -44238,9 +44238,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module HUAWEIClusterCullingShader =
-        let Type = ExtensionType.Device
-        let Name = "VK_HUAWEI_cluster_culling_shader"
-        let Number = 405
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_HUAWEI_cluster_culling_shader"
+        let [<Literal>] Number = 405
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI =
@@ -44367,9 +44367,9 @@ module rec Extensions =
 
     /// Requires EXTCustomBorderColor.
     module EXTBorderColorSwizzle =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_border_color_swizzle"
-        let Number = 412
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_border_color_swizzle"
+        let [<Literal>] Number = 412
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceBorderColorSwizzleFeaturesEXT =
@@ -44441,9 +44441,9 @@ module rec Extensions =
 
     /// Requires EXTMemoryPriority.
     module EXTPageableDeviceLocalMemory =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_pageable_device_local_memory"
-        let Number = 413
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_pageable_device_local_memory"
+        let [<Literal>] Number = 413
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT =
@@ -44488,9 +44488,9 @@ module rec Extensions =
     /// Requires Vulkan11.
     /// Promoted to Vulkan13.
     module KHRMaintenance4 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_maintenance4"
-        let Number = 414
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_maintenance4"
+        let [<Literal>] Number = 414
 
         type VkDeviceBufferMemoryRequirementsKHR = Vulkan13.VkDeviceBufferMemoryRequirements
 
@@ -44521,9 +44521,9 @@ module rec Extensions =
 
     /// Requires Vulkan11.
     module ARMShaderCoreProperties =
-        let Type = ExtensionType.Device
-        let Name = "VK_ARM_shader_core_properties"
-        let Number = 416
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_ARM_shader_core_properties"
+        let [<Literal>] Number = 416
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderCorePropertiesARM =
@@ -44565,9 +44565,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan14.
     module KHRShaderSubgroupRotate =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_subgroup_rotate"
-        let Number = 417
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_subgroup_rotate"
+        let [<Literal>] Number = 417
 
         type VkPhysicalDeviceShaderSubgroupRotateFeaturesKHR = Vulkan14.VkPhysicalDeviceShaderSubgroupRotateFeatures
 
@@ -44581,9 +44581,9 @@ module rec Extensions =
 
     /// Requires ARMShaderCoreBuiltins.
     module ARMSchedulingControls =
-        let Type = ExtensionType.Device
-        let Name = "VK_ARM_scheduling_controls"
-        let Number = 418
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_ARM_scheduling_controls"
+        let [<Literal>] Number = 418
 
         [<Flags>]
         type VkPhysicalDeviceSchedulingControlsFlagsARM =
@@ -44686,9 +44686,9 @@ module rec Extensions =
 
     /// Requires (KHRMaintenance1, KHRGetPhysicalDeviceProperties2) | Vulkan11.
     module EXTImageSlicedViewOf3d =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_image_sliced_view_of_3d"
-        let Number = 419
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_image_sliced_view_of_3d"
+        let [<Literal>] Number = 419
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImageViewSlicedCreateInfoEXT =
@@ -44757,9 +44757,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module VALVEDescriptorSetHostMapping =
-        let Type = ExtensionType.Device
-        let Name = "VK_VALVE_descriptor_set_host_mapping"
-        let Number = 421
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_VALVE_descriptor_set_host_mapping"
+        let [<Literal>] Number = 421
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkDescriptorSetBindingReferenceVALVE =
@@ -44872,9 +44872,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to KHRDepthClampZeroOne.
     module EXTDepthClampZeroOne =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_depth_clamp_zero_one"
-        let Number = 422
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_depth_clamp_zero_one"
+        let [<Literal>] Number = 422
 
         type VkPhysicalDeviceDepthClampZeroOneFeaturesEXT = KHRDepthClampZeroOne.VkPhysicalDeviceDepthClampZeroOneFeaturesKHR
 
@@ -44882,9 +44882,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTNonSeamlessCubeMap =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_non_seamless_cube_map"
-        let Number = 423
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_non_seamless_cube_map"
+        let [<Literal>] Number = 423
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT =
@@ -44925,9 +44925,9 @@ module rec Extensions =
 
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRSynchronization2) | Vulkan13.
     module ARMRenderPassStriped =
-        let Type = ExtensionType.Device
-        let Name = "VK_ARM_render_pass_striped"
-        let Number = 425
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_ARM_render_pass_striped"
+        let [<Literal>] Number = 425
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceRenderPassStripedFeaturesARM =
@@ -45092,9 +45092,9 @@ module rec Extensions =
 
     /// Requires (KHRGetPhysicalDeviceProperties2 | Vulkan11), EXTFragmentDensityMap.
     module QCOMFragmentDensityMapOffset =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_fragment_density_map_offset"
-        let Number = 426
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_fragment_density_map_offset"
+        let [<Literal>] Number = 426
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM =
@@ -45198,9 +45198,9 @@ module rec Extensions =
 
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRBufferDeviceAddress) | Vulkan12.
     module NVCopyMemoryIndirect =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_copy_memory_indirect"
-        let Number = 427
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_copy_memory_indirect"
+        let [<Literal>] Number = 427
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkCopyMemoryIndirectCommandNV =
@@ -45341,9 +45341,9 @@ module rec Extensions =
 
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRBufferDeviceAddress) | Vulkan12.
     module NVMemoryDecompression =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_memory_decompression"
-        let Number = 428
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_memory_decompression"
+        let [<Literal>] Number = 428
 
         [<Flags>]
         type VkMemoryDecompressionMethodFlagsNV =
@@ -45463,9 +45463,9 @@ module rec Extensions =
 
     /// Requires NVDeviceGeneratedCommands.
     module NVDeviceGeneratedCommandsCompute =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_device_generated_commands_compute"
-        let Number = 429
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_device_generated_commands_compute"
+        let [<Literal>] Number = 429
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkBindPipelineIndirectCommandNV =
@@ -45618,9 +45618,9 @@ module rec Extensions =
 
     /// Requires KHRRayTracingPipeline.
     module NVRayTracingLinearSweptSpheres =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_ray_tracing_linear_swept_spheres"
-        let Number = 430
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_ray_tracing_linear_swept_spheres"
+        let [<Literal>] Number = 430
 
         type VkRayTracingLssIndexingModeNV =
             | List = 0
@@ -45792,9 +45792,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module NVLinearColorAttachment =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_linear_color_attachment"
-        let Number = 431
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_linear_color_attachment"
+        let [<Literal>] Number = 431
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceLinearColorAttachmentFeaturesNV =
@@ -45839,15 +45839,15 @@ module rec Extensions =
 
     /// Requires KHRSurface.
     module GOOGLESurfacelessQuery =
-        let Type = ExtensionType.Instance
-        let Name = "VK_GOOGLE_surfaceless_query"
-        let Number = 434
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_GOOGLE_surfaceless_query"
+        let [<Literal>] Number = 434
 
     /// Requires Vulkan11.
     module KHRShaderMaximalReconvergence =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_maximal_reconvergence"
-        let Number = 435
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_maximal_reconvergence"
+        let [<Literal>] Number = 435
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR =
@@ -45883,9 +45883,9 @@ module rec Extensions =
 
     /// Requires EXTImageCompressionControl.
     module EXTImageCompressionControlSwapchain =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_image_compression_control_swapchain"
-        let Number = 438
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_image_compression_control_swapchain"
+        let [<Literal>] Number = 438
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT =
@@ -45921,9 +45921,9 @@ module rec Extensions =
 
     /// Requires KHRFormatFeatureFlags2 | Vulkan13.
     module QCOMImageProcessing =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_image_processing"
-        let Number = 441
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_image_processing"
+        let [<Literal>] Number = 441
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImageViewSampleWeightCreateInfoQCOM =
@@ -46062,9 +46062,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTNestedCommandBuffer =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_nested_command_buffer"
-        let Number = 452
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_nested_command_buffer"
+        let [<Literal>] Number = 452
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceNestedCommandBufferFeaturesEXT =
@@ -46143,9 +46143,9 @@ module rec Extensions =
 
     /// Requires KHRExternalMemory | Vulkan11.
     module EXTExternalMemoryAcquireUnmodified =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_external_memory_acquire_unmodified"
-        let Number = 454
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_external_memory_acquire_unmodified"
+        let [<Literal>] Number = 454
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkExternalMemoryAcquireUnmodifiedEXT =
@@ -46181,9 +46181,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTExtendedDynamicState3 =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_extended_dynamic_state3"
-        let Number = 456
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_extended_dynamic_state3"
+        let [<Literal>] Number = 456
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkColorBlendAdvancedEXT =
@@ -46742,9 +46742,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTSubpassMergeFeedback =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_subpass_merge_feedback"
-        let Number = 459
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_subpass_merge_feedback"
+        let [<Literal>] Number = 459
 
         type VkSubpassMergeStatusEXT =
             | Merged = 0
@@ -46936,9 +46936,9 @@ module rec Extensions =
 
 
     module LUNARGDirectDriverLoading =
-        let Type = ExtensionType.Instance
-        let Name = "VK_LUNARG_direct_driver_loading"
-        let Number = 460
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_LUNARG_direct_driver_loading"
+        let [<Literal>] Number = 460
 
         type PFN_vkGetInstanceProcAddrLUNARG = nativeint
 
@@ -47020,9 +47020,9 @@ module rec Extensions =
 
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), EXTPipelineCreationCacheControl) | Vulkan13.
     module EXTShaderModuleIdentifier =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_module_identifier"
-        let Number = 463
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_module_identifier"
+        let [<Literal>] Number = 463
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT =
@@ -47164,9 +47164,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTRasterizationOrderAttachmentAccess =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_rasterization_order_attachment_access"
-        let Number = 464
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_rasterization_order_attachment_access"
+        let [<Literal>] Number = 464
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -47221,9 +47221,9 @@ module rec Extensions =
 
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRFormatFeatureFlags2, KHRSynchronization2) | Vulkan13.
     module NVOpticalFlow =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_optical_flow"
-        let Number = 465
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_optical_flow"
+        let [<Literal>] Number = 465
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -47603,9 +47603,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTLegacyDithering =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_legacy_dithering"
-        let Number = 466
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_legacy_dithering"
+        let [<Literal>] Number = 466
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceLegacyDitheringFeaturesEXT =
@@ -47657,9 +47657,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan14.
     module EXTPipelineProtectedAccess =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_pipeline_protected_access"
-        let Number = 467
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_pipeline_protected_access"
+        let [<Literal>] Number = 467
 
         type VkPhysicalDevicePipelineProtectedAccessFeaturesEXT = Vulkan14.VkPhysicalDevicePipelineProtectedAccessFeatures
 
@@ -47673,9 +47673,9 @@ module rec Extensions =
 
     /// Requires ANDROIDExternalMemoryAndroidHardwareBuffer.
     module ANDROIDExternalFormatResolve =
-        let Type = ExtensionType.Device
-        let Name = "VK_ANDROID_external_format_resolve"
-        let Number = 469
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_ANDROID_external_format_resolve"
+        let [<Literal>] Number = 469
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkAndroidHardwareBufferFormatResolvePropertiesANDROID =
@@ -47786,9 +47786,9 @@ module rec Extensions =
     /// Requires (Vulkan11, KHRDynamicRendering) | Vulkan13.
     /// Promoted to Vulkan14.
     module KHRMaintenance5 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_maintenance5"
-        let Number = 471
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_maintenance5"
+        let [<Literal>] Number = 471
 
         type VkPipelineCreateFlags2KHR = Vulkan14.VkPipelineCreateFlags2
         type VkBufferUsageFlags2KHR = Vulkan14.VkBufferUsageFlags2
@@ -48050,9 +48050,9 @@ module rec Extensions =
 
 
     module AMDAntiLag =
-        let Type = ExtensionType.Device
-        let Name = "VK_AMD_anti_lag"
-        let Number = 477
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_AMD_anti_lag"
+        let [<Literal>] Number = 477
 
         type VkAntiLagModeAMD =
             | DriverControl = 0
@@ -48175,9 +48175,9 @@ module rec Extensions =
 
     /// Requires KHRAccelerationStructure.
     module KHRRayTracingPositionFetch =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_ray_tracing_position_fetch"
-        let Number = 482
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_ray_tracing_position_fetch"
+        let [<Literal>] Number = 482
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR =
@@ -48218,9 +48218,9 @@ module rec Extensions =
 
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRDynamicRendering) | Vulkan13.
     module EXTShaderObject =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_object"
-        let Number = 483
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_object"
+        let [<Literal>] Number = 483
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -48711,9 +48711,9 @@ module rec Extensions =
 
     /// Requires KHRMaintenance5.
     module KHRPipelineBinary =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_pipeline_binary"
-        let Number = 484
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_pipeline_binary"
+        let [<Literal>] Number = 484
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -49130,9 +49130,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module QCOMTileProperties =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_tile_properties"
-        let Number = 485
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_tile_properties"
+        let [<Literal>] Number = 485
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceTilePropertiesFeaturesQCOM =
@@ -49220,9 +49220,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module SECAmigoProfiling =
-        let Type = ExtensionType.Device
-        let Name = "VK_SEC_amigo_profiling"
-        let Number = 486
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_SEC_amigo_profiling"
+        let [<Literal>] Number = 486
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkAmigoProfilingSubmitInfoSEC =
@@ -49291,9 +49291,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module QCOMMultiviewPerViewViewports =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_multiview_per_view_viewports"
-        let Number = 489
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_multiview_per_view_viewports"
+        let [<Literal>] Number = 489
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM =
@@ -49329,9 +49329,9 @@ module rec Extensions =
 
     /// Requires KHRRayTracingPipeline.
     module NVRayTracingInvocationReorder =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_ray_tracing_invocation_reorder"
-        let Number = 491
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_ray_tracing_invocation_reorder"
+        let [<Literal>] Number = 491
 
         type VkRayTracingInvocationReorderModeNV =
             | None = 0
@@ -49401,9 +49401,9 @@ module rec Extensions =
 
 
     module NVCooperativeVector =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_cooperative_vector"
-        let Number = 492
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_cooperative_vector"
+        let [<Literal>] Number = 492
 
         type VkCooperativeVectorMatrixLayoutNV =
             | RowMajor = 0
@@ -49622,9 +49622,9 @@ module rec Extensions =
             let vkCmdConvertCooperativeVectorMatrixNV(commandBuffer, infoCount, pInfos) = Static<vkCmdConvertCooperativeVectorMatrixNVDel>.Value.Invoke(commandBuffer, infoCount, pInfos)
 
     module NVExtendedSparseAddressSpace =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_extended_sparse_address_space"
-        let Number = 493
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_extended_sparse_address_space"
+        let [<Literal>] Number = 493
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV =
@@ -49696,9 +49696,9 @@ module rec Extensions =
 
     /// Requires KHRMaintenance3.
     module EXTMutableDescriptorType =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_mutable_descriptor_type"
-        let Number = 495
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_mutable_descriptor_type"
+        let [<Literal>] Number = 495
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkMutableDescriptorTypeListEXT =
@@ -49801,9 +49801,9 @@ module rec Extensions =
 
     /// Requires EXTVertexInputDynamicState.
     module EXTLegacyVertexAttributes =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_legacy_vertex_attributes"
-        let Number = 496
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_legacy_vertex_attributes"
+        let [<Literal>] Number = 496
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceLegacyVertexAttributesFeaturesEXT =
@@ -49868,9 +49868,9 @@ module rec Extensions =
 
 
     module EXTLayerSettings =
-        let Type = ExtensionType.Instance
-        let Name = "VK_EXT_layer_settings"
-        let Number = 497
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_EXT_layer_settings"
+        let [<Literal>] Number = 497
 
         type VkLayerSettingTypeEXT =
             | Bool32 = 0
@@ -49954,9 +49954,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module ARMShaderCoreBuiltins =
-        let Type = ExtensionType.Device
-        let Name = "VK_ARM_shader_core_builtins"
-        let Number = 498
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_ARM_shader_core_builtins"
+        let [<Literal>] Number = 498
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM =
@@ -50028,9 +50028,9 @@ module rec Extensions =
 
     /// Requires KHRRayTracingPipeline, KHRPipelineLibrary.
     module EXTPipelineLibraryGroupHandles =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_pipeline_library_group_handles"
-        let Number = 499
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_pipeline_library_group_handles"
+        let [<Literal>] Number = 499
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT =
@@ -50066,9 +50066,9 @@ module rec Extensions =
 
     /// Requires ((KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRDynamicRendering) | Vulkan13.
     module EXTDynamicRenderingUnusedAttachments =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_dynamic_rendering_unused_attachments"
-        let Number = 500
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_dynamic_rendering_unused_attachments"
+        let [<Literal>] Number = 500
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT =
@@ -50104,9 +50104,9 @@ module rec Extensions =
 
     /// Requires Vulkan12 | KHRTimelineSemaphore.
     module NVLowLatency2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_low_latency2"
-        let Number = 506
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_low_latency2"
+        let [<Literal>] Number = 506
 
         type VkLatencyMarkerNV =
             | SimulationStart = 0
@@ -50474,9 +50474,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module KHRCooperativeMatrix =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_cooperative_matrix"
-        let Number = 507
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_cooperative_matrix"
+        let [<Literal>] Number = 507
 
         type VkScopeKHR =
             | Device = 1
@@ -50626,9 +50626,9 @@ module rec Extensions =
             let vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(physicalDevice, pPropertyCount, pProperties) = Static<vkGetPhysicalDeviceCooperativeMatrixPropertiesKHRDel>.Value.Invoke(physicalDevice, pPropertyCount, pProperties)
 
     module QCOMMultiviewPerViewRenderAreas =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_multiview_per_view_render_areas"
-        let Number = 511
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_multiview_per_view_render_areas"
+        let [<Literal>] Number = 511
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM =
@@ -50697,9 +50697,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2.
     module KHRComputeShaderDerivatives =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_compute_shader_derivatives"
-        let Number = 512
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_compute_shader_derivatives"
+        let [<Literal>] Number = 512
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR =
@@ -50768,9 +50768,9 @@ module rec Extensions =
 
     /// Requires KHRVideoDecodeQueue.
     module KHRVideoDecodeAv1 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_decode_av1"
-        let Number = 513
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_decode_av1"
+        let [<Literal>] Number = 513
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkVideoDecodeAV1CapabilitiesKHR =
@@ -50949,9 +50949,9 @@ module rec Extensions =
 
     /// Requires KHRVideoEncodeQueue.
     module KHRVideoEncodeAv1 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_encode_av1"
-        let Number = 514
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_encode_av1"
+        let [<Literal>] Number = 514
 
         type VkVideoEncodeAV1PredictionModeKHR =
             | VideoEncodeAv1PredictionModeIntraOnly = 0
@@ -51572,9 +51572,9 @@ module rec Extensions =
 
     /// Requires KHRVideoQueue.
     module KHRVideoMaintenance1 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_maintenance1"
-        let Number = 516
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_maintenance1"
+        let [<Literal>] Number = 516
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceVideoMaintenance1FeaturesKHR =
@@ -51655,9 +51655,9 @@ module rec Extensions =
 
     /// Requires KHRMaintenance6 | Vulkan14.
     module NVPerStageDescriptorSet =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_per_stage_descriptor_set"
-        let Number = 517
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_per_stage_descriptor_set"
+        let [<Literal>] Number = 517
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePerStageDescriptorSetFeaturesNV =
@@ -51701,9 +51701,9 @@ module rec Extensions =
 
     /// Requires QCOMImageProcessing.
     module QCOMImageProcessing2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_image_processing2"
-        let Number = 519
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_image_processing2"
+        let [<Literal>] Number = 519
 
         type VkBlockMatchWindowCompareModeQCOM =
             | Min = 0
@@ -51807,9 +51807,9 @@ module rec Extensions =
 
     /// Requires EXTFilterCubic.
     module QCOMFilterCubicWeights =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_filter_cubic_weights"
-        let Number = 520
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_filter_cubic_weights"
+        let [<Literal>] Number = 520
 
         type VkCubicFilterWeightsQCOM =
             | CatmullRom = 0
@@ -51911,9 +51911,9 @@ module rec Extensions =
 
 
     module QCOMYcbcrDegamma =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_ycbcr_degamma"
-        let Number = 521
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_ycbcr_degamma"
+        let [<Literal>] Number = 521
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceYcbcrDegammaFeaturesQCOM =
@@ -51982,9 +51982,9 @@ module rec Extensions =
 
     /// Requires (EXTFilterCubic), (Vulkan12 | EXTSamplerFilterMinmax).
     module QCOMFilterCubicClamp =
-        let Type = ExtensionType.Device
-        let Name = "VK_QCOM_filter_cubic_clamp"
-        let Number = 522
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QCOM_filter_cubic_clamp"
+        let [<Literal>] Number = 522
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceCubicClampFeaturesQCOM =
@@ -52025,9 +52025,9 @@ module rec Extensions =
 
     /// Requires (KHRGetPhysicalDeviceProperties2 | Vulkan11), EXTAttachmentFeedbackLoopLayout.
     module EXTAttachmentFeedbackLoopDynamicState =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_attachment_feedback_loop_dynamic_state"
-        let Number = 525
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_attachment_feedback_loop_dynamic_state"
+        let [<Literal>] Number = 525
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT =
@@ -52077,9 +52077,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan14.
     module KHRVertexAttributeDivisor =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_vertex_attribute_divisor"
-        let Number = 526
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_vertex_attribute_divisor"
+        let [<Literal>] Number = 526
 
         type VkPhysicalDeviceVertexAttributeDivisorFeaturesKHR = Vulkan14.VkPhysicalDeviceVertexAttributeDivisorFeatures
 
@@ -52093,9 +52093,9 @@ module rec Extensions =
 
     /// Promoted to Vulkan14.
     module KHRLoadStoreOpNone =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_load_store_op_none"
-        let Number = 527
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_load_store_op_none"
+        let [<Literal>] Number = 527
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -52108,9 +52108,9 @@ module rec Extensions =
     /// Requires Vulkan11, KHRShaderFloatControls.
     /// Promoted to Vulkan14.
     module KHRShaderFloatControls2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_float_controls2"
-        let Number = 529
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_float_controls2"
+        let [<Literal>] Number = 529
 
         type VkPhysicalDeviceShaderFloatControls2FeaturesKHR = Vulkan14.VkPhysicalDeviceShaderFloatControls2Features
 
@@ -52118,9 +52118,9 @@ module rec Extensions =
 
     /// Requires ((KHRSamplerYcbcrConversion, KHRExternalMemory, KHRDedicatedAllocation) | Vulkan11), EXTQueueFamilyForeign.
     module QNXExternalMemoryScreenBuffer =
-        let Type = ExtensionType.Device
-        let Name = "VK_QNX_external_memory_screen_buffer"
-        let Number = 530
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_QNX_external_memory_screen_buffer"
+        let [<Literal>] Number = 530
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkExternalFormatQNX =
@@ -52316,9 +52316,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module MSFTLayeredDriver =
-        let Type = ExtensionType.Device
-        let Name = "VK_MSFT_layered_driver"
-        let Number = 531
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_MSFT_layered_driver"
+        let [<Literal>] Number = 531
 
         type VkLayeredDriverUnderlyingApiMSFT =
             | None = 0
@@ -52360,9 +52360,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan14.
     module KHRIndexTypeUint8 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_index_type_uint8"
-        let Number = 534
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_index_type_uint8"
+        let [<Literal>] Number = 534
 
         type VkPhysicalDeviceIndexTypeUint8FeaturesKHR = Vulkan14.VkPhysicalDeviceIndexTypeUint8Features
 
@@ -52376,9 +52376,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan14.
     module KHRLineRasterization =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_line_rasterization"
-        let Number = 535
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_line_rasterization"
+        let [<Literal>] Number = 535
 
         type VkLineRasterizationModeKHR = Vulkan14.VkLineRasterizationMode
 
@@ -52410,9 +52410,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module KHRCalibratedTimestamps =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_calibrated_timestamps"
-        let Number = 544
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_calibrated_timestamps"
+        let [<Literal>] Number = 544
 
         type VkTimeDomainKHR =
             | Device = 0
@@ -52466,9 +52466,9 @@ module rec Extensions =
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     /// Promoted to Vulkan14.
     module KHRShaderExpectAssume =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_expect_assume"
-        let Number = 545
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_expect_assume"
+        let [<Literal>] Number = 545
 
         type VkPhysicalDeviceShaderExpectAssumeFeaturesKHR = Vulkan14.VkPhysicalDeviceShaderExpectAssumeFeatures
 
@@ -52477,9 +52477,9 @@ module rec Extensions =
     /// Requires Vulkan11.
     /// Promoted to Vulkan14.
     module KHRMaintenance6 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_maintenance6"
-        let Number = 546
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_maintenance6"
+        let [<Literal>] Number = 546
 
         type VkBindDescriptorSetsInfoKHR = Vulkan14.VkBindDescriptorSetsInfo
 
@@ -52622,9 +52622,9 @@ module rec Extensions =
 
     /// Requires Vulkan11.
     module NVDescriptorPoolOverallocation =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_descriptor_pool_overallocation"
-        let Number = 547
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_descriptor_pool_overallocation"
+        let [<Literal>] Number = 547
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV =
@@ -52666,9 +52666,9 @@ module rec Extensions =
 
     /// Requires KHRDisplay, KHRGetDisplayProperties2.
     module NVDisplayStereo =
-        let Type = ExtensionType.Instance
-        let Name = "VK_NV_display_stereo"
-        let Number = 552
+        let [<Literal>] Type = ExtensionType.Instance
+        let [<Literal>] Name = "VK_NV_display_stereo"
+        let [<Literal>] Number = 552
 
         type VkDisplaySurfaceStereoTypeNV =
             | None = 0
@@ -52741,9 +52741,9 @@ module rec Extensions =
 
     /// Requires KHRVideoEncodeQueue, KHRFormatFeatureFlags2.
     module KHRVideoEncodeQuantizationMap =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_encode_quantization_map"
-        let Number = 554
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_encode_quantization_map"
+        let [<Literal>] Number = 554
 
         type VkVideoEncodeFlagsKHR = KHRVideoEncodeQueue.VkVideoEncodeFlagsKHR
         type VkVideoSessionParametersCreateFlagsKHR = KHRVideoQueue.VkVideoSessionParametersCreateFlagsKHR
@@ -53107,9 +53107,9 @@ module rec Extensions =
 
 
     module NVRawAccessChains =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_raw_access_chains"
-        let Number = 556
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_raw_access_chains"
+        let [<Literal>] Number = 556
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceRawAccessChainsFeaturesNV =
@@ -53144,9 +53144,9 @@ module rec Extensions =
 
 
     module KHRShaderRelaxedExtendedInstruction =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_shader_relaxed_extended_instruction"
-        let Number = 559
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_shader_relaxed_extended_instruction"
+        let [<Literal>] Number = 559
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR =
@@ -53181,9 +53181,9 @@ module rec Extensions =
 
 
     module NVCommandBufferInheritance =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_command_buffer_inheritance"
-        let Number = 560
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_command_buffer_inheritance"
+        let [<Literal>] Number = 560
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceCommandBufferInheritanceFeaturesNV =
@@ -53219,9 +53219,9 @@ module rec Extensions =
 
     /// Requires Vulkan11.
     module KHRMaintenance7 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_maintenance7"
-        let Number = 563
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_maintenance7"
+        let [<Literal>] Number = 563
 
         type VkPhysicalDeviceLayeredApiKHR =
             | Vulkan = 0
@@ -53425,9 +53425,9 @@ module rec Extensions =
 
 
     module NVShaderAtomicFloat16Vector =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_shader_atomic_float16_vector"
-        let Number = 564
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_shader_atomic_float16_vector"
+        let [<Literal>] Number = 564
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV =
@@ -53462,9 +53462,9 @@ module rec Extensions =
 
 
     module EXTShaderReplicatedComposites =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_shader_replicated_composites"
-        let Number = 565
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_shader_replicated_composites"
+        let [<Literal>] Number = 565
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT =
@@ -53499,9 +53499,9 @@ module rec Extensions =
 
 
     module NVRayTracingValidation =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_ray_tracing_validation"
-        let Number = 569
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_ray_tracing_validation"
+        let [<Literal>] Number = 569
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceRayTracingValidationFeaturesNV =
@@ -53537,9 +53537,9 @@ module rec Extensions =
 
     /// Requires KHRAccelerationStructure.
     module NVClusterAccelerationStructure =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_cluster_acceleration_structure"
-        let Number = 570
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_cluster_acceleration_structure"
+        let [<Literal>] Number = 570
 
         [<Flags>]
         type VkClusterAccelerationStructureClusterFlagsNV =
@@ -54293,9 +54293,9 @@ module rec Extensions =
 
     /// Requires KHRAccelerationStructure.
     module NVPartitionedAccelerationStructure =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_partitioned_acceleration_structure"
-        let Number = 571
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_partitioned_acceleration_structure"
+        let [<Literal>] Number = 571
 
         type VkPartitionedAccelerationStructureOpTypeNV =
             | WriteInstance = 0
@@ -54669,9 +54669,9 @@ module rec Extensions =
 
     /// Requires KHRBufferDeviceAddress, KHRMaintenance5.
     module EXTDeviceGeneratedCommands =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_device_generated_commands"
-        let Number = 573
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_device_generated_commands"
+        let [<Literal>] Number = 573
 
 
         [<StructLayout(LayoutKind.Sequential)>]
@@ -55561,9 +55561,9 @@ module rec Extensions =
 
     /// Requires Vulkan11.
     module KHRMaintenance8 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_maintenance8"
-        let Number = 575
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_maintenance8"
+        let [<Literal>] Number = 575
 
         [<Flags>]
         type VkAccessFlags3KHR =
@@ -55645,9 +55645,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module MESAImageAlignmentControl =
-        let Type = ExtensionType.Device
-        let Name = "VK_MESA_image_alignment_control"
-        let Number = 576
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_MESA_image_alignment_control"
+        let [<Literal>] Number = 576
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImageAlignmentControlCreateInfoMESA =
@@ -55743,9 +55743,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTDepthClampControl =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_depth_clamp_control"
-        let Number = 583
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_depth_clamp_control"
+        let [<Literal>] Number = 583
 
         type VkDepthClampModeEXT =
             | ViewportRange = 0
@@ -55857,9 +55857,9 @@ module rec Extensions =
 
     /// Requires KHRVideoDecodeQueue | KHRVideoEncodeQueue.
     module KHRVideoMaintenance2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_video_maintenance2"
-        let Number = 587
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_video_maintenance2"
+        let [<Literal>] Number = 587
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceVideoMaintenance2FeaturesKHR =
@@ -56014,9 +56014,9 @@ module rec Extensions =
 
     /// Requires (KHRGetPhysicalDeviceProperties2 | Vulkan11), KHRSwapchain, EXTHdrMetadata.
     module HUAWEIHdrVivid =
-        let Type = ExtensionType.Device
-        let Name = "VK_HUAWEI_hdr_vivid"
-        let Number = 591
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_HUAWEI_hdr_vivid"
+        let [<Literal>] Number = 591
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkHdrVividDynamicMetadataHUAWEI =
@@ -56085,9 +56085,9 @@ module rec Extensions =
 
     /// Requires KHRCooperativeMatrix.
     module NVCooperativeMatrix2 =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_cooperative_matrix2"
-        let Number = 594
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_cooperative_matrix2"
+        let [<Literal>] Number = 594
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkCooperativeMatrixFlexibleDimensionsPropertiesNV =
@@ -56242,9 +56242,9 @@ module rec Extensions =
 
     /// Requires EXTOpacityMicromap.
     module ARMPipelineOpacityMicromap =
-        let Type = ExtensionType.Device
-        let Name = "VK_ARM_pipeline_opacity_micromap"
-        let Number = 597
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_ARM_pipeline_opacity_micromap"
+        let [<Literal>] Number = 597
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePipelineOpacityMicromapFeaturesARM =
@@ -56285,9 +56285,9 @@ module rec Extensions =
 
     /// Requires KHRExternalMemory | Vulkan11.
     module EXTExternalMemoryMetal =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_external_memory_metal"
-        let Number = 603
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_external_memory_metal"
+        let [<Literal>] Number = 603
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkImportMemoryMetalHandleInfoEXT =
@@ -56406,9 +56406,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module KHRDepthClampZeroOne =
-        let Type = ExtensionType.Device
-        let Name = "VK_KHR_depth_clamp_zero_one"
-        let Number = 605
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_KHR_depth_clamp_zero_one"
+        let [<Literal>] Number = 605
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceDepthClampZeroOneFeaturesKHR =
@@ -56444,9 +56444,9 @@ module rec Extensions =
 
     /// Requires KHRGetPhysicalDeviceProperties2 | Vulkan11.
     module EXTVertexAttributeRobustness =
-        let Type = ExtensionType.Device
-        let Name = "VK_EXT_vertex_attribute_robustness"
-        let Number = 609
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_EXT_vertex_attribute_robustness"
+        let [<Literal>] Number = 609
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT =
@@ -56481,9 +56481,9 @@ module rec Extensions =
 
 
     module NVPresentMetering =
-        let Type = ExtensionType.Device
-        let Name = "VK_NV_present_metering"
-        let Number = 614
+        let [<Literal>] Type = ExtensionType.Device
+        let [<Literal>] Name = "VK_NV_present_metering"
+        let [<Literal>] Number = 614
 
         [<StructLayout(LayoutKind.Sequential)>]
         type VkPhysicalDevicePresentMeteringFeaturesNV =
