@@ -301,7 +301,7 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
         new OpenGlVRApplicationLayered(debug, id, samples)
 
     new(debug: bool, adjustSize: V2i -> V2i, [<Optional; DefaultParameterValue(1)>] samples: int) =
-        new OpenGlVRApplicationLayered(DebugLevel.ofBool debug, adjustSize)
+        new OpenGlVRApplicationLayered(DebugLevel.ofBool debug, adjustSize, samples)
 
     new([<Optional; DefaultParameterValue(false)>] debug: bool, [<Optional; DefaultParameterValue(1)>] samples: int) =
         new OpenGlVRApplicationLayered(debug, id, samples)

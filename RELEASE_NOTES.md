@@ -1,4 +1,5 @@
 - [Vulkan] Improved handling of unavailable or disabled features
+- [Application.OpenVR.GL] Fixed `samples` parameter of `OpenGlVRApplicationLayered` constructor being ignored
 
 ### 5.6.2
 - Added support for enum types as vertex and instance attributes
