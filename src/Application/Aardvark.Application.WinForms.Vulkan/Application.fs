@@ -63,12 +63,8 @@ type VulkanApplication(debug: IDebugConfig,
             yield! Extensions.Sharing
         ]
 
-    let requestedLayers =
-        [
-        ]
-
     let instance =
-        new Instance(requestedLayers, requestedExtensions, debug)
+        new Instance(debug, extensions = requestedExtensions)
 
     // choose a physical device
     let physicalDevice = 
@@ -81,9 +77,7 @@ type VulkanApplication(debug: IDebugConfig,
     do instance.PrintInfo(physicalDevice, debug.PlatformInformationVerbosity)
 
     // create a device
-    let device =
-        let selectFeatures = if isNull deviceFeatures then DeviceFeatures.getDefault else deviceFeatures.Invoke
-        physicalDevice.CreateDevice(requestedExtensions, selectFeatures)
+    let device = physicalDevice.CreateDevice(requestedExtensions, deviceFeatures)
 
     // create a runtime
     let runtime = new Runtime(device)

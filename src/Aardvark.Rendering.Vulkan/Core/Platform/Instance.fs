@@ -28,7 +28,9 @@ module Instance =
         let Validation          = "VK_LAYER_KHRONOS_validation"
         let Nsight              = "VK_LAYER_NV_nsight"
 
-type Instance(apiVersion : Version, layers : string seq, extensions : string seq, debug : IDebugConfig) as this =
+type Instance(debug : IDebugConfig, apiVersion : Version,
+              [<Optional; DefaultParameterValue(null : string seq)>] layers : string seq,
+              [<Optional; DefaultParameterValue(null : string seq)>] extensions : string seq) as this =
 
     static let defaultVersion = Version(1, 1, 0)
 
@@ -75,12 +77,16 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
 
     let enabledLayers, availableExtensions, enabledExtensions =
         let extensions =
+            let extensions = extensions ||? Seq.empty
+
             if debug.DebugReportEnabled || debug.ValidationLayerEnabled || debug.DebugLabels then
                 List.ofSeq extensions @ [Extensions.Debug]
             else
                 extensions |> List.ofSeq |> List.filter ((<>) Extensions.Debug)
 
         let layers =
+            let layers = layers ||? Seq.empty
+
             if debug.ValidationLayerEnabled then
                 List.ofSeq layers @ [Instance.Layers.Validation]
             else
@@ -225,7 +231,7 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                     |> check "could not get physical device groups"
 
                 return
-                    groups |> Array.mapi (fun i d -> 
+                    groups |> Array.map (fun d ->
                         let devices = 
                             Array.init (int d.physicalDeviceCount) (fun ii ->
                                 let handle = d.physicalDevices.[ii]
@@ -241,14 +247,25 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
     let devicesAndGroups =
         Array.append devices (groups |> Array.map (fun a -> a :> _))
 
-    new (layers: seq<string>, extensions: seq<string>, debug: IDebugConfig) =
-        new Instance(defaultVersion, layers, extensions, debug)
+    new (debug: IDebugConfig,
+         [<Optional; DefaultParameterValue(null : string seq)>] layers: string seq,
+         [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq) =
+        new Instance(debug, defaultVersion, layers, extensions)
 
-    new (apiVersion: Version, layers: seq<string>, extensions: seq<string>) =
-        new Instance(apiVersion, layers, extensions, DebugConfig.None)
+    new (apiVersion: Version,
+         [<Optional; DefaultParameterValue(null : string seq)>] layers: string seq,
+         [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq) =
+        new Instance(DebugConfig.None, apiVersion, layers, extensions)
 
-    new (layers: seq<string>, extensions: seq<string>) =
-        new Instance(defaultVersion, layers, extensions)
+    new (debug: bool, apiVersion : Version,
+         [<Optional; DefaultParameterValue(null : string seq)>] layers : string seq,
+         [<Optional; DefaultParameterValue(null : string seq)>] extensions : string seq) =
+        new Instance(DebugLevel.ofBool debug, apiVersion, layers, extensions)
+
+    new ([<Optional; DefaultParameterValue(false)>] debug: bool,
+         [<Optional; DefaultParameterValue(null : string seq)>] layers : string seq,
+         [<Optional; DefaultParameterValue(null : string seq)>] extensions : string seq) =
+        new Instance(debug, defaultVersion, layers, extensions)
 
     static member DefaultVersion = defaultVersion
     static member AvailableLayers = availableLayers
@@ -357,20 +374,20 @@ type Instance(apiVersion : Version, layers : string seq, extensions : string seq
                         )
 
                         l.section "heaps:" (fun () ->
-                            for (h : MemoryHeapInfo) in d.MemoryHeaps do
+                            for h in d.MemoryHeaps do
                                 match h.Flags with
                                     | MemoryHeapFlags.DeviceLocal -> l.line "%d: %A (device local)" h.Index h.Capacity
                                     | _  -> l.line "%d: %A" h.Index h.Capacity
                         )
 
                         l.section "memories:" (fun () ->
-                            for (h : MemoryInfo) in d.MemoryTypes do
-                                if h.flags <> MemoryFlags.None then
-                                    l.line "%d: %A (heap: %d)" h.index h.flags h.heap.Index
+                            for m in d.MemoryTypes do
+                                if m.flags <> MemoryFlags.None then
+                                    l.line "%d: %A (heap: %d)" m.index m.flags m.heap.Index
                         )
 
                         l.section "queues:" (fun () ->
-                            for (q : QueueFamilyInfo) in d.QueueFamilies do
+                            for q in d.QueueFamilies do
                                 l.section "%d:" q.index (fun () ->
                                     l.line "capabilities:   %s" (capString q.flags)
                                     l.line "count:          %d" q.count

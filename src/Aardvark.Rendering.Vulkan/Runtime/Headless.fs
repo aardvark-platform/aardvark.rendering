@@ -33,11 +33,8 @@ type HeadlessVulkanApplication(debug: IDebugConfig,
             yield! Extensions.Sharing
         ]
 
-    let requestedLayers =
-        []
-
     let instance =
-        new Instance(requestedLayers, requestedExtensions, debug)
+        new Instance(debug, extensions = requestedExtensions)
 
     // choose a physical device
     let physicalDevice =
@@ -55,8 +52,7 @@ type HeadlessVulkanApplication(debug: IDebugConfig,
             if isNull deviceExtensions then Seq.empty
             else deviceExtensions.Invoke physicalDevice
 
-        let selectFeatures = if isNull deviceFeatures then DeviceFeatures.getDefault else deviceFeatures.Invoke
-        physicalDevice.CreateDevice(Seq.append requestedExtensions deviceExtensions, selectFeatures)
+        physicalDevice.CreateDevice(Seq.append requestedExtensions deviceExtensions, deviceFeatures)
 
     // create a runtime
     let runtime = new Runtime(device)
