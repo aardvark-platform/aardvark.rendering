@@ -66,7 +66,7 @@ type VulkanVRApplicationLayered(debug: IDebugConfig,
                                 [<Optional; DefaultParameterValue(null : Func<DeviceFeatures, DeviceFeatures>)>] deviceFeatures: Func<DeviceFeatures, DeviceFeatures>,
                                 [<Optional; DefaultParameterValue(null : IDeviceChooser)>] deviceChooser: IDeviceChooser) as this =
 
-    inherit VrRenderer(if isNull adjustSize then id else adjustSize.Invoke)
+    inherit VrRenderer(adjustSize)
 
     let instanceExtensions =
         let extensions = if extensions = null then Seq.empty else extensions
@@ -114,8 +114,8 @@ type VulkanVRApplicationLayered(debug: IDebugConfig,
     let tex = AVal.custom (fun _ -> fImg :> ITexture)
 
 
-    let keyboard = new EventKeyboard()
-    let mouse = new EventMouse(false)
+    let keyboard = EventKeyboard()
+    let mouse = EventMouse(false)
 
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
