@@ -35,16 +35,21 @@ type internal PipelineCache private (device: IDevice, handle: VkPipelineCache) =
     static let serializer = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
     static let getFilePath (device: IDevice) =
-        let assemblyName =
-            let assembly = IntrospectionProperties.CurrentEntryAssembly
-            let name = if notNull assembly then assembly.GetName().Name else null
-            name ||? "unknown"
+        try
+            let assemblyName =
+                let assembly = IntrospectionProperties.CurrentEntryAssembly
+                let name = if notNull assembly then assembly.GetName().Name else null
+                name ||? "unknown"
 
-        Path.combine [
-            CachingProperties.CacheDirectory
-            "Pipelines"
-            $"{assemblyName}_{device.PhysicalDevice.Id}.pipeline_cache"
-        ]
+            Path.combine [
+                CachingProperties.CacheDirectory
+                "Pipelines"
+                $"{assemblyName}_{device.PhysicalDevice.Id}.pipeline_cache"
+            ]
+
+        with exn ->
+            Log.warn $"[Vulkan] Failed to determine path of pipeline cache: {exn.Message}"
+            null
 
     let getData (size: uint64) (pData: nativeint) =
         let mutable size = size
@@ -82,61 +87,62 @@ type internal PipelineCache private (device: IDevice, handle: VkPipelineCache) =
     member _.Handle = handle
 
     static member Deserialize(device: IDevice) =
-        Report.Begin(3, "Deserializing pipeline cache")
+        let path = getFilePath device
 
-        try
-            let path = getFilePath device
-            Report.Line(3, $"Path: {path}")
-
-            let data =
-                if File.Exists path then
-                    use stream = File.OpenRead path
-                    let data = serializer.Deserialize<PipelineCacheData>(stream)
-                    let hash = serializer.ComputeHash data.Data
-
-                    if data.Id <> device.PipelineCacheId then
-                        Report.Line(3, $"Pipeline cache ID mismatch (expected: {device.PipelineCacheId}, actual: {data.Id})")
-                        None
-
-                    elif data.Hash <> hash.Hash then
-                        Report.Line(3, $"Pipeline cache hash mismatch")
-                        None
-
-                    else
-                        Some data
-                else
-                    None
-
-            match data with
-            | Some data ->
-                use pData = fixed data.Data
-                let mutable createInfo = VkPipelineCacheCreateInfo(VkPipelineCacheCreateFlags.None, data.Size, pData.Address)
-                let result = new PipelineCache(device, &createInfo)
-                Report.End(3) |> ignore
-                result
-
-            | None ->
-                if File.Exists path then
-                    File.Delete path
-                    Report.End(3, " - invalidated") |> ignore
-                else
-                    Report.End(3, " - not found") |> ignore
-
-                new PipelineCache(device)
-
-        with e ->
-            Report.Line(3, $"{e.GetType()}: {e.Message}")
-            Report.End(3, " - failed") |> ignore
-            new PipelineCache(device)
-
-    member _.Serialize() =
-        if handle.IsValid then
-            Report.Begin(3, "Serializing pipeline cache")
+        if notNull path then
+            Report.BeginTimed(3, $"[Vulkan] Deserializing pipeline cache '{path}'")
 
             try
-                let path = getFilePath device
-                Report.Line(3, $"Path: {path}")
+                let data =
+                    if File.Exists path then
+                        use stream = File.OpenRead path
+                        let data = serializer.Deserialize<PipelineCacheData>(stream)
+                        let hash = serializer.ComputeHash data.Data
 
+                        if data.Id <> device.PipelineCacheId then
+                            Report.Line(3, $"Pipeline cache ID mismatch (expected: {device.PipelineCacheId}, actual: {data.Id})")
+                            None
+
+                        elif data.Hash <> hash.Hash then
+                            Report.Line(3, $"Pipeline cache hash mismatch")
+                            None
+
+                        else
+                            Some data
+                    else
+                        None
+
+                match data with
+                | Some data ->
+                    use pData = fixed data.Data
+                    let mutable createInfo = VkPipelineCacheCreateInfo(VkPipelineCacheCreateFlags.None, data.Size, pData.Address)
+                    let result = new PipelineCache(device, &createInfo)
+                    Report.EndTimed(3, " - success") |> ignore
+                    result
+
+                | None ->
+                    if File.Exists path then
+                        File.Delete path
+                        Report.EndTimed(3, " - invalidated") |> ignore
+                    else
+                        Report.EndTimed(3, " - not found") |> ignore
+
+                    new PipelineCache(device)
+
+            with e ->
+                Report.Line(3, $"{e.GetType()}: {e.Message}")
+                Report.EndTimed(3, " - failed") |> ignore
+                new PipelineCache(device)
+        else
+            new PipelineCache(device, VkPipelineCache.Null)
+
+    member _.Serialize() =
+        let path = getFilePath device
+
+        if notNull path && handle.IsValid then
+            Report.BeginTimed(3, $"[Vulkan] Serializing pipeline cache '{path}'")
+
+            try
                 let directory = Path.GetDirectoryName path
                 if not <| Directory.Exists directory then
                     Directory.CreateDirectory directory |> ignore
@@ -153,10 +159,10 @@ type internal PipelineCache private (device: IDevice, handle: VkPipelineCache) =
                     Data = data
                 })
 
-                Report.End(3) |> ignore
+                Report.EndTimed(3, " - success") |> ignore
             with e ->
                 Report.Line(3, $"{e.GetType()}: {e.Message}")
-                Report.End(3, " - failed") |> ignore
+                Report.EndTimed(3, " - failed") |> ignore
 
     member _.Dispose() =
         if handle.IsValid then

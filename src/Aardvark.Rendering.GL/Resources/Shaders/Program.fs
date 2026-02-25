@@ -801,15 +801,15 @@ module ProgramExtensions =
 
         let private tryRead (unpickle : byte[] -> 'T) (file : string) : 'T option =
             if File.Exists file then
-                Report.BeginTimed(4, $"[GL] Reading shader program file cache '%s{file}'")
+                Report.BeginTimed(4, $"[GL] Reading shader program file cache '{file}'")
 
                 try
                     let result = unpickle <| File.readAllBytes file
-                    Report.EndTimed(4, ": success") |> ignore
+                    Report.EndTimed(4, " - success") |> ignore
                     Some result
                 with
                 | exn ->
-                    Report.EndTimed(4, ": failed") |> ignore
+                    Report.EndTimed(4, " - failed") |> ignore
                     Log.warn "[GL] Failed to read from shader program file cache '%s': %s" file exn.Message
                     None
             else
