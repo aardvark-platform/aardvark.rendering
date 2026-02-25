@@ -19,7 +19,7 @@ type UploadMode =
     | Sync
     | Async
 
-type Device private (physicalDevice: PhysicalDevice, extensions: string seq, selectFeatures: DeviceFeatures -> DeviceFeatures) =
+type Device private (physicalDevice: PhysicalDevice, extensions: string seq, selectFeatures: Func<DeviceFeatures, DeviceFeatures>) =
     let isGroup, physicalDevices =
         match physicalDevice with
         | :? PhysicalDeviceGroup as g -> true, g.Devices
@@ -80,7 +80,8 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
 
     let extensions =
         [
-            yield! extensions
+            if notNull extensions then
+                yield! extensions
 
             // if the device supports VK_KHR_portability_subset, it must be enabled
             if physicalDevice.HasExtension KHRPortabilitySubset.Name then
@@ -108,7 +109,7 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
 
     let enabledFeatures =
         physicalDevice.GetFeatures(isExtensionEnabled)
-        |> selectFeatures
+        |> if notNull selectFeatures then selectFeatures.Invoke else DeviceFeatures.getDefault
 
     let mutable isDisposed = 0
 
@@ -211,8 +212,10 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
 
         pipelineCache <- PipelineCache.Deserialize(this)
 
-    static member Create(physicalDevice: PhysicalDevice, wantedExtensions: string seq, selectFeatures: DeviceFeatures -> DeviceFeatures) =
-        let device = new Device(physicalDevice, wantedExtensions, selectFeatures)
+    static member Create(physicalDevice: PhysicalDevice,
+                         [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq,
+                         [<Optional; DefaultParameterValue(null : Func<DeviceFeatures, DeviceFeatures>)>] selectFeatures: Func<DeviceFeatures, DeviceFeatures>) =
+        let device = new Device(physicalDevice, extensions, selectFeatures)
         device.Initialize()
         device
 
@@ -378,8 +381,10 @@ module IDeviceObjectExtensions =
 type DeviceExtensions private() =
 
     [<Extension>]
-    static member CreateDevice(this: PhysicalDevice, wantedExtensions: string seq, selectFeatures: DeviceFeatures -> DeviceFeatures) =
-        Device.Create(this, wantedExtensions, selectFeatures)
+    static member CreateDevice(this: PhysicalDevice,
+                               [<Optional; DefaultParameterValue(null : string seq)>] extensions: string seq,
+                               [<Optional; DefaultParameterValue(null : Func<DeviceFeatures, DeviceFeatures>)>] selectFeatures: Func<DeviceFeatures,  DeviceFeatures>) =
+        Device.Create(this, extensions, selectFeatures)
 
     [<Extension>]
     static member Set(semaphore: Vulkan.Semaphore) =
