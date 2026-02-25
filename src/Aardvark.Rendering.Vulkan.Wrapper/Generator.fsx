@@ -2413,9 +2413,9 @@ module FSharpWriter =
             )
 
             printfn "module %s =" name
-            printfn "    let Type = ExtensionType.%A" e.typ
-            printfn "    let Name = \"%s\"" e.name
-            printfn "    let Number = %d" e.number
+            printfn "    let [<Literal>] Type = ExtensionType.%A" e.typ
+            printfn "    let [<Literal>] Name = \"%s\"" e.name
+            printfn "    let [<Literal>] Number = %d" e.number
             printfn ""
 
             let requires =

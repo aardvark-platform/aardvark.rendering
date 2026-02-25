@@ -4,34 +4,34 @@ open System.Runtime.InteropServices
 
 /// Contains Vulkan extensions (both instance and device)
 module Extensions =
-    let Surface                         = KHRSurface.Name
-    let SwapChain                       = KHRSwapchain.Name
-    let Display                         = KHRDisplay.Name
-    let DisplaySwapChain                = KHRDisplaySwapchain.Name
+    let [<Literal>] Surface                         = KHRSurface.Name
+    let [<Literal>] SwapChain                       = KHRSwapchain.Name
+    let [<Literal>] Display                         = KHRDisplay.Name
+    let [<Literal>] DisplaySwapChain                = KHRDisplaySwapchain.Name
 
-    let AndroidSurface                  = KHRAndroidSurface.Name
-    let WaylandSurface                  = KHRWaylandSurface.Name
-    let Win32Surface                    = KHRWin32Surface.Name
-    let XcbSurface                      = KHRXcbSurface.Name
-    let XlibSurface                     = KHRXlibSurface.Name
-    let GetPhysicalDeviceProperties2    = KHRGetPhysicalDeviceProperties2.Name
+    let [<Literal>] AndroidSurface                  = KHRAndroidSurface.Name
+    let [<Literal>] WaylandSurface                  = KHRWaylandSurface.Name
+    let [<Literal>] Win32Surface                    = KHRWin32Surface.Name
+    let [<Literal>] XcbSurface                      = KHRXcbSurface.Name
+    let [<Literal>] XlibSurface                     = KHRXlibSurface.Name
+    let [<Literal>] GetPhysicalDeviceProperties2    = KHRGetPhysicalDeviceProperties2.Name
 
-    let ShaderSubgroupVote              = EXTShaderSubgroupVote.Name
-    let ShaderSubgroupBallot            = EXTShaderSubgroupBallot.Name
+    let [<Literal>] ShaderSubgroupVote              = EXTShaderSubgroupVote.Name
+    let [<Literal>] ShaderSubgroupBallot            = EXTShaderSubgroupBallot.Name
 
-    let ConservativeRasterization       = EXTConservativeRasterization.Name
+    let [<Literal>] ConservativeRasterization       = EXTConservativeRasterization.Name
 
-    let CustomBorderColor               = EXTCustomBorderColor.Name
+    let [<Literal>] CustomBorderColor               = EXTCustomBorderColor.Name
 
-    let Debug                           = EXTDebugUtils.Name
+    let [<Literal>] Debug                           = EXTDebugUtils.Name
 
-    let DeviceFault                     = EXTDeviceFault.Name
+    let [<Literal>] DeviceFault                     = EXTDeviceFault.Name
 
-    let MemoryBudget                    = EXTMemoryBudget.Name
+    let [<Literal>] MemoryBudget                    = EXTMemoryBudget.Name
 
-    let MemoryPriority                  = EXTMemoryPriority.Name
+    let [<Literal>] MemoryPriority                  = EXTMemoryPriority.Name
 
-    let PortabilityEnumeration          = KHRPortabilityEnumeration.Name
+    let [<Literal>] PortabilityEnumeration          = KHRPortabilityEnumeration.Name
 
     let Shader8Bit16Bit = [
         KHR8bitStorage.Name
