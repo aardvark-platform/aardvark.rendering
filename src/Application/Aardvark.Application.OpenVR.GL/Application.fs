@@ -98,8 +98,8 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
     let version = AVal.init 0
     let tex = AVal.custom (fun _ -> fTexl :> ITexture)
     
-    let keyboard = new EventKeyboard()
-    let mouse = new EventMouse(false)
+    let keyboard = EventKeyboard()
+    let mouse = EventMouse(false)
     
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
@@ -146,7 +146,6 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
     member x.Samples = samples
     member x.Time = time
 
-    
     member x.RenderTask
         with set (t : IRenderTask) =
             if isNull t.Name then t.Name <- "Window Task"
@@ -154,7 +153,8 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
         and get () = userTask
 
     override x.Use(f : unit -> 'a) =
-        Operators.using ctx.ResourceLock (fun _ -> f())
+        use _ = ctx.ResourceLock
+        f()
 
     //override x.Handedness 
     //    with get() = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, -V3d.OIO, V3d.Zero)
@@ -162,86 +162,68 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
     override x.OnLoad(i : VrRenderInfo) =
         //renderCtx.MakeCurrent()
         //ctx.CurrentContextHandle <- Some renderCtx
-        Operators.using ctx.ResourceLock (fun _ ->
+        use _ = ctx.ResourceLock
+        info <- i
 
-            info <- i
+        if loaded then
+            ctx.Delete (unbox<Framebuffer> fbo)
+            ctx.Delete fTexl
+            ctx.Delete fTexr
+            ctx.Delete dTex
+            ctx.Delete cTex
+        else
+            compileHidden x.HiddenAreaMesh
+            compileClear()
 
-            if loaded then
-                ctx.Delete (unbox<Framebuffer> fbo)
-                ctx.Delete fTexl
-                ctx.Delete fTexr
-                ctx.Delete dTex
-                ctx.Delete cTex
-            else
-                compileHidden x.HiddenAreaMesh
-                compileClear()
+        cTex <- ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Rgba8, samples)
+        cTex.Name <- "Color Attachment (Window)"
 
+        dTex <- ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Depth24Stencil8, samples)
+        dTex.Name <- "Depth / Stencil Attachment (Window)"
 
-            let nTex = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Rgba8, samples)
-            nTex.Name <- "Color Attachment (Window)"
+        fTexl <- ctx.CreateTexture2D(info.framebufferSize, 1, TextureFormat.Rgba8, 1)
+        fTexl.Name <- "Resolved Left Color Attachment (Window)"
 
-            let nDepth = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Depth24Stencil8, samples)
-            nDepth.Name <- "Depth / Stencil Attachment (Window)"
+        fTexr <- ctx.CreateTexture2D(info.framebufferSize, 1, TextureFormat.Rgba8, 1)
+        fTexr.Name <- "Resolved Right Color Attachment (Window)"
 
-            let nfTexl = ctx.CreateTexture2D(info.framebufferSize, 1, TextureFormat.Rgba8, 1)
-            nfTexl.Name <- "Resolved Left Color Attachment (Window)"
+        fbo <-
+            runtime.CreateFramebuffer(
+                framebufferSignature,
+                [
+                    DefaultSemantic.Colors, cTex.[TextureAspect.Color, 0, *] :> IFramebufferOutput
+                    DefaultSemantic.DepthStencil, dTex.[TextureAspect.Depth, 0, *] :> IFramebufferOutput
+                ]
+            )
 
-            let nfTexr = ctx.CreateTexture2D(info.framebufferSize, 1, TextureFormat.Rgba8, 1)
-            nfTexr.Name <- "Resolved Right Color Attachment (Window)"
+        let lTex = VrTexture.OpenGL(fTexl.Handle)
+        let rTex = VrTexture.OpenGL(fTexr.Handle)
+        loaded <- true
 
-            let nFbo =
-                runtime.CreateFramebuffer(
-                    framebufferSignature,
-                    [
-                        DefaultSemantic.Colors, nTex.[TextureAspect.Color, 0, *] :> IFramebufferOutput
-                        DefaultSemantic.DepthStencil, nDepth.[TextureAspect.Depth, 0, *] :> IFramebufferOutput
-                    ]
-                )
-
-            dTex <- nDepth
-            cTex <- nTex
-            fTexl <- nfTexl
-            fTexr <- nfTexr
-            fbo <- nFbo
-
-
-            let lTex = VrTexture.OpenGL(fTexl.Handle)
-            let rTex = VrTexture.OpenGL(fTexr.Handle)
-            loaded <- true
-        
-
-            lTex,rTex
-        )
+        lTex, rTex
 
     override x.Render() =
         if loaded then
-            Operators.using ctx.ResourceLock (fun _ ->
-                ctx.PushDebugGroup("Swapchain")
-  
-                let output = OutputDescription.ofFramebuffer fbo
+            use _ = ctx.ResourceLock
+            ctx.PushDebugGroup("Swapchain")
 
-                caller.EvaluateAlways AdaptiveToken.Top (fun t ->
-                    clearTask.Run(t, RenderToken.Empty, output)
-                    hiddenTask.Run(t, RenderToken.Empty, output)
-                    userTask.Run(t, RenderToken.Empty, output) 
-                )
+            let output = OutputDescription.ofFramebuffer fbo
 
-                GL.Sync()
-
-                if samples > 1 then
-                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 0], fTexl, V2i.Zero, V2i.Zero, cTex.Size.XY)
-                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 1], fTexr, V2i.Zero, V2i.Zero, cTex.Size.XY)
-                    ctx.PopDebugGroup()
-                else
-                    //runtime.Copy(cTex.[TextureAspect.Color, 0, *], fTex.[TextureAspect.Color, 0, *])
-                    ctx.PopDebugGroup()
-                    failwith "not implemented"
+            caller.EvaluateAlways AdaptiveToken.Top (fun t ->
+                clearTask.Run(t, RenderToken.Empty, output)
+                hiddenTask.Run(t, RenderToken.Empty, output)
+                userTask.Run(t, RenderToken.Empty, output)
             )
-                
+
+            runtime.Copy(cTex.[TextureAspect.Color, 0, 0], fTexl.[TextureAspect.Color, 0])
+            runtime.Copy(cTex.[TextureAspect.Color, 0, 1], fTexr.[TextureAspect.Color, 0])
+
+            ctx.PopDebugGroup()
+
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
 
-
     override x.Release() =
+        // TODO: check cleanup"
         clearTask.Dispose()
         hiddenTask.Dispose()
         userTask.Dispose()
@@ -258,10 +240,6 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
 
         app.Dispose()
 
-        
-        Log.warn "[GL] TODO: check cleanup"
-        ()
-        
     member x.BeforeRender = beforeRender
     member x.AfterRender = afterRender
 
@@ -289,7 +267,7 @@ type OpenGlVRApplicationLayered(debug: IDebugConfig, adjustSize: V2i -> V2i,
     interface IRenderControl with
         member x.Cursor
             with get() = Cursor.Default
-            and set c = ()
+            and set _ = ()
 
         member x.Keyboard = keyboard :> IKeyboard
         member x.Mouse = mouse :> IMouse
