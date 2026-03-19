@@ -1,5 +1,11 @@
+### 5.6.3
 - [Vulkan] Improved handling of unavailable or disabled features
+- [Vulkan] Added missing synchronization for buffer uploads
+- [Vulkan] Query format properties on demand
+- [Vulkan] Removed logging of shader interface
+- [Application] Dispose window when using `show` builder
 - [Application.OpenVR.GL] Fixed `samples` parameter of `OpenGlVRApplicationLayered` constructor being ignored
+- [Application.OpenVR.GL] Fixed copy for non-multisampled framebuffers
 - [Sg] Added `Sg.uniforms`
 
 ### 5.6.2
