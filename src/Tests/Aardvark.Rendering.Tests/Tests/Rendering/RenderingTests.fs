@@ -20,6 +20,7 @@ module ``Rendering Tests`` =
         Viewport.tests
         ResourceManagement.tests
         Commands.tests
+        LodRenderer.tests
     ]
 
     [<Tests>]

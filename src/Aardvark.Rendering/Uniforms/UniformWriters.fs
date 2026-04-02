@@ -107,12 +107,6 @@ module GLSLType =
             Vec(3, Float(64)), typeof<V3f>
             Vec(4, Float(64)), typeof<V4f>
 
-            Mat(2,2,Int(true,32)), typeof<M22i>
-            Mat(2,3,Int(true,32)), typeof<M23i>
-            Mat(3,3,Int(true,32)), typeof<M34i>
-            Mat(3,4,Int(true,32)), typeof<M34i>
-            Mat(4,4,Int(true,32)), typeof<M44i>
-
             Mat(2,2,Float(32)), typeof<Interop.M24f> // Matrix rows need to be padded to 4 elements according to std140
             Mat(2,3,Float(32)), typeof<Interop.M24f>
             Mat(3,3,Float(32)), typeof<M34f>
@@ -132,7 +126,7 @@ module GLSLType =
         | Int(_,b) -> b / 8
         | Float(w) -> w / 8
         | Vec(d,e) -> d * sizeof e
-        | Mat(r,c,e) -> r * c * sizeof e
+        | Mat(c,_,e) -> 4 * c * sizeof e // Matrix rows need to be padded to 4 elements according to std140
         | Array(len, e, stride) -> len * stride
         | Struct(_,f,size) -> size
         | Void -> failwith "[UniformWriter] void does not have a size"

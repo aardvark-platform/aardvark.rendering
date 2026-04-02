@@ -1,4 +1,5 @@
 - [GL] Dispose MultimediaTimer in LodRenderer to avoid resource exhaustion
+- [GL] Fixed M22f, M23f, M33f geometry attributes in LodRenderer
 
 ### 5.6.3
 - [Vulkan] Improved handling of unavailable or disabled features
