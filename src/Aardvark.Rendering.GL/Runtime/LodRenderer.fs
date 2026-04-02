@@ -1854,7 +1854,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
             startThreadSafe "Camera prediction" (fun () ->
                 let mutable lastTime = time()
                 let mutable lastReport = time()
-                let timer = new MultimediaTimer.Trigger(5)
+                use timer = new MultimediaTimer.Trigger(5)
                     
                 while not shutdown.IsCancellationRequested do
                     timer.Wait()
@@ -1917,7 +1917,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
 
         let puller =
             startThreadSafe "Puller" (fun () ->
-                let timer = new MultimediaTimer.Trigger(20)
+                use timer = new MultimediaTimer.Trigger(20)
                     
                 let pickTrees = config.pickTrees
                 let reg = shutdown.Token.Register (System.Action(MVar.put changesPending))
@@ -2023,7 +2023,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                 let notConverged = MVar.create () //new ManualResetEventSlim(true)
 
                 let cancel = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, CancellationTokenSource>()
-                let timer = new MultimediaTimer.Trigger(10)
+                use timer = new MultimediaTimer.Trigger(10)
                     
                 let stop (node : ILodTreeNode) =
                     match cancel.TryRemove node with

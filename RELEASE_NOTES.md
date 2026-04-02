@@ -1,3 +1,5 @@
+- [GL] Dispose MultimediaTimer in LodRenderer to avoid resource exhaustion
+
 ### 5.6.3
 - [Vulkan] Improved handling of unavailable or disabled features
 - [Vulkan] Added missing synchronization for buffer uploads
