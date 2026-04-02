@@ -69,6 +69,7 @@
     <Compile Include="Tests\Rendering\Viewport.fs" />
     <Compile Include="Tests\Rendering\ResourceManagement.fs" />
     <Compile Include="Tests\Rendering\Commands.fs" />
+    <Compile Include="Tests\Rendering\LodRenderer.fs" />
     <Compile Include="Tests\Rendering\RenderingTests.fs" />
     <Compile Include="Tests\Compute\Images.fs" />
     <Compile Include="Tests\Compute\Buffers.fs" />

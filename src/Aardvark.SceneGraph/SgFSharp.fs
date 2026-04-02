@@ -130,6 +130,10 @@ module SgFSharp =
         // Uniforms & Textures
         // ================================================================================================================
 
+        /// Applies the given uniform provider to the scene graph.
+        let uniforms (provider : IUniformProvider) (sg : ISg) =
+            Sg.UniformApplicator(provider, sg) :> ISg
+
         /// Sets the uniform with the given name to the given value.
         /// The name can be a string, Symbol, or TypedSymbol.
         let inline uniform (name : ^Name) (value : aval<'Value>) (sg : ISg) =
@@ -637,7 +641,7 @@ module SgFSharp =
         /// <summary>
         /// Sets a custom scissor for the scene.
         /// The scissor is the region of the framebuffer that can be modified by the render task.
-        /// Fragments with coordinates outside of the scissor region will be discarded.
+        /// Fragments with coordinates outside the scissor region will be discarded.
         /// </summary>
         /// <remarks>
         /// The default scissor is specified in <see cref="OutputDescription"/>.
@@ -650,7 +654,7 @@ module SgFSharp =
         /// <summary>
         /// Sets a custom scissor for the scene.
         /// The scissor is the region of the framebuffer that can be modified by the render task.
-        /// Fragments with coordinates outside of the scissor region will be discarded.
+        /// Fragments with coordinates outside the scissor region will be discarded.
         /// </summary>
         /// <remarks>
         /// The default scissor is specified in <see cref="OutputDescription"/>.

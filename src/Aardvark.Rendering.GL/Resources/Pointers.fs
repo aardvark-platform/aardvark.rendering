@@ -101,15 +101,22 @@ module PointerContextExtensions =
                 let matrices =
                     let sizes = MatrixType.all |> List.map _.Dimension |> List.distinct
 
-                    primitives
-                    |> List.collect (fun struct (t, (_, a, typeSize)) ->
-                        sizes |> List.choose (fun s ->
-                            MatrixType.tryGet t s
-                            |> Option.map (fun vt ->
-                                struct (vt, struct (s, a, typeSize))
+                    let builtin =
+                        primitives
+                        |> List.collect (fun struct (t, (_, a, typeSize)) ->
+                            sizes |> List.choose (fun s ->
+                                MatrixType.tryGet t s
+                                |> Option.map (fun mt ->
+                                    struct (mt, struct (s, a, typeSize))
+                                )
                             )
                         )
-                    )
+
+                    let m24f =
+                        let mt = typeof<GLSLType.Interop.M24f>
+                        struct (mt, struct (V2i(4, 2), VertexAttribPointerType.Float, sizeof<float32>))
+
+                    m24f :: builtin
 
                 Dictionary.ofListV (primitives @ vectors @ colors @ matrices)
 
