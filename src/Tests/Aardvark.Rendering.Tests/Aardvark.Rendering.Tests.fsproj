@@ -77,6 +77,8 @@
     <Compile Include="Tests\Compute\Sorting.fs" />
     <Compile Include="Tests\Compute\Jpeg.fs" />
     <Compile Include="Tests\Compute\MutableInputBinding.fs" />
+    <Compile Include="Tests\Compute\PushConstants.fs" />
+    <Compile Include="Tests\Compute\DispatchIndirect.fs" />
     <Compile Include="Tests\Compute\ComputeTests.fs" />
     <Compile Include="Tests\Other\Camera.fs" />
     <Compile Include="Tests\Other\IndexedGeometryTests.fs" />

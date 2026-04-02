@@ -13,6 +13,8 @@ module ``Compute Tests`` =
         ComputeSorting.tests
         ComputeJpeg.tests
         MutableInputBinding.tests
+        PushConstants.tests
+        DispatchIndirect.tests
     ]
 
     [<Tests>]

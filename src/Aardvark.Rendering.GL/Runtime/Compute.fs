@@ -375,9 +375,20 @@ module internal ComputeTaskInternals =
                                 s.BindImageTexture(slot, TextureAccess.ReadWrite, binding.Pointer)
                         )
 
+                    | ComputeCommand.SetConstantCmd _ ->
+                        raise <| NotSupportedException("Constants are not supported.")
+
                     | ComputeCommand.DispatchCmd groups ->
                         do! CompilerState.assemble (fun _ s ->
                             s.DispatchCompute(groups.X, groups.Y, groups.Z)
+                        )
+
+                    | ComputeCommand.DispatchIndirectCmd (indirectBuffer, offset) ->
+                        let indirectBuffer = unbox<GL.Buffer> indirectBuffer
+
+                        do! CompilerState.assemble (fun _ s ->
+                            s.BindBuffer(BufferTarget.DispatchIndirectBuffer, indirectBuffer.Handle)
+                            s.DispatchComputeIndirect(nativeint offset)
                         )
 
                     | ComputeCommand.ExecuteCmd other ->
