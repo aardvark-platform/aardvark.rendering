@@ -451,6 +451,9 @@ type Runtime(device : Device) as this =
     member x.CreateInputBinding(shader : IComputeShader, inputs : IUniformProvider) : IComputeInputBinding =
         manager.CreateComputeInputBinding(shader, inputs)
 
+    member x.GetComputeConstant<'T>(shader : IComputeShader, name : Symbol) : IComputeConstant<'T> =
+        PushConstant<'T>(shader, name)
+
     member x.CompileCompute (commands : alist<ComputeCommand>) =
         new ComputeTask(manager, commands) :> IComputeTask
 
@@ -560,6 +563,9 @@ type Runtime(device : Device) as this =
 
         member x.CreateInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
             x.CreateInputBinding(shader, inputs)
+
+        member x.GetComputeConstant<'T>(shader : IComputeShader, name : Symbol) =
+            x.GetComputeConstant<'T>(shader, name)
 
         member x.CompileCompute (commands : alist<ComputeCommand>) =
             x.CompileCompute commands

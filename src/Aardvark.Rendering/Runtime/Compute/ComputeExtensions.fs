@@ -63,6 +63,10 @@ type IComputeRuntimeExtensions private() =
     static member Run(runtime : IComputeRuntime, commands : list<ComputeCommand>) =
         runtime.Run(commands, RenderToken.Empty)
 
+    [<Extension>]
+    static member GetComputeConstant<'T>(runtime : IComputeRuntime, shader : IComputeShader, name : string) =
+        runtime.GetComputeConstant<'T>(shader, Sym.ofString name)
+
 
 [<AbstractClass; Sealed; Extension>]
 type IComputeShaderExtensions private() =
@@ -70,6 +74,14 @@ type IComputeShaderExtensions private() =
     [<Extension>]
     static member CreateInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
         shader.Runtime.CreateInputBinding(shader, inputs)
+
+    [<Extension>]
+    static member GetConstant<'T>(shader : IComputeShader, name : Symbol) =
+        shader.Runtime.GetComputeConstant<'T>(shader, name)
+
+    [<Extension>]
+    static member GetConstant<'T>(shader : IComputeShader, name : string) =
+        shader.Runtime.GetComputeConstant<'T>(shader, name)
 
     [<Extension>]
     static member Invoke(shader : IComputeShader, groupCount : V3i, input : IComputeInputBinding, renderToken : RenderToken) =

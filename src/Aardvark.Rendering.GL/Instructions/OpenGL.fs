@@ -456,6 +456,7 @@ module OpenGl =
         let BindProgram  = getProcAddress "glUseProgram"
 
         let DispatchCompute = getProcAddress "glDispatchCompute"
+        let DispatchComputeIndirect = getProcAddress "glDispatchComputeIndirect"
         let GetInteger = getProcAddress "glGetIntegerv"
         let GetFloat = getProcAddress "glGetFloatv"
         let GetDouble = getProcAddress "glGetDoublev"

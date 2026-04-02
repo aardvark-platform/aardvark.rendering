@@ -65,6 +65,8 @@ let tests (targets: TestTarget list) =
             Compute.ComputeSorting.tests
             Compute.ComputeJpeg.tests
             Compute.MutableInputBinding.tests
+            Compute.PushConstants.tests
+            Compute.Dispatch.tests
         ]
 
         testAllTargets "Raytracing" [

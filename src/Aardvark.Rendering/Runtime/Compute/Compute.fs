@@ -26,6 +26,13 @@ and IComputeShader =
 and IComputeInputBinding =
     abstract member Shader : IComputeShader
 
+and IComputeConstant =
+    abstract member Shader : IComputeShader
+    abstract member Name : Symbol
+
+and IComputeConstant<'T> =
+    inherit IComputeConstant
+
 and IComputeRuntime =
     inherit IBufferRuntime
     inherit ITextureRuntime
@@ -33,6 +40,7 @@ and IComputeRuntime =
     abstract member MaxLocalSize : V3i
     abstract member CreateComputeShader : shader: FShade.ComputeShader -> IComputeShader
     abstract member CreateInputBinding : shader: IComputeShader * inputs: IUniformProvider -> IComputeInputBinding
+    abstract member GetComputeConstant<'T> : shader: IComputeShader * name: Symbol -> IComputeConstant<'T>
     abstract member CompileCompute : commands: alist<ComputeCommand> -> IComputeTask
 
 and [<RequireQualifiedAccess>]
@@ -44,7 +52,9 @@ and [<RequireQualifiedAccess>]
     ComputeCommand =
     | BindCmd                 of shader: IComputeShader
     | SetInputCmd             of input: IComputeInputBinding
+    | SetConstantCmd          of constant: IComputeConstant * data: obj
     | DispatchCmd             of groups: V3i
+    | DispatchIndirectCmd     of indirectBuffer: IBackendBuffer * offset: uint64
     | ExecuteCmd              of task: IComputeTask
     | CopyBufferCmd           of src: IBufferRange * dst: IBufferRange
     | DownloadBufferCmd       of src: IBufferRange * dst: HostMemory
@@ -66,6 +76,9 @@ and [<RequireQualifiedAccess>]
     static member SetInput(input : IComputeInputBinding) =
         ComputeCommand.SetInputCmd input
 
+    static member SetConstant<'T>(constant : IComputeConstant<'T>, value : 'T) =
+        ComputeCommand.SetConstantCmd(constant, value)
+
     static member Dispatch(groups : V3i) =
         ComputeCommand.DispatchCmd groups
 
@@ -74,6 +87,9 @@ and [<RequireQualifiedAccess>]
 
     static member Dispatch(groups : int) =
         ComputeCommand.DispatchCmd (V3i(groups, 1, 1))
+
+    static member DispatchIndirect(indirectBuffer : IBackendBuffer, [<Optional; DefaultParameterValue(0UL)>] offset : uint64) =
+        ComputeCommand.DispatchIndirectCmd(indirectBuffer, offset)
 
     static member Execute(task : IComputeTask) =
         ComputeCommand.ExecuteCmd task

@@ -83,6 +83,8 @@
     <Compile Include="Tests\Compute\Sorting.fs" />
     <Compile Include="Tests\Compute\Jpeg.fs" />
     <Compile Include="Tests\Compute\MutableInputBinding.fs" />
+    <Compile Include="Tests\Compute\PushConstants.fs" />
+    <Compile Include="Tests\Compute\Dispatch.fs" />
     <Compile Include="Tests\Raytracing\TraceGeometryTests.fs" />
     <Compile Include="Tests\IndexedGeometry\OperationsTests.fs" />
     <Compile Include="Tests\IndexedGeometry\SphereTests.fs" />

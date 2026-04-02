@@ -13,11 +13,41 @@ module internal ComputeTaskInternals =
         {
             Shader         : IComputeShader
             DescriptorSets : INativeResourceLocation<DescriptorSetBinding>
-            PushConstants  : IConstantResourceLocation<PushConstants> voption
         }
 
         interface IComputeInputBinding with
             member x.Shader = x.Shader
+
+    type PushConstant(shader: IComputeShader, name: Symbol, inputType: Type) =
+        let layout =
+            shader.PipelineLayout.PushConstants
+            |> ValueOption.defaultWith (fun _ -> failf "Compute shader does not use any push constants.")
+
+        let field =
+            layout.Buffer.ubFields
+            |> List.tryFindV (fun f -> f.ufName = string name)
+            |> ValueOption.defaultWith (fun _ -> failf $"Compute shader does not use push constant '{name}'.")
+
+        let writer =
+            match UniformWriters.tryGetWriter 0 field.ufType inputType with
+            | Result.Ok writer -> writer
+            | Result.Error msg -> failf $"Cannot get writer for compute constant '{name}': {msg}"
+
+        let size = GLSLType.sizeof field.ufType
+
+        member _.Size = size
+
+        member _.Write(stream: VKVM.CommandStream, value: obj, buffer: nativeint) =
+            writer.WriteUnsafeValue(value, buffer)
+            stream.PushConstants(shader.PipelineLayout.Handle, layout.StageFlags, uint32 field.ufOffset, uint32 size, buffer) |> ignore
+
+        interface IComputeConstant with
+            member _.Shader = shader
+            member _.Name = name
+
+    type PushConstant<'T>(shader: IComputeShader, name: Symbol) =
+        inherit PushConstant(shader, name, typeof<'T>)
+        interface IComputeConstant<'T>
 
     type ResourceManager with
 
@@ -28,15 +58,8 @@ module internal ComputeTaskInternals =
                 let sets = x.CreateDescriptorSets(shader.PipelineLayout, provider)
                 x.CreateDescriptorSetBinding(VkPipelineBindPoint.Compute, shader.PipelineLayout, sets)
 
-            let pushConstants =
-                shader.PipelineLayout.PushConstants |> ValueOption.map (fun pc ->
-                    x.CreatePushConstants(pc, provider)
-                )
-
             { Shader         = shader
-              DescriptorSets = descriptorSets
-              PushConstants  = pushConstants }
-
+              DescriptorSets = descriptorSets }
 
     [<RequireQualifiedAccess>]
     type private HostCommand =
@@ -59,10 +82,15 @@ module internal ComputeTaskInternals =
 
     type private CompilerState =
         {
-            Commands     : CompiledCommand list
-            UsedImages   : HashSet<Image>
-            ImageLayouts : HashMap<Image, VkImageLayout>
+            Commands        : CompiledCommand list
+            UsedImages      : HashSet<Image>
+            ImageLayouts    : HashMap<Image, VkImageLayout>
+            ConstantBuffers : nativeptr<uint8> list
         }
+
+        member this.Free() =
+            for cmd in this.Commands do cmd.Dispose()
+            for buf in this.ConstantBuffers do NativePtr.free buf
 
     type private ICompiledTask =
         abstract member State : CompilerState
@@ -93,9 +121,10 @@ module internal ComputeTaskInternals =
         module private CompilerState =
 
             let empty =
-                { Commands     = []
-                  UsedImages   = HashSet.empty
-                  ImageLayouts = HashMap.empty }
+                { Commands        = []
+                  UsedImages      = HashSet.empty
+                  ImageLayouts    = HashMap.empty
+                  ConstantBuffers = [] }
 
             let stream =
                 State.custom (fun s ->
@@ -127,7 +156,7 @@ module internal ComputeTaskInternals =
                 State.modify (fun s -> { s with UsedImages = s.UsedImages |> HashSet.add image })
 
             let usedImages =
-                State.get |> State.map (fun s -> s.UsedImages)
+                State.get |> State.map _.UsedImages
 
             let inline layout (image : Image) =
                 State.get |> State.map (fun s ->
@@ -149,6 +178,12 @@ module internal ComputeTaskInternals =
 
                     return oldLayout
                 }
+
+            let inline constantBuffer (constant: PushConstant) =
+                State.custom (fun s ->
+                    let buffer = NativePtr.alloc constant.Size
+                    { s with ConstantBuffers = buffer :: s.ConstantBuffers }, buffer
+                )
 
         [<AutoOpen>]
         module private CommandStreamExtensions =
@@ -262,13 +297,21 @@ module internal ComputeTaskInternals =
                         let input = unbox<ComputeInputBinding> input
                         let! stream = CompilerState.stream
                         stream.IndirectBindDescriptorSets(input.DescriptorSets.Pointer) |> ignore
-                        match input.PushConstants with
-                        | ValueSome pc -> stream.PushConstants(input.Shader.PipelineLayout.Handle, pc.Handle) |> ignore
-                        | _ -> ()
+
+                    | ComputeCommand.SetConstantCmd (constant, value) ->
+                        let constant = unbox<PushConstant> constant
+                        let! stream = CompilerState.stream
+                        let! buffer = CompilerState.constantBuffer constant
+                        constant.Write(stream, value, buffer.Address)
 
                     | ComputeCommand.DispatchCmd groups ->
                         let! stream = CompilerState.stream
                         stream.Dispatch(uint32 groups.X, uint32 groups.Y, uint32 groups.Z) |> ignore
+
+                    | ComputeCommand.DispatchIndirectCmd (indirectBuffer, offset) ->
+                        let! stream = CompilerState.stream
+                        let indirectBuffer = indirectBuffer |> unbox<Buffer>
+                        stream.DispatchIndirect(indirectBuffer.Handle, offset) |> ignore
 
                     | ComputeCommand.ExecuteCmd other ->
                         let compiled = unbox<ICompiledTask> other
@@ -415,7 +458,6 @@ module internal ComputeTaskInternals =
                             failf "unknown input binding type %A" (input.GetType())
 
                     resources.Add input.DescriptorSets
-                    input.PushConstants |> ValueOption.iter resources.Add
                     inputs.[index] <- input
 
                     ComputeCommand.SetInputCmd input
@@ -469,7 +511,6 @@ module internal ComputeTaskInternals =
                 // This way nothing will be released if the input just moved in the command list
                 for input in removedInputs do
                     resources.Remove input.DescriptorSets
-                    input.PushConstants |> ValueOption.iter resources.Remove
 
                 // Update all hooked compute programs
                 let mutable changed = deltas.Count > 0
@@ -479,7 +520,7 @@ module internal ComputeTaskInternals =
 
                 // Compile updated command list
                 if changed then
-                    for c in compiled.Commands do c.Dispose()
+                    compiled.Free()
                     compiled <- ComputeCommand.compile queueFlags commands
                     true
                 else
@@ -488,7 +529,6 @@ module internal ComputeTaskInternals =
             member x.Dispose() =
                 for KeyValue(_, input) in inputs do
                     resources.Remove input.DescriptorSets
-                    input.PushConstants |> ValueOption.iter resources.Remove
                 inputs.Clear()
 
                 for KeyValue(_, task) in nested do
@@ -497,7 +537,7 @@ module internal ComputeTaskInternals =
 
                 hooked.Clear()
                 commands <- IndexList.empty
-                for c in compiled.Commands do c.Dispose()
+                compiled.Free()
                 compiled <- CompilerState.empty
 
             interface IDisposable with

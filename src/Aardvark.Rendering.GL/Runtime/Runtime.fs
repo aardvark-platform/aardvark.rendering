@@ -193,6 +193,9 @@ type Runtime(debug : IDebugConfig) =
         member x.CreateInputBinding(shader, inputs) =
             x.CreateInputBinding(shader, inputs)
 
+        member x.GetComputeConstant<'T>(_, _) : IComputeConstant<'T> =
+            raise <| NotSupportedException("Constants are not supported.")
+
         member x.CompileCompute (commands) =
             x.CompileCompute commands
 
