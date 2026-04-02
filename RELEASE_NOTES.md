@@ -1,3 +1,9 @@
+### 5.7.0-prerelease0001
+- [Vulkan] Reworked loading of Vulkan library
+- [Vulkan] Added support for MoltenVK
+- Added ComputeCommand.SetConstantCmd
+- Added ComputeCommand.DispatchIndirectCmd
+
 ### 5.6.14
 - [GL] `LodRendererStats.converged` is now cleared with the input change itself; in 5.6.13 it could stay true for a few milliseconds after a camera change.
 
