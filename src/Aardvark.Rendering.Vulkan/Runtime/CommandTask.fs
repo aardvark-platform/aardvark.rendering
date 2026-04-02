@@ -517,9 +517,9 @@ module private RuntimeCommands =
 
             let writers =
                 types |> Map.map (fun name (input, typ) ->
-                    let size = GLSLType.sizeof input.paramType
-                    let writer = UniformWriters.getWriter 0 input.paramType typ
-                    writer
+                    match UniformWriters.tryGetWriter 0 input.paramType typ with
+                    | Result.Ok writer -> writer
+                    | Result.Error msg -> failf $"cannot get writer for instance attribute '{name}': {msg}"
                 )
 
 
@@ -1819,7 +1819,9 @@ module private RuntimeCommands =
 
         let instanceWriters =
             instanceInputs |> Map.map (fun name (i, typ) ->
-                UniformWriters.getWriter 0 i.paramType typ
+                match UniformWriters.tryGetWriter 0 i.paramType typ with
+                | Result.Ok writer -> writer
+                | Result.Error msg -> failf $"cannot get writer for uniform '{name}': {msg}"
             )
 
         let slotSems =

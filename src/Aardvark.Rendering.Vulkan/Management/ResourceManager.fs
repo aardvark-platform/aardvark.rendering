@@ -2087,11 +2087,9 @@ type ResourceManager(device : Device) =
     member inline private x.GetUniformWriters(values : struct (FShade.GLSL.GLSLUniformBufferField * IAdaptiveValue) list) =
         values |> List.map (fun struct (target, value) ->
             let writer =
-                try
-                    value.ContentType |> UniformWriters.getWriter target.ufOffset target.ufType
-                with
-                | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                    failf "cannot convert uniform '%s' from %A to %A" target.ufName exn.Source exn.Target
+                match value.ContentType |> UniformWriters.tryGetWriter target.ufOffset target.ufType with
+                | Result.Ok writer -> writer
+                | Result.Error msg -> failf $"cannot get writer for uniform '{target.ufName}': {msg}"
 
             struct (value, writer)
         )
