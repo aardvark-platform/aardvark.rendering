@@ -4,6 +4,8 @@ on:
   push:
     branches: 
       - vkvm-build
+    paths:
+      - .github/workflows/vkvm.yml
 jobs:
   windows-x64:
     name: Windows (x64)

@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - v57
     paths:
       - RELEASE_NOTES.md 
       - .github/workflows/publish.yml
