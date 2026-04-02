@@ -10,6 +10,13 @@ open Expecto
 
 module UniformWriter =
 
+    module private UniformWriters =
+
+        let getWriter (offset : int) (target : FShade.GLSL.GLSLType) (source : Type) =
+            match UniformWriters.tryGetWriter offset target source with
+            | Result.Ok writer -> writer
+            | Result.Error message -> failtestf "could not create uniform writer: %s" message
+
     module private Arr =
 
         let private targetCount = 3

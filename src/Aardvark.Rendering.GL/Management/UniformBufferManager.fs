@@ -77,11 +77,9 @@ type UniformBufferManager(ctx : Context) =
                 let writers =
                     (block.ubFields, values) ||> List.map2 (fun target value ->
                         let writer =
-                            try
-                                value.ContentType |> UniformWriters.getWriter target.ufOffset target.ufType
-                            with
-                            | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                                failf "cannot convert uniform '%s' from %A to %A" target.ufName exn.Source exn.Target
+                            match value.ContentType |> UniformWriters.tryGetWriter target.ufOffset target.ufType with
+                            | Result.Ok writer -> writer
+                            | Result.Error msg -> failf $"cannot get writer for uniform '{target.ufName}': {msg}"
 
                         value, writer
                     )

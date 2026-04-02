@@ -316,7 +316,12 @@ module GeometryPoolData =
             let buffers =
                 semantics |> MapExt.map (fun sem (glsl, input) ->
                     let elemSize = GLSLType.sizeof glsl
-                    let write = UniformWriters.getWriter 0 glsl input
+
+                    let write =
+                        match UniformWriters.tryGetWriter 0 glsl input with
+                        | Result.Ok writer -> writer
+                        | Result.Error msg -> failf $"cannot get writer for instance attribute '{sem}': {msg}"
+
                     totalSize <- totalSize + int64 count * int64 elemSize
 
                     let buffer =
