@@ -383,12 +383,12 @@ module internal ComputeTaskInternals =
                             s.DispatchCompute(groups.X, groups.Y, groups.Z)
                         )
 
-                    | ComputeCommand.DispatchIndirectCmd (indirectBuffer, offset) ->
-                        let indirectBuffer = unbox<GL.Buffer> indirectBuffer
+                    | ComputeCommand.DispatchIndirectCmd indirectBuffer ->
+                        let buffer = unbox<GL.Buffer> indirectBuffer.Buffer
 
                         do! CompilerState.assemble (fun _ s ->
-                            s.BindBuffer(BufferTarget.DispatchIndirectBuffer, indirectBuffer.Handle)
-                            s.DispatchComputeIndirect(nativeint offset)
+                            s.BindBuffer(BufferTarget.DispatchIndirectBuffer, buffer.Handle)
+                            s.DispatchComputeIndirect(nativeint indirectBuffer.Offset)
                         )
 
                     | ComputeCommand.ExecuteCmd other ->

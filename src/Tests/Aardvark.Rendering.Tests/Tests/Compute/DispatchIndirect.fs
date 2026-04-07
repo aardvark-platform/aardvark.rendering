@@ -35,10 +35,14 @@ module DispatchIndirect =
             use shader = runtime.CreateComputeShader(Shader.writeGlobalId)
             let input = shader.CreateInputBinding <| uniformMap { buffer "OutputBuffer" output }
 
+            let indirectBufferRange =
+                let start = if withOffset then 1 else 0
+                indirectBuffer.Coerce<V3i>().Elements(start)
+
             runtime.Run [
                 ComputeCommand.Bind shader
                 ComputeCommand.SetInput input
-                ComputeCommand.DispatchIndirect(indirectBuffer, if withOffset then 12UL else 0UL)
+                ComputeCommand.DispatchIndirect indirectBufferRange
             ]
 
             let expected =
