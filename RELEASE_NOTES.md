@@ -3,6 +3,7 @@
 - [Vulkan] Added support for MoltenVK
 - Added ComputeCommand.SetConstantCmd
 - Added ComputeCommand.DispatchIndirectCmd
+- Fixed support for 64-bit attributes and uniforms
 
 ### 5.6.4
 - [GL] Dispose MultimediaTimer in LodRenderer to avoid resource exhaustion

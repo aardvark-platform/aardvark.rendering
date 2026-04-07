@@ -22,9 +22,9 @@ nuget Aardvark.Base.Fonts                           ~> 5.3.20
 
 nuget Aardvark.Assembler                            ~> 0.1.0
 
-nuget FShade.Core                                   ~> 5.7.0
-nuget FShade                                        ~> 5.7.0
-nuget FShade.Debug                                  ~> 5.7.0
+nuget FShade.Core                                   ~> 5.7.3
+nuget FShade                                        ~> 5.7.3
+nuget FShade.Debug                                  ~> 5.7.3
 
 nuget Unofficial.OpenVR					            ~> 1.1.0
 nuget CommonMark.NET                                ~> 0.15.1

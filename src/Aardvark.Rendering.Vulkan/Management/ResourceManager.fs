@@ -922,9 +922,13 @@ module Resources =
 
             let inputAttributes =
                 paramsWithInputs |> List.collecti (fun binding struct (location, desc) ->
-                    desc.offsets |> List.mapi (fun i offset ->
+                    let slotsPerRow =
+                        let rowSize = VkFormat.pixelSizeInBytes desc.inputFormat
+                        (rowSize + 15) / 16
+
+                    desc.offsets |> List.mapi (fun row offset ->
                         VkVertexInputAttributeDescription(
-                            uint32 (location + i),
+                            uint32 (location + row * slotsPerRow),
                             uint32 binding,
                             desc.inputFormat,
                             uint32 offset

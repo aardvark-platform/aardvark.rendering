@@ -116,7 +116,11 @@ module PointerContextExtensions =
                         let mt = typeof<GLSLType.Interop.M24f>
                         struct (mt, struct (V2i(4, 2), VertexAttribPointerType.Float, sizeof<float32>))
 
-                    m24f :: builtin
+                    let m24d =
+                        let mt = typeof<GLSLType.Interop.M24d>
+                        struct (mt, struct (V2i(4, 2), VertexAttribPointerType.Double, sizeof<float>))
+
+                    m24f :: m24d :: builtin
 
                 Dictionary.ofListV (primitives @ vectors @ colors @ matrices)
 
