@@ -102,6 +102,7 @@ DllExport(void) vmInit()
 	glDrawArraysInstanced = (PFNGLDRAWARRAYSINSTANCEDPROC)getProc("glDrawArraysInstanced");
 	glDrawElementsBaseVertex = (PFNGLDRAWELEMENTSBASEVERTEXPROC)getProc("glDrawElementsBaseVertex");
 	glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)getProc("glVertexAttribPointer");
+	glVertexAttribLPointer = (PFNGLVERTEXATTRIBLPOINTERPROC)getProc("glVertexAttribLPointer");
 	glVertexAttribIPointer = (PFNGLVERTEXATTRIBIPOINTERPROC)getProc("glVertexAttribIPointer");
 	glUniform1fv = (PFNGLUNIFORM1FVPROC)getProc("glUniform1fv");
 	glUniform1iv = (PFNGLUNIFORM1IVPROC)getProc("glUniform1iv");
@@ -120,7 +121,7 @@ DllExport(void) vmInit()
 	glVertexAttrib4f = (PFNGLVERTEXATTRIB4FPROC)getProc("glVertexAttrib4f");
 
 	glVertexAttrib4fv = (PFNGLVERTEXATTRIB4FVPROC)getProc("glVertexAttrib4fv");
-	glVertexAttrib4dv = (PFNGLVERTEXATTRIB4DVPROC)getProc("glVertexAttrib4dv");
+	glVertexAttribL4dv = (PFNGLVERTEXATTRIB4DVPROC)getProc("glVertexAttribL4dv");
 
 	glVertexAttrib4sv = (PFNGLVERTEXATTRIB4SVPROC)getProc("glVertexAttrib4sv");
 	glVertexAttrib4iv = (PFNGLVERTEXATTRIB4IVPROC)getProc("glVertexAttrib4iv");
@@ -1273,8 +1274,11 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 				switch (b.Type)
 				{
 					case GL_FLOAT:
-					case GL_DOUBLE:
 						glVertexAttribPointer(b.Index, b.Size, b.Type, 0, b.Stride, (void*)(size_t)b.Offset);
+						break;
+
+					case GL_DOUBLE:
+						glVertexAttribLPointer(b.Index, b.Size, b.Type, b.Stride, (void*)(size_t)b.Offset);
 						break;
 
 					case GL_BYTE:
@@ -1323,8 +1327,7 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 					break;
 
 				case GL_DOUBLE:
-					// Note: Even if input is double, we assume that shader wants float (hence no L)
-					glVertexAttrib4dv(b.Index, (GLdouble*)&b.Value);
+					glVertexAttribL4dv(b.Index, (GLdouble*)&b.Value);
 					break;
 
 				case GL_BYTE:

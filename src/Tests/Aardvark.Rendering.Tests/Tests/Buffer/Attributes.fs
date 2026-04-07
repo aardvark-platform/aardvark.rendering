@@ -197,6 +197,18 @@ module AttributeBuffer =
                 TextureFormat.R32f 1234us [| 1234.0f |]
                 perInstance singleValue interleaved false runtime
 
+        let attributeDouble (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<float, float32> <@ float32 @>)
+                TextureFormat.R32f 43.3 [| 43.3f |]
+                perInstance singleValue interleaved false runtime
+
+        let attributeDoubleFromV4d (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<V4d, V4f> <@ v4f @>)
+                TextureFormat.R32f (V4d(43.3, 0.0, 0.0, 0.0)) [| 43.3f |]
+                perInstance singleValue interleaved false runtime
+
         let attributeInt8 (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
             runtime |> requireExtensionGL [NVGpuShader5]
 
@@ -281,11 +293,25 @@ module AttributeBuffer =
                 (V2f(424.0f, 22381.0f)) [| 424.0f; 22381.0f |]
                 perInstance singleValue interleaved false runtime
 
-        // Double to float conversion (Only GL)
-        let attributeV3fFromV3d (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+        let attributeV2d (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
             renderAttribute
-                AttributeShader.Effect<V3f> TextureFormat.Rgba32f
-                (V3d(424.0f, 22381.0f, -234.4f)) [| 424.0f; 22381.0f; -234.4f |]
+                (AttributeShader.EffectWithView<V2d, V2f> <@ v2f @>)
+                TextureFormat.Rg32f
+                (V2d(424.0, 22381.0)) [| 424.0f; 22381.0f |]
+                perInstance singleValue interleaved false runtime
+
+        let attributeV3d (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<V3d, V3f> <@ v3f @>)
+                TextureFormat.Rgba32f
+                (V3d(424.0, 22381.0, -41.0)) [| 424.0f; 22381.0f; -41.0f |]
+                perInstance singleValue interleaved false runtime
+
+        let attributeV4d (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                (AttributeShader.EffectWithView<V4d, V4f> <@ v4f @>)
+                TextureFormat.Rgba32f
+                (V4d(424.0, 22381.0, -41.0, -666.0)) [| 424.0f; 22381.0f; -41.0f; -666.0f |]
                 perInstance singleValue interleaved false runtime
 
         // Treat color as normalized float
@@ -322,6 +348,12 @@ module AttributeBuffer =
                 AttributeShader.Effect<V3f> TextureFormat.Rgba32f
                 C3ui.BurlyWood (C3ui.BurlyWood.ToC3fExact().ToArray())
                 perInstance singleValue interleaved true runtime
+
+        let attributeV4fFromC4f (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            renderAttribute
+                AttributeShader.Effect<V4f> TextureFormat.Rgba32f
+                C4f.DeepSkyBlue (C4f.DeepSkyBlue.ToArray())
+                perInstance singleValue interleaved false runtime
 
         let attributeC3bToC4us (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
             runtime |> requireVertexFormat Vulkan.VkFormat.B8g8r8Uint
@@ -376,12 +408,6 @@ module AttributeBuffer =
                 (AttributeShader.EffectWithView<C3f, C4ui> <@ c4ui @>)
                 TextureFormat.Rgba32ui
                 C3f.Brown (C3f.Brown.ToC4uiAsFloat().ToArray())
-                perInstance singleValue interleaved false runtime
-
-        let attributeV4f (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
-            renderAttribute
-                AttributeShader.Effect<V4f> TextureFormat.Rgba32f
-                C4f.DeepSkyBlue (C4f.DeepSkyBlue.ToArray())
                 perInstance singleValue interleaved false runtime
 
         let attributeV2i (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
@@ -452,6 +478,36 @@ module AttributeBuffer =
                 value [| 1.0f; 4.0f; 11.0f; 14.0f |]
                 perInstance singleValue interleaved false runtime
 
+        let attributeM23d (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            let value = M23d(Array.init 6 (id >> float))
+            let view = <@ fun (m : M23d) -> V3f(m.[0, 1], m.[1, 0], m.[1, 2]) @>
+
+            renderAttribute
+                (AttributeShader.EffectWithView<M23d, V3f> view)
+                TextureFormat.Rgba32f
+                value [| 1.0f; 3.0f; 5.0f |]
+                perInstance singleValue interleaved false runtime
+
+        let attributeM34d (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            let value = M34d(Array.init 12 (id >> float))
+            let view = <@ fun (m : M34d) -> V3f(m.[0, 1], m.[1, 0], m.[2, 3]) @>
+
+            renderAttribute
+                (AttributeShader.EffectWithView<M34d, V3f> view)
+                TextureFormat.Rgba32f
+                value [| 1.0f; 4.0f; 11.0f |]
+                perInstance singleValue interleaved false runtime
+
+        let attributeM44d (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
+            let value = M44d(Array.init 16 (id >> float))
+            let view = <@ fun (m : M44d) -> V4f m.R0 @>
+
+            renderAttribute
+                (AttributeShader.EffectWithView<M44d, V4f> view)
+                TextureFormat.Rgba32f
+                value (value.R0.ToV4f().ToArray())
+                perInstance singleValue interleaved false runtime
+
         let all = [
             "float32",                        attributeFloat32
             "float32 from V4f",               attributeFloat32FromV4f
@@ -463,6 +519,8 @@ module AttributeBuffer =
             "float32 from int16 scaled",      attributeFloat32FromInt16Scaled
             "float32 from uint16 normalized", attributeFloat32FromUInt16Norm
             "float32 from uint16 scaled",     attributeFloat32FromUInt16Scaled
+            "double",                         attributeDouble
+            "double from V4d",                attributeDoubleFromV4d
             "int8",                           attributeInt8
             "uint8",                          attributeUInt8
             "uint8 from C4b",                 attributeUInt8FromC4b
@@ -474,19 +532,21 @@ module AttributeBuffer =
             "uint32 from C3ui",               attributeUInt32FromC3ui
             "uint32 enum",                    attributeUInt32Enum
             "V2f",                            attributeV2f
-            "V3f from V3d",                   attributeV3fFromV3d
+            "V2d",                            attributeV2d
+            "V3d",                            attributeV3d
+            "V4d",                            attributeV4d
             "V3f from C4b normalized",        attributeV3fFromC4bNorm
             "V3f from C4b scaled",            attributeV3fFromC4bScaled
             "V3f from C3us normalized",       attributeV3fFromC3usNorm
             "V3f from C3us scaled",           attributeV3fFromC3usScaled
             "V3f from C3ui normalized",       attributeV3fFromC3uiNorm
+            "V4f from C4f",                   attributeV4fFromC4f
             "C3b to C4us",                    attributeC3bToC4us
             "C3b to C4ui",                    attributeC3bToC4ui
             "C3b to C4f",                     attributeC3bToC4f
             "C3f to C4b",                     attributeC3fToC4b
             "C3f to C4us",                    attributeC3fToC4us
             "C3f to C4ui",                    attributeC3fToC4ui
-            "V4f",                            attributeV4f
             "V2i",                            attributeV2i
             "V3i",                            attributeV3i
             "V4i",                            attributeV4i
@@ -496,6 +556,9 @@ module AttributeBuffer =
             "M23f",                           attributeM23f
             "M34f",                           attributeM34f
             "M44f",                           attributeM44f
+            "M23d",                           attributeM23d
+            "M34d",                           attributeM34d
+            "M44d",                           attributeM44d
         ]
 
     type private Layout =
@@ -540,11 +603,6 @@ module AttributeBuffer =
                 // only works for normalized float attributes.
                 // For single values we just fix the layout ourselves.
                 if backend = Backend.GL && Set.contains name bgrLayoutTests && not singleValue then
-                    ()
-
-                // Vulkan does not support converting double to float on-the-fly.
-                // Not really a good idea anyway :)
-                elif backend = Backend.Vulkan && name = "V3f from V3d" then
                     ()
 
                 // Vulkan does not have normalized 32bit formats (e.g. there is no VK_FORMAT_R32G32B32_UNORM)

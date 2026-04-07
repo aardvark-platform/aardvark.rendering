@@ -54,6 +54,43 @@ module GLSLType =
                 { M00 = float32 m.M00; M01 = float32 m.M01; M02 = float32 m.M02; M03 = 0.0f
                   M10 = float32 m.M10; M11 = float32 m.M11; M12 = float32 m.M12; M13 = 0.0f }
 
+        /// Type representing 2x4 matrices
+        /// Only used for padding rows of 2x3 matrices
+        [<Struct; StructLayout(LayoutKind.Sequential)>]
+        type M24d =
+            val M00 : float
+            val M01 : float
+            val M02 : float
+            val M03 : float
+            val M10 : float
+            val M11 : float
+            val M12 : float
+            val M13 : float
+
+            static do PrimitiveValueConverter.addConverters [
+                // padding for 2 row matrices
+                ( fun (i : M22f) -> M24d &i ) :> obj
+                ( fun (i : M22d) -> M24d &i ) :> obj
+                ( fun (i : M23f) -> M24d &i ) :> obj
+                ( fun (i : M23d) -> M24d &i ) :> obj
+            ]
+
+            new (m : inref<M22f>) =
+                { M00 = float m.M00; M01 = float m.M01; M02 = 0.0; M03 = 0.0
+                  M10 = float m.M10; M11 = float m.M11; M12 = 0.0; M13 = 0.0 }
+
+            new (m : inref<M22d>) =
+                { M00 = m.M00; M01 = m.M01; M02 = 0.0; M03 = 0.0
+                  M10 = m.M10; M11 = m.M11; M12 = 0.0; M13 = 0.0 }
+
+            new (m : inref<M23f>) =
+                { M00 = float m.M00; M01 = float m.M01; M02 = float m.M02; M03 = 0.0
+                  M10 = float m.M10; M11 = float m.M11; M12 = float m.M12; M13 = 0.0 }
+
+            new (m : inref<M23d>) =
+                { M00 = m.M00; M01 = m.M01; M02 = m.M02; M03 = 0.0
+                  M10 = m.M10; M11 = m.M11; M12 = m.M12; M13 = 0.0 }
+
         module Patterns =
             open TypeMeta
 
@@ -64,6 +101,7 @@ module GLSLType =
                 | MatrixOf r -> ValueSome r
                 | _ ->
                     if t = typeof<M24f> then ValueSome (V2i(4, 2), typeof<float32>)
+                    elif t = typeof<M24d> then ValueSome (V2i(4, 2), typeof<float>)
                     else ValueNone
 
     let toType =
@@ -83,7 +121,7 @@ module GLSLType =
 
             Float(16), typeof<float16>
             Float(32), typeof<float32>
-            Float(64), typeof<float32>
+            Float(64), typeof<float>
 
             Vec(3, Int(false, 8)), typeof<C3b>
             Vec(4, Int(false, 8)), typeof<C4b>
@@ -103,21 +141,21 @@ module GLSLType =
             Vec(3, Float(32)), typeof<V3f>
             Vec(4, Float(32)), typeof<V4f>
 
-            Vec(2, Float(64)), typeof<V2f>
-            Vec(3, Float(64)), typeof<V3f>
-            Vec(4, Float(64)), typeof<V4f>
+            Vec(2, Float(64)), typeof<V2d>
+            Vec(3, Float(64)), typeof<V3d>
+            Vec(4, Float(64)), typeof<V4d>
 
-            Mat(2,2,Float(32)), typeof<Interop.M24f> // Matrix rows need to be padded to 4 elements according to std140
-            Mat(2,3,Float(32)), typeof<Interop.M24f>
-            Mat(3,3,Float(32)), typeof<M34f>
-            Mat(3,4,Float(32)), typeof<M34f>
-            Mat(4,4,Float(32)), typeof<M44f>
+            Mat(2, 2, Float(32)), typeof<Interop.M24f> // Matrix rows need to be padded to 4 elements according to std140
+            Mat(2, 3, Float(32)), typeof<Interop.M24f>
+            Mat(3, 3, Float(32)), typeof<M34f>
+            Mat(3, 4, Float(32)), typeof<M34f>
+            Mat(4, 4, Float(32)), typeof<M44f>
 
-            Mat(2,2,Float(64)), typeof<Interop.M24f>
-            Mat(2,3,Float(64)), typeof<Interop.M24f>
-            Mat(3,3,Float(64)), typeof<M34f>
-            Mat(3,4,Float(64)), typeof<M34f>
-            Mat(4,4,Float(64)), typeof<M44f>
+            Mat(2, 2, Float(64)), typeof<M22d>
+            Mat(2, 3, Float(64)), typeof<Interop.M24d>
+            Mat(3, 3, Float(64)), typeof<M34d>
+            Mat(3, 4, Float(64)), typeof<M34d>
+            Mat(4, 4, Float(64)), typeof<M44d>
         ]
 
     let rec sizeof (t : GLSLType) =

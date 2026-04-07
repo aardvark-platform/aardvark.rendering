@@ -1,3 +1,5 @@
+- Fixed support for 64-bit attributes and uniforms
+
 ### 5.6.4
 - [GL] Dispose MultimediaTimer in LodRenderer to avoid resource exhaustion
 - [GL] Fixed M22f, M23f, M33f geometry attributes in LodRenderer
