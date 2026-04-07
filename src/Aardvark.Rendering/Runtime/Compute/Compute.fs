@@ -54,7 +54,7 @@ and [<RequireQualifiedAccess>]
     | SetInputCmd             of input: IComputeInputBinding
     | SetConstantCmd          of constant: IComputeConstant * data: obj
     | DispatchCmd             of groups: V3i
-    | DispatchIndirectCmd     of indirectBuffer: IBackendBuffer * offset: uint64
+    | DispatchIndirectCmd     of indirectBuffer: IBufferRange
     | ExecuteCmd              of task: IComputeTask
     | CopyBufferCmd           of src: IBufferRange * dst: IBufferRange
     | DownloadBufferCmd       of src: IBufferRange * dst: HostMemory
@@ -88,8 +88,8 @@ and [<RequireQualifiedAccess>]
     static member Dispatch(groups : int) =
         ComputeCommand.DispatchCmd (V3i(groups, 1, 1))
 
-    static member DispatchIndirect(indirectBuffer : IBackendBuffer, [<Optional; DefaultParameterValue(0UL)>] offset : uint64) =
-        ComputeCommand.DispatchIndirectCmd(indirectBuffer, offset)
+    static member DispatchIndirect(indirectBuffer : IBufferRange) =
+        ComputeCommand.DispatchIndirectCmd(indirectBuffer)
 
     static member Execute(task : IComputeTask) =
         ComputeCommand.ExecuteCmd task

@@ -308,10 +308,10 @@ module internal ComputeTaskInternals =
                         let! stream = CompilerState.stream
                         stream.Dispatch(uint32 groups.X, uint32 groups.Y, uint32 groups.Z) |> ignore
 
-                    | ComputeCommand.DispatchIndirectCmd (indirectBuffer, offset) ->
+                    | ComputeCommand.DispatchIndirectCmd indirectBuffer ->
                         let! stream = CompilerState.stream
-                        let indirectBuffer = indirectBuffer |> unbox<Buffer>
-                        stream.DispatchIndirect(indirectBuffer.Handle, offset) |> ignore
+                        let buffer = indirectBuffer.Buffer |> unbox<Buffer>
+                        stream.DispatchIndirect(buffer.Handle, indirectBuffer.Offset) |> ignore
 
                     | ComputeCommand.ExecuteCmd other ->
                         let compiled = unbox<ICompiledTask> other
