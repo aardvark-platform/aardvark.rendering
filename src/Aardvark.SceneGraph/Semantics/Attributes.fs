@@ -36,7 +36,9 @@ module AttributeSemantics =
             if scope.VertexIndexBuffer.IsNone then
                 match Map.tryFind DefaultSemantic.Positions app.Values with
                 | Some positions -> app.Child?FaceVertexCount <- BufferView.getCount positions
-                | _ -> ()
+                | _ -> app.Child?FaceVertexCount <- scope.FaceVertexCount
+            else
+                app.Child?FaceVertexCount <- scope.FaceVertexCount
 
         member x.InstanceAttributes(root : Root<ISg>, scope : Ag.Scope) = 
             root.Child?InstanceAttributes <- Map.empty<Symbol, BufferView>

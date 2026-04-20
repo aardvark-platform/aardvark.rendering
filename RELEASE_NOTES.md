@@ -1,4 +1,5 @@
 - Fixed support for 64-bit attributes and uniforms
+- [Sg] Fixed broken Ag rule for `FaceVertexCount`
 
 ### 5.6.4
 - [GL] Dispose MultimediaTimer in LodRenderer to avoid resource exhaustion
