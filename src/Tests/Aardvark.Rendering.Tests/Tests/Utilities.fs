@@ -334,18 +334,18 @@ module ``Expecto Extensions`` =
         let inline approxEqualAux< ^a, ^b when (^a or ^b) : (static member ApproximateEquals : ^a * ^a * float -> bool)> (_ : ^ b) (a : 'a) (b : 'a) (eps : float) =
             (((^a or ^b) : (static member ApproximateEquals : ^a * ^a * float -> bool) (a, b, eps)))
 
-        let inline approxEquals a b eps msg =
-            if not (approxEqualAux Unchecked.defaultof<Fun> a b eps) then
-                Expect.equal a b msg
+        let inline approxEquals actual expected eps msg =
+            if not (approxEqualAux Unchecked.defaultof<Fun> actual expected eps) then
+                Expect.equal actual expected msg
 
-        let inline relativeApproxEquals (a : float) (b : float) eps msg =
-            let scale = max (abs a) (abs b)
+        let inline relativeApproxEquals (actual: float) (expected: float) eps msg =
+            let scale = max (abs actual) (abs expected)
             if not (Fun.IsTiny(scale, eps)) then
-                let ra = a / scale
-                let rb = b / scale
+                let ra = actual / scale
+                let re = expected / scale
 
-                if not (Fun.ApproximateEquals(ra, rb, eps)) then
-                    Expect.equal a b msg
+                if not (Fun.ApproximateEquals(ra, re, eps)) then
+                    Expect.equal actual expected msg
 
     module ExpectoOverrides =
 

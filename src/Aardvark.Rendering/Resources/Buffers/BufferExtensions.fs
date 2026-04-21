@@ -342,6 +342,10 @@ type IBufferRangeExtensions private() =
 [<AbstractClass; Sealed; Extension>]
 type IBufferExtensions private() =
 
+    static let getAvailableCount (elementSize: uint64) (stride: uint64) (offset: uint64) (totalSize: uint64) =
+        let availableSize = if offset <= totalSize then totalSize - offset else 0UL
+        if availableSize >= elementSize then 1UL + (availableSize - elementSize) / stride else 0UL
+
     static let copyToArray (elementType: Type) (elementSize: uint64) (stride: uint64) (offset: uint64) (count: uint64) (src: nativeint) =
         let array = Array.CreateInstance(elementType, int64 count)
         let sizeInBytes = count * elementSize
@@ -369,30 +373,27 @@ type IBufferExtensions private() =
     ///<summary>Returns elements of a buffer as an array.</summary>
     ///<param name="buffer">The buffer from which to retrieve elements.</param>
     ///<param name="elementType">The element type of the buffer and resulting array.</param>
-    ///<param name="count">The number of elements to retrieve.</param>
+    ///<param name="count">The maximum number of elements to retrieve. Default is UInt64.MaxValue.</param>
     ///<param name="offset">Offset (in bytes) into the buffer. Default is 0.</param>
     ///<param name="stride">Number of bytes between elements or 0 for tightly packed data. Default is 0.</param>
     ///<returns>An array containing the buffer elements.</returns>
     [<Extension>]
-    static member ToArray(buffer: IBuffer, elementType: Type, count: uint64,
+    static member ToArray(buffer: IBuffer, elementType: Type,
+                          [<Optional; DefaultParameterValue(UInt64.MaxValue)>] count: uint64,
                           [<Optional; DefaultParameterValue(0UL)>] offset: uint64,
                           [<Optional; DefaultParameterValue(0UL)>] stride: uint64) : Array =
         let elementSize = uint64 elementType.CLRSize
         let stride = if stride = 0UL then elementSize else stride
-        let copySize = if count = 0UL then 0UL else stride * (count - 1UL) + elementSize
 
         match buffer with
-        | :? ArrayBuffer as buffer ->
-            if buffer.ElementType <> elementType then
-                raise <| InvalidCastException($"Expected ArrayBuffer with element type {elementType} but got {buffer.ElementType}.")
+        | :? ArrayBuffer as buffer when buffer.ElementType = elementType ->
+            let totalSize = uint64 buffer.Data.Length * elementSize
+            let available = getAvailableCount elementSize stride offset totalSize
+            let count = min available count
 
             if count = uint64 buffer.Data.Length && offset = 0UL && stride = elementSize then
                 buffer.Data
             else
-                let totalSize = uint64 buffer.Data.Length * elementSize
-                if copySize > totalSize - offset then
-                    raise <| ArgumentOutOfRangeException($"Cannot copy {copySize} bytes from ArrayBuffer with size {totalSize} starting at offset {offset}.")
-
                 if stride = elementSize && offset % elementSize = 0UL then
                     let result = Array.CreateInstance(elementType, int64 count)
                     Array.Copy(buffer.Data, int64 (offset / elementSize), result, 0L, int64 count)
@@ -401,14 +402,13 @@ type IBufferExtensions private() =
                     buffer.Data |> NativeInt.pin (copyToArray elementType elementSize stride offset count)
 
         | :? INativeBuffer as buffer ->
-            if copySize > buffer.SizeInBytes - offset then
-                raise <| ArgumentOutOfRangeException($"Cannot copy {copySize} bytes from INativeBuffer with size {buffer.SizeInBytes} starting at offset {offset}.")
-
+            let available = getAvailableCount elementSize stride offset buffer.SizeInBytes
+            let count = min available count
             buffer.Use(copyToArray elementType elementSize stride offset count)
 
         | :? IBackendBuffer as buffer ->
-            if copySize > buffer.SizeInBytes - offset then
-                raise <| ArgumentOutOfRangeException($"Cannot copy {copySize} bytes from IBackendBuffer with size {buffer.SizeInBytes} starting at offset {offset}.")
+            let available = getAvailableCount elementSize stride offset buffer.SizeInBytes
+            let count = min available count
 
             if stride = elementSize then
                 let result = Array.CreateInstance(elementType, int64 count)
@@ -417,6 +417,7 @@ type IBufferExtensions private() =
                 )
                 result
             else
+                let copySize = if count = 0UL then 0UL else stride * (count - 1UL) + elementSize
                 let tmp = Marshal.AllocHGlobal(nativeint copySize)
                 try
                     buffer.Download(offset, tmp, copySize)
@@ -429,12 +430,13 @@ type IBufferExtensions private() =
 
     ///<summary>Returns elements of a buffer as an array.</summary>
     ///<param name="buffer">The buffer from which to retrieve elements.</param>
-    ///<param name="count">The number of elements to retrieve.</param>
+    ///<param name="count">The maximum number of elements to retrieve. Default is UInt64.MaxValue.</param>
     ///<param name="offset">Offset (in bytes) into the buffer. Default is 0.</param>
     ///<param name="stride">Number of bytes between elements or 0 for tightly packed data. Default is 0.</param>
     ///<returns>An array containing the buffer elements.</returns>
     [<Extension>]
-    static member inline ToArray<'T when 'T : unmanaged>(buffer: IBuffer, count: uint64,
+    static member inline ToArray<'T when 'T : unmanaged>(buffer: IBuffer,
+                                                         [<Optional; DefaultParameterValue(UInt64.MaxValue)>] count: uint64,
                                                          [<Optional; DefaultParameterValue(0UL)>] offset: uint64,
                                                          [<Optional; DefaultParameterValue(0UL)>] stride: uint64) : 'T[] =
         buffer.ToArray(typeof<'T>, count, offset, stride) :?> 'T[]

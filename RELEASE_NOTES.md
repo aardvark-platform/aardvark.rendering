@@ -1,5 +1,6 @@
 - Fixed support for 64-bit attributes and uniforms
 - [Sg] Fixed broken Ag rule for `FaceVertexCount`
+- Made `IBuffer.ToArray` and `BufferView.download` robust to out-of-range arguments
 
 ### 5.6.4
 - [GL] Dispose MultimediaTimer in LodRenderer to avoid resource exhaustion

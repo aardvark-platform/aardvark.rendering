@@ -153,9 +153,15 @@ module BufferView =
                 int ((sizeInBytes - uint64 view.Offset) / uint64 view.ElementType.CLRSize)
             )
 
+    /// Retrieves up to count elements from the given buffer view as an array starting at startIndex.
+    /// If count < 0, all available elements are retrieved.
     let download (startIndex : int) (count : int) (view : BufferView) : aval<Array> =
+        let startIndex = max startIndex 0
+
         match view.SingleValue with
         | Some value ->
+            let count = if count < 0 then 1 else count
+
             value.Accept {
                 new IAdaptiveValueVisitor<_> with
                     member _.Visit(value) = value |> AVal.map (fun value -> Array.replicate count value :> Array)
