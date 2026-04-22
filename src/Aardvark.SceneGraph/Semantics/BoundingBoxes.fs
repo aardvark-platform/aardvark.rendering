@@ -5,227 +5,177 @@ open Aardvark.Base.Ag
 open Aardvark.Rendering
 open Aardvark.SceneGraph
 open FSharp.Data.Adaptive
+open System.Runtime.CompilerServices
+open TrafoOperators
 
 [<AutoOpen>]
 module BoundingBoxExtensions =
+    let private cache = ConditionalWeakTable<RenderObject, aval<Box3d>>()
 
-    open System.Runtime.CompilerServices
+    module internal Box3d =
+        let invalid = AVal.constant Box3d.Invalid
 
-    let private composeCache = BinaryCache<aval<Box3d>, aval<Box3d>, aval<Box3d>>(AVal.map2 (fun l r -> Box.Union(l,r)))
-    let private (<+>) l r = composeCache.Invoke(l,r)
-    let private invalid = AVal.constant Box3d.Invalid
+        let private union : Box3d -> Box3d -> Box3d = curry Box.Union
 
-    let private bbCache = ConditionalWeakTable<RenderObject, aval<Box3d>>()
-    
-    type RenderObject with
-        member x.GetBoundingBox() =
-            match bbCache.TryGetValue x with
-            | (true, v) -> v
-            | _ ->
-                let v =
-                    match x.VertexAttributes.TryGetAttribute DefaultSemantic.Positions with
-                    | ValueSome v ->
-                        v.Buffer |> AVal.bind (fun buffer ->
-                            match buffer with
-                            | :? ArrayBuffer as pos ->
-                                let trafo : aval<Trafo3d> = x.AttributeScope?ModelTrafo()
+        let private trySubtract (a: Box3d) (b: Box3d) =
+            if Vec.allGreater b.Min a.Min && Vec.allSmaller b.Max a.Max then
+                Some a
+            else
+                None
 
-                                AVal.map (fun trafo ->
-                                    let box = Box3d.op_Explicit (Box3f(pos.Data |> unbox<V3f[]>))
-                                    box
-                                ) trafo
+        let ofASet set = set |> ASet.foldHalfGroup union trySubtract Box3d.Invalid
+        let ofAList list = list |>  AList.foldHalfGroup union trySubtract Box3d.Invalid
 
-                            | _ ->
-                                failwithf "invalid positions in renderjob: %A" x
-                        )
-                    | _ ->
-                        failwithf "no positions in renderjob: %A" x
-                bbCache.Add(x,v)
-                v
+    module internal BoundingBox =
+        let compute (trafo: aval<Trafo3d>) (positionBuffer: BufferView) (indexBuffer: BufferView option) =
+            let positions : aval<V3d[]> =
+                positionBuffer
+                |> BufferView.download 0 -1
+                |> PrimitiveValueConverter.convertArray positionBuffer.ElementType
 
-    let rec private objBB (o : IRenderObject) =
-        match o with
-            | :? RenderObject as o -> o.GetBoundingBox()
-            | :? MultiRenderObject as o ->
-                let boxes = o.Children |> List.map objBB
-                AVal.custom (fun t ->
-                    boxes |> List.map (fun b -> b.GetValue t) |> Box3d
+            match indexBuffer with
+            | Some indexBuffer ->
+                let indices : aval<int[]> =
+                    indexBuffer
+                    |> BufferView.download 0 -1
+                    |> PrimitiveValueConverter.convertArray indexBuffer.ElementType
+
+                (positions, indices, trafo) |||> AVal.map3 (fun positions indices trafo ->
+                    let vertices = indices |> Array.map (fun i -> positions.[i] |> Mat.transformPos trafo.Forward)
+                    Box3d vertices
                 )
-            | :? IPreparedRenderObject as o ->
-                match o.Original with
-                    | Some o -> o.GetBoundingBox()
-                    | _ -> AVal.constant Box3d.Invalid
 
-            | :? CommandRenderObject as o ->
-                match cmdBB o.Command with
-                    | Some bb -> bb
-                    | None -> invalid
             | _ ->
-                invalid
+                (positions, trafo) ||> AVal.map2 (fun positions trafo ->
+                    let vertices = positions |> Array.map (Mat.transformPos trafo.Forward)
+                    Box3d vertices
+                )
 
-    and private cmdBB (c : RuntimeCommand) : Option<aval<Box3d>> =
-        match c with
-            | RuntimeCommand.EmptyCmd -> None
-            | RuntimeCommand.ClearCmd _ -> None
-            | RuntimeCommand.IfThenElseCmd(_,i,e) ->
-                match cmdBB i, cmdBB e with
-                    | Some i, Some e -> Some (i <+> e)
-                    | Some i, None -> Some i
-                    | None, Some e -> Some e
-                    | None, None -> None
-            | RuntimeCommand.DispatchCmd _ ->
-                None
-            | RuntimeCommand.OrderedCmd l ->
-                let merge (s : Box3d) (v : Box3d) : Box3d = Box.Union(s,v)
-                l |> AList.toASet |> ASet.choose cmdBB |> ASet.flattenA |> ASet.fold merge Box3d.Invalid |> Some
-    
-            | RuntimeCommand.RenderCmd objs ->
-                let merge (s : Box3d) (v : Box3d) : Box3d = Box.Union(s,v)
-                objs |> ASet.mapA objBB |> ASet.fold merge Box3d.Invalid |> Some
-            | _ ->
-                Log.warn "[Sg] bouningbox for %A not implemented" c 
-                None
+    type RenderObject with
+        member this.GetBoundingBox(scope: Scope) =
+            lock cache (fun _ ->
+                match cache.TryGetValue this with
+                | true, bb -> bb
+                | _ ->
+                    let bb =
+                        match this.VertexAttributes.TryGetAttribute DefaultSemantic.Positions with
+                        | ValueSome positionBuffer ->
+                            let trafo = this.AttributeScope.ModelTrafo <*> scope.ModelTrafo
+                            BoundingBox.compute trafo positionBuffer this.Indices
 
+                        | _ ->
+                            Box3d.invalid
+
+                    cache.Add(this, bb)
+                    bb
+            )
+
+        member this.GetBoundingBox() = this.GetBoundingBox Scope.Root
+
+    let rec private objBB (scope: Scope) (ro : IRenderObject) =
+        match ro with
+        | :? RenderObject as ro ->
+            ro.GetBoundingBox scope
+
+        | :? MultiRenderObject as ro ->
+            if ro.Children.IsEmpty then
+                Box3d.invalid
+            else
+                let boxes = ro.Children |> List.map (objBB scope)
+                AVal.custom (fun t -> boxes |> List.map (fun b -> b.GetValue t) |> Box3d)
+
+        | :? IPreparedRenderObject as ro ->
+            match ro.Original with
+            | Some ro -> ro.GetBoundingBox scope
+            | _ -> Box3d.invalid
+
+        | :? CommandRenderObject as o ->
+            cmdBB scope o.Command
+
+        | _ ->
+            Box3d.invalid
+
+    and private cmdBB (scope: Scope) (cmd: RuntimeCommand) =
+        match cmd with
+        | RuntimeCommand.EmptyCmd ->
+            Box3d.invalid
+
+        | RuntimeCommand.ClearCmd _ ->
+            Box3d.invalid
+
+        | RuntimeCommand.IfThenElseCmd (c, t, f) ->
+            let t = cmdBB scope t
+            let f = cmdBB scope f
+            c |> AVal.bind (fun c -> if c then t else f)
+
+        | RuntimeCommand.DispatchCmd _ ->
+            Box3d.invalid
+
+        | RuntimeCommand.OrderedCmd commands ->
+            commands |> AList.mapA (cmdBB scope) |> Box3d.ofAList
+
+        | RuntimeCommand.RenderCmd objects ->
+            objects |> ASet.mapA (objBB scope) |> Box3d.ofASet
+
+        | RuntimeCommand.LodTreeCmd _
+        | RuntimeCommand.GeometriesCmd _
+        | RuntimeCommand.GeometriesSimpleCmd _ ->
+            Log.warn "[Sg] Bounding box computation for %A not implemented" cmd
+            Box3d.invalid
 
     type IRenderObject with
-        member x.GetBoundingBox() = objBB x
+        member this.GetBoundingBox(scope: Scope) = objBB scope this
+        member this.GetBoundingBox() = this.GetBoundingBox Scope.Root
+
     type RuntimeCommand with
-        member x.GetBoundingBox() = cmdBB x
+        member this.GetBoundingBox(scope: Scope) = cmdBB scope this |> Some
+        member this.GetBoundingBox() = this.GetBoundingBox Scope.Root
+
 [<AutoOpen>]
 module BoundingBoxes =
 
     type ISg with
-        member x.GlobalBoundingBox(scope : Ag.Scope) : aval<Box3d> = x?GlobalBoundingBox(scope)
-        member x.LocalBoundingBox(scope : Ag.Scope)  : aval<Box3d> = x?LocalBoundingBox(scope)
+        member this.GlobalBoundingBox(scope: Scope) : aval<Box3d> = this?GlobalBoundingBox(scope)
+        member this.LocalBoundingBox(scope: Scope)  : aval<Box3d> = this?LocalBoundingBox(scope)
 
     module Semantic =
-        let globalBoundingBox (scope : Ag.Scope) (sg : ISg) : aval<Box3d> = sg?GlobalBoundingBox(scope)
-        let localBoundingBox  (scope : Ag.Scope) (sg : ISg) : aval<Box3d> = sg?LocalBoundingBox(scope)
-
-
-    let private trySub (b : Box3d) (d : Box3d) =
-        if d.Min.AllGreater b.Min && d.Max.AllSmaller b.Max then
-            Some b
-        else
-            None
-
+        let globalBoundingBox (scope: Scope) (sg: ISg) : aval<Box3d> = sg?GlobalBoundingBox(scope)
+        let localBoundingBox  (scope: Scope) (sg: ISg) : aval<Box3d> = sg?LocalBoundingBox(scope)
 
     [<Rule>]
-    type GlobalBoundingBoxSem() =
+    type internal BoundingBoxSem() =
+        member _.GlobalBoundingBox(r : Sg.RenderObjectNode, scope: Scope) : aval<Box3d> =
+            r.Objects |> ASet.mapA _.GetBoundingBox(scope) |> Box3d.ofASet
 
-        let boxFromArray (v : V3d[]) = if v.Length = 0 then Box3d.Invalid else Box3d v
-
-        member x.GlobalBoundingBox(r : Sg.RenderObjectNode, scope : Ag.Scope) : aval<Box3d> =
-            r.Objects |> ASet.mapA (fun o -> o.GetBoundingBox()) |> ASet.fold  (curry Box.Union) Box3d.Invalid
-
-        member x.LocalBoundingBox(r : Sg.RenderObjectNode, scope : Ag.Scope) : aval<Box3d> =
-            r.GlobalBoundingBox(scope)
-
-        member x.GlobalBoundingBox(r : Sg.IndirectRenderNode, scope : Ag.Scope) : aval<Box3d> =
-            AVal.constant Box3d.Infinite
-
-        member x.LocalBoundingBox(r : Sg.IndirectRenderNode, scope : Ag.Scope) : aval<Box3d> =
-            AVal.constant Box3d.Infinite
-
-        member x.GlobalBoundingBox(node : Sg.RenderNode, scope : Ag.Scope) : aval<Box3d> =
-            let va = scope.VertexAttributes
-            let positions : BufferView = 
-                match Map.tryFind DefaultSemantic.Positions va with
-                    | Some v -> v
-                    | _ -> failwith "no positions specified"
-
-            adaptive {
-                let! buffer =  positions.Buffer
-                match buffer with
-                    | :? ArrayBuffer as ab ->
-                        let positions = ab.Data |> unbox<V3f[]>
-
-                        let! trafo = scope.ModelTrafo
-                        match scope.VertexIndexBuffer with
-                            | None -> 
-                                    return positions |> Array.map (fun p -> trafo.Forward.TransformPos(V3d p)) |> boxFromArray
-                            | Some indices ->
-                                let! indices = indices.Buffer
-                                match indices with
-                                    | :? ArrayBuffer as b ->
-                                        let indices = b.Data
-                                        let filteredPositions = if indices.GetType().GetElementType() = typeof<uint16> 
-                                                                then indices |> unbox<uint16[]> |> Array.map (fun i -> positions.[int i])
-                                                                else indices |> unbox<int[]> |> Array.map (fun i -> positions.[i])
-                                        return filteredPositions |> Array.map (fun p -> trafo.Forward.TransformPos(V3d p)) |> boxFromArray
-                                    | _ ->
-                                        return failwithf "unknown IBuffer for indices: %A" indices
-                                            
-
-                    | _ ->
-                        return failwithf "unknown IBuffer for positions: %A" buffer
-            }
-
-        member x.GlobalBoundingBox(app : IGroup, scope : Ag.Scope) : aval<Box3d> =
-            app.Children 
-                |> ASet.mapA (fun sg -> sg.GlobalBoundingBox(scope) ) 
-                |> ASet.foldHalfGroup (curry Box.Union) trySub Box3d.Invalid
-            
-        member x.GlobalBoundingBox(n : IApplicator, scope : Ag.Scope) : aval<Box3d> = 
-            adaptive {
-                let! low = n.Child
-                return! low.GlobalBoundingBox(scope)
-            }
+        member this.LocalBoundingBox(r : Sg.RenderObjectNode, scope: Scope) : aval<Box3d> =
+            this.GlobalBoundingBox(r, scope)
 
 
-    [<Rule>]
-    type LocalBoundingBoxSem() =
+        member _.GlobalBoundingBox(_: Sg.IndirectRenderNode, _: Scope) : aval<Box3d> =
+            Box3d.invalid
 
-        let boxFromArray (v : V3f[]) = if v.Length = 0 then Box3d.Invalid else Box3d (Box3f v)
-        let transform (bb : Box3d) (t : Trafo3d) = bb.Transformed t
+        member this.LocalBoundingBox(r: Sg.IndirectRenderNode, scope: Scope) : aval<Box3d> =
+            this.GlobalBoundingBox(r, scope)
 
 
-        member x.LocalBoundingBox(node : Sg.RenderNode, scope : Ag.Scope) : aval<Box3d> =
-            let va = scope.VertexAttributes
-            let positions : BufferView = 
-                match Map.tryFind DefaultSemantic.Positions va with
-                    | Some v -> v
-                    | _ -> failwith "no positions specified"
+        member _.GlobalBoundingBox(_: Sg.RenderNode, scope: Scope) : aval<Box3d> =
+            match scope.VertexAttributes |> Map.tryFindV DefaultSemantic.Positions with
+            | ValueSome positionBuffer -> BoundingBox.compute scope.ModelTrafo positionBuffer scope.VertexIndexBuffer
+            | _ -> Box3d.invalid
 
-            adaptive {
-                let! buffer = positions.Buffer
-                match buffer with
-                    | :? ArrayBuffer as ab ->
-                        let positions = ab.Data |> unbox<V3f[]>
+        member this.LocalBoundingBox(r: Sg.RenderNode, scope: Scope) : aval<Box3d> =
+            this.GlobalBoundingBox(r, scope)
 
-                        match scope.VertexIndexBuffer with
-                            | None -> 
-                                    return positions |> boxFromArray
-                            | Some indices ->
-                                let! indices = indices.Buffer
-                                match indices with
-                                    | :? ArrayBuffer as b ->
-                                        let indices = b.Data
-                                        let filteredPositions = if indices.GetType().GetElementType() = typeof<uint16> 
-                                                                then indices |> unbox<uint16[]> |> Array.map (fun i -> positions.[int i])
-                                                                else indices |> unbox<int[]> |> Array.map (fun i -> positions.[i])
-                                        return filteredPositions |> boxFromArray
-                                    | _ ->
-                                        return failwithf "unknown IBuffer for indices: %A" indices
-                    | _ ->
-                        return failwithf "unknown IBuffer for positions: %A" buffer
-            }
-            
-        member x.LocalBoundingBox(app : IGroup, scope : Ag.Scope) : aval<Box3d> =
-            app.Children 
-                |> ASet.mapA (fun sg -> sg.LocalBoundingBox(scope)) 
-                |> ASet.foldHalfGroup (curry Box.Union) trySub Box3d.Invalid
 
-        member x.LocalBoundingBox(app : Sg.TrafoApplicator, scope : Ag.Scope) : aval<Box3d> =  
-            adaptive {
-                let! c = app.Child
-                let! bb = c.LocalBoundingBox(scope) : aval<Box3d>
-                let! trafo = app.Trafo
-                return transform bb trafo
-            }
+        member _.GlobalBoundingBox(app: IGroup, scope: Scope) : aval<Box3d> =
+            app.Children |> ASet.mapA _.GlobalBoundingBox(scope) |> Box3d.ofASet
 
-        member x.LocalBoundingBox(n : IApplicator, scope : Ag.Scope) : aval<Box3d> = 
-            adaptive {
-                let! low = n.Child
-                return! low.LocalBoundingBox(scope)
-            }
+        member this.LocalBoundingBox(app: IGroup, scope: Scope) : aval<Box3d> =
+            this.GlobalBoundingBox(app, scope)
+
+
+        member _.GlobalBoundingBox(app: IApplicator, scope: Scope) : aval<Box3d> =
+            app.Child |> AVal.bind _.GlobalBoundingBox(scope)
+
+        member this.LocalBoundingBox(app: IApplicator, scope: Scope) : aval<Box3d> =
+            this.GlobalBoundingBox(app, scope)

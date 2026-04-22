@@ -1,4 +1,5 @@
 - Fixed support for 64-bit attributes and uniforms
+- Fixed various issues with `GlobalBoundingBox` and `LocalBoundingBox`. Both attributes are now equivalent.
 - Made `IBuffer.ToArray` and `BufferView.download` robust to out-of-range arguments
 - [Sg] Fixed broken Ag rule for `FaceVertexCount`
 - [Sg] Added `rotation` and `rotation'`

@@ -49,6 +49,8 @@ module Rnd =
     let c4b() = C4b(uint8(), uint8(), uint8(), 255uy)
     let c4f() = C4f(float32(), float32(), float32(), 1.0f)
 
+    let v3d() = V3d(float(), float(), float())
+
     let enum<'T>() =
         let values = Enum.GetValues(typeof<'T>) :?> 'T[]
         values.[rng.UniformInt values.Length]
