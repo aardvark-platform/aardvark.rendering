@@ -1,5 +1,7 @@
 - Fixed support for 64-bit attributes and uniforms
 - Fixed various issues with `GlobalBoundingBox` and `LocalBoundingBox`. Both attributes are now equivalent.
+- Fixed `PickObjects` attribute for render nodes with `TriangleStrip` and `TriangleAdjacencyList` topologies
+- Added `PickTree` intersection methods using `ValueOption` rather than `Option`
 - Made `IBuffer.ToArray` and `BufferView.download` robust to out-of-range arguments
 - [Sg] Fixed broken Ag rule for `FaceVertexCount`
 - [Sg] Added `rotation` and `rotation'`
