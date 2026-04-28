@@ -359,7 +359,7 @@ module Buffer =
         let key = (memory, export, usage, alignment)
 
         let buffer =
-            emptyBuffers.GetOrAdd(key, fun (memory, export, usage, alignment) ->
+            emptyBuffers.GetOrAdd(key, fun (memory, export, usage, alignment as key) ->
                 lazy (
                     let device = memory.Device
                     let buffer =

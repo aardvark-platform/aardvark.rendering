@@ -1147,35 +1147,37 @@ module Image =
 
     /// Returns an uninitialized image with size 8 in each dimension, used as NullTexture counter-part
     let internal getNull =
-        let store = ConcurrentDictionary<Device * ImageProperties, Image>()
+        let store = ConcurrentDictionary<Device * ImageProperties, Lazy<Image>>()
 
         fun (properties : ImageProperties) (device : Device) ->
             let image =
-                store.GetOrAdd((device, properties), fun key ->
-                    let size = V3i 8
-                    let format = VkFormat.ofTextureFormat properties.Format
-                    let samples = if properties.IsMultisampled then 2 else 1
-                    let image =
-                        let img = device |> create properties.Dimension defaultUsage format 1 1 samples size
-                        img.Name <- "Null"
+                store.GetOrAdd((device, properties), fun (device, properties as key) ->
+                    lazy (
+                        let size = V3i 8
+                        let format = VkFormat.ofTextureFormat properties.Format
+                        let samples = if properties.IsMultisampled then 2 else 1
+                        let image =
+                            let img = device |> create properties.Dimension defaultUsage format 1 1 samples size
+                            img.Name <- "Null"
 
-                        { new Image(img) with
-                            override x.Name
-                                with get() = base.Name
-                                and set name = ()
+                            { new Image(img) with
+                                override x.Name
+                                    with get() = base.Name
+                                    and set name = ()
+                            }
+
+                        device.perform {
+                            do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
                         }
 
-                    device.perform {
-                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
-                    }
+                        device.OnDispose.Add(fun _ ->
+                            store.TryRemove key |> ignore
+                            image.Dispose()
+                        )
 
-                    device.OnDispose.Add(fun _ ->
-                        store.TryRemove key |> ignore
-                        image.Dispose()
+                        image
                     )
-
-                    image
-                )
+                ).Value
 
             image.AddReference()
             image
