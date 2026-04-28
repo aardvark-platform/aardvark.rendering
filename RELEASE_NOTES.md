@@ -1,3 +1,4 @@
+### 5.6.5
 - Fixed support for 64-bit attributes and uniforms
 - Fixed various issues with `GlobalBoundingBox` and `LocalBoundingBox`. Both attributes are now equivalent.
 - Fixed `PickObjects` attribute for render nodes with `TriangleStrip` and `TriangleAdjacencyList` topologies
@@ -5,6 +6,7 @@
 - Made `IBuffer.ToArray` and `BufferView.download` robust to out-of-range arguments
 - [Sg] Fixed broken Ag rule for `FaceVertexCount`
 - [Sg] Added `rotation` and `rotation'`
+- Replaced `Marshal.Copy`/`Marshal.Set` calls in `UniformWriters.NewWriters` with managed `Buffer.MemoryCopy`/`Span<byte>.Clear` so wasm builds (which lack `msvcrt.dll`/`libc`) can write array uniforms
 
 ### 5.6.4
 - [GL] Dispose MultimediaTimer in LodRenderer to avoid resource exhaustion
