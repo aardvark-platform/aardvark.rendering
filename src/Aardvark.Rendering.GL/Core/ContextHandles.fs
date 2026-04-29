@@ -204,6 +204,12 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         | Some dbg -> dbg.GetErrors()
         | _ -> [||]
 
+    /// Returns all messages reported by the debug output.
+    member x.GetDebugMessages() =
+        match debugOutput with
+        | Some dbg -> dbg.GetMessages()
+        | _ -> [||]
+
     member x.PrintDebug(typ: DebugType, severity: DebugSeverity, id: int, message: string) =
         match debugOutput with
         | Some dbg -> dbg.Print(typ, severity, id, message)

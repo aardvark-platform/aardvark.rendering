@@ -530,7 +530,11 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     /// Returns all errors reported by the debug output on the resource context handles.
     member x.GetDebugErrors() =
-        resourceContexts |> Array.collect (fun h -> h.GetDebugErrors())
+        resourceContexts |> Array.collect _.GetDebugErrors()
+
+    /// Returns all messages reported by the debug output on the resource context handles.
+    member x.GetDebugMessages() =
+        resourceContexts |> Array.collect _.GetDebugMessages()
 
     member x.PrintDebug(typ: DebugType, severity: DebugSeverity, id: int, message: string) =
         match ContextHandle.Current with

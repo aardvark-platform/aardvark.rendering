@@ -1,3 +1,5 @@
+- [GL] Added `Context.GetDebugMessages`
+
 ### 5.6.5
 - Fixed support for 64-bit attributes and uniforms
 - Fixed various issues with `GlobalBoundingBox` and `LocalBoundingBox`. Both attributes are now equivalent.
