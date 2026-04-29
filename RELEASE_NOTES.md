@@ -1,4 +1,5 @@
 - [GL] Added `Context.GetDebugMessages`
+- [GL] Added `Context.OnDispose`
 
 ### 5.6.5
 - Fixed support for 64-bit attributes and uniforms

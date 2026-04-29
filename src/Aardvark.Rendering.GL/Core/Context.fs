@@ -210,6 +210,9 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     let shaderCache = new ShaderCache()
 
+    let onDispose = Event<unit>()
+    let onDisposeObservable = onDispose.Publish
+
     let mutable isDisposed = 0
 
     let mutable driverInfo : Option<Driver> = None
@@ -285,6 +288,8 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
     member x.Runtime = runtime
 
     member x.IsDisposed = isDisposed = 1
+
+    member x.OnDispose = onDisposeObservable :> IObservable<_>
 
     member x.Driver =
         getOrQuery "driver info" &driverInfo Driver.readInfo
@@ -571,6 +576,8 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
     member x.Dispose() =
         if Interlocked.Exchange(&isDisposed, 1) = 0 then
             try
+                onDispose.Trigger()
+
                 shaderCache.Dispose()
 
                 for c in resourceContexts do
