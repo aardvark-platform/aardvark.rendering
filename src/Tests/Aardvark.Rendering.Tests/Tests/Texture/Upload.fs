@@ -145,8 +145,11 @@ module TextureUpload =
             let randomBuffer = randomTask |> RenderTask.renderToColor (AVal.init <| V2i(256))
             randomBuffer.Acquire()
 
-            try randomBuffer.GetValue() |> ignore
-            finally randomBuffer.Release()
+            let random =
+                try
+                    randomBuffer.GetValue().Download().AsPixImage<uint8>()
+                finally
+                    randomBuffer.Release()
 
             use task =
                 Sg.fullScreenQuad
@@ -155,11 +158,29 @@ module TextureUpload =
                 |> Sg.compile runtime signature
 
             // Render sampling the null texture.
-            // We can't check the result since null textures are uninitialized, just make sure there are no errors.
+            // We can't check the result since null textures are uninitialized, just make sure there are no errors, and we
+            // get a different result than with the random texture.
             let buffer = task |> RenderTask.renderToColor (AVal.init <| V2i(256))
             buffer.Acquire()
-            try buffer.GetValue() |> ignore
-            finally buffer.Release()
+
+            let result =
+                try
+                    buffer.GetValue().Download().AsPixImage<uint8>()
+                finally
+                    buffer.Release()
+
+            Expect.equal result.Size random.Size "Unexpected result size"
+            Expect.notEqual result.Data random.Data "Output with null texture matches output with random texture"
+
+            // Make sure we bound a real texture by checking the GL debug output
+            match runtime with
+            | :? GL.Runtime as runtime ->
+                let messages = runtime.Context.GetDebugMessages()
+                for msg in messages do
+                    if msg.Message.Contains "The texture object (0) bound" then
+                        failtest msg.Message
+            | _ ->
+                ()
 
         let texture1DNull (runtime : IRuntime) =
             let diffuseSampler =
@@ -725,6 +746,21 @@ module TextureUpload =
 
             runtime |> renderQuadWithNullTexture shader randomTexture
 
+        let private renderRandomToTexture2D (texture: IBackendTexture) (runtime: IRuntime) =
+            use signature = runtime.CreateFramebufferSignature([DefaultSemantic.Colors, TextureFormat.Rgba8], samples = texture.Samples)
+            use framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, texture.GetOutputView()])
+
+            use ss = runtime.CreateTexture2D(texture.Size.XY, TextureFormat.Rgba8)
+            ss.Upload(PixImage.random8ui texture.Size.XY)
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.diffuseTexture' ss
+                |> Sg.shader { do! DefaultSurfaces.diffuseTexture }
+                |> Sg.compile runtime signature
+
+            task.Run(framebuffer)
+
         let texture2DNullMultisampled (runtime : IRuntime) =
             let diffuseSampler =
                 sampler2dMS {
@@ -736,7 +772,8 @@ module TextureUpload =
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return diffuseSampler.Read(V2i.Zero, 0)
+                    let p = V2i (v.tc * V2f diffuseSampler.Size.XY)
+                    return diffuseSampler.Read(p, 0)
                 }
 
             let shader =
@@ -744,7 +781,12 @@ module TextureUpload =
                     do! diffuseTexture
                 }
 
-            runtime |> renderQuadWithNullTexture shader nullTexture
+            use randomTexture =
+                let texture = runtime.CreateTexture2D(V2i(8, 8), TextureFormat.Rgba8, samples = 2)
+                renderRandomToTexture2D texture runtime
+                texture
+
+            runtime |> renderQuadWithNullTexture shader randomTexture
 
         let texture2DNullMultisampledArray (runtime : IRuntime) =
             let diffuseSampler =
@@ -757,7 +799,8 @@ module TextureUpload =
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return diffuseSampler.Read(V2i.Zero, 0, 0)
+                    let p = V2i (v.tc * V2f diffuseSampler.Size.XY)
+                    return diffuseSampler.Read(p, 0, 0)
                 }
 
             let shader =
@@ -765,7 +808,12 @@ module TextureUpload =
                     do! diffuseTexture
                 }
 
-            runtime |> renderQuadWithNullTexture shader nullTexture
+            use randomTexture =
+                let texture = runtime.CreateTexture2DArray(V2i(8, 8), TextureFormat.Rgba8, samples = 2, count = 1)
+                renderRandomToTexture2D texture runtime
+                texture
+
+            runtime |> renderQuadWithNullTexture shader randomTexture
 
         let texture2DNullInt(runtime : IRuntime) =
             let diffuseSampler =
@@ -778,7 +826,8 @@ module TextureUpload =
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return V4f(diffuseSampler.Read(V2i.Zero, 0))
+                    let p = V2i (v.tc * V2f diffuseSampler.Size.XY)
+                    return V4f(diffuseSampler.Read(p, 0))
                 }
 
             let shader =
@@ -798,11 +847,12 @@ module TextureUpload =
                     filter Filter.MinMagLinear
                     addressU WrapMode.Clamp
                     addressV WrapMode.Clamp
+                    comparison ComparisonFunction.LessOrEqual
                 }
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return V4f(diffuseSampler.Sample(v.tc, 0.0f))
+                    return V4f(diffuseSampler.Sample(v.tc, 0.5f))
                 }
 
             let shader =
@@ -810,7 +860,10 @@ module TextureUpload =
                     do! diffuseTexture
                 }
 
-            runtime |> renderQuadWithNullTexture shader nullTexture
+            use randomTexture = runtime.CreateTexture2D(V2i(8, 8), TextureFormat.DepthComponent32f)
+            randomTexture.Upload(PixImage.random32f' Col.Format.Gray <| V2i(8, 8))
+
+            runtime |> renderQuadWithNullTexture shader randomTexture
 
         let texture2DStreaming (runtime : IRuntime) =
             let texture = runtime.CreateStreamingTexture(false)
@@ -997,7 +1050,6 @@ module TextureUpload =
                 else
                     runtime.CreateTextureCube(size, fmt, levels)
 
-
             try
                 let target = texture.[TextureAspect.Color, level, slice]
                 target.Upload(data, regionOffset, regionSize)
@@ -1114,7 +1166,8 @@ module TextureUpload =
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return diffuseSampler.Sample(V3f.Zero)
+                    let tc = v.tc * 2.0f - 1.0f
+                    return diffuseSampler.Sample(V3f(tc.X, -tc.Y, 1.0f)) // +Z face (slice = 4)
                 }
 
             let shader =
@@ -1122,7 +1175,10 @@ module TextureUpload =
                     do! diffuseTexture
                 }
 
-            runtime |> renderQuadWithNullTexture shader nullTexture
+            use randomTexture = runtime.CreateTextureCube(8, TextureFormat.Rgba8)
+            randomTexture.Upload(PixImage.random8ui <| V2i(8, 8), slice = 4)
+
+            runtime |> renderQuadWithNullTexture shader randomTexture
 
         let textureCubeNullArray (runtime : IRuntime) =
             let diffuseSampler =
@@ -1135,7 +1191,8 @@ module TextureUpload =
 
             let diffuseTexture (v : Effects.Vertex) =
                 fragment {
-                    return diffuseSampler.Sample(V3f.Zero, 32)
+                    let tc = v.tc * 2.0f - 1.0f
+                    return diffuseSampler.Sample(V3f(tc.X, -tc.Y, 1.0f), 0) // +Z face (slice = 4)
                 }
 
             let shader =
@@ -1143,7 +1200,10 @@ module TextureUpload =
                     do! diffuseTexture
                 }
 
-            runtime |> renderQuadWithNullTexture shader nullTexture
+            use randomTexture = runtime.CreateTextureCubeArray(8, TextureFormat.Rgba8, count = 1)
+            randomTexture.Upload(PixImage.random8ui <| V2i(8, 8), slice = 4)
+
+            runtime |> renderQuadWithNullTexture shader randomTexture
 
     let tests (backend : Backend) =
         [

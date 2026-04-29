@@ -366,13 +366,13 @@ module ContextTextureUploadExtensions =
                     Texture.uploadPixVolume texture info.HasWantMipMaps 0 V3i.Zero data
                     texture
 
-                | :? NullTexture ->
+                | :? Aardvark.Rendering.NullTexture ->
                     let properties =
                         match properties with
                         | ValueSome p -> p
                         | _ -> failf "cannot prepare null texture without properties"
 
-                    Texture.empty properties
+                    Texture.getNull properties this
 
                 | :? Texture as o ->
                     o

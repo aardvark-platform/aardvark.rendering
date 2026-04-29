@@ -89,13 +89,12 @@ type Texture =
             GL.DeleteTexture x.Handle
             ResourceCounts.removeTexture x.Context x.SizeInBytes
             GL.Check "could not delete texture"
+            x.Handle <- 0
 
         member x.Dispose() =
-            if notNull x.Context then // NullTexture has no context
-                using x.Context.ResourceLock (fun _ ->
-                    x.Destroy()
-                    x.Handle <- 0
-                )
+            using x.Context.ResourceLock (fun _ ->
+                x.Destroy()
+            )
 
         interface IBackendTexture with
             member x.Runtime = x.Context.Runtime :> ITextureRuntime
@@ -148,6 +147,15 @@ type Texture =
             new Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, cnt, isArray, format)
     end
 
+type internal NullTexture(inner : Texture) =
+    inherit Texture(inner.Context, inner.Handle, inner.Dimension, inner.MipMapLevels, inner.Multisamples,
+                    V3i.Zero, inner.Count, inner.IsArray, inner.Format, inner.SizeInBytes)
+    override this.Destroy() = ()
+
+    override _.Name
+        with get() = base.Name
+        and set _ = ()
+
 type internal SharedTexture(ctx : Context, handle : int, external : IExportedBackendTexture, memory : SharedMemoryBlock) =
     inherit Texture(ctx, handle,
                     external.Dimension, external.MipMapLevels, external.Samples, external.Size,
@@ -168,10 +176,12 @@ type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension
         GL.DeleteTexture x.Handle
         ResourceCounts.removeTextureView x.Context
         GL.Check "could not delete texture view"
+        x.Handle <- 0
 
 // Used for determining the bind target of null textures
 type internal TextureProperties =
     { Dimension      : TextureDimension
+      Format         : TextureFormat
       IsMultisampled : bool
       IsArray        : bool }
 
@@ -184,13 +194,25 @@ module internal TextureUtilitiesAndExtensions =
 
     type FShade.GLSL.GLSLSamplerType with
         member x.Properties =
+            let format =
+                if x.isShadow then TextureFormat.DepthComponent32f
+                elif x.IsInteger then TextureFormat.Rgba8i
+                else TextureFormat.Rgba8
+
             { Dimension      = x.dimension.TextureDimension
+              Format         = format
               IsMultisampled = x.isMS
               IsArray        = x.isArray }
 
     type FShade.GLSL.GLSLImageType with
         member x.Properties =
+            let format =
+                match x.format with
+                | Some fmt -> fmt.TextureFormat
+                | _ -> if x.IsInteger then TextureFormat.Rgba8i else TextureFormat.Rgba8
+
             { Dimension      = x.dimension.TextureDimension
+              Format         = format
               IsMultisampled = x.isMS
               IsArray        = x.isArray }
 
@@ -658,14 +680,36 @@ module TextureCreationExtensions =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Texture =
 
-    let private emptyStore = ConcurrentDictionary<TextureProperties, Texture>()
+    let internal getNull =
+        let store = ConcurrentDictionary<Context * TextureProperties, Lazy<NullTexture>>()
 
-    let internal empty (properties : TextureProperties) =
-        emptyStore.GetOrAdd(properties, fun _ ->
-            let count = if properties.IsArray then Some 1 else None
-            let samples = if properties.IsMultisampled then 2 else 1
-            new Texture(null, 0, properties.Dimension, 1, samples, V3i.Zero, count, TextureFormat.Rgba8, 0L)
-        )
+        fun (properties : TextureProperties) (context : Context) ->
+            let texture =
+                store.GetOrAdd((context, properties), fun (context, properties as key) ->
+                    lazy (
+                        let inner =
+                            let count = if properties.IsArray then 1 else 0
+                            let samples = if properties.IsMultisampled then 2 else 1
+
+                            context.CreateTexture(
+                                V3i 8, properties.Dimension, properties.Format,
+                                slices = count, levels = 1, samples = samples
+                            )
+
+                        inner.Name <- "Null"
+                        let texture = new NullTexture(inner)
+
+                        context.OnDispose.Add(fun _ ->
+                            store.TryRemove key |> ignore
+                            inner.Dispose()
+                            texture.Handle <- 0
+                        )
+
+                        texture
+                    )
+                ).Value
+
+            texture :> Texture
 
     let create1D (c : Context) (size : int) (mipLevels : int) (format : TextureFormat) =
         c.CreateTexture1D(size, mipLevels, format)

@@ -300,7 +300,7 @@ type ITextureRuntimeExtensions private() =
                          [<Optional; DefaultParameterValue(0)>] slice : int,
                          [<Optional; DefaultParameterValue(V2i())>] offset : V2i,
                          [<Optional; DefaultParameterValue(V2i())>] size : V2i) =
-        this.Upload(texture.[TextureAspect.Color, level, slice], source, offset, size)
+        this.Upload(texture.[texture.Format.Aspect, level, slice], source, offset, size)
 
     // ================================================================================================================
     // Upload 3D
@@ -344,7 +344,7 @@ type ITextureRuntimeExtensions private() =
                          [<Optional; DefaultParameterValue(0)>] slice : int,
                          [<Optional; DefaultParameterValue(V3i())>] offset : V3i,
                          [<Optional; DefaultParameterValue(V3i())>] size : V3i) =
-        this.Upload(texture.[TextureAspect.Color, level, slice], source, offset, size)
+        this.Upload(texture.[texture.Format.Aspect, level, slice], source, offset, size)
 
 
     // ================================================================================================================
