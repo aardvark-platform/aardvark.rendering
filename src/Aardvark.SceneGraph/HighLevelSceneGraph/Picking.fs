@@ -10,6 +10,7 @@ open Aardvark.SceneGraph
 module ``Sg Picking Extensions`` =
     open Aardvark.SceneGraph.Semantics
 
+    [<RequireQualifiedAccess>]
     type PickShape =
         | Box           of Box3d
         | Sphere        of Sphere3d
@@ -23,13 +24,13 @@ module ``Sg Picking Extensions`` =
     module PickShape =
         let bounds (p : PickShape) =
             match p with
-            | Box b            -> b
-            | Sphere s         -> s.BoundingBox3d
-            | Cylinder c       -> c.BoundingBox3d
-            | Triangle t       -> t.BoundingBox3d
-            | Triangles b      -> b.Bounds
-            | TriangleArray ts -> Box3d(ts |> Array.map _.BoundingBox3d)
-            | Custom(b, _)     -> b
+            | PickShape.Box b            -> b
+            | PickShape.Sphere s         -> s.BoundingBox3d
+            | PickShape.Cylinder c       -> c.BoundingBox3d
+            | PickShape.Triangle t       -> t.BoundingBox3d
+            | PickShape.Triangles b      -> b.Bounds
+            | PickShape.TriangleArray ts -> Box3d(ts |> Array.map _.BoundingBox3d)
+            | PickShape.Custom(b, _)     -> b
 
     type Pickable = { trafo : Trafo3d; shape : PickShape }
 
@@ -77,18 +78,18 @@ module ``Sg Picking Extensions`` =
                     None
 
             match p.shape with
-            | Box b -> RayPart.Intersects(local, b) |> getRealT
-            | Sphere s -> RayPart.Intersects(local, s) |> getRealT
-            | Cylinder c -> RayPart.Intersects(local, c) |> getRealT
-            | Triangle t -> RayPart.Intersects(local, t) |> getRealT
-            | Triangles kdtree -> KdTree.intersect intersectTriangle local kdtree |> Option.map _.T |> getRealT
-            | TriangleArray arr ->
+            | PickShape.Box b -> RayPart.Intersects(local, b) |> getRealT
+            | PickShape.Sphere s -> RayPart.Intersects(local, s) |> getRealT
+            | PickShape.Cylinder c -> RayPart.Intersects(local, c) |> getRealT
+            | PickShape.Triangle t -> RayPart.Intersects(local, t) |> getRealT
+            | PickShape.Triangles kdtree -> KdTree.intersect intersectTriangle local kdtree |> Option.map _.T |> getRealT
+            | PickShape.TriangleArray arr ->
                 let hits = arr |> Array.chooseV (fun t -> RayPart.IntersectsV(local, t))
                 if hits.Length > 0 then
                     hits |> Array.min |> Some |> getRealT
                 else
                     None
-            | Custom(_, intersect) -> intersect local |> getRealT
+            | PickShape.Custom(_, intersect) -> intersect local |> getRealT
 
         let private intersectTriangleV (part : RayPart) (tri : Triangle3d) =
             match RayPart.IntersectsV(part, tri) with
@@ -109,18 +110,18 @@ module ``Sg Picking Extensions`` =
                     ValueNone
 
             match p.shape with
-            | Box b -> RayPart.IntersectsV(local, b) |> getRealT
-            | Sphere s -> RayPart.IntersectsV(local, s) |> getRealT
-            | Cylinder c -> RayPart.IntersectsV(local, c) |> getRealT
-            | Triangle t -> RayPart.IntersectsV(local, t) |> getRealT
-            | Triangles kdtree -> KdTree.intersectV intersectTriangleV local kdtree |> ValueOption.map _.T |> getRealT
-            | TriangleArray arr ->
+            | PickShape.Box b -> RayPart.IntersectsV(local, b) |> getRealT
+            | PickShape.Sphere s -> RayPart.IntersectsV(local, s) |> getRealT
+            | PickShape.Cylinder c -> RayPart.IntersectsV(local, c) |> getRealT
+            | PickShape.Triangle t -> RayPart.IntersectsV(local, t) |> getRealT
+            | PickShape.Triangles kdtree -> KdTree.intersectV intersectTriangleV local kdtree |> ValueOption.map _.T |> getRealT
+            | PickShape.TriangleArray arr ->
                 let hits = arr |> Array.chooseV (fun t -> RayPart.IntersectsV(local, t))
                 if hits.Length > 0 then
                     hits |> Array.min |> ValueSome |> getRealT
                 else
                     ValueNone
-            | Custom(_, intersect) -> intersect local |> Option.toValueOption |> getRealT
+            | PickShape.Custom(_, intersect) -> intersect local |> Option.toValueOption |> getRealT
 
     type PickObject(scope : Scope, pickable : aval<Pickable>) =
         member x.Scope = scope
