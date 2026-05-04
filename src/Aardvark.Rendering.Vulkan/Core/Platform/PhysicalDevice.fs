@@ -201,10 +201,6 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
         let properties = x.GetFormatProperties(format)
         if tiling = VkImageTiling.Optimal then properties.optimalTilingFeatures else properties.linearTilingFeatures
 
-    [<Obsolete("Use GetImageFormatFeatures instead.")>]
-    member x.GetFormatFeatures(tiling : VkImageTiling, fmt : VkFormat) =
-        x.GetImageFormatFeatures(fmt, tiling)
-
     member internal x.GetImageProperties(format : VkFormat, typ : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags,
                                          flags : VkImageCreateFlags, external : VkExternalMemoryHandleTypeFlags) =
         let key = (format, typ, tiling, usage, flags, external)

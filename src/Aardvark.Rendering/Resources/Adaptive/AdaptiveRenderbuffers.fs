@@ -172,17 +172,3 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
                                 [<Optional; DefaultParameterValue(-1)>] slice : int) =
         let aspect = texture |> AVal.mapNonAdaptive _.Format.Aspect
         AdaptiveTextureAttachment(texture, aspect, ~~level, ~~slice) :> IAdaptiveFramebufferOutput
-
-    [<Extension; System.Obsolete("Use texture.GetOutputView() instead. Note that slice and level parameter positions are switched.")>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#IBackendTexture>, slice : aval<int>, level : aval<int>) =
-        texture.GetOutputView(level, slice)
-
-    [<Extension; System.Obsolete("Use texture.GetOutputView() instead. Note that slice and level parameter positions are switched.")>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#IBackendTexture>, slice : aval<int>) =
-        texture.GetOutputView(~~0, slice)
-
-    [<Extension; System.Obsolete("Use texture.GetOutputView() instead. Note that slice and level parameter positions are switched.")>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#IBackendTexture>,
-                                          [<Optional; DefaultParameterValue(-1)>] slice : int,
-                                          [<Optional; DefaultParameterValue(0)>] level : int) =
-        texture.GetOutputView(level, slice)
