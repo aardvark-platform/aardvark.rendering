@@ -327,6 +327,14 @@ module SgFSharp =
 
 
         /// Rotates the scene by the given Euler angles.
+        let rotation (rollPitchYawInRadians : aval<V3d>) (sg : ISg) =
+            sg |> trafo (rollPitchYawInRadians |> AVal.map Trafo3d.RotationEuler)
+
+        /// Rotates the scene by the given Euler angles.
+        let rotation' (rollPitchYawInRadians : V3d) (sg : ISg) =
+            sg |> transform (Trafo3d.RotationEuler rollPitchYawInRadians)
+
+        /// Rotates the scene by the given Euler angles.
         let rotate (rollInRadians : float) (pitchInRadians : float) (yawInRadians : float) (sg : ISg) =
             sg |> transform (Trafo3d.RotationEuler(rollInRadians, pitchInRadians, yawInRadians))
 

@@ -140,56 +140,82 @@ open Aardvark.SceneGraph
 [<AutoOpen>]
 module RuntimeCommandSemantics =
 
-    module private RuntimeCommand =
-        let rec ofRenderCommand (scope : Ag.Scope) (parent : ISg) (cmd : RenderCommand) =
+    module private RenderCommand =
+        let rec toRuntimeCommand (scope : Ag.Scope) (cmd : RenderCommand) =
             match cmd with
-                | RenderCommand.REmpty ->
-                    RuntimeCommand.Empty
+            | RenderCommand.REmpty ->
+                RuntimeCommand.Empty
 
-                | RenderCommand.RUnorderedScenes scenes ->
-                    let objects = scenes |> ASet.collect (fun s -> s.RenderObjects(scope))
-                    RuntimeCommand.Render(objects)
+            | RenderCommand.RUnorderedScenes scenes ->
+                let objects = scenes |> ASet.collect _.RenderObjects(scope)
+                RuntimeCommand.Render(objects)
 
-                | RenderCommand.RClear values ->
-                    RuntimeCommand.Clear(values)
+            | RenderCommand.RClear values ->
+                RuntimeCommand.Clear(values)
 
-                | RenderCommand.RGeometries(config, geometries) ->
-                    let effect =
-                        match scope.Surface with
-                            | Surface.Effect e -> e
-                            | s -> failwithf "[Sg] cannot create GeometryCommand with shader: %A" s
+            | RenderCommand.RGeometries(config, geometries) ->
+                let effect =
+                    match scope.Surface with
+                    | Surface.Effect e -> e
+                    | s -> failwithf "[Sg] cannot create GeometryCommand with shader: %A" s
 
-                    let state =
-                        { PipelineState.ofScope scope with
-                            Mode                = config.mode
-                            VertexInputTypes    = config.vertexInputTypes
-                            PerGeometryUniforms = config.perGeometryUniforms }
+                let state =
+                    { PipelineState.ofScope scope with
+                        Mode                = config.mode
+                        VertexInputTypes    = config.vertexInputTypes
+                        PerGeometryUniforms = config.perGeometryUniforms }
 
-                    RuntimeCommand.Geometries(effect, state, geometries)
+                RuntimeCommand.Geometries(effect, state, geometries)
 
-                | RenderCommand.ROrdered(list) ->
-                    let commands = list |> AList.map (ofRenderCommand scope parent)
-                    RuntimeCommand.Ordered(commands)
+            | RenderCommand.ROrdered(list) ->
+                let commands = list |> AList.map (toRuntimeCommand scope)
+                RuntimeCommand.Ordered(commands)
 
-                | RenderCommand.RIfThenElse(c,t,f) ->
-                    RuntimeCommand.IfThenElse(c, ofRenderCommand scope parent t, ofRenderCommand scope parent f)
+            | RenderCommand.RIfThenElse(c, t, f) ->
+                RuntimeCommand.IfThenElse(c, toRuntimeCommand scope t, toRuntimeCommand scope f)
 
-                | RenderCommand.RLodTree(config,g) ->
-                    let state =
-                        { PipelineState.ofScope scope with
-                            Mode                = config.mode
-                            VertexInputTypes    = config.vertexInputTypes
-                            PerGeometryUniforms = config.perGeometryUniforms }
+            | RenderCommand.RLodTree(config, g) ->
+                let state =
+                    { PipelineState.ofScope scope with
+                        Mode                = config.mode
+                        VertexInputTypes    = config.vertexInputTypes
+                        PerGeometryUniforms = config.perGeometryUniforms }
 
-                    RuntimeCommand.LodTree(scope.Surface, state, g)
+                RuntimeCommand.LodTree(scope.Surface, state, g)
+
+        let rec getBoundingBox (scope : Ag.Scope) (cmd : RenderCommand) =
+            match cmd with
+            | RenderCommand.REmpty ->
+                Box3d.invalid
+
+            | RenderCommand.RClear _ ->
+                Box3d.invalid
+
+            | RenderCommand.RIfThenElse (c, t, f) ->
+                let t = getBoundingBox scope t
+                let f = getBoundingBox scope f
+                c |> AVal.bind (fun c -> if c then t else f)
+
+            | RenderCommand.ROrdered commands ->
+                commands |> AList.mapA (getBoundingBox scope) |> Box3d.ofAList
+
+            | RenderCommand.RUnorderedScenes objects ->
+                objects |> ASet.mapA _.GlobalBoundingBox(scope) |> Box3d.ofASet
+
+            | RenderCommand.RLodTree _
+            | RenderCommand.RGeometries _ ->
+                Log.warn "[Sg] Bounding box computation for %A not implemented" cmd
+                Box3d.invalid
 
     [<Rule>]
     type RuntimeCommandSem() =
         member x.RenderObjects(n : Sg.RuntimeCommandNode, scope : Ag.Scope) : aset<IRenderObject> =
-            let cmd = n.Command
-            let runtimeCommand = RuntimeCommand.ofRenderCommand scope n cmd
-
-            let pass = scope.RenderPass
-
-            let obj = CommandRenderObject(pass, scope, runtimeCommand)
+            let runtimeCommand = n.Command |> RenderCommand.toRuntimeCommand scope
+            let obj = CommandRenderObject(scope.RenderPass, scope, runtimeCommand)
             ASet.single (obj :> IRenderObject)
+
+        member _.GlobalBoundingBox(n : Sg.RuntimeCommandNode, scope : Ag.Scope) : aval<Box3d> =
+            n.Command |> RenderCommand.getBoundingBox scope
+
+        member this.LocalBoundingBox(n : Sg.RuntimeCommandNode, scope: Ag.Scope) : aval<Box3d> =
+            this.GlobalBoundingBox(n, scope)

@@ -77,14 +77,39 @@ module private IGraphicsContextDebugExtensions =
                 else None
             )
 
+type DebugMessage =
+    { Id        : int
+      Type      : DebugType
+      Source    : DebugSource
+      Severity  : DebugSeverity
+      Message   : String
+      UserParam : nativeint }
+
 [<AutoOpen>]
 module private DebugOutputInternals =
     type GLDebugMessageCallbackDel = delegate of callback : nativeint * userData : nativeint -> unit
 
-    let debugCallback (debugErrors : System.Collections.Generic.List<string>)
+    [<Literal>]
+    let private maxMessageCount = 4096
+
+    let debugCallback (debugMessages : System.Collections.Generic.Queue<DebugMessage>)
                       (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity)
                       (length : int) (message : nativeint) (userParam : nativeint) =
         let message = Marshal.PtrToStringAnsi(message, length)
+
+        lock debugMessages (fun _ ->
+            while debugMessages.Count >= maxMessageCount do
+                debugMessages.Dequeue() |> ignore
+
+            debugMessages.Enqueue {
+                Id        = id
+                Type      = debugType
+                Source    = debugSource
+                Severity  = severity
+                Message   = message
+                UserParam = userParam
+            }
+        )
 
         match severity with
         | DebugSeverity.DebugSeverityNotification ->
@@ -96,7 +121,6 @@ module private DebugOutputInternals =
             | _ -> Report.Warn("[GL:{0}] {1}", userParam, message)
 
         | DebugSeverity.DebugSeverityHigh ->
-            lock debugErrors (fun _ -> debugErrors.Add message)
             Report.Error("[GL:{0}] {1}", userParam, message)
 
         | _ ->
@@ -109,7 +133,7 @@ type internal DebugOutputMode =
 
 type internal DebugOutput private (context: OpenTK.ContextHandle) =
     let mutable mode = DebugOutputMode.Disabled
-    let errors = ResizeArray<string>()
+    let messages = System.Collections.Generic.Queue<DebugMessage>()
     let mutable callback = null
 
     let maxDebugMessageLength = GL.GetInteger(unbox<GetPName> 0x9143)
@@ -133,14 +157,26 @@ type internal DebugOutput private (context: OpenTK.ContextHandle) =
     member inline this.IsSynchronous = match this.Mode with | DebugOutputMode.Enabled s -> s | _ -> false
 
     member _.GetErrors() =
-        lock errors (fun _ -> errors.ToArray())
+        lock messages (fun _ ->
+            messages
+            |> Seq.choose (fun msg ->
+                if msg.Severity = DebugSeverity.DebugSeverityHigh then
+                    Some msg.Message
+                else
+                    None
+            )
+            |> Seq.toArray
+        )
+
+    member _.GetMessages() =
+        lock messages (fun _ -> messages.ToArray())
 
     member this.Enable(synchronous: bool, verbosity: DebugOutputSeverity) =
         if not this.IsEnabled then
             GL.Enable(EnableCap.DebugOutput)
             GL.Check "cannot enable debug output"
 
-            callback <- DebugProc (debugCallback errors)
+            callback <- DebugProc (debugCallback messages)
             GL.DebugMessageCallback(callback, context.Handle)
             GL.Check "failed to set debug message callback"
 

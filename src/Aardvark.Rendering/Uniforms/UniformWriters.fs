@@ -323,6 +323,18 @@ module UniformWriters =
             override x.TargetSize =
                 writer.TargetSize
 
+        // Managed memcpy/memset replacements. Avoid Aardvark.Base's
+        // Marshal.Copy/Set extensions which P/Invoke msvcrt.dll / libc
+        // (broken on wasm where neither resolves).
+        let inline private clearBytes (dst : nativeint) (size : nativeint) =
+            if size > 0n then
+                let span = Span<byte>(dst.ToPointer(), int size)
+                span.Clear()
+
+        let inline private copyBytes (src : nativeint) (dst : nativeint) (size : nativeint) =
+            if size > 0n then
+                System.Buffer.MemoryCopy(src.ToPointer(), dst.ToPointer(), int64 size, int64 size)
+
         type TypeInfo<'a> private() =
             static let isBlittable =
                 let arr : 'a[] = Array.zeroCreate 1
@@ -405,7 +417,7 @@ module UniformWriters =
 
                 let remaining = targetSize - offset
                 if remaining > 0n then
-                    Marshal.Set(ptr + offset, 0, remaining)
+                    clearBytes (ptr + offset) remaining
 
         type ArrWriter<'d, 'a when 'd :> INatural>(targetCount : int, stride : nativeint, inner : IWriter<'a>) =
             inherit AbstractWriter<Arr<'d, 'a>>()
@@ -425,7 +437,7 @@ module UniformWriters =
                     offset <- offset + stride
 
                 if missingBytes > 0n then
-                    Marshal.Set(ptr + firstEmptyByte, 0, missingBytes)
+                    clearBytes (ptr + firstEmptyByte) missingBytes
 
         type SeqWriter<'s, 'a when 's :> seq<'a>>(targetCount : int, stride : nativeint, inner : IWriter<'a>) =
             inherit AbstractWriter<'s>()
@@ -446,7 +458,7 @@ module UniformWriters =
 
                 let remaining = targetSize - offset
                 if remaining > 0n then
-                    Marshal.Set(ptr + offset, 0, remaining)
+                    clearBytes (ptr + offset) remaining
 
         type ReplicateWriter<'a>(targetCount : int, stride : nativeint, inner : IWriter<'a>) =
             inherit AbstractWriter<'a>()
@@ -466,7 +478,7 @@ module UniformWriters =
 
                 let remaining = targetSize - offset
                 if remaining > 0n then
-                    Marshal.Set(ptr + offset, 0, remaining)
+                    clearBytes (ptr + offset) remaining
 
         type SubTypeTestWriter<'a, 'b when 'a : not struct>(inner : IWriter<'b>) =
             inherit AbstractWriter<'a>()
@@ -476,9 +488,9 @@ module UniformWriters =
 
             override x.Write(value : 'a, ptr : nativeint) =
                 match value :> obj with
-                | null -> Marshal.Set(ptr, 0, inner.TargetSize)
+                | null -> clearBytes ptr inner.TargetSize
                 | :? 'b as b -> inner.WriteValue(b, ptr)
-                | _ -> Marshal.Set(ptr, 0, inner.TargetSize)
+                | _ -> clearBytes ptr inner.TargetSize
 
         type ZeroWhenNullWriter<'a when 'a : not struct>(inner : IWriter<'a>) =
             inherit AbstractWriter<'a>()
@@ -488,7 +500,7 @@ module UniformWriters =
 
             override x.Write(value : 'a, ptr : nativeint) =
                 match value :> obj with
-                | null -> Marshal.Set(ptr, 0, inner.TargetSize)
+                | null -> clearBytes ptr inner.TargetSize
                 | _ -> inner.WriteValue(value, ptr)
 
         type PrimitiveArrayWriter<'a when 'a : unmanaged>(count : int) =
@@ -503,8 +515,9 @@ module UniformWriters =
                 let copySize = min targetSize inputSize
 
                 value |> NativePtr.pinArr (fun pSrc ->
-                    Marshal.Copy(pSrc.Address, ptr, copySize)
-                    if targetSize > copySize then Marshal.Set(ptr + copySize, 0, targetSize - copySize)
+                    copyBytes (NativePtr.toNativeInt pSrc) ptr copySize
+                    if targetSize > copySize then
+                        clearBytes (ptr + copySize) (targetSize - copySize)
                 )
 
         type PrimitiveMapWriter<'a, 'b when 'b : unmanaged>(mapping : 'a -> 'b) =
