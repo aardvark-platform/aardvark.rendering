@@ -127,7 +127,7 @@ type SceneGraphExtensions =
     [<Extension>]
     static member ColorOutput(sg : ISg, enabled : Set<Symbol>)       = sg |> Sg.colorOutput' enabled
     [<Extension>]
-    static member ColorOutput(sg : ISg, enabled : seq<Symbol>)       = sg |> Sg.colorOutput' (Set.ofSeq enabled)
+    static member ColorOutput(sg : ISg, enabled : seq<Symbol>)       = sg |> Sg.colorOutput' enabled
 
     // Depth
     [<Extension>]
@@ -239,13 +239,13 @@ type SceneGraphExtensions =
 
     // Write buffers
     [<Extension>]
-    static member WriteBuffers(sg : ISg, bufferIdentifiers : aval<WriteBuffer seq>) : ISg = sg |> Sg.writeBuffers (bufferIdentifiers |> AVal.map Set.ofSeq)
+    static member WriteBuffers(sg : ISg, bufferIdentifiers : aval<WriteBuffer seq>) : ISg = sg |> Sg.writeBuffers bufferIdentifiers
 
     [<Extension>]
-    static member WriteBuffers(sg : ISg, bufferIdentifiers : seq<WriteBuffer>) : ISg = sg |> Sg.writeBuffers' (Set.ofSeq bufferIdentifiers)
+    static member WriteBuffers(sg : ISg, bufferIdentifiers : seq<WriteBuffer>) : ISg = sg |> Sg.writeBuffers' bufferIdentifiers
 
     [<Extension>]
-    static member WriteBuffers(sg : ISg, [<ParamArray>] bufferIdentifiers: WriteBuffer[]) : ISg = sg |> Sg.writeBuffers' (Set.ofArray bufferIdentifiers)
+    static member WriteBuffers(sg : ISg, [<ParamArray>] bufferIdentifiers: WriteBuffer[]) : ISg = sg |> Sg.writeBuffers' bufferIdentifiers
 
 
     [<Extension>]

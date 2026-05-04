@@ -407,9 +407,9 @@ module SgFSharp =
 
 
         /// Restricts color output to the given attachments.
-        let colorOutput (enabled : aval<Set<Symbol>>) =
+        let colorOutput (enabled : aval<#seq<Symbol>>) =
             colorWrite' false
-            >> colorMasks (enabled |> AVal.map ColorMask.ofWriteSet)
+            >> colorMasks (enabled |> AVal.map (Seq.map (fun sem -> sem, ColorMask.All) >> Map.ofSeq))
 
         /// Restricts color output to the given attachments.
         let colorOutput' enabled = colorOutput (AVal.constant enabled)
@@ -552,25 +552,24 @@ module SgFSharp =
         // Write buffers
         // ================================================================================================================
 
-        /// Toggles color, depth and stencil writes according to the given set of symbols.
-        let writeBuffers (buffers : aval<Set<WriteBuffer>>) =
-
+        /// Toggles color, depth and stencil writes according to the given symbols.
+        let writeBuffers (buffers : aval<#seq<WriteBuffer>>) =
             let depthEnable =
-                buffers |> AVal.map (Set.contains WriteBuffer.Depth)
+                buffers |> AVal.map (Seq.contains WriteBuffer.Depth)
 
             let stencilEnable =
-                buffers |> AVal.map (Set.contains WriteBuffer.Stencil)
+                buffers |> AVal.map (Seq.contains WriteBuffer.Stencil)
 
             let colors =
                 let get = function WriteBuffer.Color sem -> Some sem | _ -> None
-                buffers |> AVal.map (Set.toList >> List.choose get >> Set.ofList)
+                buffers |> AVal.map (Seq.choose get)
 
             depthWrite depthEnable
             >> stencilWrite stencilEnable
             >> colorOutput colors
 
-        /// Toggles color, depth and stencil writes according to the given set of symbols.
-        let writeBuffers' (buffers : Set<WriteBuffer>) =
+        /// Toggles color, depth and stencil writes according to the given symbols.
+        let writeBuffers' (buffers : seq<WriteBuffer>) =
             writeBuffers (~~buffers)
 
         // ================================================================================================================
