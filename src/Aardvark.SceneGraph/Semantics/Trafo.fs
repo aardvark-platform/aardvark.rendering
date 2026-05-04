@@ -32,9 +32,6 @@ module TrafoExtensions =
 module TrafoSemantics =
     open TrafoOperators
 
-    [<Obsolete>]
-    let rootTrafo = Trafo3d.identity
-
     let flattenStack (stack : aval<Trafo3d> list) =
         let rec foldConstants (l : aval<Trafo3d> list) =
             match l with

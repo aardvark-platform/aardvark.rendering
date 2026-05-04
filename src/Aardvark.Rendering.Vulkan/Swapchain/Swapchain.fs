@@ -206,10 +206,6 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
                 resolvedImage <- newResolvedImage
                 currentBuffer <- 0u
 
-    [<Obsolete>]
-    new (device : Device, description : SwapchainDescription) =
-        new Swapchain(device, V2i(1024, 768), description)
-
     member x.Size = update(); size
     member x.Description = description
     member x.Samples = description.samples
@@ -392,19 +388,15 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Swapchain =
 
-    let create2 (size : V2i) (description : SwapchainDescription) (device : Device) =
+    let create (size : V2i) (description : SwapchainDescription) (device : Device) =
         new Swapchain(device, size, description)
-
-    [<Obsolete("Use Swapchain.create2 instead.")>]
-    let create (desc : SwapchainDescription) (device : Device) =
-        create2 (V2i(1024, 768)) desc device
 
 [<AbstractClass; Sealed; Extension>]
 type DeviceSwapchainExtensions private() =
 
     [<Extension>]
     static member CreateSwapchain(this : Device, size : V2i, description : SwapchainDescription) =
-        this |> Swapchain.create2 size description
+        this |> Swapchain.create size description
 
     [<Extension>]
     static member CreateSwapchain(this : Device, description : SwapchainDescription) =

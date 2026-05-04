@@ -199,15 +199,6 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
 
         {| Current = current; Min = toInt2D caps.minImageExtent; Max = toInt2D caps.maxImageExtent |}
 
-    [<Obsolete("Use Extent.Current instead.")>]
-    member x.Size = x.Extent.Current
-
-    [<Obsolete("Use Extent.Min instead.")>]
-    member x.MinSize = x.Extent.Min
-
-    [<Obsolete("Use Extent.Max instead.")>]
-    member x.MaxSize = x.Extent.Max
-
     member x.HasCompositeAlpha (t : VkCompositeAlphaFlagsKHR) = (t &&& supportedCompositeAlpha) = t
     member x.HasUsage (t : VkImageUsageFlags) = (t &&& supportedUsage) = t
 
