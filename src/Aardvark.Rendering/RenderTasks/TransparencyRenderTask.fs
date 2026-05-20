@@ -103,6 +103,25 @@ module TransparencyRenderTask =
             userSig.DepthStencilAttachment
             |> Option.defaultValue TextureFormat.Depth24Stencil8
 
+        // Color attachments in the user signature fall into two groups:
+        //   - the primary color target (DefaultSemantic.Colors): replaced by
+        //     Accum + Revealage during the transparent pass and resolved by
+        //     the composite shader
+        //   - "extra" attachments (e.g. PickData, normal buffers, …): passed
+        //     through to the OIT framebuffer. Their backing textures are
+        //     shared with the intermediate framebuffer, so transparent
+        //     shaders that write to them update the same storage opaque just
+        //     wrote to. Ordering between transparent fragments is undefined
+        //     (last-write-wins); apps that need depth-ordered semantics in
+        //     extras must sort their transparent objects accordingly.
+        let userColorAtts =
+            userSig.ColorAttachments
+            |> Map.toList
+            |> List.map (fun (_, att) -> att.Name, att.Format)
+
+        let extraAtts =
+            userColorAtts |> List.filter (fun (n, _) -> n <> DefaultSemantic.Colors)
+
         let opaqueSet = objects |> ASet.filter (not << isTransparent)
         let transparentSet =
             objects |> ASet.choose (fun o ->
@@ -176,22 +195,24 @@ module TransparencyRenderTask =
                 releaseTasksAndSignatures ()
 
                 let interSig =
-                    let colorEntries =
-                        userSig.ColorAttachments
-                        |> Map.toSeq
-                        |> Seq.map (fun (_, att) -> att.Name, att.Format)
                     let entries = seq {
-                        yield! colorEntries
+                        yield! userColorAtts
                         yield DefaultSemantic.DepthStencil, depthFormat
                     }
                     runtime.CreateFramebufferSignature(entries, samples = samples)
 
+                // OIT signature: Accum + Revealage replace the primary Colors
+                // target; every other user attachment (and the depth-stencil)
+                // is mirrored so transparent shaders can write to the same
+                // backing storage opaque already wrote to.
                 let oS =
-                    runtime.CreateFramebufferSignature(
-                        [ WeightedBlendedOIT.Semantic.Accum,     TextureFormat.Rgba16f
-                          WeightedBlendedOIT.Semantic.Revealage, TextureFormat.R32f
-                          DefaultSemantic.DepthStencil,          depthFormat ],
-                        samples = samples)
+                    let entries = seq {
+                        yield WeightedBlendedOIT.Semantic.Accum,     TextureFormat.Rgba16f
+                        yield WeightedBlendedOIT.Semantic.Revealage, TextureFormat.R32f
+                        yield! extraAtts
+                        yield DefaultSemantic.DepthStencil, depthFormat
+                    }
+                    runtime.CreateFramebufferSignature(entries, samples = samples)
 
                 let compositeObject = buildCompositeObject samples accumTex revealageTex
                 let compositeSet    = ASet.single (compositeObject :> IRenderObject)
@@ -224,12 +245,19 @@ module TransparencyRenderTask =
                     |> Map.map (fun _ t -> t.GetOutputView())
                     |> Map.add DefaultSemantic.DepthStencil (dt.GetOutputView())
 
+                // Share the depth and every user extra attachment with the
+                // intermediate framebuffer (same backing texture, two FBO
+                // bindings) so transparent writes land in the same storage
+                // opaque just updated.
                 let oitAtts =
-                    Map.ofList [
-                        WeightedBlendedOIT.Semantic.Accum,     at.GetOutputView()
-                        WeightedBlendedOIT.Semantic.Revealage, rt.GetOutputView()
-                        DefaultSemantic.DepthStencil,          dt.GetOutputView()
-                    ]
+                    let baseAtts =
+                        Map.ofList [
+                            WeightedBlendedOIT.Semantic.Accum,     at.GetOutputView()
+                            WeightedBlendedOIT.Semantic.Revealage, rt.GetOutputView()
+                            DefaultSemantic.DepthStencil,          dt.GetOutputView()
+                        ]
+                    extraAtts |> List.fold (fun acc (name, _) ->
+                        Map.add name (ct.[name].GetOutputView()) acc) baseAtts
 
                 intermediateFb <- ValueSome (runtime.CreateFramebuffer(intermediateSig.Value, interAtts))
                 oitFb          <- ValueSome (runtime.CreateFramebuffer(oitSig.Value, oitAtts))
