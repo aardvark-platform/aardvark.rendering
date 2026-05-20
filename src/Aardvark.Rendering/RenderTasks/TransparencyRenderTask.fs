@@ -31,36 +31,29 @@ module TransparencyRenderTask =
     /// Run time when there are no transparent objects in the current snapshot.
     let needsOitTreatment (_objects : aset<IRenderObject>) = true
 
-    /// Builds the per-attachment blend-mode map for the transparent pass:
-    ///   - Accum: additive
-    ///   - Revealage: multiplicative transmittance
-    ///   - every other "extra" attachment (e.g. PickData): defaults to
-    ///     per-channel minimum so multiple transparent fragments resolve
-    ///     deterministically to the smallest written value (apps that want
-    ///     correct depth-ordered picking encode their data with smaller =
-    ///     closer; see WeightedBlendedOIT.BlendModes.minimum)
-    /// Existing per-attachment modes the user supplied are preserved.
-    let private transparentAttachmentBlend (extras : Symbol list) (existing : Map<Symbol, BlendMode>) =
-        let withExtras =
-            extras |> List.fold (fun acc name ->
-                if Map.containsKey name acc then acc
-                else Map.add name WeightedBlendedOIT.BlendModes.minimum acc) existing
-        withExtras
-        |> Map.add WeightedBlendedOIT.Semantic.Accum     WeightedBlendedOIT.BlendModes.accum
-        |> Map.add WeightedBlendedOIT.Semantic.Revealage WeightedBlendedOIT.BlendModes.revealage
+    /// Per-attachment blend-mode map for the OIT pass. Only Accum and
+    /// Revealage exist in the OIT framebuffer — extras are not bound to
+    /// it. Accum: additive. Revealage: multiplicative transmittance.
+    let private transparentAttachmentBlend =
+        Map.ofList [
+            WeightedBlendedOIT.Semantic.Accum,     WeightedBlendedOIT.BlendModes.accum
+            WeightedBlendedOIT.Semantic.Revealage, WeightedBlendedOIT.BlendModes.revealage
+        ]
 
-    /// Clones a transparent RenderObject and rewrites its pipeline state for the
-    /// OIT pass: composes the weighted-blend writer onto its surface, forces
-    /// depth-write off, applies per-attachment blend modes for Accum + Revealage
-    /// plus min-blending on every extra attachment, and clears IsTransparent on
-    /// the clone to avoid recursive wrapping.
-    let private transformTransparent (extras : Symbol list) (ro : RenderObject) : IRenderObject =
+    /// Clones a transparent RenderObject and rewrites its pipeline state for
+    /// the OIT compositing pass: composes the weighted-blend writer onto its
+    /// surface, forces depth-write off, applies the Accum/Revealage blend
+    /// modes, and clears IsTransparent on the clone to avoid recursive
+    /// wrapping. The OIT framebuffer only has Accum + Revealage as color
+    /// attachments — any extras the user's shader writes are dropped by
+    /// FShade compilation, since they're not in the OIT signature.
+    let private transformTransparent (ro : RenderObject) : IRenderObject =
         let copy = RenderObject(ro)
         copy.IsTransparent <- false
         copy.Surface       <- WeightedBlendedOIT.composeSurface ro.Surface
         copy.DepthState    <- { ro.DepthState with WriteMask = AVal.constant false }
         copy.BlendState    <- { ro.BlendState with
-                                  AttachmentMode = ro.BlendState.AttachmentMode |> AVal.map (transparentAttachmentBlend extras) }
+                                  AttachmentMode = AVal.constant transparentAttachmentBlend }
         copy :> IRenderObject
 
     /// Builds the per-attachment write-mask map for the transparent depth/extras
@@ -150,33 +143,22 @@ module TransparencyRenderTask =
             userSig.DepthStencilAttachment
             |> Option.defaultValue TextureFormat.Depth24Stencil8
 
-        // Color attachments in the user signature fall into two groups:
-        //   - the primary color target (DefaultSemantic.Colors): replaced by
-        //     Accum + Revealage during the transparent pass and resolved by
-        //     the composite shader
-        //   - "extra" attachments (e.g. PickData, normal buffers, …): passed
-        //     through to the OIT framebuffer. Their backing textures are
-        //     shared with the intermediate framebuffer, so transparent
-        //     shaders that write to them update the same storage opaque just
-        //     wrote to. Ordering between transparent fragments is undefined
-        //     (last-write-wins); apps that need depth-ordered semantics in
-        //     extras must sort their transparent objects accordingly.
+        // The intermediate framebuffer mirrors the user signature exactly
+        // (all color attachments + DepthStencil). Opaque writes go there and
+        // pass 3 updates extras + depth based on depth-test selection. The
+        // OIT framebuffer is separate and only carries Accum + Revealage +
+        // a shared DepthStencil — extras are not bound for pass 2.
         let userColorAtts =
             userSig.ColorAttachments
             |> Map.toList
             |> List.map (fun (_, att) -> att.Name, att.Format)
-
-        let extraAtts =
-            userColorAtts |> List.filter (fun (n, _) -> n <> DefaultSemantic.Colors)
-
-        let extraNames = extraAtts |> List.map fst
 
         let opaqueSet = objects |> ASet.filter (not << isTransparent)
         let transparentSet =
             objects |> ASet.choose (fun o ->
                 if isTransparent o then
                     match o with
-                    | :? RenderObject as r -> Some (transformTransparent extraNames r)
+                    | :? RenderObject as r -> Some (transformTransparent r)
                     | _ -> None
                 else None)
 
@@ -287,18 +269,17 @@ module TransparencyRenderTask =
                     }
                     runtime.CreateFramebufferSignature(entries, samples = samples)
 
-                // OIT signature: Accum + Revealage replace the primary Colors
-                // target; every other user attachment (and the depth-stencil)
-                // is mirrored so transparent shaders can write to the same
-                // backing storage opaque already wrote to.
+                // OIT signature: Accum + Revealage + DepthStencil only. The
+                // composed transparent shader's outputs are pared down by
+                // FShade to exactly these — any extras the user's shader
+                // produces are dropped for this pass. Pass 3 is where extras
+                // get written, with proper depth-test selection.
                 let oS =
-                    let entries = seq {
-                        yield WeightedBlendedOIT.Semantic.Accum,     TextureFormat.Rgba16f
-                        yield WeightedBlendedOIT.Semantic.Revealage, TextureFormat.R32f
-                        yield! extraAtts
-                        yield DefaultSemantic.DepthStencil, depthFormat
-                    }
-                    runtime.CreateFramebufferSignature(entries, samples = samples)
+                    runtime.CreateFramebufferSignature(
+                        [ WeightedBlendedOIT.Semantic.Accum,     TextureFormat.Rgba16f
+                          WeightedBlendedOIT.Semantic.Revealage, TextureFormat.R32f
+                          DefaultSemantic.DepthStencil,          depthFormat ],
+                        samples = samples)
 
                 // Composite signature: only Colors + DepthStencil. FShade's
                 // effect linker compiles outputs for every color attachment in
@@ -346,19 +327,16 @@ module TransparencyRenderTask =
                 |> Map.map (fun _ t -> t.GetOutputView())
                 |> Map.add DefaultSemantic.DepthStencil (dt.GetOutputView())
 
-            // Share the depth and every user extra attachment with the
-            // intermediate framebuffer (same backing texture, two FBO
-            // bindings) so transparent writes land in the same storage
-            // opaque just updated.
+            // OIT framebuffer: only Accum + Revealage + shared DepthStencil.
+            // Extras are NOT bound here — pass 3 (against the intermediate
+            // framebuffer) is where the depth-test selects the closest
+            // transparent fragment's extras.
             let oitAtts =
-                let baseAtts =
-                    Map.ofList [
-                        WeightedBlendedOIT.Semantic.Accum,     at.GetOutputView()
-                        WeightedBlendedOIT.Semantic.Revealage, rt.GetOutputView()
-                        DefaultSemantic.DepthStencil,          dt.GetOutputView()
-                    ]
-                extraAtts |> List.fold (fun acc (name, _) ->
-                    Map.add name (ct.[name].GetOutputView()) acc) baseAtts
+                Map.ofList [
+                    WeightedBlendedOIT.Semantic.Accum,     at.GetOutputView()
+                    WeightedBlendedOIT.Semantic.Revealage, rt.GetOutputView()
+                    DefaultSemantic.DepthStencil,          dt.GetOutputView()
+                ]
 
             // Composite framebuffer: only Colors + DepthStencil, but
             // referencing the same backing textures as the intermediate
