@@ -379,7 +379,7 @@ type Runtime(device : Device) as this =
                     let lDst = dstView.Image.Layout
                     do! Command.TransformLayout(srcView.Image, VkImageLayout.TransferSrcOptimal)
                     do! Command.TransformLayout(dstView.Image, VkImageLayout.TransferDstOptimal)
-                    do! Command.Blit(srcView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, dstView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, VkFilter.Nearest)
+                    do! Command.Blit(srcView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, dstView.Image.[ap, 0, *], VkImageLayout.TransferDstOptimal, VkFilter.Nearest)
                     do! Command.TransformLayout(srcView.Image, lSrc)
                     do! Command.TransformLayout(dstView.Image, lDst)
                 | _ ->
