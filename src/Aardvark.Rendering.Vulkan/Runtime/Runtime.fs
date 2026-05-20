@@ -88,9 +88,15 @@ type Runtime(device : Device) as this =
     member x.CompileRender(renderPass : IFramebufferSignature, cmd : RuntimeCommand) =
         new CommandTask(manager, unbox renderPass, cmd)
 
-    member x.CompileRender (renderPass : IFramebufferSignature, set : aset<IRenderObject>) =
+    member private x.CompileRenderRaw (renderPass : IFramebufferSignature, set : aset<IRenderObject>) : IRenderTask =
         let set = ShaderDebugger.hookRenderObjects set
         new CommandTask(manager, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
+
+    member x.CompileRender (renderPass : IFramebufferSignature, set : aset<IRenderObject>) : IRenderTask =
+        if TransparencyRenderTask.needsOitTreatment set then
+            TransparencyRenderTask.create (x :> IRuntime) renderPass set x.CompileRenderRaw
+        else
+            x.CompileRenderRaw(renderPass, set)
 
     member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =
         new ClearTask(manager, unbox signature, values) :> IRenderTask
