@@ -21,6 +21,7 @@ module ``Rendering Tests`` =
         ResourceManagement.tests
         Commands.tests
         LodRenderer.tests
+        Transparency.tests
     ]
 
     [<Tests>]
