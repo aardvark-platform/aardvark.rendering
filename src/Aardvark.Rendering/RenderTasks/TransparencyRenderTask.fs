@@ -194,6 +194,11 @@ module TransparencyRenderTask =
         let mutable currentSamples      = 0
         let mutable intermediateSig     : IFramebufferSignature voption = ValueNone
         let mutable oitSig              : IFramebufferSignature voption = ValueNone
+        // The composite shader only writes Colors. We compile it against a
+        // dedicated signature with just Colors + DepthStencil so FShade
+        // doesn't synthesize varying passthroughs for the user's extra
+        // attachments (which would then need to come from vertex attributes).
+        let mutable compositeSig        : IFramebufferSignature voption = ValueNone
         let mutable opaqueTask          : IRenderTask voption = ValueNone
         let mutable transparentTask     : IRenderTask voption = ValueNone
         let mutable compositeTask       : IRenderTask voption = ValueNone
@@ -208,16 +213,19 @@ module TransparencyRenderTask =
         let mutable colorTex       : Map<Symbol, IBackendTexture> = Map.empty
         let mutable intermediateFb : IFramebuffer voption = ValueNone
         let mutable oitFb          : IFramebuffer voption = ValueNone
+        let mutable compositeFb    : IFramebuffer voption = ValueNone
 
         let releaseFbos () =
             intermediateFb |> ValueOption.iter (fun fb -> fb.Dispose())
             oitFb          |> ValueOption.iter (fun fb -> fb.Dispose())
+            compositeFb    |> ValueOption.iter (fun fb -> fb.Dispose())
             depthTex       |> ValueOption.iter (fun t -> t.Dispose())
             accumT         |> ValueOption.iter (fun t -> t.Dispose())
             revealageT     |> ValueOption.iter (fun t -> t.Dispose())
             colorTex |> Map.iter (fun _ t -> t.Dispose())
             intermediateFb <- ValueNone
             oitFb          <- ValueNone
+            compositeFb    <- ValueNone
             depthTex       <- ValueNone
             accumT         <- ValueNone
             revealageT     <- ValueNone
@@ -231,12 +239,14 @@ module TransparencyRenderTask =
             transparentPickTask |> ValueOption.iter (fun t -> t.Dispose())
             intermediateSig     |> ValueOption.iter (fun s -> s.Dispose())
             oitSig              |> ValueOption.iter (fun s -> s.Dispose())
+            compositeSig        |> ValueOption.iter (fun s -> s.Dispose())
             opaqueTask          <- ValueNone
             transparentTask     <- ValueNone
             compositeTask       <- ValueNone
             transparentPickTask <- ValueNone
             intermediateSig     <- ValueNone
             oitSig              <- ValueNone
+            compositeSig        <- ValueNone
 
         let ensureForSamples (samples : int) =
             if samples <> currentSamples then
@@ -265,14 +275,31 @@ module TransparencyRenderTask =
                     }
                     runtime.CreateFramebufferSignature(entries, samples = samples)
 
+                // Composite signature: only Colors + DepthStencil. FShade's
+                // effect linker compiles outputs for every color attachment in
+                // the signature; if extras (e.g. PickData) were included here,
+                // the composite shader (which writes only Colors) would have
+                // its missing outputs synthesized as varying passthroughs,
+                // requiring matching vertex attributes that the fullscreen
+                // quad doesn't have.
+                let cS =
+                    runtime.CreateFramebufferSignature(
+                        [ DefaultSemantic.Colors,       userColorAtts
+                                                       |> List.tryFind (fun (n, _) -> n = DefaultSemantic.Colors)
+                                                       |> Option.map snd
+                                                       |> Option.defaultValue TextureFormat.Rgba8
+                          DefaultSemantic.DepthStencil, depthFormat ],
+                        samples = samples)
+
                 let compositeObject = buildCompositeObject samples accumTex revealageTex
                 let compositeSet    = ASet.single (compositeObject :> IRenderObject)
 
                 intermediateSig     <- ValueSome interSig
                 oitSig              <- ValueSome oS
+                compositeSig        <- ValueSome cS
                 opaqueTask          <- ValueSome (compileRaw (interSig, opaqueSet))
                 transparentTask     <- ValueSome (compileRaw (oS, transparentSet))
-                compositeTask       <- ValueSome (compileRaw (interSig, compositeSet))
+                compositeTask       <- ValueSome (compileRaw (cS, compositeSet))
                 transparentPickTask <- ValueSome (compileRaw (interSig, transparentPickSet))
                 currentSamples      <- samples
 
@@ -311,8 +338,22 @@ module TransparencyRenderTask =
                     extraAtts |> List.fold (fun acc (name, _) ->
                         Map.add name (ct.[name].GetOutputView()) acc) baseAtts
 
+                // Composite framebuffer: only Colors + DepthStencil, but
+                // referencing the same backing textures as the intermediate
+                // framebuffer so the composite's writes to Colors land in the
+                // shared texture.
+                let compositeAtts =
+                    Map.ofList [
+                        DefaultSemantic.Colors,
+                            (ct |> Map.tryFind DefaultSemantic.Colors
+                                |> Option.map (fun t -> t.GetOutputView())
+                                |> Option.defaultValue (dt.GetOutputView()))
+                        DefaultSemantic.DepthStencil, dt.GetOutputView()
+                    ]
+
                 intermediateFb <- ValueSome (runtime.CreateFramebuffer(intermediateSig.Value, interAtts))
                 oitFb          <- ValueSome (runtime.CreateFramebuffer(oitSig.Value, oitAtts))
+                compositeFb    <- ValueSome (runtime.CreateFramebuffer(compositeSig.Value, compositeAtts))
 
                 depthTex   <- ValueSome dt
                 colorTex   <- ct
@@ -369,7 +410,7 @@ module TransparencyRenderTask =
                     }
                 runtime.Clear(oit, oitClear)
                 transparentTask.Value.Run(token, rt, { output with Framebuffer = oit })
-                compositeTask.Value.Run(token, rt, { output with Framebuffer = inter })
+                compositeTask.Value.Run(token, rt, { output with Framebuffer = compositeFb.Value })
 
                 // Pass 3: transparent depth + extras pass.
                 // Renders the *unmodified* user surfaces with depth-write on and
