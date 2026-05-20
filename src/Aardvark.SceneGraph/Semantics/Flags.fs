@@ -14,10 +14,12 @@ module ActiveSemantics =
     type Ag.Scope with
         member x.IsActive : aval<bool> = x?IsActive
         member x.RenderPass : RenderPass = x?RenderPass
+        member x.IsTransparent : bool = x?IsTransparent
 
     module Semantic =
         let isActive (s : Ag.Scope) : aval<bool> = s?IsActive
         let renderPass (s : Ag.Scope) : RenderPass = s?RenderPass
+        let isTransparent (s : Ag.Scope) : bool = s?IsTransparent
 
     [<Rule>]
     type ActiveSemantics() =
@@ -54,9 +56,19 @@ module ActiveSemantics =
     type PassSemantics() =
 
         let defaultPass = RenderPass.main
-        
+
         member x.RenderPass(e : Root<ISg>, scope : Ag.Scope) =
             e.Child?RenderPass <- defaultPass
 
         member x.RenderPass(p : Sg.PassApplicator, scope : Ag.Scope) =
             p.Child?RenderPass <- p.Pass
+
+
+    [<Rule>]
+    type TransparentSemantics() =
+
+        member x.IsTransparent(r : Root<ISg>, scope : Ag.Scope) =
+            r.Child?IsTransparent <- false
+
+        member x.IsTransparent(t : Sg.TransparentApplicator, scope : Ag.Scope) =
+            t.Child?IsTransparent <- t.IsTransparent

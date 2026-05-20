@@ -811,6 +811,17 @@ module SgFSharp =
         let pass (pass : RenderPass) (sg : ISg) =
             Sg.PassApplicator(pass, sg) :> ISg
 
+        /// Marks the subtree's render objects as transparent.
+        /// Transparent objects are rendered into a Weighted Blended OIT pass and composited
+        /// onto the framebuffer's color attachments. Their depth state is unchanged but the
+        /// RenderTask forces depth-write off and applies the OIT shader composition.
+        let transparent (sg : ISg) =
+            Sg.TransparentApplicator(true, sg) :> ISg
+
+        /// Marks the subtree's render objects as opaque (the default).
+        let opaque (sg : ISg) =
+            Sg.TransparentApplicator(false, sg) :> ISg
+
         /// Creates a single draw call for the given geometry mode.
         let draw (mode : IndexedGeometryMode) =
             Sg.RenderNode(

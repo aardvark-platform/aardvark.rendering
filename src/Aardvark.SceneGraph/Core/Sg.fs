@@ -152,6 +152,14 @@ module Sg =
 
         new(pass : RenderPass, child : ISg) = PassApplicator(pass, AVal.constant child)
 
+    /// Marks the subtree's render objects as transparent (weighted-blended OIT).
+    type TransparentApplicator(isTransparent : bool, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.IsTransparent = isTransparent
+
+        new(isTransparent : bool, child : ISg) = TransparentApplicator(isTransparent, AVal.constant child)
+
     type UniformApplicator(uniformHolder : IUniformProvider, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
