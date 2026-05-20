@@ -63,6 +63,29 @@ module TransparencyRenderTask =
                                   AttachmentMode = ro.BlendState.AttachmentMode |> AVal.map (transparentAttachmentBlend extras) }
         copy :> IRenderObject
 
+    /// Builds the per-attachment write-mask map for the transparent depth/extras
+    /// pass: Colors gets ColorMask.None (writes suppressed), all other
+    /// attachments keep their existing mask (default = All).
+    let private transparentPickWriteMask (existing : Map<Symbol, ColorMask>) =
+        existing |> Map.add DefaultSemantic.Colors ColorMask.None
+
+    /// Clones a transparent RenderObject for the depth + extras pass. The
+    /// shader is left UNMODIFIED (user's original surface) — depth-write is
+    /// enabled so the depth test alone selects the closest transparent
+    /// fragment per pixel. The Colors attachment is write-masked so only the
+    /// extras (PickData and friends) actually land in the framebuffer.
+    /// Blending is disabled — only one fragment survives per pixel through
+    /// the depth test.
+    let private transformTransparentPick (ro : RenderObject) : IRenderObject =
+        let copy = RenderObject(ro)
+        copy.IsTransparent <- false
+        copy.DepthState    <- { ro.DepthState with WriteMask = AVal.constant true }
+        copy.BlendState    <- { ro.BlendState with
+                                  Mode                = AVal.constant BlendMode.None
+                                  AttachmentMode      = AVal.constant Map.empty
+                                  AttachmentWriteMask = ro.BlendState.AttachmentWriteMask |> AVal.map transparentPickWriteMask }
+        copy :> IRenderObject
+
     let private fullscreenPositions =
         [| V3f(-1.0f, -1.0f, 0.0f)
            V3f( 1.0f, -1.0f, 0.0f)
@@ -144,6 +167,18 @@ module TransparencyRenderTask =
                     | _ -> None
                 else None)
 
+        // Pass-3 set: same transparent objects, but cloned with depth-write on,
+        // Colors masked out, and the user's original surface intact. Drives the
+        // "as-if-depth-test" pass that updates extras + depth based purely on
+        // depth ordering.
+        let transparentPickSet =
+            objects |> ASet.choose (fun o ->
+                if isTransparent o then
+                    match o with
+                    | :? RenderObject as r -> Some (transformTransparentPick r)
+                    | _ -> None
+                else None)
+
         // Snapshot of the current transparent objects — used at Run to skip the
         // OIT sub-passes whenever there are none.
         let transparentContent = transparentSet.Content
@@ -156,12 +191,13 @@ module TransparencyRenderTask =
         // sample count and the framebuffer signatures bake in their sample
         // count, so all of this is rebuilt whenever the output framebuffer's
         // sample count changes.
-        let mutable currentSamples  = 0
-        let mutable intermediateSig : IFramebufferSignature voption = ValueNone
-        let mutable oitSig          : IFramebufferSignature voption = ValueNone
-        let mutable opaqueTask      : IRenderTask voption = ValueNone
-        let mutable transparentTask : IRenderTask voption = ValueNone
-        let mutable compositeTask   : IRenderTask voption = ValueNone
+        let mutable currentSamples      = 0
+        let mutable intermediateSig     : IFramebufferSignature voption = ValueNone
+        let mutable oitSig              : IFramebufferSignature voption = ValueNone
+        let mutable opaqueTask          : IRenderTask voption = ValueNone
+        let mutable transparentTask     : IRenderTask voption = ValueNone
+        let mutable compositeTask       : IRenderTask voption = ValueNone
+        let mutable transparentPickTask : IRenderTask voption = ValueNone
 
         // Size-dependent state. Rebuilt whenever the output framebuffer's size
         // (or sample count) changes.
@@ -189,16 +225,18 @@ module TransparencyRenderTask =
             currentSize    <- V2i.Zero
 
         let releaseTasksAndSignatures () =
-            opaqueTask      |> ValueOption.iter (fun t -> t.Dispose())
-            transparentTask |> ValueOption.iter (fun t -> t.Dispose())
-            compositeTask   |> ValueOption.iter (fun t -> t.Dispose())
-            intermediateSig |> ValueOption.iter (fun s -> s.Dispose())
-            oitSig          |> ValueOption.iter (fun s -> s.Dispose())
-            opaqueTask      <- ValueNone
-            transparentTask <- ValueNone
-            compositeTask   <- ValueNone
-            intermediateSig <- ValueNone
-            oitSig          <- ValueNone
+            opaqueTask          |> ValueOption.iter (fun t -> t.Dispose())
+            transparentTask     |> ValueOption.iter (fun t -> t.Dispose())
+            compositeTask       |> ValueOption.iter (fun t -> t.Dispose())
+            transparentPickTask |> ValueOption.iter (fun t -> t.Dispose())
+            intermediateSig     |> ValueOption.iter (fun s -> s.Dispose())
+            oitSig              |> ValueOption.iter (fun s -> s.Dispose())
+            opaqueTask          <- ValueNone
+            transparentTask     <- ValueNone
+            compositeTask       <- ValueNone
+            transparentPickTask <- ValueNone
+            intermediateSig     <- ValueNone
+            oitSig              <- ValueNone
 
         let ensureForSamples (samples : int) =
             if samples <> currentSamples then
@@ -230,12 +268,13 @@ module TransparencyRenderTask =
                 let compositeObject = buildCompositeObject samples accumTex revealageTex
                 let compositeSet    = ASet.single (compositeObject :> IRenderObject)
 
-                intermediateSig <- ValueSome interSig
-                oitSig          <- ValueSome oS
-                opaqueTask      <- ValueSome (compileRaw (interSig, opaqueSet))
-                transparentTask <- ValueSome (compileRaw (oS, transparentSet))
-                compositeTask   <- ValueSome (compileRaw (interSig, compositeSet))
-                currentSamples  <- samples
+                intermediateSig     <- ValueSome interSig
+                oitSig              <- ValueSome oS
+                opaqueTask          <- ValueSome (compileRaw (interSig, opaqueSet))
+                transparentTask     <- ValueSome (compileRaw (oS, transparentSet))
+                compositeTask       <- ValueSome (compileRaw (interSig, compositeSet))
+                transparentPickTask <- ValueSome (compileRaw (interSig, transparentPickSet))
+                currentSamples      <- samples
 
         let ensureFbos (size : V2i) (samples : int) =
             if size <> currentSize then
@@ -291,9 +330,10 @@ module TransparencyRenderTask =
         override x.Use f = f ()
 
         override x.PerformUpdate(token, rt) =
-            opaqueTask      |> ValueOption.iter (fun t -> t.Update(token, rt))
-            transparentTask |> ValueOption.iter (fun t -> t.Update(token, rt))
-            compositeTask   |> ValueOption.iter (fun t -> t.Update(token, rt))
+            opaqueTask          |> ValueOption.iter (fun t -> t.Update(token, rt))
+            transparentTask     |> ValueOption.iter (fun t -> t.Update(token, rt))
+            compositeTask       |> ValueOption.iter (fun t -> t.Update(token, rt))
+            transparentPickTask |> ValueOption.iter (fun t -> t.Update(token, rt))
 
         override x.Perform(token, rt, output) =
             let outFb = output.Framebuffer
@@ -316,6 +356,7 @@ module TransparencyRenderTask =
             if hasTransparent then
                 let oit = oitFb.Value
 
+                // Pass 2: OIT color compositing.
                 // Clear only Accum + Revealage on the OIT framebuffer; the
                 // shared depth from the opaque pass is preserved for depth
                 // testing.
@@ -329,6 +370,14 @@ module TransparencyRenderTask =
                 runtime.Clear(oit, oitClear)
                 transparentTask.Value.Run(token, rt, { output with Framebuffer = oit })
                 compositeTask.Value.Run(token, rt, { output with Framebuffer = inter })
+
+                // Pass 3: transparent depth + extras pass.
+                // Renders the *unmodified* user surfaces with depth-write on and
+                // Colors write-masked. The depth test alone selects the closest
+                // transparent fragment per pixel, so extras (PickData, etc.)
+                // and the shared depth end up with the closest-fragment's
+                // values regardless of draw order.
+                transparentPickTask.Value.Run(token, rt, { output with Framebuffer = inter })
 
             // Final blit: intermediate → user framebuffer.
             runtime.Copy(inter, outFb)
