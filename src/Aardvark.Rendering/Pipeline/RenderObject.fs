@@ -50,7 +50,8 @@ and RenderObject private (id                 : RenderObjectId,
                           instanceAttributes : IAttributeProvider,
                           vertexAttributes   : IAttributeProvider,
                           uniforms           : IUniformProvider,
-                          activate           : unit -> IDisposable) =
+                          activate           : unit -> IDisposable,
+                          isTransparent      : bool) =
     static let empty =
         RenderObject(
             id                 = RenderObjectId(),
@@ -69,7 +70,8 @@ and RenderObject private (id                 : RenderObjectId,
             instanceAttributes = AttributeProvider.Empty,
             vertexAttributes   = AttributeProvider.Empty,
             uniforms           = UniformProvider.Empty,
-            activate           = nopActivate
+            activate           = nopActivate,
+            isTransparent      = false
         )
 
     member val Id                 = id
@@ -89,6 +91,12 @@ and RenderObject private (id                 : RenderObjectId,
     member val VertexAttributes   = vertexAttributes   with get, set
     member val Uniforms           = uniforms           with get, set
     member val Activate           = activate           with get, set
+    /// If true, this object writes order-independent transparency (weighted blended OIT) outputs
+    /// rather than the framebuffer's normal color attachments. The RenderTask groups all
+    /// transparent objects into a separate pass that shares the depth attachment, composes a
+    /// weighted-blend shader onto each object's surface, and composites the result onto the
+    /// real framebuffer.
+    member val IsTransparent      = isTransparent      with get, set
 
     private new(id : RenderObjectId, other : RenderObject) =
         RenderObject(
@@ -108,7 +116,8 @@ and RenderObject private (id                 : RenderObjectId,
             instanceAttributes = other.InstanceAttributes,
             vertexAttributes   = other.VertexAttributes,
             uniforms           = other.Uniforms,
-            activate           = other.Activate
+            activate           = other.Activate,
+            isTransparent      = other.IsTransparent
         )
 
     /// Creates an empty render object with a unique id.
