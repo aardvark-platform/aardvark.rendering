@@ -127,6 +127,19 @@ module TransparencyRenderTask =
                                     Mode = AVal.constant WeightedBlendedOIT.BlendModes.composite }
         ro
 
+    /// Cached per-(size, samples) bundle of FBO resources used by the wrapped
+    /// path. Built lazily on demand and kept alive across frames so size
+    /// changes between known sizes don't dispose+rebuild.
+    type private FboBundle = {
+        IntermediateFb : IFramebuffer
+        OitFb          : IFramebuffer
+        CompositeFb    : IFramebuffer
+        DepthTex       : IBackendTexture
+        AccumT         : IBackendTexture
+        RevealageT     : IBackendTexture
+        ColorTex       : Map<Symbol, IBackendTexture>
+    }
+
     type private WrappedTask(runtime   : IRuntime,
                              userSig   : IFramebufferSignature,
                              objects   : aset<IRenderObject>,
@@ -191,6 +204,13 @@ module TransparencyRenderTask =
         // sample count and the framebuffer signatures bake in their sample
         // count, so all of this is rebuilt whenever the output framebuffer's
         // sample count changes.
+        // "Direct" opaque-only task compiled against the user signature.
+        // Used every frame in which the transparent set is currently empty:
+        // render straight to the user framebuffer, no intermediate FBO and
+        // no blits. Lazily built on first frame that hits the direct branch,
+        // kept alive afterwards so re-entering direct mode is free.
+        let mutable directOpaqueTask : IRenderTask voption = ValueNone
+
         let mutable currentSamples      = 0
         let mutable intermediateSig     : IFramebufferSignature voption = ValueNone
         let mutable oitSig              : IFramebufferSignature voption = ValueNone
@@ -204,33 +224,34 @@ module TransparencyRenderTask =
         let mutable compositeTask       : IRenderTask voption = ValueNone
         let mutable transparentPickTask : IRenderTask voption = ValueNone
 
-        // Size-dependent state. Rebuilt whenever the output framebuffer's size
-        // (or sample count) changes.
-        let mutable currentSize    = V2i.Zero
-        let mutable depthTex       : IBackendTexture voption = ValueNone
-        let mutable accumT         : IBackendTexture voption = ValueNone
-        let mutable revealageT     : IBackendTexture voption = ValueNone
-        let mutable colorTex       : Map<Symbol, IBackendTexture> = Map.empty
-        let mutable intermediateFb : IFramebuffer voption = ValueNone
-        let mutable oitFb          : IFramebuffer voption = ValueNone
-        let mutable compositeFb    : IFramebuffer voption = ValueNone
+        // Bounded LRU cache of FBO bundles, one per (size, samples) the
+        // wrapper has seen. Render tasks typically see only a handful of
+        // distinct sizes (main window, preview pane, …); caching avoids
+        // dispose+rebuild thrashing when the task alternates between them.
+        // If an app churns through more sizes than `fboCacheCapacity`, the
+        // least-recently-used bundle is evicted.
+        let fboCacheCapacity = 4
+        let fboCache =
+            System.Collections.Generic.Dictionary<struct (V2i * int), FboBundle>()
+        // Most-recently-used at head.
+        let mutable fboLru : list<struct (V2i * int)> = []
+
+        let mutable currentBundle : FboBundle voption = ValueNone
+
+        let disposeBundle (b : FboBundle) =
+            b.IntermediateFb.Dispose()
+            b.OitFb.Dispose()
+            b.CompositeFb.Dispose()
+            b.DepthTex.Dispose()
+            b.AccumT.Dispose()
+            b.RevealageT.Dispose()
+            for KeyValue(_, t) in b.ColorTex do t.Dispose()
 
         let releaseFbos () =
-            intermediateFb |> ValueOption.iter (fun fb -> fb.Dispose())
-            oitFb          |> ValueOption.iter (fun fb -> fb.Dispose())
-            compositeFb    |> ValueOption.iter (fun fb -> fb.Dispose())
-            depthTex       |> ValueOption.iter (fun t -> t.Dispose())
-            accumT         |> ValueOption.iter (fun t -> t.Dispose())
-            revealageT     |> ValueOption.iter (fun t -> t.Dispose())
-            colorTex |> Map.iter (fun _ t -> t.Dispose())
-            intermediateFb <- ValueNone
-            oitFb          <- ValueNone
-            compositeFb    <- ValueNone
-            depthTex       <- ValueNone
-            accumT         <- ValueNone
-            revealageT     <- ValueNone
-            colorTex       <- Map.empty
-            currentSize    <- V2i.Zero
+            for kvp in fboCache do disposeBundle kvp.Value
+            fboCache.Clear()
+            fboLru <- []
+            currentBundle <- ValueNone
 
         let releaseTasksAndSignatures () =
             opaqueTask          |> ValueOption.iter (fun t -> t.Dispose())
@@ -247,6 +268,10 @@ module TransparencyRenderTask =
             intermediateSig     <- ValueNone
             oitSig              <- ValueNone
             compositeSig        <- ValueNone
+
+        let releaseDirectTask () =
+            directOpaqueTask |> ValueOption.iter (fun t -> t.Dispose())
+            directOpaqueTask <- ValueNone
 
         let ensureForSamples (samples : int) =
             if samples <> currentSamples then
@@ -303,74 +328,107 @@ module TransparencyRenderTask =
                 transparentPickTask <- ValueSome (compileRaw (interSig, transparentPickSet))
                 currentSamples      <- samples
 
-        let ensureFbos (size : V2i) (samples : int) =
-            if size <> currentSize then
-                releaseFbos ()
+        let buildBundle (size : V2i) (samples : int) =
+            let dt = runtime.CreateTexture2D(size, depthFormat, samples = samples)
 
-                let dt = runtime.CreateTexture2D(size, depthFormat, samples = samples)
+            let ct =
+                userSig.ColorAttachments
+                |> Map.toList
+                |> List.map (fun (_, att) ->
+                    att.Name, runtime.CreateTexture2D(size, att.Format, samples = samples))
+                |> Map.ofList
 
-                let ct =
-                    userSig.ColorAttachments
-                    |> Map.toList
-                    |> List.map (fun (_, att) ->
-                        att.Name, runtime.CreateTexture2D(size, att.Format, samples = samples))
-                    |> Map.ofList
+            let at = runtime.CreateTexture2D(size, TextureFormat.Rgba16f, samples = samples)
+            let rt = runtime.CreateTexture2D(size, TextureFormat.R32f,    samples = samples)
 
-                let at = runtime.CreateTexture2D(size, TextureFormat.Rgba16f, samples = samples)
-                let rt = runtime.CreateTexture2D(size, TextureFormat.R32f,    samples = samples)
+            let interAtts =
+                ct
+                |> Map.map (fun _ t -> t.GetOutputView())
+                |> Map.add DefaultSemantic.DepthStencil (dt.GetOutputView())
 
-                let interAtts =
-                    ct
-                    |> Map.map (fun _ t -> t.GetOutputView())
-                    |> Map.add DefaultSemantic.DepthStencil (dt.GetOutputView())
-
-                // Share the depth and every user extra attachment with the
-                // intermediate framebuffer (same backing texture, two FBO
-                // bindings) so transparent writes land in the same storage
-                // opaque just updated.
-                let oitAtts =
-                    let baseAtts =
-                        Map.ofList [
-                            WeightedBlendedOIT.Semantic.Accum,     at.GetOutputView()
-                            WeightedBlendedOIT.Semantic.Revealage, rt.GetOutputView()
-                            DefaultSemantic.DepthStencil,          dt.GetOutputView()
-                        ]
-                    extraAtts |> List.fold (fun acc (name, _) ->
-                        Map.add name (ct.[name].GetOutputView()) acc) baseAtts
-
-                // Composite framebuffer: only Colors + DepthStencil, but
-                // referencing the same backing textures as the intermediate
-                // framebuffer so the composite's writes to Colors land in the
-                // shared texture.
-                let compositeAtts =
+            // Share the depth and every user extra attachment with the
+            // intermediate framebuffer (same backing texture, two FBO
+            // bindings) so transparent writes land in the same storage
+            // opaque just updated.
+            let oitAtts =
+                let baseAtts =
                     Map.ofList [
-                        DefaultSemantic.Colors,
-                            (ct |> Map.tryFind DefaultSemantic.Colors
-                                |> Option.map (fun t -> t.GetOutputView())
-                                |> Option.defaultValue (dt.GetOutputView()))
-                        DefaultSemantic.DepthStencil, dt.GetOutputView()
+                        WeightedBlendedOIT.Semantic.Accum,     at.GetOutputView()
+                        WeightedBlendedOIT.Semantic.Revealage, rt.GetOutputView()
+                        DefaultSemantic.DepthStencil,          dt.GetOutputView()
                     ]
+                extraAtts |> List.fold (fun acc (name, _) ->
+                    Map.add name (ct.[name].GetOutputView()) acc) baseAtts
 
-                intermediateFb <- ValueSome (runtime.CreateFramebuffer(intermediateSig.Value, interAtts))
-                oitFb          <- ValueSome (runtime.CreateFramebuffer(oitSig.Value, oitAtts))
-                compositeFb    <- ValueSome (runtime.CreateFramebuffer(compositeSig.Value, compositeAtts))
+            // Composite framebuffer: only Colors + DepthStencil, but
+            // referencing the same backing textures as the intermediate
+            // framebuffer so the composite's writes to Colors land in the
+            // shared texture.
+            let compositeAtts =
+                Map.ofList [
+                    DefaultSemantic.Colors,
+                        (ct |> Map.tryFind DefaultSemantic.Colors
+                            |> Option.map (fun t -> t.GetOutputView())
+                            |> Option.defaultValue (dt.GetOutputView()))
+                    DefaultSemantic.DepthStencil, dt.GetOutputView()
+                ]
 
-                depthTex   <- ValueSome dt
-                colorTex   <- ct
-                accumT     <- ValueSome at
-                revealageT <- ValueSome rt
+            { IntermediateFb = runtime.CreateFramebuffer(intermediateSig.Value, interAtts)
+              OitFb          = runtime.CreateFramebuffer(oitSig.Value, oitAtts)
+              CompositeFb    = runtime.CreateFramebuffer(compositeSig.Value, compositeAtts)
+              DepthTex       = dt
+              AccumT         = at
+              RevealageT     = rt
+              ColorTex       = ct }
 
-                currentSize <- size
+        let touchLru (key : struct (V2i * int)) =
+            // Move `key` to the front of the LRU list. If we exceed the
+            // capacity, drop the tail entry and dispose its bundle.
+            fboLru <- key :: (fboLru |> List.filter (fun k -> k <> key))
+            if List.length fboLru > fboCacheCapacity then
+                let rec dropTail = function
+                    | [] | [_] as l -> l
+                    | x :: rest -> x :: dropTail rest
+                let evicted = List.last fboLru
+                fboLru <- dropTail fboLru
+                match fboCache.TryGetValue evicted with
+                | true, b ->
+                    fboCache.Remove evicted |> ignore
+                    disposeBundle b
+                | _ -> ()
 
+        let ensureFbos (size : V2i) (samples : int) =
+            let key = struct (size, samples)
+            let bundle =
+                match fboCache.TryGetValue key with
+                | true, b -> b
+                | _ ->
+                    let b = buildBundle size samples
+                    fboCache.[key] <- b
+                    b
+            touchLru key
+
+            // Swap the adaptive texture references the composite quad reads
+            // through so it picks up the right accum/revealage for this size.
+            let mustTransact =
+                match currentBundle with
+                | ValueSome cur ->
+                    not (obj.ReferenceEquals(cur.AccumT, bundle.AccumT))
+                | ValueNone -> true
+
+            if mustTransact then
                 transact (fun () ->
-                    accumTex.Value     <- at :> ITexture
-                    revealageTex.Value <- rt :> ITexture)
+                    accumTex.Value     <- bundle.AccumT :> ITexture
+                    revealageTex.Value <- bundle.RevealageT :> ITexture)
+
+            currentBundle <- ValueSome bundle
 
         override x.FramebufferSignature = Some userSig
         override x.Runtime = Some runtime
         override x.Use f = f ()
 
         override x.PerformUpdate(token, rt) =
+            directOpaqueTask    |> ValueOption.iter (fun t -> t.Update(token, rt))
             opaqueTask          |> ValueOption.iter (fun t -> t.Update(token, rt))
             transparentTask     |> ValueOption.iter (fun t -> t.Update(token, rt))
             compositeTask       |> ValueOption.iter (fun t -> t.Update(token, rt))
@@ -379,23 +437,40 @@ module TransparencyRenderTask =
         override x.Perform(token, rt, output) =
             let outFb = output.Framebuffer
             let outSamples = outFb.Signature.Samples
+
+            let hasTransparent =
+                not (HashSet.isEmpty (AVal.force transparentContent))
+
+            if not hasTransparent then
+                // Fast direct path: no transparent objects right now. Render
+                // the opaque set straight to the user framebuffer — no
+                // intermediate FBO, no blits, no OIT machinery. The wrapped
+                // resources (if previously built) stay alive for the next
+                // frame where transparent objects reappear.
+                match directOpaqueTask with
+                | ValueNone ->
+                    directOpaqueTask <- ValueSome (compileRaw (userSig, opaqueSet))
+                | _ -> ()
+                directOpaqueTask.Value.Run(token, rt, output)
+            else
+
+            // Wrapped path: build (or reuse) the intermediate / OIT / composite
+            // signatures, sub-tasks, and framebuffers and do the full OIT
+            // dance. The direct task is kept alive for the next opaque-only
+            // frame.
             ensureForSamples outSamples
             ensureFbos outFb.Size outSamples
 
-            let inter = intermediateFb.Value
+            let bundle = currentBundle.Value
+            let inter = bundle.IntermediateFb
 
             // Always: seed intermediate from user FB (preserves any pre-clear)
             // and run the opaque pass into it.
             runtime.Copy(outFb, inter)
             opaqueTask.Value.Run(token, rt, { output with Framebuffer = inter })
 
-            // Skip the OIT passes when there are currently no transparent
-            // objects in the input set.
-            let hasTransparent =
-                not (HashSet.isEmpty (AVal.force transparentContent))
-
             if hasTransparent then
-                let oit = oitFb.Value
+                let oit = bundle.OitFb
 
                 // Pass 2: OIT color compositing.
                 // Clear only Accum + Revealage on the OIT framebuffer; the
@@ -410,7 +485,7 @@ module TransparencyRenderTask =
                     }
                 runtime.Clear(oit, oitClear)
                 transparentTask.Value.Run(token, rt, { output with Framebuffer = oit })
-                compositeTask.Value.Run(token, rt, { output with Framebuffer = compositeFb.Value })
+                compositeTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
 
                 // Pass 3: transparent depth + extras pass.
                 // Renders the *unmodified* user surfaces with depth-write on and
@@ -424,6 +499,7 @@ module TransparencyRenderTask =
             runtime.Copy(inter, outFb)
 
         override x.Release() =
+            releaseDirectTask ()
             releaseTasksAndSignatures ()
             releaseFbos ()
 
