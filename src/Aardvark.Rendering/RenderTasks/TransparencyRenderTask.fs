@@ -438,8 +438,12 @@ module TransparencyRenderTask =
             let outFb = output.Framebuffer
             let outSamples = outFb.Signature.Samples
 
+            // Read through the current AdaptiveToken so this wrapper is
+            // marked dirty when transparent objects appear / disappear —
+            // important for dirty-driven render loops that only re-run
+            // a task when one of its dependencies changes.
             let hasTransparent =
-                not (HashSet.isEmpty (AVal.force transparentContent))
+                not (HashSet.isEmpty (transparentContent.GetValue token))
 
             if not hasTransparent then
                 // Fast direct path: no transparent objects right now. Render
