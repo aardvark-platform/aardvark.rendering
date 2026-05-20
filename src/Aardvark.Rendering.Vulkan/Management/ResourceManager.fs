@@ -1456,22 +1456,24 @@ module Resources =
                 false
 
     [<AbstractClass>]
-    type AbstractImageViewResource(owner : IResourceCache, key : list<obj>, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
+    type AbstractImageViewResource(owner : IResourceCache, key : list<obj>, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>, aspect : aval<TextureAspect>) =
         inherit AbstractResourceLocation<ImageView>(owner, key)
 
         let mutable handle : ImageView voption = ValueNone
         let mutable version = 0
 
-        abstract member CreateImageView : image: Image * levels: Range1i * slices: Range1i * mapping: VkComponentMapping -> ImageView
+        abstract member CreateImageView : image: Image * aspect: TextureAspect * levels: Range1i * slices: Range1i * mapping: VkComponentMapping -> ImageView
 
         override x.Create() =
             image.Acquire()
             levels.Acquire()
             slices.Acquire()
+            aspect.Acquire()
 
         override x.Destroy() =
             handle |> ValueOption.iter Disposable.dispose
             handle <- ValueNone
+            aspect.Release()
             slices.Release()
             levels.Release()
             image.Release()
@@ -1483,10 +1485,11 @@ module Resources =
 
                 let levels = levels.GetValue(user, token, renderToken)
                 let slices = slices.GetValue(user, token, renderToken)
+                let aspect = aspect.GetValue(user, token, renderToken)
 
                 let isIdentical =
                     match handle with
-                    | ValueSome h -> h.Image = image.handle && h.MipLevelRange = levels && h.ArrayRange = slices
+                    | ValueSome h -> h.Image = image.handle && h.MipLevelRange = levels && h.ArrayRange = slices && h.Aspect = aspect
                     | ValueNone -> false
 
                 if isIdentical then
@@ -1502,7 +1505,7 @@ module Resources =
                         else
                             VkComponentMapping.Identity
 
-                    let h = x.CreateImageView(image.handle, levels, slices, mapping)
+                    let h = x.CreateImageView(image.handle, aspect, levels, slices, mapping)
                     handle <- ValueSome h
                     inc &version
 
@@ -1513,21 +1516,28 @@ module Resources =
                 | ValueNone -> failwith "[Resource] inconsistent state"
 
     type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device,
-                           samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
-        inherit AbstractImageViewResource(owner, key, image, levels, slices)
+                           samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>, aspect : aval<TextureAspect>) =
+        inherit AbstractImageViewResource(owner, key, image, levels, slices, aspect)
+
+        new (owner : IResourceCache, key : list<obj>, device : Device,
+             samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
+            ImageViewResource(owner, key, device, samplerType, image, levels, slices, AVal.constant TextureAspect.None)
 
         new (owner : IResourceCache, key : list<obj>, device : Device,
              samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>) =
             let levels = image |> AVal.map (fun i -> Range1i(0, i.MipMapLevels - 1))
             let slices = image |> AVal.map (fun i -> Range1i(0, i.Layers - 1))
-            ImageViewResource(owner, key, device, samplerType, image, levels, slices)
+            ImageViewResource(owner, key, device, samplerType, image, levels, slices, AVal.constant TextureAspect.None)
 
-        override x.CreateImageView(image : Image, levels : Range1i, slices : Range1i, mapping : VkComponentMapping) =
-            device.CreateInputImageView(image, samplerType, levels, slices, mapping)
+        override x.CreateImageView(image : Image, aspect : TextureAspect, levels : Range1i, slices : Range1i, mapping : VkComponentMapping) =
+            let aspectOverride =
+                if aspect = TextureAspect.None then ValueNone
+                else ValueSome aspect
+            device.CreateInputImageView(image, samplerType, aspectOverride, levels, slices, mapping)
 
     type StorageImageViewResource(owner : IResourceCache, key : list<obj>, device : Device,
                                   imageType : FShade.GLSL.GLSLImageType, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
-        inherit AbstractImageViewResource(owner, key, image, levels, slices)
+        inherit AbstractImageViewResource(owner, key, image, levels, slices, AVal.constant TextureAspect.None)
 
         new (owner : IResourceCache, key : list<obj>, device : Device,
              imageType : FShade.GLSL.GLSLImageType, image : IResourceLocation<Image>) =
@@ -1535,7 +1545,7 @@ module Resources =
             let slices = image |> AVal.map (fun i -> Range1i(0, i.Layers - 1))
             StorageImageViewResource(owner, key, device, imageType, image, levels, slices)
 
-        override x.CreateImageView(image : Image, levels : Range1i, slices : Range1i, mapping : VkComponentMapping) =
+        override x.CreateImageView(image : Image, _aspect : TextureAspect, levels : Range1i, slices : Range1i, mapping : VkComponentMapping) =
             device.CreateStorageView(image, imageType, levels, slices, mapping)
 
     type IsActiveResource(owner : IResourceCache, key : list<obj>, input : aval<bool>) =
@@ -1897,6 +1907,12 @@ type ResourceManager(device : Device) =
             fun cache key -> ImageViewResource(cache, key, device, samplerType, input, levels, slices)
         )
 
+    member x.CreateImageView(samplerType : FShade.GLSL.GLSLSamplerType, input : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>, aspect : aval<TextureAspect>) =
+        imageViewCache.GetOrCreate(
+            [samplerType :> obj; input :> obj; levels :> obj; slices :> obj; aspect :> obj],
+            fun cache key -> ImageViewResource(cache, key, device, samplerType, input, levels, slices, aspect)
+        )
+
     member x.CreateImageView(samplerType : FShade.GLSL.GLSLSamplerType, input : IResourceLocation<Image>) =
         imageViewCache.GetOrCreate([samplerType :> obj; input :> obj], fun cache key -> ImageViewResource(cache, key, device, samplerType, input))
 
@@ -1929,13 +1945,19 @@ type ResourceManager(device : Device) =
                                         level : aval<ITextureLevel>, samplerDesc : aval<SamplerState>) =
         let levels = level |> AVal.mapNonAdaptive _.Levels
         let slices = level |> AVal.mapNonAdaptive _.Slices
+        let aspect = level |> AVal.mapNonAdaptive _.Aspect
         let image = x.CreateImage(name, samplerType.Properties, level)
-        let view = x.CreateImageView(samplerType, image, levels, slices)
+        let view = x.CreateImageView(samplerType, image, levels, slices, aspect)
 
         imageSamplerCache.GetOrCreate(
             [view :> obj; samplerDesc :> obj],
             fun cache key -> ImageSamplerResource(cache, key, device, view, samplerDesc)
         )
+
+    member private x.CreateImageSampler(name : string, samplerType : FShade.GLSL.GLSLSamplerType,
+                                        sub : aval<ITextureSubResource>, samplerDesc : aval<SamplerState>) =
+        let level = sub |> AdaptiveResource.mapNonAdaptive (fun s -> s :> ITextureLevel)
+        x.CreateImageSampler(name, samplerType, level, samplerDesc)
 
     member x.CreateImageSampler(textureName : Symbol, samplerType : FShade.GLSL.GLSLSamplerType,
                                 texture : aval<ITexture>, samplerDesc : aval<SamplerState>) =
@@ -1946,6 +1968,11 @@ type ResourceManager(device : Device) =
                                 level : aval<ITextureLevel>, samplerDesc : aval<SamplerState>) =
         let name = if device.DebugLabelsEnabled then $"{textureName} (Sampled Image)" else null
         x.CreateImageSampler(name, samplerType, level, samplerDesc)
+
+    member x.CreateImageSampler(textureName : Symbol, samplerType : FShade.GLSL.GLSLSamplerType,
+                                sub : aval<ITextureSubResource>, samplerDesc : aval<SamplerState>) =
+        let name = if device.DebugLabelsEnabled then $"{textureName} (Sampled Image)" else null
+        x.CreateImageSampler(name, samplerType, sub, samplerDesc)
 
     member x.CreateNullImageSampler(samplerType : FShade.GLSL.GLSLSamplerType) =
         x.CreateImageSampler(null, samplerType, nullTextureConst, AVal.constant SamplerState.Default)

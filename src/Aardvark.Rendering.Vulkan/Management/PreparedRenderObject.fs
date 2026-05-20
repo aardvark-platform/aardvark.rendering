@@ -195,13 +195,18 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 let sampler = this.CreateImageSampler(textureName, sam.samplerType, texture, desc)
                                                 i, sampler
 
+                                            | CastUniformResource (sub : aval<ITextureSubResource>) ->
+                                                let desc = createSamplerState this textureName uniforms samplerState
+                                                let sampler = this.CreateImageSampler(textureName, sam.samplerType, sub, desc)
+                                                i, sampler
+
                                             | CastUniformResource (level : aval<ITextureLevel>) ->
                                                 let desc = createSamplerState this textureName uniforms samplerState
                                                 let sampler = this.CreateImageSampler(textureName, sam.samplerType, level, desc)
                                                 i, sampler
 
                                             | ValueSome t ->
-                                                failf "invalid type '%A' for texture '%A' (expected a subtype of ITexture or ITextureLevel)" t.ContentType textureName
+                                                failf "invalid type '%A' for texture '%A' (expected a subtype of ITexture, ITextureLevel, or ITextureSubResource)" t.ContentType textureName
 
                                             | _ ->
                                                 failf "could not find texture '%A'" textureName

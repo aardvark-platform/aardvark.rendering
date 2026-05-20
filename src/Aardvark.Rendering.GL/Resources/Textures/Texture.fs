@@ -652,6 +652,29 @@ module TextureCreationExtensions =
         member x.CreateTextureView(orig : Texture, levels : Range1i, slices : Range1i) =
             x.CreateTextureView(orig, levels, slices, orig.IsArray)
 
+        /// Creates a texture view restricted to the given aspect. For depth-stencil formats this configures
+        /// GL_DEPTH_STENCIL_TEXTURE_MODE so that the view samples as either depth or stencil.
+        member x.CreateTextureView(orig : Texture, aspect : TextureAspect, levels : Range1i, slices : Range1i, isArray : bool) =
+            let view = x.CreateTextureView(orig, levels, slices, isArray)
+
+            if orig.Format.IsDepthStencil then
+                let mode =
+                    match aspect with
+                    | TextureAspect.Stencil -> All.StencilIndex
+                    | TextureAspect.Depth   -> All.DepthComponent
+                    | _ -> All.DepthComponent
+
+                using x.ResourceLock (fun _ ->
+                    let target = TextureTarget.ofTexture view
+                    GL.BindTexture(target, view.Handle)
+                    GL.Check "could not bind texture view"
+                    GL.TexParameter(target, TextureParameterName.DepthStencilTextureMode, int mode)
+                    GL.Check "could not set DEPTH_STENCIL_TEXTURE_MODE on texture view"
+                    GL.BindTexture(target, 0)
+                )
+
+            view
+
         member x.Delete(t : Texture) =
             t.Dispose()
 

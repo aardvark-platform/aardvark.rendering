@@ -128,14 +128,20 @@ module ImageView =
         | _ ->
             failf "invalid view type: %A" (count, isArray, dim)
 
-    let createInputView (componentMapping : VkComponentMapping) (img : Image) (samplerType : FShade.GLSL.GLSLSamplerType)
-                        (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
+    let createInputViewWithAspect (componentMapping : VkComponentMapping) (img : Image) (samplerType : FShade.GLSL.GLSLSamplerType)
+                                  (aspectOverride : TextureAspect voption) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
         let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Layers
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
-        let aspect = VkFormat.toShaderAspect img.Format
+        let aspect =
+            match aspectOverride with
+            | ValueSome a when a <> TextureAspect.None && a <> TextureAspect.DepthStencil ->
+                // sampler views can only carry a single aspect
+                VkImageAspectFlags.ofTextureAspect a
+            | _ ->
+                VkFormat.toShaderAspect img.Format
 
         let isResolved, img = 
             if samplerType.isMS then
@@ -192,6 +198,10 @@ module ImageView =
 
             return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange)
         }
+
+    let createInputView (componentMapping : VkComponentMapping) (img : Image) (samplerType : FShade.GLSL.GLSLSamplerType)
+                        (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
+        device |> createInputViewWithAspect componentMapping img samplerType ValueNone levelRange arrayRange
 
     let createStorageView (componentMapping : VkComponentMapping) (img : Image) (imageType : FShade.GLSL.GLSLImageType)
                           (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
@@ -290,6 +300,10 @@ module ImageView =
 
 [<AbstractClass; Sealed; Extension>]
 type ContextImageViewExtensions private() =
+
+    [<Extension>]
+    static member inline CreateInputImageView(this : Device, image : Image, samplerType : FShade.GLSL.GLSLSamplerType, aspect : TextureAspect voption, levelRange : Range1i, arrayRange : Range1i, comp : VkComponentMapping) =
+        this |> ImageView.createInputViewWithAspect comp image samplerType aspect levelRange arrayRange
 
     [<Extension>]
     static member inline CreateInputImageView(this : Device, image : Image, samplerType : FShade.GLSL.GLSLSamplerType, levelRange : Range1i, arrayRange : Range1i, comp : VkComponentMapping) =

@@ -262,11 +262,14 @@ module PreparedPipelineState =
                 | CastUniformResource (texture : aval<ITexture>) ->
                     x.CreateTexture(textureName, texture, samplerType)
 
+                | CastUniformResource (sub : aval<ITextureSubResource>) ->
+                    x.CreateTexture(textureName, sub, samplerType)
+
                 | CastUniformResource (level : aval<ITextureLevel>) ->
                     x.CreateTexture(textureName, level, samplerType)
 
                 | ValueSome t ->
-                    failf "invalid type '%A' for texture '%A' (expected a subtype of ITexture or ITextureLevel)" t.ContentType textureName
+                    failf "invalid type '%A' for texture '%A' (expected a subtype of ITexture, ITextureLevel, or ITextureSubResource)" t.ContentType textureName
 
                 | _ ->
                     failf "could not find texture '%A'" textureName

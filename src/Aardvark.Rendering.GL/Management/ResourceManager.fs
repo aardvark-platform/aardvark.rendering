@@ -295,25 +295,49 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let name = if ctx.DebugLabelsEnabled then $"{name} (Sampled Texture)" else null
         x.CreateTexture(name, data, samplerType.Properties)
 
-    // Workaround for some APIs accepting texture levels as sampler input (e.g. GPGPU image reduce).
-    // GL cannot directly bind specific texture levels and ranges to samplers.
-    // We would have to use texture views, which are not guaranteed to be supported (MacOS does not obviously).
-    // Here we just bind the whole texture as usual and do some sanity checks.
-    member x.CreateTexture(name : Symbol, data : aval<ITextureLevel>, samplerType : FShade.GLSL.GLSLSamplerType) =
-        let data =
-            data |> AdaptiveResource.mapNonAdaptive (fun l ->
-                if l.Level <> 0 then
-                    failf "cannot bind texture level %d (must be zero)" l.Level
+    // Sub-resource sampling path: builds a glTextureView restricted to the requested aspect / level / slice
+    // and binds that view as the sampler. This lets shaders read the depth or stencil aspect of a
+    // depth-stencil texture, or sample a specific mip level / array slice. Requires ARB_texture_view.
+    member private x.CreateTextureFromRange(name : string, data : aval<ITextureRange>, properties : TextureProperties) : IResource<Texture, TextureBinding> =
+        textureCache.GetOrCreate(data, [properties :> obj; "subresource" :> obj], fun () ->
+            let createView (r : ITextureRange) =
+                let orig =
+                    match r.Texture with
+                    | :? Texture as t -> t
+                    | t -> failf "expected GL backend texture, got %A" (t.GetType())
 
-                let wholeRange = Range1i(0, l.Texture.Slices - 1)
-                if l.Slices <> wholeRange then
-                    failf "cannot bind texture range %A (must be %A)" l.Slices wholeRange
+                let levels = r.Levels
+                let slices = r.Slices
 
-                l.Texture
-            )
+                if levels.Size > 1 then
+                    failf "cannot bind texture level range %A to sampler (must be a single level)" levels
 
+                let view = ctx.CreateTextureView(orig, r.Aspect, levels, slices, properties.IsArray)
+                view :> Texture
+
+            {
+                create = fun b   -> createView b
+                update = fun h b ->
+                    let next = createView b
+                    h.Dispose()
+                    next
+                delete = fun h   -> h.Dispose()
+                unwrap = fun _   -> ValueNone
+                info   = fun _   -> ResourceInfo.Zero
+                view   = fun r   -> { texture = r.Handle; target = Translations.toGLTarget r.Dimension r.IsArray r.Multisamples }
+                kind   = ResourceKind.Texture
+            }
+        )
+
+    member x.CreateTexture(name : Symbol, data : aval<ITextureLevel>, samplerType : FShade.GLSL.GLSLSamplerType) : IResource<Texture, TextureBinding> =
         let name = if ctx.DebugLabelsEnabled then $"{name} (Sampled Texture)" else null
-        x.CreateTexture(name, data, samplerType.Properties)
+        let data = data |> AdaptiveResource.mapNonAdaptive (fun l -> l :> ITextureRange)
+        x.CreateTextureFromRange(name, data, samplerType.Properties)
+
+    member x.CreateTexture(name : Symbol, data : aval<ITextureSubResource>, samplerType : FShade.GLSL.GLSLSamplerType) : IResource<Texture, TextureBinding> =
+        let name = if ctx.DebugLabelsEnabled then $"{name} (Sampled Texture)" else null
+        let data = data |> AdaptiveResource.mapNonAdaptive (fun l -> l :> ITextureRange)
+        x.CreateTextureFromRange(name, data, samplerType.Properties)
 
     member x.CreateIndirectBuffer(indexed : bool, data : aval<Aardvark.Rendering.IndirectBuffer>) =
         let name = if ctx.DebugLabelsEnabled then "Indirect Buffer" else null
