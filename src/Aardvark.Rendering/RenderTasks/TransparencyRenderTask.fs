@@ -31,25 +31,36 @@ module TransparencyRenderTask =
     /// Run time when there are no transparent objects in the current snapshot.
     let needsOitTreatment (_objects : aset<IRenderObject>) = true
 
-    /// Builds the per-attachment blend-mode map for the transparent pass,
-    /// preserving any existing per-attachment modes the user supplied for
-    /// non-OIT attachments.
-    let private transparentAttachmentBlend (existing : Map<Symbol, BlendMode>) =
-        existing
+    /// Builds the per-attachment blend-mode map for the transparent pass:
+    ///   - Accum: additive
+    ///   - Revealage: multiplicative transmittance
+    ///   - every other "extra" attachment (e.g. PickData): defaults to
+    ///     per-channel minimum so multiple transparent fragments resolve
+    ///     deterministically to the smallest written value (apps that want
+    ///     correct depth-ordered picking encode their data with smaller =
+    ///     closer; see WeightedBlendedOIT.BlendModes.minimum)
+    /// Existing per-attachment modes the user supplied are preserved.
+    let private transparentAttachmentBlend (extras : Symbol list) (existing : Map<Symbol, BlendMode>) =
+        let withExtras =
+            extras |> List.fold (fun acc name ->
+                if Map.containsKey name acc then acc
+                else Map.add name WeightedBlendedOIT.BlendModes.minimum acc) existing
+        withExtras
         |> Map.add WeightedBlendedOIT.Semantic.Accum     WeightedBlendedOIT.BlendModes.accum
         |> Map.add WeightedBlendedOIT.Semantic.Revealage WeightedBlendedOIT.BlendModes.revealage
 
     /// Clones a transparent RenderObject and rewrites its pipeline state for the
     /// OIT pass: composes the weighted-blend writer onto its surface, forces
-    /// depth-write off, applies per-attachment blend modes for Accum + Revealage,
-    /// and clears IsTransparent on the clone to avoid recursive wrapping.
-    let private transformTransparent (ro : RenderObject) : IRenderObject =
+    /// depth-write off, applies per-attachment blend modes for Accum + Revealage
+    /// plus min-blending on every extra attachment, and clears IsTransparent on
+    /// the clone to avoid recursive wrapping.
+    let private transformTransparent (extras : Symbol list) (ro : RenderObject) : IRenderObject =
         let copy = RenderObject(ro)
         copy.IsTransparent <- false
         copy.Surface       <- WeightedBlendedOIT.composeSurface ro.Surface
         copy.DepthState    <- { ro.DepthState with WriteMask = AVal.constant false }
         copy.BlendState    <- { ro.BlendState with
-                                  AttachmentMode = ro.BlendState.AttachmentMode |> AVal.map transparentAttachmentBlend }
+                                  AttachmentMode = ro.BlendState.AttachmentMode |> AVal.map (transparentAttachmentBlend extras) }
         copy :> IRenderObject
 
     let private fullscreenPositions =
@@ -122,12 +133,14 @@ module TransparencyRenderTask =
         let extraAtts =
             userColorAtts |> List.filter (fun (n, _) -> n <> DefaultSemantic.Colors)
 
+        let extraNames = extraAtts |> List.map fst
+
         let opaqueSet = objects |> ASet.filter (not << isTransparent)
         let transparentSet =
             objects |> ASet.choose (fun o ->
                 if isTransparent o then
                     match o with
-                    | :? RenderObject as r -> Some (transformTransparent r)
+                    | :? RenderObject as r -> Some (transformTransparent extraNames r)
                     | _ -> None
                 else None)
 

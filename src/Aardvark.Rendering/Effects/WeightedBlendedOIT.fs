@@ -45,6 +45,23 @@ module WeightedBlendedOIT =
         /// Final composite blend — premultiplied alpha blend.
         let composite = BlendMode.Blend
 
+        /// Per-channel minimum. Default blend mode applied to every "extra"
+        /// user attachment (i.e. color attachments other than Colors) during
+        /// the transparent pass, so multiple transparent fragments at the
+        /// same pixel resolve to the smallest written value in each channel.
+        /// Apps that want correct depth-ordered picking should encode their
+        /// pick attachment as a single channel whose value is monotonic in
+        /// depth (e.g. a bit-packed (depth, id) cast to float).
+        let minimum =
+            { BlendMode.None with
+                Enabled                = true
+                SourceColorFactor      = BlendFactor.One
+                SourceAlphaFactor      = BlendFactor.One
+                DestinationColorFactor = BlendFactor.One
+                DestinationAlphaFactor = BlendFactor.One
+                ColorOperation         = BlendOperation.Minimum
+                AlphaOperation         = BlendOperation.Minimum }
+
     [<AutoOpen>]
     module Shaders =
 
