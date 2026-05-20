@@ -143,6 +143,7 @@
     <Compile Include="Effects\Default\Impl\InstanceTrafo.fs" />
     <Compile Include="Effects\Default\DefaultSurfaces.fs" />
     <Compile Include="Effects\Effect.fs" />
+    <Compile Include="Effects\WeightedBlendedOIT.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
   </ItemGroup>
