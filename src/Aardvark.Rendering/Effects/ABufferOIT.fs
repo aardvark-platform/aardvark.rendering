@@ -40,11 +40,15 @@ module ABufferOIT =
         // The required-extension strings make FShade emit the matching
         // #extension directives. GL wants the ARB name, glslang/Vulkan the
         // EXT name; we declare both so either compiler is satisfied.
+        // KeepCall stops FShade's optimizer from eliminating these
+        // unit-returning, side-effecting calls (they have no usable result).
+        [<KeepCall>]
         [<GLSLIntrinsic("beginInvocationInterlockARB()",
                         "GL_ARB_fragment_shader_interlock",
                         "GL_EXT_fragment_shader_interlock")>]
         let beginInterlock() : unit = failwith "only in shader code"
 
+        [<KeepCall>]
         [<GLSLIntrinsic("endInvocationInterlockARB()",
                         "GL_ARB_fragment_shader_interlock",
                         "GL_EXT_fragment_shader_interlock")>]

@@ -27,7 +27,7 @@ module TransparencyRenderTask =
         | WeightedBlended
         | ABuffer
 
-    let technique = Technique.WeightedBlended
+    let technique = Technique.ABuffer
 
     /// True if the given render object should be routed through the OIT pass.
     let isTransparent (o : IRenderObject) =

@@ -44,6 +44,38 @@ module Transparency =
                 return V4f.Zero
             }
 
+        // Pass 2 of the cross-pass test: reads the image written by a previous
+        // render pass via imageLoad and outputs it as colour. If cross-pass
+        // storage visibility is broken, this reads 0.
+        let smokeReadImage (f : Fragment) =
+            fragment {
+                let px = V2i f.coord.XY
+                let v = uniform.SmokeTarget.[px].X
+                return V4f(float32 v, 0.0f, 0.0f, 1.0f)
+            }
+
+        [<KeepCall>]
+        [<GLSLIntrinsic("beginInvocationInterlockARB()",
+                        "GL_ARB_fragment_shader_interlock", "GL_EXT_fragment_shader_interlock")>]
+        let beginInterlock() : unit = failwith "shader only"
+        [<KeepCall>]
+        [<GLSLIntrinsic("endInvocationInterlockARB()",
+                        "GL_ARB_fragment_shader_interlock", "GL_EXT_fragment_shader_interlock")>]
+        let endInterlock() : unit = failwith "shader only"
+
+        // Interlocked count read-modify-write — the A-buffer's core mechanic.
+        // Each fragment increments the per-pixel counter inside a critical
+        // section. With N overlapping draws the count must end at N.
+        let countRMW (f : Fragment) =
+            fragment {
+                let px = V2i f.coord.XY
+                beginInterlock()
+                let c = uniform.SmokeTarget.[px].X
+                uniform.SmokeTarget.[px] <- V4ui(c + 1u, 0u, 0u, 0u)
+                endInterlock()
+                return V4f.Zero
+            }
+
     module Cases =
 
         /// Smoke test: prove a fragment shader can write to a storage image
@@ -88,6 +120,94 @@ module Transparency =
                 fbo.Dispose()
                 runtime.DeleteTexture target
                 runtime.DeleteTexture colorTex
+
+        /// Cross-pass storage visibility: pass 1 writes a storage image, a
+        /// SECOND render pass reads it via imageLoad and outputs to colour.
+        /// This isolates the exact mechanism the A-buffer resolve relies on.
+        let crossPassImageReadWrite (runtime : IRuntime) =
+            let size = V2i(8)
+            let target = runtime.CreateTexture2D(size, TextureFormat.R32ui)
+
+            use writeSig = runtime.CreateFramebufferSignature([ DefaultSemantic.Colors, TextureFormat.Rgba8 ])
+            use readSig  = runtime.CreateFramebufferSignature([ DefaultSemantic.Colors, TextureFormat.Rgba32f ])
+
+            let writeColor = runtime.CreateTexture2D(size, TextureFormat.Rgba8)
+            let readColor  = runtime.CreateTexture2D(size, TextureFormat.Rgba32f)
+            let writeFbo = runtime.CreateFramebuffer(writeSig, Map.ofList [ DefaultSemantic.Colors, writeColor.GetOutputView() ])
+            let readFbo  = runtime.CreateFramebuffer(readSig,  Map.ofList [ DefaultSemantic.Colors, readColor.GetOutputView() ])
+
+            use writeTask =
+                Sg.fullScreenQuad
+                |> Sg.texture "SmokeTarget" (AVal.constant (target :> ITexture))
+                |> Sg.shader { do! Shader.smokeWriteImage size.X }
+                |> Sg.compile runtime writeSig
+
+            use readTask =
+                Sg.fullScreenQuad
+                |> Sg.texture "SmokeTarget" (AVal.constant (target :> ITexture))
+                |> Sg.shader { do! Shader.smokeReadImage }
+                |> Sg.compile runtime readSig
+
+            try
+                writeTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer writeFbo)
+                readTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer readFbo)
+
+                let data = readColor.Download().AsPixImage<float32>().Data
+                // Red channel holds the value read from the storage image; 0
+                // everywhere means the second pass didn't see the first's writes.
+                let reds = [ for i in 0 .. (data.Length / 4) - 1 -> data.[i * 4] ]
+                let nonZero = reds |> List.filter (fun v -> v > 0.0f) |> List.length
+                Expect.isGreaterThan nonZero 0
+                    "second render pass must see the storage-image writes from the first pass (0 everywhere = cross-pass storage visibility is broken)"
+            finally
+                writeFbo.Dispose(); readFbo.Dispose()
+                runtime.DeleteTexture target
+                runtime.DeleteTexture writeColor
+                runtime.DeleteTexture readColor
+
+        /// The A-buffer's core mechanic: N overlapping draws each do an
+        /// interlocked read-modify-write of a per-pixel counter; a second pass
+        /// reads it back. Must equal N (interlock serialized the RMW and the
+        /// writes are visible cross-pass).
+        let interlockedCountRMW (runtime : IRuntime) =
+            let size = V2i(8)
+            let n = 3
+            let target = runtime.CreateTexture2D(size, TextureFormat.R32ui)
+
+            use writeSig = runtime.CreateFramebufferSignature([ DefaultSemantic.Colors, TextureFormat.Rgba8 ])
+            use readSig  = runtime.CreateFramebufferSignature([ DefaultSemantic.Colors, TextureFormat.Rgba32f ])
+            let writeColor = runtime.CreateTexture2D(size, TextureFormat.Rgba8)
+            let readColor  = runtime.CreateTexture2D(size, TextureFormat.Rgba32f)
+            let writeFbo = runtime.CreateFramebuffer(writeSig, Map.ofList [ DefaultSemantic.Colors, writeColor.GetOutputView() ])
+            let readFbo  = runtime.CreateFramebuffer(readSig,  Map.ofList [ DefaultSemantic.Colors, readColor.GetOutputView() ])
+
+            let quad () =
+                Sg.fullScreenQuad
+                |> Sg.texture "SmokeTarget" (AVal.constant (target :> ITexture))
+                |> Sg.shader { do! Shader.countRMW }
+
+            use writeTask = List.init n (fun _ -> quad ()) |> Sg.ofList |> Sg.compile runtime writeSig
+            use readTask =
+                Sg.fullScreenQuad
+                |> Sg.texture "SmokeTarget" (AVal.constant (target :> ITexture))
+                |> Sg.shader { do! Shader.smokeReadImage }
+                |> Sg.compile runtime readSig
+
+            try
+                runtime.Clear(target, clear { color C4ui.Zero })
+                writeTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer writeFbo)
+                readTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer readFbo)
+
+                let data = readColor.Download().AsPixImage<float32>().Data
+                let counts = [ for i in 0 .. (data.Length / 4) - 1 -> int (round data.[i * 4]) ]
+                let distinct = counts |> List.distinct |> List.sort
+                Expect.equal distinct [ n ]
+                    $"every pixel's interlocked count must equal {n} (got distinct values {distinct})"
+            finally
+                writeFbo.Dispose(); readFbo.Dispose()
+                runtime.DeleteTexture target
+                runtime.DeleteTexture writeColor
+                runtime.DeleteTexture readColor
 
         /// Five screen-filling quads with identity camera and varying NDC z:
         ///
@@ -201,7 +321,9 @@ module Transparency =
 
     let tests (backend : Backend) =
         [
-            "fragment storage-image write", Cases.fragmentImageWrite
+            "fragment storage-image write",  Cases.fragmentImageWrite
+            "cross-pass storage read/write", Cases.crossPassImageReadWrite
+            "interlocked count RMW",         Cases.interlockedCountRMW
             "z-stack with opaque occluder",  Cases.zStackWithOccluder
         ]
         |> prepareCases backend "Transparency"

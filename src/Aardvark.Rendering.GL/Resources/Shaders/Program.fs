@@ -152,17 +152,28 @@ module ProgramExtensions =
         // the generated code uses the interlock intrinsic. Inserted right
         // after the interlock #extension line to keep GLSL ordering valid
         // (layout qualifiers must follow #extension directives).
-        let private interlockExtRx =
-            System.Text.RegularExpressions.Regex @"(#extension[ \t]+GL_ARB_fragment_shader_interlock[ \t]*:[^\n]*\n)"
+        // Any #extension directive; the interlock execution-mode layout must be
+        // inserted after the LAST one (layouts are non-preprocessor tokens and
+        // every #extension must precede them).
+        let private anyExtRx =
+            System.Text.RegularExpressions.Regex @"#extension[^\n]*\n"
+
+        // Storage images touched inside an interlock critical section must be
+        // coherent so writes from one fragment/draw are visible to a later
+        // critical section at the same pixel.
+        let private storageImageDeclRx =
+            System.Text.RegularExpressions.Regex @"(?<!coherent[ \t])(\buniform[ \t]+(?:restrict[ \t]+)?[ui]?image\w+)"
 
         let injectFragmentInterlock (code : string) =
             if code.Contains "beginInvocationInterlockARB" then
                 let decl = $"layout(pixel_interlock_unordered) in;{nl}layout(early_fragment_tests) in;{nl}"
-                if interlockExtRx.IsMatch code then
-                    interlockExtRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->
-                        m.Groups.[1].Value + decl), 1)
-                else
-                    code
+                let ms = anyExtRx.Matches code
+                let code =
+                    if ms.Count > 0 then
+                        let last = ms.[ms.Count - 1]
+                        code.Insert(last.Index + last.Length, decl)
+                    else code
+                storageImageDeclRx.Replace(code, "coherent $1")
             else
                 code
 
