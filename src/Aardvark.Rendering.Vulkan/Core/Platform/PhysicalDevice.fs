@@ -19,6 +19,7 @@ open EXTCustomBorderColor
 open EXTDescriptorIndexing
 open EXTMemoryPriority
 open EXTDeviceFault
+open EXTFragmentShaderInterlock
 open NVRayTracingInvocationReorder
 open NVRayTracingValidation
 
@@ -65,7 +66,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
     let hasExtension = flip Map.containsKey availableExtensions
 
     let queryFeatures (hasExtension: string -> bool) =
-        let f, pm, memp, ycbcr, cbc, s8, s16, f16i8, vp, sdp, idx, psub, rtp, rtpos, rtir, rtv, acc, omm, rq, bda, dflt =
+        let f, pm, memp, ycbcr, cbc, s8, s16, f16i8, vp, sdp, idx, psub, rtp, rtpos, rtir, rtv, acc, omm, rq, bda, dflt, fsi =
             use chain = new VkStructChain()
             let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
             let pMemPrior   = chain.Add<VkPhysicalDeviceMemoryPriorityFeaturesEXT>             (hasExtension EXTMemoryPriority.Name)
@@ -87,6 +88,7 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             let pRQ         = chain.Add<VkPhysicalDeviceRayQueryFeaturesKHR>                   (hasExtension KHRRayQuery.Name)
             let pDevAddr    = chain.Add<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>        (hasExtension KHRBufferDeviceAddress.Name)
             let pDevFault   = chain.Add<VkPhysicalDeviceFaultFeaturesEXT>                      (hasExtension EXTDeviceFault.Name)
+            let pFsi        = chain.Add<VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT>    (hasExtension EXTFragmentShaderInterlock.Name)
             let pFeatures   = chain.Add<VkPhysicalDeviceFeatures2>()
 
             VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
@@ -107,9 +109,9 @@ type PhysicalDevice internal(instance: IVulkanInstance, handle: VkPhysicalDevice
             NativePtr.readOrEmpty p8bit, !!p16bit, NativePtr.readOrEmpty pf16i8,
             !!pVarPtrs, !!pDrawParams, NativePtr.readOrEmpty pIdx, psub, NativePtr.readOrEmpty pRTP, NativePtr.readOrEmpty pRTPos,
             NativePtr.readOrEmpty pRTIR, NativePtr.readOrEmpty pRTV, NativePtr.readOrEmpty pAcc, NativePtr.readOrEmpty pOmm, NativePtr.readOrEmpty pRQ,
-            NativePtr.readOrEmpty pDevAddr, NativePtr.readOrEmpty pDevFault
+            NativePtr.readOrEmpty pDevAddr, NativePtr.readOrEmpty pDevFault, NativePtr.readOrEmpty pFsi
 
-        f |> DeviceFeatures.create pm memp ycbcr cbc s8 s16 f16i8 vp sdp idx psub rtp rtpos rtir rtv acc omm rq bda dflt
+        f |> DeviceFeatures.create pm memp ycbcr cbc s8 s16 f16i8 vp sdp idx psub rtp rtpos rtir rtv acc omm rq bda dflt fsi
 
     let availableFeatures =
         queryFeatures hasExtension

@@ -23,6 +23,7 @@ type HeadlessVulkanApplication(debug: IDebugConfig,
             yield Extensions.GetPhysicalDeviceProperties2
             yield Extensions.ConservativeRasterization
             yield Extensions.CustomBorderColor
+            yield Extensions.FragmentShaderInterlock
             yield Extensions.MemoryBudget
             yield Extensions.MemoryPriority
             yield Extensions.DeviceFault
