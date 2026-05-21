@@ -61,12 +61,27 @@ module ShaderModule =
             return !!pHandle
         }
 
+    // FShade cannot emit the fragment-stage execution-mode layout that
+    // fragment-shader interlock requires, so inject it into the generated GLSL
+    // for the fragment slot before handing it to glslang. Inserted after the
+    // interlock #extension line so GLSL ordering stays valid.
+    let private interlockExtRx =
+        System.Text.RegularExpressions.Regex @"(#extension[ \t]+GL_(?:ARB|EXT)_fragment_shader_interlock[ \t]*:[^\n]*\n)"
+
+    let private injectFragmentInterlock (slot : FShade.ShaderSlot) (code : string) =
+        if slot = FShade.ShaderSlot.Fragment && code.Contains "beginInvocationInterlockARB" && interlockExtRx.IsMatch code then
+            let decl = "layout(pixel_interlock_unordered) in;\nlayout(early_fragment_tests) in;\n"
+            interlockExtRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m -> m.Groups.[1].Value + decl), 1)
+        else
+            code
+
     let ofGLSLWithTarget (target : GLSLang.Target) (slot : FShade.ShaderSlot) (info : FShade.GLSL.GLSLShader) (device : Device) =
         let siface = info.iface.shaders.[slot]
         let defines = [slot.Conditional]
         let config = device.DebugConfig
+        let code = injectFragmentInterlock slot info.code
 
-        match GLSLang.GLSLang.tryCompileWithTarget target (glslangStage slot) siface.shaderEntry config.GenerateShaderDebugInfo defines info.code with
+        match GLSLang.GLSLang.tryCompileWithTarget target (glslangStage slot) siface.shaderEntry config.GenerateShaderDebugInfo defines code with
         | Some binary, wrn ->
             if config.PrintShaderCode && not <| System.String.IsNullOrWhiteSpace wrn then
                 let wrn = wrn |> String.indent 1
@@ -82,7 +97,7 @@ module ShaderModule =
 
         | None, err ->
             if not config.PrintShaderCode then
-                ShaderCodeReporting.logLines "Failed to compile shader" info.code
+                ShaderCodeReporting.logLines "Failed to compile shader" code
 
             let err = String.normalizeLineEndings err
             failf $"{slot} shader compilation failed:{nl}{nl}{err}"

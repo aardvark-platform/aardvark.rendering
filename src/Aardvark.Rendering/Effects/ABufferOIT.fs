@@ -50,10 +50,14 @@ module ABufferOIT =
                         "GL_EXT_fragment_shader_interlock")>]
         let endInterlock() : unit = failwith "only in shader code"
 
+    // Storage uses wide 2D images (Capacity slots laid out along X) rather
+    // than 2D-array images, because a plain image2D binds through the proven
+    // graphics image-binding path; array images would need layered binding.
+    // Slot s of pixel (x, y) lives at (x * Capacity + s, y).
     type UniformScope with
-        member x.ABufferCount : UIntImage2d<Formats.r32ui>      = x?ABufferCount
-        member x.ABufferDepth : UIntImage2dArray<Formats.r32ui> = x?ABufferDepth
-        member x.ABufferColor : UIntImage2dArray<Formats.r32ui> = x?ABufferColor
+        member x.ABufferCount : UIntImage2d<Formats.r32ui> = x?ABufferCount
+        member x.ABufferDepth : UIntImage2d<Formats.r32ui> = x?ABufferDepth
+        member x.ABufferColor : UIntImage2d<Formats.r32ui> = x?ABufferColor
 
     [<AutoOpen>]
     module private Packing =
@@ -92,21 +96,21 @@ module ABufferOIT =
             let count = int (uniform.ABufferCount.[px].X)
 
             if count < Capacity then
-                uniform.ABufferDepth.[px, count] <- V4ui(dz, 0u, 0u, 0u)
-                uniform.ABufferColor.[px, count] <- V4ui(cc, 0u, 0u, 0u)
+                uniform.ABufferDepth.[V2i(px.X * Capacity + count, px.Y)] <- V4ui(dz, 0u, 0u, 0u)
+                uniform.ABufferColor.[V2i(px.X * Capacity + count, px.Y)] <- V4ui(cc, 0u, 0u, 0u)
                 uniform.ABufferCount.[px] <- V4ui(uint32 (count + 1), 0u, 0u, 0u)
             else
                 // full: replace the farthest slot if this fragment is nearer
                 let mutable maxSlot = 0
                 let mutable maxDepth = 0u
                 for i in 0 .. Capacity - 1 do
-                    let d = uniform.ABufferDepth.[px, i].X
+                    let d = uniform.ABufferDepth.[V2i(px.X * Capacity + i, px.Y)].X
                     if d > maxDepth then
                         maxDepth <- d
                         maxSlot <- i
                 if dz < maxDepth then
-                    uniform.ABufferDepth.[px, maxSlot] <- V4ui(dz, 0u, 0u, 0u)
-                    uniform.ABufferColor.[px, maxSlot] <- V4ui(cc, 0u, 0u, 0u)
+                    uniform.ABufferDepth.[V2i(px.X * Capacity + maxSlot, px.Y)] <- V4ui(dz, 0u, 0u, 0u)
+                    uniform.ABufferColor.[V2i(px.X * Capacity + maxSlot, px.Y)] <- V4ui(cc, 0u, 0u, 0u)
 
             endInterlock()
 
@@ -125,8 +129,8 @@ module ABufferOIT =
             let depths = Arr<N<8>, uint32>()
             let colors = Arr<N<8>, uint32>()
             for i in 0 .. count - 1 do
-                depths.[i] <- uniform.ABufferDepth.[px, i].X
-                colors.[i] <- uniform.ABufferColor.[px, i].X
+                depths.[i] <- uniform.ABufferDepth.[V2i(px.X * Capacity + i, px.Y)].X
+                colors.[i] <- uniform.ABufferColor.[V2i(px.X * Capacity + i, px.Y)].X
 
             // insertion sort by depth (ascending = front to back)
             for i in 1 .. count - 1 do
@@ -149,3 +153,16 @@ module ABufferOIT =
 
             return accum
         }
+
+    /// Effect form of the fullscreen resolve.
+    let resolveEffect : Effect = Effect.ofFunction resolve
+
+    /// Composes the interlocked insert writer onto an existing surface (used
+    /// by the RenderTask wrapper to transform transparent objects for the
+    /// A-buffer build pass).
+    let composeSurface (surface : Surface) : Surface =
+        match surface with
+        | Surface.Effect e -> Surface.Effect (Effect.compose [e; Effect.ofFunction insert])
+        | Surface.Dynamic _ -> failwith "[A-buffer] dynamic surfaces are not yet supported for transparent objects"
+        | Surface.Backend _ -> failwith "[A-buffer] backend surfaces cannot be marked transparent"
+        | Surface.None -> failwith "[A-buffer] transparent objects need a surface"

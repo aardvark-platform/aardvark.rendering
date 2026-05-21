@@ -19,6 +19,16 @@ open FSharp.Data.Adaptive
 /// a `compileRaw` callback that creates ordinary, unwrapped sub-render-tasks.
 module TransparencyRenderTask =
 
+    /// Transparent rendering technique. WeightedBlended is the cheap,
+    /// approximate default; ABuffer is the exact (interlocked per-pixel
+    /// k-buffer) alternative. Switch the whole pipeline by editing the single
+    /// `technique` binding below.
+    type Technique =
+        | WeightedBlended
+        | ABuffer
+
+    let technique = Technique.WeightedBlended
+
     /// True if the given render object should be routed through the OIT pass.
     let isTransparent (o : IRenderObject) =
         match o with
@@ -120,6 +130,67 @@ module TransparencyRenderTask =
                                     Mode = AVal.constant WeightedBlendedOIT.BlendModes.composite }
         ro
 
+    // ===== A-buffer (exact k-buffer) technique =================================
+
+    /// Premultiplied "over" blend for compositing the resolved A-buffer color
+    /// onto the opaque scene: result = src + (1 - src.a) * dst.
+    let private premultipliedOver =
+        { BlendMode.Blend with
+            SourceColorFactor      = BlendFactor.One
+            DestinationColorFactor = BlendFactor.InvSourceAlpha
+            SourceAlphaFactor      = BlendFactor.One
+            DestinationAlphaFactor = BlendFactor.InvSourceAlpha }
+
+    /// Builds a uniform provider exposing the three A-buffer storage images.
+    let private aBufferImageUniforms (count : aval<ITexture>) (depth : aval<ITexture>) (color : aval<ITexture>) =
+        UniformProvider.ofList [
+            ABufferOIT.Semantic.ABufferCount, count :> IAdaptiveValue
+            ABufferOIT.Semantic.ABufferDepth, depth :> IAdaptiveValue
+            ABufferOIT.Semantic.ABufferColor, color :> IAdaptiveValue
+        ]
+
+    /// Clones a transparent RenderObject for the A-buffer build pass: composes
+    /// the interlocked insert writer onto its surface, masks colour writes,
+    /// disables depth-write (depth test still occludes against opaque), binds
+    /// the storage images, and clears IsTransparent on the clone.
+    let private transformTransparentABuffer
+                    (count : aval<ITexture>) (depth : aval<ITexture>) (color : aval<ITexture>)
+                    (ro : RenderObject) : IRenderObject =
+        let copy = RenderObject(ro)
+        copy.IsTransparent <- false
+        copy.Surface       <- ABufferOIT.composeSurface ro.Surface
+        copy.DepthState    <- { ro.DepthState with WriteMask = AVal.constant false }
+        copy.BlendState    <- { ro.BlendState with
+                                  Mode                = AVal.constant BlendMode.None
+                                  AttachmentMode      = AVal.constant Map.empty
+                                  ColorWriteMask      = AVal.constant ColorMask.None
+                                  AttachmentWriteMask = AVal.constant Map.empty }
+        copy.Uniforms      <- UniformProvider.union (aBufferImageUniforms count depth color) ro.Uniforms
+        copy :> IRenderObject
+
+    /// Fullscreen quad that resolves the A-buffer and composites it over the
+    /// opaque scene with premultiplied "over".
+    let private buildABufferResolveObject
+                    (count : aval<ITexture>) (depth : aval<ITexture>) (color : aval<ITexture>) : RenderObject =
+        let buffer = AVal.constant (ArrayBuffer fullscreenPositions :> IBuffer)
+        let view   = BufferView(buffer, typeof<V3f>)
+        let attrs  = AttributeProvider.ofList [ DefaultSemantic.Positions, view ]
+        let drawCall = DrawCallInfo(FaceVertexCount = 4, InstanceCount = 1)
+
+        let ro = RenderObject()
+        ro.AttributeScope   <- Ag.Scope.Root
+        ro.Mode             <- IndexedGeometryMode.TriangleStrip
+        ro.DrawCalls        <- DrawCalls.Direct (AVal.constant [| drawCall |])
+        ro.VertexAttributes <- attrs
+        ro.Uniforms         <- aBufferImageUniforms count depth color
+        ro.Surface          <- Surface.Effect ABufferOIT.resolveEffect
+        ro.DepthState       <- { DepthState.Default with
+                                    Test      = AVal.constant DepthTest.None
+                                    WriteMask = AVal.constant false }
+        ro.BlendState       <- { BlendState.Default with
+                                    Mode = AVal.constant premultipliedOver }
+        ro
+
     /// Cached per-(size, samples) bundle of FBO resources used by the wrapped
     /// path. Built lazily on demand and kept alive across frames so size
     /// changes between known sizes don't dispose+rebuild.
@@ -131,6 +202,10 @@ module TransparencyRenderTask =
         AccumT         : IBackendTexture
         RevealageT     : IBackendTexture
         ColorTex       : Map<Symbol, IBackendTexture>
+        // A-buffer storage (only allocated when technique = ABuffer)
+        AbCount        : IBackendTexture voption
+        AbDepth        : IBackendTexture voption
+        AbColor        : IBackendTexture voption
     }
 
     type private WrappedTask(runtime   : IRuntime,
@@ -182,6 +257,22 @@ module TransparencyRenderTask =
         let accumTex     : cval<ITexture> = cval (NullTexture.Instance)
         let revealageTex : cval<ITexture> = cval (NullTexture.Instance)
 
+        // Adaptive holders for the A-buffer storage images.
+        let abCountTex : cval<ITexture> = cval (NullTexture.Instance)
+        let abDepthTex : cval<ITexture> = cval (NullTexture.Instance)
+        let abColorTex : cval<ITexture> = cval (NullTexture.Instance)
+
+        // A-buffer build/resolve object sets (transparent objects with the
+        // interlocked insert composed; a fullscreen resolve quad).
+        let aBufferBuildSet =
+            objects |> ASet.choose (fun o ->
+                if isTransparent o then
+                    match o with
+                    | :? RenderObject as r ->
+                        Some (transformTransparentABuffer abCountTex abDepthTex abColorTex r)
+                    | _ -> None
+                else None)
+
         // Sample-count-dependent state. The OIT composite shader bakes in the
         // sample count and the framebuffer signatures bake in their sample
         // count, so all of this is rebuilt whenever the output framebuffer's
@@ -205,6 +296,8 @@ module TransparencyRenderTask =
         let mutable transparentTask     : IRenderTask voption = ValueNone
         let mutable compositeTask       : IRenderTask voption = ValueNone
         let mutable transparentPickTask : IRenderTask voption = ValueNone
+        let mutable aBufferBuildTask    : IRenderTask voption = ValueNone
+        let mutable aBufferResolveTask  : IRenderTask voption = ValueNone
 
         // Bounded LRU cache of FBO bundles, one per (size, samples) the
         // wrapper has seen. Render tasks typically see only a handful of
@@ -228,6 +321,9 @@ module TransparencyRenderTask =
             b.AccumT.Dispose()
             b.RevealageT.Dispose()
             for KeyValue(_, t) in b.ColorTex do t.Dispose()
+            b.AbCount |> ValueOption.iter (fun t -> t.Dispose())
+            b.AbDepth |> ValueOption.iter (fun t -> t.Dispose())
+            b.AbColor |> ValueOption.iter (fun t -> t.Dispose())
 
         let releaseFbos () =
             for kvp in fboCache do disposeBundle kvp.Value
@@ -240,6 +336,8 @@ module TransparencyRenderTask =
             transparentTask     |> ValueOption.iter (fun t -> t.Dispose())
             compositeTask       |> ValueOption.iter (fun t -> t.Dispose())
             transparentPickTask |> ValueOption.iter (fun t -> t.Dispose())
+            aBufferBuildTask    |> ValueOption.iter (fun t -> t.Dispose())
+            aBufferResolveTask  |> ValueOption.iter (fun t -> t.Dispose())
             intermediateSig     |> ValueOption.iter (fun s -> s.Dispose())
             oitSig              |> ValueOption.iter (fun s -> s.Dispose())
             compositeSig        |> ValueOption.iter (fun s -> s.Dispose())
@@ -247,6 +345,8 @@ module TransparencyRenderTask =
             transparentTask     <- ValueNone
             compositeTask       <- ValueNone
             transparentPickTask <- ValueNone
+            aBufferBuildTask    <- ValueNone
+            aBufferResolveTask  <- ValueNone
             intermediateSig     <- ValueNone
             oitSig              <- ValueNone
             compositeSig        <- ValueNone
@@ -304,9 +404,21 @@ module TransparencyRenderTask =
                 oitSig              <- ValueSome oS
                 compositeSig        <- ValueSome cS
                 opaqueTask          <- ValueSome (compileRaw (interSig, opaqueSet))
-                transparentTask     <- ValueSome (compileRaw (oS, transparentSet))
-                compositeTask       <- ValueSome (compileRaw (cS, compositeSet))
                 transparentPickTask <- ValueSome (compileRaw (interSig, transparentPickSet))
+
+                match technique with
+                | WeightedBlended ->
+                    transparentTask <- ValueSome (compileRaw (oS, transparentSet))
+                    compositeTask   <- ValueSome (compileRaw (cS, compositeSet))
+                | ABuffer ->
+                    // build + resolve both render to the Colors+DepthStencil
+                    // composite signature (the storage is bound via uniforms,
+                    // not attachments).
+                    let resolveObject = buildABufferResolveObject abCountTex abDepthTex abColorTex
+                    let resolveSet    = ASet.single (resolveObject :> IRenderObject)
+                    aBufferBuildTask   <- ValueSome (compileRaw (cS, aBufferBuildSet))
+                    aBufferResolveTask <- ValueSome (compileRaw (cS, resolveSet))
+
                 currentSamples      <- samples
 
         let buildBundle (size : V2i) (samples : int) =
@@ -351,13 +463,30 @@ module TransparencyRenderTask =
                     DefaultSemantic.DepthStencil, dt.GetOutputView()
                 ]
 
+            // A-buffer storage: count (W×H) + depth/color laid out Capacity
+            // slots wide (W*Capacity × H), all R32UI. Only when technique uses
+            // it.
+            let abCount, abDepth, abColor =
+                match technique with
+                | ABuffer ->
+                    let k = ABufferOIT.Capacity
+                    let cnt = runtime.CreateTexture2D(size, TextureFormat.R32ui)
+                    let dep = runtime.CreateTexture2D(V2i(size.X * k, size.Y), TextureFormat.R32ui)
+                    let col = runtime.CreateTexture2D(V2i(size.X * k, size.Y), TextureFormat.R32ui)
+                    ValueSome cnt, ValueSome dep, ValueSome col
+                | WeightedBlended ->
+                    ValueNone, ValueNone, ValueNone
+
             { IntermediateFb = runtime.CreateFramebuffer(intermediateSig.Value, interAtts)
               OitFb          = runtime.CreateFramebuffer(oitSig.Value, oitAtts)
               CompositeFb    = runtime.CreateFramebuffer(compositeSig.Value, compositeAtts)
               DepthTex       = dt
               AccumT         = at
               RevealageT     = rt
-              ColorTex       = ct }
+              ColorTex       = ct
+              AbCount        = abCount
+              AbDepth        = abDepth
+              AbColor        = abColor }
 
         let touchLru (key : struct (V2i * int)) =
             // Move `key` to the front of the LRU list. If we exceed the
@@ -397,7 +526,10 @@ module TransparencyRenderTask =
             if mustTransact then
                 transact (fun () ->
                     accumTex.Value     <- bundle.AccumT :> ITexture
-                    revealageTex.Value <- bundle.RevealageT :> ITexture)
+                    revealageTex.Value <- bundle.RevealageT :> ITexture
+                    bundle.AbCount |> ValueOption.iter (fun t -> abCountTex.Value <- t :> ITexture)
+                    bundle.AbDepth |> ValueOption.iter (fun t -> abDepthTex.Value <- t :> ITexture)
+                    bundle.AbColor |> ValueOption.iter (fun t -> abColorTex.Value <- t :> ITexture))
 
             currentBundle <- ValueSome bundle
 
@@ -411,6 +543,8 @@ module TransparencyRenderTask =
             transparentTask     |> ValueOption.iter (fun t -> t.Update(token, rt))
             compositeTask       |> ValueOption.iter (fun t -> t.Update(token, rt))
             transparentPickTask |> ValueOption.iter (fun t -> t.Update(token, rt))
+            aBufferBuildTask    |> ValueOption.iter (fun t -> t.Update(token, rt))
+            aBufferResolveTask  |> ValueOption.iter (fun t -> t.Update(token, rt))
 
         override x.Perform(token, rt, output) =
             let outFb = output.Framebuffer
@@ -452,22 +586,36 @@ module TransparencyRenderTask =
             opaqueTask.Value.Run(token, rt, { output with Framebuffer = inter })
 
             if hasTransparent then
-                let oit = bundle.OitFb
+                match technique with
+                | WeightedBlended ->
+                    let oit = bundle.OitFb
 
-                // Pass 2: OIT color compositing.
-                // Clear only Accum + Revealage on the OIT framebuffer; the
-                // shared depth from the opaque pass is preserved for depth
-                // testing.
-                let oitClear =
-                    clear {
-                        colors [
-                            WeightedBlendedOIT.Semantic.Accum,     C4f.Zero
-                            WeightedBlendedOIT.Semantic.Revealage, C4f.White
-                        ]
-                    }
-                runtime.Clear(oit, oitClear)
-                transparentTask.Value.Run(token, rt, { output with Framebuffer = oit })
-                compositeTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
+                    // Pass 2: OIT color compositing.
+                    // Clear only Accum + Revealage on the OIT framebuffer; the
+                    // shared depth from the opaque pass is preserved for depth
+                    // testing.
+                    let oitClear =
+                        clear {
+                            colors [
+                                WeightedBlendedOIT.Semantic.Accum,     C4f.Zero
+                                WeightedBlendedOIT.Semantic.Revealage, C4f.White
+                            ]
+                        }
+                    runtime.Clear(oit, oitClear)
+                    transparentTask.Value.Run(token, rt, { output with Framebuffer = oit })
+                    compositeTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
+
+                | ABuffer ->
+                    // Clear the per-pixel fragment count to 0, build the
+                    // k-buffer (interlocked insert; depth-tests against the
+                    // opaque depth, colour writes masked), then resolve it over
+                    // the opaque scene. The build pass's image writes are made
+                    // visible by the per-draw memory barrier in the GL backend
+                    // / render-pass dependencies in Vulkan.
+                    bundle.AbCount |> ValueOption.iter (fun c ->
+                        runtime.Clear(c, clear { color C4ui.Zero }))
+                    aBufferBuildTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
+                    aBufferResolveTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
 
                 // Pass 3: transparent depth + extras pass.
                 // Renders the *unmodified* user surfaces with depth-write on and

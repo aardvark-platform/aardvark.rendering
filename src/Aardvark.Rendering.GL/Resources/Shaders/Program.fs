@@ -147,6 +147,25 @@ module ProgramExtensions =
 
         let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
 
+        // FShade cannot emit the fragment-stage execution-mode layout that
+        // GL_ARB_fragment_shader_interlock requires, so we inject it here when
+        // the generated code uses the interlock intrinsic. Inserted right
+        // after the interlock #extension line to keep GLSL ordering valid
+        // (layout qualifiers must follow #extension directives).
+        let private interlockExtRx =
+            System.Text.RegularExpressions.Regex @"(#extension[ \t]+GL_ARB_fragment_shader_interlock[ \t]*:[^\n]*\n)"
+
+        let injectFragmentInterlock (code : string) =
+            if code.Contains "beginInvocationInterlockARB" then
+                let decl = $"layout(pixel_interlock_unordered) in;{nl}layout(early_fragment_tests) in;{nl}"
+                if interlockExtRx.IsMatch code then
+                    interlockExtRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->
+                        m.Groups.[1].Value + decl), 1)
+                else
+                    code
+            else
+                code
+
         let addPreprocessorDefine (define : string) (code : string) =
             let mutable replaced = false
             let def = $"#define {define}{nl}"
@@ -174,6 +193,7 @@ module ProgramExtensions =
 
         let private tryCompileShader (stage : ShaderStage) (code : string) (entryPoint : string) (context : Context) =
             let code = code.Replace(sprintf "%s(" entryPoint, "main(")
+            let code = if stage = ShaderStage.Fragment then injectFragmentInterlock code else code
 
             let handle = GL.CreateShader(getShaderType stage)
             GL.Check "could not create shader"
