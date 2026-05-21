@@ -31,7 +31,63 @@ module Transparency =
                 return {| PickData = V4f(pickId, f.coord.Z, 0.0f, 0.0f) |}
             }
 
+        // --- Smoke test: can a fragment shader write to a storage image? ---
+        type UniformScope with
+            member x.SmokeTarget : UIntImage2d<Formats.r32ui> = x?SmokeTarget
+
+        // Writes (x + y*width + 1) into the storage image at each pixel, so a
+        // readback of 0 means "the write never happened". Returns black.
+        let smokeWriteImage (width : int) (f : Fragment) =
+            fragment {
+                let px = V2i f.coord.XY
+                uniform.SmokeTarget.[px] <- V4ui(uint32 (px.X + px.Y * width + 1), 0u, 0u, 0u)
+                return V4f.Zero
+            }
+
     module Cases =
+
+        /// Smoke test: prove a fragment shader can write to a storage image
+        /// through the graphics pipeline (the foundation the A-buffer relies
+        /// on). A fullscreen quad writes (x + y*w + 1) into an R32UI image;
+        /// we read it back and check every pixel.
+        let fragmentImageWrite (runtime : IRuntime) =
+            let size = V2i(8)
+
+            let target = runtime.CreateTexture2D(size, TextureFormat.R32ui)
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                ])
+
+            let colorTex = runtime.CreateTexture2D(size, TextureFormat.Rgba8)
+            let fbo =
+                runtime.CreateFramebuffer(signature, Map.ofList [
+                    DefaultSemantic.Colors, colorTex.GetOutputView()
+                ])
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.texture "SmokeTarget" (AVal.constant (target :> ITexture))
+                |> Sg.shader { do! Shader.smokeWriteImage size.X }
+                |> Sg.compile runtime signature
+
+            try
+                task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
+
+                // Each pixel writes a unique id in [1 .. w*h]; verify the
+                // multiset of written values is exactly {1 .. w*h}, which
+                // proves every pixel was written exactly once (independent of
+                // the gl_FragCoord-vs-download Y orientation).
+                let data = target.Download().AsPixImage<uint32>().Data
+                let got = data |> Array.sort
+                let expected = Array.init (size.X * size.Y) (fun i -> uint32 (i + 1))
+                Expect.sequenceEqual got expected
+                    "fragment storage-image writes must cover every pixel exactly once (0 means the write never landed)"
+            finally
+                fbo.Dispose()
+                runtime.DeleteTexture target
+                runtime.DeleteTexture colorTex
 
         /// Five screen-filling quads with identity camera and varying NDC z:
         ///
@@ -145,6 +201,7 @@ module Transparency =
 
     let tests (backend : Backend) =
         [
-            "z-stack with opaque occluder", Cases.zStackWithOccluder
+            "fragment storage-image write", Cases.fragmentImageWrite
+            "z-stack with opaque occluder",  Cases.zStackWithOccluder
         ]
         |> prepareCases backend "Transparency"
