@@ -55,12 +55,10 @@ module Transparency =
             }
 
         [<KeepCall>]
-        [<GLSLIntrinsic("beginInvocationInterlockARB()",
-                        "GL_ARB_fragment_shader_interlock", "GL_EXT_fragment_shader_interlock")>]
+        [<GLSLIntrinsic("beginInvocationInterlockARB()", "GL_ARB_fragment_shader_interlock")>]
         let beginInterlock() : unit = failwith "shader only"
         [<KeepCall>]
-        [<GLSLIntrinsic("endInvocationInterlockARB()",
-                        "GL_ARB_fragment_shader_interlock", "GL_EXT_fragment_shader_interlock")>]
+        [<GLSLIntrinsic("endInvocationInterlockARB()", "GL_ARB_fragment_shader_interlock")>]
         let endInterlock() : unit = failwith "shader only"
 
         // Interlocked count read-modify-write — the A-buffer's core mechanic.

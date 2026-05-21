@@ -37,21 +37,20 @@ module ABufferOIT =
 
     [<AutoOpen>]
     module private Intrinsics =
-        // The required-extension strings make FShade emit the matching
-        // #extension directives. GL wants the ARB name, glslang/Vulkan the
-        // EXT name; we declare both so either compiler is satisfied.
+        // The required-extension string makes FShade emit the matching
+        // #extension directive. The beginInvocationInterlockARB function is
+        // the ARB-named entry point; glslang and NVIDIA GL both recognise it
+        // under GL_ARB_fragment_shader_interlock (the EXT extension only adds
+        // the EXT-named aliases, which we don't use, and NVIDIA GL warns it is
+        // unsupported — so we declare ARB only).
         // KeepCall stops FShade's optimizer from eliminating these
         // unit-returning, side-effecting calls (they have no usable result).
         [<KeepCall>]
-        [<GLSLIntrinsic("beginInvocationInterlockARB()",
-                        "GL_ARB_fragment_shader_interlock",
-                        "GL_EXT_fragment_shader_interlock")>]
+        [<GLSLIntrinsic("beginInvocationInterlockARB()", "GL_ARB_fragment_shader_interlock")>]
         let beginInterlock() : unit = failwith "only in shader code"
 
         [<KeepCall>]
-        [<GLSLIntrinsic("endInvocationInterlockARB()",
-                        "GL_ARB_fragment_shader_interlock",
-                        "GL_EXT_fragment_shader_interlock")>]
+        [<GLSLIntrinsic("endInvocationInterlockARB()", "GL_ARB_fragment_shader_interlock")>]
         let endInterlock() : unit = failwith "only in shader code"
 
     // Storage uses wide 2D images (Capacity slots laid out along X) rather
