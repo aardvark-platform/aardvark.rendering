@@ -13,6 +13,7 @@
     <OutputPath>..\..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Heap.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
