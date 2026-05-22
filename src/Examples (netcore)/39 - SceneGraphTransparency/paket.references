@@ -1,0 +1,13 @@
+Aardvark.Base.Essentials
+Aardvark.Base.Incremental
+FShade.Core
+FShade.GLSL
+FSharp.Core
+Unofficial.LibTessDotNet
+Unofficial.OpenTK
+
+Unofficial.OpenVR
+FShade.Debug
+
+Aardvark.Base.Tensors
+Aardvark.Build
