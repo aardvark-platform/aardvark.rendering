@@ -37,15 +37,24 @@ let main argv =
             samples 8
         }
 
-    // shared box geometry -> shared BufferViews / index
-    let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
-    let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-    let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
-    let index     = g.IndexArray |> unbox<int[]>
-    let posBV = BufferView(AVal.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>)
-    let norBV = BufferView(AVal.constant (ArrayBuffer(normals)   :> IBuffer), typeof<V3f>)
-    let idxBV = BufferView(AVal.constant (ArrayBuffer(index)     :> IBuffer), typeof<int>)
-    let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, posBV; DefaultSemantic.Normals, norBV ]
+    // VARIED geometry — box / sphere / torus. Each gets its own BufferViews;
+    // Heap.ofRenderObjects packs them into shared buffers (deduped by identity)
+    // with per-RO draw ranges, still ONE indirect draw for the bucket.
+    let geometry (ig : IndexedGeometry) =
+        let g = ig.ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let attrs = AttributeProvider.ofList [
+                        DefaultSemantic.Positions, BufferView(AVal.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>)
+                        DefaultSemantic.Normals,   BufferView(AVal.constant (ArrayBuffer(normals)   :> IBuffer), typeof<V3f>) ]
+        let idxBV = BufferView(AVal.constant (ArrayBuffer(index) :> IBuffer), typeof<int>)
+        attrs, idxBV, index.Length
+
+    let shapes =
+        [| geometry (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White)
+           geometry (IndexedGeometryPrimitives.Sphere.solidSubdivisionSphere (Sphere3d(V3d.Zero, 0.4)) 3 C4b.White)
+           geometry (IndexedGeometryPrimitives.solidTorus (Torus3d(V3d.Zero, V3d.OOI, 0.35, 0.13)) C4b.White 16 12) |]
 
     // camera -> ViewProjTrafo (global; left as a UBO by the rewrite)
     let viewProj : aval<Trafo3d> =
@@ -75,12 +84,13 @@ let main argv =
     // N ordinary render objects
     let inputs =
         grid |> Array.mapi (fun i p ->
+            let (attrs, idxBV, faceVertexCount) = shapes.[i % shapes.Length]
             let ro = RenderObject()
             ro.Surface   <- Surface.Effect effect
             ro.Mode      <- IndexedGeometryMode.TriangleList
-            ro.VertexAttributes <- vattrs
+            ro.VertexAttributes <- attrs
             ro.Indices   <- Some idxBV
-            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = faceVertexCount, InstanceCount = 1) |])
             ro.Uniforms  <-
                 UniformProvider.ofList [
                     Symbol.Create "HeapModelTrafo", (modelOf p (float i * 0.3) :> IAdaptiveValue)

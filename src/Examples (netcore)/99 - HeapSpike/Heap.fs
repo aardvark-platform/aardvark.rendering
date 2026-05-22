@@ -264,21 +264,52 @@ module Heap =
             let arena = HeapArena(runtime, totalF)
             for (av, o, sz, pk) in distinct do arena.Add(av, o, sz, pk)
 
-            let fvc, fi0, bv0 =
-                match ro0.DrawCalls with
-                | DrawCalls.Direct calls -> let c = (AVal.force calls).[0] in c.FaceVertexCount, c.FirstIndex, c.BaseVertex
-                | DrawCalls.Indirect _ -> failwith "Heap.ofRenderObjects: indirect input not supported (v1)"
+            // Pack per-RO geometry into shared buffers. Deduped by (positions,
+            // index) buffer identity so SHARED geometry is packed once; VARIED
+            // geometry gets its own packed range. Per-RO firstIndex/baseVertex/
+            // count drive the indirect buffer (one sub-draw per RO).
+            let hostArray (bv : BufferView) : System.Array =
+                match bv.Buffer.GetValue() with
+                | :? ArrayBuffer as a -> a.Data
+                | b -> failwithf "Heap.ofRenderObjects: expected host ArrayBuffer geometry, got %A" (b.GetType())
+            let attr (ro : RenderObject) (s : Symbol) =
+                match ro.VertexAttributes.TryGetAttribute s with
+                | ValueSome bv -> bv
+                | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing vertex attribute %A" s
+
+            let packedPos = System.Collections.Generic.List<V3f>()
+            let packedNor = System.Collections.Generic.List<V3f>()
+            let packedIdx = System.Collections.Generic.List<int>()
+            let geomCache = System.Collections.Generic.Dictionary<struct(obj * obj), struct(int * int * int)>(HashIdentity.Structural)
 
             let indirect =
-                Array.init ros.Length (fun i ->
-                    DrawCallInfo(FaceVertexCount = fvc, FirstIndex = fi0, BaseVertex = bv0, FirstInstance = i, InstanceCount = 1))
+                ros |> Array.mapi (fun i ro ->
+                    let posBV = attr ro DefaultSemantic.Positions
+                    let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer (v1 requires indexed geometry)"
+                    let key = struct(posBV.Buffer :> obj, idxBV.Buffer :> obj)
+                    let (struct(firstIndex, baseVertex, count)) =
+                        match geomCache.TryGetValue key with
+                        | true, r -> r
+                        | _ ->
+                            let pos = hostArray posBV :?> V3f[]
+                            let nor = hostArray (attr ro DefaultSemantic.Normals) :?> V3f[]
+                            let idx = hostArray idxBV :?> int[]
+                            let r = struct(packedIdx.Count, packedPos.Count, idx.Length)
+                            packedPos.AddRange pos
+                            packedNor.AddRange nor
+                            packedIdx.AddRange idx
+                            geomCache.[key] <- r
+                            r
+                    DrawCallInfo(FaceVertexCount = count, FirstIndex = firstIndex, BaseVertex = baseVertex, FirstInstance = i, InstanceCount = 1))
                 |> IndirectBuffer.ofArray
 
+            let bvOf (arr : System.Array) t = BufferView(AVal.constant (ArrayBuffer(arr) :> IBuffer), t)
             let ro = RenderObject.Clone ro0
-            ro.Surface     <- Surface.Effect (rewrite nameToField fieldStride effect)
-            ro.DrawCalls   <- DrawCalls.Indirect (AVal.constant indirect)
-            ro.VertexAttributes <- ro0.VertexAttributes
-            ro.Indices     <- ro0.Indices
+            ro.Surface          <- Surface.Effect (rewrite nameToField fieldStride effect)
+            ro.DrawCalls        <- DrawCalls.Indirect (AVal.constant indirect)
+            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bvOf (packedPos.ToArray()) typeof<V3f>
+                                                              DefaultSemantic.Normals,   bvOf (packedNor.ToArray()) typeof<V3f> ]
+            ro.Indices          <- Some (bvOf (packedIdx.ToArray()) typeof<int>)
 
             let arenaU   = ((arena :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)) :> IAdaptiveValue
             let headersU = AVal.constant headers :> IAdaptiveValue
