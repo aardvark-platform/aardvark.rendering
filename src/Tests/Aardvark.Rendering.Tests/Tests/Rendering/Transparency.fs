@@ -317,11 +317,72 @@ module Transparency =
                 runtime.DeleteTexture pickTex
                 runtime.DeleteTexture depthTex
 
+        /// Same transparent z-stack, but rendered into a MULTISAMPLED
+        /// framebuffer. Exercises the wrapper's framebuffer copies on MSAA
+        /// attachments (vkCmdBlitImage rejects multisampled images, so this
+        /// would throw "cannot blit from or to multisampled images" before the
+        /// copy/resolve fix). All quads are full-screen, so the MSAA resolve is
+        /// uniform per pixel and the colour expectations match the 1x case.
+        let zStackMultisampled (samples : int) (runtime : IRuntime) =
+            let size = V2i(8)
+
+            let makeQuad (color : C4f) (pickId : float32) (z : float) (transparent : bool) =
+                let sg =
+                    Sg.fullScreenQuad
+                    |> Sg.translate 0.0 0.0 z
+                    |> Sg.shader {
+                        do! DefaultSurfaces.trafo
+                        do! DefaultSurfaces.constantColor color
+                        do! Shader.writePick pickId
+                    }
+                if transparent then sg |> Sg.transparent else sg
+
+            let scene =
+                Sg.ofList [
+                    makeQuad (C4f(0.0f, 0.0f, 1.0f, 0.5f)) 2.0f -0.8 true   // A
+                    makeQuad (C4f(0.0f, 1.0f, 0.0f, 0.5f)) 3.0f -0.3 true   // B
+                    makeQuad (C4f(1.0f, 0.0f, 0.0f, 1.0f)) 1.0f  0.0 false  // SOLID
+                    makeQuad (C4f(1.0f, 1.0f, 0.0f, 0.5f)) 4.0f  0.3 true   // C
+                    makeQuad (C4f(0.0f, 1.0f, 1.0f, 0.5f)) 5.0f  0.7 true   // D
+                ]
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors,       TextureFormat.Rgba32f
+                    Semantic.PickData,            TextureFormat.Rgba32f
+                    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+                ], samples = samples)
+
+            use task = scene |> Sg.compile runtime signature
+
+            let buffer =
+                task
+                |> RenderTask.renderToColorWithClear (AVal.constant size)
+                       (clear { color C4f.Black; depth 1.0; stencil 0 })
+
+            buffer.Acquire()
+            try
+                let cArr = buffer.GetValue().Download().AsPixImage<float32>().Data
+                let r0, g0, b0 = cArr.[0], cArr.[1], cArr.[2]
+
+                Expect.isLessThan r0 1.0f
+                    $"[{samples}x] Red must drop below 1 — transparents in front modify it (regression: MSAA blit/copy)"
+                Expect.isGreaterThan g0 0.0f
+                    $"[{samples}x] Green must be > 0 — quad B contributed"
+                Expect.isGreaterThan b0 0.0f
+                    $"[{samples}x] Blue must be > 0 — quad A contributed"
+                Expect.isLessThan r0 0.95f
+                    $"[{samples}x] Red must not include occluded yellow's contribution"
+            finally
+                buffer.Release()
+
     let tests (backend : Backend) =
         [
             "fragment storage-image write",  Cases.fragmentImageWrite
             "cross-pass storage read/write", Cases.crossPassImageReadWrite
             "interlocked count RMW",         Cases.interlockedCountRMW
             "z-stack with opaque occluder",  Cases.zStackWithOccluder
+            "z-stack MSAA 2x",               Cases.zStackMultisampled 2
+            "z-stack MSAA 4x",               Cases.zStackMultisampled 4
         ]
         |> prepareCases backend "Transparency"
