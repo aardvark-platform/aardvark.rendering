@@ -20,30 +20,13 @@ open Aardvark.Application
 open FShade
 open HeapSpike
 
-module HeapShaders =
-    type Vertex =
-        { [<Position>] pos : V4f
-          [<Color>]    c   : V4f
-          [<Normal>]   n   : V3f }
-
-    let shade (v : Vertex) =
-        vertex {
-            let m   : M44f = uniform?HeapModelTrafo
-            let col : V4f  = uniform?HeapColor
-            let vp  : M44f = uniform?ViewProjTrafo
-            return { v with pos = vp * (m * v.pos); c = col; n = m.TransformDir v.n }
-        }
-
-    let shadeFrag (v : Vertex) =
-        fragment {
-            let l  = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
-            let nn = Vec.normalize v.n
-            let d  = 0.25f + 0.75f * max 0.0f (Vec.dot nn l)
-            return V4f(v.c.XYZ * d, 1.0f)
-        }
-
 [<EntryPoint>]
 let main argv =
+    if argv |> Array.contains "bench" then
+        Bench.run ()
+        0
+    else
+
     Aardvark.Init()
 
     let win =
@@ -87,7 +70,7 @@ let main argv =
             (Trafo3d.Translation p * Trafo3d.RotationZ(0.5 * t + phase)).Forward |> M44f.op_Explicit)
 
     let effect =
-        Effect.compose [ Effect.ofFunction HeapShaders.shade; Effect.ofFunction HeapShaders.shadeFrag ]
+        Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
 
     // N ordinary render objects
     let inputs =

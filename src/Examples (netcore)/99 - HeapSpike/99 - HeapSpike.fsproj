@@ -13,7 +13,9 @@
     <OutputPath>..\..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Shaders.fs" />
     <Compile Include="Heap.fs" />
+    <Compile Include="Bench.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
