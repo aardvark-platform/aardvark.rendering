@@ -170,7 +170,59 @@ module Heap =
     /// One bucket draw count, for reporting.
     let mutable lastBucketCount = 0
 
-    let ofRenderObjects (heapNames : Set<string>) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+    /// Adaptive writer for one arena region. Reads its source aval and packs
+    /// the floats into the arena's shared staging at its offset. Marked (via
+    /// the source) only when that source changes.
+    type private RegionWriter(src : IAdaptiveValue, off : int, size : int, pack : obj -> float32[] -> int -> unit) =
+        inherit AdaptiveObject()
+        do src.Acquire()
+        member _.Off = off
+        member _.Size = size
+        member x.Pack(token : AdaptiveToken, staging : float32[]) =
+            x.EvaluateIfNeeded token () (fun token -> pack (src.GetValueUntyped token) staging off)
+        member x.Dispose() =
+            src.Release()
+            src.Outputs.Remove x |> ignore
+            x.Outputs.Clear()
+
+    /// Dirty-tracking arena buffer. `InputChangedObject` collects the writers
+    /// whose source changed (no per-source marking callbacks); `Compute` packs
+    /// only those into a shared staging mirror, COALESCES adjacent dirty
+    /// regions into runs, and uploads one sub-range per run. All-dirty -> one
+    /// upload (regions are arena-contiguous); sparse -> a few small uploads.
+    type HeapArena(runtime : IBufferRuntime, totalFloats : int) =
+        inherit AdaptiveBuffer(runtime, uint64 (max 1 totalFloats * 4), BufferUsage.Storage, BufferStorage.Host)
+        let staging = Array.zeroCreate<float32> (max 1 totalFloats)
+        let pending = LockedSet<RegionWriter>()
+        // strong refs: FDA output edges are weak, so a GC'd writer would stop updating.
+        let writers = System.Collections.Generic.List<RegionWriter>()
+        member x.Add(src, off, size, pack) =
+            let w = RegionWriter(src, off, size, pack)
+            writers.Add w
+            pending.Add w |> ignore
+        override x.Compute(t, rt) =
+            let dirty = pending.GetAndClear()
+            if dirty.Count > 0 then
+                let ranges = System.Collections.Generic.List<struct(int * int)>(dirty.Count)
+                for w in dirty do
+                    w.Pack(t, staging)
+                    ranges.Add(struct(w.Off, w.Off + w.Size))
+                ranges.Sort(fun (struct(a, _)) (struct(b, _)) -> compare a b)
+                let flush lo hi = x.Write(staging, uint64 (lo * 4), lo, hi - lo, false)
+                let mutable lo = let (struct(l, _)) = ranges.[0] in l
+                let mutable hi = let (struct(_, h)) = ranges.[0] in h
+                for i in 1 .. ranges.Count - 1 do
+                    let (struct(o, e)) = ranges.[i]
+                    if o <= hi then hi <- max hi e          // contiguous / overlapping -> extend run
+                    else flush lo hi; lo <- o; hi <- e      // gap -> emit run, start new
+                flush lo hi
+            base.Compute(t, rt)
+        override x.InputChangedObject(_, o) =
+            match o with
+            | :? RegionWriter as w -> pending.Add w |> ignore
+            | _ -> ()
+
+    let ofRenderObjects (runtime : IRuntime) (heapNames : Set<string>) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         let names = heapNames |> Set.toArray |> Array.sort
         let fieldStride = names.Length
         let nameToField = names |> Array.mapi (fun i n -> n, i) |> Map.ofArray
@@ -193,7 +245,7 @@ module Heap =
 
             // dedup arena regions by aval identity
             let regionOf = System.Collections.Generic.Dictionary<IAdaptiveValue, int>(HashIdentity.Reference)
-            let distinct = System.Collections.Generic.List<IAdaptiveValue * int * (obj -> float32[] -> int -> unit)>()
+            let distinct = System.Collections.Generic.List<IAdaptiveValue * int * int * (obj -> float32[] -> int -> unit)>()
             let mutable cursor = 0
             let headers = Array.zeroCreate<int> (ros.Length * fieldStride)
             ros |> Array.iteri (fun di ro ->
@@ -203,15 +255,14 @@ module Heap =
                     let off =
                         match regionOf.TryGetValue av with
                         | true, o -> o
-                        | _ -> let o = cursor in cursor <- cursor + sz; regionOf.[av] <- o; distinct.Add(av, o, pk); o
+                        | _ -> let o = cursor in cursor <- cursor + sz; regionOf.[av] <- o; distinct.Add(av, o, sz, pk); o
                     headers.[di * fieldStride + fi] <- off)
-            let totalF = cursor
 
-            let arena =
-                AVal.custom (fun t ->
-                    let a = Array.zeroCreate<float32> totalF
-                    for (av, o, pk) in distinct do pk (av.GetValueUntyped t) a o
-                    a)
+            let totalF = cursor
+            // arena = custom dirty-tracking AdaptiveBuffer: one lightweight writer
+            // per distinct region (reused staging, direct sub-range upload).
+            let arena = HeapArena(runtime, totalF)
+            for (av, o, sz, pk) in distinct do arena.Add(av, o, sz, pk)
 
             let fvc, fi0, bv0 =
                 match ro0.DrawCalls with
@@ -229,7 +280,7 @@ module Heap =
             ro.VertexAttributes <- ro0.VertexAttributes
             ro.Indices     <- ro0.Indices
 
-            let arenaU   = arena :> IAdaptiveValue
+            let arenaU   = ((arena :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)) :> IAdaptiveValue
             let headersU = AVal.constant headers :> IAdaptiveValue
             ro.Uniforms <-
                 { new IUniformProvider with

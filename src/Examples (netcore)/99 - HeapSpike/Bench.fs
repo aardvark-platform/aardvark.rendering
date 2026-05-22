@@ -76,36 +76,40 @@ module Bench =
                     ro :> IRenderObject)
             ros, trafos, s
 
-        let measure (transform : aset<IRenderObject> -> aset<IRenderObject>) (n : int) =
+        // dirtyPerFrame = how many objects' model trafos change each frame.
+        let measure (transform : aset<IRenderObject> -> aset<IRenderObject>) (n : int) (dirtyPerFrame : int) =
             let ros, trafos, s = buildInputs n
             use task = runtime.CompileRender(signature, transform (ASet.ofArray ros))
             let tex = RenderTask.renderToColor size task
+            tex |> AVal.force |> ignore   // build
 
-            let swSetup = Stopwatch.StartNew()
-            tex |> AVal.force |> ignore
-            swSetup.Stop()
+            let dirty = min dirtyPerFrame n
+            let bump (f : int) =
+                transact (fun () ->
+                    for j in 0 .. dirty - 1 do
+                        let i = (f * dirty + j) % n
+                        trafos.[i].Value <- trafoAt s i (float f * 0.02))
 
-            // warmup
-            for _ in 1 .. 3 do
-                transact (fun () -> for i in 0 .. n - 1 do trafos.[i].Value <- trafoAt s i 0.123)
-                tex |> AVal.force |> ignore
+            for f in 1 .. 3 do bump f; tex |> AVal.force |> ignore   // warmup
 
             let k = 60
             let sw = Stopwatch.StartNew()
-            for f in 1 .. k do
-                let ph = float f * 0.02
-                transact (fun () -> for i in 0 .. n - 1 do trafos.[i].Value <- trafoAt s i ph)
-                tex |> AVal.force |> ignore
+            for f in 1 .. k do bump (f + 3); tex |> AVal.force |> ignore
             sw.Stop()
+            sw.Elapsed.TotalMilliseconds / float k
 
-            swSetup.Elapsed.TotalMilliseconds, sw.Elapsed.TotalMilliseconds / float k
+        let heap = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ])
 
         printfn ""
-        printfn "  N    | classic setup | heap setup | classic ms/f | heap ms/f | draws C->H"
-        printfn "-------+---------------+------------+--------------+-----------+-----------"
+        printfn "  N    | ALL changed/frame      | 16 changed/frame       | draws"
+        printfn "       | classic   heap  speedup| classic   heap  speedup| C -> H"
+        printfn "-------+------------------------+------------------------+--------"
         for n in [ 128; 512; 2048; 8192 ] do
-            let cs, cf = measure id n
-            let hs, hf = measure (Heap.ofRenderObjects (Set.ofList [ "HeapModelTrafo"; "HeapColor" ])) n
+            let cFull = measure id n n
+            let hFull = measure heap n n
+            let cSparse = measure id n 16
+            let hSparse = measure heap n 16
             let b = Heap.lastBucketCount
-            printfn "%6d | %11.1f   | %8.1f   | %10.2f   | %7.2f   | %d -> %d" n cs hs cf hf n b
+            printfn "%6d | %7.2f %6.2f  %5.1fx | %7.2f %6.2f  %5.1fx | %d -> %d"
+                n cFull hFull (cFull / hFull) cSparse hSparse (cSparse / hSparse) n b
         printfn ""
