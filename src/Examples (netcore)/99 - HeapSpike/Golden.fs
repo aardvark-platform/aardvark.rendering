@@ -209,3 +209,64 @@ module Golden =
         if pass then Log.line "golden: ALL PASS (uniform + bindless-textured heap == classic)"
         else Log.warn "golden: FAILED"
         pass
+
+    // Verifies the per-RO IsActive visibility gate: deactivating half the draws
+    // (in a transact) roughly halves the rendered coverage, with no rebuild.
+    let visibilityTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        let n = 64
+        let s = int (ceil (sqrt (float n)))
+        let actives = Array.init n (fun _ -> AVal.init true)
+        let inputs =
+            Array.init n (fun i ->
+                let x = i % s
+                let y = i / s
+                let p = V3d(float (x - s/2) * 1.4, float (y - s/2) * 1.4, 0.0)
+                let ro = RenderObject()
+                ro.Surface   <- Surface.Effect effect
+                ro.Mode      <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- vattrs
+                ro.Indices   <- Some (bv index typeof<int>)
+                ro.IsActive  <- actives.[i]
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+                ro.Uniforms  <-
+                    UniformProvider.ofList [
+                        Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                        Symbol.Create "HeapColor",      (AVal.constant (V4f(1.0f, 0.7f, 0.3f, 1.0f)) :> IAdaptiveValue)
+                        Symbol.Create "ViewProjTrafo",  viewProj ]
+                ro :> IRenderObject)
+        let heap = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray inputs)
+        use task = runtime.CompileRender(signature, heap)
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let coverage () =
+            let m = out.GetValue().Download().AsPixImage<uint8>().GetMatrix<C4b>()
+            let mutable c = 0L
+            m.ForeachCoord(fun (p : V2l) -> let v = m.[p] in if v.R <> 0uy || v.G <> 0uy || v.B <> 0uy then c <- c + 1L)
+            c
+        let all = coverage ()
+        transact (fun () -> for i in 0 .. n - 1 do if i % 2 = 0 then actives.[i].Value <- false)
+        let half = coverage ()
+        out.Release()
+        Log.line "visibility: %d bucket(s); coverage all=%d half=%d (ratio %.2f)" Heap.lastBucketCount all half (float half / float all)
+        let pass = all > 0L && half > 0L && float half / float all < 0.65 && float half / float all > 0.35
+        if pass then Log.line "visibility: PASS (deactivating half ~halves coverage, no rebuild)"
+        else Log.warn "visibility: FAIL"
+        pass

@@ -361,7 +361,7 @@ module Heap =
             let packedIdx = System.Collections.Generic.List<int>()
             let geomCache = System.Collections.Generic.Dictionary<struct(obj * obj), struct(int * int * int)>(HashIdentity.Structural)
 
-            let indirect =
+            let baseEntries =
                 ros |> Array.mapi (fun i ro ->
                     let posBV = attr ro DefaultSemantic.Positions
                     let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer (v1 requires indexed geometry)"
@@ -380,12 +380,26 @@ module Heap =
                             geomCache.[key] <- r
                             r
                     DrawCallInfo(FaceVertexCount = count, FirstIndex = firstIndex, BaseVertex = baseVertex, FirstInstance = i, InstanceCount = 1))
-                |> IndirectBuffer.ofArray
+
+            // per-RO visibility gate: IsActive = false -> InstanceCount 0 (the draw
+            // emits nothing), no bucket/arena churn. Reactive only when some RO has
+            // a non-constant IsActive; all-constant-active buckets stay a constant.
+            let actives = ros |> Array.map (fun ro -> ro.IsActive)
+            let indirect =
+                if actives |> Array.forall (fun a -> a.IsConstant && AVal.force a) then
+                    AVal.constant (IndirectBuffer.ofArray baseEntries)
+                else
+                    AVal.custom (fun t ->
+                        let entries = Array.copy baseEntries
+                        for i in 0 .. entries.Length - 1 do
+                            if not (actives.[i].GetValue t) then entries.[i].InstanceCount <- 0
+                        IndirectBuffer.ofArray entries)
 
             let bvOf (arr : System.Array) t = BufferView(AVal.constant (ArrayBuffer(arr) :> IBuffer), t)
             let ro = RenderObject.Clone ro0
+            ro.IsActive         <- AVal.constant true   // bucket always active; per-draw gating is in the indirect buffer
             ro.Surface          <- Surface.Effect (rewrite nameToField fieldStride standardDerivedRules effect)
-            ro.DrawCalls        <- DrawCalls.Indirect (AVal.constant indirect)
+            ro.DrawCalls        <- DrawCalls.Indirect indirect
             ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bvOf (packedPos.ToArray()) typeof<V3f>
                                                               DefaultSemantic.Normals,   bvOf (packedNor.ToArray()) typeof<V3f> ]
             ro.Indices          <- Some (bvOf (packedIdx.ToArray()) typeof<int>)
