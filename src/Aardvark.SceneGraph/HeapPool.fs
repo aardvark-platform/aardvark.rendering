@@ -11,10 +11,10 @@ namespace Aardvark.SceneGraph
 // / FShade / Sg — no Vulkan types), but currently VULKAN-ONLY in practice:
 // per-draw routing reads the slot via gl_InstanceIndex (= gl_InstanceID +
 // baseInstance under Vulkan semantics). On GL, gl_InstanceID omits baseInstance
-// and FShade has no base-instance intrinsic, so every draw reads slot 0 — the
-// `golden-gl` test demonstrates this divergence. A GL port needs a FShade
-// gl_BaseInstance/gl_DrawID intrinsic (ARB_shader_draw_parameters); texture
-// bindless additionally needs GL extensions (ARB_bindless_texture / NV_gpu_shader5).
+// and FShade has no base-instance intrinsic, so every draw would read slot 0.
+// A GL port needs a FShade gl_BaseInstance/gl_DrawID intrinsic
+// (ARB_shader_draw_parameters); texture bindless additionally needs GL
+// extensions (ARB_bindless_texture / NV_gpu_shader5).
 //
 // Two entry points:
 //   * Heap.ofRenderObjects — adaptive aset<IRenderObject> -> aset<IRenderObject>
