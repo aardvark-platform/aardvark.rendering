@@ -122,11 +122,19 @@ module Heap =
             "ModelViewTrafo",     <@ (uniform?ViewTrafo     : M44f) * (uniform?ModelTrafo : M44f) @>.Raw
         ]
 
+    /// gl_DrawID (the sub-draw index within a multi-draw), via a GLSL intrinsic —
+    /// no FShade fork. Used to route per-draw heap uniforms when the sub-draws may
+    /// themselves be instanced (instanceCount > 1), so firstInstance stays 0 and
+    /// gl_InstanceIndex remains each draw's LOCAL instance index. Requires
+    /// VK_KHR_shader_draw_parameters (shaderDrawParameters, Vulkan 1.1 core).
+    [<GLSLIntrinsic("gl_DrawID", "GL_ARB_shader_draw_parameters")>]
+    let private getDrawId () : int = onlyInShaderCode "getDrawId"
+
     /// Rewrite an effect so that the uniforms named in `layout` become arena
-    /// gathers indexed by gl_InstanceIndex; everything else stays a UBO.
-    let private rewrite (layout : Map<string, int>) (fieldStride : int) (rules : Map<string, DerivedRule>) (e : Effect) =
-        let iid : Expr<int> = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
-        let off (fi : int) : Expr<int> = <@ uniform.HeapHeaders.[ %iid * %(cint fieldStride) + %(cint fi) ] @>
+    /// gathers indexed by `slot` (gl_InstanceIndex or gl_DrawID); everything else
+    /// stays a UBO.
+    let private rewrite (slot : Expr<int>) (layout : Map<string, int>) (fieldStride : int) (rules : Map<string, DerivedRule>) (e : Effect) =
+        let off (fi : int) : Expr<int> = <@ uniform.HeapHeaders.[ %slot * %(cint fieldStride) + %(cint fi) ] @>
         // 1) Expand derived rules to a fixpoint. Rules emit only plain uniform?X
         //    reads, so this introduces no gathers — a rule whose base is itself
         //    derived is resolved on the next iteration.
@@ -188,7 +196,7 @@ module Heap =
                              FirstInstance = i, InstanceCount = 1))
             |> IndirectBuffer.ofArray
 
-        let effect = rewrite nameToField fieldStride standardDerivedRules effect
+        let effect = rewrite (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)) nameToField fieldStride standardDerivedRules effect
 
         Sg.indirectDraw mode (AVal.constant indirect)
         |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(AVal.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>))
@@ -227,7 +235,7 @@ module Heap =
                 let a = Array.zeroCreate<float32> totalF
                 for (input, o) in distinct do input.packInto t a o
                 a)
-        let effect = rewrite nameToField fieldStride standardDerivedRules effect
+        let effect = rewrite (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)) nameToField fieldStride standardDerivedRules effect
         let n = instances.Length
         // ONE instanced indirect draw: firstInstance 0, instanceCount N. Built
         // declaratively (like `scene`) so ambient Sg.uniform globals merge in.
@@ -359,6 +367,17 @@ module Heap =
             | ValueSome v -> v
             | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing per-draw uniform '%s'" n
 
+        // an input RO may ALREADY be instanced (instanceCount > 1); preserve it.
+        // Per-draw routing is by gl_DrawID, so each sub-draw keeps firstInstance 0
+        // and gl_InstanceIndex stays the RO's local instance index (0 .. K-1).
+        let instanceCountOf (ro : RenderObject) =
+            match ro.DrawCalls with
+            | DrawCalls.Direct calls ->
+                match AVal.force calls with
+                | [||] -> 1
+                | arr -> max 1 arr.[0].InstanceCount
+            | _ -> 1
+
         let buildBucket (ros : RenderObject[]) : IRenderObject =
             let ro0 = ros.[0]
             let effect = match ro0.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
@@ -406,7 +425,7 @@ module Heap =
             let geomCache = System.Collections.Generic.Dictionary<struct(obj * obj), struct(int * int * int)>(HashIdentity.Structural)
 
             let baseEntries =
-                ros |> Array.mapi (fun i ro ->
+                ros |> Array.map (fun ro ->
                     let posBV = attr ro DefaultSemantic.Positions
                     let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer (v1 requires indexed geometry)"
                     let key = struct(posBV.Buffer :> obj, idxBV.Buffer :> obj)
@@ -423,7 +442,7 @@ module Heap =
                             packedIdx.AddRange idx
                             geomCache.[key] <- r
                             r
-                    DrawCallInfo(FaceVertexCount = count, FirstIndex = firstIndex, BaseVertex = baseVertex, FirstInstance = i, InstanceCount = 1))
+                    DrawCallInfo(FaceVertexCount = count, FirstIndex = firstIndex, BaseVertex = baseVertex, FirstInstance = 0, InstanceCount = instanceCountOf ro))
 
             // per-RO visibility gate: IsActive = false -> InstanceCount 0 (the draw
             // emits nothing), no bucket/arena churn. Reactive only when some RO has
@@ -442,7 +461,7 @@ module Heap =
             let bvOf (arr : System.Array) t = BufferView(AVal.constant (ArrayBuffer(arr) :> IBuffer), t)
             let ro = RenderObject.Clone ro0
             ro.IsActive         <- AVal.constant true   // bucket always active; per-draw gating is in the indirect buffer
-            ro.Surface          <- Surface.Effect (rewrite nameToField fieldStride standardDerivedRules effect)
+            ro.Surface          <- Surface.Effect (rewrite (<@ getDrawId() @>) nameToField fieldStride standardDerivedRules effect)
             ro.DrawCalls        <- DrawCalls.Indirect indirect
             ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bvOf (packedPos.ToArray()) typeof<V3f>
                                                               DefaultSemantic.Normals,   bvOf (packedNor.ToArray()) typeof<V3f> ]

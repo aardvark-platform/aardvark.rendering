@@ -354,6 +354,92 @@ module Golden =
         else Log.warn "bucketing: FAIL (expected 2 buckets)"
         pass
 
+    // Verifies ALREADY-INSTANCED inputs to ofRenderObjects: input ROs that have
+    // instanceCount > 1 are folded into the bucket with gl_DrawID per-draw routing,
+    // so each sub-draw keeps its own per-draw uniforms while gl_InstanceIndex stays
+    // the local instance index. Compared against the equivalent non-instanced
+    // expansion (the per-instance offset baked into each trafo): must be identical.
+    module AI =
+        type V = { [<Position>] pos : V4f; [<Color>] c : V4f; [<InstanceId>] iid : int }
+        let shadeInst (v : V) =
+            vertex {
+                let m  : M44f = uniform?HeapModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                let col : V4f = uniform?HeapColor
+                let p = v.pos + V4f(float32 v.iid * 1.5f, 0.0f, 0.0f, 0.0f)
+                return { v with pos = vp * (m * p); c = col }
+            }
+        let shadePlain (v : V) =
+            vertex {
+                let m  : M44f = uniform?HeapModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                let col : V4f = uniform?HeapColor
+                return { v with pos = vp * (m * v.pos); c = col }
+            }
+        let frag (v : V) = fragment { return v.c }
+
+    let alreadyInstancedTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(2.0, -1.0, 1.0) * 14.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let bases = [| V3d(0.0, 2.0, 0.0), C4f.Red; V3d(0.0, -2.0, 0.0), C4f.DodgerBlue |]
+        let k = 4
+        let mkRO effect (uniforms : list<Symbol * IAdaptiveValue>) (inst : int) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect effect
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = inst) |])
+            ro.Uniforms  <- UniformProvider.ofList uniforms
+            ro :> IRenderObject
+        let imageOf (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+
+        // instanced: 2 ROs, each instanceCount=4, offset per instance via gl_InstanceIndex
+        let effInst = Effect.compose [ Effect.ofFunction AI.shadeInst; Effect.ofFunction AI.frag ]
+        let instancedInputs =
+            bases |> Array.map (fun (p, c) ->
+                mkRO effInst [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                               Symbol.Create "HeapColor",      (AVal.constant (c.ToV4f()) :> IAdaptiveValue)
+                               Symbol.Create "ViewProjTrafo",  viewProj ] k)
+        let imgInst = imageOf (Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray instancedInputs))
+        let instBuckets = Heap.lastBucketCount
+
+        // reference: 8 plain ROs (offset baked into the trafo), instanceCount=1
+        let effPlain = Effect.compose [ Effect.ofFunction AI.shadePlain; Effect.ofFunction AI.frag ]
+        let plainInputs =
+            [| for (p, c) in bases do
+                 for i in 0 .. k-1 ->
+                   mkRO effPlain [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p * Trafo3d.Translation(float i * 1.5, 0.0, 0.0)).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                                   Symbol.Create "HeapColor",      (AVal.constant (c.ToV4f()) :> IAdaptiveValue)
+                                   Symbol.Create "ViewProjTrafo",  viewProj ] 1 |]
+        let imgPlain = imageOf (Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray plainInputs))
+
+        let maxD, nDiff, nNonBg, total = diff imgPlain imgInst
+        Log.line "already-instanced: 2 ROs x %d instances (%d bucket, gl_DrawID routing) vs 8 plain ROs  maxDelta=%d diffPixels=%d coverage=%d" k instBuckets maxD nDiff nNonBg
+        let pass = maxD <= 1 && nNonBg > 500L && instBuckets = 1
+        if pass then Log.line "already-instanced: PASS (instanced inputs == non-instanced expansion; per-draw routed by gl_DrawID)"
+        else Log.warn "already-instanced: FAIL (maxDelta=%d nNonBg=%d buckets=%d)" maxD nNonBg instBuckets
+        pass
+
     // Verifies per-instance heap rendering (instanceCount > 1): the SAME per-
     // instance data rendered via Heap.instanced (one instanced draw) and via
     // Heap.scene (N indirect sub-draws) must be pixel-identical — both index the
