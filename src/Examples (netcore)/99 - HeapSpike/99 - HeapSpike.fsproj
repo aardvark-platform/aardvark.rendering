@@ -19,6 +19,7 @@
     <Compile Include="Textures.fs" />
     <Compile Include="Real.fs" />
     <Compile Include="Golden.fs" />
+    <Compile Include="GpuModes.fs" />
     <Compile Include="GLBindless.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
