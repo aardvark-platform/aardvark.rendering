@@ -78,14 +78,44 @@ module Heap =
 
     /// Rewrite an effect so that the uniforms named in `layout` become arena
     /// gathers indexed by gl_InstanceIndex; everything else stays a UBO.
-    let private rewrite (layout : Map<string, int>) (fieldStride : int) (e : Effect) =
+    // ── Derived-uniform system (general, à la wombat §7) ─────────────────
+    // A derived uniform is a pure function of OTHER uniforms, written as an
+    // expression over `uniform?Name` reads. The rewriter expands these rules to
+    // a fixpoint (so a rule whose base is itself derived resolves too), then a
+    // single pass turns every heap-managed read into a per-object arena gather;
+    // anything left is a plain global (UBO). Rules emit only uniform reads, never
+    // gathers, so each gather is a top-level substitution created exactly once —
+    // FShade resolves those correctly, whereas splicing a gather into a rule
+    // expression loses its storage-buffer scope. The standard trafo derivations
+    // are just DATA; add your own the same way.
+    type DerivedRule = Expr
+
+    /// Standard trafo derivations. ModelTrafo is per-object (arena); the
+    /// camera-dependent factors stay globals (UBO, one upload per camera move).
+    let standardDerivedRules : Map<string, DerivedRule> =
+        Map.ofList [
+            "ModelViewProjTrafo", <@ (uniform?ViewProjTrafo : M44f) * (uniform?ModelTrafo : M44f) @>.Raw
+            "ModelViewTrafo",     <@ (uniform?ViewTrafo     : M44f) * (uniform?ModelTrafo : M44f) @>.Raw
+        ]
+
+    let private rewrite (layout : Map<string, int>) (fieldStride : int) (rules : Map<string, DerivedRule>) (e : Effect) =
         let iid : Expr<int> = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
-        e |> Effect.substituteUniforms (fun name typ _ _ ->
+        let off (fi : int) : Expr<int> = <@ uniform.HeapHeaders.[ %iid * %(cint fieldStride) + %(cint fi) ] @>
+        // 1) Expand derived rules to a fixpoint. Rules emit only plain uniform?X
+        //    reads, so this introduces no gathers — a rule whose base is itself
+        //    derived is resolved on the next iteration.
+        let expandDerived (eff : Effect) =
+            eff |> Effect.substituteUniforms (fun name _ _ _ -> Map.tryFind name rules)
+        let hasDerived (eff : Effect) = eff.Uniforms |> Map.exists (fun n _ -> rules.ContainsKey n)
+        let mutable cur = e
+        let mutable i = 0
+        while hasDerived cur && i < 8 do cur <- expandDerived cur; i <- i + 1
+        // 2) Single pass: every heap-managed read becomes a top-level arena
+        //    gather (created exactly once, all StorageBuffer scope — no mixing).
+        cur |> Effect.substituteUniforms (fun name typ _ _ ->
             match Map.tryFind name layout with
-            | None -> None
-            | Some fi ->
-                let off : Expr<int> = <@ uniform.HeapHeaders.[ %iid * %(cint fieldStride) + %(cint fi) ] @>
-                Some (gatherFor typ off))
+            | Some fi -> Some (gatherFor typ (off fi))
+            | None -> None)
 
     /// Build a reactive heap-rendered scene graph for a single bucket: one
     /// effect, one shared geometry, N draws differing only by per-draw avals.
@@ -132,7 +162,7 @@ module Heap =
                              FirstInstance = i, InstanceCount = 1))
             |> IndirectBuffer.ofArray
 
-        let effect = rewrite nameToField fieldStride effect
+        let effect = rewrite nameToField fieldStride standardDerivedRules effect
 
         Sg.indirectDraw mode (AVal.constant indirect)
         |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(AVal.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>))
@@ -322,7 +352,7 @@ module Heap =
 
             let bvOf (arr : System.Array) t = BufferView(AVal.constant (ArrayBuffer(arr) :> IBuffer), t)
             let ro = RenderObject.Clone ro0
-            ro.Surface          <- Surface.Effect (rewrite nameToField fieldStride effect)
+            ro.Surface          <- Surface.Effect (rewrite nameToField fieldStride standardDerivedRules effect)
             ro.DrawCalls        <- DrawCalls.Indirect (AVal.constant indirect)
             ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bvOf (packedPos.ToArray()) typeof<V3f>
                                                               DefaultSemantic.Normals,   bvOf (packedNor.ToArray()) typeof<V3f> ]
