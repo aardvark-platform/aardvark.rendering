@@ -72,6 +72,20 @@ module Heap =
     let f32 (av : aval<float32>) : HeapInput =
         { sizeF = 1; key = av; packInto = fun t a o -> a.[o] <- av.GetValue t }
 
+    // ── runtime support ─────────────────────────────────────────────────
+    /// Whether `runtime` can run the heap path at all (per-draw base-instance
+    /// multidraw routing). Bindless per-object textures additionally need
+    /// `runtime.SupportsUnboundedSamplerArrays`.
+    let isSupported (runtime : IRuntime) = runtime.SupportsBaseInstanceMultiDraw
+
+    /// Throw a clear error if `runtime` cannot run the heap path. Pass
+    /// `textures = true` to also require unbounded (bindless) sampler arrays.
+    let checkSupport (textures : bool) (runtime : IRuntime) =
+        if not runtime.SupportsBaseInstanceMultiDraw then
+            failwith "Heap: runtime does not support indirect multi-draw with base-instance routing (required for per-draw heap rendering). Currently only the Vulkan backend on capable hardware is supported (GL lacks a base-instance shader intrinsic)."
+        if textures && not runtime.SupportsUnboundedSamplerArrays then
+            failwith "Heap: runtime does not support unbounded (bindless) sampler arrays (descriptor indexing); per-object textures via the heap are unavailable on this device."
+
     /// Type-driven gather: given the base element offset in HeapData, build
     /// the expression that reconstructs a value of `typ`.
     let private gatherFor (typ : System.Type) (off : Expr<int>) : Expr =
@@ -287,6 +301,7 @@ module Heap =
     /// dirty-tracked arena. The uniforms named in `heapNames` are gathered
     /// per-draw in the rewritten shader; everything else is treated as a global.
     let ofRenderObjects (runtime : IRuntime) (heapNames : Set<string>) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        checkSupport false runtime
         let names = heapNames |> Set.toArray |> Array.sort
         let fieldStride = names.Length
         let nameToField = names |> Array.mapi (fun i n -> n, i) |> Map.ofArray
@@ -412,6 +427,8 @@ module Heap =
     type HeapScene(runtime : IRuntime, effect : Effect, mode : IndexedGeometryMode,
                    positions : V3f[], normals : V3f[], index : int[],
                    schema : (string * System.Type)[], globals : IUniformProvider) =
+
+        do checkSupport false runtime
 
         // fixed layout from the schema
         let fieldOffset = System.Collections.Generic.Dictionary<string, int>()

@@ -37,6 +37,12 @@ type Runtime(debug : IDebugConfig) =
 
     member x.DebugLabelsEnabled = debug.DebugLabels
 
+    // The heap render path is not supported on GL: per-draw base-instance routing
+    // would need a FShade gl_BaseInstance/gl_DrawID intrinsic (ARB_shader_draw_
+    // parameters), and bindless sampler arrays need GL texture extensions.
+    member x.SupportsBaseInstanceMultiDraw = false
+    member x.SupportsUnboundedSamplerArrays = false
+
     member x.ShaderCachePath
         with get() = ctx.ShaderCachePath
         and set(value) = ctx.ShaderCachePath <- value
@@ -101,6 +107,8 @@ type Runtime(debug : IDebugConfig) =
         member x.SupportsLayeredShaderInputs = x.SupportsLayeredShaderInputs
         member x.DebugConfig = x.DebugConfig
         member x.DebugLabelsEnabled = x.DebugLabelsEnabled
+        member x.SupportsBaseInstanceMultiDraw = x.SupportsBaseInstanceMultiDraw
+        member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
         member x.ContextLock = x.ContextLock
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =

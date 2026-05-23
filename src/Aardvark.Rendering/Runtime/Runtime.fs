@@ -76,6 +76,14 @@ and IRuntime =
     /// Returns whether debug labels and markers are enabled.
     abstract member DebugLabelsEnabled : bool
 
+    /// Returns whether the runtime supports indirect multi-draw with a non-zero
+    /// firstInstance (per-draw base-instance routing, e.g. for heap rendering).
+    abstract member SupportsBaseInstanceMultiDraw : bool
+
+    /// Returns whether the runtime supports unbounded (bindless) sampler arrays
+    /// indexed by non-uniform expressions ('sampler2D X[]').
+    abstract member SupportsUnboundedSamplerArrays : bool
+
     abstract member OnDispose : IEvent<unit>
 
     /// Compiles an effect for the given framebuffer signature and topology.

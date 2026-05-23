@@ -43,6 +43,15 @@ type Runtime(device : Device) as this =
 
     member x.DebugLabelsEnabled = instance.DebugLabelsEnabled
 
+    member x.SupportsBaseInstanceMultiDraw =
+        let d = x.Device.EnabledFeatures.GraphicsPipeline.Drawing
+        d.MultiDrawIndirect && d.DrawIndirectFirstInstance
+
+    member x.SupportsUnboundedSamplerArrays =
+        x.Device.UpdateDescriptorsAfterBind &&
+        x.Device.EnabledFeatures.Descriptors.RuntimeDescriptorArray &&
+        x.Device.EnabledFeatures.Shaders.SampledImageArrayNonUniformIndexing
+
     member x.CreateStreamingTexture (mipMaps : bool) : IStreamingTexture =
         raise <| NotImplementedException()
 
@@ -549,6 +558,10 @@ type Runtime(device : Device) as this =
         member x.DebugConfig = x.DebugConfig
 
         member x.DebugLabelsEnabled = x.DebugLabelsEnabled
+
+        member x.SupportsBaseInstanceMultiDraw = x.SupportsBaseInstanceMultiDraw
+
+        member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
 
         member x.DeviceCount = x.DeviceCount
 
