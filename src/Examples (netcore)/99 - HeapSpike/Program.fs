@@ -85,6 +85,8 @@ let main argv =
         if Golden.bucketingTest () then 0 else 1
     elif argv |> Array.contains "modes" then
         if Golden.modeRulesTest () then 0 else 1
+    elif argv |> Array.contains "gpumodes-gl" then
+        if GpuModes.runGL () then 0 else 1
     elif argv |> Array.contains "gpumodes-win" then
         GpuModes.runWin (); 0
     elif argv |> Array.contains "gpumodes" then

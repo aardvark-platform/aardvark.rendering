@@ -168,6 +168,50 @@ module GpuModes =
         else Log.warn "gpu-modes: FAIL"
         pass
 
+    /// GL validation: same GPU partition on the OpenGL backend — dispatch the
+    /// compute, verify per-slot masks, and render the per-slot pipelines from the
+    /// GPU-written indirect buffer (glMultiDrawElementsIndirect + gl_DrawID).
+    let runGL () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.OpenGlApplication(false)
+        let runtime = app.Runtime :> IRuntime
+        Log.line "gl: SupportsMultiDrawIndirectDrawId=%b" runtime.SupportsMultiDrawIndirectDrawId
+        let n, numSlots, faceVtx, indirect, partitioned, _threshold, slotRO = build runtime
+        partitioned |> AVal.force |> ignore   // GPU partition dispatch on GL
+        let raw = indirect.Download()
+        let mutable ok = true
+        let mutable s0 = 0
+        let mutable s1 = 0
+        for i in 0 .. n - 1 do
+            let expect = if (float32 (i % 3) * 0.4f) > 0.5f then 1 else 0
+            let ic0 = raw.[(0 * n + i) * 5 + 1]
+            let ic1 = raw.[(1 * n + i) * 5 + 1]
+            if ic0 = 1 then s0 <- s0 + 1
+            if ic1 = 1 then s1 <- s1 + 1
+            let got = if ic1 = 1 then 1 elif ic0 = 1 then 0 else -1
+            if got <> expect || (ic0 + ic1) <> 1 then ok <- false
+        // render the two GPU-routed pipeline slots and measure coverage
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 13.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        use task = runtime.CompileRender(signature, ASet.ofList [ slotRO 0 viewProj; slotRO 1 viewProj ])
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let m = out.GetValue().Download().AsPixImage<uint8>().GetMatrix<C4b>()
+        let mutable coverage = 0L
+        m.ForeachCoord(fun (p : V2l) -> let v = m.[p] in if v.R <> 0uy || v.G <> 0uy || v.B <> 0uy then coverage <- coverage + 1L)
+        out.Release()
+        Log.line "gpu-modes-gl: n=%d  slot0(fill)=%d slot1(wire)=%d  routing=%b  coverage=%d  faceVtx=%d" n s0 s1 ok coverage faceVtx
+        let pass = ok && s0 > 0 && s1 > 0 && coverage > 20000L
+        if pass then Log.line "gpu-modes-gl: PASS (GPU partition + per-slot indirect render on the GL backend)"
+        else Log.warn "gpu-modes-gl: FAIL (routing=%b coverage=%d)" ok coverage
+        pass
+
     /// windowed: GPU routes cubes to solid vs wireframe pipelines; press T to bump
     /// the threshold (re-partitions on the GPU, no CPU re-bucket).
     let runWin () =
