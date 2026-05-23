@@ -7,9 +7,14 @@ namespace Aardvark.SceneGraph
 // the command stream encodes O(buckets) and binds one descriptor set per bucket
 // instead of one per object.
 //
-// Backend-agnostic: built on IRuntime / RenderObject / AdaptiveBuffer / FShade
-// and the SceneGraph Sg combinators — runs on both the Vulkan and GL backends
-// (anything supporting indirect draws + storage buffers).
+// Backend-neutral in its dependencies (IRuntime / RenderObject / AdaptiveBuffer
+// / FShade / Sg — no Vulkan types), but currently VULKAN-ONLY in practice:
+// per-draw routing reads the slot via gl_InstanceIndex (= gl_InstanceID +
+// baseInstance under Vulkan semantics). On GL, gl_InstanceID omits baseInstance
+// and FShade has no base-instance intrinsic, so every draw reads slot 0 — the
+// `golden-gl` test demonstrates this divergence. A GL port needs a FShade
+// gl_BaseInstance/gl_DrawID intrinsic (ARB_shader_draw_parameters); texture
+// bindless additionally needs GL extensions (ARB_bindless_texture / NV_gpu_shader5).
 //
 // Two entry points:
 //   * Heap.ofRenderObjects — adaptive aset<IRenderObject> -> aset<IRenderObject>

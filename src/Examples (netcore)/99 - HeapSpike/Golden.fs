@@ -38,10 +38,15 @@ module Golden =
             if p.R <> 0uy || p.G <> 0uy || p.B <> 0uy then nNonBg <- nNonBg + 1L)
         maxDelta, nDiff, nNonBg, int64 am.Size.X * int64 am.Size.Y
 
-    let run () =
+    let rec run () = runOn false   // default: Vulkan
+
+    and runOn (useGL : bool) =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app : IApplication =
+            if useGL then new Aardvark.Application.Slim.OpenGlApplication(false) :> IApplication
+            else new Aardvark.Application.Slim.VulkanApplication(false) :> IApplication
         let runtime = app.Runtime
+        Log.line "golden: backend = %s" (if useGL then "GL" else "Vulkan")
 
         let signature =
             runtime.CreateFramebufferSignature [
@@ -120,5 +125,9 @@ module Golden =
         // the scene actually drew something (guards against two blank images)
         let pass = maxDelta <= 1 && nNonBg > total / 100L
         if pass then Log.line "golden: PASS (heap render is pixel-equivalent to classic)"
+        elif useGL then
+            Log.warn "golden: FAIL on GL (maxDelta=%d) — EXPECTED: per-draw routing reads" maxDelta
+            Log.warn "golden: gl_InstanceIndex; GL's gl_InstanceID omits baseInstance and FShade"
+            Log.warn "golden: has no base-instance intrinsic, so every draw reads slot 0. Vulkan passes."
         else Log.warn  "golden: FAIL (maxDelta=%d nNonBg=%d)" maxDelta nNonBg
         pass
