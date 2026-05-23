@@ -78,15 +78,16 @@ let main argv =
             let t = sw.Elapsed.TotalSeconds
             (Trafo3d.Translation p * Trafo3d.RotationZ(0.5 * t + phase)).Forward |> M44f.op_Explicit)
 
-    let effect =
-        Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+    // two distinct effects -> two buckets -> two indirect draws
+    let effectLit = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+    let effectRim = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFragRim ]
 
     // N ordinary render objects
     let inputs =
         grid |> Array.mapi (fun i p ->
             let (attrs, idxBV, faceVertexCount) = shapes.[i % shapes.Length]
             let ro = RenderObject()
-            ro.Surface   <- Surface.Effect effect
+            ro.Surface   <- Surface.Effect (if i % 2 = 0 then effectLit else effectRim)
             ro.Mode      <- IndexedGeometryMode.TriangleList
             ro.VertexAttributes <- attrs
             ro.Indices   <- Some idxBV

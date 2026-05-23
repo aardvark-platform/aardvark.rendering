@@ -28,3 +28,11 @@ module Shaders =
             let d  = 0.25f + 0.75f * max 0.0f (Vec.dot nn l)
             return V4f(v.c.XYZ * d, 1.0f)
         }
+
+    // a second, distinct effect (rim-lit) -> lands in its own bucket
+    let shadeFragRim (v : Vertex) =
+        fragment {
+            let nn  = Vec.normalize v.n
+            let rim = pow (1.0f - abs nn.Z) 2.0f
+            return V4f(v.c.XYZ * 0.35f + V3f.III * rim, 1.0f)
+        }
