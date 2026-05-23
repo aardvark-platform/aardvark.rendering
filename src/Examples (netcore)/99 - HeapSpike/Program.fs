@@ -89,6 +89,8 @@ let main argv =
         if Golden.instancingTest () then 0 else 1
     elif argv |> Array.contains "instbucket" then
         if Golden.alreadyInstancedTest () then 0 else 1
+    elif argv |> Array.contains "gl" then
+        if Golden.glHeapTest () then 0 else 1
     elif argv |> Array.contains "dynamic" then
         runDynamic ()
         0

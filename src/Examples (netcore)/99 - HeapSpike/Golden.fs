@@ -354,6 +354,60 @@ module Golden =
         else Log.warn "bucketing: FAIL (expected 2 buckets)"
         pass
 
+    // GL backend: the uniform heap (no bindless textures) now works on GL via
+    // gl_DrawID routing over multi-draw-indirect. Renders a cube grid classic
+    // (N UBO draws) vs heap (1 multidraw, SSBO gather) on GL and compares.
+    let glHeapTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.OpenGlApplication(false)
+        let runtime = app.Runtime :> IRuntime
+        Log.line "gl: SupportsMultiDrawIndirectDrawId=%b SupportsUnboundedSamplerArrays=%b"
+            runtime.SupportsMultiDrawIndirectDrawId runtime.SupportsUnboundedSamplerArrays
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
+        let s = 16
+        let inputs =
+            Array.init (s*s) (fun i ->
+                let p = V3d(float (i % s - s/2) * 1.2, float (i / s - s/2) * 1.2, 0.0)
+                let ro = RenderObject()
+                ro.Surface   <- Surface.Effect effect
+                ro.Mode      <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- vattrs
+                ro.Indices   <- Some (bv index typeof<int>)
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+                ro.Uniforms  <- UniformProvider.ofList [
+                    Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                    Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                    Symbol.Create "ViewProjTrafo",  viewProj ]
+                ro :> IRenderObject)
+        let imageOf (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let classicPix = imageOf (ASet.ofArray inputs)
+        let heapPix = imageOf (Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray inputs))
+        let maxD, nDiff, nNonBg, total = diff classicPix heapPix
+        Log.line "gl-heap: %d ROs -> %d bucket(s)  classic vs heap maxDelta=%d diffPixels=%d/%d coverage=%d" inputs.Length Heap.lastBucketCount maxD nDiff total nNonBg
+        let pass = maxD <= 1 && nNonBg > total / 100L
+        if pass then Log.line "gl-heap: PASS (uniform heap renders correctly on the GL backend via gl_DrawID)"
+        else Log.warn "gl-heap: FAIL (maxDelta=%d nNonBg=%d)" maxD nNonBg
+        pass
+
     // Verifies ALREADY-INSTANCED inputs to ofRenderObjects: input ROs that have
     // instanceCount > 1 are folded into the bucket with gl_DrawID per-draw routing,
     // so each sub-draw keeps its own per-draw uniforms while gl_InstanceIndex stays

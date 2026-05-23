@@ -73,18 +73,19 @@ module Heap =
         { sizeF = 1; key = av; packInto = fun t a o -> a.[o] <- av.GetValue t }
 
     // ── runtime support ─────────────────────────────────────────────────
-    /// Whether `runtime` can run the heap path at all (per-draw base-instance
-    /// multidraw routing). Bindless per-object textures additionally need
-    /// `runtime.SupportsUnboundedSamplerArrays`.
-    let isSupported (runtime : IRuntime) = runtime.SupportsBaseInstanceMultiDraw
+    /// Whether `runtime` can run the heap path at all (multi-draw-indirect with
+    /// per-draw gl_DrawID routing — works on Vulkan and GL 4.6+). Bindless
+    /// per-object textures additionally need `runtime.SupportsUnboundedSamplerArrays`
+    /// (Vulkan descriptor indexing; not available on GL).
+    let isSupported (runtime : IRuntime) = runtime.SupportsMultiDrawIndirectDrawId
 
     /// Throw a clear error if `runtime` cannot run the heap path. Pass
     /// `textures = true` to also require unbounded (bindless) sampler arrays.
     let checkSupport (textures : bool) (runtime : IRuntime) =
-        if not runtime.SupportsBaseInstanceMultiDraw then
-            failwith "Heap: runtime does not support indirect multi-draw with base-instance routing (required for per-draw heap rendering). Currently only the Vulkan backend on capable hardware is supported (GL lacks a base-instance shader intrinsic)."
+        if not runtime.SupportsMultiDrawIndirectDrawId then
+            failwith "Heap: runtime does not support multi-draw-indirect with a per-draw gl_DrawID (required for heap routing). Needs Vulkan, or GL 4.6+ with GL_ARB_shader_draw_parameters."
         if textures && not runtime.SupportsUnboundedSamplerArrays then
-            failwith "Heap: runtime does not support unbounded (bindless) sampler arrays (descriptor indexing); per-object textures via the heap are unavailable on this device."
+            failwith "Heap: runtime does not support unbounded (bindless) sampler arrays (descriptor indexing); per-object textures via the heap are unavailable on this device (e.g. the GL backend)."
 
     /// Type-driven gather: given the base element offset in HeapData, build
     /// the expression that reconstructs a value of `typ`.
@@ -190,13 +191,15 @@ module Heap =
                 for (input, o) in distinct do input.packInto t a o
                 a)
 
+        // route per-draw by gl_DrawID (firstInstance stays 0) so this works on GL
+        // too (GL's gl_InstanceID omits baseInstance; gl_DrawID does not).
         let indirect =
-            Array.init draws.Length (fun i ->
+            Array.init draws.Length (fun _ ->
                 DrawCallInfo(FaceVertexCount = index.Length, FirstIndex = 0, BaseVertex = 0,
-                             FirstInstance = i, InstanceCount = 1))
+                             FirstInstance = 0, InstanceCount = 1))
             |> IndirectBuffer.ofArray
 
-        let effect = rewrite (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)) nameToField fieldStride standardDerivedRules effect
+        let effect = rewrite (<@ getDrawId() @>) nameToField fieldStride standardDerivedRules effect
 
         Sg.indirectDraw mode (AVal.constant indirect)
         |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(AVal.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>))
@@ -609,12 +612,14 @@ module Heap =
                 o <- o + sz
             o
 
-        // header-less rewrite: uniform -> HeapData[ iid*stride + fieldOffset ]
+        // header-less rewrite: uniform -> HeapData[ slot*stride + fieldOffset ],
+        // slot routed by gl_DrawID (= the sub-draw's position = the slot), so this
+        // works on GL too (firstInstance stays 0).
         let effect' =
-            let iid : Expr<int> = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
+            let did : Expr<int> = <@ getDrawId() @>
             effect |> Effect.substituteUniforms (fun name typ _ _ ->
                 match fieldOffset.TryGetValue name with
-                | true, fo -> Some (gatherFor typ <@ %iid * %(cint dataStride) + %(cint fo) @>)
+                | true, fo -> Some (gatherFor typ <@ %did * %(cint dataStride) + %(cint fo) @>)
                 | _ -> None)
 
         let initialSlots = 64
@@ -665,7 +670,7 @@ module Heap =
                         let (sz, pk) = packerOf.[n]
                         arena.Add(uniforms.[n], slot * dataStride + fieldOffset.[n], sz, pk))
                 slotWriters.[slot] <- ws
-                entries.[slot] <- DrawCallInfo(FaceVertexCount = index.Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = slot, InstanceCount = 1)
+                entries.[slot] <- DrawCallInfo(FaceVertexCount = index.Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 1)
                 arena.Touch()
                 version.Value <- version.Value + 1
                 slot)
@@ -679,7 +684,7 @@ module Heap =
                     slotWriters.Remove slot |> ignore
                 | _ -> ()
                 if slot < entries.Length then
-                    entries.[slot] <- DrawCallInfo(FaceVertexCount = 0, FirstInstance = slot, InstanceCount = 0)
+                    entries.[slot] <- DrawCallInfo(FaceVertexCount = 0, FirstInstance = 0, InstanceCount = 0)
                 freeList.Push slot
                 version.Value <- version.Value + 1)
 

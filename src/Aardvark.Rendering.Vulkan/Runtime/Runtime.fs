@@ -43,9 +43,9 @@ type Runtime(device : Device) as this =
 
     member x.DebugLabelsEnabled = instance.DebugLabelsEnabled
 
-    member x.SupportsBaseInstanceMultiDraw =
-        let d = x.Device.EnabledFeatures.GraphicsPipeline.Drawing
-        d.MultiDrawIndirect && d.DrawIndirectFirstInstance
+    member x.SupportsMultiDrawIndirectDrawId =
+        x.Device.EnabledFeatures.GraphicsPipeline.Drawing.MultiDrawIndirect &&
+        x.Device.EnabledFeatures.Shaders.DrawParameters
 
     member x.SupportsUnboundedSamplerArrays =
         x.Device.UpdateDescriptorsAfterBind &&
@@ -559,7 +559,7 @@ type Runtime(device : Device) as this =
 
         member x.DebugLabelsEnabled = x.DebugLabelsEnabled
 
-        member x.SupportsBaseInstanceMultiDraw = x.SupportsBaseInstanceMultiDraw
+        member x.SupportsMultiDrawIndirectDrawId = x.SupportsMultiDrawIndirectDrawId
 
         member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
 
