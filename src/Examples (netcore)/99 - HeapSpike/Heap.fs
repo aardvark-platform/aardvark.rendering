@@ -63,7 +63,8 @@ module Heap =
     /// Type-driven gather: given the base element offset in HeapData, build
     /// the expression that reconstructs a value of `typ`.
     let private gatherFor (typ : System.Type) (off : Expr<int>) : Expr =
-        if   typ = typeof<float32> then <@ uniform.HeapData.[%off] @>.Raw
+        if   typ = typeof<int>     then <@ int (uniform.HeapData.[%off]) @>.Raw
+        elif typ = typeof<float32> then <@ uniform.HeapData.[%off] @>.Raw
         elif typ = typeof<V2f> then <@ let o = %off in V2f(uniform.HeapData.[o], uniform.HeapData.[o+1]) @>.Raw
         elif typ = typeof<V3f> then <@ let o = %off in V3f(uniform.HeapData.[o], uniform.HeapData.[o+1], uniform.HeapData.[o+2]) @>.Raw
         elif typ = typeof<V4f> then <@ let o = %off in V4f(uniform.HeapData.[o], uniform.HeapData.[o+1], uniform.HeapData.[o+2], uniform.HeapData.[o+3]) @>.Raw
@@ -165,6 +166,7 @@ module Heap =
         elif t = typeof<V2f>     then 2,  (fun o a off -> let v = o :?> V2f in a.[off]<-v.X; a.[off+1]<-v.Y)
         elif t = typeof<float32> then 1,  (fun o a off -> a.[off] <- (o :?> float32))
         elif t = typeof<float>   then 1,  (fun o a off -> a.[off] <- float32 (o :?> float))
+        elif t = typeof<int>     then 1,  (fun o a off -> a.[off] <- float32 (o :?> int))
         else failwithf "Heap: unsupported per-draw uniform content type %A" t
 
     /// One bucket draw count, for reporting.

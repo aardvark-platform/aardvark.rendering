@@ -17,6 +17,7 @@
     <Compile Include="Heap.fs" />
     <Compile Include="Bench.fs" />
     <Compile Include="Phase4.fs" />
+    <Compile Include="Textures.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
