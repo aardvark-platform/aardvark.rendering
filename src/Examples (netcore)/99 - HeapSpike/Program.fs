@@ -81,6 +81,8 @@ let main argv =
         if Golden.run () then 0 else 1
     elif argv |> Array.contains "vis" then
         if Golden.visibilityTest () then 0 else 1
+    elif argv |> Array.contains "buckets" then
+        if Golden.bucketingTest () then 0 else 1
     elif argv |> Array.contains "dynamic" then
         runDynamic ()
         0

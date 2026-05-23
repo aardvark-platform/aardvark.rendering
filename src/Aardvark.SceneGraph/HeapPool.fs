@@ -416,6 +416,16 @@ module Heap =
                     member _.Dispose() = () }
             ro :> IRenderObject
 
+        // Bucket key = effect + topology + full pipeline state. Render objects
+        // differing in blend / cull / depth / stencil / topology must NOT share a
+        // bucket (one indirect draw = one pipeline). Default-state ROs share the
+        // same state instances (structural equality), so they still collapse;
+        // a customised RO (e.g. ro.BlendState <- ...) splits into its own bucket.
+        // This is the aardvark-idiomatic form of wombat's per-RO "mode rules".
+        let bucketKey (r : RenderObject) =
+            let eid = match r.Surface with | Surface.Effect e -> e.Id | _ -> "?"
+            (eid, r.Mode, r.DepthState, r.BlendState, r.StencilState, r.RasterizerState)
+
         objects
         |> ASet.toAVal
         |> ASet.bind (fun ros ->
@@ -423,7 +433,7 @@ module Heap =
                 ros
                 |> HashSet.toArray
                 |> Array.choose (fun ro -> match ro with :? RenderObject as r -> Some r | _ -> None)
-                |> Array.groupBy (fun r -> match r.Surface with | Surface.Effect e -> e.Id | _ -> "?")
+                |> Array.groupBy bucketKey
                 |> Array.map (fun (_, g) -> buildBucket g)
             lastBucketCount <- buckets.Length
             ASet.ofArray buckets)

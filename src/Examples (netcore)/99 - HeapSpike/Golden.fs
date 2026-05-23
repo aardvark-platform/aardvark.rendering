@@ -210,6 +210,46 @@ module Golden =
         else Log.warn "golden: FAILED"
         pass
 
+    // Verifies pipeline-state bucketing: ROs with the same effect but a different
+    // rasterizer (cull) state must land in separate buckets, while same-state ROs
+    // still collapse into one.
+    let bucketingTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let viewProj = AVal.constant Trafo3d.Identity :> IAdaptiveValue
+        let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        // one shared custom rasterizer state (cull back) for half the ROs
+        let culled = { RasterizerState.Default with CullMode = AVal.constant CullMode.Back }
+        let mk i =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect effect
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            if i % 2 = 0 then ro.RasterizerState <- culled
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <-
+                UniformProvider.ofList [
+                    Symbol.Create "HeapModelTrafo", (AVal.constant M44f.Identity :> IAdaptiveValue)
+                    Symbol.Create "HeapColor",      (AVal.constant V4f.IIII :> IAdaptiveValue)
+                    Symbol.Create "ViewProjTrafo",  viewProj ]
+            ro :> IRenderObject
+        let inputs = Array.init 16 mk
+        let heap = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray inputs)
+        heap |> ASet.toAVal |> AVal.force |> ignore
+        Log.line "bucketing: 16 ROs (8 default + 8 cull-back) -> %d bucket(s)" Heap.lastBucketCount
+        let pass = Heap.lastBucketCount = 2
+        if pass then Log.line "bucketing: PASS (distinct pipeline state -> distinct buckets)"
+        else Log.warn "bucketing: FAIL (expected 2 buckets)"
+        pass
+
     // Verifies the per-RO IsActive visibility gate: deactivating half the draws
     // (in a transact) roughly halves the rendered coverage, with no rebuild.
     let visibilityTest () =
