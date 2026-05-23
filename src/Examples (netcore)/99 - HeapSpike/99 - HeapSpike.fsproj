@@ -19,6 +19,7 @@
     <Compile Include="Phase4.fs" />
     <Compile Include="Textures.fs" />
     <Compile Include="Real.fs" />
+    <Compile Include="Golden.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

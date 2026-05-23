@@ -77,6 +77,8 @@ let main argv =
     if argv |> Array.contains "bench" then
         Bench.run ()
         0
+    elif argv |> Array.contains "golden" then
+        if Golden.run () then 0 else 1
     elif argv |> Array.contains "dynamic" then
         runDynamic ()
         0
