@@ -60,3 +60,6 @@ src/Aardvark.Rendering.Interactive/bin/
 /src/VKVM/build/
 /.boss
 /.claude/settings.local.json
+
+# Aardvark.Build local package overrides (dev-local, machine-specific paths)
+local.sources
