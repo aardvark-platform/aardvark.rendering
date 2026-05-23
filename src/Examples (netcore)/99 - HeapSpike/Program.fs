@@ -81,8 +81,10 @@ let main argv =
     if argv |> Array.contains "bench" then
         Bench.run ()
         0
+    elif argv |> Array.contains "showcase-rec" then
+        Showcase.run true; 0
     elif argv |> Array.contains "showcase" then
-        Showcase.run (); 0
+        Showcase.run false; 0
     elif argv |> Array.contains "plain" then
         if Golden.plainTest () then 0 else 1
     elif argv |> Array.contains "golden" then

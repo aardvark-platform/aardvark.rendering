@@ -11,6 +11,7 @@ namespace HeapSpike
 open Aardvark.Base
 open Aardvark.Base.Ag
 open Aardvark.Rendering
+open Aardvark.Rendering.Text
 open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive
@@ -117,15 +118,30 @@ module Showcase =
           idx = BufferView(AVal.constant (ArrayBuffer idx :> IBuffer), typeof<int>)
           count = idx.Length }
 
-    let run () =
+    let run (record : bool) =
         Aardvark.Init()
         use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let win = app.CreateGameWindow(samples = 4)
+        let win = app.CreateGameWindow(samples = 8)   // multisampling (smooth overlay text)
         let runtime = app.Runtime
 
-        // camera (DefaultCameraController)
+        // camera: DefaultCameraController interactively; smooth auto-orbit for recording
         let initialView = CameraView.lookAt (V3d(70.0, 70.0, 55.0)) V3d.Zero V3d.OOI
-        let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
+        // STATIC=1 -> fully constant camera (no win.Time dependency): isolates the
+        // heap render loop's steady-state allocation from camera/animation churn.
+        let isStatic = System.Environment.GetEnvironmentVariable "STATIC" = "1"
+        let cameraView =
+            // depend on win.Time so the window keeps re-rendering every frame, but
+            // return the SAME camera object -> heap redraws with no new uploads.
+            if isStatic then win.Time |> AVal.map (fun _ -> initialView)
+            elif record then
+                let sw = System.Diagnostics.Stopwatch.StartNew()
+                win.Time |> AVal.map (fun _ ->
+                    let t = sw.Elapsed.TotalSeconds
+                    let r = 50.0 + 30.0 * sin (t * 0.22)
+                    let a = t * 0.32
+                    CameraView.lookAt (V3d(cos a * r, sin a * r, 20.0 + 14.0 * sin (t * 0.4))) V3d.Zero V3d.OOI)
+            else
+                DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
         let frustum = win.Sizes |> AVal.map (fun s -> Frustum.perspective 70.0 0.1 3000.0 (float s.X / float s.Y))
         let camLoc = cameraView |> AVal.map (fun cv -> V3f cv.Location)
         let texU = AVal.constant ((Array.init TexCount mkTexture) : ITexture[])
@@ -138,7 +154,10 @@ module Showcase =
         let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan; C4f.Orange; C4f.HotPink |]
 
         let rnd = RandomSystem()
-        let n = 20000
+        let n =
+            match System.Environment.GetEnvironmentVariable "N" with
+            | null | "" -> if record then 40000 else 20000
+            | s -> int s
         let span = 70.0
         let objSg (i : int) : ISg =
             let s = shapes.[i % shapes.Length]
@@ -174,13 +193,46 @@ module Showcase =
         let heapMode = AVal.init true
         let ros = heapMode |> ASet.bind (fun h -> if h then heapRos else stdRos)
 
-        let report () =
-            if heapMode.Value then Log.warn "MODE = HEAP      | %d objects -> %d indirect draws" n Heap.lastBucketCount
-            else                   Log.warn "MODE = STANDARD  | %d objects -> %d draw calls" n n
-        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
-            if k = Keys.Space then transact (fun () -> heapMode.Value <- not heapMode.Value); report ())
+        // live fps (counted in AfterRender, published twice a second)
+        let fps = AVal.init 0.0
+        let mutable frames = 0
+        let fsw = System.Diagnostics.Stopwatch.StartNew()
+        win.AfterRender.Add (fun () ->
+            frames <- frames + 1
+            if not isStatic && fsw.Elapsed.TotalSeconds >= 0.5 then
+                transact (fun () -> fps.Value <- float frames / fsw.Elapsed.TotalSeconds)
+                frames <- 0; fsw.Restart())
 
-        Log.warn "Showcase: %d objects, %d effects (solid/textured/toon/bump/rim). SPACE = STANDARD <-> HEAP. WASD+mouse to fly." n effects.Length
-        report ()
-        win.RenderTask <- runtime.CompileRender(win.FramebufferSignature, ros)
+        // overlay text (aardvark.text, screen space) — mode / draw calls / fps
+        let overlayText =
+            (heapMode, fps) ||> AVal.map2 (fun h f ->
+                sprintf "MODE: %s\n%d objects\n%d draw calls\n%.0f fps" (if h then "HEAP" else "STANDARD") n (if h then Heap.lastBucketCount else n) f)
+        let overlay =
+            let trafo =
+                win.Sizes |> AVal.map (fun s ->
+                    let border = V2d(30.0, 24.0) / V2d s
+                    let pixels = 46.0 / float s.Y
+                    Trafo3d.Scale pixels *
+                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
+                    Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0))
+            let font = DefaultFonts.Hack.Regular
+            let cfg =
+                use __ = runtime.ContextLock
+                runtime.PrepareGlyphs(font, [| for c in 0 .. 255 -> char c |])
+                TextConfig.create font C4b.White TextAlignment.Left false RenderStyle.NoBoundary
+            Sg.textWithConfig cfg overlayText
+            |> Sg.trafo trafo
+            |> Sg.viewTrafo (AVal.constant Trafo3d.Identity)
+            |> Sg.projTrafo (AVal.constant Trafo3d.Identity)
+
+        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+            if k = Keys.Space then transact (fun () -> heapMode.Value <- not heapMode.Value))
+
+        if record then
+            win.Fullcreen <- true   // (sic) aardvark's spelling of the fullscreen toggle
+
+        let mainTask    = runtime.CompileRender(win.FramebufferSignature, ros)
+        let overlayTask = runtime.CompileRender(win.FramebufferSignature, overlay)
+        win.RenderTask <- RenderTask.ofList [ mainTask; overlayTask ]
+        Log.warn "Showcase: %d objects, %d effects (solid/textured/toon/bump/rim). SPACE = STANDARD <-> HEAP." n effects.Length
         win.Run()
