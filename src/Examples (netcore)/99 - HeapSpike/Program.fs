@@ -74,9 +74,17 @@ let runDynamic () =
 
 [<EntryPoint>]
 let main argv =
+    // macOS only: load aardvark's BUNDLED MoltenVK over a system-installed Vulkan
+    // SDK. (On Linux this would drop libvulkan.so and fail, so guard it.)
+    if System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform System.Runtime.InteropServices.OSPlatform.OSX then
+        Aardvark.Rendering.Vulkan.VulkanLoader.PreferMoltenVK <- true
     if argv |> Array.contains "bench" then
         Bench.run ()
         0
+    elif argv |> Array.contains "showcase" then
+        Showcase.run (); 0
+    elif argv |> Array.contains "plain" then
+        if Golden.plainTest () then 0 else 1
     elif argv |> Array.contains "golden" then
         if Golden.run () then 0 else 1
     elif argv |> Array.contains "vis" then

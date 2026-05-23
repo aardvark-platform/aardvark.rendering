@@ -1,0 +1,186 @@
+namespace HeapSpike
+
+// Flashy showcase: ~20k objects, several visually-distinct shaders (solid, bindless
+// textured, toon, normal/bump, fresnel-rim) over shared geometry (box/sphere/torus).
+// The input is a SCENEGRAPH driven by the DefaultCameraController; SPACE toggles
+// between STANDARD (one draw call per object) and HEAP (the same scene's render
+// objects collapsed to one indirect multidraw per effect). Shaders read the
+// standard ModelViewProjTrafo — provided by the Sg in standard mode, synthesised
+// by the heap's derived-uniform rule (ViewProjTrafo * ModelTrafo) in heap mode.
+
+open Aardvark.Base
+open Aardvark.Base.Ag
+open Aardvark.Rendering
+open Aardvark.SceneGraph
+open Aardvark.Application
+open FSharp.Data.Adaptive
+
+module Showcase =
+
+    [<Literal>]
+    let TexCount = 16
+
+    module S =
+        open FShade
+        type V =
+            { [<Position>]                                                 pos : V4f
+              [<Normal>]                                                   n   : V3f
+              [<Semantic("TexCoord")>]                                     tc  : V2f
+              [<Color>]                                                    c   : V4f
+              [<Semantic("TexId"); Interpolation(InterpolationMode.Flat)>] ti  : int
+              [<Semantic("WorldPos")>]                                     wp  : V3f }
+
+        let shade (v : V) =
+            vertex {
+                let mvp : M44f = uniform?ModelViewProjTrafo
+                let m   : M44f = uniform?ModelTrafo
+                let ti  : int  = uniform?HeapTexIndex
+                let col : V4f  = uniform?HeapColor
+                return { v with pos = mvp * v.pos; n = m.TransformDir v.n
+                                tc = v.pos.XY * 2.0f + V2f(0.6f, 0.6f); c = col; ti = ti; wp = (m * v.pos).XYZ }
+            }
+
+        let private L = V3f(0.4f, 0.7f, 0.6f) |> Vec.normalize
+
+        let solid (v : V) =
+            fragment {
+                let nn = Vec.normalize v.n
+                return V4f(v.c.XYZ * (0.2f + 0.8f * max 0.0f (Vec.dot nn L)), 1.0f)
+            }
+
+        let private tex =
+            sampler2d {
+                textureArray uniform?Textures -1
+                filter Filter.MinMagMipLinear
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            }
+        let textured (v : V) =
+            fragment {
+                let nn = Vec.normalize v.n
+                let d = 0.35f + 0.65f * max 0.0f (Vec.dot nn L)
+                return V4f(tex.[v.ti].Sample(v.tc).XYZ * d, 1.0f)
+            }
+
+        let toon (v : V) =
+            fragment {
+                let nn = Vec.normalize v.n
+                let bands = floor (max 0.0f (Vec.dot nn L) * 4.0f) / 4.0f
+                return V4f(v.c.XYZ * (0.25f + 0.8f * bands), 1.0f)
+            }
+
+        let bump (v : V) =
+            fragment {
+                let nn = Vec.normalize v.n
+                let detail = V3f(sin (v.tc.X * 50.0f) * 0.45f, sin (v.tc.Y * 50.0f) * 0.45f, 1.0f) |> Vec.normalize
+                let pn = Vec.normalize (nn + detail * 0.6f)
+                let d = 0.2f + 0.8f * max 0.0f (Vec.dot pn L)
+                let s = pown (max 0.0f (Vec.dot pn L)) 32
+                return V4f(v.c.XYZ * d + V3f.III * (s * 0.6f), 1.0f)
+            }
+
+        let rim (v : V) =
+            fragment {
+                let nn = Vec.normalize v.n
+                let cam : V3f = uniform?CameraLocation
+                let view = Vec.normalize (cam - v.wp)
+                let f = pown (1.0f - max 0.0f (Vec.dot nn view)) 3
+                let d = 0.2f + 0.7f * max 0.0f (Vec.dot nn L)
+                return V4f(v.c.XYZ * d + V3f(0.3f, 0.65f, 1.0f) * f, 1.0f)
+            }
+
+        // five distinct effects (-> five buckets in heap mode)
+        let effects =
+            [| solid; textured; toon; bump; rim |]
+            |> Array.map (fun frag -> Effect.compose [ Effect.ofFunction shade; Effect.ofFunction frag ])
+
+    let private mkTexture (i : int) : ITexture =
+        let cols = [| C3b(235,70,70); C3b(70,205,90); C3b(70,130,235); C3b(235,205,55)
+                      C3b(215,70,215); C3b(55,215,215); C3b(235,150,55); C3b(190,190,190) |]
+        let col = cols.[i % cols.Length]
+        let img = PixImage<byte>(Col.Format.RGBA, V2i(64, 64))
+        img.GetMatrix<C4b>().SetByIndex(fun (idx : int64) ->
+            let x = int idx % 64
+            let y = int idx / 64
+            if ((x / 8) + (y / 8)) % 2 = 0 then C4b(col) else C4b(20uy, 20uy, 30uy, 255uy)) |> ignore
+        PixTexture2d(img) :> ITexture
+
+    // shared per-shape geometry (one BufferView set per shape -> heap dedups them)
+    type private Shape = { pos : BufferView; nor : BufferView; idx : BufferView; count : int }
+    let private mkShape (ig : IndexedGeometry) =
+        let g = ig.ToIndexed()
+        let pos = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let nor = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let idx = g.IndexArray |> unbox<int[]>
+        { pos = BufferView(AVal.constant (ArrayBuffer pos :> IBuffer), typeof<V3f>)
+          nor = BufferView(AVal.constant (ArrayBuffer nor :> IBuffer), typeof<V3f>)
+          idx = BufferView(AVal.constant (ArrayBuffer idx :> IBuffer), typeof<int>)
+          count = idx.Length }
+
+    let run () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let win = app.CreateGameWindow(samples = 4)
+        let runtime = app.Runtime
+
+        // camera (DefaultCameraController)
+        let initialView = CameraView.lookAt (V3d(70.0, 70.0, 55.0)) V3d.Zero V3d.OOI
+        let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
+        let frustum = win.Sizes |> AVal.map (fun s -> Frustum.perspective 70.0 0.1 3000.0 (float s.X / float s.Y))
+        let camLoc = cameraView |> AVal.map (fun cv -> V3f cv.Location)
+        let texU = AVal.constant ((Array.init TexCount mkTexture) : ITexture[])
+
+        let shapes =
+            [| mkShape (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.7)) C4b.White)
+               mkShape (IndexedGeometryPrimitives.Sphere.solidSubdivisionSphere (Sphere3d(V3d.Zero, 0.45)) 2 C4b.White)
+               mkShape (IndexedGeometryPrimitives.solidTorus (Torus3d(V3d.Zero, V3d.OOI, 0.4, 0.16)) C4b.White 16 12) |]
+        let effects = S.effects
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan; C4f.Orange; C4f.HotPink |]
+
+        let rnd = RandomSystem()
+        let n = 20000
+        let span = 70.0
+        let objSg (i : int) : ISg =
+            let s = shapes.[i % shapes.Length]
+            let p = V3d(rnd.UniformDouble() - 0.5, rnd.UniformDouble() - 0.5, rnd.UniformDouble() - 0.5) * span
+            let model = Trafo3d.Rotation(rnd.UniformV3dDirection(), rnd.UniformDouble() * 6.2832) * Trafo3d.Translation p
+            Sg.render IndexedGeometryMode.TriangleList (DrawCallInfo(FaceVertexCount = s.count, InstanceCount = 1))
+            |> Sg.vertexBuffer DefaultSemantic.Positions s.pos
+            |> Sg.vertexBuffer DefaultSemantic.Normals   s.nor
+            |> Sg.indexBuffer s.idx
+            |> Sg.trafo' model
+            |> Sg.uniform' "HeapColor"    (palette.[i % palette.Length].ToV4f())
+            |> Sg.uniform' "HeapTexIndex" (i % TexCount)
+            |> Sg.effect [ effects.[i % effects.Length] ]
+
+        // THE INPUT: a scenegraph (camera + globals applied at the top)
+        let scene =
+            Array.init n objSg
+            |> Sg.ofArray
+            |> Sg.uniform "Textures"       texU
+            |> Sg.uniform "CameraLocation" camLoc
+            |> Sg.viewTrafo (cameraView |> AVal.map CameraView.viewTrafo)
+            |> Sg.projTrafo (frustum    |> AVal.map Frustum.projTrafo)
+
+        // standard render objects (extracted from the scenegraph)
+        let stdRos : aset<IRenderObject> =
+            let dn = Sg.DynamicNode(AVal.constant scene) :> ISg
+            dn?Runtime <- runtime
+            dn?RenderObjects(Ag.Scope.Root)
+        // heap: collapse the SAME render objects into buckets / indirect draws
+        let heapRos = Heap.ofRenderObjects runtime (Set.ofList [ "ModelTrafo"; "HeapColor"; "HeapTexIndex" ]) stdRos
+        heapRos |> ASet.toAVal |> AVal.force |> ignore
+
+        let heapMode = AVal.init true
+        let ros = heapMode |> ASet.bind (fun h -> if h then heapRos else stdRos)
+
+        let report () =
+            if heapMode.Value then Log.warn "MODE = HEAP      | %d objects -> %d indirect draws" n Heap.lastBucketCount
+            else                   Log.warn "MODE = STANDARD  | %d objects -> %d draw calls" n n
+        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+            if k = Keys.Space then transact (fun () -> heapMode.Value <- not heapMode.Value); report ())
+
+        Log.warn "Showcase: %d objects, %d effects (solid/textured/toon/bump/rim). SPACE = STANDARD <-> HEAP. WASD+mouse to fly." n effects.Length
+        report ()
+        win.RenderTask <- runtime.CompileRender(win.FramebufferSignature, ros)
+        win.Run()

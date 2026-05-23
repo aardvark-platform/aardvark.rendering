@@ -314,6 +314,55 @@ module Golden =
         else Log.warn "derivedFp64: FAIL (scaleInvariant=%b f32Broke=%b)" scaleInvariant f32Broke
         pass
 
+    // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
+    // problem is aardvark's offscreen path on the backend, not the heap.
+    let plainTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 6.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        let inputs =
+            Array.init 9 (fun i ->
+                let p = V3d(float (i % 3 - 1) * 1.2, float (i / 3 - 1) * 1.2, 0.0)
+                let ro = RenderObject()
+                ro.Surface   <- Surface.Effect effect
+                ro.Mode      <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- vattrs
+                ro.Indices   <- Some (bv index typeof<int>)
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+                ro.Uniforms  <- UniformProvider.ofList [
+                    Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                    Symbol.Create "HeapColor",      (AVal.constant (V4f(1.0f, 0.7f, 0.3f, 1.0f)) :> IAdaptiveValue)
+                    Symbol.Create "ViewProjTrafo",  viewProj ]
+                ro :> IRenderObject)
+        Log.line "plain: compiling + rendering 9 plain (non-heap) cubes offscreen..."
+        use task = runtime.CompileRender(signature, ASet.ofArray inputs)
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let m = out.GetValue().Download().AsPixImage<uint8>().GetMatrix<C4b>()
+        let mutable c = 0L
+        m.ForeachCoord(fun (p : V2l) -> let v = m.[p] in if v.R <> 0uy || v.G <> 0uy || v.B <> 0uy then c <- c + 1L)
+        out.Release()
+        Log.line "plain: coverage=%d" c
+        let pass = c > 1000L
+        if pass then Log.line "plain: PASS (plain offscreen render works)"
+        else Log.warn "plain: FAIL (coverage=%d)" c
+        pass
+
     // Verifies pipeline-state bucketing: ROs with the same effect but a different
     // rasterizer (cull) state must land in separate buckets, while same-state ROs
     // still collapse into one.
