@@ -482,27 +482,34 @@ module Heap =
                     member _.Dispose() = () }
             ro :> IRenderObject
 
-        // Bucket key = effect + topology + full pipeline state. Render objects
-        // differing in blend / cull / depth / stencil / topology must NOT share a
-        // bucket (one indirect draw = one pipeline). Default-state ROs share the
-        // same state instances (structural equality), so they still collapse;
-        // a customised RO (e.g. ro.BlendState <- ...) splits into its own bucket.
-        // This is the aardvark-idiomatic form of wombat's per-RO "mode rules".
-        let bucketKey (r : RenderObject) =
+        // Bucket key = effect + topology + the VALUES of the per-RO pipeline state
+        // (cull / front-face / fill / blend / depth test+write). Reading the state
+        // avals through the token makes bucketing REACTIVE: a rule-driven mode value
+        // change re-partitions the heap into the right buckets (one indirect draw =
+        // one pipeline). This is wombat's per-RO dynamic "mode rules" — the rule is
+        // simply each RO's state aval (often derived from its data); constant state
+        // never re-partitions. Only mode changes rebuild buckets; per-draw value
+        // changes still flow through the arena with no rebuild.
+        let modeKey (t : AdaptiveToken) (r : RenderObject) =
+            let ra = r.RasterizerState
             let eid = match r.Surface with | Surface.Effect e -> e.Id | _ -> "?"
-            (eid, r.Mode, r.DepthState, r.BlendState, r.StencilState, r.RasterizerState)
+            (eid, r.Mode,
+             ra.CullMode.GetValue t, ra.FrontFacing.GetValue t, ra.FillMode.GetValue t,
+             r.BlendState.Mode.GetValue t,
+             r.DepthState.Test.GetValue t, r.DepthState.WriteMask.GetValue t)
 
-        objects
-        |> ASet.toAVal
-        |> ASet.bind (fun ros ->
-            let buckets =
-                ros
-                |> HashSet.toArray
-                |> Array.choose (fun ro -> match ro with :? RenderObject as r -> Some r | _ -> None)
-                |> Array.groupBy bucketKey
-                |> Array.map (fun (_, g) -> buildBucket g)
-            lastBucketCount <- buckets.Length
-            ASet.ofArray buckets)
+        let objsAval = objects |> ASet.toAVal
+        let bucketsAval =
+            AVal.custom (fun t ->
+                let buckets =
+                    objsAval.GetValue t
+                    |> HashSet.toArray
+                    |> Array.choose (fun ro -> match ro with :? RenderObject as r -> Some r | _ -> None)
+                    |> Array.groupBy (modeKey t)
+                    |> Array.map (fun (_, g) -> buildBucket g)
+                lastBucketCount <- buckets.Length
+                buckets)
+        bucketsAval |> ASet.ofAVal
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)

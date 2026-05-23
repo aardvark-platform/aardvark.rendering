@@ -354,6 +354,50 @@ module Golden =
         else Log.warn "bucketing: FAIL (expected 2 buckets)"
         pass
 
+    // Verifies DYNAMIC mode rules: a per-RO cull-mode aval drives bucketing, so
+    // flipping it (in a transact) RE-PARTITIONS the heap reactively (1 -> 2 buckets)
+    // without touching the object set.
+    let modeRulesTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let viewProj = AVal.constant Trafo3d.Identity :> IAdaptiveValue
+        let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        let n = 16
+        let culls = Array.init n (fun _ -> AVal.init CullMode.None)   // per-RO dynamic cull "rule"
+        let inputs =
+            Array.init n (fun i ->
+                let ro = RenderObject()
+                ro.Surface   <- Surface.Effect effect
+                ro.Mode      <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- vattrs
+                ro.Indices   <- Some (bv index typeof<int>)
+                ro.RasterizerState <- { RasterizerState.Default with CullMode = culls.[i] }
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+                ro.Uniforms  <- UniformProvider.ofList [
+                    Symbol.Create "HeapModelTrafo", (AVal.constant M44f.Identity :> IAdaptiveValue)
+                    Symbol.Create "HeapColor",      (AVal.constant V4f.IIII :> IAdaptiveValue)
+                    Symbol.Create "ViewProjTrafo",  viewProj ]
+                ro :> IRenderObject)
+        let heap = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray inputs)
+        let force () = heap |> ASet.toAVal |> AVal.force |> ignore; Heap.lastBucketCount
+        let b0 = force ()
+        transact (fun () -> for i in 0 .. n-1 do if i % 2 = 0 then culls.[i].Value <- CullMode.Back)
+        let b1 = force ()
+        transact (fun () -> for i in 0 .. n-1 do culls.[i].Value <- CullMode.None)
+        let b2 = force ()
+        Log.line "mode-rules: buckets all-None=%d half-Back=%d back-to-None=%d" b0 b1 b2
+        let pass = b0 = 1 && b1 = 2 && b2 = 1
+        if pass then Log.line "mode-rules: PASS (per-RO cull aval re-partitions the heap reactively: 1 -> 2 -> 1)"
+        else Log.warn "mode-rules: FAIL (expected 1,2,1 got %d,%d,%d)" b0 b1 b2
+        pass
+
     // GL backend: the uniform heap (no bindless textures) now works on GL via
     // gl_DrawID routing over multi-draw-indirect. Renders a cube grid classic
     // (N UBO draws) vs heap (1 multidraw, SSBO gather) on GL and compares.
