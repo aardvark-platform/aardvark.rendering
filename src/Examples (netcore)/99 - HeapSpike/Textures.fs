@@ -16,7 +16,7 @@ open FShade
 module Textures =
 
     [<Literal>]
-    let TexCount = 8
+    let TexCount = 32
 
     module S =
         type Vertex =
@@ -66,6 +66,8 @@ module Textures =
 
     let run () =
         Aardvark.Init()
+        // Use `Aardvark.Rendering.Vulkan.DebugConfig.Normal` to print the
+        // compiled GLSL (shows `textures[nonuniformEXT(...)]`) + run validation.
         let win = window { backend Backend.Vulkan; display Display.Mono; debug false; samples 8 }
 
         let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.8)) C4b.White).ToIndexed()
