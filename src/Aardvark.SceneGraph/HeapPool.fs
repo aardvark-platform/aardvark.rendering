@@ -1,27 +1,34 @@
-namespace HeapSpike
+namespace Aardvark.SceneGraph
 
-// Phase-1 heap module (still SG-level; not yet wired into CommandTask).
+// Heap rendering — collapse many per-object render objects that differ only in
+// their per-draw uniforms into a few "bucket" render objects, each drawn as ONE
+// indirect multidraw against a shared storage-buffer arena. The per-draw uniform
+// values are gathered in the (auto-rewritten) shader via gl_InstanceIndex, so
+// the command stream encodes O(buckets) and binds one descriptor set per bucket
+// instead of one per object.
 //
-// Generalises the phase-0 spike:
-//   * type-driven rewrite (any float-family uniform type, derived from the
-//     effect's own usage — no hardcoded names);
-//   * aval-identity deduplication (draws sharing an aval share one arena
-//     region — the "10k ROs, one ViewProjTrafo allocation" property);
-//   * a reactive arena (AVal) — when any per-draw aval marks, the arena
-//     re-packs (offsets/headers stay constant: refs never move).
+// Backend-agnostic: built on IRuntime / RenderObject / AdaptiveBuffer / FShade
+// and the SceneGraph Sg combinators — runs on both the Vulkan and GL backends
+// (anything supporting indirect draws + storage buffers).
 //
-// Geometry is shared across the bucket's draws for now (per-draw geometry
-// packing is a later refinement); draws differ only by their per-draw
-// uniform avals.
+// Two entry points:
+//   * Heap.ofRenderObjects — adaptive aset<IRenderObject> -> aset<IRenderObject>
+//     transform; buckets by effect, packs shared/varied geometry, dirty-tracks
+//     the arena (sparse per-frame mutation uploads only changed sub-ranges).
+//   * Heap.HeapScene       — imperative, growable single bucket with O(1)
+//     Add/Remove (free-list slots); for streaming workloads.
 
 open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.SceneGraph
 open FShade
 open FShade.Imperative
 open Microsoft.FSharp.Quotations
 
+/// Storage-buffer accessors for the heap arena, for shaders that read it
+/// directly (the per-draw header table and the float payload arena). The heap
+/// rewrite injects these automatically; expose them so custom/compute shaders
+/// can address the arena too.
 [<AutoOpen>]
 module HeapUniforms =
     type UniformScope with
@@ -76,8 +83,6 @@ module Heap =
                     uniform.HeapData.[o+12], uniform.HeapData.[o+13], uniform.HeapData.[o+14], uniform.HeapData.[o+15]) @>.Raw
         else failwithf "Heap: unsupported per-draw uniform type %A" typ
 
-    /// Rewrite an effect so that the uniforms named in `layout` become arena
-    /// gathers indexed by gl_InstanceIndex; everything else stays a UBO.
     // ── Derived-uniform system (general, à la wombat §7) ─────────────────
     // A derived uniform is a pure function of OTHER uniforms, written as an
     // expression over `uniform?Name` reads. The rewriter expands these rules to
@@ -98,6 +103,8 @@ module Heap =
             "ModelViewTrafo",     <@ (uniform?ViewTrafo     : M44f) * (uniform?ModelTrafo : M44f) @>.Raw
         ]
 
+    /// Rewrite an effect so that the uniforms named in `layout` become arena
+    /// gathers indexed by gl_InstanceIndex; everything else stays a UBO.
     let private rewrite (layout : Map<string, int>) (fieldStride : int) (rules : Map<string, DerivedRule>) (e : Effect) =
         let iid : Expr<int> = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
         let off (fi : int) : Expr<int> = <@ uniform.HeapHeaders.[ %iid * %(cint fieldStride) + %(cint fi) ] @>
@@ -199,13 +206,14 @@ module Heap =
         elif t = typeof<int>     then 1,  (fun o a off -> a.[off] <- float32 (o :?> int))
         else failwithf "Heap: unsupported per-draw uniform content type %A" t
 
-    /// One bucket draw count, for reporting.
+    /// Number of buckets produced by the most recent `ofRenderObjects` evaluation
+    /// (diagnostic / for logging).
     let mutable lastBucketCount = 0
 
     /// Adaptive writer for one arena region. Reads its source aval and packs
     /// the floats into the arena's shared staging at its offset. Marked (via
     /// the source) only when that source changes.
-    type RegionWriter(src : IAdaptiveValue, off : int, size : int, pack : obj -> float32[] -> int -> unit) =
+    type internal RegionWriter(src : IAdaptiveValue, off : int, size : int, pack : obj -> float32[] -> int -> unit) =
         inherit AdaptiveObject()
         do src.Acquire()
         member _.Off = off
@@ -223,7 +231,7 @@ module Heap =
     /// regions into runs, and uploads one sub-range per run. All-dirty -> one
     /// upload (regions are arena-contiguous); sparse -> a few small uploads.
     /// Supports dynamic add/remove of regions and pow2 growth (for HeapScene).
-    type HeapArena(runtime : IBufferRuntime, initialFloats : int) =
+    type internal HeapArena(runtime : IBufferRuntime, initialFloats : int) =
         inherit AdaptiveBuffer(runtime, uint64 (max 1 initialFloats * 4), BufferUsage.Storage, BufferStorage.Host)
         let mutable capacity = max 1 initialFloats
         let mutable staging = Array.zeroCreate<float32> capacity
@@ -269,6 +277,10 @@ module Heap =
             | :? RegionWriter as w -> pending.Add w |> ignore
             | _ -> ()
 
+    /// Collapse an adaptive set of N render objects into B bucket render objects
+    /// (one per effect), each drawn as ONE indirect multidraw against a shared
+    /// dirty-tracked arena. The uniforms named in `heapNames` are gathered
+    /// per-draw in the rewritten shader; everything else is treated as a global.
     let ofRenderObjects (runtime : IRuntime) (heapNames : Set<string>) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         let names = heapNames |> Set.toArray |> Array.sort
         let fieldStride = names.Length
@@ -309,7 +321,7 @@ module Heap =
             // arena = custom dirty-tracking AdaptiveBuffer: one lightweight writer
             // per distinct region (reused staging, direct sub-range upload).
             let arena = HeapArena(runtime, totalF)
-            for (av, o, sz, pk) in distinct do arena.Add(av, o, sz, pk)
+            for (av, o, sz, pk) in distinct do arena.Add(av, o, sz, pk) |> ignore
 
             // Pack per-RO geometry into shared buffers. Deduped by (positions,
             // index) buffer identity so SHARED geometry is packed once; VARIED
@@ -388,6 +400,10 @@ module Heap =
     // + dead indirect entry), no header buffer (offset = slot*stride + field).
     // Call Add/Remove inside `transact` (the framework marks buffers there —
     // same convention as ManagedBuffer; can't mark inside an adaptive eval).
+
+    /// An incrementally-mutable single-bucket heap scene: Add/Remove draws at
+    /// runtime (O(1), free-list slots in a growable arena). Call Add/Remove
+    /// inside `transact`.
     type HeapScene(runtime : IRuntime, effect : Effect, mode : IndexedGeometryMode,
                    positions : V3f[], normals : V3f[], index : int[],
                    schema : (string * System.Type)[], globals : IUniformProvider) =

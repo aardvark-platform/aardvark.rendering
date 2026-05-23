@@ -55,6 +55,7 @@
     <Compile Include="Imperative.fs" />
     <Compile Include="SgCSharp.fs" />
     <Compile Include="RuntimeExtensions.fs" />
+    <Compile Include="HeapPool.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
   </ItemGroup>
