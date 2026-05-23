@@ -217,7 +217,7 @@ module VkImageLayout =
             TextureLayout.Present, VkImageLayout.PresentSrcKhr
         ]
 
-    let private toStageFlags (neutral : VkPipelineStageFlags) =
+    let private mkStageFlags (neutral : VkPipelineStageFlags) =
         LookupTable.lookup [
             VkImageLayout.Undefined,                     neutral
             VkImageLayout.General,                       VkPipelineStageFlags.AllCommandsBit
@@ -231,13 +231,17 @@ module VkImageLayout =
             VkImageLayout.PresentSrcKhr,                 neutral
         ]
 
+    // Build the two tables ONCE. Only two neutral values are ever used; binding
+    // them as point-free module values builds the list+dictionary at init instead
+    // of rebuilding it on every call (this is a per-frame swapchain hot path).
+    let private srcStageFlags = mkStageFlags VkPipelineStageFlags.TopOfPipeBit
+    let private dstStageFlags = mkStageFlags VkPipelineStageFlags.BottomOfPipeBit
+
     /// Returns the appropriate source stage flags for the given image layout.
-    let toSrcStageFlags (layout : VkImageLayout) =
-        layout |> toStageFlags VkPipelineStageFlags.TopOfPipeBit
+    let toSrcStageFlags (layout : VkImageLayout) = srcStageFlags layout
 
     /// Returns the appropriate destination stage flags for the given image layout.
-    let toDstStageFlags (layout : VkImageLayout) =
-        layout |> toStageFlags VkPipelineStageFlags.BottomOfPipeBit
+    let toDstStageFlags (layout : VkImageLayout) = dstStageFlags layout
 
     /// Returns the appropriate destination access flags for the given image layout.
     let toDstAccessFlags =
