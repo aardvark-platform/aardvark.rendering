@@ -438,6 +438,86 @@ module Heap =
             lastBucketCount <- buckets.Length
             ASet.ofArray buckets)
 
+    // ── fp64 derived-uniform compute pre-pass ───────────────────────────
+    // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)
+    // in a GPU compute pre-pass at df32 precision; we use REAL fp64 (M44d /
+    // dmat4, shaderFloat64). The pre-pass computes the derived matrices once per
+    // object per frame (not per vertex) in double precision and writes them as
+    // f32 into a heap arena the render gathers by gl_InstanceIndex. Camera-
+    // relative math (View * Model) stays precise at geodetic scale where an f32
+    // inline ModelViewProj would jitter. Reactive: the arena re-runs the compute
+    // whenever any model or the camera changes (AVal.custom over the inputs).
+
+    module private Fp64 =
+        // one thread per object: arena[2i] = Proj*View*Model, arena[2i+1] =
+        // (Model^-1)^T (NormalMatrix) — all evaluated in fp64, stored as f32.
+        [<LocalSize(X = 64)>]
+        let derive (n : int) (view : M44d) (proj : M44d) (model : M44d[]) (outp : M44f[]) =
+            compute {
+                let i = getGlobalId().X
+                if i < n then
+                    let m = model.[i]
+                    outp.[2*i]     <- M44f(proj * view * m)
+                    outp.[2*i + 1] <- M44f(m.Inverse.Transposed)
+            }
+
+    /// Build a heap-rendered scene whose ModelViewProjTrafo + NormalMatrix are
+    /// computed per object by an fp64 GPU compute pre-pass (camera-relative,
+    /// geodetic-precise) and gathered in the rewritten shader. `models` are the
+    /// per-object world transforms; `view`/`proj` the camera. The effect reads
+    /// `uniform?ModelViewProjTrafo` and/or `uniform?NormalMatrix`. One instanced
+    /// indirect draw; the compute re-dispatches reactively on input changes.
+    let derivedFp64 (runtime : IRuntime) (mode : IndexedGeometryMode)
+                    (positions : V3f[]) (normals : V3f[]) (index : int[])
+                    (effect : Effect)
+                    (view : aval<Trafo3d>) (proj : aval<Trafo3d>) (models : aval<Trafo3d>[]) : ISg =
+        checkSupport false runtime
+        let n = models.Length
+        let stride = 32                 // floats per object: MVP(16) + NormalMatrix(16)
+        let outBuf   = runtime.CreateBuffer<M44f>(max 1 (2 * n))
+        let modelBuf = runtime.CreateBuffer<M44d>(max 1 n)
+        let shader   = runtime.CreateComputeShader Fp64.derive
+        let input    = runtime.CreateInputBinding shader
+        let groups   = (n + shader.LocalSize.X - 1) / shader.LocalSize.X
+        let prog     = runtime.CompileCompute [ ComputeCommand.Bind shader; ComputeCommand.SetInput input; ComputeCommand.Dispatch groups ]
+
+        // reactive arena: re-run the fp64 compute when any model / the camera marks
+        let arena =
+            AVal.custom (fun t ->
+                modelBuf.Upload(models |> Array.map (fun m -> (m.GetValue t).Forward))
+                input.["n"]     <- n
+                input.["view"]  <- (view.GetValue t).Forward
+                input.["proj"]  <- (proj.GetValue t).Forward
+                input.["model"] <- modelBuf
+                input.["outp"]  <- outBuf
+                input.Flush()
+                prog.Run()
+                outBuf :> IBuffer)
+
+        // rewrite the two derived reads into arena gathers (stride 32: MVP@0, NM@16)
+        let iid : Expr<int> = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
+        let eff =
+            effect |> Effect.substituteUniforms (fun name typ _ _ ->
+                match name with
+                | "ModelViewProjTrafo" -> Some (gatherFor typ <@ %iid * stride + 0 @>)
+                | "NormalMatrix"       -> Some (gatherFor typ <@ %iid * stride + 16 @>)
+                | _ -> None)
+
+        let bv (a : System.Array) tp = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), tp)
+        let symHeap = Symbol.Create "HeapData"
+        let heapU = arena :> IAdaptiveValue
+        let ro = RenderObject()
+        ro.Surface          <- Surface.Effect eff
+        ro.Mode             <- mode
+        ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        ro.Indices          <- Some (bv index typeof<int>)
+        ro.DrawCalls        <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = n) |])
+        ro.Uniforms <-
+            { new IUniformProvider with
+                member _.TryGetUniform(_, name) = if name = symHeap then ValueSome heapU else ValueNone
+                member _.Dispose() = () }
+        Sg.renderObjectSet (ASet.single (ro :> IRenderObject))
+
     // ── Incremental scene (imperative Add/Remove) ───────────────────────
     // The streaming path: ONE bucket, shared geometry, fixed-size per-draw
     // slots in a growable dirty-tracked arena. Add/Remove are O(1) (free-list

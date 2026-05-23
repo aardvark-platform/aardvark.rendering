@@ -210,6 +210,110 @@ module Golden =
         else Log.warn "golden: FAILED"
         pass
 
+    // fp64 derived-uniform compute pre-pass test. Renders the SAME camera-relative
+    // cube grid (a) at normal scale and (b) at geodetic scale (~earth radius) via
+    // Heap.derivedFp64 (fp64 ModelViewProjTrafo + NormalMatrix), and (c) at geodetic
+    // scale via the f32-inline heap. Camera-relative => (a) and (b) must look the
+    // same (fp64 stays precise); (c) breaks (f32 loses precision at that scale).
+    module DF =
+        type V = { [<Position>] pos : V4f; [<Normal>] n : V3f }
+        let shadeFp64 (v : V) =
+            vertex {
+                let mvp : M44f = uniform?ModelViewProjTrafo
+                let nm  : M44f = uniform?NormalMatrix
+                return { v with pos = mvp * v.pos; n = (nm * V4f(v.n, 0.0f)).XYZ }
+            }
+        let shadeMvp (v : V) =
+            vertex {
+                let mvp : M44f = uniform?ModelViewProjTrafo
+                return { v with pos = mvp * v.pos; n = v.n }
+            }
+        let frag (v : V) =
+            fragment {
+                let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
+                let d = 0.3f + 0.7f * max 0.0f (Vec.dot (Vec.normalize v.n) l)
+                return V4f(V3f(0.9f, 0.7f, 0.3f) * d, 1.0f)
+            }
+
+    let derivedFp64Test () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+
+        // camera-relative grid: cubes at (origin + offset), eye at (origin + relEye)
+        let side = 6
+        let offsets = [| for x in 0 .. side-1 do for y in 0 .. side-1 -> V3d(float (x-side/2) * 1.4, float (y-side/2) * 1.4, 0.0) |]
+        let n = offsets.Length
+        let relEye = V3d(0.0, -1.0, 0.6) * 14.0
+        let proj = Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo
+
+        let imageOf (sg : ISg) =
+            use task = sg |> Sg.compile runtime signature
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let coverage (img : PixImage<uint8>) =
+            let m = img.GetMatrix<C4b>()
+            let mutable c = 0L
+            m.ForeachCoord(fun (p : V2l) -> let v = m.[p] in if v.R <> 0uy || v.G <> 0uy || v.B <> 0uy then c <- c + 1L)
+            c
+
+        let effFp64 = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
+
+        // (a) fp64 at normal scale (origin); (b) fp64 at geodetic scale — same
+        // camera-relative scene, so a precise pipeline yields the SAME image.
+        let sceneFp64 (origin : V3d) =
+            let view = AVal.constant (CameraView.lookAt (origin + relEye) origin V3d.OOI |> CameraView.viewTrafo)
+            let models = offsets |> Array.map (fun o -> AVal.constant (Trafo3d.Translation(origin + o)))
+            Heap.derivedFp64 runtime IndexedGeometryMode.TriangleList positions normals index effFp64 view (AVal.constant proj) models
+        let earth = V3d(6378137.0, 3189000.0, 1594500.0)
+        let imgNormal  = imageOf (sceneFp64 V3d.Zero)
+        let imgGeoFp64 = imageOf (sceneFp64 earth)
+
+        // (c) f32 inline heap at geodetic scale (ModelViewProjTrafo derived in f32)
+        let imgGeoF32 =
+            let viewProj = AVal.constant ((CameraView.lookAt (earth + relEye) earth V3d.OOI |> CameraView.viewTrafo) * proj)
+            let effMvp = Effect.compose [ Effect.ofFunction DF.shadeMvp; Effect.ofFunction DF.frag ]
+            let inputs =
+                offsets |> Array.map (fun o ->
+                    let ro = RenderObject()
+                    ro.Surface <- Surface.Effect effMvp
+                    ro.Mode <- IndexedGeometryMode.TriangleList
+                    ro.VertexAttributes <- vattrs
+                    ro.Indices <- Some (bv index typeof<int>)
+                    ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+                    ro.Uniforms <- UniformProvider.ofList [
+                        Symbol.Create "ModelTrafo",    (AVal.constant (Trafo3d.Translation(earth + o)) :> IAdaptiveValue)
+                        Symbol.Create "ViewProjTrafo", (viewProj :> IAdaptiveValue) ]
+                    ro :> IRenderObject)
+            imageOf (Sg.renderObjectSet (Heap.ofRenderObjects runtime (Set.ofList [ "ModelTrafo" ]) (ASet.ofArray inputs)))
+
+        let covNormal  = coverage imgNormal
+        let covGeoFp64 = coverage imgGeoFp64
+        // fp64 geodetic must equal fp64 normal (scale-invariant, precise);
+        // f32 inline at geodetic must DIFFER from it (jittered cubes).
+        let dInvar, _, _, total = diff imgNormal imgGeoFp64
+        let _, nDiffF32, _, _ = diff imgGeoFp64 imgGeoF32
+        Log.line "derivedFp64: n=%d  cov normal=%d geo-fp64=%d  fp64 normal-vs-geo maxDelta=%d  f32 diffPixels=%d/%d (%.1f%%)"
+            n covNormal covGeoFp64 dInvar nDiffF32 total (100.0 * float nDiffF32 / float total)
+        let scaleInvariant = covNormal > 1000L && dInvar <= 1
+        let f32Broke = float nDiffF32 / float total > 0.02
+        let pass = scaleInvariant && f32Broke
+        if pass then Log.line "derivedFp64: PASS (fp64 compute bit-identical across scale; f32 inline jitters at geodetic scale)"
+        else Log.warn "derivedFp64: FAIL (scaleInvariant=%b f32Broke=%b)" scaleInvariant f32Broke
+        pass
+
     // Verifies pipeline-state bucketing: ROs with the same effect but a different
     // rasterizer (cull) state must land in separate buckets, while same-state ROs
     // still collapse into one.
