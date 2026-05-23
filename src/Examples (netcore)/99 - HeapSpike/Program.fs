@@ -80,6 +80,9 @@ let main argv =
     elif argv |> Array.contains "dynamic" then
         runDynamic ()
         0
+    elif argv |> Array.contains "phase4r" then
+        Phase4.runRender ()
+        0
     elif argv |> Array.contains "phase4" then
         Phase4.run ()
         0
