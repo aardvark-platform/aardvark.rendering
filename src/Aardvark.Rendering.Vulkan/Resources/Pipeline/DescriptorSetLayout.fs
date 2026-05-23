@@ -25,13 +25,33 @@ type DescriptorSetLayoutBinding =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSetLayoutBinding =
+
+    /// Ceiling for an unbounded (bindless) sampler array's reserved descriptor
+    /// capacity. This is only the layout upper bound (and the per-set count when
+    /// variable descriptor count is unavailable); with variable descriptor count
+    /// each set allocates just the textures it actually uses. Clamped per device.
+    [<Literal>]
+    let UnboundedSamplerArrayCeiling = 1024u
+
+    /// Device-clamped capacity for an unbounded sampler-array binding.
+    let unboundedSamplerArrayCapacity (device : Device) =
+        int (min UnboundedSamplerArrayCeiling device.PhysicalDevice.Limits.Descriptor.MaxPerStageSampledImages)
+
     let create (descriptorType : VkDescriptorType) (stages : VkShaderStageFlags) (parameter : ShaderUniformParameter) (device : Device) =
         let count =
             match parameter with
                 // samplerCount = -1 marks an unbounded (bindless) sampler array
-                // ('sampler2D X[]'); reserve a fixed capacity of valid descriptors
-                // (filled with the null sampler beyond what is bound).
-                | SamplerParameter p -> if p.samplerCount < 0 then 256 else p.samplerCount
+                // ('sampler2D X[]'). It requires descriptor indexing; reserve a
+                // device-clamped capacity (variable descriptor count narrows the
+                // per-set allocation; unused slots are null-filled / partially bound).
+                | SamplerParameter p ->
+                    if p.samplerCount < 0 then
+                        let d = device.EnabledFeatures.Descriptors
+                        let s = device.EnabledFeatures.Shaders
+                        if not (d.RuntimeDescriptorArray && s.SampledImageArrayNonUniformIndexing) then
+                            failf "shader uses an unbounded sampler array (bindless) but the device does not support descriptor indexing (runtimeDescriptorArray + shaderSampledImageArrayNonUniformIndexing)"
+                        unboundedSamplerArrayCapacity device
+                    else p.samplerCount
                 | _ -> 1
 
         let handle = 
