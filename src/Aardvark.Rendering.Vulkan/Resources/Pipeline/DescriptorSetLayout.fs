@@ -26,9 +26,12 @@ type DescriptorSetLayoutBinding =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSetLayoutBinding =
     let create (descriptorType : VkDescriptorType) (stages : VkShaderStageFlags) (parameter : ShaderUniformParameter) (device : Device) =
-        let count = 
+        let count =
             match parameter with
-                | SamplerParameter p -> p.samplerCount
+                // samplerCount = -1 marks an unbounded (bindless) sampler array
+                // ('sampler2D X[]'); reserve a fixed capacity of valid descriptors
+                // (filled with the null sampler beyond what is bound).
+                | SamplerParameter p -> if p.samplerCount < 0 then 256 else p.samplerCount
                 | _ -> 1
 
         let handle = 

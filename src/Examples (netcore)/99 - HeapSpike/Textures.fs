@@ -37,9 +37,10 @@ module Textures =
                             ti  = ti }
             }
 
+        // -1 == unbounded (bindless) runtime-sized array -> `uniform sampler2D Textures[]`
         let textures =
             sampler2d {
-                textureArray uniform?Textures TexCount
+                textureArray uniform?Textures -1
                 filter Filter.MinMagMipLinear
                 addressU WrapMode.Wrap
                 addressV WrapMode.Wrap

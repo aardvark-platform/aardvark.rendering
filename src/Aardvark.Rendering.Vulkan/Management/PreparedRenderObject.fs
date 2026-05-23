@@ -157,14 +157,15 @@ type DevicePreparedRenderObjectExtensions private() =
                                 | NullUniform ->
                                     failf "texture array '%A' is null" textureName
 
+                                // capped count (handles unbounded samplerCount = -1 -> reserved capacity)
                                 | ValueSome (:? aval<(int * aval<ITexture>)[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
-                                    let is = this.CreateImageSamplerArray(textureName, sam.samplerCount, sam.samplerType, tex, s)
+                                    let is = this.CreateImageSamplerArray(textureName, int b.DescriptorCount, sam.samplerType, tex, s)
                                     Some is
 
                                 | ValueSome (:? aval<ITexture[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
-                                    let is = this.CreateImageSamplerArray(textureName, sam.samplerCount, sam.samplerType, tex, s)
+                                    let is = this.CreateImageSamplerArray(textureName, int b.DescriptorCount, sam.samplerType, tex, s)
                                     Some is
 
                                 | ValueSome t ->
