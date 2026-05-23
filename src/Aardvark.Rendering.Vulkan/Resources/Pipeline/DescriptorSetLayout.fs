@@ -17,8 +17,13 @@ type DescriptorSetLayoutBinding =
         member x.StageFlags = x.Handle.stageFlags
         member x.DescriptorCount = int x.Handle.descriptorCount
         member x.Name = x.Parameter.Name
-        member x.Binding = int x.Handle.binding 
+        member x.Binding = int x.Handle.binding
         member x.DescriptorType = x.Handle.descriptorType
+        /// True for an unbounded ('sampler2D X[]', samplerCount = -1) sampler array.
+        member x.IsUnboundedSamplerArray =
+            match x.Parameter with
+            | SamplerParameter p -> p.samplerCount < 0
+            | _ -> false
 
         new (device, handle, parameter) = { Device = device; Handle = handle; Parameter = parameter }
     end
@@ -70,20 +75,25 @@ type DescriptorSetLayout =
     class
         inherit Resource<VkDescriptorSetLayout>
         val public Bindings : array<DescriptorSetLayoutBinding>
+        /// Binding number of the binding declared with VARIABLE_DESCRIPTOR_COUNT
+        /// (an unbounded sampler array, highest binding number), if any. Sets
+        /// allocated from this layout may then specify a per-set count up to that
+        /// binding's (capped) descriptorCount.
+        val public VariableCountBinding : Option<int>
 
         override x.Destroy() =
             if x.Handle.IsValid then
                 VkRaw.vkDestroyDescriptorSetLayout(x.Device.Handle, x.Handle, NativePtr.zero)
                 x.Handle <- VkDescriptorSetLayout.Null
 
-        new(device : Device, handle : VkDescriptorSetLayout, bindings) =
-            { inherit Resource<_>(device, handle); Bindings = bindings }
+        new(device : Device, handle : VkDescriptorSetLayout, bindings, variableCountBinding) =
+            { inherit Resource<_>(device, handle); Bindings = bindings; VariableCountBinding = variableCountBinding }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSetLayout =
 
-    let empty (d : Device) = new DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty)
+    let empty (d : Device) = new DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty, None)
 
     let create (bindings : array<DescriptorSetLayoutBinding>) (device : Device) =
         assert (
@@ -94,24 +104,44 @@ module DescriptorSetLayout =
         let features =
             device.EnabledFeatures.Descriptors
 
+        // The unbounded sampler array with the highest binding number may use a
+        // VARIABLE descriptor count (each set allocates only the textures it uses)
+        // when the device supports it and the bindings are update-after-bind. The
+        // variable-count binding must have the largest binding number in the set.
+        let variableCountBinding =
+            if device.UpdateDescriptorsAfterBind && features.BindingVariableDescriptorCount && features.BindingPartiallyBound then
+                let unbounded = bindings |> Array.filter (fun b -> b.IsUnboundedSamplerArray)
+                if unbounded.Length > 0 then
+                    let maxBinding = bindings |> Array.map (fun b -> b.Binding) |> Array.max
+                    let candidate = unbounded |> Array.maxBy (fun b -> b.Binding)
+                    if candidate.Binding = maxBinding then Some candidate.Binding else None
+                else None
+            else None
+
         native {
             let! pBindings = bindings |> Array.map (fun b -> b.Handle)
 
             let! pBindingFlags =
                 bindings |> Array.map (fun b ->
-                    if b.DescriptorType = VkDescriptorType.UniformBuffer then
-                        features.BindingUniformBufferUpdateAfterBind
+                    let updateAfterBind =
+                        if b.DescriptorType = VkDescriptorType.UniformBuffer then
+                            features.BindingUniformBufferUpdateAfterBind
 
-                    elif b.DescriptorType = VkDescriptorType.AccelerationStructureKhr then
-                        features.BindingAccelerationStructureUpdateAfterBind
+                        elif b.DescriptorType = VkDescriptorType.AccelerationStructureKhr then
+                            features.BindingAccelerationStructureUpdateAfterBind
 
-                    else
-                        // other features are mandatory if VK_EXT_descriptor_indexing is supported
-                        true
-                )
-                |> Array.map (fun updateAfterBind ->
-                    if updateAfterBind then VkDescriptorBindingFlagsEXT.UpdateAfterBindBit
-                    else VkDescriptorBindingFlagsEXT.None
+                        else
+                            // other features are mandatory if VK_EXT_descriptor_indexing is supported
+                            true
+
+                    let mutable flags =
+                        if updateAfterBind then VkDescriptorBindingFlagsEXT.UpdateAfterBindBit
+                        else VkDescriptorBindingFlagsEXT.None
+
+                    if variableCountBinding = Some b.Binding then
+                        flags <- flags ||| VkDescriptorBindingFlagsEXT.VariableDescriptorCountBit ||| VkDescriptorBindingFlagsEXT.PartiallyBoundBit
+
+                    flags
                 )
 
             let! pBindingFlagsCreateInfo =
@@ -140,5 +170,5 @@ module DescriptorSetLayout =
                 |> check "could not create DescriptorSetLayout"
 
             let handle = NativePtr.read pHandle
-            return new DescriptorSetLayout(device, handle, bindings)
+            return new DescriptorSetLayout(device, handle, bindings, variableCountBinding)
         }

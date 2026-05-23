@@ -1212,7 +1212,15 @@ module Resources =
             for b in bindings do
                 b.Acquire()
 
-            handle <- layout.Device.CreateDescriptorSet(layout)
+            // for a layout with a VARIABLE_DESCRIPTOR_COUNT binding, allocate the
+            // set at the actual element count of the matching descriptor (an
+            // unbounded sampler array sized to the textures it actually uses).
+            let variableCount =
+                match layout.VariableCountBinding with
+                | Some bnd -> bindings |> Array.tryPick (fun d -> if d.Slot = bnd then Some d.Count else None)
+                | None -> None
+
+            handle <- layout.Device.CreateDescriptorSet(layout, ?variableCount = variableCount)
 
         override x.Destroy() =
             for b in bindings do

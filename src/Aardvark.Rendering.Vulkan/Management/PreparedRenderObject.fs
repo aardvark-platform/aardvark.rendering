@@ -149,6 +149,10 @@ type DevicePreparedRenderObjectExtensions private() =
                         AdaptiveDescriptor.StorageBuffer (b.Binding, buffer) :> IAdaptiveDescriptor
 
                     | SamplerParameter sam ->
+                        // returns the (count, resource): for an unbounded binding with a
+                        // CONSTANT (int * aval<ITexture>)[] the count is the actual array
+                        // length -> variable descriptor count (the set allocates exactly
+                        // that many); otherwise the capped layout descriptorCount.
                         let arraySampler =
                             sam.Array |> Option.bind (fun (textureName, samplerState) ->
                                 let textureName = Symbol.Create textureName
@@ -157,16 +161,23 @@ type DevicePreparedRenderObjectExtensions private() =
                                 | NullUniform ->
                                     failf "texture array '%A' is null" textureName
 
-                                // capped count (handles unbounded samplerCount = -1 -> reserved capacity)
+                                // array of per-texture avals: if the outer array is constant
+                                // its length is known -> use it as the (variable) count.
                                 | ValueSome (:? aval<(int * aval<ITexture>)[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
-                                    let is = this.CreateImageSamplerArray(textureName, int b.DescriptorCount, sam.samplerType, tex, s)
-                                    Some is
+                                    let count =
+                                        if tex.IsConstant then
+                                            let arr = AVal.force tex
+                                            if arr.Length = 0 then int b.DescriptorCount
+                                            else min ((arr |> Array.map fst |> Array.max) + 1) (int b.DescriptorCount)
+                                        else int b.DescriptorCount
+                                    let is = this.CreateImageSamplerArray(textureName, count, sam.samplerType, tex, s)
+                                    Some (count, is)
 
                                 | ValueSome (:? aval<ITexture[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
                                     let is = this.CreateImageSamplerArray(textureName, int b.DescriptorCount, sam.samplerType, tex, s)
-                                    Some is
+                                    Some (int b.DescriptorCount, is)
 
                                 | ValueSome t ->
                                     failf "invalid type '%A' for texture array '%A' (expected ITexture[] or (int * aval<ITexture>)[])" t.ContentType textureName
@@ -175,7 +186,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                     None
                             )
 
-                        let sampler =
+                        let samplerCount, sampler =
                             arraySampler |> Option.defaultWith(fun _ ->
                                 match sam.samplerTextures with
                                 | [] ->
@@ -209,10 +220,10 @@ type DevicePreparedRenderObjectExtensions private() =
                                         )
 
                                     let empty = this.CreateNullImageSampler(sam.samplerType)
-                                    this.CreateImageSamplerArray(sam.samplerCount, empty, list)
+                                    sam.samplerCount, this.CreateImageSamplerArray(sam.samplerCount, empty, list)
                             )
 
-                        AdaptiveDescriptor.CombinedImageSampler(b.Binding, b.DescriptorCount, sampler) :> IAdaptiveDescriptor
+                        AdaptiveDescriptor.CombinedImageSampler(b.Binding, samplerCount, sampler) :> IAdaptiveDescriptor
 
                     | ImageParameter image ->
                         let viewSam =

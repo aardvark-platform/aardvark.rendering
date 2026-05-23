@@ -106,13 +106,23 @@ and DescriptorSet =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSet =
 
-    let tryAlloc (layout : DescriptorSetLayout) (pool : DescriptorPool) =
+    let tryAlloc (variableCount : int option) (layout : DescriptorSetLayout) (pool : DescriptorPool) =
         lock pool (fun () ->
             if pool.TryAllocateSet() then
                 native {
                     let! pLayoutHandle = layout.Handle
+
+                    // VARIABLE_DESCRIPTOR_COUNT: allocate only the per-set count for
+                    // the layout's variable binding (an unbounded sampler array)
+                    // instead of its full (capped) capacity.
+                    let useVariable = layout.VariableCountBinding.IsSome && Option.isSome variableCount
+                    let! pCounts = [| uint32 (defaultArg variableCount 0) |]
+                    let! pVarInfo = Vulkan12.VkDescriptorSetVariableDescriptorCountAllocateInfo(1u, pCounts)
+                    let pNext = if useVariable then NativePtr.toNativeInt pVarInfo else 0n
+
                     let! pInfo =
                         VkDescriptorSetAllocateInfo(
+                            pNext,
                             pool.Handle,
                             1u,
                             pLayoutHandle
@@ -131,8 +141,8 @@ module DescriptorSet =
                 None
         )
 
-    let alloc (layout : DescriptorSetLayout) (pool : DescriptorPool) =
-        match tryAlloc layout pool with
+    let alloc (variableCount : int option) (layout : DescriptorSetLayout) (pool : DescriptorPool) =
+        match tryAlloc variableCount layout pool with
             | Some d -> d
             | None -> failf "cannot allocate DescriptorSet (out of slots)"
 
@@ -287,7 +297,7 @@ type ContextDescriptorSetExtensions private() =
 
     [<Extension>]
     static member inline Alloc(this : DescriptorPool, layout : DescriptorSetLayout) =
-        this |> DescriptorSet.alloc layout
+        this |> DescriptorSet.alloc None layout
 
     [<Extension>]
     static member inline Update(this : DescriptorPool, set : DescriptorSet, values : array<Descriptor>) =
@@ -295,9 +305,9 @@ type ContextDescriptorSetExtensions private() =
 
 
     [<Extension>]
-    static member CreateDescriptorSet(this : Device, layout : DescriptorSetLayout) =
+    static member CreateDescriptorSet(this : Device, layout : DescriptorSetLayout, ?variableCount : int) =
         use bag = this.GetCached(DescriptorPoolBag, 0, fun _ -> new DescriptorPoolBag(this, 1024, 1024))
-        bag.CreateSet(layout, DescriptorSet.tryAlloc)
+        bag.CreateSet(layout, DescriptorSet.tryAlloc variableCount)
 
     [<Extension>]
     static member Update(set : DescriptorSet, values : array<Descriptor>) =

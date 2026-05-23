@@ -184,7 +184,9 @@ module Golden =
 
         // ── scene 2: textured (conventional per-object vs bindless heap) ───
         let texArray : ITexture[] = Array.init TexCount mkTexture
-        let texArrayU = AVal.constant texArray :> IAdaptiveValue
+        // per-texture avals (constant outer array -> known length -> variable
+        // descriptor count; each texture would update independently)
+        let texArrayU = AVal.constant (texArray |> Array.mapi (fun i t -> i, AVal.constant t)) :> IAdaptiveValue
         let effectClassic = Effect.compose [ Effect.ofFunction S.vClassic; Effect.ofFunction S.fClassic ]
         let effectHeap    = Effect.compose [ Effect.ofFunction S.vHeap;    Effect.ofFunction S.fHeap ]
         let grid = gridOf 64
