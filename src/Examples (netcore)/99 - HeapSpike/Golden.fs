@@ -354,6 +354,52 @@ module Golden =
         else Log.warn "bucketing: FAIL (expected 2 buckets)"
         pass
 
+    // Verifies per-instance heap rendering (instanceCount > 1): the SAME per-
+    // instance data rendered via Heap.instanced (one instanced draw) and via
+    // Heap.scene (N indirect sub-draws) must be pixel-identical — both index the
+    // same arena, one by gl_InstanceIndex (instance id), the other by firstInstance.
+    let instancingTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 16.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj)
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
+        let side = 7
+        let instances =
+            [| for x in 0 .. side-1 do
+                 for y in 0 .. side-1 ->
+                   let i = x * side + y
+                   let p = V3d(float (x-side/2) * 1.4, float (y-side/2) * 1.4, 0.0)
+                   Map.ofList [
+                     "HeapModelTrafo", Heap.mat4 (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit))
+                     "HeapColor",      Heap.v4   (AVal.constant (palette.[i % palette.Length].ToV4f())) ] |]
+        let n = instances.Length
+        let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        let imageOf (sg : ISg) =
+            use task = sg |> Sg.compile runtime signature
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let imgInst  = imageOf (Heap.instanced IndexedGeometryMode.TriangleList positions normals index effect instances |> Sg.uniform "ViewProjTrafo" viewProj)
+        let imgScene = imageOf (Heap.scene     IndexedGeometryMode.TriangleList positions normals index effect instances |> Sg.uniform "ViewProjTrafo" viewProj)
+        let maxD, nDiff, nNonBg, total = diff imgScene imgInst
+        Log.line "instancing: %d instances (1 instanced draw)  vs scene (multidraw)  maxDelta=%d diffPixels=%d/%d coverage=%d" n maxD nDiff total nNonBg
+        let pass = maxD <= 1 && nNonBg > total / 100L
+        if pass then Log.line "instancing: PASS (instanceCount=%d instanced draw == multidraw scene, per-instance arena data)" n
+        else Log.warn "instancing: FAIL (maxDelta=%d nNonBg=%d)" maxD nNonBg
+        pass
+
     // Verifies the per-RO IsActive visibility gate: deactivating half the draws
     // (in a transact) roughly halves the rendered coverage, with no rebuild.
     let visibilityTest () =

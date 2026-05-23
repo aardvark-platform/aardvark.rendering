@@ -198,6 +198,50 @@ module Heap =
         |> Sg.uniform "HeapHeaders" (AVal.constant headers)
         |> Sg.effect [ effect ]
 
+    /// Render N INSTANCES of one shared geometry in a SINGLE instanced draw
+    /// (instanceCount = N, firstInstance = 0), with per-instance uniforms gathered
+    /// from the arena by gl_InstanceIndex (0 .. N-1). Same arena + shader rewrite
+    /// as `scene`; the difference is one instanced draw instead of N indirect
+    /// sub-draws — i.e. true per-instance heap rendering (instanceCount > 1).
+    let instanced (mode : IndexedGeometryMode)
+                  (positions : V3f[]) (normals : V3f[]) (index : int[])
+                  (effect : Effect)
+                  (instances : Map<string, HeapInput>[]) : ISg =
+        let names = instances |> Array.collect (fun d -> Map.toArray d |> Array.map fst) |> Array.distinct
+        let fieldStride = names.Length
+        let nameToField = names |> Array.mapi (fun i n -> n, i) |> Map.ofArray
+        let regionOf = System.Collections.Generic.Dictionary<IAdaptiveValue, int>(HashIdentity.Reference)
+        let distinct = System.Collections.Generic.List<HeapInput * int>()
+        let mutable cursor = 0
+        let headers = Array.zeroCreate<int> (instances.Length * fieldStride)
+        instances |> Array.iteri (fun ii draw ->
+            for KeyValue(name, input) in draw do
+                let off =
+                    match regionOf.TryGetValue input.key with
+                    | true, o -> o
+                    | _ -> let o = cursor in cursor <- cursor + input.sizeF; regionOf.[input.key] <- o; distinct.Add(input, o); o
+                headers.[ii * fieldStride + nameToField.[name]] <- off)
+        let totalF = cursor
+        let arena =
+            AVal.custom (fun t ->
+                let a = Array.zeroCreate<float32> totalF
+                for (input, o) in distinct do input.packInto t a o
+                a)
+        let effect = rewrite nameToField fieldStride standardDerivedRules effect
+        let n = instances.Length
+        // ONE instanced indirect draw: firstInstance 0, instanceCount N. Built
+        // declaratively (like `scene`) so ambient Sg.uniform globals merge in.
+        let indirect =
+            [| DrawCallInfo(FaceVertexCount = index.Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = n) |]
+            |> IndirectBuffer.ofArray
+        Sg.indirectDraw mode (AVal.constant indirect)
+        |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(AVal.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>))
+        |> Sg.vertexBuffer DefaultSemantic.Normals   (BufferView(AVal.constant (ArrayBuffer(normals)   :> IBuffer), typeof<V3f>))
+        |> Sg.index' index
+        |> Sg.uniform "HeapData"    arena
+        |> Sg.uniform "HeapHeaders" (AVal.constant headers)
+        |> Sg.effect [ effect ]
+
     // ── RO-level integration ────────────────────────────────────────────
     // The actual encode-win path: collapse an aset<IRenderObject> of N draws
     // into B bucket render objects (one per effect), each rendered as ONE

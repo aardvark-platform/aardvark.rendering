@@ -85,6 +85,8 @@ let main argv =
         if Golden.bucketingTest () then 0 else 1
     elif argv |> Array.contains "fp64" then
         if Golden.derivedFp64Test () then 0 else 1
+    elif argv |> Array.contains "inst" then
+        if Golden.instancingTest () then 0 else 1
     elif argv |> Array.contains "dynamic" then
         runDynamic ()
         0
