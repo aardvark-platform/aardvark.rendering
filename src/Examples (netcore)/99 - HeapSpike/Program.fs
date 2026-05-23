@@ -20,10 +20,65 @@ open Aardvark.Application
 open FShade
 open HeapSpike
 
+// Incremental streaming demo: HeapScene with background add/remove churn.
+let runDynamic () =
+    Aardvark.Init()
+    let win = window { backend Backend.Vulkan; display Display.Mono; debug false; samples 8 }
+
+    let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+    let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+    let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+    let index     = g.IndexArray |> unbox<int[]>
+
+    let viewProj : aval<Trafo3d> = AVal.map2 (fun (v : Trafo3d[]) (p : Trafo3d[]) -> v.[0] * p.[0]) win.View win.Proj
+    let symVP = Symbol.Create "ViewProjTrafo"
+    let globals =
+        { new IUniformProvider with
+            member _.TryGetUniform(s, name) = if name = symVP then ValueSome (viewProj :> IAdaptiveValue) else ValueNone
+            member _.Dispose() = () }
+
+    let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+    let scene =
+        Heap.HeapScene(win.Runtime, effect, IndexedGeometryMode.TriangleList, positions, normals, index,
+                       [| "HeapModelTrafo", typeof<M44f>; "HeapColor", typeof<V4f> |], globals)
+
+    let live = System.Collections.Generic.List<int>()
+    let spawn (rnd : RandomSystem) =
+        let p = V3d(rnd.UniformDouble() * 12.0 - 6.0, rnd.UniformDouble() * 12.0 - 6.0, rnd.UniformDouble() * 12.0 - 6.0)
+        let m = AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue
+        let c = AVal.constant (V4f(rnd.UniformV3f(), 1.0f)) :> IAdaptiveValue
+        live.Add (scene.Add(Map.ofList [ "HeapModelTrafo", m; "HeapColor", c ]))
+
+    let rnd0 = RandomSystem()
+    transact (fun () -> for _ in 1 .. 40 do spawn rnd0)
+
+    // background thread churns add/remove every 80ms (each batch in a transact)
+    let thread =
+        System.Threading.Thread(System.Threading.ThreadStart(fun () ->
+            let rnd = RandomSystem()
+            while true do
+                System.Threading.Thread.Sleep 80
+                transact (fun () ->
+                    let removeN = if live.Count > 80 then 12 elif live.Count > 30 then 6 else 0
+                    for _ in 1 .. removeN do
+                        let i = rnd.UniformInt(live.Count)
+                        scene.Remove(live.[i]); live.RemoveAt i
+                    let addN = if live.Count < 100 then 1 + rnd.UniformInt(7) else 0
+                    for _ in 1 .. addN do spawn rnd)))
+    thread.IsBackground <- true
+    thread.Start()
+
+    Log.warn "HeapScene dynamic: incremental add/remove churn in background (one bucket, one indirect draw)"
+    win.Scene <- scene.Sg
+    win.Run()
+
 [<EntryPoint>]
 let main argv =
     if argv |> Array.contains "bench" then
         Bench.run ()
+        0
+    elif argv |> Array.contains "dynamic" then
+        runDynamic ()
         0
     else
 

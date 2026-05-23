@@ -173,7 +173,7 @@ module Heap =
     /// Adaptive writer for one arena region. Reads its source aval and packs
     /// the floats into the arena's shared staging at its offset. Marked (via
     /// the source) only when that source changes.
-    type private RegionWriter(src : IAdaptiveValue, off : int, size : int, pack : obj -> float32[] -> int -> unit) =
+    type RegionWriter(src : IAdaptiveValue, off : int, size : int, pack : obj -> float32[] -> int -> unit) =
         inherit AdaptiveObject()
         do src.Acquire()
         member _.Off = off
@@ -190,16 +190,31 @@ module Heap =
     /// only those into a shared staging mirror, COALESCES adjacent dirty
     /// regions into runs, and uploads one sub-range per run. All-dirty -> one
     /// upload (regions are arena-contiguous); sparse -> a few small uploads.
-    type HeapArena(runtime : IBufferRuntime, totalFloats : int) =
-        inherit AdaptiveBuffer(runtime, uint64 (max 1 totalFloats * 4), BufferUsage.Storage, BufferStorage.Host)
-        let staging = Array.zeroCreate<float32> (max 1 totalFloats)
+    /// Supports dynamic add/remove of regions and pow2 growth (for HeapScene).
+    type HeapArena(runtime : IBufferRuntime, initialFloats : int) =
+        inherit AdaptiveBuffer(runtime, uint64 (max 1 initialFloats * 4), BufferUsage.Storage, BufferStorage.Host)
+        let mutable capacity = max 1 initialFloats
+        let mutable staging = Array.zeroCreate<float32> capacity
         let pending = LockedSet<RegionWriter>()
-        // strong refs: FDA output edges are weak, so a GC'd writer would stop updating.
-        let writers = System.Collections.Generic.List<RegionWriter>()
-        member x.Add(src, off, size, pack) =
+        /// Grow the buffer + staging to hold at least n floats (call in transact).
+        member x.EnsureFloats(n : int) =
+            if n > capacity then
+                let nf = Fun.NextPowerOfTwo n
+                x.Resize(uint64 (nf * 4))           // copies existing GPU content
+                let ns = Array.zeroCreate<float32> nf
+                System.Array.Copy(staging, ns, capacity)
+                staging <- ns
+                capacity <- nf
+        /// Add a region writer; returns it so it can be removed later.
+        member x.Add(src, off, size, pack) : RegionWriter =
             let w = RegionWriter(src, off, size, pack)
-            writers.Add w
             pending.Add w |> ignore
+            w
+        member x.Remove(w : RegionWriter) =
+            pending.Remove w |> ignore
+            w.Dispose()
+        /// Mark outdated so the next eval flushes pending writes (call in transact).
+        member x.Touch() = x.MarkOutdated()
         override x.Compute(t, rt) =
             let dirty = pending.GetAndClear()
             if dirty.Count > 0 then
@@ -334,3 +349,103 @@ module Heap =
                 |> Array.map (fun (_, g) -> buildBucket g)
             lastBucketCount <- buckets.Length
             ASet.ofArray buckets)
+
+    // ── Incremental scene (imperative Add/Remove) ───────────────────────
+    // The streaming path: ONE bucket, shared geometry, fixed-size per-draw
+    // slots in a growable dirty-tracked arena. Add/Remove are O(1) (free-list
+    // + dead indirect entry), no header buffer (offset = slot*stride + field).
+    // Call Add/Remove inside `transact` (the framework marks buffers there —
+    // same convention as ManagedBuffer; can't mark inside an adaptive eval).
+    type HeapScene(runtime : IRuntime, effect : Effect, mode : IndexedGeometryMode,
+                   positions : V3f[], normals : V3f[], index : int[],
+                   schema : (string * System.Type)[], globals : IUniformProvider) =
+
+        // fixed layout from the schema
+        let fieldOffset = System.Collections.Generic.Dictionary<string, int>()
+        let packerOf = System.Collections.Generic.Dictionary<string, int * (obj -> float32[] -> int -> unit)>()
+        let dataStride =
+            let mutable o = 0
+            for (n, t) in schema do
+                let (sz, pk) = packerFor t
+                fieldOffset.[n] <- o
+                packerOf.[n] <- (sz, pk)
+                o <- o + sz
+            o
+
+        // header-less rewrite: uniform -> HeapData[ iid*stride + fieldOffset ]
+        let effect' =
+            let iid : Expr<int> = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
+            effect |> Effect.substituteUniforms (fun name typ _ _ ->
+                match fieldOffset.TryGetValue name with
+                | true, fo -> Some (gatherFor typ <@ %iid * %(cint dataStride) + %(cint fo) @>)
+                | _ -> None)
+
+        let initialSlots = 64
+        let arena = HeapArena(runtime, dataStride * initialSlots)
+        let freeList = System.Collections.Generic.Stack<int>()
+        let mutable highWater = 0
+        let slotWriters = System.Collections.Generic.Dictionary<int, RegionWriter[]>()
+        let mutable entries : DrawCallInfo[] = Array.zeroCreate initialSlots
+        let version = AVal.init 0
+
+        // `entries` / `highWater` are read on the render thread (indirectAval)
+        // and mutated by the caller's thread (Add/Remove) -> guard with a gate.
+        let gate = obj()
+        let bv (arr : System.Array) t = BufferView(AVal.constant (ArrayBuffer(arr) :> IBuffer), t)
+        let indirectAval = version |> AVal.map (fun _ -> lock gate (fun () -> IndirectBuffer.ofArray (Array.sub entries 0 highWater)))
+        let heapDataU = ((arena :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)) :> IAdaptiveValue
+        let symHeap = Symbol.Create "HeapData"
+
+        let ro = RenderObject()
+        do
+            ro.Surface          <- Surface.Effect effect'
+            ro.Mode             <- mode
+            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>
+                                                              DefaultSemantic.Normals,   bv normals   typeof<V3f> ]
+            ro.Indices          <- Some (bv index typeof<int>)
+            ro.DrawCalls        <- DrawCalls.Indirect indirectAval
+            ro.Uniforms <-
+                { new IUniformProvider with
+                    member _.TryGetUniform(s, name) =
+                        if name = symHeap then ValueSome heapDataU else globals.TryGetUniform(s, name)
+                    member _.Dispose() = () }
+
+        let ensure (slot : int) =
+            if slot >= entries.Length then
+                let n = Fun.NextPowerOfTwo (slot + 1)
+                let ne = Array.zeroCreate n
+                System.Array.Copy(entries, ne, entries.Length)
+                entries <- ne
+            arena.EnsureFloats ((slot + 1) * dataStride)
+
+        /// Add a draw with the given per-draw uniform values. Call in transact.
+        member _.Add(uniforms : Map<string, IAdaptiveValue>) : int =
+            lock gate (fun () ->
+                let slot = if freeList.Count > 0 then freeList.Pop() else let s = highWater in highWater <- highWater + 1; s
+                ensure slot
+                let ws =
+                    schema |> Array.map (fun (n, _) ->
+                        let (sz, pk) = packerOf.[n]
+                        arena.Add(uniforms.[n], slot * dataStride + fieldOffset.[n], sz, pk))
+                slotWriters.[slot] <- ws
+                entries.[slot] <- DrawCallInfo(FaceVertexCount = index.Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = slot, InstanceCount = 1)
+                arena.Touch()
+                version.Value <- version.Value + 1
+                slot)
+
+        /// Remove a previously added draw. Call in transact.
+        member _.Remove(slot : int) =
+            lock gate (fun () ->
+                match slotWriters.TryGetValue slot with
+                | true, ws ->
+                    for w in ws do arena.Remove w
+                    slotWriters.Remove slot |> ignore
+                | _ -> ()
+                if slot < entries.Length then
+                    entries.[slot] <- DrawCallInfo(FaceVertexCount = 0, FirstInstance = slot, InstanceCount = 0)
+                freeList.Push slot
+                version.Value <- version.Value + 1)
+
+        member _.Count = slotWriters.Count
+        member _.RenderObject = ro :> IRenderObject
+        member x.Sg = Sg.renderObjectSet (ASet.single x.RenderObject)
