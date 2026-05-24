@@ -1631,6 +1631,86 @@ module Golden =
         else Log.warn "texCube: FAIL (maxDelta=%d coverage=%d buckets=%d)" maxD nNonBg Heap.lastBucketCount
         pass
 
+    // GPU-resident geometry: positions/normals/index uploaded as backend buffers.
+    // ofRenderObjects can't CPU-slice them, so it routes the bucket to the bindless
+    // VERTEX-PULL path (objects' buffers bound as HeapVertexData, pulled by handle).
+    // Input types == buffer types (V3f) so the gather decodes exactly.
+    module GG =
+        type VIn  = { [<Semantic("Positions")>] pos : V3f; [<Semantic("Normals")>] n : V3f }
+        type VOut = { [<Position>] clip : V4f; [<Normal>] wn : V3f }
+        let shade (v : VIn) =
+            vertex {
+                let m  : M44f = uniform?HeapModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                return { clip = vp * (m * V4f(v.pos, 1.0f)); wn = m.TransformDir v.n }
+            }
+        let frag (v : VOut) =
+            fragment {
+                let c : V4f = uniform?HeapColor
+                let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
+                let d = 0.35f + 0.65f * max 0.0f (Vec.dot (Vec.normalize v.wn) l)
+                return V4f(c.XYZ * d, 1.0f)
+            }
+
+    let gpuGeomTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        // upload geometry to the GPU once (shared by all objects); default BufferUsage.All
+        // makes each usable as BOTH a vertex buffer (classic) and storage (vertex-pull).
+        let posGpu = runtime.PrepareBuffer(ArrayBuffer positions :> IBuffer)
+        let nrmGpu = runtime.PrepareBuffer(ArrayBuffer normals   :> IBuffer)
+        let idxGpu = runtime.PrepareBuffer(ArrayBuffer index     :> IBuffer)
+        let gbv (b : IBackendBuffer) t = BufferView(AVal.constant (b :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ Symbol.Create "Positions", gbv posGpu typeof<V3f>; Symbol.Create "Normals", gbv nrmGpu typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
+        let eff = Effect.compose [ Effect.ofFunction GG.shade; Effect.ofFunction GG.frag ]
+        let grid =
+            let s = 8
+            [| for x in 0 .. s - 1 do for y in 0 .. s - 1 -> (x * s + y), V3d(float (x - s/2) * 1.2, float (y - s/2) * 1.2, 0.0) |]
+        let mkRO (i : int) (p : V3d) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (gbv idxGpu typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj ]
+            ro :> IRenderObject
+        let ros = grid |> Array.map (fun (i, p) -> mkRO i p)
+        let renderToPix (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let classicPix = renderToPix (ASet.ofArray ros)   // GPU buffers, fixed-function input
+        let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray ros)
+        let heapPix = renderToPix heapObjs                 // GPU buffers, bindless vertex-pull
+        let maxD, nDiff, nNonBg, total = diff classicPix heapPix
+        Log.line "gpuGeom: %d ROs (GPU-resident geometry) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
+            ros.Length Heap.lastBucketCount maxD nDiff nNonBg
+        // GPU geometry can't take the host combined-buffer path, so buckets>0 PROVES the
+        // bindless vertex-pull path ran (not passthrough, not the CPU packer).
+        let pass = maxD <= 1 && nNonBg > total / 100L && Heap.lastBucketCount > 0
+        if pass then Log.line "gpuGeom: PASS (GPU-resident geometry vertex-pulled via ofRenderObjects == classic fixed-function; %d bucket(s))" Heap.lastBucketCount
+        else Log.warn "gpuGeom: FAIL (maxDelta=%d coverage=%d buckets=%d -> mis-pulled or passthrough)" maxD nNonBg Heap.lastBucketCount
+        pass
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =
