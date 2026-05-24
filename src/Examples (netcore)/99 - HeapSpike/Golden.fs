@@ -217,11 +217,6 @@ module Golden =
         Aardvark.Init()
         use app = new Aardvark.Application.Slim.VulkanApplication(false)
         let runtime = app.Runtime
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
-            ]
         let size = AVal.constant (V2i(1024, 1024))
         let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
         let geometry (ig : IndexedGeometry) =
@@ -259,11 +254,21 @@ module Golden =
                     Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
                     Symbol.Create "ViewProjTrafo",  viewProj ]
                 ro :> IRenderObject)
-        let renderToPix (objs : aset<IRenderObject>) =
-            use task = runtime.CompileRender(signature, objs)
+        // render at a given sample count; resolve MSAA -> single-sample before download
+        let renderAt (samples : int) (objs : aset<IRenderObject>) =
+            let sgn = runtime.CreateFramebufferSignature([ DefaultSemantic.Colors, TextureFormat.Rgba8; DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ], samples)
+            use task = runtime.CompileRender(sgn, objs)
             let out = task |> RenderTask.renderToColor size
             out.Acquire()
-            try out.GetValue().Download().AsPixImage<uint8>()
+            try
+                let tex = out.GetValue()
+                if samples > 1 then
+                    let resolved = runtime.CreateTexture2D(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1)
+                    runtime.ResolveMultisamples(tex.GetOutputView(), resolved)
+                    let img = runtime.Download(resolved).AsPixImage<uint8>()
+                    runtime.DeleteTexture resolved
+                    img
+                else tex.Download().AsPixImage<uint8>()
             finally out.Release()
         let savePpm (path : string) (img : PixImage<uint8>) =
             let m = img.GetMatrix<C4b>()
@@ -282,15 +287,20 @@ module Golden =
                     buf.[o + 2] <- c.B
                     o <- o + 3
             fs.Write(buf, 0, buf.Length)
-        let classic = renderToPix (ASet.ofArray inputs)
         let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray inputs)
-        let heap = renderToPix heapObjs
+        let classic = renderAt 1 (ASet.ofArray inputs)
+        let heap1   = renderAt 1 heapObjs
+        let heap8   = renderAt 8 heapObjs        // <-- the windowed demo uses samples=8
         savePpm "/tmp/demo_classic.ppm" classic
-        savePpm "/tmp/demo_heap.ppm" heap
-        let maxDelta, nDiff, nNonBg, total = diff classic heap
-        Log.line "demoShot: -> %d bucket(s)  maxChannelDelta=%d  diffPixels=%d/%d (%.4f%%)  coverage=%d px"
-            Heap.lastBucketCount maxDelta nDiff total (100.0 * float nDiff / float total) nNonBg
-        Log.line "demoShot: saved /tmp/demo_classic.ppm + /tmp/demo_heap.ppm"
+        savePpm "/tmp/demo_heap.ppm" heap1
+        savePpm "/tmp/demo_heap_msaa.ppm" heap8
+        let d0, _, nbg, total = diff classic heap1
+        let dm, ndm, _, _ = diff heap1 heap8
+        Log.line "demoShot: -> %d bucket(s)  heap-vs-classic(1x) maxDelta=%d  coverage=%d px"
+            Heap.lastBucketCount d0 nbg
+        Log.line "demoShot: heap 1x vs 8x(MSAA)  maxDelta=%d  diffPixels=%d/%d (%.4f%%)"
+            dm ndm total (100.0 * float ndm / float total)
+        Log.line "demoShot: saved demo_classic.ppm + demo_heap.ppm + demo_heap_msaa.ppm"
         true
 
     // fp64 derived-uniform compute pre-pass test. Renders the SAME camera-relative
