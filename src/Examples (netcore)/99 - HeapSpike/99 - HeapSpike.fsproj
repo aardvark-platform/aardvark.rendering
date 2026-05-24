@@ -22,6 +22,7 @@
     <Compile Include="GpuModes.fs" />
     <Compile Include="GLBindless.fs" />
     <Compile Include="ChainDemo.fs" />
+    <Compile Include="GlslDump.fs" />
     <Compile Include="Showcase.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
