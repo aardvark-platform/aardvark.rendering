@@ -12,7 +12,7 @@ open Microsoft.FSharp.NativeInterop
 
 type Descriptor =
     | UniformBuffer         of slot: int * buffer: UniformBuffer
-    | StorageBuffer         of slot: int * buffer: Buffer * offset: uint64 * size: uint64
+    | StorageBuffer         of slot: int * element: int * buffer: Buffer * offset: uint64 * size: uint64
     | CombinedImageSampler  of slot: int * element: int * view: ImageView * sampler: Sampler * layout: VkImageLayout
     | StorageImage          of slot: int * view: ImageView
     | AccelerationStructure of slot: int * accel: AccelerationStructure
@@ -167,7 +167,7 @@ module DescriptorSet =
             descriptors
             |> Array.map (fun desc ->
                 match desc with
-                | StorageBuffer (binding, buffer, offset, size) ->
+                | StorageBuffer (binding, element, buffer, offset, size) ->
                     let info =
                         VkDescriptorBufferInfo(
                             buffer.Handle,
@@ -185,7 +185,7 @@ module DescriptorSet =
                     VkWriteDescriptorSet(
                         set.Handle,
                         uint32 binding,
-                        0u, 1u, VkDescriptorType.StorageBuffer,
+                        uint32 element, 1u, VkDescriptorType.StorageBuffer,
                         NativePtr.zero,
                         ptr,
                         NativePtr.zero

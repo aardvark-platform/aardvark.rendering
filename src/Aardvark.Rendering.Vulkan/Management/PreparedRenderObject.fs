@@ -126,6 +126,28 @@ type DevicePreparedRenderObjectExtensions private() =
                         let buffer = this.CreateUniformBuffer(block, uniforms)
                         AdaptiveDescriptor.UniformBuffer (b.Binding, buffer) :> IAdaptiveDescriptor
 
+                    | StorageBufferParameter block when block.ssbCount < 0 ->
+                        // unbounded (bindless) array of storage buffers (from a T[][]
+                        // storage buffer). Expect an aval<IBuffer[]>; one descriptor per
+                        // element. Count = the (constant) array length -> variable count.
+                        let bufferName = Symbol.Create block.ssbName
+                        match uniforms.TryGetUniform(Ag.Scope.Root, bufferName) with
+                        | NullUniform ->
+                            failf "storage buffer array '%A' is null" bufferName
+
+                        | ValueSome (:? aval<IBuffer[]> as buffers) ->
+                            let res = this.CreateStorageBufferArray(bufferName, buffers)
+                            let count =
+                                if buffers.IsConstant then max 1 (AVal.force buffers).Length
+                                else int b.DescriptorCount
+                            AdaptiveDescriptor.StorageBuffers (b.Binding, count, res) :> IAdaptiveDescriptor
+
+                        | ValueSome value ->
+                            failf "invalid type '%A' for storage buffer array '%A' (expected aval<IBuffer[]>)" value.ContentType bufferName
+
+                        | _ ->
+                            failf "could not find storage buffer array '%A'" bufferName
+
                     | StorageBufferParameter block ->
                         let bufferName = Symbol.Create block.ssbName
 

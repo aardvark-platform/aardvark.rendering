@@ -393,6 +393,9 @@ module Resources =
 
     type ImageSamplerArray = ResourceInfo<ImageSampler>[]
 
+    /// Resolved value of an unbounded (bindless) storage-buffer array binding.
+    type StorageBufferArray = ResourceInfo<Buffer>[]
+
     [<Struct>]
     type DescriptorInfo =
         { Version    : int
@@ -505,7 +508,7 @@ module Resources =
                 features.BindingStorageBufferUpdateAfterBind
 
             override x.GetDescriptor(buffer) =
-                Descriptor.StorageBuffer(slot, buffer, 0UL, buffer.Size)
+                Descriptor.StorageBuffer(slot, 0, buffer, 0UL, buffer.Size)
 
         type StorageImage(slot : int, image : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<ImageView>(slot, image)
@@ -538,6 +541,22 @@ module Resources =
                     let { Image = v; Sampler = s } = images.[i].handle
                     let desc = Descriptor.CombinedImageSampler(slot, i, v, s, v.Image.SamplerLayout)
                     cache.[i] <- { Version = images.[i].version; Descriptor = desc }
+
+        /// Unbounded (bindless) array of storage buffers: resolves to one
+        /// Descriptor.StorageBuffer per element (slot, element index).
+        type StorageBuffers(slot : int, count : int, buffers : IResourceLocation<_>) =
+            inherit Abstract.AdaptiveDescriptor<StorageBufferArray>(slot, count, buffers)
+
+            override x.GetUpdateAfterBindFeature(features) =
+                features.BindingStorageBufferUpdateAfterBind
+
+            override x.GetDescriptors(buffers, cache) =
+                let buffers = buffers.handle
+
+                for i = 0 to buffers.Length - 1 do
+                    let b = buffers.[i].handle
+                    let desc = Descriptor.StorageBuffer(slot, i, b, 0UL, b.Size)
+                    cache.[i] <- { Version = buffers.[i].version; Descriptor = desc }
 
     let private ownsBuffer (buffer: IBuffer) =
         match buffer with
@@ -835,6 +854,30 @@ module Resources =
             match object with
             | :? IResourceLocation<ImageSampler> as r -> pending.Add r |> ignore
             | _ -> ()
+
+    /// A FIXED array of storage buffers (the heap builds one per bucket; the set is
+    /// constant for the bucket's lifetime). Acquires each element location, produces
+    /// ResourceInfo<Buffer>[], bumps version when any element changes. Simpler than
+    /// ImageSamplerArrayResource (no incremental amap deltas needed).
+    type StorageBufferArrayResource(owner : IResourceCache, key : list<obj>, buffers : IResourceLocation<Buffer>[]) =
+        inherit AbstractResourceLocation<StorageBufferArray>(owner, key)
+
+        let handle = Array.init buffers.Length (fun _ -> { version = -1; handle = Unchecked.defaultof<Buffer> })
+        let mutable version = 0
+
+        override x.Create() = for b in buffers do b.Acquire()
+        override x.Destroy() = for b in buffers do b.Release()
+
+        override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            if x.OutOfDate then
+                let mutable changed = false
+                for i = 0 to buffers.Length - 1 do
+                    let info = buffers.[i].Update(user, token, renderToken)
+                    if info.version <> handle.[i].version || not (Object.ReferenceEquals(info.handle, handle.[i].handle)) then
+                        handle.[i] <- info
+                        changed <- true
+                if changed then inc &version
+            { handle = handle; version = version }
 
     type DynamicShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, layout : PipelineLayout, input : aval<FShade.Imperative.Module>) =
         inherit ImmutableResourceLocation<FShade.Imperative.Module, ShaderProgram>(
@@ -1789,6 +1832,7 @@ type ResourceManager(device : Device) =
     let imageSamplerCache       = ResourceLocationCache<ImageSampler>(device)
     let imageSamplerArrayCache  = ResourceLocationCache<ImageSamplerArray>(device)
     let imageSamplerMapCache    = ImageSamplerMapCache()
+    let storageBufferArrayCache = ResourceLocationCache<StorageBufferArray>(device)
     let dynamicProgramCache     = ResourceLocationCache<ShaderProgram>(device)
 
     let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(device)
@@ -2016,6 +2060,16 @@ type ResourceManager(device : Device) =
     member x.CreateImageSamplerArray(count : int, empty : IResourceLocation<ImageSampler>, input : amap<int, IResourceLocation<ImageSampler>>) =
         imageSamplerArrayCache.GetOrCreate(
             [count :> obj, empty :> obj; input :> obj], fun cache key -> ImageSamplerArrayResource(cache, key, count, empty, input)
+        )
+
+    /// Bindless array of storage buffers. The buffer set is assumed constant (the
+    /// heap builds one per bucket); each element is wrapped as a storage-buffer
+    /// resource and collected into a StorageBufferArray.
+    member x.CreateStorageBufferArray(name : Symbol, buffers : aval<IBuffer[]>) =
+        storageBufferArrayCache.GetOrCreate([buffers :> obj], fun cache key ->
+            let arr = AVal.force buffers
+            let locs = arr |> Array.map (fun b -> x.CreateStorageBuffer(name, AVal.constant b))
+            StorageBufferArrayResource(cache, key, locs) :> IResourceLocation<StorageBufferArray>
         )
 
     member x.CreateShaderProgram(pass : RenderPass, program : ShaderProgram) =

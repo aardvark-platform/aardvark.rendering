@@ -600,6 +600,59 @@ module Golden =
         else Log.warn "varType: FAIL (buckets=%d maxDelta=%d coverage=%d)" buckets maxD nNonBg
         pass
 
+    // Bindless storage-buffer ARRAY end-to-end: a shader vertex-PULLS its position
+    // from one of many GPU buffers chosen by a handle (Geom[handle].data[gl_VertexIndex]),
+    // with NO vertex-input attributes at all. Validates the whole new Vulkan chain
+    // (FShade ssbCount=-1 -> unbounded SSBO descriptor array -> array binding/write).
+    module SA =
+        type UniformScope with
+            member x.Geom : V4f[][] = uniform?StorageBuffer?Geom
+        type VIn  = { [<VertexId>] vid : int }
+        type VOut = { [<Position>] pos : V4f; [<Color>] c : V4f }
+        let shade (v : VIn) =
+            vertex {
+                let h : int = uniform?Handle
+                return { pos = uniform.Geom.[h].[v.vid]; c = V4f(0.2f, 0.9f, 0.4f, 1.0f) }
+            }
+        let frag (v : VOut) = fragment { return v.c }
+
+    let ssboArrayTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(256, 256))
+        let tri = [| V4f(-0.6f, -0.6f, 0.0f, 1.0f); V4f(0.6f, -0.6f, 0.0f, 1.0f); V4f(0.0f, 0.7f, 0.0f, 1.0f) |]
+        let quad = [| V4f(-0.9f, 0.6f, 0.0f, 1.0f); V4f(-0.6f, 0.6f, 0.0f, 1.0f); V4f(-0.75f, 0.9f, 0.0f, 1.0f) |]
+        // an ARRAY of two distinct GPU storage buffers
+        let geom : IBuffer[] = [| ArrayBuffer(tri) :> IBuffer; ArrayBuffer(quad) :> IBuffer |]
+        let eff = Effect.compose [ Effect.ofFunction SA.shade; Effect.ofFunction SA.frag ]
+        let mk (handle : int) =
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect eff
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList ([] : list<Symbol * BufferView>)   // NO vertex attributes — pure pull
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = 3, InstanceCount = 1) |])
+            ro.Uniforms <- UniformProvider.ofList [
+                Symbol.Create "Geom",   (AVal.constant geom :> IAdaptiveValue)
+                Symbol.Create "Handle", (AVal.constant handle :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        use task = Sg.renderObjectSet (ASet.ofList [ mk 0; mk 1 ]) |> Sg.compile runtime signature
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let pix = try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let m = pix.GetMatrix<C4b>()
+        let mutable green = 0L
+        m.ForeachCoord(fun (p : V2l) -> let v = m.[p] in if v.G > 100uy && v.R < 120uy then green <- green + 1L)
+        Log.line "ssboArray: vertex-pulled from a 2-elem SSBO array -> green coverage=%d px" green
+        let pass = green > 1000L
+        if pass then Log.line "ssboArray: PASS (bindless SSBO array vertex-pull renders; descriptor array bound + written)"
+        else Log.warn "ssboArray: FAIL (coverage=%d, expected a vertex-pulled triangle)" green
+        pass
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =

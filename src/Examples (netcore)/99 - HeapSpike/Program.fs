@@ -117,6 +117,8 @@ let main argv =
         if Golden.varTypeTest () then 0 else 1
     elif argv |> Array.contains "glsldump" then
         GlslDump.run (); 0
+    elif argv |> Array.contains "ssboarray" then
+        if Golden.ssboArrayTest () then 0 else 1
     elif argv |> Array.contains "inst" then
         if Golden.instancingTest () then 0 else 1
     elif argv |> Array.contains "instbucket" then

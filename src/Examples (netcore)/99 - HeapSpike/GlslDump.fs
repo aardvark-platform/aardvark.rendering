@@ -27,7 +27,7 @@ module GlslDump =
         fragment { return V4f.IIII }
 
     let run () =
-        let e = Effect.compose [ Effect.ofFunction shade; Effect.ofFunction frag ]
+        let e = Effect.compose [ Effect.ofFunction Golden.SA.shade; Effect.ofFunction Golden.SA.frag ]
         let m =
             e |> Effect.toModule {
                 depthRange = Range1f(-1.0f, 1.0f)
@@ -37,3 +37,5 @@ module GlslDump =
             }
         let glsl = ModuleCompiler.compileGLSLVulkan m
         printfn "=== GLSL (bindless V4f[][] storage buffer) ===\n%s\n=== END ===" glsl.code
+        glsl.iface.storageBuffers |> Seq.iter (fun kv ->
+            printfn "=== IFACE: SSB '%s' ssbCount=%d (-1 = unbounded array) ssbType=%A" kv.Key kv.Value.ssbCount kv.Value.ssbType)

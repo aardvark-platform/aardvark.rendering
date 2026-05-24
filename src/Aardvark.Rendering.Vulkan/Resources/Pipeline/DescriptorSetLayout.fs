@@ -24,6 +24,11 @@ type DescriptorSetLayoutBinding =
             match x.Parameter with
             | SamplerParameter p -> p.samplerCount < 0
             | _ -> false
+        /// True for an unbounded ('buffer {..} X[]', ssbCount = -1) storage-buffer array.
+        member x.IsUnboundedStorageBufferArray =
+            match x.Parameter with
+            | StorageBufferParameter p -> p.ssbCount < 0
+            | _ -> false
 
         new (device, handle, parameter) = { Device = device; Handle = handle; Parameter = parameter }
     end
@@ -42,6 +47,10 @@ module DescriptorSetLayoutBinding =
     let unboundedSamplerArrayCapacity (device : Device) =
         int (min UnboundedSamplerArrayCeiling device.PhysicalDevice.Limits.Descriptor.MaxPerStageSampledImages)
 
+    /// Device-clamped capacity for an unbounded storage-buffer-array binding.
+    let unboundedStorageBufferArrayCapacity (device : Device) =
+        int (min UnboundedSamplerArrayCeiling device.PhysicalDevice.Limits.Descriptor.MaxPerStageStorageBuffers)
+
     let create (descriptorType : VkDescriptorType) (stages : VkShaderStageFlags) (parameter : ShaderUniformParameter) (device : Device) =
         let count =
             match parameter with
@@ -57,6 +66,17 @@ module DescriptorSetLayoutBinding =
                             failf "shader uses an unbounded sampler array (bindless) but the device does not support descriptor indexing (runtimeDescriptorArray + shaderSampledImageArrayNonUniformIndexing)"
                         unboundedSamplerArrayCapacity device
                     else p.samplerCount
+                // ssbCount = -1 marks an unbounded (bindless) storage-buffer array
+                // ('buffer {..} X[]', from a T[][] storage buffer); reserve a
+                // device-clamped capacity (variable descriptor count narrows it).
+                | StorageBufferParameter p ->
+                    if p.ssbCount < 0 then
+                        let d = device.EnabledFeatures.Descriptors
+                        let s = device.EnabledFeatures.Shaders
+                        if not (d.RuntimeDescriptorArray && s.StorageBufferArrayNonUniformIndexing) then
+                            failf "shader uses an unbounded storage-buffer array (bindless) but the device does not support descriptor indexing (runtimeDescriptorArray + shaderStorageBufferArrayNonUniformIndexing)"
+                        unboundedStorageBufferArrayCapacity device
+                    else max 1 p.ssbCount
                 | _ -> 1
 
         let handle = 
@@ -110,7 +130,7 @@ module DescriptorSetLayout =
         // variable-count binding must have the largest binding number in the set.
         let variableCountBinding =
             if device.UpdateDescriptorsAfterBind && features.BindingVariableDescriptorCount && features.BindingPartiallyBound then
-                let unbounded = bindings |> Array.filter (fun b -> b.IsUnboundedSamplerArray)
+                let unbounded = bindings |> Array.filter (fun b -> b.IsUnboundedSamplerArray || b.IsUnboundedStorageBufferArray)
                 if unbounded.Length > 0 then
                     let maxBinding = bindings |> Array.map (fun b -> b.Binding) |> Array.max
                     let candidate = unbounded |> Array.maxBy (fun b -> b.Binding)
