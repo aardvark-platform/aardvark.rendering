@@ -1304,6 +1304,89 @@ module Golden =
         else Log.warn "bindlessVar: FAIL (red=%d green=%d blue=%d — integral decode or uint16 index broken)" r gr b
         pass
 
+    // Per-object backend TEXTURES through the real heap: N ROs with a NAIVE single-
+    // sampler effect (`uniform?DiffuseTexture`), each a DIFFERENT texture. ofRenderObjects
+    // must auto-bindless them (one HeapTextures array, indexed by the per-draw handle) so
+    // the collapsed bucket matches a direct render — proving the silent "all share ro0's
+    // texture" bug is fixed and any number of textures work. (Clean effect, no TexId input.)
+    module TH =
+        type VIn  = { [<Position>] pos : V4f; [<Normal>] n : V3f }
+        type VOut = { [<Position>] pos : V4f; [<Normal>] wn : V3f; [<Semantic("TexCoord")>] tc : V2f }
+        let shade (v : VIn) =
+            vertex {
+                let m  : M44f = uniform?HeapModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                return { pos = vp * (m * v.pos); wn = m.TransformDir v.n; tc = v.pos.XY + V2f(0.5f, 0.5f) }
+            }
+        let private diffuse =
+            sampler2d {
+                texture uniform?DiffuseTexture
+                filter Filter.MinMagMipLinear
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            }
+        let frag (v : VOut) =
+            fragment {
+                let albedo = diffuse.Sample(v.tc).XYZ
+                let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
+                let d = 0.35f + 0.65f * max 0.0f (Vec.dot (Vec.normalize v.wn) l)
+                return V4f(albedo * d, 1.0f)
+            }
+
+    let texHeapTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let texArray : ITexture[] = Array.init TexCount mkTexture
+        let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
+        let grid =
+            let s = 8
+            [| for x in 0 .. s - 1 do for y in 0 .. s - 1 -> (x * s + y), V3d(float (x - s/2) * 1.2, float (y - s/2) * 1.2, 0.0) |]
+        let mkRO (i : int) (p : V3d) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj
+                Symbol.Create "DiffuseTexture", (AVal.constant texArray.[i % TexCount] :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        let ros = grid |> Array.map (fun (i, p) -> mkRO i p)
+        let renderToPix (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let classicPix = renderToPix (ASet.ofArray ros)
+        let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo" ]) (ASet.ofArray ros)
+        let heapPix = renderToPix heapObjs
+        let maxD, nDiff, nNonBg, total = diff classicPix heapPix
+        Log.line "texHeap: %d ROs (per-object texture) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
+            ros.Length Heap.lastBucketCount maxD nDiff nNonBg
+        // require buckets > 0 — otherwise the ROs merely passed through and "matching
+        // classic" would be trivially (and misleadingly) true.
+        let pass = maxD <= 1 && nNonBg > total / 100L && Heap.lastBucketCount > 0
+        if pass then Log.line "texHeap: PASS (per-object textures auto-bindless via ofRenderObjects == classic; %d bucket(s))" Heap.lastBucketCount
+        else Log.warn "texHeap: FAIL (maxDelta=%d coverage=%d buckets=%d -> mis-bound or passthrough)" maxD nNonBg Heap.lastBucketCount
+        pass
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =

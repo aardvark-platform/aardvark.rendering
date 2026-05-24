@@ -119,6 +119,8 @@ let main argv =
         if Golden.demoShotTest () then 0 else 1
     elif argv |> Array.contains "glsldump" then
         GlslDump.run (); 0
+    elif argv |> Array.contains "texheap" then
+        if Golden.texHeapTest () then 0 else 1
     elif argv |> Array.contains "bindlessvar" then
         if Golden.bindlessVarTest () then 0 else 1
     elif argv |> Array.contains "bcbox" then
