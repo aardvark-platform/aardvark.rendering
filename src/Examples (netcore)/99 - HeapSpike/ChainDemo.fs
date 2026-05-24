@@ -38,32 +38,43 @@ module ChainDemo =
         let win = app.CreateGameWindow(samples = 8)
         let runtime = app.Runtime
 
-        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.5)) C4b.White).ToIndexed()
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III)) C4b.White).ToIndexed()
         let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
         let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
         let index     = g.IndexArray |> unbox<int[]>
 
-        // P animated cluster parents (shared cvals), each over K leaf cubes.
-        let pSide = 10
-        let kSide = 10
-        let parentCount = pSide * pSide
+        // a 5x5x5 LATTICE of clusters; each cluster is a 3x3x3 cube-of-cubes that
+        // spins about its OWN centre via one shared (animated) rotation parent.
+        let cSide = 5
+        let kSide = 3
+        let clusterSpacing = 9.0
+        let cubeSpacing    = 1.6
+        let parentCount = cSide * cSide * cSide
         let rnd = RandomSystem()
-        // base ring/grid position + initial angle for each parent
-        let parentPos = [| for x in 0 .. pSide-1 do for y in 0 .. pSide-1 -> V3d(float (x-pSide/2) * 6.0, float (y-pSide/2) * 6.0, 0.0) |]
-        let parentSpin = parentPos |> Array.map (fun _ -> rnd.UniformDouble() * 6.2832)
-        let parents = parentPos |> Array.mapi (fun i p -> AVal.init (Trafo3d.RotationZ parentSpin.[i] * Trafo3d.Translation p))
-        // leaf-local cube positions within a cluster (constant -> folded)
-        let leafLocal = [| for x in 0 .. kSide-1 do for y in 0 .. kSide-1 -> V3d(float (x-kSide/2) * 0.6, float (y-kSide/2) * 0.6, 0.0) |]
+        let clusterPos =
+            [| for x in 0 .. cSide-1 do for y in 0 .. cSide-1 do for z in 0 .. cSide-1 -> V3d(float (x-cSide/2), float (y-cSide/2), float (z-cSide/2)) * clusterSpacing |]
+        let spinAxis  = clusterPos |> Array.map (fun _ -> rnd.UniformV3dDirection())
+        let spinSpeed = clusterPos |> Array.map (fun _ -> 0.5 + rnd.UniformDouble() * 1.5)
+        let spinPhase = clusterPos |> Array.map (fun _ -> rnd.UniformDouble() * 6.2832)
+        // one shared rotation cval per cluster (about its centre = local origin)
+        let parents = clusterPos |> Array.mapi (fun i _ -> AVal.init (Trafo3d.Rotation(spinAxis.[i], spinPhase.[i])))
+        // SHARED leaf-local cube positions (centred at 0) reused across all clusters
+        let leafLocal =
+            [| for x in 0 .. kSide-1 do for y in 0 .. kSide-1 do for z in 0 .. kSide-1 -> AVal.constant (Trafo3d.Translation(V3d(float (x-kSide/2), float (y-kSide/2), float (z-kSide/2)) * cubeSpacing)) |]
 
+        // chain per leaf = [ Translation(clusterPos) ; rotationCval ; leafLocal ]:
+        // leaf placed in cluster space, rotated about the cluster centre, then moved
+        // to the lattice cell. Only the rotation is dynamic.
         let tree =
             Heap.Trafo(AVal.constant Trafo3d.Identity,
-                [ for pi in 0 .. parentCount-1 ->
-                    Heap.Trafo(parents.[pi] :> aval<Trafo3d>,
-                        [ for l in leafLocal -> Heap.Leaf (AVal.constant (Trafo3d.Translation l)) ]) ])
+                [ for ci in 0 .. parentCount-1 ->
+                    Heap.Trafo(AVal.constant (Trafo3d.Translation clusterPos.[ci]),
+                        [ Heap.Trafo(parents.[ci] :> aval<Trafo3d>,
+                            [ for l in leafLocal -> Heap.Leaf l ]) ]) ])
         let chains = Heap.flattenChains tree
         let n = chains.Length
 
-        let initialView = CameraView.lookAt (V3d(0.0, -70.0, 55.0)) V3d.Zero V3d.OOI
+        let initialView = CameraView.lookAt (V3d(45.0, -55.0, 40.0)) V3d.Zero V3d.OOI
         let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
         let view = cameraView |> AVal.map CameraView.viewTrafo
         let frustum = win.Sizes |> AVal.map (fun s -> Frustum.perspective 70.0 0.1 5000.0 (float s.X / float s.Y))
@@ -72,17 +83,18 @@ module ChainDemo =
         let eff = FShade.Effect.compose [ FShade.Effect.ofFunction S.shade; FShade.Effect.ofFunction S.frag ]
         let sg = Heap.derivedChainFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj chains
 
-        // animate the P parents every frame: marks P link slots, not N leaves.
+        // animate each cluster's shared rotation every frame: marks the P rotation
+        // slots, NOT the N leaves -> per-frame upload is O(clusters), not O(cubes).
         let sw = System.Diagnostics.Stopwatch.StartNew()
         let mutable lastLog = 0.0
         win.AfterRender.Add (fun () ->
             let t = sw.Elapsed.TotalSeconds
             transact (fun () ->
                 for i in 0 .. parentCount-1 do
-                    parents.[i].Value <- Trafo3d.RotationZ (parentSpin.[i] + t * 0.8) * Trafo3d.Translation parentPos.[i])
+                    parents.[i].Value <- Trafo3d.Rotation(spinAxis.[i], spinPhase.[i] + t * spinSpeed.[i]))
             if t - lastLog > 1.0 then
                 lastLog <- t
-                Log.line "chaindemo: %d cubes, %d animated parents -> %d link uploads/frame" n parentCount Heap.lastChainLinkUploads)
+                Log.line "chaindemo: %d cubes in %d spinning clusters -> %d link uploads/frame" n parentCount Heap.lastChainLinkUploads)
 
         Log.warn "ChainDemo: %d cubes under %d shared animated parents (GPU transform propagation)" n parentCount
         win.RenderTask <- (sg |> Sg.compile runtime win.FramebufferSignature)

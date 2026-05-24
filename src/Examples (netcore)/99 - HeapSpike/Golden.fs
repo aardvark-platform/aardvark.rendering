@@ -410,6 +410,196 @@ module Golden =
             pass
         finally out.Release()
 
+    // Graceful fallback: a mixed aset of heapable + un-heapable ROs. Heapable ones
+    // collapse to buckets; the un-heapable one (here: no index buffer) must be
+    // passed through UNCHANGED (same instance) in the output, not dropped or crashed.
+    let passthroughTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.5)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let eff = Effect.compose [ Effect.ofFunction DF.shadeMvp; Effect.ofFunction DF.frag ]
+        let vp = AVal.constant Trafo3d.Identity :> IAdaptiveValue
+
+        // 4 heapable ROs (same effect/geom/state -> one bucket)
+        let heapable =
+            Array.init 4 (fun i ->
+                let ro = RenderObject()
+                ro.Surface <- Surface.Effect eff
+                ro.Mode <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- vattrs
+                ro.Indices <- Some (bv index typeof<int>)
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+                ro.Uniforms <- UniformProvider.ofList [
+                    Symbol.Create "ModelTrafo",    (AVal.constant (Trafo3d.Translation(V3d(float i, 0.0, 0.0))) :> IAdaptiveValue)
+                    Symbol.Create "ViewProjTrafo", vp ]
+                ro :> IRenderObject)
+        // 1 un-heapable RO: NO index buffer -> not eligible -> must pass through
+        let odd =
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect eff
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices <- None
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = positions.Length, InstanceCount = 1) |])
+            ro.Uniforms <- UniformProvider.ofList [
+                Symbol.Create "ModelTrafo",    (AVal.constant Trafo3d.Identity :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo", vp ]
+            ro :> IRenderObject
+
+        let input = ASet.ofArray (Array.append heapable [| odd |])
+        let outSet = Heap.ofRenderObjects runtime (Set.ofList [ "ModelTrafo" ]) input
+        let out = outSet |> ASet.toAVal |> AVal.force |> HashSet.toArray
+        let buckets = Heap.lastBucketCount
+        let passedThrough = out |> Array.exists (fun o -> System.Object.ReferenceEquals(o, odd))
+        Log.line "passthrough: in=5 (4 heapable + 1 odd) -> out=%d buckets=%d oddPassedThrough=%b" out.Length buckets passedThrough
+        let pass = buckets = 1 && passedThrough && out.Length = buckets + 1
+        if pass then Log.line "passthrough: PASS (heapable collapsed to 1 bucket; un-heapable RO passed through unchanged)"
+        else Log.warn "passthrough: FAIL (out=%d buckets=%d passedThrough=%b)" out.Length buckets passedThrough
+        pass
+
+    // NativeMemoryBuffer geometry is heap-eligible: a user-supplied native buffer
+    // is copied into the packed arena exactly like an ArrayBuffer. Render N cubes
+    // with native-buffer geometry through the heap and compare to the ArrayBuffer
+    // path -> must be pixel-identical.
+    let nativeBufTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(640, 640))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let abv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+
+        // native-buffer views (HGlobal copies; freed at the end)
+        let allocs = System.Collections.Generic.List<nativeint>()
+        let nbvV3f (arr : V3f[]) =
+            let f = Array.zeroCreate<float32> (arr.Length * 3)
+            arr |> Array.iteri (fun i v -> f.[3*i] <- v.X; f.[3*i+1] <- v.Y; f.[3*i+2] <- v.Z)
+            let bytes = f.Length * 4
+            let ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal bytes
+            allocs.Add ptr
+            System.Runtime.InteropServices.Marshal.Copy(f, 0, ptr, f.Length)
+            BufferView(AVal.constant (NativeMemoryBuffer(ptr, uint64 bytes) :> IBuffer), typeof<V3f>)
+        let nbvInt (arr : int[]) =
+            let bytes = arr.Length * 4
+            let ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal bytes
+            allocs.Add ptr
+            System.Runtime.InteropServices.Marshal.Copy(arr, 0, ptr, arr.Length)
+            BufferView(AVal.constant (NativeMemoryBuffer(ptr, uint64 bytes) :> IBuffer), typeof<int>)
+
+        let eff = Effect.compose [ Effect.ofFunction DF.shadeMvp; Effect.ofFunction DF.frag ]
+        let vp = AVal.constant ((CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo) * (Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo)) :> IAdaptiveValue
+        let offsets = [| for x in -2 .. 2 do for y in -2 .. 2 -> V3d(float x * 1.3, float y * 1.3, 0.0) |]
+
+        let mkObjs (posV : BufferView) (norV : BufferView) (idxV : BufferView) =
+            offsets |> Array.map (fun o ->
+                let ro = RenderObject()
+                ro.Surface <- Surface.Effect eff
+                ro.Mode <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, posV; DefaultSemantic.Normals, norV ]
+                ro.Indices <- Some idxV
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+                ro.Uniforms <- UniformProvider.ofList [
+                    Symbol.Create "ModelTrafo",    (AVal.constant (Trafo3d.Translation o) :> IAdaptiveValue)
+                    Symbol.Create "ViewProjTrafo", vp ]
+                ro :> IRenderObject)
+
+        let imageOf (objs : IRenderObject[]) =
+            let heap = Heap.ofRenderObjects runtime (Set.ofList [ "ModelTrafo" ]) (ASet.ofArray objs)
+            use task = Sg.renderObjectSet heap |> Sg.compile runtime signature
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+
+        let arrPix = imageOf (mkObjs (abv positions typeof<V3f>) (abv normals typeof<V3f>) (abv index typeof<int>))
+        let bucketsArr = Heap.lastBucketCount
+        let natPix = imageOf (mkObjs (nbvV3f positions) (nbvV3f normals) (nbvInt index))
+        let bucketsNat = Heap.lastBucketCount
+        for p in allocs do System.Runtime.InteropServices.Marshal.FreeHGlobal p
+
+        let maxD, nDiff, nNonBg, total = diff arrPix natPix
+        Log.line "nativeBuf: bucketsArr=%d bucketsNat=%d  array-vs-native maxDelta=%d diffPixels=%d/%d coverage=%d" bucketsArr bucketsNat maxD nDiff total nNonBg
+        let pass = bucketsNat = 1 && nNonBg > 1000 && maxD <= 1
+        if pass then Log.line "nativeBuf: PASS (NativeMemoryBuffer geometry heaped -> 1 bucket, identical to ArrayBuffer)"
+        else Log.warn "nativeBuf: FAIL (bucketsNat=%d maxDelta=%d coverage=%d)" bucketsNat maxD nNonBg
+        pass
+
+    // Type-agnostic geometry: V4f positions + uint16 indices (not the V3f/int the
+    // heap used to assume). Heap render must equal the classic per-RO render.
+    module VT =
+        type V = { [<Position>] pos : V4f; [<Normal>] n : V3f }
+        let shade (v : V) =
+            vertex {
+                let m  : M44f = uniform?ModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                return { v with pos = vp * (m * v.pos); n = (m * V4f(v.n, 0.0f)).XYZ }
+            }
+        let frag (v : V) =
+            fragment {
+                let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
+                let d = 0.3f + 0.7f * max 0.0f (Vec.dot (Vec.normalize v.n) l)
+                return V4f(V3f(0.9f, 0.6f, 0.3f) * d, 1.0f)
+            }
+
+    let varTypeTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(640, 640))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let pos3 = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals = g.IndexedAttributes.[DefaultSemantic.Normals] |> unbox<V3f[]>
+        let idx32 = g.IndexArray |> unbox<int[]>
+        // NON-default types: V4f positions, uint16 indices
+        let pos4 = pos3 |> Array.map (fun p -> V4f(p.X, p.Y, p.Z, 1.0f))
+        let idx16 = idx32 |> Array.map uint16
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv pos4 typeof<V4f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let eff = Effect.compose [ Effect.ofFunction VT.shade; Effect.ofFunction VT.frag ]
+        let vp = AVal.constant ((CameraView.lookAt (V3d(0.0, -9.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo) * (Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo)) :> IAdaptiveValue
+        let mk (x : int) (y : int) =
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect eff
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices <- Some (bv idx16 typeof<uint16>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = idx16.Length, InstanceCount = 1) |])
+            ro.Uniforms <- UniformProvider.ofList [
+                Symbol.Create "ModelTrafo",    (AVal.constant (Trafo3d.Translation(V3d(float x * 1.3, float y * 1.3, 0.0))) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo", vp ]
+            ro :> IRenderObject
+        let objs = [| for x in -2 .. 2 do for y in -2 .. 2 -> mk x y |]
+        let imageOf (s : aset<IRenderObject>) =
+            use task = Sg.renderObjectSet s |> Sg.compile runtime signature
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let classicPix = imageOf (ASet.ofArray objs)
+        let heapPix = imageOf (Heap.ofRenderObjects runtime (Set.ofList [ "ModelTrafo" ]) (ASet.ofArray objs))
+        let buckets = Heap.lastBucketCount
+        let maxD, nDiff, nNonBg, total = diff classicPix heapPix
+        Log.line "varType: V4f pos + uint16 idx  buckets=%d classic-vs-heap maxDelta=%d diffPixels=%d/%d coverage=%d" buckets maxD nDiff total nNonBg
+        let pass = buckets = 1 && nNonBg > 1000 && maxD <= 1
+        if pass then Log.line "varType: PASS (V4f positions + uint16 indices heaped == classic; no type assumptions)"
+        else Log.warn "varType: FAIL (buckets=%d maxDelta=%d coverage=%d)" buckets maxD nNonBg
+        pass
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =

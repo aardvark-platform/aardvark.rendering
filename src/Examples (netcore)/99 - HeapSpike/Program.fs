@@ -109,6 +109,12 @@ let main argv =
         if Golden.chainFanoutTest () then 0 else 1
     elif argv |> Array.contains "chaindemo" then
         ChainDemo.run (); 0
+    elif argv |> Array.contains "passthru" then
+        if Golden.passthroughTest () then 0 else 1
+    elif argv |> Array.contains "nativebuf" then
+        if Golden.nativeBufTest () then 0 else 1
+    elif argv |> Array.contains "vartype" then
+        if Golden.varTypeTest () then 0 else 1
     elif argv |> Array.contains "inst" then
         if Golden.instancingTest () then 0 else 1
     elif argv |> Array.contains "instbucket" then

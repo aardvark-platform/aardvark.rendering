@@ -29,6 +29,9 @@ open FSharp.Data.Adaptive
 open FShade
 open FShade.Imperative
 open Microsoft.FSharp.Quotations
+open Microsoft.FSharp.NativeInterop
+
+#nowarn "9"
 
 /// Storage-buffer accessors for the heap arena, for shaders that read it
 /// directly (the per-draw header table and the float payload arena). The heap
@@ -280,6 +283,36 @@ module Heap =
         elif t = typeof<int>     then 1,  (fun o a off -> a.[off] <- float32 (o :?> int))
         else failwithf "Heap: unsupported per-draw uniform content type %A" t
 
+    /// Size in bytes of a blittable attribute/index element type (-1 if it isn't
+    /// blittable — such an RO is then treated as un-heapable and passed through).
+    let private elemSize (t : System.Type) =
+        try System.Runtime.InteropServices.Marshal.SizeOf t with _ -> -1
+
+    /// Read a host buffer-view's raw bytes (respecting its byte Offset). Works for
+    /// ArrayBuffer and any INativeBuffer (incl. a user-supplied NativeMemoryBuffer).
+    /// Assumes a tightly-packed view; interleaved/strided and GPU-resident views are
+    /// rejected by `isHeapable` so they never reach here. TYPE-AGNOSTIC: bytes only.
+    let private readBytesView (bv : BufferView) : byte[] =
+        match bv.Buffer.GetValue() with
+        | :? INativeBuffer as nb ->
+            nb.Use (fun (ptr : nativeint) ->
+                let len = int nb.SizeInBytes - bv.Offset
+                let arr = Array.zeroCreate<byte> len
+                System.Runtime.InteropServices.Marshal.Copy(ptr + nativeint bv.Offset, arr, 0, len)
+                arr)
+        | b -> failwithf "Heap.ofRenderObjects: expected host (INativeBuffer) geometry, got %A" (b.GetType())
+
+    /// Build a packed vertex/index buffer view of an arbitrary element type from
+    /// raw bytes (the backend derives the vertex/index format from `et`, so no
+    /// shader-side decoding is needed for standard formats).
+    let private packedView (bytes : byte[]) (et : System.Type) : BufferView =
+        let n = bytes.Length / max 1 (elemSize et)
+        let a = System.Array.CreateInstance(et, n)
+        let gc = System.Runtime.InteropServices.GCHandle.Alloc(a, System.Runtime.InteropServices.GCHandleType.Pinned)
+        try System.Runtime.InteropServices.Marshal.Copy(bytes, 0, gc.AddrOfPinnedObject(), bytes.Length)
+        finally gc.Free()
+        BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), et)
+
     /// Number of buckets produced by the most recent `ofRenderObjects` evaluation
     /// (diagnostic / for logging).
     let mutable lastBucketCount = 0
@@ -359,6 +392,8 @@ module Heap =
     /// (one per effect), each drawn as ONE indirect multidraw against a shared
     /// dirty-tracked arena. The uniforms named in `heapNames` are gathered
     /// per-draw in the rewritten shader; everything else is treated as a global.
+    /// Render objects that aren't heap-eligible (see `isHeapable` below) are passed
+    /// through to the output set UNCHANGED — so a mixed scene degrades gracefully.
     let ofRenderObjects (runtime : IRuntime) (heapNames : Set<string>) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         checkSupport false runtime
         let names = heapNames |> Set.toArray |> Array.sort
@@ -413,40 +448,50 @@ module Heap =
             let arena = HeapArena(runtime, totalF)
             for (av, o, sz, pk) in distinct do arena.Add(av, o, sz, pk) |> ignore
 
-            // Pack per-RO geometry into shared buffers. Deduped by (positions,
-            // index) buffer identity so SHARED geometry is packed once; VARIED
-            // geometry gets its own packed range. Per-RO firstIndex/baseVertex/
-            // count drive the indirect buffer (one sub-draw per RO).
-            let hostArray (bv : BufferView) : System.Array =
-                match bv.Buffer.GetValue() with
-                | :? ArrayBuffer as a -> a.Data
-                | b -> failwithf "Heap.ofRenderObjects: expected host ArrayBuffer geometry, got %A" (b.GetType())
-            let attr (ro : RenderObject) (s : Symbol) =
-                match ro.VertexAttributes.TryGetAttribute s with
-                | ValueSome bv -> bv
-                | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing vertex attribute %A" s
+            // Pack ONLY the attributes the shader consumes (effect.Inputs), each
+            // with its REAL element type (any type), into shared raw-byte buffers;
+            // the index keeps its real type (uint16/uint32/int). The BufferView's
+            // ElementType preserves the format (backend derives it — no shader-side
+            // decoding). Deduped by geometry identity (first attr + index buffer).
+            let attrTypes =
+                effect.Inputs |> Map.toArray
+                |> Array.map (fun (name, _) ->
+                    let sym = Symbol.Create name
+                    match ro0.VertexAttributes.TryGetAttribute sym with
+                    | ValueSome bv -> sym, bv.ElementType, elemSize bv.ElementType
+                    | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym)
+            let idxType = match ro0.Indices with Some bv -> bv.ElementType | None -> failwith "Heap.ofRenderObjects: heapable RO must be indexed"
+            let idxSize = elemSize idxType
 
-            let packedPos = System.Collections.Generic.List<V3f>()
-            let packedNor = System.Collections.Generic.List<V3f>()
-            let packedIdx = System.Collections.Generic.List<int>()
-            let geomCache = System.Collections.Generic.Dictionary<struct(obj * obj), struct(int * int * int)>(HashIdentity.Structural)
+            let packedAttr = attrTypes |> Array.map (fun _ -> System.Collections.Generic.List<byte>())
+            let packedIdx  = System.Collections.Generic.List<byte>()
+            let geomCache  = System.Collections.Generic.Dictionary<struct(obj * obj), struct(int * int * int)>(HashIdentity.Structural)
+            let mutable vtxCount = 0
+            let mutable idxCount = 0
 
             let baseEntries =
                 ros |> Array.map (fun ro ->
-                    let posBV = attr ro DefaultSemantic.Positions
-                    let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer (v1 requires indexed geometry)"
-                    let key = struct(posBV.Buffer :> obj, idxBV.Buffer :> obj)
+                    let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
+                    let firstAttr = let (sym, _, _) = attrTypes.[0] in (match ro.VertexAttributes.TryGetAttribute sym with ValueSome b -> b.Buffer :> obj | ValueNone -> null)
+                    let key = struct(firstAttr, idxBV.Buffer :> obj)
                     let (struct(firstIndex, baseVertex, count)) =
                         match geomCache.TryGetValue key with
                         | true, r -> r
                         | _ ->
-                            let pos = hostArray posBV :?> V3f[]
-                            let nor = hostArray (attr ro DefaultSemantic.Normals) :?> V3f[]
-                            let idx = hostArray idxBV :?> int[]
-                            let r = struct(packedIdx.Count, packedPos.Count, idx.Length)
-                            packedPos.AddRange pos
-                            packedNor.AddRange nor
-                            packedIdx.AddRange idx
+                            let firstIndex = idxCount
+                            let baseVertex = vtxCount
+                            let ib = readBytesView idxBV
+                            let thisIdx = ib.Length / idxSize
+                            packedIdx.AddRange ib
+                            idxCount <- idxCount + thisIdx
+                            let mutable thisVtx = 0
+                            attrTypes |> Array.iteri (fun ai (sym, _, es) ->
+                                let bv = match ro.VertexAttributes.TryGetAttribute sym with ValueSome b -> b | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym
+                                let bytes = readBytesView bv
+                                packedAttr.[ai].AddRange bytes
+                                thisVtx <- bytes.Length / es)
+                            vtxCount <- vtxCount + thisVtx
+                            let r = struct(firstIndex, baseVertex, thisIdx)
                             geomCache.[key] <- r
                             r
                     DrawCallInfo(FaceVertexCount = count, FirstIndex = firstIndex, BaseVertex = baseVertex, FirstInstance = 0, InstanceCount = instanceCountOf ro))
@@ -465,14 +510,12 @@ module Heap =
                             if not (actives.[i].GetValue t) then entries.[i].InstanceCount <- 0
                         IndirectBuffer.ofArray entries)
 
-            let bvOf (arr : System.Array) t = BufferView(AVal.constant (ArrayBuffer(arr) :> IBuffer), t)
             let ro = RenderObject.Clone ro0
             ro.IsActive         <- AVal.constant true   // bucket always active; per-draw gating is in the indirect buffer
             ro.Surface          <- Surface.Effect (rewrite (<@ getDrawId() @>) nameToField fieldStride standardDerivedRules effect)
             ro.DrawCalls        <- DrawCalls.Indirect indirect
-            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bvOf (packedPos.ToArray()) typeof<V3f>
-                                                              DefaultSemantic.Normals,   bvOf (packedNor.ToArray()) typeof<V3f> ]
-            ro.Indices          <- Some (bvOf (packedIdx.ToArray()) typeof<int>)
+            ro.VertexAttributes <- AttributeProvider.ofList [ for ai in 0 .. attrTypes.Length - 1 -> let (sym, et, _) = attrTypes.[ai] in sym, packedView (packedAttr.[ai].ToArray()) et ]
+            ro.Indices          <- Some (packedView (packedIdx.ToArray()) idxType)
 
             let arenaU   = ((arena :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)) :> IAdaptiveValue
             let headersU = AVal.constant headers :> IAdaptiveValue
@@ -494,26 +537,76 @@ module Heap =
         // simply each RO's state aval (often derived from its data); constant state
         // never re-partitions. Only mode changes rebuild buckets; per-draw value
         // changes still flow through the arena with no rebuild.
+        // geometry layout signature: the shader inputs' actual element types + the
+        // index type. Different layouts need different vertex-input pipelines, so
+        // they must land in different buckets (and pack consistently).
+        let layoutSig (r : RenderObject) =
+            let attrs =
+                match r.Surface with
+                | Surface.Effect e ->
+                    e.Inputs |> Map.toList |> List.map (fun (name, _) ->
+                        match r.VertexAttributes.TryGetAttribute (Symbol.Create name) with
+                        | ValueSome bv -> name + ":" + bv.ElementType.FullName
+                        | ValueNone -> name + ":?") |> String.concat ";"
+                | _ -> ""
+            let it = match r.Indices with Some bv -> bv.ElementType.FullName | None -> "none"
+            attrs + "|" + it
         let modeKey (t : AdaptiveToken) (r : RenderObject) =
             let ra = r.RasterizerState
             let eid = match r.Surface with | Surface.Effect e -> e.Id | _ -> "?"
-            (eid, r.Mode,
+            (eid, r.Mode, layoutSig r,
              ra.CullMode.GetValue t, ra.FrontFacing.GetValue t, ra.FillMode.GetValue t,
              r.BlendState.Mode.GetValue t,
              r.DepthState.Test.GetValue t, r.DepthState.WriteMask.GetValue t)
 
+        // Eligibility: only a concrete indexed Effect RenderObject with host-array
+        // (positions/normals/index) geometry and ALL heap uniforms present in a
+        // packable type can be collapsed. Anything else — a non-RenderObject, a
+        // command/multi RO, non-indexed or GPU-buffer geometry, a missing/odd-typed
+        // heap uniform — is passed through UNCHANGED. Never dropped, never crashed.
+        // host-readable AND tightly packed: ArrayBuffer / any INativeBuffer (incl. a
+        // user-supplied NativeMemoryBuffer), blittable element type, no interleave
+        // (stride 0 or = element size). GPU-only or interleaved -> not eligible.
+        let isHostTight (bv : BufferView) =
+            let es = elemSize bv.ElementType
+            es > 0 && (bv.Stride = 0 || bv.Stride = es) &&
+            (match bv.Buffer.GetValue() with :? INativeBuffer -> true | _ -> false)
+        let packable =
+            System.Collections.Generic.HashSet<System.Type>(
+                [ typeof<M44f>; typeof<Trafo3d>; typeof<M44d>; typeof<V4f>; typeof<C4f>
+                  typeof<V3f>; typeof<V2f>; typeof<float32>; typeof<float>; typeof<int> ])
+        // eligible iff: an Effect surface, an indexed (host/tight) draw, every
+        // attribute the SHADER reads (effect.Inputs) present host/tight, and every
+        // heap uniform present in a packable type. Anything else -> passthrough.
+        let isHeapable (o : IRenderObject) =
+            match o with
+            | :? RenderObject as ro ->
+                match ro.Surface with
+                | Surface.Effect e ->
+                    (match ro.Indices with Some bv -> isHostTight bv | None -> false) &&
+                    (e.Inputs |> Map.forall (fun name _ ->
+                        match ro.VertexAttributes.TryGetAttribute (Symbol.Create name) with
+                        | ValueSome bv -> isHostTight bv
+                        | ValueNone -> false)) &&
+                    (names |> Array.forall (fun n ->
+                        match ro.Uniforms.TryGetUniform(scope, Symbol.Create n) with
+                        | ValueSome v -> packable.Contains v.ContentType
+                        | ValueNone -> false))
+                | _ -> false
+            | _ -> false
+
         let objsAval = objects |> ASet.toAVal
-        let bucketsAval =
+        let resultAval =
             AVal.custom (fun t ->
+                let heapable, rest = objsAval.GetValue t |> HashSet.toArray |> Array.partition isHeapable
                 let buckets =
-                    objsAval.GetValue t
-                    |> HashSet.toArray
+                    heapable
                     |> Array.choose (fun ro -> match ro with :? RenderObject as r -> Some r | _ -> None)
                     |> Array.groupBy (modeKey t)
                     |> Array.map (fun (_, g) -> buildBucket g)
                 lastBucketCount <- buckets.Length
-                buckets)
-        bucketsAval |> ASet.ofAVal
+                Array.append buckets rest)              // collapsed buckets ∪ untouched passthrough
+        resultAval |> ASet.ofAVal
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)
