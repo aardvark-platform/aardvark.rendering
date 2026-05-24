@@ -51,6 +51,8 @@ module HeapUniforms =
         // the SAME per-object buffers bound a second time as an int view, so integral
         // attributes decode their 4-byte slots as ints (bit pattern is identical).
         member x.HeapVertexDataI : int[][]     = uniform?StorageBuffer?HeapVertexDataI
+        // per-(object,sampler) index into the DEDUPED HeapTextures array, at slot*K + k.
+        member x.HeapTexIndices  : int[]       = uniform?StorageBuffer?HeapTexIndices
 
 module Heap =
 
@@ -174,8 +176,11 @@ module Heap =
     // doesn't choke on a sampler CE embedded in a spliced quotation.
     let private heapTexArray : Sampler2d[] =
         sampler2d { textureArray uniform?HeapTextures -1 }
+    // object's k-th texture: the per-draw slot indexes HeapTexIndices (slot*K+k) to
+    // get the DEDUPED position in HeapTextures — so the sampler array holds only the
+    // distinct textures of the bucket (≤ unbounded-array cap), not one entry per draw.
     let private samplerRead (slot : Expr<int>) (kCount : int) (k : int) : Expr =
-        <@ heapTexArray.[ (%slot) * kCount + k ] @>.Raw
+        <@ heapTexArray.[ uniform.HeapTexIndices.[ (%slot) * kCount + k ] ] @>.Raw
 
     /// rewrite each of the effect's sampler uniforms (name -> k) into HeapTextures.[slot*K+k]
     let private rewriteSamplers (slot : Expr<int>) (samplers : Map<string, int>) (kCount : int) (e : Effect) =
@@ -587,10 +592,14 @@ module Heap =
 
             let arenaU   = ((arena :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)) :> IAdaptiveValue
             let headersU = AVal.constant headers :> IAdaptiveValue
-            // gather each object's textures into ONE HeapTextures array at slot*K + k
-            // (reactive: re-reads the per-object texture avals).
-            let symTextures = Symbol.Create "HeapTextures"
-            let texU : IAdaptiveValue voption =
+            // gather each object's textures and DEDUP them: HeapTextures holds only the
+            // distinct textures of the bucket, HeapTexIndices.[slot*K+k] points each draw
+            // at its texture. Keeps the unbounded sampler array within its cap (~1024)
+            // even when many objects share few textures. Reactive: re-reads + re-dedups
+            // when a per-object texture aval changes.
+            let symTextures   = Symbol.Create "HeapTextures"
+            let symTexIndices = Symbol.Create "HeapTexIndices"
+            let texData : aval<ITexture[] * int[]> voption =
                 if kCount = 0 then ValueNone
                 else
                     let texAvals =
@@ -599,13 +608,25 @@ module Heap =
                                 match ro.Uniforms.TryGetUniform(scope, Symbol.Create tn) with
                                 | ValueSome v -> v
                                 | ValueNone -> failwithf "Heap.ofRenderObjects: texture uniform %A missing" tn))
-                    ValueSome (AVal.custom (fun t -> texAvals |> Array.map (fun (av : IAdaptiveValue) -> av.GetValueUntyped t :?> ITexture)) :> IAdaptiveValue)
+                    ValueSome (AVal.custom (fun t ->
+                        let texs = texAvals |> Array.map (fun (av : IAdaptiveValue) -> av.GetValueUntyped t :?> ITexture)
+                        let distinct = System.Collections.Generic.List<ITexture>()
+                        let idxOf = System.Collections.Generic.Dictionary<ITexture, int>(HashIdentity.Reference)
+                        let indices =
+                            texs |> Array.map (fun tex ->
+                                match idxOf.TryGetValue tex with
+                                | true, i -> i
+                                | _ -> let i = distinct.Count in idxOf.[tex] <- i; distinct.Add tex; i)
+                        distinct.ToArray(), indices))
+            let texturesU  = texData |> ValueOption.map (fun d -> (d |> AVal.map fst) :> IAdaptiveValue)
+            let texIndicesU = texData |> ValueOption.map (fun d -> (d |> AVal.map snd) :> IAdaptiveValue)
             ro.Uniforms <-
                 { new IUniformProvider with
                     member _.TryGetUniform(s, name) =
                         if name = symData then ValueSome arenaU
                         elif name = symHeaders then ValueSome headersU
-                        elif name = symTextures then texU
+                        elif name = symTextures then texturesU
+                        elif name = symTexIndices then texIndicesU
                         elif Set.contains name heapSyms then ValueNone
                         elif Set.contains name samplerSyms then ValueNone
                         else ro0.Uniforms.TryGetUniform(s, name)

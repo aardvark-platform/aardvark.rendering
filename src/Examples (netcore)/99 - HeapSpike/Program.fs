@@ -121,6 +121,8 @@ let main argv =
         GlslDump.run (); 0
     elif argv |> Array.contains "texheap" then
         if Golden.texHeapTest () then 0 else 1
+    elif argv |> Array.contains "texswap" then
+        if Golden.texSwapTest () then 0 else 1
     elif argv |> Array.contains "bindlessvar" then
         if Golden.bindlessVarTest () then 0 else 1
     elif argv |> Array.contains "bcbox" then

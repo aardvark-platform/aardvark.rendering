@@ -1387,6 +1387,83 @@ module Golden =
         else Log.warn "texHeap: FAIL (maxDelta=%d coverage=%d buckets=%d -> mis-bound or passthrough)" maxD nNonBg Heap.lastBucketCount
         pass
 
+    // RTT-relevant: a per-object texture whose IDENTITY swaps at runtime (the
+    // double-buffer / resize case). Both the classic and the heap task are kept
+    // COMPILED across the mutation, so this exercises the INCREMENTAL descriptor
+    // update of the bindless sampler array (+ re-dedup of HeapTextures /
+    // HeapTexIndices), not a fresh rebuild. Passes iff the heap tracks the classic
+    // render at BOTH states AND the swap actually changed the image.
+    let texSwapTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let texArray : ITexture[] = Array.init TexCount mkTexture
+        let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
+        let grid =
+            let s = 8
+            [| for x in 0 .. s - 1 do for y in 0 .. s - 1 -> (x * s + y), V3d(float (x - s/2) * 1.2, float (y - s/2) * 1.2, 0.0) |]
+        // one MUTABLE texture cell per object — the identity changes on swap
+        let texCells = grid |> Array.map (fun (i, _) -> cval (texArray.[i % TexCount]))
+        let mkRO (i : int) (p : V3d) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj
+                Symbol.Create "DiffuseTexture", (texCells.[i] :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        // distinct RO instances per path, but SHARING texCells so both track the swap
+        let classicROs    = grid |> Array.map (fun (i, p) -> mkRO i p)
+        let heapInputROs  = grid |> Array.map (fun (i, p) -> mkRO i p)
+        let mkOut (objs : aset<IRenderObject>) =
+            let task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            task, out
+        let classicTask, classicOut = mkOut (ASet.ofArray classicROs)
+        let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo" ]) (ASet.ofArray heapInputROs)
+        let heapTask, heapOut = mkOut heapObjs
+        let dl (out : IAdaptiveResource<IBackendTexture>) = out.GetValue().Download().AsPixImage<uint8>()
+        // ── state 0 ──
+        let classic0 = dl classicOut
+        let heap0    = dl heapOut
+        let buckets  = Heap.lastBucketCount
+        // ── RTT-style swap: every cube's texture identity changes ──
+        transact (fun () -> texCells |> Array.iteri (fun i c -> c.Value <- texArray.[(i + 7) % TexCount]))
+        // ── state 1: SAME compiled tasks, re-evaluated (incremental update) ──
+        let classic1 = dl classicOut
+        let heap1    = dl heapOut
+        classicOut.Release(); heapOut.Release(); classicTask.Dispose(); heapTask.Dispose()
+        let d0, _, nbg0, total = diff classic0 heap0
+        let d1, _, nbg1, _     = diff classic1 heap1
+        let _, nChanged, _, _  = diff heap0 heap1   // the swap must visibly change the image
+        Log.line "texSwap: %d ROs -> %d bucket(s)  s0 maxDelta=%d  s1 maxDelta=%d  swap-changed-px=%d/%d"
+            classicROs.Length buckets d0 d1 nChanged total
+        let pass =
+            d0 <= 1 && d1 <= 1 && nbg0 > total/100L && nbg1 > total/100L
+            && nChanged > total/100L && buckets > 0
+        if pass then Log.line "texSwap: PASS (heap tracks classic across an RTT-style texture identity swap; incremental sampler-array descriptor update OK; %d bucket(s))" buckets
+        else Log.warn "texSwap: FAIL (s0Δ=%d s1Δ=%d swapChanged=%d buckets=%d)" d0 d1 nChanged buckets
+        pass
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =
