@@ -2166,6 +2166,16 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
     let pool = device.GraphicsFamily.CreateCommandPool()
     let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
+    // MoltenVK (portability subset) crashes in vkCmdExecuteCommands when executing
+    // our secondary (VKVM) command buffer. On such devices, replay the VKVM command
+    // stream INLINE into the primary buffer each frame (VkSubpassContents.Inline) —
+    // the stream is still the same mutable VKVM, we just re-emit it per frame instead
+    // of recording it once into a reusable secondary. AARDVARK_INLINE_RENDERPASS=1
+    // forces it (for testing on conformant Vulkan).
+    let useInline =
+        device.IsExtensionEnabled KHRPortabilitySubset.Name ||
+        System.Environment.GetEnvironmentVariable "AARDVARK_INLINE_RENDERPASS" = "1"
+
     let stats = NativePtr.alloc 1
     let resources = ResourceLocationSet()
     let mutable lastOutput = ValueNone
@@ -2246,7 +2256,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
         updateResources token renderToken (fun resourcesChanged ->
 
-            if outputChanged || commandChanged || resourcesChanged then
+            if not useInline && (outputChanged || commandChanged || resourcesChanged) then
 
                 if device.DebugConfig.PrintRenderTaskRecompile then
                     let cause =
@@ -2289,9 +2299,22 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                     else
                         do! Command.TransformLayout(view, VkImageLayout.ColorAttachmentOptimal)
 
-                do! Command.BeginPass(renderPass, fbo, false)
-                do! Command.Execute inner
-                do! Command.EndPass
+                if useInline then
+                    // inline: begin the pass for inline contents, set dynamic state,
+                    // and replay the VKVM stream straight into THIS (primary) buffer.
+                    do! Command.BeginPass(renderPass, fbo, true)
+                    do! Command.SetViewports [| output.Viewport |]
+                    do! Command.SetScissors [| output.Scissor |]
+                    do! { new Command() with
+                            member _.Compatible = QueueFlags.Graphics
+                            member _.Enqueue (c : CommandBuffer) =
+                                c.AppendCommand()
+                                device.VKVM.Run(c.Handle, compiled.Stream) }
+                    do! Command.EndPass
+                else
+                    do! Command.BeginPass(renderPass, fbo, false)
+                    do! Command.Execute inner
+                    do! Command.EndPass
 
                 for i in 0 .. views.Length - 1 do
                     let _, view = views.[i]
