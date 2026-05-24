@@ -1333,6 +1333,51 @@ module Golden =
                 return V4f(albedo * d, 1.0f)
             }
 
+    // Same as TH but POINT filtering — proves the heap re-applies sampler STATE.
+    // With a magnified checker texture, point vs linear differ sharply at block
+    // boundaries; if the heap dropped state (used the default), it would NOT match
+    // the classic point-sampled render. (TH=linear and THP=point can't both match a
+    // single default state, so both passing means state is genuinely preserved.)
+    module THP =
+        let private diffuse =
+            sampler2d {
+                texture uniform?DiffuseTexture
+                filter Filter.MinMagMipPoint
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            }
+        let frag (v : TH.VOut) =
+            fragment {
+                let albedo = diffuse.Sample(v.tc).XYZ
+                let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
+                let d = 0.35f + 0.65f * max 0.0f (Vec.dot (Vec.normalize v.wn) l)
+                return V4f(albedo * d, 1.0f)
+            }
+
+    // Cubemap path: a per-object samplerCube sampled by the world normal direction.
+    module TC =
+        type VIn  = { [<Position>] pos : V4f; [<Normal>] n : V3f }
+        type VOut = { [<Position>] pos : V4f; [<Normal>] wn : V3f }
+        let shade (v : VIn) =
+            vertex {
+                let m  : M44f = uniform?HeapModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                return { pos = vp * (m * v.pos); wn = m.TransformDir v.n }
+            }
+        let private envMap =
+            samplerCube {
+                texture uniform?EnvTexture
+                filter Filter.MinMagMipLinear
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+                addressW WrapMode.Wrap
+            }
+        let frag (v : VOut) =
+            fragment {
+                let albedo = envMap.Sample(Vec.normalize v.wn).XYZ
+                return V4f(albedo, 1.0f)
+            }
+
     let texHeapTest () =
         Aardvark.Init()
         use app = new Aardvark.Application.Slim.VulkanApplication(false)
@@ -1462,6 +1507,128 @@ module Golden =
             && nChanged > total/100L && buckets > 0
         if pass then Log.line "texSwap: PASS (heap tracks classic across an RTT-style texture identity swap; incremental sampler-array descriptor update OK; %d bucket(s))" buckets
         else Log.warn "texSwap: FAIL (s0Δ=%d s1Δ=%d swapChanged=%d buckets=%d)" d0 d1 nChanged buckets
+        pass
+
+    // Sampler-STATE preservation: identical to texHeapTest but the effect uses POINT
+    // filtering. The heap must re-apply that state to its generated bindless array;
+    // if it used the default (≈linear), point vs linear would diverge sharply at the
+    // magnified checker boundaries and this would FAIL. (texHeap=linear PASS +
+    // texState=point PASS together prove state is carried, not defaulted.)
+    let texStateTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let texArray : ITexture[] = Array.init TexCount mkTexture
+        let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction THP.frag ]
+        let grid =
+            let s = 8
+            [| for x in 0 .. s - 1 do for y in 0 .. s - 1 -> (x * s + y), V3d(float (x - s/2) * 1.2, float (y - s/2) * 1.2, 0.0) |]
+        let mkRO (i : int) (p : V3d) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj
+                Symbol.Create "DiffuseTexture", (AVal.constant texArray.[i % TexCount] :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        let ros = grid |> Array.map (fun (i, p) -> mkRO i p)
+        let renderToPix (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let classicPix = renderToPix (ASet.ofArray ros)
+        let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo" ]) (ASet.ofArray ros)
+        let heapPix = renderToPix heapObjs
+        let maxD, nDiff, nNonBg, total = diff classicPix heapPix
+        Log.line "texState: %d ROs (POINT filter) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
+            ros.Length Heap.lastBucketCount maxD nDiff nNonBg
+        let pass = maxD <= 1 && nNonBg > total / 100L && Heap.lastBucketCount > 0
+        if pass then Log.line "texState: PASS (sampler STATE preserved: point-filtered heap == classic; %d bucket(s))" Heap.lastBucketCount
+        else Log.warn "texState: FAIL (maxDelta=%d coverage=%d buckets=%d -> state dropped or passthrough)" maxD nNonBg Heap.lastBucketCount
+        pass
+
+    // a per-FACE-uniform-color cube texture; the frag samples it by world normal
+    let private mkCubeTexture (i : int) : ITexture =
+        let cols = [| C4b(230uy,60uy,60uy,255uy); C4b(60uy,200uy,60uy,255uy); C4b(60uy,120uy,230uy,255uy); C4b(230uy,200uy,40uy,255uy)
+                      C4b(210uy,60uy,210uy,255uy); C4b(40uy,210uy,210uy,255uy); C4b(230uy,140uy,40uy,255uy); C4b(180uy,180uy,180uy,255uy) |]
+        let face (c : C4b) =
+            let img = PixImage<byte>(Col.Format.RGBA, V2i(16, 16))
+            img.GetMatrix<C4b>().SetByIndex(fun (_ : int64) -> c) |> ignore
+            PixImageMipMap(img :> PixImage)
+        // give each of the 6 faces a distinct color (offset by i) so direction matters
+        PixTextureCube(PixCube [| for f in 0 .. 5 -> face cols.[(i + f) % cols.Length] |], false) :> ITexture
+
+    // Cubemap path: per-object samplerCube auto-bindless via ofRenderObjects, sampled
+    // by world normal. Proves the per-TYPE bindless array (samplerCube[]) works.
+    let texCubeTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let cubeArray : ITexture[] = Array.init TexCount mkCubeTexture
+        let eff = Effect.compose [ Effect.ofFunction TC.shade; Effect.ofFunction TC.frag ]
+        let grid =
+            let s = 8
+            [| for x in 0 .. s - 1 do for y in 0 .. s - 1 -> (x * s + y), V3d(float (x - s/2) * 1.2, float (y - s/2) * 1.2, 0.0) |]
+        let mkRO (i : int) (p : V3d) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj
+                Symbol.Create "EnvTexture",     (AVal.constant cubeArray.[i % TexCount] :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        let ros = grid |> Array.map (fun (i, p) -> mkRO i p)
+        let renderToPix (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let classicPix = renderToPix (ASet.ofArray ros)
+        let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo" ]) (ASet.ofArray ros)
+        let heapPix = renderToPix heapObjs
+        let maxD, nDiff, nNonBg, total = diff classicPix heapPix
+        Log.line "texCube: %d ROs (per-object samplerCube) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
+            ros.Length Heap.lastBucketCount maxD nDiff nNonBg
+        let pass = maxD <= 1 && nNonBg > total / 100L && Heap.lastBucketCount > 0
+        if pass then Log.line "texCube: PASS (per-object cubemaps auto-bindless via samplerCube[] == classic; %d bucket(s))" Heap.lastBucketCount
+        else Log.warn "texCube: FAIL (maxDelta=%d coverage=%d buckets=%d)" maxD nNonBg Heap.lastBucketCount
         pass
 
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the

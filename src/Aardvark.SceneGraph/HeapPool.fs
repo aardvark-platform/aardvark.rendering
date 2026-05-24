@@ -51,8 +51,11 @@ module HeapUniforms =
         // the SAME per-object buffers bound a second time as an int view, so integral
         // attributes decode their 4-byte slots as ints (bit pattern is identical).
         member x.HeapVertexDataI : int[][]     = uniform?StorageBuffer?HeapVertexDataI
-        // per-(object,sampler) index into the DEDUPED HeapTextures array, at slot*K + k.
-        member x.HeapTexIndices  : int[]       = uniform?StorageBuffer?HeapTexIndices
+        // per-(object,sampler) index into the DEDUPED per-type HeapTextures<T> array,
+        // at slot*Kt + kt (Kt = that type's sampler count in the effect). One index
+        // buffer per supported sampler type.
+        member x.HeapTexIndices2d   : int[] = uniform?StorageBuffer?HeapTexIndices2d
+        member x.HeapTexIndicesCube : int[] = uniform?StorageBuffer?HeapTexIndicesCube
 
 module Heap =
 
@@ -166,43 +169,81 @@ module Heap =
             | Some fi -> Some (gatherFor typ (off fi))
             | None -> None)
 
-    // ── per-object textures via ONE shared bindless sampler array ──────────
-    // Each sampler uniform the effect declares becomes an indexed read of one
-    // unbounded array `HeapTextures` (sampler2d[]); object i's k-th texture lives at
-    // slot*K + k (K = sampler count). Reuses the per-draw handle and the proven
-    // unbounded-sampler-array path — many textures per object, any number, one array.
-    // the shared unbounded sampler array, built ONCE (module-level) — keeping the
-    // sampler builder OUT of the per-call quotation so the F# Release optimizer
-    // doesn't choke on a sampler CE embedded in a spliced quotation.
-    let private heapTexArray : Sampler2d[] =
-        sampler2d { textureArray uniform?HeapTextures -1 }
-    // object's k-th texture: the per-draw slot indexes HeapTexIndices (slot*K+k) to
-    // get the DEDUPED position in HeapTextures — so the sampler array holds only the
-    // distinct textures of the bucket (≤ unbounded-array cap), not one entry per draw.
-    let private samplerRead (slot : Expr<int>) (kCount : int) (k : int) : Expr =
-        <@ heapTexArray.[ uniform.HeapTexIndices.[ (%slot) * kCount + k ] ] @>.Raw
+    // ── per-object textures via per-TYPE bindless sampler arrays ───────────
+    // Each sampler uniform the effect declares becomes an indexed read of the
+    // unbounded array for its sampler TYPE (HeapTextures2d : sampler2d[],
+    // HeapTexturesCube : samplerCube[], …). Within a type, object i's kt-th sampler
+    // reads HeapTextures<T>.[ HeapTexIndices<T>[slot*Kt + kt] ] — the index buffer
+    // dedups, so the array holds only the bucket's distinct textures (≤ array cap).
+    // The arrays are module-level (built ONCE) so the sampler CE never sits inside a
+    // spliced per-call quotation (which makes the F# Release optimizer grind).
+    let private heapTex2d   : Sampler2d[]   = sampler2d   { textureArray uniform?HeapTextures2d   -1 }
+    let private heapTexCube : SamplerCube[] = samplerCube { textureArray uniform?HeapTexturesCube -1 }
 
-    /// rewrite each of the effect's sampler uniforms (name -> k) into HeapTextures.[slot*K+k]
-    let private rewriteSamplers (slot : Expr<int>) (samplers : Map<string, int>) (kCount : int) (e : Effect) =
-        if kCount = 0 then e
-        else
-            e |> Effect.substituteUniforms (fun name _ _ _ ->
-                match Map.tryFind name samplers with
-                | Some k -> Some (samplerRead slot kCount k)
-                | None -> None)
+    /// supported bindless sampler types: F# type ->
+    ///   (array texture-semantic, index buffer semantic, FShade uniform KEY).
+    /// The FShade key is the module-level VALUE name (e.g. "heapTex2d") under which the
+    /// sampler array appears in shaderUniforms — it MUST equal the `let` name below; the
+    /// texture semantic (e.g. "HeapTextures2d") is the `uniform?…` name the provider binds.
+    let private bindlessTypeInfo (ty : System.Type) : (string * string * string) option =
+        if   ty = typeof<Sampler2d>   then Some ("HeapTextures2d",   "HeapTexIndices2d",   "heapTex2d")
+        elif ty = typeof<SamplerCube> then Some ("HeapTexturesCube", "HeapTexIndicesCube", "heapTexCube")
+        else None
+    let private isBindlessSamplerType (ty : System.Type) = (bindlessTypeInfo ty).IsSome
 
-    /// the effect's Sampler2d uniforms, in stable order: (samplerName, textureName, k).
-    /// The sampler's NAME is the shader binding (e.g. "diffuse"); the TEXTURE it reads
-    /// (e.g. "DiffuseTexture", from UniformValue.Sampler) is what the RO actually provides.
-    let private samplerUniforms (e : Effect) : (string * string * int)[] =
+    /// read object `slot`'s kt-th sampler of type `ty` from its per-type bindless array
+    let private samplerReadFor (ty : System.Type) (slot : Expr<int>) (kCountT : int) (kt : int) : Expr =
+        if   ty = typeof<Sampler2d>   then <@ heapTex2d.[   uniform.HeapTexIndices2d.[   (%slot) * kCountT + kt ] ] @>.Raw
+        elif ty = typeof<SamplerCube> then <@ heapTexCube.[ uniform.HeapTexIndicesCube.[ (%slot) * kCountT + kt ] ] @>.Raw
+        else failwithf "Heap: unsupported bindless sampler type %A" ty
+
+    /// the effect's sampler uniforms (supported types only), in stable order:
+    /// (samplerName, textureName, samplerType, samplerState). The sampler's NAME is the
+    /// shader binding (e.g. "diffuse"); the TEXTURE it reads (e.g. "DiffuseTexture", from
+    /// UniformValue.Sampler) is what the RO provides; the STATE (filter/wrap/…) must be
+    /// re-applied to the generated array — see overrideSamplerStates.
+    let private samplerUniforms (e : Effect) : (string * string * System.Type * SamplerState)[] =
         e.Uniforms |> Map.toArray
         |> Array.choose (fun (n, p) ->
-            if p.uniformType = typeof<Sampler2d> then
-                match p.uniformValue with
-                | UniformValue.Sampler(tn, _) -> Some (n, tn)
-                | _ -> Some (n, n)
+            if isBindlessSamplerType p.uniformType then
+                let tn, st =
+                    match p.uniformValue with
+                    | UniformValue.Sampler(tn, st) -> tn, st
+                    | UniformValue.SamplerArray arr when arr.Length > 0 -> fst arr.[0], snd arr.[0]
+                    | _ -> n, SamplerState.empty
+                Some (n, tn, p.uniformType, st)
             else None)
-        |> Array.mapi (fun k (n, tn) -> n, tn, k)
+
+    /// rewrite each sampler read into its per-type bindless array read.
+    /// `byName` : samplerName -> (samplerType, kt, Kt-for-that-type)
+    let private rewriteSamplers (slot : Expr<int>) (byName : Map<string, System.Type * int * int>) (e : Effect) =
+        if Map.isEmpty byName then e
+        else
+            e |> Effect.substituteUniforms (fun name _ _ _ ->
+                match Map.tryFind name byName with
+                | Some (ty, kt, kCountT) -> Some (samplerReadFor ty slot kCountT kt)
+                | None -> None)
+
+    /// re-apply the original sampler STATE to the generated per-type array uniforms.
+    /// Codegen reads SamplerState from effect.Uniforms; the module-level arrays carry a
+    /// DEFAULT (empty) state, so without this the heap would silently sample with the
+    /// wrong filter/wrap. `states` : arrayUniformName -> desired state.
+    let private overrideSamplerStates (states : Map<string, SamplerState>) (e : Effect) =
+        if Map.isEmpty states then e
+        else
+            e |> Effect.map (fun shader ->
+                let us =
+                    shader.shaderUniforms |> Map.map (fun n p ->
+                        match Map.tryFind n states with
+                        | Some st ->
+                            let nv =
+                                match p.uniformValue with
+                                | UniformValue.SamplerArray arr -> UniformValue.SamplerArray (arr |> Array.map (fun (tn, _) -> tn, st))
+                                | UniformValue.Sampler(tn, _)   -> UniformValue.Sampler(tn, st)
+                                | v -> v
+                            { p with uniformValue = nv }
+                        | None -> p)
+                { shader with shaderUniforms = us })
 
     /// Build a reactive heap-rendered scene graph for a single bucket: one
     /// effect, one shared geometry, N draws differing only by per-draw avals.
@@ -473,14 +514,32 @@ module Heap =
             let ro0 = ros.[0]
             let effect = match ro0.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
 
-            // per-object textures: the effect's Sampler2d uniforms become indexed reads
-            // of one shared HeapTextures array (slot*K + k); gathered below.
-            let samplers   = samplerUniforms effect
-            let kCount     = samplers.Length
-            let samplerMap = samplers |> Array.map (fun (sn, _, k) -> sn, k) |> Map.ofArray
-            // both the sampler binding names and the texture uniform names are now folded
-            // into HeapTextures, so the bucket provider must not pass either through.
-            let samplerSyms = samplers |> Array.collect (fun (sn, tn, _) -> [| Symbol.Create sn; Symbol.Create tn |]) |> Set.ofArray
+            // per-object textures: the effect's sampler uniforms become indexed reads of
+            // the per-TYPE bindless array (slot*Kt + kt); gathered below. Group by type so
+            // each type gets its own array + index buffer; assign kt within each group.
+            let samplers      = samplerUniforms effect      // (name, texName, type, state)[]
+            let samplersByType =
+                samplers
+                |> Array.groupBy (fun (_, _, ty, _) -> ty)
+                |> Array.map (fun (ty, grp) -> ty, grp |> Array.mapi (fun kt (sn, tn, _, st) -> sn, tn, kt, st))
+            // samplerName -> (type, kt, Kt-for-that-type), for the read rewrite
+            let samplerByName =
+                samplersByType
+                |> Array.collect (fun (ty, grp) -> let kCountT = grp.Length in grp |> Array.map (fun (sn, _, kt, _) -> sn, (ty, kt, kCountT)))
+                |> Map.ofArray
+            // FShade sampler-array KEY -> state (one per type; isHeapable enforces same
+            // state per type). Keyed by the FShade uniform key (the module value name),
+            // which is what shaderUniforms uses — NOT the texture semantic.
+            let samplerStateOverrides =
+                samplersByType
+                |> Array.choose (fun (ty, grp) ->
+                    match bindlessTypeInfo ty with
+                    | Some (_, _, fkey) when grp.Length > 0 -> let (_, _, _, st) = grp.[0] in Some (fkey, st)
+                    | _ -> None)
+                |> Map.ofArray
+            // the bucket provider must pass through neither the sampler binding names nor
+            // the texture uniform names — both are folded into the per-type arrays.
+            let samplerSyms = samplers |> Array.collect (fun (sn, tn, _, _) -> [| Symbol.Create sn; Symbol.Create tn |]) |> Set.ofArray
 
             // name -> (fieldIdx, size, packer), types from ro0
             let info = names |> Array.map (fun n -> let (sz, pk) = packerFor (uni ro0 n).ContentType in n, (nameToField.[n], sz, pk)) |> Map.ofArray
@@ -585,51 +644,54 @@ module Heap =
 
             let ro = RenderObject.Clone ro0
             ro.IsActive         <- AVal.constant true   // bucket always active; per-draw gating is in the indirect buffer
-            ro.Surface          <- Surface.Effect (rewrite slot nameToField fieldStride standardDerivedRules effect |> rewriteSamplers slot samplerMap kCount)
+            ro.Surface          <- Surface.Effect (rewrite slot nameToField fieldStride standardDerivedRules effect |> rewriteSamplers slot samplerByName |> overrideSamplerStates samplerStateOverrides)
             ro.DrawCalls        <- DrawCalls.Indirect indirect
             ro.VertexAttributes <- AttributeProvider.ofList [ for ai in 0 .. attrTypes.Length - 1 -> let (sym, et, _) = attrTypes.[ai] in sym, packedView (packedAttr.[ai].ToArray()) et ]
             ro.Indices          <- Some (packedView (packedIdx.ToArray()) idxType)
 
             let arenaU   = ((arena :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)) :> IAdaptiveValue
             let headersU = AVal.constant headers :> IAdaptiveValue
-            // gather each object's textures and DEDUP them: HeapTextures holds only the
-            // distinct textures of the bucket, HeapTexIndices.[slot*K+k] points each draw
-            // at its texture. Keeps the unbounded sampler array within its cap (~1024)
-            // even when many objects share few textures. Reactive: re-reads + re-dedups
-            // when a per-object texture aval changes.
-            let symTextures   = Symbol.Create "HeapTextures"
-            let symTexIndices = Symbol.Create "HeapTexIndices"
-            let texData : aval<ITexture[] * int[]> voption =
-                if kCount = 0 then ValueNone
-                else
+            // For each sampler TYPE present, gather that type's textures (in kt order) and
+            // DEDUP them: HeapTextures<T> holds only the bucket's distinct textures and
+            // HeapTexIndices<T>.[slot*Kt+kt] points each draw at its texture. Keeps the
+            // unbounded array within its cap even when many objects share few textures.
+            // Reactive: re-reads + re-dedups when a per-object texture aval changes.
+            let texLookup = System.Collections.Generic.Dictionary<Symbol, IAdaptiveValue>(HashIdentity.Structural)
+            for (ty, grp) in samplersByType do
+                match bindlessTypeInfo ty with
+                | None -> ()
+                | Some (arrName, idxName, _) ->
                     let texAvals =
                         ros |> Array.collect (fun ro ->
-                            samplers |> Array.map (fun (_, tn, _) ->
+                            grp |> Array.map (fun (_, tn, _, _) ->
                                 match ro.Uniforms.TryGetUniform(scope, Symbol.Create tn) with
                                 | ValueSome v -> v
                                 | ValueNone -> failwithf "Heap.ofRenderObjects: texture uniform %A missing" tn))
-                    ValueSome (AVal.custom (fun t ->
-                        let texs = texAvals |> Array.map (fun (av : IAdaptiveValue) -> av.GetValueUntyped t :?> ITexture)
-                        let distinct = System.Collections.Generic.List<ITexture>()
-                        let idxOf = System.Collections.Generic.Dictionary<ITexture, int>(HashIdentity.Reference)
-                        let indices =
-                            texs |> Array.map (fun tex ->
-                                match idxOf.TryGetValue tex with
-                                | true, i -> i
-                                | _ -> let i = distinct.Count in idxOf.[tex] <- i; distinct.Add tex; i)
-                        distinct.ToArray(), indices))
-            let texturesU  = texData |> ValueOption.map (fun d -> (d |> AVal.map fst) :> IAdaptiveValue)
-            let texIndicesU = texData |> ValueOption.map (fun d -> (d |> AVal.map snd) :> IAdaptiveValue)
+                    let d =
+                        AVal.custom (fun t ->
+                            let texs = texAvals |> Array.map (fun (av : IAdaptiveValue) -> av.GetValueUntyped t :?> ITexture)
+                            let distinct = System.Collections.Generic.List<ITexture>()
+                            let idxOf = System.Collections.Generic.Dictionary<ITexture, int>(HashIdentity.Reference)
+                            let indices =
+                                texs |> Array.map (fun tex ->
+                                    match idxOf.TryGetValue tex with
+                                    | true, i -> i
+                                    | _ -> let i = distinct.Count in idxOf.[tex] <- i; distinct.Add tex; i)
+                            distinct.ToArray(), indices)
+                    texLookup.[Symbol.Create arrName] <- (d |> AVal.map fst) :> IAdaptiveValue
+                    texLookup.[Symbol.Create idxName] <- (d |> AVal.map snd) :> IAdaptiveValue
             ro.Uniforms <-
                 { new IUniformProvider with
                     member _.TryGetUniform(s, name) =
                         if name = symData then ValueSome arenaU
                         elif name = symHeaders then ValueSome headersU
-                        elif name = symTextures then texturesU
-                        elif name = symTexIndices then texIndicesU
-                        elif Set.contains name heapSyms then ValueNone
-                        elif Set.contains name samplerSyms then ValueNone
-                        else ro0.Uniforms.TryGetUniform(s, name)
+                        else
+                            match texLookup.TryGetValue name with
+                            | true, v -> ValueSome v
+                            | _ ->
+                                if Set.contains name heapSyms then ValueNone
+                                elif Set.contains name samplerSyms then ValueNone
+                                else ro0.Uniforms.TryGetUniform(s, name)
                     member _.Dispose() = () }
             ro :> IRenderObject
 
@@ -696,12 +758,23 @@ module Heap =
                         match ro.Uniforms.TryGetUniform(scope, Symbol.Create n) with
                         | ValueSome v -> packable.Contains v.ContentType
                         | ValueNone -> false)) &&
-                    // textures: every sampler must be a Sampler2d we can put in the
-                    // bindless array AND the device must support unbounded sampler
-                    // arrays — else pass through (e.g. GL, or exotic sampler types).
+                    // textures: every sampler must be a SUPPORTED bindless type (sampler2d
+                    // / samplerCube / …) AND the device must support unbounded sampler
+                    // arrays. One array per type carries ONE state, so all samplers of a
+                    // given type must share their sampler state; otherwise pass through
+                    // (also GL, or exotic sampler types).
                     (let samps = e.Uniforms |> Map.toArray |> Array.filter (fun (_, p) -> typeof<ISampler>.IsAssignableFrom p.uniformType)
                      samps.Length = 0 ||
-                     ((samps |> Array.forall (fun (_, p) -> p.uniformType = typeof<Sampler2d>)) && runtime.SupportsUnboundedSamplerArrays))
+                     (runtime.SupportsUnboundedSamplerArrays
+                      && (samps |> Array.forall (fun (_, p) -> isBindlessSamplerType p.uniformType))
+                      && (samps
+                          |> Array.choose (fun (_, p) ->
+                              match p.uniformValue with
+                              | UniformValue.Sampler(_, st) -> Some (p.uniformType, st)
+                              | UniformValue.SamplerArray a when a.Length > 0 -> Some (p.uniformType, snd a.[0])
+                              | _ -> None)
+                          |> Array.groupBy fst
+                          |> Array.forall (fun (_, g) -> match g with | [||] -> true | _ -> let (_, st0) = g.[0] in g |> Array.forall (fun (_, st) -> st = st0)))))
                 | _ -> false
             | _ -> false
 

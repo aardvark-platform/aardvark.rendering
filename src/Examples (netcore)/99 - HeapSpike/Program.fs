@@ -123,6 +123,10 @@ let main argv =
         if Golden.texHeapTest () then 0 else 1
     elif argv |> Array.contains "texswap" then
         if Golden.texSwapTest () then 0 else 1
+    elif argv |> Array.contains "texstate" then
+        if Golden.texStateTest () then 0 else 1
+    elif argv |> Array.contains "texcube" then
+        if Golden.texCubeTest () then 0 else 1
     elif argv |> Array.contains "bindlessvar" then
         if Golden.bindlessVarTest () then 0 else 1
     elif argv |> Array.contains "bcbox" then
