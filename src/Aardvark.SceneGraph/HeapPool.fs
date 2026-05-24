@@ -42,6 +42,13 @@ module HeapUniforms =
     type UniformScope with
         member x.HeapData    : float32[] = uniform?StorageBuffer?HeapData
         member x.HeapHeaders : int[]     = uniform?StorageBuffer?HeapHeaders
+        // Bindless geometry: arrays of per-object GPU buffers, referenced by handle
+        // (gl_DrawID). Vertex-pulling reads HeapPositions[handle].data[index].
+        // V4f (not V3f) because a std430 vec3[] element is 16-byte aligned (stride
+        // 16) — a tightly-packed V3f[] would be read misaligned. Pull uses .XYZ.
+        member x.HeapPositions : V4f[][] = uniform?StorageBuffer?HeapPositions
+        member x.HeapNormals   : V4f[][] = uniform?StorageBuffer?HeapNormals
+        member x.HeapIndex     : int[][] = uniform?StorageBuffer?HeapIndex
 
 module Heap =
 
@@ -496,6 +503,21 @@ module Heap =
                             r
                     DrawCallInfo(FaceVertexCount = count, FirstIndex = firstIndex, BaseVertex = baseVertex, FirstInstance = 0, InstanceCount = instanceCountOf ro))
 
+            // Per-draw routing. gl_DrawID is UNSUPPORTED in MSL (MoltenVK), so on
+            // VULKAN, when no sub-draw is instanced, route by gl_InstanceIndex + a
+            // per-draw firstInstance (local instance is 0, so gl_InstanceIndex =
+            // firstInstance = the draw index) — portable to MoltenVK. On GL,
+            // gl_InstanceID omits baseInstance, so firstInstance routing breaks;
+            // GL uses gl_DrawID (GL 4.6). Instanced sub-draws always need gl_DrawID.
+            let isGL = runtime.GetType().FullName.Contains("Aardvark.Rendering.GL")
+            let anyInstanced = baseEntries |> Array.exists (fun e -> e.InstanceCount > 1)
+            let useDrawId = isGL || anyInstanced
+            let slot : Expr<int> =
+                if useDrawId then <@ getDrawId() @>
+                else Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
+            if not useDrawId then
+                for di in 0 .. baseEntries.Length - 1 do baseEntries.[di].FirstInstance <- di
+
             // per-RO visibility gate: IsActive = false -> InstanceCount 0 (the draw
             // emits nothing), no bucket/arena churn. Reactive only when some RO has
             // a non-constant IsActive; all-constant-active buckets stay a constant.
@@ -512,7 +534,7 @@ module Heap =
 
             let ro = RenderObject.Clone ro0
             ro.IsActive         <- AVal.constant true   // bucket always active; per-draw gating is in the indirect buffer
-            ro.Surface          <- Surface.Effect (rewrite (<@ getDrawId() @>) nameToField fieldStride standardDerivedRules effect)
+            ro.Surface          <- Surface.Effect (rewrite slot nameToField fieldStride standardDerivedRules effect)
             ro.DrawCalls        <- DrawCalls.Indirect indirect
             ro.VertexAttributes <- AttributeProvider.ofList [ for ai in 0 .. attrTypes.Length - 1 -> let (sym, et, _) = attrTypes.[ai] in sym, packedView (packedAttr.[ai].ToArray()) et ]
             ro.Indices          <- Some (packedView (packedIdx.ToArray()) idxType)
@@ -854,6 +876,66 @@ module Heap =
                 member _.TryGetUniform(_, name) = if name = symHeap then ValueSome heapU else ValueNone
                 member _.Dispose() = () }
         Sg.renderObjectSet (ASet.single (ro :> IRenderObject))
+
+    // ── Bindless geometry: vertex-pulling from GPU buffers by handle ────
+    // GPU-resident geometry can't be CPU-packed; instead each object's buffers are
+    // referenced by HANDLE (one element of a bindless SSBO array) and the vertex
+    // shader PULLS attributes — no fixed-function vertex input, no copy. The per-RO
+    // handle is gl_DrawID; the vertex is gl_VertexIndex; for indexed meshes the
+    // index is pulled too: HeapPositions[drawId].data[ HeapIndex[drawId].data[vid] ].
+    // The effect's vertex-attribute reads (Positions/Normals) are rewritten to these
+    // pulls via Shader.substituteReads (ParameterKind.Input). Requires the device's
+    // bindless storage-buffer arrays (descriptor indexing).
+
+    let private vidExpr : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId)
+
+    let private pullPositions : Expr =
+        <@@ let h = getDrawId() in (uniform.HeapPositions.[h].[ uniform.HeapIndex.[h].[ (%%vidExpr : int) ] ]).XYZ @@>
+    let private pullNormals : Expr =
+        <@@ let h = getDrawId() in (uniform.HeapNormals.[h].[ uniform.HeapIndex.[h].[ (%%vidExpr : int) ] ]).XYZ @@>
+
+    /// EXPERIMENTAL / WIP. Render N objects whose geometry lives in per-object
+    /// buffers referenced by handle (bindless), vertex-PULLED in the (rewritten)
+    /// shader — no vertex buffers bound, no packing/copy. The single-SSBO-array
+    /// primitive is proven (Golden.ssboArrayTest), but this multi-array path
+    /// (Positions+Normals+Index in three unbounded SSBO arrays in one set) renders
+    /// incorrectly — only the highest-binding unbounded array gets a variable/
+    /// partially-bound descriptor, so the others mis-bind. KNOWN TODO: (a) handle
+    /// >1 unbounded SSBO array per set; (b) per the design, do NOT assume V4f —
+    /// store flat float[] and decode by the attribute's actual component count;
+    /// (c) route via firstInstance (portable) not gl_DrawID (MoltenVK lacks it).
+    let bindless (runtime : IRuntime) (mode : IndexedGeometryMode) (effect : Effect)
+                 (positions : V3f[][]) (normals : V3f[][]) (indices : int[][])
+                 (viewProj : aval<Trafo3d>) : ISg =
+        checkSupport false runtime
+        let n = positions.Length
+        // pad to V4f: std430 vec3[] elements are 16-byte aligned, so a packed V3f[]
+        // would be read misaligned. V4f[] (16-byte) matches the vec4[] std430 stride.
+        let posBufs = positions |> Array.map (fun a -> ArrayBuffer (a |> Array.map (fun p -> V4f(p, 1.0f))) :> IBuffer)
+        let norBufs = normals   |> Array.map (fun a -> ArrayBuffer (a |> Array.map (fun nv -> V4f(nv, 0.0f))) :> IBuffer)
+        let idxBufs = indices   |> Array.map (fun a -> ArrayBuffer a :> IBuffer)
+
+        // rewrite the vertex shader's Positions/Normals INPUT reads into bindless pulls
+        let eff =
+            effect |> Effect.map (fun s ->
+                s |> Shader.substituteReads (fun kind _ name _ _ ->
+                    match kind, name with
+                    | ParameterKind.Input, "Positions" -> Some pullPositions
+                    | ParameterKind.Input, "Normals"   -> Some pullNormals
+                    | _ -> None))
+
+        // one non-indexed sub-draw per object: gl_VertexIndex runs 0 .. indexCount-1
+        // (the index itself is pulled from HeapIndex), gl_DrawID = the object handle.
+        let indirect =
+            Array.init n (fun di -> DrawCallInfo(FaceVertexCount = indices.[di].Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 1))
+            |> IndirectBuffer.ofArray
+
+        Sg.indirectDraw mode (AVal.constant indirect)
+        |> Sg.uniform "HeapPositions" (AVal.constant posBufs)
+        |> Sg.uniform "HeapNormals"   (AVal.constant norBufs)
+        |> Sg.uniform "HeapIndex"     (AVal.constant idxBufs)
+        |> Sg.uniform "ViewProjTrafo" (viewProj |> AVal.map (fun t -> M44f.op_Explicit t.Forward))
+        |> Sg.effect [ eff ]
 
     // ── Heap-local chain emission (authoring) ───────────────────────────
     // A lightweight transform tree, OWNED by the heap (no core Aardvark.SceneGraph

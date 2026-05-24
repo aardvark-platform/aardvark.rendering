@@ -653,6 +653,76 @@ module Golden =
         else Log.warn "ssboArray: FAIL (coverage=%d, expected a vertex-pulled triangle)" green
         pass
 
+    // Bindless heap geometry: render objects whose geometry is PULLED from per-object
+    // GPU buffers by handle (no vertex buffers bound, no packing) must match a plain
+    // indexed render of the same world-space geometry.
+    module BH =
+        type VIn  = { [<Semantic("Positions")>] pos : V3f; [<Semantic("Normals")>] n : V3f }
+        type VOut = { [<Position>] clip : V4f; [<Semantic("WN")>] wn : V3f }
+        let shade (v : VIn) =
+            vertex {
+                let vp : M44f = uniform?ViewProjTrafo
+                return { clip = vp * V4f(v.pos, 1.0f); wn = v.n }
+            }
+        let frag (v : VOut) =
+            fragment {
+                let l = Vec.normalize (V3f(0.4f, 0.7f, 0.6f))
+                let d = 0.3f + 0.7f * max 0.0f (Vec.dot (Vec.normalize v.wn) l)
+                return V4f(V3f(0.4f, 0.75f, 0.95f) * d, 1.0f)
+            }
+
+    let bindlessHeapTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(640, 640))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let bpos = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let bnor = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let bidx = g.IndexArray |> unbox<int[]>
+        let offsets = [| for x in -1 .. 1 do for y in -1 .. 1 -> V3f(float32 x * 1.3f, float32 y * 1.3f, 0.0f) |]
+        let n = offsets.Length
+        // per-object WORLD-space geometry (offset baked in; no model trafo)
+        let positions = offsets |> Array.map (fun o -> bpos |> Array.map (fun p -> p + o))
+        let normals   = offsets |> Array.map (fun _ -> bnor)
+        let indices   = offsets |> Array.map (fun _ -> bidx)
+        let vpTrafo = (CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo) * (Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo)
+        let eff = Effect.compose [ Effect.ofFunction BH.shade; Effect.ofFunction BH.frag ]
+
+        let imageOf (sg : ISg) =
+            use task = sg |> Sg.compile runtime signature
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+
+        // reference: plain per-object indexed render (real vertex buffers)
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let refObjs =
+            positions |> Array.map (fun pos ->
+                let ro = RenderObject()
+                ro.Surface <- Surface.Effect eff
+                ro.Mode <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv pos typeof<V3f>; DefaultSemantic.Normals, bv bnor typeof<V3f> ]
+                ro.Indices <- Some (bv bidx typeof<int>)
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = bidx.Length, InstanceCount = 1) |])
+                ro.Uniforms <- UniformProvider.ofList [ Symbol.Create "ViewProjTrafo", (AVal.constant (M44f.op_Explicit vpTrafo.Forward) :> IAdaptiveValue) ]
+                ro :> IRenderObject)
+        let refPix = imageOf (Sg.renderObjectSet (ASet.ofArray refObjs))
+
+        // bindless: same geometry pulled from per-object buffers by handle
+        let bindlessPix = imageOf (Heap.bindless runtime IndexedGeometryMode.TriangleList eff positions normals indices (AVal.constant vpTrafo))
+
+        let maxD, nDiff, nNonBg, total = diff refPix bindlessPix
+        Log.line "bindlessHeap: n=%d  plain-vs-bindless maxDelta=%d diffPixels=%d/%d coverage=%d" n maxD nDiff total nNonBg
+        let pass = nNonBg > 1000 && maxD <= 1
+        if pass then Log.line "bindlessHeap: PASS (vertex-pulled bindless geometry == plain indexed render)"
+        else Log.warn "bindlessHeap: FAIL (maxDelta=%d diffPixels=%d coverage=%d)" maxD nDiff nNonBg
+        pass
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =
