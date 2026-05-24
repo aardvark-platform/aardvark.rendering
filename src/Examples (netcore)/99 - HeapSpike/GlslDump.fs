@@ -15,8 +15,13 @@ module GlslDump =
 
     let private vidExpr    : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId)
     let private handleExpr : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
-    let private pullPositions : Expr = <@@ let h = (%%handleExpr : int) in (uniform.HeapPositions.[h].[ (%%vidExpr : int) ]).XYZ @@>
-    let private pullNormals   : Expr = <@@ let h = (%%handleExpr : int) in (uniform.HeapNormals.[h].[ (%%vidExpr : int) ]).XYZ @@>
+    // BH layout: Positions @ offset 0, Normals @ offset 3, vertex stride 6 floats
+    let private pullPositions : Expr =
+        <@@ let hh = (%%handleExpr : int) in let o = (%%vidExpr : int) * 6 + 0 in
+            V3f(uniform.HeapVertexData.[hh].[o], uniform.HeapVertexData.[hh].[o+1], uniform.HeapVertexData.[hh].[o+2]) @@>
+    let private pullNormals : Expr =
+        <@@ let hh = (%%handleExpr : int) in let o = (%%vidExpr : int) * 6 + 3 in
+            V3f(uniform.HeapVertexData.[hh].[o], uniform.HeapVertexData.[hh].[o+1], uniform.HeapVertexData.[hh].[o+2]) @@>
 
     let run () =
         let e =

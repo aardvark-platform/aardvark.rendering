@@ -1049,7 +1049,10 @@ module Golden =
                 ro :> IRenderObject)
         // render the bindless FIRST (before the plain ref compiles the same `eff`),
         // to test whether the original effect's cached shader poisons the rewritten one
-        let bindlessPix = imageOf (Heap.bindless runtime IndexedGeometryMode.TriangleList eff positions normals indices (AVal.constant view) (AVal.constant proj))
+        let bindlessPix =
+            let attribs = Array.init positions.Length (fun i -> Map.ofList [ DefaultSemantic.Positions, (positions.[i] :> System.Array); DefaultSemantic.Normals, (normals.[i] :> System.Array) ])
+            let idxArrs = indices |> Array.map (fun a -> a :> System.Array)
+            imageOf (Heap.bindless runtime IndexedGeometryMode.TriangleList eff attribs idxArrs (AVal.constant view) (AVal.constant proj))
         let refPix = imageOf (Sg.renderObjectSet (ASet.ofArray refObjs))
         let savePpm (path : string) (img : PixImage<uint8>) =
             let mm = img.GetMatrix<C4b>()
@@ -1119,7 +1122,10 @@ module Golden =
         let refPix = imageOf (Sg.renderObjectSet (ASet.ofArray refObjs))
 
         // bindless: same geometry pulled from per-object buffers by handle
-        let bindlessPix = imageOf (Heap.bindless runtime IndexedGeometryMode.TriangleList eff positions normals indices (AVal.constant view) (AVal.constant proj))
+        let bindlessPix =
+            let attribs = Array.init positions.Length (fun i -> Map.ofList [ DefaultSemantic.Positions, (positions.[i] :> System.Array); DefaultSemantic.Normals, (normals.[i] :> System.Array) ])
+            let idxArrs = indices |> Array.map (fun a -> a :> System.Array)
+            imageOf (Heap.bindless runtime IndexedGeometryMode.TriangleList eff attribs idxArrs (AVal.constant view) (AVal.constant proj))
 
         let savePpm (path : string) (img : PixImage<uint8>) =
             let m = img.GetMatrix<C4b>()
@@ -1237,6 +1243,65 @@ module Golden =
         let pass = colored > 1000L
         if pass then Log.line "bindlessCleanBox: PASS (positions-only pull renders under perspective)"
         else Log.warn "bindlessCleanBox: FAIL (screen is magenta -> position pull blank under perspective)"
+        pass
+
+    // Type-agnostic / integral-attribute proof: V3f Positions + an INTEGRAL V3i "Tint"
+    // attribute (decoded via the int view of the same buffer) + uint16 indices. Each
+    // box gets a distinct integer tint; seeing all three colors proves int decode,
+    // mixed float/int attributes in one buffer, and 16-bit indices all work.
+    module BVI =
+        type VIn  = { [<Semantic("Positions")>] pos : V3f; [<Semantic("Tint")>] tint : V3i }
+        type VOut = { [<Position>] clip : V4f; [<Semantic("Col")>] col : V3f }
+        let shade (v : VIn) =
+            vertex {
+                let vp : M44f = uniform?ViewProjTrafo
+                return { clip = vp * V4f(v.pos, 1.0f)
+                         col  = V3f(float32 v.tint.X, float32 v.tint.Y, float32 v.tint.Z) / 255.0f }
+            }
+        let frag (v : VOut) = fragment { return V4f(v.col, 1.0f) }
+
+    let bindlessVarTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(640, 640))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let bpos = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let bidx = g.IndexArray |> unbox<int[]>
+        let offsets = [| for x in -1 .. 1 do for y in -1 .. 1 -> V3f(float32 x * 1.3f, float32 y * 1.3f, 0.0f) |]
+        let n = offsets.Length
+        let palette = [| V3i(230, 40, 40); V3i(40, 210, 80); V3i(60, 120, 235) |]
+        let positions = offsets |> Array.map (fun o -> bpos |> Array.map (fun p -> p + o))
+        let tints     = offsets |> Array.mapi (fun i _ -> Array.replicate bpos.Length palette.[i % palette.Length])  // V3i per vertex
+        let idx16     = offsets |> Array.map (fun _ -> bidx |> Array.map uint16)                                     // uint16 indices
+        let attribs   = Array.init n (fun i -> Map.ofList [ DefaultSemantic.Positions, (positions.[i] :> System.Array)
+                                                            Symbol.Create "Tint",       (tints.[i]     :> System.Array) ])
+        let idxArrs   = idx16 |> Array.map (fun a -> a :> System.Array)
+        let view = CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let eff = Effect.compose [ Effect.ofFunction BVI.shade; Effect.ofFunction BVI.frag ]
+        let pix =
+            use task = Heap.bindless runtime IndexedGeometryMode.TriangleList eff attribs idxArrs (AVal.constant view) (AVal.constant proj) |> Sg.compile runtime signature
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let m = pix.GetMatrix<C4b>()
+        let mutable r = 0L
+        let mutable gr = 0L
+        let mutable b = 0L
+        m.ForeachCoord(fun (p : V2l) ->
+            let v = m.[p]
+            if v.R > 150uy && v.G < 110uy && v.B < 110uy then r  <- r + 1L
+            if v.G > 150uy && v.R < 110uy then gr <- gr + 1L
+            if v.B > 150uy && v.R < 110uy then b  <- b + 1L)
+        Log.line "bindlessVar: V3i tint + uint16 idx -> red=%d green=%d blue=%d px" r gr b
+        let pass = r > 300L && gr > 300L && b > 300L
+        if pass then Log.line "bindlessVar: PASS (integral V3i attribute decoded + uint16 indices + mixed float/int buffer)"
+        else Log.warn "bindlessVar: FAIL (red=%d green=%d blue=%d — integral decode or uint16 index broken)" r gr b
         pass
 
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the

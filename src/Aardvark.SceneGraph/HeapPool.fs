@@ -42,13 +42,15 @@ module HeapUniforms =
     type UniformScope with
         member x.HeapData    : float32[] = uniform?StorageBuffer?HeapData
         member x.HeapHeaders : int[]     = uniform?StorageBuffer?HeapHeaders
-        // Bindless geometry: arrays of per-object GPU buffers, referenced by handle
-        // (gl_DrawID). Vertex-pulling reads HeapPositions[handle].data[index].
-        // V4f (not V3f) because a std430 vec3[] element is 16-byte aligned (stride
-        // 16) — a tightly-packed V3f[] would be read misaligned. Pull uses .XYZ.
-        member x.HeapPositions : V4f[][] = uniform?StorageBuffer?HeapPositions
-        member x.HeapNormals   : V4f[][] = uniform?StorageBuffer?HeapNormals
-        member x.HeapIndex     : int[][] = uniform?StorageBuffer?HeapIndex
+        // Bindless geometry: ONE flat float32 SSBO array indexed by handle
+        // (gl_InstanceIndex). Element [h] is object h's interleaved vertex floats;
+        // each attribute is decoded by component count at a fixed offset (like the
+        // host arena's HeapData) — type-agnostic, any number of attributes, and a
+        // flat float[] avoids std430 vec3 16-byte-stride misalignment.
+        member x.HeapVertexData  : float32[][] = uniform?StorageBuffer?HeapVertexData
+        // the SAME per-object buffers bound a second time as an int view, so integral
+        // attributes decode their 4-byte slots as ints (bit pattern is identical).
+        member x.HeapVertexDataI : int[][]     = uniform?StorageBuffer?HeapVertexDataI
 
 module Heap =
 
@@ -877,66 +879,141 @@ module Heap =
                 member _.Dispose() = () }
         Sg.renderObjectSet (ASet.single (ro :> IRenderObject))
 
-    // ── Bindless geometry: vertex-pulling from GPU buffers by handle ────
-    // GPU-resident geometry can't be CPU-packed; instead each object's buffers are
-    // referenced by HANDLE (one element of a bindless SSBO array) and the vertex
-    // shader PULLS attributes — no fixed-function vertex input, no copy. The per-RO
-    // handle is gl_DrawID; the vertex is gl_VertexIndex; for indexed meshes the
-    // index is pulled too: HeapPositions[drawId].data[ HeapIndex[drawId].data[vid] ].
-    // The effect's vertex-attribute reads (Positions/Normals) are rewritten to these
-    // pulls via Shader.substituteReads (ParameterKind.Input). Requires the device's
-    // bindless storage-buffer arrays (descriptor indexing).
+    // ── Bindless geometry: type-agnostic vertex-pull from GPU buffers by handle ──
+    // GPU-resident geometry can't be CPU-packed; instead each object's vertices live
+    // in ONE flat float32 SSBO array indexed by HANDLE (gl_InstanceIndex). The vertex
+    // shader PULLS each attribute by decoding `componentCount` floats at a fixed
+    // per-vertex offset (exactly like the host arena's gatherFor) — no fixed-function
+    // vertex input, no copy, NO type assumptions (any float-vector attribute, any
+    // number of them). The index buffer stays fixed-function so uint16/uint32 indices
+    // work natively. Requires descriptor indexing (unbounded storage-buffer arrays).
 
-    let private vidExpr : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId)
-
-    // Per-draw object handle. gl_DrawID does NOT vary across aardvark's Vulkan
-    // indirect multidraw (it stays constant) AND MoltenVK lacks it entirely, so we
-    // route the handle through gl_InstanceIndex instead: each sub-draw sets
-    // FirstInstance = its index and InstanceCount = 1, so gl_InstanceIndex = the
-    // handle (gl_InstanceIndex = firstInstance + 0). Portable across GL/Vulkan/Metal.
+    let private vidExpr    : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId)
+    // Per-draw handle via gl_InstanceIndex (per-draw FirstInstance) — gl_DrawID does
+    // not vary across aardvark's Vulkan indirect multidraw and MoltenVK lacks it.
     let private handleExpr : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
 
-    // The index buffer is bound and fixed-function indexing already resolves
-    // gl_VertexIndex to the object's LOCAL 0-based vertex index, so we pull the
-    // position/normal directly — no HeapIndex SSBO indirection needed.
-    let private pullPositions : Expr =
-        <@@ let h = (%%handleExpr : int) in (uniform.HeapPositions.[h].[ (%%vidExpr : int) ]).XYZ @@>
-    let private pullNormals : Expr =
-        <@@ let h = (%%handleExpr : int) in (uniform.HeapNormals.[h].[ (%%vidExpr : int) ]).XYZ @@>
+    /// component count of a vertex-attribute type — decode exactly what's there
+    let private componentsOf (t : System.Type) : int =
+        if   t = typeof<float32> || t = typeof<int> then 1
+        elif t = typeof<V2f> || t = typeof<V2i> then 2
+        elif t = typeof<V3f> || t = typeof<V3i> then 3
+        elif t = typeof<V4f> || t = typeof<V4i> then 4
+        else failwithf "Heap.bindless: unsupported attribute type %A (expected float32/V2f/V3f/V4f or int/V2i/V3i/V4i)" t
 
-    /// Render N objects whose geometry lives in per-object GPU buffers referenced by
-    /// HANDLE (bindless), vertex-PULLED in the (rewritten) shader — no vertex buffers
-    /// bound, no CPU packing/copy. Each attribute is one unbounded SSBO array; the
-    /// per-object handle rides gl_InstanceIndex (per-draw FirstInstance), the index
-    /// buffer gives gl_VertexIndex, and one indexed indirect multidraw issues all N.
-    /// `view`/`proj` are applied the normal way (ambient camera semantic), so this SG
-    /// composes like any other; in a real scene the caller's camera supplies them.
+    let private isIntegral (t : System.Type) : bool =
+        t = typeof<int> || t = typeof<V2i> || t = typeof<V3i> || t = typeof<V4i>
+
+    /// reinterpret a blittable float-based array (V2f[]/V3f[]/V4f[]/float32[]) as floats
+    let private arrayToFloats (a : System.Array) : float32[] =
+        let elemBytes = System.Runtime.InteropServices.Marshal.SizeOf(a.GetType().GetElementType())
+        let f = Array.zeroCreate<float32> (a.Length * elemBytes / 4)
+        let h = System.Runtime.InteropServices.GCHandle.Alloc(a, System.Runtime.InteropServices.GCHandleType.Pinned)
+        try System.Runtime.InteropServices.Marshal.Copy(h.AddrOfPinnedObject(), f, 0, f.Length)
+        finally h.Free()
+        f
+
+    /// concatenate same-typed System.Arrays (per-object index arrays -> one buffer)
+    let private concatArrays (arrs : System.Array[]) (et : System.Type) : System.Array =
+        let total = arrs |> Array.sumBy (fun a -> a.Length)
+        let res = System.Array.CreateInstance(et, total)
+        let mutable o = 0
+        for a in arrs do System.Array.Copy(a, 0, res, o, a.Length); o <- o + a.Length
+        res
+
+    /// decode attribute `typ` at element offset (vid*stride + fieldOffset) from
+    /// HeapVertexData[handle] (float view) or HeapVertexDataI[handle] (int view, same
+    /// bytes) — the bindless analogue of the host arena's gatherFor.
+    let private bindlessGather (typ : System.Type) (stride : int) (fieldOffset : int) : Expr =
+        if typ = typeof<float32> then
+            <@@ let hh = (%%handleExpr : int) in uniform.HeapVertexData.[hh].[ (%%vidExpr : int) * stride + fieldOffset ] @@>
+        elif typ = typeof<V2f> then
+            <@@ let hh = (%%handleExpr : int) in
+                let o = (%%vidExpr : int) * stride + fieldOffset
+                V2f(uniform.HeapVertexData.[hh].[o], uniform.HeapVertexData.[hh].[o+1]) @@>
+        elif typ = typeof<V3f> then
+            <@@ let hh = (%%handleExpr : int) in
+                let o = (%%vidExpr : int) * stride + fieldOffset
+                V3f(uniform.HeapVertexData.[hh].[o], uniform.HeapVertexData.[hh].[o+1], uniform.HeapVertexData.[hh].[o+2]) @@>
+        elif typ = typeof<V4f> then
+            <@@ let hh = (%%handleExpr : int) in
+                let o = (%%vidExpr : int) * stride + fieldOffset
+                V4f(uniform.HeapVertexData.[hh].[o], uniform.HeapVertexData.[hh].[o+1], uniform.HeapVertexData.[hh].[o+2], uniform.HeapVertexData.[hh].[o+3]) @@>
+        elif typ = typeof<int> then
+            <@@ let hh = (%%handleExpr : int) in uniform.HeapVertexDataI.[hh].[ (%%vidExpr : int) * stride + fieldOffset ] @@>
+        elif typ = typeof<V2i> then
+            <@@ let hh = (%%handleExpr : int) in
+                let o = (%%vidExpr : int) * stride + fieldOffset
+                V2i(uniform.HeapVertexDataI.[hh].[o], uniform.HeapVertexDataI.[hh].[o+1]) @@>
+        elif typ = typeof<V3i> then
+            <@@ let hh = (%%handleExpr : int) in
+                let o = (%%vidExpr : int) * stride + fieldOffset
+                V3i(uniform.HeapVertexDataI.[hh].[o], uniform.HeapVertexDataI.[hh].[o+1], uniform.HeapVertexDataI.[hh].[o+2]) @@>
+        else
+            <@@ let hh = (%%handleExpr : int) in
+                let o = (%%vidExpr : int) * stride + fieldOffset
+                V4i(uniform.HeapVertexDataI.[hh].[o], uniform.HeapVertexDataI.[hh].[o+1], uniform.HeapVertexDataI.[hh].[o+2], uniform.HeapVertexDataI.[hh].[o+3]) @@>
+
+    /// Render N objects whose geometry lives in per-object GPU buffers, vertex-PULLED
+    /// in the (rewritten) shader — no vertex buffers, no CPU packing. TYPE-AGNOSTIC and
+    /// attribute-general: `attribs.[i]` maps each of the effect's vertex-input semantics
+    /// to object i's data (V2f[]/V3f[]/V4f[]/float32[]); `indices.[i]` is object i's
+    /// LOCAL 0-based index array (int/uint16/uint32). Each object's attributes are
+    /// interleaved into one flat float32 SSBO array element, decoded per-attribute by
+    /// component count. One indexed indirect multidraw; handle via gl_InstanceIndex.
+    /// `view`/`proj` go through the ambient camera path so this SG composes normally.
     let bindless (runtime : IRuntime) (mode : IndexedGeometryMode) (effect : Effect)
-                 (positions : V3f[][]) (normals : V3f[][]) (indices : int[][])
+                 (attribs : Map<Symbol, System.Array>[]) (indices : System.Array[])
                  (view : aval<Trafo3d>) (proj : aval<Trafo3d>) : ISg =
         checkSupport false runtime
-        let n = positions.Length
-        // pad to V4f: std430 vec3[] elements are 16-byte aligned, so a packed V3f[]
-        // would be read misaligned. V4f[] (16-byte) matches the vec4[] std430 stride.
-        let posBufs = positions |> Array.map (fun a -> ArrayBuffer (a |> Array.map (fun p -> V4f(p, 1.0f))) :> IBuffer)
-        let norBufs = normals   |> Array.map (fun a -> ArrayBuffer (a |> Array.map (fun nv -> V4f(nv, 0.0f))) :> IBuffer)
+        let n = attribs.Length
 
-        // rewrite the vertex shader's Positions/Normals INPUT reads into bindless pulls
+        // vertex layout = the effect's input attributes (any count/type), each with a
+        // float component count and a cumulative offset within one interleaved vertex.
+        let mutable fo = 0
+        let fields =
+            effect.Inputs |> Map.toArray
+            |> Array.map (fun (name, _) ->
+                let sym = Symbol.Create name
+                let typ = attribs.[0].[sym].GetType().GetElementType()
+                let c = componentsOf typ
+                let off = fo
+                fo <- fo + c
+                name, sym, typ, off)
+        let vertexStride = fo
+        let fieldByName = fields |> Array.map (fun (name, _, typ, off) -> name, (typ, off)) |> Map.ofArray
+
+        // per object: interleave its attributes into one flat float32[] vertex buffer
+        let buildObject (m : Map<Symbol, System.Array>) : float32[] =
+            let per = fields |> Array.map (fun (_, sym, _, _) -> arrayToFloats m.[sym])
+            let cs  = fields |> Array.map (fun (_, _, typ, _) -> componentsOf typ)
+            let vtx = per.[0].Length / cs.[0]
+            let out = Array.zeroCreate<float32> (vtx * vertexStride)
+            for v in 0 .. vtx - 1 do
+                let mutable o = 0
+                for k in 0 .. per.Length - 1 do
+                    let c = cs.[k]
+                    for i in 0 .. c - 1 do out.[v * vertexStride + o + i] <- per.[k].[v * c + i]
+                    o <- o + c
+            out
+        let vtxBufs = attribs |> Array.map (fun m -> ArrayBuffer (buildObject m) :> IBuffer)
+
+        // rewrite each vertex-input read into a flat-buffer gather, typed per the layout
         let eff =
             effect |> Effect.map (fun s ->
                 s |> Shader.substituteReads (fun kind _ name _ _ ->
-                    match kind, name with
-                    | ParameterKind.Input, "Positions" -> Some pullPositions
-                    | ParameterKind.Input, "Normals"   -> Some pullNormals
+                    match kind with
+                    | ParameterKind.Input ->
+                        match Map.tryFind name fieldByName with
+                        | Some (typ, off) -> Some (bindlessGather typ vertexStride off)
+                        | None -> None
                     | _ -> None))
 
-        // INDEXED indirect multidraw (the non-indexed indirect path does not honour
-        // per-draw FirstInstance on aardvark/Vulkan). One combined index buffer holds
-        // every object's LOCAL 0-based indices concatenated; each sub-draw points at
-        // its slice via FirstIndex and routes its handle via FirstInstance = di. The
-        // bound index buffer makes gl_VertexIndex the object's local vertex index,
-        // which directly addresses HeapPositions[handle]/HeapNormals[handle].
-        let combinedIdx = indices |> Array.concat
+        // INDEXED indirect multidraw: one combined index buffer (per-object LOCAL
+        // 0-based indices concatenated, real type preserved for uint16/uint32), each
+        // sub-draw sliced via FirstIndex and handle-routed via FirstInstance = di.
+        let idxType = indices.[0].GetType().GetElementType()
+        let combinedIdx = concatArrays indices idxType
         let mutable firstIndex = 0
         let entries =
             Array.init n (fun di ->
@@ -945,12 +1022,15 @@ module Heap =
                 firstIndex <- firstIndex + cnt
                 e)
         let indirect = IndirectBuffer.ofArray entries
-        let idxBV = BufferView(AVal.constant (ArrayBuffer combinedIdx :> IBuffer), typeof<int>)
+        let idxBV = BufferView(AVal.constant (ArrayBuffer combinedIdx :> IBuffer), idxType)
 
         Sg.indirectDraw mode (AVal.constant indirect)
         |> Sg.indexBuffer idxBV
-        |> Sg.uniform "HeapPositions" (AVal.constant posBufs)
-        |> Sg.uniform "HeapNormals"   (AVal.constant norBufs)
+        // the SAME per-object buffers, bound as both a float and an int view, so the
+        // shader decodes float attributes via HeapVertexData and integral ones via
+        // HeapVertexDataI (identical bytes).
+        |> Sg.uniform "HeapVertexData"  (AVal.constant vtxBufs)
+        |> Sg.uniform "HeapVertexDataI" (AVal.constant vtxBufs)
         // ViewProjTrafo is a built-in camera semantic — provide it through the camera
         // path (ambient), NOT Sg.uniform "ViewProjTrafo" (which the default identity
         // shadows when no camera is in scope).
