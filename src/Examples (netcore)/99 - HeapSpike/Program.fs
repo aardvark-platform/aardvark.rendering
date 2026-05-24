@@ -119,6 +119,18 @@ let main argv =
         if Golden.demoShotTest () then 0 else 1
     elif argv |> Array.contains "glsldump" then
         GlslDump.run (); 0
+    elif argv |> Array.contains "bcbox" then
+        if Golden.bindlessCleanBoxTest () then 0 else 1
+    elif argv |> Array.contains "bindlesssimple" then
+        if Golden.bindlessSimpleTest () then 0 else 1
+    elif argv |> Array.contains "ssboarray5" then
+        if Golden.ssboArray5Test () then 0 else 1
+    elif argv |> Array.contains "ssboarray4" then
+        if Golden.ssboArray4Test () then 0 else 1
+    elif argv |> Array.contains "ssboarray3" then
+        if Golden.ssboArray3Test () then 0 else 1
+    elif argv |> Array.contains "ssboarray2" then
+        if Golden.ssboArray2Test () then 0 else 1
     elif argv |> Array.contains "ssboarray" then
         if Golden.ssboArrayTest () then 0 else 1
     elif argv |> Array.contains "bindless" then

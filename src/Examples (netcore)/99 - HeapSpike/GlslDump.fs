@@ -13,12 +13,10 @@ open Microsoft.FSharp.Quotations
 
 module GlslDump =
 
-    [<GLSLIntrinsic("gl_DrawID", "GL_ARB_shader_draw_parameters")>]
-    let private getDrawId () : int = onlyInShaderCode "getDrawId"
-
-    let private vidExpr : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId)
-    let private pullPositions : Expr = <@@ let h = getDrawId() in (uniform.HeapPositions.[h].[ uniform.HeapIndex.[h].[ (%%vidExpr : int) ] ]).XYZ @@>
-    let private pullNormals   : Expr = <@@ let h = getDrawId() in (uniform.HeapNormals.[h].[ uniform.HeapIndex.[h].[ (%%vidExpr : int) ] ]).XYZ @@>
+    let private vidExpr    : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId)
+    let private handleExpr : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
+    let private pullPositions : Expr = <@@ let h = (%%handleExpr : int) in (uniform.HeapPositions.[h].[ (%%vidExpr : int) ]).XYZ @@>
+    let private pullNormals   : Expr = <@@ let h = (%%handleExpr : int) in (uniform.HeapNormals.[h].[ (%%vidExpr : int) ]).XYZ @@>
 
     let run () =
         let e =
@@ -40,3 +38,17 @@ module GlslDump =
         printfn "=== REWRITTEN bindless GLSL ===\n%s\n=== END ===" glsl.code
         glsl.iface.storageBuffers |> Seq.iter (fun kv ->
             printfn "=== IFACE: SSB '%s' ssbCount=%d" kv.Key kv.Value.ssbCount)
+
+        // for comparison: the CLEAN hand-written pull shader (SAvp) that DOES render
+        let mClean =
+            Effect.compose [ Effect.ofFunction Golden.SAvp.shade; Effect.ofFunction Golden.SAvp.frag ]
+            |> Effect.toModule {
+                depthRange = Range1f(-1.0f, 1.0f)
+                flipHandedness = false
+                lastStage = ShaderStage.Fragment
+                outputs = Map.ofList [ "Colors", (typeof<V4f>, 0) ]
+            }
+        let glslClean = ModuleCompiler.compileGLSLVulkan mClean
+        printfn "=== CLEAN SAvp GLSL (works) ===\n%s\n=== END ===" glslClean.code
+        glslClean.iface.storageBuffers |> Seq.iter (fun kv ->
+            printfn "=== CLEAN IFACE: SSB '%s' ssbCount=%d" kv.Key kv.Value.ssbCount)

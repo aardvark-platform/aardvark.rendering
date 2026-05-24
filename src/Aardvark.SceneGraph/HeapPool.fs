@@ -889,31 +889,37 @@ module Heap =
 
     let private vidExpr : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId)
 
-    let private pullPositions : Expr =
-        <@@ let h = getDrawId() in (uniform.HeapPositions.[h].[ uniform.HeapIndex.[h].[ (%%vidExpr : int) ] ]).XYZ @@>
-    let private pullNormals : Expr =
-        <@@ let h = getDrawId() in (uniform.HeapNormals.[h].[ uniform.HeapIndex.[h].[ (%%vidExpr : int) ] ]).XYZ @@>
+    // Per-draw object handle. gl_DrawID does NOT vary across aardvark's Vulkan
+    // indirect multidraw (it stays constant) AND MoltenVK lacks it entirely, so we
+    // route the handle through gl_InstanceIndex instead: each sub-draw sets
+    // FirstInstance = its index and InstanceCount = 1, so gl_InstanceIndex = the
+    // handle (gl_InstanceIndex = firstInstance + 0). Portable across GL/Vulkan/Metal.
+    let private handleExpr : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
 
-    /// EXPERIMENTAL / WIP. Render N objects whose geometry lives in per-object
-    /// buffers referenced by handle (bindless), vertex-PULLED in the (rewritten)
-    /// shader — no vertex buffers bound, no packing/copy. The single-SSBO-array
-    /// primitive is proven (Golden.ssboArrayTest), but this multi-array path
-    /// (Positions+Normals+Index in three unbounded SSBO arrays in one set) renders
-    /// incorrectly — only the highest-binding unbounded array gets a variable/
-    /// partially-bound descriptor, so the others mis-bind. KNOWN TODO: (a) handle
-    /// >1 unbounded SSBO array per set; (b) per the design, do NOT assume V4f —
-    /// store flat float[] and decode by the attribute's actual component count;
-    /// (c) route via firstInstance (portable) not gl_DrawID (MoltenVK lacks it).
+    // The index buffer is bound and fixed-function indexing already resolves
+    // gl_VertexIndex to the object's LOCAL 0-based vertex index, so we pull the
+    // position/normal directly — no HeapIndex SSBO indirection needed.
+    let private pullPositions : Expr =
+        <@@ let h = (%%handleExpr : int) in (uniform.HeapPositions.[h].[ (%%vidExpr : int) ]).XYZ @@>
+    let private pullNormals : Expr =
+        <@@ let h = (%%handleExpr : int) in (uniform.HeapNormals.[h].[ (%%vidExpr : int) ]).XYZ @@>
+
+    /// Render N objects whose geometry lives in per-object GPU buffers referenced by
+    /// HANDLE (bindless), vertex-PULLED in the (rewritten) shader — no vertex buffers
+    /// bound, no CPU packing/copy. Each attribute is one unbounded SSBO array; the
+    /// per-object handle rides gl_InstanceIndex (per-draw FirstInstance), the index
+    /// buffer gives gl_VertexIndex, and one indexed indirect multidraw issues all N.
+    /// `view`/`proj` are applied the normal way (ambient camera semantic), so this SG
+    /// composes like any other; in a real scene the caller's camera supplies them.
     let bindless (runtime : IRuntime) (mode : IndexedGeometryMode) (effect : Effect)
                  (positions : V3f[][]) (normals : V3f[][]) (indices : int[][])
-                 (viewProj : aval<Trafo3d>) : ISg =
+                 (view : aval<Trafo3d>) (proj : aval<Trafo3d>) : ISg =
         checkSupport false runtime
         let n = positions.Length
         // pad to V4f: std430 vec3[] elements are 16-byte aligned, so a packed V3f[]
         // would be read misaligned. V4f[] (16-byte) matches the vec4[] std430 stride.
         let posBufs = positions |> Array.map (fun a -> ArrayBuffer (a |> Array.map (fun p -> V4f(p, 1.0f))) :> IBuffer)
         let norBufs = normals   |> Array.map (fun a -> ArrayBuffer (a |> Array.map (fun nv -> V4f(nv, 0.0f))) :> IBuffer)
-        let idxBufs = indices   |> Array.map (fun a -> ArrayBuffer a :> IBuffer)
 
         // rewrite the vertex shader's Positions/Normals INPUT reads into bindless pulls
         let eff =
@@ -924,17 +930,32 @@ module Heap =
                     | ParameterKind.Input, "Normals"   -> Some pullNormals
                     | _ -> None))
 
-        // one non-indexed sub-draw per object: gl_VertexIndex runs 0 .. indexCount-1
-        // (the index itself is pulled from HeapIndex), gl_DrawID = the object handle.
-        let indirect =
-            Array.init n (fun di -> DrawCallInfo(FaceVertexCount = indices.[di].Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 1))
-            |> IndirectBuffer.ofArray
+        // INDEXED indirect multidraw (the non-indexed indirect path does not honour
+        // per-draw FirstInstance on aardvark/Vulkan). One combined index buffer holds
+        // every object's LOCAL 0-based indices concatenated; each sub-draw points at
+        // its slice via FirstIndex and routes its handle via FirstInstance = di. The
+        // bound index buffer makes gl_VertexIndex the object's local vertex index,
+        // which directly addresses HeapPositions[handle]/HeapNormals[handle].
+        let combinedIdx = indices |> Array.concat
+        let mutable firstIndex = 0
+        let entries =
+            Array.init n (fun di ->
+                let cnt = indices.[di].Length
+                let e = DrawCallInfo(FaceVertexCount = cnt, FirstIndex = firstIndex, BaseVertex = 0, FirstInstance = di, InstanceCount = 1)
+                firstIndex <- firstIndex + cnt
+                e)
+        let indirect = IndirectBuffer.ofArray entries
+        let idxBV = BufferView(AVal.constant (ArrayBuffer combinedIdx :> IBuffer), typeof<int>)
 
         Sg.indirectDraw mode (AVal.constant indirect)
+        |> Sg.indexBuffer idxBV
         |> Sg.uniform "HeapPositions" (AVal.constant posBufs)
         |> Sg.uniform "HeapNormals"   (AVal.constant norBufs)
-        |> Sg.uniform "HeapIndex"     (AVal.constant idxBufs)
-        |> Sg.uniform "ViewProjTrafo" (viewProj |> AVal.map (fun t -> M44f.op_Explicit t.Forward))
+        // ViewProjTrafo is a built-in camera semantic — provide it through the camera
+        // path (ambient), NOT Sg.uniform "ViewProjTrafo" (which the default identity
+        // shadows when no camera is in scope).
+        |> Sg.viewTrafo view
+        |> Sg.projTrafo proj
         |> Sg.effect [ eff ]
 
     // ── Heap-local chain emission (authoring) ───────────────────────────

@@ -71,11 +71,19 @@ module DescriptorPool =
 type ContextDescriptorPoolExtensions private() =
     [<Extension>]
     static member inline CreateDescriptorPool(this : Device, setCount : int, perTypeCount) =
+        // Unbounded (bindless) arrays each RESERVE their full capacity (up to ~1024)
+        // at set allocation, and a single set may hold several of them (e.g. the
+        // heap's HeapPositions + HeapNormals + HeapIndex = 3 storage-buffer arrays).
+        // A set cannot span pools, so the per-type budget for the only two types that
+        // can host unbounded arrays — StorageBuffer and CombinedImageSampler — must
+        // cover several full unbounded arrays, not just `perTypeCount`. Other types
+        // never form unbounded arrays and keep the base budget.
+        let arrayCapableBudget = max perTypeCount (perTypeCount * 8)
         let counts =
             Map.ofList [
                 VkDescriptorType.UniformBuffer, perTypeCount
-                VkDescriptorType.StorageBuffer, perTypeCount
-                VkDescriptorType.CombinedImageSampler, perTypeCount
+                VkDescriptorType.StorageBuffer, arrayCapableBudget
+                VkDescriptorType.CombinedImageSampler, arrayCapableBudget
                 VkDescriptorType.StorageImage, perTypeCount
                 if this.IsExtensionEnabled KHRAccelerationStructure.Name then
                     VkDescriptorType.AccelerationStructureKhr, perTypeCount

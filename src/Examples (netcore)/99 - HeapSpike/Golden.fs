@@ -746,9 +746,8 @@ module Golden =
         else Log.warn "ssboArray: FAIL (coverage=%d, expected a vertex-pulled triangle)" green
         pass
 
-    // Bindless heap geometry: render objects whose geometry is PULLED from per-object
-    // GPU buffers by handle (no vertex buffers bound, no packing) must match a plain
-    // indexed render of the same world-space geometry.
+    // Bindless heap geometry effect (shared by the bring-up tests below): geometry is
+    // PULLED from per-object GPU buffers by handle (no vertex buffers bound).
     module BH =
         type VIn  = { [<Semantic("Positions")>] pos : V3f; [<Semantic("Normals")>] n : V3f }
         type VOut = { [<Position>] clip : V4f; [<Semantic("WN")>] wn : V3f }
@@ -763,6 +762,317 @@ module Golden =
                 let d = 0.3f + 0.7f * max 0.0f (Vec.dot (Vec.normalize v.wn) l)
                 return V4f(V3f(0.4f, 0.75f, 0.95f) * d, 1.0f)
             }
+
+    // STEP 1 of the bindless bring-up: exactly ONE variable changed from ssboArray —
+    // TWO SSBO arrays (positions in GeomA, colors in GeomB) instead of one. Still a
+    // per-RO uniform handle and separate draws. Isolates the multi-array descriptor
+    // bind/write path: GeomA gives geometry, GeomB gives color; if the second array
+    // mis-binds, the color is wrong/black.
+    module SA2 =
+        type UniformScope with
+            member x.GeomA : V4f[][] = uniform?StorageBuffer?GeomA
+            member x.GeomB : V4f[][] = uniform?StorageBuffer?GeomB
+        type VIn  = { [<VertexId>] vid : int }
+        type VOut = { [<Position>] pos : V4f; [<Color>] c : V4f }
+        let shade (v : VIn) =
+            vertex {
+                let h : int = uniform?Handle
+                return { pos = uniform.GeomA.[h].[v.vid]; c = uniform.GeomB.[h].[v.vid] }
+            }
+        let frag (v : VOut) = fragment { return v.c }
+
+    let ssboArray2Test () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(256, 256))
+        let tri  = [| V4f(-0.6f, -0.6f, 0.0f, 1.0f); V4f(0.6f, -0.6f, 0.0f, 1.0f); V4f(0.0f, 0.7f, 0.0f, 1.0f) |]
+        let quad = [| V4f(0.1f, 0.1f, 0.0f, 1.0f); V4f(0.8f, 0.1f, 0.0f, 1.0f); V4f(0.45f, 0.8f, 0.0f, 1.0f) |]
+        let grn  = Array.replicate 3 (V4f(0.2f, 0.9f, 0.3f, 1.0f))
+        let red  = Array.replicate 3 (V4f(0.9f, 0.2f, 0.2f, 1.0f))
+        let geomA : IBuffer[] = [| ArrayBuffer tri :> IBuffer; ArrayBuffer quad :> IBuffer |]
+        let geomB : IBuffer[] = [| ArrayBuffer grn :> IBuffer; ArrayBuffer red :> IBuffer |]
+        let eff = Effect.compose [ Effect.ofFunction SA2.shade; Effect.ofFunction SA2.frag ]
+        let mk (handle : int) =
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect eff
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList ([] : list<Symbol * BufferView>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = 3, InstanceCount = 1) |])
+            ro.Uniforms <- UniformProvider.ofList [
+                Symbol.Create "GeomA",  (AVal.constant geomA :> IAdaptiveValue)
+                Symbol.Create "GeomB",  (AVal.constant geomB :> IAdaptiveValue)
+                Symbol.Create "Handle", (AVal.constant handle :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        use task = Sg.renderObjectSet (ASet.ofList [ mk 0; mk 1 ]) |> Sg.compile runtime signature
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let pix = try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let m = pix.GetMatrix<C4b>()
+        let mutable green = 0L
+        let mutable redc  = 0L
+        m.ForeachCoord(fun (p : V2l) ->
+            let v = m.[p]
+            if v.G > 120uy && v.R < 120uy then green <- green + 1L
+            if v.R > 120uy && v.G < 120uy then redc  <- redc + 1L)
+        Log.line "ssboArray2: TWO SSBO arrays (pos=GeomA, col=GeomB) -> green=%d red=%d px" green redc
+        let pass = green > 500L && redc > 500L
+        if pass then Log.line "ssboArray2: PASS (both SSBO arrays bind+read; GeomA geometry + GeomB color correct)"
+        else Log.warn "ssboArray2: FAIL (green=%d red=%d — a second SSBO array mis-binds)" green redc
+        pass
+
+    // STEP 2: one variable changed from ssboArray2 — the handle now comes from
+    // gl_InstanceIndex (routed by per-RO FirstInstance) instead of a uniform. Still
+    // SEPARATE draws. Isolates gl_InstanceIndex+firstInstance routing before any
+    // multidraw is involved.
+    module SA3 =
+        type UniformScope with
+            member x.GeomA : V4f[][] = uniform?StorageBuffer?GeomA
+            member x.GeomB : V4f[][] = uniform?StorageBuffer?GeomB
+        type VIn  = { [<VertexId>] vid : int; [<InstanceId>] iid : int }
+        type VOut = { [<Position>] pos : V4f; [<Color>] c : V4f }
+        let shade (v : VIn) =
+            vertex {
+                return { pos = uniform.GeomA.[v.iid].[v.vid]; c = uniform.GeomB.[v.iid].[v.vid] }
+            }
+        let frag (v : VOut) = fragment { return v.c }
+
+    let ssboArray3Test () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(256, 256))
+        let tri  = [| V4f(-0.6f, -0.6f, 0.0f, 1.0f); V4f(0.6f, -0.6f, 0.0f, 1.0f); V4f(0.0f, 0.7f, 0.0f, 1.0f) |]
+        let quad = [| V4f(0.1f, 0.1f, 0.0f, 1.0f); V4f(0.8f, 0.1f, 0.0f, 1.0f); V4f(0.45f, 0.8f, 0.0f, 1.0f) |]
+        let grn  = Array.replicate 3 (V4f(0.2f, 0.9f, 0.3f, 1.0f))
+        let red  = Array.replicate 3 (V4f(0.9f, 0.2f, 0.2f, 1.0f))
+        let geomA : IBuffer[] = [| ArrayBuffer tri :> IBuffer; ArrayBuffer quad :> IBuffer |]
+        let geomB : IBuffer[] = [| ArrayBuffer grn :> IBuffer; ArrayBuffer red :> IBuffer |]
+        let eff = Effect.compose [ Effect.ofFunction SA3.shade; Effect.ofFunction SA3.frag ]
+        let mk (handle : int) =
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect eff
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList ([] : list<Symbol * BufferView>)
+            // handle routed through FirstInstance -> gl_InstanceIndex
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = 3, FirstInstance = handle, InstanceCount = 1) |])
+            ro.Uniforms <- UniformProvider.ofList [
+                Symbol.Create "GeomA", (AVal.constant geomA :> IAdaptiveValue)
+                Symbol.Create "GeomB", (AVal.constant geomB :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        use task = Sg.renderObjectSet (ASet.ofList [ mk 0; mk 1 ]) |> Sg.compile runtime signature
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let pix = try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let m = pix.GetMatrix<C4b>()
+        let mutable green = 0L
+        let mutable redc  = 0L
+        m.ForeachCoord(fun (p : V2l) ->
+            let v = m.[p]
+            if v.G > 120uy && v.R < 120uy then green <- green + 1L
+            if v.R > 120uy && v.G < 120uy then redc  <- redc + 1L)
+        Log.line "ssboArray3: gl_InstanceIndex handle (separate draws) -> green=%d red=%d px" green redc
+        let pass = green > 500L && redc > 500L
+        if pass then Log.line "ssboArray3: PASS (gl_InstanceIndex+firstInstance routes the handle; separate draws)"
+        else Log.warn "ssboArray3: FAIL (green=%d red=%d — gl_InstanceIndex/firstInstance handle routing broken)" green redc
+        pass
+
+    // STEP 3: one variable changed from ssboArray3 — separate draws collapse into a
+    // single INDEXED indirect multidraw (2 entries, per-entry FirstIndex+FirstInstance).
+    // Same 2 arrays, gl_InstanceIndex handle, no vertex attributes. This is the minimal
+    // repro of the bindless geometry setup; isolates whether the indirect multidraw
+    // honours per-command FirstInstance.
+    let ssboArray4Test () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(256, 256))
+        let tri  = [| V4f(-0.6f, -0.6f, 0.0f, 1.0f); V4f(0.6f, -0.6f, 0.0f, 1.0f); V4f(0.0f, 0.7f, 0.0f, 1.0f) |]
+        let quad = [| V4f(0.1f, 0.1f, 0.0f, 1.0f); V4f(0.8f, 0.1f, 0.0f, 1.0f); V4f(0.45f, 0.8f, 0.0f, 1.0f) |]
+        let grn  = Array.replicate 3 (V4f(0.2f, 0.9f, 0.3f, 1.0f))
+        let red  = Array.replicate 3 (V4f(0.9f, 0.2f, 0.2f, 1.0f))
+        let geomA : IBuffer[] = [| ArrayBuffer tri :> IBuffer; ArrayBuffer quad :> IBuffer |]
+        let geomB : IBuffer[] = [| ArrayBuffer grn :> IBuffer; ArrayBuffer red :> IBuffer |]
+        let eff = Effect.compose [ Effect.ofFunction SA3.shade; Effect.ofFunction SA3.frag ]
+        // combined index buffer: tri (local 0,1,2) then quad (local 0,1,2)
+        let combinedIdx = [| 0;1;2; 0;1;2 |]
+        let entries =
+            [| DrawCallInfo(FaceVertexCount = 3, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 1)
+               DrawCallInfo(FaceVertexCount = 3, FirstIndex = 3, BaseVertex = 0, FirstInstance = 1, InstanceCount = 1) |]
+        let indirect = IndirectBuffer.ofArray entries
+        let idxBV = BufferView(AVal.constant (ArrayBuffer combinedIdx :> IBuffer), typeof<int>)
+        let sg =
+            Sg.indirectDraw IndexedGeometryMode.TriangleList (AVal.constant indirect)
+            |> Sg.indexBuffer idxBV
+            |> Sg.uniform "GeomA" (AVal.constant geomA)
+            |> Sg.uniform "GeomB" (AVal.constant geomB)
+            |> Sg.effect [ eff ]
+        use task = sg |> Sg.compile runtime signature
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let pix = try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let m = pix.GetMatrix<C4b>()
+        let mutable green = 0L
+        let mutable redc  = 0L
+        m.ForeachCoord(fun (p : V2l) ->
+            let v = m.[p]
+            if v.G > 120uy && v.R < 120uy then green <- green + 1L
+            if v.R > 120uy && v.G < 120uy then redc  <- redc + 1L)
+        Log.line "ssboArray4: indexed indirect MULTIDRAW (2 entries) -> green=%d red=%d px" green redc
+        let pass = green > 500L && redc > 500L
+        if pass then Log.line "ssboArray4: PASS (indirect multidraw honours per-command FirstInstance)"
+        else Log.warn "ssboArray4: FAIL (green=%d red=%d — multidraw drops per-command FirstInstance or runs one draw)" green redc
+        pass
+
+    // STEP 6: ssboArray4 (works) + a ViewProjTrafo multiply (identity) in the clean
+    // shader. Geometry is already in NDC, so identity*pos == pos: if this still renders
+    // both triangles, the *ViewProj path is fine and the bug is the substituteReads
+    // rewrite; if it breaks, the ViewProj multiply in the pull path is the culprit.
+    module SAvp =
+        type UniformScope with
+            member x.GeomA : V4f[][] = uniform?StorageBuffer?GeomA
+            member x.GeomB : V4f[][] = uniform?StorageBuffer?GeomB
+        type VIn  = { [<VertexId>] vid : int; [<InstanceId>] iid : int }
+        type VOut = { [<Position>] pos : V4f; [<Color>] c : V4f }
+        let shade (v : VIn) =
+            vertex {
+                let vp : M44f = uniform?ViewProjTrafo
+                return { pos = vp * uniform.GeomA.[v.iid].[v.vid]; c = uniform.GeomB.[v.iid].[v.vid] }
+            }
+        let frag (v : VOut) = fragment { return v.c }
+
+    let ssboArray5Test () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(256, 256))
+        // WORLD-space triangles + a REAL camera (matches bindlessSimple) — the only
+        // thing now differing from Heap.bindless is clean effect vs substituteReads rewrite.
+        let tri  = [| V4f(-1.5f, 0.0f, -0.5f, 1.0f); V4f(-0.2f, 0.0f, -0.5f, 1.0f); V4f(-0.85f, 0.0f, 0.7f, 1.0f) |]
+        let quad = [| V4f(0.2f, 0.0f, -0.5f, 1.0f);  V4f(1.5f, 0.0f, -0.5f, 1.0f);  V4f(0.85f, 0.0f, 0.7f, 1.0f) |]
+        let grn  = Array.replicate 3 (V4f(0.2f, 0.9f, 0.3f, 1.0f))
+        let red  = Array.replicate 3 (V4f(0.9f, 0.2f, 0.2f, 1.0f))
+        let geomA : IBuffer[] = [| ArrayBuffer tri :> IBuffer; ArrayBuffer quad :> IBuffer |]
+        let geomB : IBuffer[] = [| ArrayBuffer grn :> IBuffer; ArrayBuffer red :> IBuffer |]
+        let eff = Effect.compose [ Effect.ofFunction SAvp.shade; Effect.ofFunction SAvp.frag ]
+        let view = CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let vpTrafo = view * proj
+        let combinedIdx = [| 0;1;2; 0;1;2 |]
+        let entries =
+            [| DrawCallInfo(FaceVertexCount = 3, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 1)
+               DrawCallInfo(FaceVertexCount = 3, FirstIndex = 3, BaseVertex = 0, FirstInstance = 1, InstanceCount = 1) |]
+        let indirect = IndirectBuffer.ofArray entries
+        let idxBV = BufferView(AVal.constant (ArrayBuffer combinedIdx :> IBuffer), typeof<int>)
+        let sg =
+            Sg.indirectDraw IndexedGeometryMode.TriangleList (AVal.constant indirect)
+            |> Sg.indexBuffer idxBV
+            |> Sg.uniform "GeomA" (AVal.constant geomA)
+            |> Sg.uniform "GeomB" (AVal.constant geomB)
+            |> Sg.viewTrafo (AVal.constant view)
+            |> Sg.projTrafo (AVal.constant proj)
+            |> Sg.effect [ eff ]
+        use task = sg |> Sg.compile runtime signature
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let pix = try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let m = pix.GetMatrix<C4b>()
+        let mutable green = 0L
+        let mutable redc  = 0L
+        m.ForeachCoord(fun (p : V2l) ->
+            let v = m.[p]
+            if v.G > 120uy && v.R < 120uy then green <- green + 1L
+            if v.R > 120uy && v.G < 120uy then redc  <- redc + 1L)
+        Log.line "ssboArray5: clean shader + ViewProj(identity) multiply -> green=%d red=%d px" green redc
+        let pass = green > 100L && redc > 100L
+        if pass then Log.line "ssboArray5: PASS (2-array pull + real perspective camera renders both objects)"
+        else Log.warn "ssboArray5: FAIL (green=%d red=%d)" green redc
+        pass
+
+    // STEP 4: the ACTUAL Heap.bindless, but with trivial 2-triangle geometry instead
+    // of boxes. Steps 1-3 proved every mechanism works with a clean shader; this runs
+    // the real rewritten-pull effect + ViewProjTrafo path on minimal geometry. If this
+    // matches the plain render, the bug is the box geometry/index; if it fails, the bug
+    // is Heap.bindless's shader/setup (the rewrite or ViewProj).
+    let bindlessSimpleTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(640, 640))
+        // NINE triangles in a 3x3 grid (matching the box test's object count/layout),
+        // each a simple 3-vertex tri; flat normals toward the camera.
+        let nrm = V3f(0.0f, -1.0f, 0.0f)
+        let offsets = [| for x in -1 .. 1 do for y in -1 .. 1 -> V3f(float32 x * 1.3f, float32 y * 1.3f, 0.0f) |]
+        let baseTri = [| V3f(-0.4f, 0.0f, -0.4f); V3f(0.4f, 0.0f, -0.4f); V3f(0.0f, 0.0f, 0.5f) |]
+        let positions = offsets |> Array.map (fun o -> baseTri |> Array.map (fun p -> p + o))
+        let normals   = offsets |> Array.map (fun _ -> Array.replicate 3 nrm)
+        let indices   = offsets |> Array.map (fun _ -> [| 0;1;2 |])
+        let view = CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let vpTrafo = view * proj
+        let eff = Effect.compose [ Effect.ofFunction BH.shade; Effect.ofFunction BH.frag ]
+        let imageOf (sg : ISg) =
+            use task = sg |> Sg.compile runtime signature
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let refObjs =
+            positions |> Array.mapi (fun i pos ->
+                let ro = RenderObject()
+                ro.Surface <- Surface.Effect eff
+                ro.Mode <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv pos typeof<V3f>; DefaultSemantic.Normals, bv normals.[i] typeof<V3f> ]
+                ro.Indices <- Some (bv indices.[i] typeof<int>)
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = 3, InstanceCount = 1) |])
+                ro.Uniforms <- UniformProvider.ofList [ Symbol.Create "ViewProjTrafo", (AVal.constant (M44f.op_Explicit vpTrafo.Forward) :> IAdaptiveValue) ]
+                ro :> IRenderObject)
+        // render the bindless FIRST (before the plain ref compiles the same `eff`),
+        // to test whether the original effect's cached shader poisons the rewritten one
+        let bindlessPix = imageOf (Heap.bindless runtime IndexedGeometryMode.TriangleList eff positions normals indices (AVal.constant view) (AVal.constant proj))
+        let refPix = imageOf (Sg.renderObjectSet (ASet.ofArray refObjs))
+        let savePpm (path : string) (img : PixImage<uint8>) =
+            let mm = img.GetMatrix<C4b>()
+            let w = int mm.Size.X
+            let h = int mm.Size.Y
+            use fs = new System.IO.FileStream(path, System.IO.FileMode.Create)
+            let hdr = System.Text.Encoding.ASCII.GetBytes(sprintf "P6\n%d %d\n255\n" w h)
+            fs.Write(hdr, 0, hdr.Length)
+            let buf : byte[] = Array.zeroCreate (w * h * 3)
+            let mutable o = 0
+            for yy in 0 .. h - 1 do
+                for xx in 0 .. w - 1 do
+                    let c = mm.[V2l(int64 xx, int64 yy)]
+                    buf.[o] <- c.R; buf.[o+1] <- c.G; buf.[o+2] <- c.B; o <- o + 3
+            fs.Write(buf, 0, buf.Length)
+        savePpm "/tmp/bsimple_ref.ppm" refPix
+        savePpm "/tmp/bsimple_heap.ppm" bindlessPix
+        let maxD, nDiff, nNonBg, total = diff refPix bindlessPix
+        Log.line "bindlessSimple: 9 triangles  plain-vs-bindless maxDelta=%d diffPixels=%d coverage=%d" maxD nDiff nNonBg
+        let pass = nNonBg > 500 && maxD <= 1
+        if pass then Log.line "bindlessSimple: PASS (Heap.bindless shader/setup correct on trivial geometry)"
+        else Log.warn "bindlessSimple: FAIL (maxDelta=%d coverage=%d)" maxD nNonBg
+        pass
 
     let bindlessHeapTest () =
         Aardvark.Init()
@@ -783,7 +1093,9 @@ module Golden =
         let positions = offsets |> Array.map (fun o -> bpos |> Array.map (fun p -> p + o))
         let normals   = offsets |> Array.map (fun _ -> bnor)
         let indices   = offsets |> Array.map (fun _ -> bidx)
-        let vpTrafo = (CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo) * (Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo)
+        let view = CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let vpTrafo = view * proj
         let eff = Effect.compose [ Effect.ofFunction BH.shade; Effect.ofFunction BH.frag ]
 
         let imageOf (sg : ISg) =
@@ -807,13 +1119,124 @@ module Golden =
         let refPix = imageOf (Sg.renderObjectSet (ASet.ofArray refObjs))
 
         // bindless: same geometry pulled from per-object buffers by handle
-        let bindlessPix = imageOf (Heap.bindless runtime IndexedGeometryMode.TriangleList eff positions normals indices (AVal.constant vpTrafo))
+        let bindlessPix = imageOf (Heap.bindless runtime IndexedGeometryMode.TriangleList eff positions normals indices (AVal.constant view) (AVal.constant proj))
 
+        let savePpm (path : string) (img : PixImage<uint8>) =
+            let m = img.GetMatrix<C4b>()
+            let w = int m.Size.X
+            let h = int m.Size.Y
+            use fs = new System.IO.FileStream(path, System.IO.FileMode.Create)
+            let header = System.Text.Encoding.ASCII.GetBytes(sprintf "P6\n%d %d\n255\n" w h)
+            fs.Write(header, 0, header.Length)
+            let buf : byte[] = Array.zeroCreate (w * h * 3)
+            let mutable o = 0
+            for yy in 0 .. h - 1 do
+                for xx in 0 .. w - 1 do
+                    let c = m.[V2l(int64 xx, int64 yy)]
+                    buf.[o] <- c.R
+                    buf.[o + 1] <- c.G
+                    buf.[o + 2] <- c.B
+                    o <- o + 3
+            fs.Write(buf, 0, buf.Length)
+        savePpm "/tmp/bindless_ref.ppm" refPix
+        savePpm "/tmp/bindless_heap.ppm" bindlessPix
         let maxD, nDiff, nNonBg, total = diff refPix bindlessPix
         Log.line "bindlessHeap: n=%d  plain-vs-bindless maxDelta=%d diffPixels=%d/%d coverage=%d" n maxD nDiff total nNonBg
         let pass = nNonBg > 1000 && maxD <= 1
         if pass then Log.line "bindlessHeap: PASS (vertex-pulled bindless geometry == plain indexed render)"
         else Log.warn "bindlessHeap: FAIL (maxDelta=%d diffPixels=%d coverage=%d)" maxD nDiff nNonBg
+        pass
+
+    // "blank-screen" debugging: POSITIONS-ONLY bindless pull (no normals/lighting),
+    // flat principal color per handle (R/G/B), MAGENTA clear. Box geometry whose plain
+    // render is known to work, real camera. Magenta == nothing drawn; R/G/B == the
+    // position pull works under perspective. Clean hand-written shader (no rewrite).
+    module BHC =
+        type UniformScope with
+            member x.PosArr : V4f[][] = uniform?StorageBuffer?PosArr
+        type VIn  = { [<VertexId>] vid : int; [<InstanceId>] iid : int }
+        type VOut = { [<Position>] clip : V4f; [<Semantic("Col")>] col : V4f }
+        let shade (v : VIn) =
+            vertex {
+                let vp : M44f = uniform?ViewProjTrafo
+                // encode the handle (gl_InstanceID) as a gradient: iid 0 -> blue, iid 8 -> red.
+                // a single uniform colour => iid constant; a spread of colours => iid varies.
+                let t = float32 v.iid / 8.0f
+                let c = V4f(t, 0.15f, 1.0f - t, 1.0f)
+                return { clip = vp * uniform.PosArr.[v.iid].[v.vid]; col = c }
+            }
+        let frag (v : VOut) = fragment { return v.col }
+
+    let bindlessCleanBoxTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature = runtime.CreateFramebufferSignature [ DefaultSemantic.Colors, TextureFormat.Rgba8; DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(640, 640))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let bpos = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let bidx = g.IndexArray |> unbox<int[]>
+        let offsets = [| for x in -1 .. 1 do for y in -1 .. 1 -> V3f(float32 x * 1.3f, float32 y * 1.3f, 0.0f) |]
+        let n = offsets.Length
+        let positions = offsets |> Array.map (fun o -> bpos |> Array.map (fun p -> p + o))
+        let view = CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let posBufs : IBuffer[] = positions |> Array.map (fun a -> ArrayBuffer (a |> Array.map (fun p -> V4f(p, 1.0f))) :> IBuffer)
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let combinedIdx = Array.concat (offsets |> Array.map (fun _ -> bidx))
+        let mutable fi = 0
+        let entries = Array.init n (fun di ->
+                        let c = bidx.Length
+                        let e = DrawCallInfo(FaceVertexCount = c, FirstIndex = fi, BaseVertex = 0, FirstInstance = di, InstanceCount = 1)
+                        fi <- fi + c
+                        e)
+        let indirect = IndirectBuffer.ofArray entries
+        let idxBV = bv combinedIdx typeof<int>
+        let eff = Effect.compose [ Effect.ofFunction BHC.shade; Effect.ofFunction BHC.frag ]
+        // provide the camera the NORMAL way (ambient semantic) instead of Sg.uniform,
+        // which was being shadowed by the default identity ViewProjTrafo.
+        let pullSg =
+            Sg.indirectDraw IndexedGeometryMode.TriangleList (AVal.constant indirect)
+            |> Sg.indexBuffer idxBV
+            |> Sg.uniform "PosArr" (AVal.constant posBufs)
+            |> Sg.viewTrafo (AVal.constant view)
+            |> Sg.projTrafo (AVal.constant proj)
+            |> Sg.effect [ eff ]
+        let clearVals = clear { color C4f.Magenta; depth 1.0 }
+        use task = pullSg |> Sg.compile runtime signature
+        let out = task |> RenderTask.renderToColorWithClear size clearVals
+        out.Acquire()
+        let pix = try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let m = pix.GetMatrix<C4b>()
+        let savePpm (path : string) =
+            let w = int m.Size.X
+            let h = int m.Size.Y
+            use fs = new System.IO.FileStream(path, System.IO.FileMode.Create)
+            let hdr = System.Text.Encoding.ASCII.GetBytes(sprintf "P6\n%d %d\n255\n" w h)
+            fs.Write(hdr, 0, hdr.Length)
+            let buf : byte[] = Array.zeroCreate (w * h * 3)
+            let mutable o = 0
+            for yy in 0 .. h - 1 do
+                for xx in 0 .. w - 1 do
+                    let c = m.[V2l(int64 xx, int64 yy)]
+                    buf.[o] <- c.R
+                    buf.[o + 1] <- c.G
+                    buf.[o + 2] <- c.B
+                    o <- o + 3
+            fs.Write(buf, 0, buf.Length)
+        savePpm "/tmp/bcbox.ppm"
+        let mutable mag = 0L
+        let mutable colored = 0L
+        m.ForeachCoord(fun (p : V2l) ->
+            let v = m.[p]
+            let isMag = v.R > 180uy && v.G < 90uy && v.B > 180uy
+            let isBlack = v.R < 40uy && v.G < 40uy && v.B < 40uy
+            if isMag then mag <- mag + 1L
+            elif not isBlack then colored <- colored + 1L)
+        Log.line "bindlessCleanBox: magenta(blank)=%d  colored(drawn)=%d" mag colored
+        let pass = colored > 1000L
+        if pass then Log.line "bindlessCleanBox: PASS (positions-only pull renders under perspective)"
+        else Log.warn "bindlessCleanBox: FAIL (screen is magenta -> position pull blank under perspective)"
         pass
 
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the

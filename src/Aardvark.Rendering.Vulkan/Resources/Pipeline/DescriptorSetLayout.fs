@@ -158,8 +158,18 @@ module DescriptorSetLayout =
                         if updateAfterBind then VkDescriptorBindingFlagsEXT.UpdateAfterBindBit
                         else VkDescriptorBindingFlagsEXT.None
 
+                    // Every unbounded (bindless) array reserves a fixed capacity (1024)
+                    // but only writes the N elements actually used, so each must be
+                    // PARTIALLY_BOUND (unwritten descriptors stay invalid). This is
+                    // INDEPENDENT of VARIABLE_DESCRIPTOR_COUNT, which the spec permits on
+                    // only ONE binding per set (the highest). Earlier only the variable-
+                    // count binding got PartiallyBound, so a second/third unbounded array
+                    // (e.g. HeapPositions + HeapNormals + HeapIndex) mis-bound.
+                    if (b.IsUnboundedSamplerArray || b.IsUnboundedStorageBufferArray) && features.BindingPartiallyBound then
+                        flags <- flags ||| VkDescriptorBindingFlagsEXT.PartiallyBoundBit
+
                     if variableCountBinding = Some b.Binding then
-                        flags <- flags ||| VkDescriptorBindingFlagsEXT.VariableDescriptorCountBit ||| VkDescriptorBindingFlagsEXT.PartiallyBoundBit
+                        flags <- flags ||| VkDescriptorBindingFlagsEXT.VariableDescriptorCountBit
 
                     flags
                 )
