@@ -210,6 +210,89 @@ module Golden =
         else Log.warn "golden: FAILED"
         pass
 
+    // offscreen reproduction of the WINDOWED demo (2 effects -> 2 buckets, varied
+    // box/sphere/torus geometry), CLASSIC vs HEAP, saved to PPM so the macOS
+    // breakage can be inspected. samples=1 so the result is downloadable.
+    let demoShotTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+            ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let geometry (ig : IndexedGeometry) =
+            let g = ig.ToIndexed()
+            let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+            let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+            let index     = g.IndexArray |> unbox<int[]>
+            let attrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+            attrs, bv index typeof<int>, index.Length
+        let shapes =
+            [| geometry (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White)
+               geometry (IndexedGeometryPrimitives.Sphere.solidSubdivisionSphere (Sphere3d(V3d.Zero, 0.4)) 3 C4b.White)
+               geometry (IndexedGeometryPrimitives.solidTorus (Torus3d(V3d.Zero, V3d.OOI, 0.35, 0.13)) C4b.White 16 12) |]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 14.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan; C4f.Orange; C4f.HotPink |]
+        let side = 8
+        let effectLit = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        let effectRim = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFragRim ]
+        let inputs =
+            Array.init (side * side) (fun i ->
+                let x = i / side
+                let y = i % side
+                let p = V3d(float (x - side/2) * 1.2, float (y - side/2) * 1.2, 0.0)
+                let (attrs, idxBV, fvc) = shapes.[i % shapes.Length]
+                let ro = RenderObject()
+                ro.Surface   <- Surface.Effect (if i % 2 = 0 then effectLit else effectRim)
+                ro.Mode      <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- attrs
+                ro.Indices   <- Some idxBV
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = fvc, InstanceCount = 1) |])
+                ro.Uniforms  <- UniformProvider.ofList [
+                    Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p * Trafo3d.RotationZ 0.6).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                    Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                    Symbol.Create "ViewProjTrafo",  viewProj ]
+                ro :> IRenderObject)
+        let renderToPix (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>()
+            finally out.Release()
+        let savePpm (path : string) (img : PixImage<uint8>) =
+            let m = img.GetMatrix<C4b>()
+            let w = int m.Size.X
+            let h = int m.Size.Y
+            use fs = new System.IO.FileStream(path, System.IO.FileMode.Create)
+            let header = System.Text.Encoding.ASCII.GetBytes(sprintf "P6\n%d %d\n255\n" w h)
+            fs.Write(header, 0, header.Length)
+            let buf : byte[] = Array.zeroCreate (w * h * 3)
+            let mutable o = 0
+            for yy in 0 .. h - 1 do
+                for xx in 0 .. w - 1 do
+                    let c = m.[V2l(int64 xx, int64 yy)]
+                    buf.[o] <- c.R
+                    buf.[o + 1] <- c.G
+                    buf.[o + 2] <- c.B
+                    o <- o + 3
+            fs.Write(buf, 0, buf.Length)
+        let classic = renderToPix (ASet.ofArray inputs)
+        let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray inputs)
+        let heap = renderToPix heapObjs
+        savePpm "/tmp/demo_classic.ppm" classic
+        savePpm "/tmp/demo_heap.ppm" heap
+        let maxDelta, nDiff, nNonBg, total = diff classic heap
+        Log.line "demoShot: -> %d bucket(s)  maxChannelDelta=%d  diffPixels=%d/%d (%.4f%%)  coverage=%d px"
+            Heap.lastBucketCount maxDelta nDiff total (100.0 * float nDiff / float total) nNonBg
+        Log.line "demoShot: saved /tmp/demo_classic.ppm + /tmp/demo_heap.ppm"
+        true
+
     // fp64 derived-uniform compute pre-pass test. Renders the SAME camera-relative
     // cube grid (a) at normal scale and (b) at geodetic scale (~earth radius) via
     // Heap.derivedFp64 (fp64 ModelViewProjTrafo + NormalMatrix), and (c) at geodetic

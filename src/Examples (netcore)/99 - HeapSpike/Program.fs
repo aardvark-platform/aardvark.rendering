@@ -115,6 +115,8 @@ let main argv =
         if Golden.nativeBufTest () then 0 else 1
     elif argv |> Array.contains "vartype" then
         if Golden.varTypeTest () then 0 else 1
+    elif argv |> Array.contains "demoshot" then
+        if Golden.demoShotTest () then 0 else 1
     elif argv |> Array.contains "glsldump" then
         GlslDump.run (); 0
     elif argv |> Array.contains "ssboarray" then
