@@ -21,6 +21,7 @@
     <Compile Include="Golden.fs" />
     <Compile Include="GpuModes.fs" />
     <Compile Include="GLBindless.fs" />
+    <Compile Include="ChainDemo.fs" />
     <Compile Include="Showcase.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

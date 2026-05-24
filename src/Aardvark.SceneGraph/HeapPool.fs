@@ -284,6 +284,10 @@ module Heap =
     /// (diagnostic / for logging).
     let mutable lastBucketCount = 0
 
+    /// Distinct trafo-link slots uploaded on the most recent chain-arena flush
+    /// (diagnostic). A shared-root change over N objects should be 1, not N.
+    let mutable lastChainLinkUploads = 0
+
     /// Adaptive writer for one arena region. Reads its source aval and packs
     /// the floats into the arena's shared staging at its offset. Marked (via
     /// the source) only when that source changes.
@@ -590,6 +594,212 @@ module Heap =
                 member _.TryGetUniform(_, name) = if name = symHeap then ValueSome heapU else ValueNone
                 member _.Dispose() = () }
         Sg.renderObjectSet (ASet.single (ro :> IRenderObject))
+
+    /// One distinct trafo link -> one fp64 slot in the LinkArena. Packs the
+    /// link's Forward matrix; marked (via its source) only when that link changes.
+    type internal LinkWriter(src : aval<Trafo3d>, slot : int) =
+        inherit AdaptiveObject()
+        do (src :> IAdaptiveValue).Acquire()
+        member _.Slot = slot
+        member x.Pack(token : AdaptiveToken, staging : M44d[]) =
+            x.EvaluateIfNeeded token () (fun token -> staging.[slot] <- (src.GetValue token).Forward)
+        member x.Dispose() =
+            (src :> IAdaptiveValue).Release()
+            (src :> IAdaptiveValue).Outputs.Remove x |> ignore
+            x.Outputs.Clear()
+
+    /// Dirty-tracked fp64 buffer of DISTINCT trafo links (M44d, one 128-byte slot
+    /// each). A link aval shared by N chains is ONE slot here, so changing it marks
+    /// ONE writer => one slot re-packed + one sub-range upload, regardless of N —
+    /// this is what kills the CPU fan-out. Coalesces adjacent dirty slots into runs.
+    type internal LinkArena(runtime : IBufferRuntime, distinct : aval<Trafo3d>[]) =
+        inherit AdaptiveBuffer(runtime, uint64 (max 1 distinct.Length * 128), BufferUsage.Storage, BufferStorage.Host)
+        let staging = Array.zeroCreate<M44d> (max 1 distinct.Length)
+        let writers = distinct |> Array.mapi (fun i a -> LinkWriter(a, i))
+        let pending = LockedSet<LinkWriter>()
+        do for w in writers do pending.Add w |> ignore        // all dirty initially
+        override x.Compute(t, rt) =
+            let dirty = pending.GetAndClear()
+            if dirty.Count > 0 then
+                lastChainLinkUploads <- dirty.Count
+                let slots = System.Collections.Generic.List<int>(dirty.Count)
+                for w in dirty do w.Pack(t, staging); slots.Add w.Slot
+                slots.Sort()
+                let flush lo hi = x.Write(staging, uint64 (lo * 128), lo, hi - lo + 1, false)
+                let mutable lo = slots.[0]
+                let mutable hi = slots.[0]
+                for i in 1 .. slots.Count - 1 do
+                    let s = slots.[i]
+                    if s <= hi + 1 then hi <- s             // contiguous -> extend run
+                    else flush lo hi; lo <- s; hi <- s      // gap -> emit run, start new
+                flush lo hi
+            base.Compute(t, rt)
+        override x.InputChangedObject(_, o) =
+            match o with
+            | :? LinkWriter as w -> pending.Add w |> ignore
+            | _ -> ()
+        member x.Dispose() = for w in writers do w.Dispose()
+
+    // ── GPU transform propagation (wombat §7 "modelChain") ──────────────
+    // Instead of CPU-composing each RO's ModelTrafo — a shared parent over N
+    // objects marks N composites => N arena uploads, the worst adaptive fan-out —
+    // emit each RO's ancestor CHAIN of trafo links and compose Model = L0·…·Ln on
+    // the GPU (fp64). Distinct links are stored ONCE (shared parent = one link),
+    // so changing a shared parent marks ONE link => one upload + one dispatch,
+    // regardless of N. Links are root-first ([root, …, leaf]) so the forward
+    // product equals aardvark's ModelTrafo. A compute pass writes per-object MVP +
+    // NormalMatrix (fp64, camera-relative) gathered by gl_InstanceIndex — same
+    // arena layout as derivedFp64.
+    module private Chain =
+        // one thread per object: compose its chain's links in fp64, then
+        // outp[2i]=Proj·View·Model, outp[2i+1]=(Model^-1)^T. Chain links are
+        // gathered indirectly through linkIdx so distinct links dedup to one slot.
+        [<LocalSize(X = 64)>]
+        let composeMvpNm (n : int) (view : M44d) (proj : M44d)
+                         (chainOffset : int[]) (chainLen : int[]) (linkIdx : int[])
+                         (links : M44d[]) (outp : M44f[]) =
+            compute {
+                let i = getGlobalId().X
+                if i < n then
+                    let off = chainOffset.[i]
+                    let len = chainLen.[i]
+                    // chain links are [L0; …; Ln-1] in compose order (Trafo3d `*`);
+                    // (L0·…·Ln-1).Forward = Ln-1.F · … · L0.F, so multiply REVERSED.
+                    let mutable m = links.[linkIdx.[off + len - 1]]
+                    for k in 1 .. len - 1 do
+                        m <- m * links.[linkIdx.[off + len - 1 - k]]
+                    outp.[2*i]     <- M44f(proj * view * m)
+                    outp.[2*i + 1] <- M44f(m.Inverse.Transposed)
+            }
+
+    /// Slice-A driver: per-object trafo chains (root-first) composed on the GPU.
+    /// `chains.[i]` is object i's ancestor link list; each link is an
+    /// `aval<Trafo3d>`. No dedup yet (every link uploaded) — proves the compute
+    /// math against the composed `derivedFp64` path. The effect reads
+    /// `uniform?ModelViewProjTrafo` and/or `uniform?NormalMatrix`.
+    let derivedChainFp64 (runtime : IRuntime) (mode : IndexedGeometryMode)
+                         (positions : V3f[]) (normals : V3f[]) (index : int[])
+                         (effect : Effect)
+                         (view : aval<Trafo3d>) (proj : aval<Trafo3d>)
+                         (chains : aval<Trafo3d>[][]) : ISg =
+        checkSupport false runtime
+        let n = chains.Length
+        let stride = 32                     // floats per object: MVP(16) + NormalMatrix(16)
+
+        // flatten chains, DEDUP links by aval identity: a shared parent => one slot.
+        let slotOf      = System.Collections.Generic.Dictionary<IAdaptiveValue, int>(HashIdentity.Reference)
+        let distinct    = System.Collections.Generic.List<aval<Trafo3d>>()
+        let chainOffset = Array.zeroCreate<int> (max 1 n)
+        let chainLen    = Array.zeroCreate<int> (max 1 n)
+        let idxList     = System.Collections.Generic.List<int>()
+        let mutable cur = 0
+        for i in 0 .. n - 1 do
+            chainOffset.[i] <- cur
+            chainLen.[i] <- chains.[i].Length
+            for l in chains.[i] do
+                let slot =
+                    match slotOf.TryGetValue (l :> IAdaptiveValue) with
+                    | true, s -> s
+                    | _ -> let s = distinct.Count in slotOf.[l :> IAdaptiveValue] <- s; distinct.Add l; s
+                idxList.Add slot
+                cur <- cur + 1
+        let linkIdx = idxList.ToArray()
+        let distinctArr = distinct.ToArray()
+
+        // distinct links live in a dirty-tracked fp64 arena (shared link = 1 slot,
+        // one upload on change); chain structure buffers are static (uploaded once).
+        let linkArena = LinkArena(runtime, distinctArr)
+        let outBuf  = runtime.CreateBuffer<M44f>(max 1 (2 * n))
+        let offBuf  = runtime.CreateBuffer<int>(max 1 n)
+        let lenBuf  = runtime.CreateBuffer<int>(max 1 n)
+        let idxBuf  = runtime.CreateBuffer<int>(max 1 cur)
+        offBuf.Upload chainOffset
+        lenBuf.Upload chainLen
+        idxBuf.Upload linkIdx
+
+        let shader = runtime.CreateComputeShader Chain.composeMvpNm
+        let input  = runtime.CreateInputBinding shader
+        let groups = (max 1 n + shader.LocalSize.X - 1) / shader.LocalSize.X
+        let prog   = runtime.CompileCompute [ ComputeCommand.Bind shader; ComputeCommand.SetInput input; ComputeCommand.Dispatch groups ]
+
+        // reactive: forcing linkArena uploads only the changed link(s); the dispatch
+        // re-runs because this depends on linkArena / view / proj.
+        let arena =
+            AVal.custom (fun t ->
+                let linkBuf = (linkArena :> aval<IBackendBuffer>).GetValue t
+                input.["n"]           <- n
+                input.["view"]        <- (view.GetValue t).Forward
+                input.["proj"]        <- (proj.GetValue t).Forward
+                input.["chainOffset"] <- offBuf
+                input.["chainLen"]    <- lenBuf
+                input.["linkIdx"]     <- idxBuf
+                input.["links"]       <- linkBuf
+                input.["outp"]        <- outBuf
+                input.Flush()
+                prog.Run()
+                outBuf :> IBuffer)
+
+        let iid : Expr<int> = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
+        let eff =
+            effect |> Effect.substituteUniforms (fun name typ _ _ ->
+                match name with
+                | "ModelViewProjTrafo" -> Some (gatherFor typ <@ %iid * stride + 0 @>)
+                | "NormalMatrix"       -> Some (gatherFor typ <@ %iid * stride + 16 @>)
+                | _ -> None)
+
+        let bv (a : System.Array) tp = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), tp)
+        let symHeap = Symbol.Create "HeapData"
+        let heapU = arena :> IAdaptiveValue
+        let ro = RenderObject()
+        ro.Surface          <- Surface.Effect eff
+        ro.Mode             <- mode
+        ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        ro.Indices          <- Some (bv index typeof<int>)
+        ro.DrawCalls        <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = n) |])
+        ro.Uniforms <-
+            { new IUniformProvider with
+                member _.TryGetUniform(_, name) = if name = symHeap then ValueSome heapU else ValueNone
+                member _.Dispose() = () }
+        Sg.renderObjectSet (ASet.single (ro :> IRenderObject))
+
+    // ── Heap-local chain emission (authoring) ───────────────────────────
+    // A lightweight transform tree, OWNED by the heap (no core Aardvark.SceneGraph
+    // semantics touched). `Trafo` scopes are shared by aval identity — author one
+    // `cval<Trafo3d>` over many children and it dedups to one link slot, so
+    // animating it is O(1). `flattenChains` produces the per-leaf root→leaf chains
+    // that `derivedChainFp64` composes on the GPU.
+    type ChainNode =
+        /// a (possibly shared) transform scope wrapping children
+        | Trafo of aval<Trafo3d> * ChainNode list
+        /// a renderable leaf with its own local transform
+        | Leaf  of aval<Trafo3d>
+
+    /// Flatten a transform tree to one root→leaf chain per leaf (compose order,
+    /// matching `Trafo3d` `*`). Adjacent CONSTANT links are folded into one so a
+    /// run of static trafos costs a single slot; dynamic links keep their identity
+    /// (shared scopes stay one slot across all leaves under them).
+    let flattenChains (root : ChainNode) : aval<Trafo3d>[][] =
+        // fold a built chain (root-first): collapse maximal runs of AVal.constant
+        // links into a single constant, preserving order; keep dynamic links as-is.
+        let foldConstants (links : aval<Trafo3d> list) : aval<Trafo3d>[] =
+            let out = System.Collections.Generic.List<aval<Trafo3d>>()
+            let mutable acc : Trafo3d voption = ValueNone
+            let flush () = match acc with ValueSome t -> out.Add(AVal.constant t); acc <- ValueNone | ValueNone -> ()
+            for l in links do
+                if l.IsConstant then
+                    let t = AVal.force l
+                    acc <- ValueSome (match acc with ValueSome a -> a * t | ValueNone -> t)
+                else flush (); out.Add l
+            flush ()
+            out.ToArray()
+        let result = System.Collections.Generic.List<aval<Trafo3d>[]>()
+        // acc is innermost-first; reverse at the leaf to get root→leaf order.
+        let rec go (acc : aval<Trafo3d> list) (node : ChainNode) =
+            match node with
+            | Trafo(t, children) -> for c in children do go (t :: acc) c
+            | Leaf lt -> result.Add(foldConstants (List.rev (lt :: acc)))
+        go [] root
+        result.ToArray()
 
     // ── Incremental scene (imperative Add/Remove) ───────────────────────
     // The streaming path: ONE bucket, shared geometry, fixed-size per-draw

@@ -103,6 +103,12 @@ let main argv =
         if GpuModes.run () then 0 else 1
     elif argv |> Array.contains "fp64" then
         if Golden.derivedFp64Test () then 0 else 1
+    elif argv |> Array.contains "chain" then
+        if Golden.derivedChainTest () then 0 else 1
+    elif argv |> Array.contains "chainfan" then
+        if Golden.chainFanoutTest () then 0 else 1
+    elif argv |> Array.contains "chaindemo" then
+        ChainDemo.run (); 0
     elif argv |> Array.contains "inst" then
         if Golden.instancingTest () then 0 else 1
     elif argv |> Array.contains "instbucket" then

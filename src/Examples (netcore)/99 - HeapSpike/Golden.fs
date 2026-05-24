@@ -314,6 +314,102 @@ module Golden =
         else Log.warn "derivedFp64: FAIL (scaleInvariant=%b f32Broke=%b)" scaleInvariant f32Broke
         pass
 
+    // GPU transform propagation (Slice A): the chained path must produce the
+    // SAME image as the composed derivedFp64 path. Scene = a shared parent
+    // rotation over a grid of per-cube translations; composed model = rot·trans,
+    // chain = [rot; trans] (root-first). Bit-identical => chain compose + order ok.
+    let derivedChainTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+
+        let side = 6
+        let offsets = [| for x in 0 .. side-1 do for y in 0 .. side-1 -> V3d(float (x-side/2) * 1.4, float (y-side/2) * 1.4, 0.0) |]
+        let n = offsets.Length
+        let parent = Trafo3d.Rotation(V3d(0.3, 0.6, 0.2).Normalized, 0.7) * Trafo3d.Scale 1.3
+        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -14.0, 9.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo)
+        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
+        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
+
+        let imageOf (sg : ISg) =
+            use task = sg |> Sg.compile runtime signature
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+
+        // per-cube chain links [parent; translation] in Trafo3d compose order.
+        let chainOf (o : V3d) = [| parent; Trafo3d.Translation o |]
+        // composed: fold the SAME links with Trafo3d `*` (canonical definition).
+        let composed =
+            let models = offsets |> Array.map (fun o -> AVal.constant (chainOf o |> Array.reduce (*)))
+            Heap.derivedFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj models
+        // chained: the same links, composed on the GPU
+        let chained =
+            let chains = offsets |> Array.map (fun o -> chainOf o |> Array.map AVal.constant)
+            Heap.derivedChainFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj chains
+
+        let ca = imageOf composed
+        let cb = imageOf chained
+        let maxD, nDiff, nNonBg, total = diff ca cb
+        Log.line "derivedChain: n=%d  composed-vs-chained maxDelta=%d diffPixels=%d/%d coverage=%d" n maxD nDiff total nNonBg
+        let pass = nNonBg > 1000 && maxD <= 1
+        if pass then Log.line "derivedChain: PASS (GPU chain compose == composed ModelTrafo, order correct)"
+        else Log.warn "derivedChain: FAIL (maxDelta=%d diffPixels=%d coverage=%d)" maxD nDiff nNonBg
+        pass
+
+    // GPU transform propagation (Slice B): the fan-out is gone. N objects share
+    // ONE root cval; changing it must re-upload exactly ONE distinct link slot
+    // (the root), not N. The win that motivates the whole feature.
+    let chainFanoutTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.4)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+
+        let nSide = 30
+        let offsets = [| for x in 0 .. nSide-1 do for y in 0 .. nSide-1 -> V3d(float (x-nSide/2) * 0.9, float (y-nSide/2) * 0.9, 0.0) |]
+        let n = offsets.Length
+        // ONE shared root cval over all N objects (the worst-case fan-out)
+        let root = AVal.init (Trafo3d.RotationZ 0.0)
+        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -40.0, 30.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo)
+        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
+        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
+        let chains = offsets |> Array.map (fun o -> [| (root :> aval<Trafo3d>); AVal.constant (Trafo3d.Translation o) |])
+        let sg = Heap.derivedChainFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj chains
+
+        use task = sg |> Sg.compile runtime signature
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        try
+            out.GetValue() |> ignore                            // initial: all distinct uploaded
+            let initial = Heap.lastChainLinkUploads
+            transact (fun () -> root.Value <- Trafo3d.RotationZ 0.6)
+            out.GetValue() |> ignore                            // re-render after a single shared-root change
+            let afterRoot = Heap.lastChainLinkUploads
+            Log.line "chainFanout: n=%d distinct=%d initialUploads=%d afterRootChange=%d" n (n+1) initial afterRoot
+            let pass = afterRoot = 1 && initial >= n
+            if pass then Log.line "chainFanout: PASS (shared-root change uploads 1 link, not %d — fan-out gone)" n
+            else Log.warn "chainFanout: FAIL (initial=%d afterRoot=%d, expected afterRoot=1)" initial afterRoot
+            pass
+        finally out.Release()
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =
