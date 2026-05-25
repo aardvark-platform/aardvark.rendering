@@ -15,6 +15,14 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
 
     let fence = device.CreateFence()
 
+    // A VkQueue is NOT thread-safe: vkQueueSubmit / vkQueuePresentKHR / vkQueueBindSparse
+    // on the same queue must be externally synchronized, and RunSynchronously shares the
+    // per-queue `fence` above. The render thread (submit + present) and background uploads
+    // (RunSynchronously — e.g. text-glyph GeometryPool streaming) otherwise race here; on
+    // MoltenVK that deadlocks the fence wait. Serialize all queue access through this lock.
+    // (ContextLock is a GL make-current artifact and does NOT guard the Vulkan queue.)
+    let queueLock = obj()
+
     member x.HasTransfer = family.Info.flags.HasFlag QueueFlags.Transfer
     member x.HasCompute = family.Info.flags.HasFlag QueueFlags.Compute
     member x.HasGraphics = family.Info.flags.HasFlag QueueFlags.Graphics
@@ -25,6 +33,8 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
     member x.FamilyIndex = family.Info.index
     member x.Index = index
     member x.Handle = handle
+    /// Guards all VkQueue access on this queue. vkQueuePresentKHR (Swapchain) must take it too.
+    member x.QueueLock = queueLock
 
     member x.BindSparse(binds: VkBindSparseInfo[], fence: Fence) =
         let fence =
@@ -65,9 +75,10 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
                 |> checkForFault device "could not bind sparse memory"
 
     member x.BindSparseSynchronously(binds: VkBindSparseInfo[]) =
-        fence.Reset()
-        x.BindSparse(binds, fence)
-        fence.Wait()
+        lock queueLock (fun () ->
+            fence.Reset()
+            x.BindSparse(binds, fence)
+            fence.Wait())
 
     member x.Submit(buffers: CommandBuffer[], waitFor: Semaphore[], signal: Semaphore[], fence: Fence) =
         let pWaitFor = waitFor |> NativePtr.stackUseArr _.Handle
@@ -121,9 +132,10 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
                 |> checkForFault device "could not submit command buffer"
 
     member x.RunSynchronously(buffers: CommandBuffer[], waitFor: Semaphore[], signal: Semaphore[]) =
-        fence.Reset()
-        x.Submit(buffers, waitFor, signal, fence)
-        fence.Wait()
+        lock queueLock (fun () ->
+            fence.Reset()
+            x.Submit(buffers, waitFor, signal, fence)
+            fence.Wait())
 
     member x.RunSynchronously(buffer: CommandBuffer) =
         if not buffer.IsEmpty then
@@ -131,7 +143,7 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
 
     member x.StartTask(buffers: CommandBuffer[], waitFor: Semaphore[], signal: Semaphore[]) =
         let f = device.CreateFence()
-        x.Submit(buffers, waitFor, signal, f)
+        lock queueLock (fun () -> x.Submit(buffers, waitFor, signal, f))
         new DeviceTask(f)
 
     member x.StartTask(buffer: CommandBuffer) =

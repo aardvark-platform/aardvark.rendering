@@ -228,7 +228,12 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
                 &&currentBuffer, NativePtr.zero
             )
 
-        let result = VkRaw.vkQueuePresentKHR(queue.Handle, &&presentInfo)
+        // vkQueuePresentKHR shares the VkQueue with vkQueueSubmit; serialize via the same
+        // per-queue lock so background uploads (e.g. text glyphs) can't race the present.
+        System.Threading.Monitor.Enter queue.QueueLock
+        let result =
+            try VkRaw.vkQueuePresentKHR(queue.Handle, &&presentInfo)
+            finally System.Threading.Monitor.Exit queue.QueueLock
 
         if VkResult.isSwapFailure result then false
         else
