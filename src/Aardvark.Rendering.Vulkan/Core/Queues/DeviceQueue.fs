@@ -106,7 +106,7 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
         if SubmitTrace.enabled then
             let hs (a: Semaphore[]) = a |> Array.map (fun s -> sprintf "%x" s.Handle.Handle) |> String.concat ","
             SubmitTrace.log (sprintf "submit  seq=%d tid=%d q=fam%d/%d qh=%x bufs=%d fence=%x wait=[%s] signal=[%s]"
-                (SubmitTrace.next()) (SubmitTrace.tid()) family.Info.index index (int64 handle.Handle) buffers.Length (int64 fence.Handle) (hs waitFor) (hs signal))
+                (SubmitTrace.next()) (SubmitTrace.tid()) family.Info.index index (int64 handle) buffers.Length (int64 fence.Handle) (hs waitFor) (hs signal))
 
         match device.PhysicalDevice with
         | :? PhysicalDeviceGroup as group ->
@@ -155,10 +155,10 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
             x.Submit(buffers, waitFor, signal, fence)
             if SubmitTrace.enabled then
                 SubmitTrace.log (sprintf "runsync-wait seq=%d tid=%d q=fam%d/%d qh=%x fence=%x"
-                    (SubmitTrace.next()) (SubmitTrace.tid()) family.Info.index index (int64 handle.Handle) (int64 fence.Handle))
+                    (SubmitTrace.next()) (SubmitTrace.tid()) family.Info.index index (int64 handle) (int64 fence.Handle.Handle))
             fence.Wait()
             if SubmitTrace.enabled then
-                SubmitTrace.log (sprintf "runsync-DONE tid=%d qh=%x" (SubmitTrace.tid()) (int64 handle.Handle)))
+                SubmitTrace.log (sprintf "runsync-DONE tid=%d qh=%x" (SubmitTrace.tid()) (int64 handle)))
 
     member x.RunSynchronously(buffer: CommandBuffer) =
         if not buffer.IsEmpty then

@@ -232,7 +232,7 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
 
         // vkQueuePresentKHR shares the VkQueue with vkQueueSubmit; serialize via the same
         // per-queue lock so background uploads (e.g. text glyphs) can't race the present.
-        if SubmitTrace.enabled then SubmitTrace.log (sprintf "present-pre seq=%d tid=%d qh=%x buf=%d" (SubmitTrace.next()) (SubmitTrace.tid()) (int64 queue.Handle.Handle) currentBuffer)
+        if SubmitTrace.enabled then SubmitTrace.log (sprintf "present-pre seq=%d tid=%d qh=%x buf=%d" (SubmitTrace.next()) (SubmitTrace.tid()) (int64 queue.Handle) currentBuffer)
         System.Threading.Monitor.Enter queue.QueueLock
         let result =
             try VkRaw.vkQueuePresentKHR(queue.Handle, &&presentInfo)
