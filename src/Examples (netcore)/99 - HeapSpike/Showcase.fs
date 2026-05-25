@@ -128,7 +128,8 @@ module Showcase =
                     { Aardvark.Rendering.Vulkan.DebugConfig.Minimal with
                         ValidationLayer =
                             Some { Aardvark.Rendering.Vulkan.ValidationLayerConfig.Standard with
-                                     SynchronizationValidation = true } }
+                                     SynchronizationValidation = true
+                                     BestPracticesValidation   = true } }   // best-practices = control: if these fire, the config path (incl. sync-val) is live
                 new Aardvark.Application.Slim.VulkanApplication(vcfg :> IDebugConfig)
             else
                 new Aardvark.Application.Slim.VulkanApplication(false)

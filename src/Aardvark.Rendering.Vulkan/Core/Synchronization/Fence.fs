@@ -67,8 +67,23 @@ type Fence internal (device: IDevice, [<Optional; DefaultParameterValue(false)>]
             fence <- VkFence.Null
 
     member x.Wait([<Optional; DefaultParameterValue(~~~0UL)>] timeoutInNanoseconds: uint64) =
-        if not <| x.TryWait(timeoutInNanoseconds) then
-            raise <| TimeoutException()
+        if timeoutInNanoseconds <> infinite then
+            if not <| x.TryWait(timeoutInNanoseconds) then
+                raise <| TimeoutException()
+        else
+            // Watchdog: an infinite vkWaitForFences that never returns is a GPU hang, and would
+            // otherwise silently freeze the whole app with no clue where (exactly how the MoltenVK
+            // glyph-upload wedge presented — it took a manual `sample` + dotnet-stack to locate).
+            // Wait in chunks and, if it blocks too long, log the managed call stack so the hang is a
+            // named, diagnosable warning instead of a silent freeze — then keep waiting (behaviour
+            // is unchanged for normal, fast waits).
+            let chunkNs = 5_000_000_000UL // 5s
+            let mutable warned = false
+            while not (x.TryWait chunkNs) do
+                if not warned then
+                    warned <- true
+                    Log.warn "[Vulkan] fence wait has blocked >5s — likely a GPU hang (vkWaitForFences not returning). Still waiting. Stack:\n%s"
+                        (System.Diagnostics.StackTrace(true).ToString())
 
     interface IDeviceObject with
         member x.DeviceInterface = x.DeviceInterface
