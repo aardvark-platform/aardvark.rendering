@@ -1396,7 +1396,8 @@ module Golden =
         let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
         let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
         let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
-        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let viewProjM = AVal.init (view * proj)              // mutated per "frame" in glyphWedge to force re-submit
+        let viewProj = viewProjM :> IAdaptiveValue
         let texArray : ITexture[] = Array.init TexCount mkTexture
         let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
         let grid =
@@ -1456,7 +1457,8 @@ module Golden =
         let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
         let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
         let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
-        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let viewProjM = AVal.init (view * proj)              // mutated per "frame" in glyphWedge to force re-submit
+        let viewProj = viewProjM :> IAdaptiveValue
         let texArray : ITexture[] = Array.init TexCount mkTexture
         let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
         let grid =
@@ -1532,7 +1534,8 @@ module Golden =
         let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
         let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
         let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
-        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let viewProjM = AVal.init (view * proj)              // mutated per "frame" in glyphWedge to force re-submit
+        let viewProj = viewProjM :> IAdaptiveValue
         let texArray : ITexture[] = Array.init TexCount mkTexture
         let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction THP.frag ]
         let grid =
@@ -1795,7 +1798,8 @@ module Golden =
         let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
         let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
         let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
-        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let viewProjM = AVal.init (view * proj)              // mutated per "frame" in glyphWedge to force re-submit
+        let viewProj = viewProjM :> IAdaptiveValue
         let texArray : ITexture[] = Array.init TexCount mkTexture
         let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
         let grid = [| for x in 0 .. 7 do for y in 0 .. 7 -> (x * 8 + y), V3d(float (x - 4) * 1.2, float (y - 4) * 1.2, 0.0) |]
@@ -1865,7 +1869,8 @@ module Golden =
         let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
         let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 60.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
         let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
-        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let viewProjM = AVal.init (view * proj)              // mutated per "frame" in glyphWedge to force re-submit
+        let viewProj = viewProjM :> IAdaptiveValue
         let texArray : ITexture[] = Array.init TexCount mkTexture
         let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
         let side = max 1 (int (ceil (sqrt (float n))))
@@ -1944,7 +1949,8 @@ module Golden =
         let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
         let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 60.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
         let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
-        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let viewProjM = AVal.init (view * proj)              // mutated per "frame" in glyphWedge to force re-submit
+        let viewProj = viewProjM :> IAdaptiveValue
         let texArray : ITexture[] = Array.init TexCount mkTexture
         let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
         let side = max 1 (int (ceil (sqrt (float n))))
@@ -1969,7 +1975,11 @@ module Golden =
         use task = runtime.CompileRender(signature, heapObjs)
         let out = task |> RenderTask.renderToColor size
         out.Acquire()
-        for _ in 1 .. iters do out.GetValue() |> ignore   // force the heap render(s); loads the GPU
+        // re-submit the heap render ITERS times (mutate viewProj each "frame" so it's actually
+        // dirty and re-rendered), mimicking the showcase's continuous render loop
+        for it in 1 .. iters do
+            transact (fun () -> viewProjM.Value <- view * proj * Trafo3d.RotationZ(float it * 1.0e-4))
+            out.GetValue() |> ignore
         out.Release()
         Heap.forceAtlas <- false
         Log.line "glyphWedge: heap render DONE (buckets=%d). Now PrepareGlyphs on the loaded device ..." Heap.lastBucketCount
