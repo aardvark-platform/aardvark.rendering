@@ -56,6 +56,14 @@ module HeapUniforms =
         // buffer per supported sampler type.
         member x.HeapTexIndices2d   : int[] = uniform?StorageBuffer?HeapTexIndices2d
         member x.HeapTexIndicesCube : int[] = uniform?StorageBuffer?HeapTexIndicesCube
+        // ── texture-atlas fallback (Vulkan-1.0 / GL / MoltenVK: ONE sampler) ──
+        // Per-object atlas placement (indexed by slot*K + k): mip-0 interior origin and
+        // size in atlas PIXELS, and packed format bits (numMips<<1 | addrU<<4 | addrV<<6).
+        member x.HeapAtlasOrigin : V4f[] = uniform?StorageBuffer?HeapAtlasOrigin   // xy used
+        member x.HeapAtlasSize   : V4f[] = uniform?StorageBuffer?HeapAtlasSize     // xy used
+        member x.HeapAtlasFmt    : int[] = uniform?StorageBuffer?HeapAtlasFmt
+        /// the atlas page dimensions in pixels (to normalize atlas-pixel coords)
+        member x.HeapAtlasPxSize : V2f   = uniform?HeapAtlasPxSize
 
 module Heap =
 
@@ -196,6 +204,105 @@ module Heap =
         if   ty = typeof<Sampler2d>   then <@ heapTex2d.[   uniform.HeapTexIndices2d.[   (%slot) * kCountT + kt ] ] @>.Raw
         elif ty = typeof<SamplerCube> then <@ heapTexCube.[ uniform.HeapTexIndicesCube.[ (%slot) * kCountT + kt ] ] @>.Raw
         else failwithf "Heap: unsupported bindless sampler type %A" ty
+
+    // ── texture-atlas sampling (single-page, ONE sampler) ──────────────────
+    // The Vulkan-1.0 / GL / MoltenVK texture path: one bound sampler over a packed
+    // atlas page (HeapAtlas). Mip selection + wrap are done IN-SHADER over the
+    // embedded Iliffe pyramid + 2-px gutters, so the page texture itself is one mip
+    // level and one sampler — no descriptor indexing, no per-texture sampler. Faithful
+    // port of wombat's atlasSample. Per-object placement (origin/size px, fmt) is
+    // gathered from the arena by slot and passed in by the Sample-call rewrite.
+    let private heapAtlas =
+        sampler2d { texture uniform?HeapAtlasTex; filter Filter.MinMagLinear; addressU WrapMode.Clamp; addressV WrapMode.Clamp }
+
+    [<ReflectedDefinition>]
+    let private atlasMirror (u : float32) =
+        let t = u - floor (u * 0.5f) * 2.0f
+        1.0f - abs (t - 1.0f)
+
+    // one axis → atlas-pixel coord per wrap mode (0=clamp, 1=repeat, 2=mirror).
+    // repeat shifts ±1px near an edge so hardware bilinear lands on the outer wrap gutter.
+    [<ReflectedDefinition>]
+    let private atlasAxis (uv : float32) (mo : float32) (ms : float32) (mode : int) =
+        if mode = 0 then mo + (clamp 0.0f 1.0f uv) * ms
+        elif mode = 2 then mo + (atlasMirror uv) * ms
+        else
+            let f = uv - floor uv
+            let mutable p = mo + f * ms
+            if p - mo < 0.5f then p <- p - 1.0f
+            elif (mo + ms) - p < 0.5f then p <- p + 1.0f
+            p
+
+    // mip-k interior origin in atlas px, walking the Iliffe pyramid (matches HeapAtlas).
+    [<ReflectedDefinition>]
+    let private atlasMipOrigin (origin : V2f) (size : V2f) (k : int) : V2f =
+        if k = 0 then origin
+        else
+            let x = origin.X + size.X + 4.0f
+            let mutable y = origin.Y
+            let mutable j = 1
+            while j < k do
+                y <- y + (max 1.0f (floor (size.Y / float32 (1 <<< j)))) + 4.0f
+                j <- j + 1
+            V2f(x, y)
+
+    [<ReflectedDefinition>]
+    let private atlasMipAt (tex : Sampler2d) (origin : V2f) (size : V2f) (k : int) (uv : V2f) (addrU : int) (addrV : int) : V4f =
+        let mo = atlasMipOrigin origin size k
+        let ms = V2f(max 1.0f (floor (size.X / float32 (1 <<< k))), max 1.0f (floor (size.Y / float32 (1 <<< k))))
+        let p  = uniform.HeapAtlasPxSize.X
+        let px = atlasAxis uv.X mo.X ms.X addrU
+        // aardvark uploads PixImages bottom-left; acq origins are top-left -> feed (1-v) and flip page-Y.
+        let py = atlasAxis (1.0f - uv.Y) mo.Y ms.Y addrV
+        tex.SampleLevel(V2f(px, p - py) / p, 0.0f)
+
+    /// sample an object's atlas tile. origin/size in atlas px; fmt packs
+    /// numMips&lt;&lt;1 | addrU&lt;&lt;4 | addrV&lt;&lt;6. Manual LOD from screen-space derivatives.
+    [<ReflectedDefinition>]
+    let private atlasSample (tex : Sampler2d) (origin : V2f) (size : V2f) (fmt : int) (uv : V2f) : V4f =
+        let numMips = (fmt >>> 1) &&& 0x7
+        let addrU   = (fmt >>> 4) &&& 0x3
+        let addrV   = (fmt >>> 6) &&& 0x3
+        // manual LOD from screen-space derivatives of the tile-texel coordinate.
+        let duvdx = ddx (uv * size)
+        let duvdy = ddy (uv * size)
+        let rho   = max (Vec.length duvdx) (Vec.length duvdy)
+        let maxLod = float32 (numMips - 1)
+        let lod   = clamp 0.0f maxLod (log (max rho 1e-6f) / log 2.0f)
+        let k0    = int (floor lod)
+        let k1    = min (k0 + 1) (int maxLod)
+        let f     = lod - float32 k0
+        let c0    = atlasMipAt tex origin size k0 uv addrU addrV
+        let c1    = atlasMipAt tex origin size k1 uv addrU addrV
+        c0 * (1.0f - f) + c1 * f
+
+    // The "FShade trickery": rewrite each `sampler.Sample(uv)` CALL into an
+    // `atlasSample(origin, size, fmt, uv)` call. In the shader body a sampler read is a
+    // `Call(None, ReadInput, [Uniform; "name"; idx])`, and `.Sample` is a `Call(Some
+    // thatRead, Sample, [uv])`. We match that, pull the sampler name, and replace the
+    // whole call with atlasSample fed the per-object placement gathered from the arena
+    // (HeapAtlasOrigin/Size/Fmt at slot*K + k). `byName` : samplerName -> (kt, K).
+    let private rewriteAtlasSamples (slot : Expr<int>) (byName : Map<string, int * int>) (e : Effect) =
+        if Map.isEmpty byName then e
+        else
+            e |> Effect.map (fun shader ->
+                let rec rw (ex : Expr) : Expr =
+                    match ex with
+                    | Patterns.Call(Some (Patterns.Call(None, ri, [_; Patterns.Value((:? string as nm), _); _])), mi, [uvArg])
+                            when (mi.Name = "Sample" || mi.Name = "SampleLevel") && ri.Name = "ReadInput" && Map.containsKey nm byName ->
+                        let (kt, kCount) = byName.[nm]
+                        let idx    = <@ (%slot) * kCount + kt @>
+                        let origin = <@ uniform.HeapAtlasOrigin.[%idx].XY @>
+                        let size   = <@ uniform.HeapAtlasSize.[%idx].XY @>
+                        let fmt    = <@ uniform.HeapAtlasFmt.[%idx] @>
+                        let uvE    = Expr.Cast<V2f>(rw uvArg)
+                        // reference heapAtlas DIRECTLY in the spliced expr (not only inside an
+                        // inlined ReflectedDefinition) so FShade reflects it into the binding interface.
+                        <@@ atlasSample heapAtlas %origin %size %fmt %uvE @@>
+                    | ExprShape.ShapeVar _ -> ex
+                    | ExprShape.ShapeLambda(v, b) -> Expr.Lambda(v, rw b)
+                    | ExprShape.ShapeCombination(o, args) -> ExprShape.RebuildShapeCombination(o, List.map rw args)
+                Shader.withBody (rw shader.shaderBody) shader)
 
     /// the effect's sampler uniforms (supported types only), in stable order:
     /// (samplerName, textureName, samplerType, samplerState). The sampler's NAME is the
@@ -427,6 +534,27 @@ module Heap =
     /// (diagnostic / for logging).
     let mutable lastBucketCount = 0
 
+    /// Force the texture-atlas path even where descriptor-indexed sampler arrays ARE
+    /// available (for testing the atlas on desktop Vulkan, which reports them supported).
+    let mutable forceAtlas = false
+
+    /// Extract a host PixImage&lt;byte&gt; (RGBA) from an ITexture for atlas packing.
+    let private toAtlasPixImage (t : ITexture) : PixImage<byte> =
+        match t with
+        | :? PixTexture2d as pt -> pt.PixImageMipMap.[0].ToPixImage<byte>()
+        | _ -> failwithf "Heap atlas: unsupported ITexture %A (host PixTexture2d only)" (t.GetType())
+
+    /// Pick a single square page size that fits all reserved (gutter+mip) rects without
+    /// rotation, clamped to the atlas page cap.
+    let private atlasPageSizeFor (pixs : (int * PixImage<byte>)[]) : int =
+        let area =
+            pixs |> Array.sumBy (fun (_, p) ->
+                let w, h = int p.Size.X, int p.Size.Y
+                let s = HeapAtlas.reservedSize true (HeapAtlas.defaultMipCount w h) w h
+                float (s.X * s.Y))
+        let est = Fun.NextPowerOfTwo (max 256 (int (ceil (sqrt (area * 1.6)))))
+        min HeapAtlas.PageSize est
+
     /// Distinct trafo-link slots uploaded on the most recent chain-arena flush
     /// (diagnostic). A shared-root change over N objects should be 1, not N.
     let mutable lastChainLinkUploads = 0
@@ -615,6 +743,59 @@ module Heap =
             // the texture uniform names — both are folded into the per-type arrays.
             let samplerSyms = samplers |> Array.collect (fun (sn, tn, _, _) -> [| Symbol.Create sn; Symbol.Create tn |]) |> Set.ofArray
 
+            // ── atlas fallback (Vulkan-1.0 / GL / MoltenVK: ONE sampler) ──
+            // Use the texture atlas for Sampler2d textures when descriptor-indexed sampler
+            // arrays are unavailable (GL / Vulkan-1.0) or forced. v1: only when EVERY
+            // sampler is Sampler2d (cube etc. keep the bindless path). The bucket's distinct
+            // textures are packed into ONE atlas page (gutters + Iliffe mips) and each
+            // object's sampler.Sample(uv) is rewritten to atlasSample over that page.
+            let atlas2d = samplers |> Array.filter (fun (_, _, ty, _) -> ty = typeof<Sampler2d>)
+            let useAtlas =
+                atlas2d.Length > 0 && atlas2d.Length = samplers.Length &&
+                (forceAtlas || not runtime.SupportsUnboundedSamplerArrays)
+            let atlasK = atlas2d.Length
+            let atlasByName = if useAtlas then atlas2d |> Array.mapi (fun kt (sn, _, _, _) -> sn, (kt, atlasK)) |> Map.ofArray else Map.empty
+            // (pageTex, pageSizePx, origins[], sizes[], fmts[]) — per (object, sampler) at slot*K+k.
+            let atlasData : (aval<ITexture> * aval<V2f> * aval<V4f[]> * aval<V4f[]> * aval<int[]>) option =
+                if not useAtlas then None
+                else
+                    let texAvals =
+                        ros |> Array.collect (fun ro ->
+                            atlas2d |> Array.map (fun (_, tn, _, _) ->
+                                match ro.Uniforms.TryGetUniform(scope, Symbol.Create tn) with
+                                | ValueSome v -> v
+                                | ValueNone -> failwithf "Heap.ofRenderObjects: atlas texture %A missing" tn))
+                    let states = atlas2d |> Array.map (fun (_, _, _, st) -> st)
+                    let addrCode (w : WrapMode option) = match w with | Some WrapMode.Wrap -> 1 | Some WrapMode.Mirror -> 2 | _ -> 0
+                    let built =
+                        AVal.custom (fun t ->
+                            let texs = texAvals |> Array.map (fun (av : IAdaptiveValue) -> av.GetValueUntyped t :?> ITexture)
+                            let distinct = System.Collections.Generic.List<ITexture>()
+                            let idxOf = System.Collections.Generic.Dictionary<ITexture, int>(HashIdentity.Reference)
+                            let perTex = texs |> Array.map (fun tex -> match idxOf.TryGetValue tex with | true, i -> i | _ -> let i = distinct.Count in idxOf.[tex] <- i; distinct.Add tex; i)
+                            let pixs = distinct |> Seq.mapi (fun i tx -> i, toAtlasPixImage tx) |> Seq.toArray
+                            let pageSz = atlasPageSizeFor pixs
+                            let pages, acq =
+                                let p1, a1 = HeapAtlas.build pageSz true pixs
+                                if p1.Length <= 1 then p1, a1 else HeapAtlas.build HeapAtlas.PageSize true pixs
+                            let pageTex = runtime.PrepareTexture(PixTexture2d(pages.[0])) :> ITexture
+                            let realSz = pages.[0].Size.X
+                            let origins = Array.zeroCreate<V4f> texs.Length
+                            let sizes   = Array.zeroCreate<V4f> texs.Length
+                            let fmts    = Array.zeroCreate<int>  texs.Length
+                            texs |> Array.iteri (fun i _ ->
+                                let a = acq.[perTex.[i]]
+                                let st = states.[i % atlasK]
+                                origins.[i] <- V4f(float32 a.OriginPx.X, float32 a.OriginPx.Y, 0.0f, 0.0f)
+                                sizes.[i]   <- V4f(float32 a.SizePx.X,   float32 a.SizePx.Y,   0.0f, 0.0f)
+                                fmts.[i]    <- (a.NumMips <<< 1) ||| (addrCode st.AddressU <<< 4) ||| (addrCode st.AddressV <<< 6))
+                            pageTex, V2f(float32 realSz, float32 realSz), origins, sizes, fmts)
+                    Some (built |> AVal.map (fun (p, _, _, _, _) -> p),
+                          built |> AVal.map (fun (_, s, _, _, _) -> s),
+                          built |> AVal.map (fun (_, _, o, _, _) -> o),
+                          built |> AVal.map (fun (_, _, _, z, _) -> z),
+                          built |> AVal.map (fun (_, _, _, _, f) -> f))
+
             // name -> (fieldIdx, size, packer), types from ro0
             let info = names |> Array.map (fun n -> let (sz, pk) = packerFor (uni ro0 n).ContentType in n, (nameToField.[n], sz, pk)) |> Map.ofArray
 
@@ -799,7 +980,10 @@ module Heap =
 
             let ro = RenderObject.Clone ro0
             ro.IsActive         <- AVal.constant true   // bucket always active; per-draw gating is in the indirect buffer
-            ro.Surface          <- Surface.Effect (rewrite slot nameToField fieldStride standardDerivedRules effect |> geomRewrite |> rewriteSamplers slot samplerByName |> overrideSamplerStates samplerStateOverrides)
+            ro.Surface          <-
+                let baseE = rewrite slot nameToField fieldStride standardDerivedRules effect |> geomRewrite
+                if useAtlas then Surface.Effect (baseE |> rewriteAtlasSamples slot atlasByName)
+                else Surface.Effect (baseE |> rewriteSamplers slot samplerByName |> overrideSamplerStates samplerStateOverrides)
             ro.DrawCalls        <- DrawCalls.Indirect indirect
             ro.VertexAttributes <- AttributeProvider.ofList vtxAttribsList
             ro.Indices          <- Some indicesBV
@@ -812,7 +996,16 @@ module Heap =
             // unbounded array within its cap even when many objects share few textures.
             // Reactive: re-reads + re-dedups when a per-object texture aval changes.
             let texLookup = System.Collections.Generic.Dictionary<Symbol, IAdaptiveValue>(HashIdentity.Structural)
-            for (ty, grp) in samplersByType do
+            // atlas path: bind the single page + per-object placement; skip the bindless arrays.
+            match atlasData with
+            | Some (pageTex, pxSize, origins, sizes, fmts) ->
+                texLookup.[Symbol.Create "HeapAtlasTex"]    <- pageTex :> IAdaptiveValue
+                texLookup.[Symbol.Create "HeapAtlasPxSize"] <- pxSize  :> IAdaptiveValue
+                texLookup.[Symbol.Create "HeapAtlasOrigin"] <- origins :> IAdaptiveValue
+                texLookup.[Symbol.Create "HeapAtlasSize"]   <- sizes   :> IAdaptiveValue
+                texLookup.[Symbol.Create "HeapAtlasFmt"]    <- fmts    :> IAdaptiveValue
+            | None -> ()
+            for (ty, grp) in (if useAtlas then [||] else samplersByType) do
                 match bindlessTypeInfo ty with
                 | None -> ()
                 | Some (arrName, idxName, _) ->

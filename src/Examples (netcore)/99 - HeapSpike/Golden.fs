@@ -1772,6 +1772,73 @@ module Golden =
         else Log.warn "atlas: FAIL"
         ok
 
+    // Atlas path: per-object textures sampled from ONE packed atlas page (the
+    // Vulkan-1.0/GL/MoltenVK fallback, no descriptor indexing). forceAtlas routes the
+    // heap through the atlas even on desktop Vulkan. Compared to the classic per-object
+    // render: atlas sampling (repacked texels + in-shader LOD/wrap) isn't bit-exact vs
+    // hardware sampling, so we allow a few badly-off pixels but require it looks the same.
+    let atlasHeapTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let texArray : ITexture[] = Array.init TexCount mkTexture
+        let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
+        let grid = [| for x in 0 .. 7 do for y in 0 .. 7 -> (x * 8 + y), V3d(float (x - 4) * 1.2, float (y - 4) * 1.2, 0.0) |]
+        let mkRO (i : int) (p : V3d) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj
+                Symbol.Create "DiffuseTexture", (AVal.constant texArray.[i % TexCount] :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        let ros = grid |> Array.map (fun (i, p) -> mkRO i p)
+        let renderToPix (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let classicPix = renderToPix (ASet.ofArray ros)
+        Heap.forceAtlas <- true
+        let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo" ]) (ASet.ofArray ros)
+        let heapPix = renderToPix heapObjs
+        let buckets = Heap.lastBucketCount
+        Heap.forceAtlas <- false
+        let am = classicPix.GetMatrix<C4b>()
+        let bm = heapPix.GetMatrix<C4b>()
+        let mutable bad = 0L
+        let mutable cov = 0L
+        am.ForeachCoord(fun (c : V2l) ->
+            let p = am.[c]
+            let q = bm.[c]
+            let d = max (max (abs (int p.R - int q.R)) (abs (int p.G - int q.G))) (abs (int p.B - int q.B))
+            if p.R <> 0uy || p.G <> 0uy || p.B <> 0uy then cov <- cov + 1L
+            if d > 24 then bad <- bad + 1L)
+        let total = int64 am.Size.X * int64 am.Size.Y
+        Log.line "atlasHeap: %d ROs -> %d bucket(s)  coverage=%d badPixels=%d/%d" ros.Length buckets cov bad total
+        let pass = cov > total / 100L && buckets > 0 && bad < cov / 25L   // <4% of covered pixels badly off
+        if pass then Log.line "atlasHeap: PASS (per-object textures via atlas page == classic within tolerance; %d bucket(s))" buckets
+        else Log.warn "atlasHeap: FAIL (coverage=%d badPixels=%d buckets=%d)" cov bad buckets
+        pass
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =
