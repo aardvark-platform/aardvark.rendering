@@ -18,6 +18,7 @@ namespace HeapSpike
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.SceneGraph
+open Aardvark.Rendering.Text
 open FSharp.Data.Adaptive
 open FShade
 
@@ -1913,6 +1914,68 @@ module Golden =
             runtime.DeleteTexture t
             if i % 250 = 0 then Log.line "submitStress: %d/%d  (%.1fs)" i n sw.Elapsed.TotalSeconds
         Log.line "submitStress: COMPLETED %d uploads in %.1fs (no fence wedge)" n sw.Elapsed.TotalSeconds
+        true
+
+    // HEADLESS repro of the windowed-showcase glyph wedge (the exact GPU sequence, no
+    // swapchain): build + render the heavy heap scene to load the GPU, then do the glyph
+    // GeometryPool upload (PrepareGlyphs) on the loaded device — the order the showcase
+    // hit before the pre-warm fix. ssh-safe (no window → the earlier whole-machine freeze
+    // was the swapchain path; offscreen tests have always stayed up). If this wedges, the
+    // Fence.Wait watchdog prints the managed stack and MoltenVK verbose logging
+    // (MVK_CONFIG_LOG_LEVEL=3) prints the Metal command-buffer error right before it — the
+    // real "what is the GPU stuck on" signal. ITERS = how many times to render the heap
+    // before the glyph upload (mimics frames; default 1). N = object count (default 20000).
+    let glyphWedgeTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let n     = match System.Environment.GetEnvironmentVariable "N"     with null | "" -> 20000 | s -> int s
+        let iters = match System.Environment.GetEnvironmentVariable "ITERS" with null | "" -> 1     | s -> int s
+        let signature =
+            runtime.CreateFramebufferSignature(
+                [ DefaultSemantic.Colors, TextureFormat.Rgba8
+                  DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ], samples = 1)
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 60.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let texArray : ITexture[] = Array.init TexCount mkTexture
+        let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
+        let side = max 1 (int (ceil (sqrt (float n))))
+        let mkRO (i : int) =
+            let x, y = i % side, i / side
+            let p = V3d(float (x - side / 2) * 1.2, float (y - side / 2) * 1.2, 0.0)
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj
+                Symbol.Create "DiffuseTexture", (AVal.constant texArray.[i % TexCount] :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        let ros = Array.init n mkRO
+        Heap.forceAtlas <- true
+        let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo" ]) (ASet.ofArray ros)
+        Log.line "glyphWedge: build + render heap n=%d (x%d) offscreen ..." n iters
+        use task = runtime.CompileRender(signature, heapObjs)
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        for _ in 1 .. iters do out.GetValue() |> ignore   // force the heap render(s); loads the GPU
+        out.Release()
+        Heap.forceAtlas <- false
+        Log.line "glyphWedge: heap render DONE (buckets=%d). Now PrepareGlyphs on the loaded device ..." Heap.lastBucketCount
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        runtime.PrepareGlyphs(DefaultFonts.Hack.Regular, [| for c in 0 .. 255 -> char c |])
+        Log.line "glyphWedge: PrepareGlyphs DONE in %.2fs — NO WEDGE" sw.Elapsed.TotalSeconds
         true
 
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the

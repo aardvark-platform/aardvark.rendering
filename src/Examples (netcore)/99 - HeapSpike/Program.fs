@@ -139,6 +139,8 @@ let main argv =
         if Golden.msaaTest () then 0 else 1
     elif argv |> Array.contains "submitstress" then
         if Golden.submitStressTest () then 0 else 1
+    elif argv |> Array.contains "glyphwedge" then
+        if Golden.glyphWedgeTest () then 0 else 1
     elif argv |> Array.contains "bindlessvar" then
         if Golden.bindlessVarTest () then 0 else 1
     elif argv |> Array.contains "bcbox" then
