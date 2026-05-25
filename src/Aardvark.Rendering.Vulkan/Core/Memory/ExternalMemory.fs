@@ -41,7 +41,8 @@ module internal ExternalMemory =
         let getHandle (allocator: VmaAllocator) (allocation: VmaAllocation) =
             let mutable handle = 0n
 
-            Vma.getMemoryWin32Handle(allocator, allocation, 0n, &&handle)
+            use pHandle = fixed &handle
+            Vma.getMemoryWin32Handle(allocator, allocation, 0n, pHandle)
                 |> check "could not retrieve external memory handle"
 
             new Win32Handle(handle) :> IExternalMemoryHandle
@@ -53,7 +54,9 @@ module internal ExternalMemory =
             let mutable info = VkMemoryGetFdInfoKHR(memory, VkExternalMemoryHandleTypeFlags.OpaqueFdBit)
             let mutable handle = 0
 
-            VkRaw.vkGetMemoryFdKHR(device, &&info, &&handle)
+            use pInfo = fixed &info
+            use pHandle = fixed &handle
+            VkRaw.vkGetMemoryFdKHR(device, pInfo, pHandle)
                 |> check "could not retrieve external memory handle"
 
             new PosixHandle(handle) :> IExternalMemoryHandle

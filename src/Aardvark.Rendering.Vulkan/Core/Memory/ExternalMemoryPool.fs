@@ -18,7 +18,9 @@ type internal ExternalMemoryPool(allocator: VmaAllocator, memoryTypeIndex: uint3
     let mutable handle = VmaPool.Zero
     do
         pExportInfo.[0] <- VkExportMemoryAllocateInfo(VkExternalMemoryHandleTypeFlags.OpaqueBit)
-        Vma.createPool(allocator, &&createInfo, &&handle)
+        use pCreateInfo = fixed &createInfo
+        use pHandle = fixed &handle
+        Vma.createPool(allocator, pCreateInfo, pHandle)
             |> check "failed to create pool"
 
     member _.Handle = handle
