@@ -71,9 +71,11 @@ type internal PreparedAccelerationStructureData(
             use pMaxPrimitiveCounts = fixed primitives
             let mutable info = VkAccelerationStructureBuildSizesInfoKHR.Empty
 
+            use pBuildGeometryInfo = fixed &buildGeometryInfo
+            use pInfo = fixed &info
             VkRaw.vkGetAccelerationStructureBuildSizesKHR(
                 device.Handle, VkAccelerationStructureBuildTypeKHR.Device,
-                &&buildGeometryInfo, pMaxPrimitiveCounts, &&info
+                pBuildGeometryInfo, pMaxPrimitiveCounts, pInfo
             )
 
             buildSizesInfo <- ValueSome info

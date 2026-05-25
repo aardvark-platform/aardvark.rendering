@@ -82,7 +82,8 @@ type AccelerationStructure =
 
             let address =
                 let mutable info = VkAccelerationStructureDeviceAddressInfoKHR(handle)
-                VkRaw.vkGetAccelerationStructureDeviceAddressKHR(device.Handle, &&info)
+                use pInfo = fixed &info
+                VkRaw.vkGetAccelerationStructureDeviceAddressKHR(device.Handle, pInfo)
 
             {
                 inherit Resource<_>(device, handle)
@@ -137,8 +138,9 @@ module AccelerationStructure =
                         let ppBuildRangeInfos = NativePtr.stackalloc 1
                         ppBuildRangeInfos.[0] <- pBuildRangeInfos
 
+                        use pBuildGeometryInfo = fixed &buildGeometryInfo
                         VkRaw.vkCmdBuildAccelerationStructuresKHR(
-                            cmd.Handle, 1u, &&buildGeometryInfo, ppBuildRangeInfos
+                            cmd.Handle, 1u, pBuildGeometryInfo, ppBuildRangeInfos
                         )
 
                         cmd.AddResource accelerationStructure
@@ -151,8 +153,9 @@ module AccelerationStructure =
                         cmd.AppendCommand()
 
                         let mutable handle = accelerationStructure.Handle
+                        use pHandle = fixed &handle
                         VkRaw.vkCmdWriteAccelerationStructuresPropertiesKHR(
-                            cmd.Handle, 1u, &&handle, queryPool.Type, queryPool.Handle, 0u
+                            cmd.Handle, 1u, pHandle, queryPool.Type, queryPool.Handle, 0u
                         )
 
                         cmd.AddResource accelerationStructure
@@ -166,7 +169,8 @@ module AccelerationStructure =
                         cmd.AppendCommand()
 
                         let mutable info = VkCopyAccelerationStructureInfoKHR(src.Handle, dst.Handle, mode)
-                        VkRaw.vkCmdCopyAccelerationStructureKHR(cmd.Handle, &&info)
+                        use pInfo = fixed &info
+                        VkRaw.vkCmdCopyAccelerationStructureKHR(cmd.Handle, pInfo)
 
                         cmd.AddResource src
                         cmd.AddResource dst
@@ -185,7 +189,9 @@ module AccelerationStructure =
             )
 
         let mutable handle = VkAccelerationStructureKHR.Null
-        VkRaw.vkCreateAccelerationStructureKHR(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+        use pCreateInfo = fixed &createInfo
+        use pHandle = fixed &handle
+        VkRaw.vkCreateAccelerationStructureKHR(device.Handle, pCreateInfo, NativePtr.zero, pHandle)
             |> checkf "could not create acceleration structure"
 
         new AccelerationStructure(device, handle, buffer, data, usage)
