@@ -525,33 +525,34 @@ module Heap =
     /// flatten of the objects' EXISTING GPU buffers (no copy). Decodes `typ` at element
     /// (vid*strideF + offF); strideF/offF (in floats) come from the BufferView so both
     /// separate-tight and interleaved buffers work. Integral types use the int view.
-    let private bindlessGatherFlat (typ : System.Type) (numAttrs : int) (ai : int) (strideF : int) (offF : int) : Expr =
+    /// `handleE` is the per-draw handle expr (gl_InstanceIndex on Vulkan, gl_DrawID on GL).
+    let private bindlessGatherFlat (handleE : Expr) (typ : System.Type) (numAttrs : int) (ai : int) (strideF : int) (offF : int) : Expr =
         if typ = typeof<float32> then
-            <@@ let b = (%%handleExpr : int) * numAttrs + ai in uniform.HeapVertexData.[b].[ (%%vidExpr : int) * strideF + offF ] @@>
+            <@@ let b = (%%handleE : int) * numAttrs + ai in uniform.HeapVertexData.[b].[ (%%vidExpr : int) * strideF + offF ] @@>
         elif typ = typeof<V2f> then
-            <@@ let b = (%%handleExpr : int) * numAttrs + ai
+            <@@ let b = (%%handleE : int) * numAttrs + ai
                 let o = (%%vidExpr : int) * strideF + offF
                 V2f(uniform.HeapVertexData.[b].[o], uniform.HeapVertexData.[b].[o+1]) @@>
         elif typ = typeof<V3f> then
-            <@@ let b = (%%handleExpr : int) * numAttrs + ai
+            <@@ let b = (%%handleE : int) * numAttrs + ai
                 let o = (%%vidExpr : int) * strideF + offF
                 V3f(uniform.HeapVertexData.[b].[o], uniform.HeapVertexData.[b].[o+1], uniform.HeapVertexData.[b].[o+2]) @@>
         elif typ = typeof<V4f> then
-            <@@ let b = (%%handleExpr : int) * numAttrs + ai
+            <@@ let b = (%%handleE : int) * numAttrs + ai
                 let o = (%%vidExpr : int) * strideF + offF
                 V4f(uniform.HeapVertexData.[b].[o], uniform.HeapVertexData.[b].[o+1], uniform.HeapVertexData.[b].[o+2], uniform.HeapVertexData.[b].[o+3]) @@>
         elif typ = typeof<int> then
-            <@@ let b = (%%handleExpr : int) * numAttrs + ai in uniform.HeapVertexDataI.[b].[ (%%vidExpr : int) * strideF + offF ] @@>
+            <@@ let b = (%%handleE : int) * numAttrs + ai in uniform.HeapVertexDataI.[b].[ (%%vidExpr : int) * strideF + offF ] @@>
         elif typ = typeof<V2i> then
-            <@@ let b = (%%handleExpr : int) * numAttrs + ai
+            <@@ let b = (%%handleE : int) * numAttrs + ai
                 let o = (%%vidExpr : int) * strideF + offF
                 V2i(uniform.HeapVertexDataI.[b].[o], uniform.HeapVertexDataI.[b].[o+1]) @@>
         elif typ = typeof<V3i> then
-            <@@ let b = (%%handleExpr : int) * numAttrs + ai
+            <@@ let b = (%%handleE : int) * numAttrs + ai
                 let o = (%%vidExpr : int) * strideF + offF
                 V3i(uniform.HeapVertexDataI.[b].[o], uniform.HeapVertexDataI.[b].[o+1], uniform.HeapVertexDataI.[b].[o+2]) @@>
         else
-            <@@ let b = (%%handleExpr : int) * numAttrs + ai
+            <@@ let b = (%%handleE : int) * numAttrs + ai
                 let o = (%%vidExpr : int) * strideF + offF
                 V4i(uniform.HeapVertexDataI.[b].[o], uniform.HeapVertexDataI.[b].[o+1], uniform.HeapVertexDataI.[b].[o+2], uniform.HeapVertexDataI.[b].[o+3]) @@>
 
@@ -660,6 +661,12 @@ module Heap =
                     // attribute layout (effect.Inputs order): per-attr type + the float
                     // stride/offset from ro0's BufferView (so separate-tight AND interleaved
                     // buffers work; layoutSig keys offset/stride so a bucket never mixes them).
+                    // per-draw handle = gl_InstanceIndex (Vulkan, via FirstInstance=di) or
+                    // gl_DrawID (GL: gl_InstanceID omits baseInstance, so route by draw id
+                    // and keep FirstInstance=0) — same rule the host path uses.
+                    let isGLb = runtime.GetType().FullName.Contains("Aardvark.Rendering.GL")
+                    let slotE : Expr<int> = if isGLb then <@ getDrawId() @> else Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
+                    let handleE : Expr = slotE.Raw
                     let attrInfos =
                         effect.Inputs |> Map.toArray
                         |> Array.mapi (fun ai (name, _) ->
@@ -684,7 +691,7 @@ module Heap =
                             let fi = firstIndex
                             packedIdx.AddRange ib
                             firstIndex <- firstIndex + cnt
-                            DrawCallInfo(FaceVertexCount = cnt, FirstIndex = fi, BaseVertex = 0, FirstInstance = di, InstanceCount = 1))
+                            DrawCallInfo(FaceVertexCount = cnt, FirstIndex = fi, BaseVertex = 0, FirstInstance = (if isGLb then 0 else di), InstanceCount = 1))
                     let idxBV = packedView (packedIdx.ToArray()) idxType
                     // object-major flatten of the objects' EXISTING buffers (reactive):
                     // HeapVertexData[di*numAttrs + ai] = object di's attribute ai buffer.
@@ -696,19 +703,25 @@ module Heap =
                                 | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym))
                     let vtxDataU = (AVal.custom (fun t -> vtxBufAvals |> Array.map (fun b -> b.GetValue t)) :> IAdaptiveValue)
                     // rewrite each vertex-input read into a per-handle flat-buffer gather
-                    // use the SHADER INPUT type (ityp from the callback) so the gather's
-                    // result type matches the read being replaced; stride/offset come from
-                    // the buffer. (Normal setup: buffer ElementType == shader input type.)
+                    // Rewrite vertex-input reads into per-handle gathers — ONLY in the
+                    // VERTEX stage. Vertex attributes are read there; a later stage's input
+                    // of the same semantic (e.g. an interpolated Normal varying) must keep
+                    // its interpolated value, and must NOT get gl_DrawID/gl_InstanceIndex
+                    // injected (invalid outside the vertex stage, and re-running
+                    // substituteReads there drops the draw-id extension the uniform gather
+                    // needs). Use the SHADER INPUT type (ityp) so the gather type matches.
                     let geomRewrite (e : Effect) =
                         e |> Effect.map (fun s ->
-                            s |> Shader.substituteReads (fun kind ityp name _ _ ->
-                                match kind with
-                                | ParameterKind.Input ->
-                                    match attrInfos |> Array.tryFind (fun (_, n, _, _, _, _) -> n = name) with
-                                    | Some (ai, _, _, _, strideF, offF) -> Some (bindlessGatherFlat ityp numAttrs ai strideF offF)
-                                    | None -> None
-                                | _ -> None))
-                    (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)), entries, geomRewrite, [], idxBV, [ symVD, vtxDataU; symVDI, vtxDataU ]
+                            if s.shaderStage <> ShaderStage.Vertex then s
+                            else
+                                s |> Shader.substituteReads (fun kind ityp name _ _ ->
+                                    match kind with
+                                    | ParameterKind.Input ->
+                                        match attrInfos |> Array.tryFind (fun (_, n, _, _, _, _) -> n = name) with
+                                        | Some (ai, _, _, _, strideF, offF) -> Some (bindlessGatherFlat handleE ityp numAttrs ai strideF offF)
+                                        | None -> None
+                                    | _ -> None))
+                    slotE, entries, geomRewrite, [], idxBV, [ symVD, vtxDataU; symVDI, vtxDataU ]
                 else
                     // ── all-host bucket: fixed-function combined-buffer path ──
                     // Pack ONLY the attributes the shader consumes (effect.Inputs), each
@@ -919,6 +932,13 @@ module Heap =
                     let hostGeom =
                         (match ro.Indices with Some bv -> isHostTight bv | None -> false) && attrOk isHostTight
                     let bindlessGeom =
+                        // vertex-pull needs descriptor indexing: a dynamically-indexed
+                        // unbounded SSBO array (HeapVertexData[]). Same capability as
+                        // unbounded sampler arrays — Vulkan has it, GL does not (GL can't
+                        // dynamically index an unsized SSBO array, and sized arrays hit the
+                        // tiny SSBO-binding limit). On GL, GPU-resident geometry therefore
+                        // falls through to passthrough (the legacy path), rendered as-is.
+                        runtime.SupportsUnboundedSamplerArrays &&
                         instanceCountOf ro = 1 &&
                         (match ro.Indices with Some bv -> isReadableIndex bv | None -> false) && attrOk isBindlessAttr
                     (hostGeom || bindlessGeom) &&

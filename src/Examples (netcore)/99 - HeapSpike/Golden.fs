@@ -1637,25 +1637,25 @@ module Golden =
     // Input types == buffer types (V3f) so the gather decodes exactly.
     module GG =
         type VIn  = { [<Semantic("Positions")>] pos : V3f; [<Semantic("Normals")>] n : V3f }
-        type VOut = { [<Position>] clip : V4f; [<Normal>] wn : V3f }
+        type VOut = { [<Position>] clip : V4f; [<Normal>] wn : V3f; [<Color>] c : V4f }
+        // read per-draw uniforms in the VERTEX stage (gl_DrawID is a vertex-only builtin
+        // on GL); pass results as varyings. The GPU-geometry feature under test is the
+        // vertex-PULL of Positions/Normals, independent of where uniforms are gathered.
         let shade (v : VIn) =
             vertex {
                 let m  : M44f = uniform?HeapModelTrafo
                 let vp : M44f = uniform?ViewProjTrafo
-                return { clip = vp * (m * V4f(v.pos, 1.0f)); wn = m.TransformDir v.n }
+                let col : V4f = uniform?HeapColor
+                return { clip = vp * (m * V4f(v.pos, 1.0f)); wn = m.TransformDir v.n; c = col }
             }
         let frag (v : VOut) =
             fragment {
-                let c : V4f = uniform?HeapColor
                 let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
                 let d = 0.35f + 0.65f * max 0.0f (Vec.dot (Vec.normalize v.wn) l)
-                return V4f(c.XYZ * d, 1.0f)
+                return V4f(v.c.XYZ * d, 1.0f)
             }
 
-    let gpuGeomTest () =
-        Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let runtime = app.Runtime
+    let private gpuGeomWith (label : string) (expectHeaped : bool) (runtime : IRuntime) =
         let signature =
             runtime.CreateFramebufferSignature [
                 DefaultSemantic.Colors, TextureFormat.Rgba8
@@ -1702,14 +1702,27 @@ module Golden =
         let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray ros)
         let heapPix = renderToPix heapObjs                 // GPU buffers, bindless vertex-pull
         let maxD, nDiff, nNonBg, total = diff classicPix heapPix
-        Log.line "gpuGeom: %d ROs (GPU-resident geometry) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
-            ros.Length Heap.lastBucketCount maxD nDiff nNonBg
-        // GPU geometry can't take the host combined-buffer path, so buckets>0 PROVES the
-        // bindless vertex-pull path ran (not passthrough, not the CPU packer).
-        let pass = maxD <= 1 && nNonBg > total / 100L && Heap.lastBucketCount > 0
-        if pass then Log.line "gpuGeom: PASS (GPU-resident geometry vertex-pulled via ofRenderObjects == classic fixed-function; %d bucket(s))" Heap.lastBucketCount
-        else Log.warn "gpuGeom: FAIL (maxDelta=%d coverage=%d buckets=%d -> mis-pulled or passthrough)" maxD nNonBg Heap.lastBucketCount
+        Log.line "%s: %d ROs (GPU-resident geometry) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
+            label ros.Length Heap.lastBucketCount maxD nDiff nNonBg
+        // Vulkan: GPU geometry can't take the host combined-buffer path, so buckets>0
+        // PROVES the bindless vertex-pull ran. GL: descriptor indexing is unavailable, so
+        // GPU geometry must PASS THROUGH (buckets=0) and still render identically (legacy path).
+        let bucketsOk = if expectHeaped then Heap.lastBucketCount > 0 else Heap.lastBucketCount = 0
+        let pass = maxD <= 1 && nNonBg > total / 100L && bucketsOk
+        let how = if expectHeaped then "vertex-pulled via ofRenderObjects == classic" else "passthrough on GL (not heaped) == classic"
+        if pass then Log.line "%s: PASS (GPU-resident geometry %s; %d bucket(s))" label how Heap.lastBucketCount
+        else Log.warn "%s: FAIL (maxDelta=%d coverage=%d buckets=%d expectHeaped=%b)" label maxD nNonBg Heap.lastBucketCount expectHeaped
         pass
+
+    let gpuGeomTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        gpuGeomWith "gpuGeom" true (app.Runtime :> IRuntime)
+
+    let gpuGeomTestGL () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.OpenGlApplication(false)
+        gpuGeomWith "gpuGeom-GL" false (app.Runtime :> IRuntime)
 
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.

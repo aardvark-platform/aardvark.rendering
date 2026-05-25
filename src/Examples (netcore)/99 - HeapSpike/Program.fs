@@ -127,6 +127,8 @@ let main argv =
         if Golden.texStateTest () then 0 else 1
     elif argv |> Array.contains "texcube" then
         if Golden.texCubeTest () then 0 else 1
+    elif argv |> Array.contains "gpugeom-gl" then
+        if Golden.gpuGeomTestGL () then 0 else 1
     elif argv |> Array.contains "gpugeom" then
         if Golden.gpuGeomTest () then 0 else 1
     elif argv |> Array.contains "bindlessvar" then
