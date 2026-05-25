@@ -1076,9 +1076,12 @@ module Image =
                     max
 
             let mutable externalMemoryInfo = VkExternalMemoryImageCreateInfo VkExternalMemoryHandleTypeFlags.OpaqueBit
+            // externalMemoryInfo's address is embedded in info.pNext and read by every
+            // vkCreateImage / CreateImage below, so its pin must stay alive across them all.
+            use pExternalMemoryInfo = fixed &externalMemoryInfo
 
             let pNext =
-                if export.IsEnabled then NativePtr.toNativeInt &&externalMemoryInfo
+                if export.IsEnabled then NativePtr.toNativeInt pExternalMemoryInfo
                 else 0n
 
             let mutable info =
@@ -1109,7 +1112,8 @@ module Image =
 
                 for i in 1 .. indices.Length - 1 do
                     let pHandle = pHandles |> NativePtr.step i
-                    VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, pHandle)
+                    use pInfo = fixed &info
+                    VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not create image"
 
                 for off in 0 .. indices.Length - 1 do
@@ -1124,7 +1128,8 @@ module Image =
                             0u, NativePtr.zero
                         )
 
-                    memory.BindImage(handles.[off], 0UL, &&groupInfo)
+                    use pGroupInfo = fixed &groupInfo
+                    memory.BindImage(handles.[off], 0UL, pGroupInfo)
 
                 let result =
                     new Image(

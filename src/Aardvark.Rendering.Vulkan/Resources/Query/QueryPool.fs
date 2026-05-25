@@ -33,7 +33,9 @@ module QueryPool =
             )
 
         let mutable handle = VkQueryPool.Null
-        VkRaw.vkCreateQueryPool(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+        use pCreateInfo = fixed &createInfo
+        use pHandle = fixed &handle
+        VkRaw.vkCreateQueryPool(device.Handle, pCreateInfo, NativePtr.zero, pHandle)
             |> check "could not create query pool"
 
         new QueryPool(device, handle, typ, count)

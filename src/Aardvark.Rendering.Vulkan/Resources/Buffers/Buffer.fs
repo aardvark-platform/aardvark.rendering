@@ -58,7 +58,8 @@ type Buffer =
             let address =
                 if usage.HasFlag VkBufferUsageFlags.ShaderDeviceAddressBitKhr then
                     let mutable info = VkBufferDeviceAddressInfoKHR(handle)
-                    VkRaw.vkGetBufferDeviceAddressKHR(device.Handle, &&info)
+                    use pInfo = fixed &info
+                    VkRaw.vkGetBufferDeviceAddressKHR(device.Handle, pInfo)
                 else
                     0UL
 
@@ -572,7 +573,9 @@ module BufferView =
                 )
 
             let mutable handle = VkBufferView.Null
-            VkRaw.vkCreateBufferView(device.Handle, &&info, NativePtr.zero, &&handle)
+            use pInfo = fixed &info
+            use pHandle = fixed &handle
+            VkRaw.vkCreateBufferView(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create BufferView"
 
             new BufferView(device, handle, buffer, format, offset, size)

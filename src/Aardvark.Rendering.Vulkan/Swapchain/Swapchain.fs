@@ -212,7 +212,8 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
 
     member private x.TryAcquireNextImage() =
         fence.Reset()
-        let result = VkRaw.vkAcquireNextImageKHR(device.Handle, handle, ~~~0UL, VkSemaphore.Null, fence.Handle, &&currentBuffer)
+        use pCurrentBuffer = fixed &currentBuffer
+        let result = VkRaw.vkAcquireNextImageKHR(device.Handle, handle, ~~~0UL, VkSemaphore.Null, fence.Handle, pCurrentBuffer)
 
         if VkResult.isSwapFailure result then false
         else
@@ -223,19 +224,22 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
             true
 
     member private x.TryPresent(queue: DeviceQueue) =
+        use pHandle = fixed &handle
+        use pCurrentBuffer = fixed &currentBuffer
         let mutable presentInfo =
             VkPresentInfoKHR(
                 0u, NativePtr.zero,
-                1u, &&handle,
-                &&currentBuffer, NativePtr.zero
+                1u, pHandle,
+                pCurrentBuffer, NativePtr.zero
             )
 
+        use pPresentInfo = fixed &presentInfo
         // vkQueuePresentKHR shares the VkQueue with vkQueueSubmit; serialize via the same
         // per-queue lock so background uploads (e.g. text glyphs) can't race the present.
         if SubmitTrace.enabled then SubmitTrace.log (sprintf "present-pre seq=%d tid=%d qh=%x buf=%d" (SubmitTrace.next()) (SubmitTrace.tid()) (int64 queue.Handle) currentBuffer)
         System.Threading.Monitor.Enter queue.QueueLock
         let result =
-            try VkRaw.vkQueuePresentKHR(queue.Handle, &&presentInfo)
+            try VkRaw.vkQueuePresentKHR(queue.Handle, pPresentInfo)
             finally System.Threading.Monitor.Exit queue.QueueLock
         if SubmitTrace.enabled then SubmitTrace.log (sprintf "present-DONE tid=%d" (SubmitTrace.tid()))
 

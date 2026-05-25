@@ -1373,8 +1373,9 @@ module Resources =
                     uint32 prog.TessellationPatchSize
                 )
 
+            use pTessStateInfo = fixed &tessStateInfo
             let pTessState =
-                if prog.HasTessellation then &&tessStateInfo
+                if prog.HasTessellation then pTessStateInfo
                 else NativePtr.zero
 
             let mutable dynamicStateCreateInfo =
@@ -1400,6 +1401,8 @@ module Resources =
                     handle, VkPipelineCreateFlags.DerivativeBit
 
             let mutable result = VkPipeline.Null
+            use pViewportState = fixed &viewportState
+            use pDynamicStateCreateInfo = fixed &dynamicStateCreateInfo
             let mutable createInfo =
                 VkGraphicsPipelineCreateInfo(
                     VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
@@ -1408,12 +1411,12 @@ module Resources =
                     inputState,
                     inputAssembly,
                     pTessState,
-                    &&viewportState,
+                    pViewportState,
                     rasterizerState,
                     multisample,
                     depthStencil,
                     colorBlendState,
-                    &&dynamicStateCreateInfo, //dynamic
+                    pDynamicStateCreateInfo, //dynamic
                     prog.PipelineLayout.Handle,
                     renderPass.Handle,
                     0u,
@@ -1421,7 +1424,9 @@ module Resources =
                     -1
                 )
 
-            VkRaw.vkCreateGraphicsPipelines(device.Handle, device.PipelineCache.Handle, 1u, &&createInfo, NativePtr.zero, &&result)
+            use pCreateInfo = fixed &createInfo
+            use pResult = fixed &result
+            VkRaw.vkCreateGraphicsPipelines(device.Handle, device.PipelineCache.Handle, 1u, pCreateInfo, NativePtr.zero, pResult)
                 |> check "could not create pipeline"
 
             if x.HasHandle then

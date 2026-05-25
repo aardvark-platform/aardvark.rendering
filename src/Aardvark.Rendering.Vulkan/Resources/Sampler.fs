@@ -109,8 +109,9 @@ module Sampler =
             else
                 VkSamplerCustomBorderColorCreateInfoEXT.Empty
 
+        use pCustomBorderColor = fixed &customBorderColor
         let pNext =
-            if hasWrapModeBorder then &&customBorderColor else NativePtr.zero
+            if hasWrapModeBorder then pCustomBorderColor else NativePtr.zero
 
         let mutable createInfo =
             VkSamplerCreateInfo(
@@ -134,7 +135,9 @@ module Sampler =
             )
 
         let mutable handle = VkSampler.Null
-        VkRaw.vkCreateSampler(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+        use pCreateInfo = fixed &createInfo
+        use pHandle = fixed &handle
+        VkRaw.vkCreateSampler(device.Handle, pCreateInfo, NativePtr.zero, pHandle)
             |> check "could not create sampler"
 
         new Sampler(device, desc, handle, format)
