@@ -1895,6 +1895,26 @@ module Golden =
         Log.line "msaaTest: COMPLETED n=%d samples=%d buckets=%d (no hang)" n samples Heap.lastBucketCount
         true
 
+    // Submit-stress: hammer K synchronous GPU uploads (each = a vkQueueSubmit + fence wait
+    // on the upload path) with no heap/glyphs/window. Tests the hypothesis that MoltenVK
+    // stops signalling fences after too many enqueues. Logs progress; if it wedges at some K
+    // that's a confirmed driver/resource-exhaustion bug. N = iterations (default 5000).
+    let submitStressTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let n = match System.Environment.GetEnvironmentVariable "N" with null | "" -> 5000 | s -> int s
+        let img = PixImage<byte>(Col.Format.RGBA, V2i(8, 8))
+        img.GetMatrix<C4b>().SetByIndex(fun _ -> C4b(200uy, 50uy, 50uy, 255uy)) |> ignore
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        Log.line "submitStress: %d small texture uploads (each a sync GPU submit on the upload path)..." n
+        for i in 1 .. n do
+            let t = runtime.PrepareTexture(PixTexture2d(img))
+            runtime.DeleteTexture t
+            if i % 250 = 0 then Log.line "submitStress: %d/%d  (%.1fs)" i n sw.Elapsed.TotalSeconds
+        Log.line "submitStress: COMPLETED %d uploads in %.1fs (no fence wedge)" n sw.Elapsed.TotalSeconds
+        true
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =
