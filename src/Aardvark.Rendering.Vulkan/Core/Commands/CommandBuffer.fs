@@ -30,7 +30,9 @@ type CommandBuffer internal (pool: ICommandPool, level: CommandBufferLevel, remo
                 1u
             )
 
-        VkRaw.vkAllocateCommandBuffers(device.Handle, &&allocateInfo, &&handle)
+        use pAllocateInfo = fixed &allocateInfo
+        use pHandle = fixed &handle
+        VkRaw.vkAllocateCommandBuffers(device.Handle, pAllocateInfo, pHandle)
             |> check "could not allocated command buffer"
 
         device.Instance.RegisterDebugTrace(handle)
@@ -53,7 +55,8 @@ type CommandBuffer internal (pool: ICommandPool, level: CommandBufferLevel, remo
                 NativePtr.zero
             )
 
-        VkRaw.vkBeginCommandBuffer(handle, &&beginInfo)
+        use pBeginInfo = fixed &beginInfo
+        VkRaw.vkBeginCommandBuffer(handle, pBeginInfo)
             |> check "could not begin command buffer"
 
     let beginSecondary (pass: VkRenderPass) (framebuffer: VkFramebuffer) (inheritQueries: bool) (usage: CommandBufferUsage) =
@@ -83,13 +86,15 @@ type CommandBuffer internal (pool: ICommandPool, level: CommandBufferLevel, remo
                 occlusion, control, statistics
             )
 
+        use pInheritanceInfo = fixed &inheritanceInfo
         let mutable beginInfo =
             VkCommandBufferBeginInfo(
                 unbox (int usage),
-                &&inheritanceInfo
+                pInheritanceInfo
             )
 
-        VkRaw.vkBeginCommandBuffer(handle, &&beginInfo)
+        use pBeginInfo = fixed &beginInfo
+        VkRaw.vkBeginCommandBuffer(handle, pBeginInfo)
             |> check "could not begin command buffer"
 
     let beginBuffer (pass: VkRenderPass) (framebuffer: VkFramebuffer) (inheritQueries: bool) (usage: CommandBufferUsage) =
@@ -190,7 +195,8 @@ type CommandBuffer internal (pool: ICommandPool, level: CommandBufferLevel, remo
             releaseResources()
 
             removeFromPool x
-            VkRaw.vkFreeCommandBuffers(device.Handle, pool.Handle, 1u, &&handle)
+            use pHandle = fixed &handle
+            VkRaw.vkFreeCommandBuffers(device.Handle, pool.Handle, 1u, pHandle)
             handle <- 0n
 
     interface IDeviceObject with

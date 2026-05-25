@@ -322,7 +322,8 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
         if instance.DebugConfig.DebugLabels then
             CStr.using name (fun pName ->
                 let mutable info = VkDebugUtilsObjectNameInfoEXT(typ, handle, pName)
-                VkRaw.vkSetDebugUtilsObjectNameEXT(device, &&info) |> check "failed to set object name"
+                use pInfo = fixed &info
+                VkRaw.vkSetDebugUtilsObjectNameEXT(device, pInfo) |> check "failed to set object name"
             )
 
     member x.OnDispose = onDisposeObservable :> IObservable<_>

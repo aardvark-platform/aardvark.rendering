@@ -75,14 +75,18 @@ module ``Common Commands`` =
                     let mutable memoryBarrier =
                         VkMemoryBarrier(srcAccess, dstAccess)
 
-                    VkRaw.vkCmdPipelineBarrier(
-                        cmd.Handle,
-                        srcStage, dstStage,
-                        VkDependencyFlags.None,
-                        1u, &&memoryBarrier,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero
-                    )
+                    // last expr -> tail position: try/finally stops the F# .tail that would drop
+                    // the &&memoryBarrier stack slot across the native call (dotnet/fsharp#18689).
+                    try
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle,
+                            srcStage, dstStage,
+                            VkDependencyFlags.None,
+                            1u, &&memoryBarrier,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero
+                        )
+                    finally ()
             }
 
         static member MemoryBarrier(srcStage: VkPipelineStageFlags2KHR, srcAccess: VkAccessFlags2KHR, dstStage: VkPipelineStageFlags2KHR, dstAccess: VkAccessFlags2KHR) =
@@ -102,7 +106,10 @@ module ``Common Commands`` =
                             0u, NativePtr.zero
                         )
 
-                    VkRaw.vkCmdPipelineBarrier2KHR(cmd.Handle, &&dependencyInfo)
+                    // last expr -> tail position: try/finally stops the F# .tail that would drop the
+                    // &&dependencyInfo / &&memoryBarrier stack slots across the call (dotnet/fsharp#18689).
+                    try VkRaw.vkCmdPipelineBarrier2KHR(cmd.Handle, &&dependencyInfo)
+                    finally ()
             }
 
         static member Execute(inner: CommandBuffer[]) =
@@ -206,7 +213,10 @@ module ``Common Commands`` =
                         buffer.AppendCommand()
                         CStr.using name (fun pName ->
                             let mutable labelInfo = VkDebugUtilsLabelEXT(pName, v4f color)
-                            VkRaw.vkCmdInsertDebugUtilsLabelEXT(buffer.Handle, &&labelInfo)
+                            // last expr of the lambda -> tail: try/finally stops the F# .tail dropping
+                            // the &&labelInfo stack slot across the native call (dotnet/fsharp#18689).
+                            try VkRaw.vkCmdInsertDebugUtilsLabelEXT(buffer.Handle, &&labelInfo)
+                            finally ()
                         )
             }
 
@@ -218,7 +228,10 @@ module ``Common Commands`` =
                         buffer.AppendCommand()
                         CStr.using name (fun pName ->
                             let mutable labelInfo = VkDebugUtilsLabelEXT(pName, v4f color)
-                            VkRaw.vkCmdBeginDebugUtilsLabelEXT(buffer.Handle, &&labelInfo)
+                            // last expr of the lambda -> tail: try/finally stops the F# .tail dropping
+                            // the &&labelInfo stack slot across the native call (dotnet/fsharp#18689).
+                            try VkRaw.vkCmdBeginDebugUtilsLabelEXT(buffer.Handle, &&labelInfo)
+                            finally ()
                         )
             }
 

@@ -19,7 +19,9 @@ type Fence internal (device: IDevice, [<Optional; DefaultParameterValue(false)>]
                 if signaled then VkFenceCreateFlags.SignaledBit
                 else VkFenceCreateFlags.None
             )
-        VkRaw.vkCreateFence(device.Handle, &&createInfo, NativePtr.zero, &&fence)
+        use pCreateInfo = fixed &createInfo
+        use pFence = fixed &fence
+        VkRaw.vkCreateFence(device.Handle, pCreateInfo, NativePtr.zero, pFence)
             |> check "could not create fence"
 
         device.Instance.RegisterDebugTrace(fence.Handle)
@@ -50,13 +52,15 @@ type Fence internal (device: IDevice, [<Optional; DefaultParameterValue(false)>]
 
     member x.Reset() =
         if fence.IsValid then
-            VkRaw.vkResetFences(device.Handle, 1u, &&fence)
+            use pFence = fixed &fence
+            VkRaw.vkResetFences(device.Handle, 1u, pFence)
                 |> check "failed to reset fence"
         else
             failf "cannot reset disposed fence"
 
     member x.TryWait([<Optional; DefaultParameterValue(~~~0UL)>] timeoutInNanoseconds: uint64) =
-        match VkRaw.vkWaitForFences(device.Handle, 1u, &&fence, 1u, timeoutInNanoseconds) with
+        use pFence = fixed &fence
+        match VkRaw.vkWaitForFences(device.Handle, 1u, pFence, 1u, timeoutInNanoseconds) with
         | VkResult.Success -> true
         | VkResult.Timeout -> false
         | err -> err |> checkForFault device "could not wait for fence" |> unbox

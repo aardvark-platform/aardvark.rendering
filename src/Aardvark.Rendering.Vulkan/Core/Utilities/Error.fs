@@ -30,7 +30,8 @@ module internal Error =
         let report (device: VkDevice) =
             let mutable counts = VkDeviceFaultCountsEXT.Empty
 
-            VkRaw.vkGetDeviceFaultInfoEXT(device, &&counts, NativePtr.zero) |> ignore
+            use pCounts = fixed &counts
+            VkRaw.vkGetDeviceFaultInfoEXT(device, pCounts, NativePtr.zero) |> ignore
             let addressInfos = Array.zeroCreate<VkDeviceFaultAddressInfoEXT> (int counts.addressInfoCount)
             use pAddressInfos = fixed addressInfos
 
@@ -45,7 +46,8 @@ module internal Error =
             info.pVendorInfos <- pVendorInfos
             info.pVendorBinaryData <- pVenodrBinaryData.Address
 
-            VkRaw.vkGetDeviceFaultInfoEXT(device, &&counts, &&info) |> ignore
+            use pInfo = fixed &info
+            VkRaw.vkGetDeviceFaultInfoEXT(device, pCounts, pInfo) |> ignore
             let builder = Text.StringBuilder()
 
             builder.AppendLine $"Description: {getDescription info.description}" |> ignore

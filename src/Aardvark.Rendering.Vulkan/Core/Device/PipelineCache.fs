@@ -53,7 +53,8 @@ type internal PipelineCache private (device: IDevice, handle: VkPipelineCache) =
 
     let getData (size: uint64) (pData: nativeint) =
         let mutable size = size
-        let result = VkRaw.vkGetPipelineCacheData(device.Handle, handle, &&size, pData)
+        use pSize = fixed &size
+        let result = VkRaw.vkGetPipelineCacheData(device.Handle, handle, pSize, pData)
 
         if result <> VkResult.Success then
             failwith $"Failed to get pipeline cache data ({result})"
@@ -75,7 +76,9 @@ type internal PipelineCache private (device: IDevice, handle: VkPipelineCache) =
     private new (device: IDevice, createInfo: byref<VkPipelineCacheCreateInfo>) =
         let mutable handle = VkPipelineCache.Null
 
-        VkRaw.vkCreatePipelineCache(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+        use pCreateInfo = fixed &createInfo
+        use pHandle = fixed &handle
+        VkRaw.vkCreatePipelineCache(device.Handle, pCreateInfo, NativePtr.zero, pHandle)
             |> check "failed to create empty pipeline cache"
 
         new PipelineCache(device, handle)

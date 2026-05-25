@@ -13,7 +13,9 @@ type Event internal (device: IDevice) =
             failf "device does not support events"
 
         let mutable createInfo = VkEventCreateInfo.Empty
-        VkRaw.vkCreateEvent(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+        use pCreateInfo = fixed &createInfo
+        use pHandle = fixed &handle
+        VkRaw.vkCreateEvent(device.Handle, pCreateInfo, NativePtr.zero, pHandle)
             |> check "could not create event"
 
         device.Instance.RegisterDebugTrace(handle.Handle)
