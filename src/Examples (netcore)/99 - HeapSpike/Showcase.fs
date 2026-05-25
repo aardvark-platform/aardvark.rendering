@@ -121,8 +121,17 @@ module Showcase =
     let run (record : bool) =
         Aardvark.Init()
         use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let win = app.CreateGameWindow(samples = 8)   // multisampling (smooth overlay text)
         let runtime = app.Runtime
+        // MSAA is unreliable on MoltenVK (portability subset): an 8x multisampled swapchain
+        // in the secondary-command-buffer render path can GPU-hang the machine. Use the same
+        // capability proxy as the heap: full MSAA only on conformant desktop Vulkan, 1x else.
+        // Override with SAMPLES=<n>.
+        let samples =
+            match System.Environment.GetEnvironmentVariable "SAMPLES" with
+            | null | "" -> if runtime.SupportsUnboundedSamplerArrays then 8 else 1
+            | s -> int s
+        let win = app.CreateGameWindow(samples = samples)
+        Log.line "showcase: MSAA samples = %d" samples
 
         // On backends without real bindless (MoltenVK / Vulkan 1.0 / GL) the heap auto-routes
         // per-object textures through a shared atlas page. FORCE_ATLAS=1 exercises that path

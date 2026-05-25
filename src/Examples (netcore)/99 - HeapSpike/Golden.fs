@@ -1839,6 +1839,62 @@ module Golden =
         else Log.warn "atlasHeap: FAIL (coverage=%d badPixels=%d buckets=%d)" cov bad buckets
         pass
 
+    // Headless repro of the windowed-showcase freeze, WITHOUT a window. Renders the
+    // atlas scene OFFSCREEN to a MULTISAMPLED framebuffer through the heap (forceAtlas),
+    // so it exercises MSAA + the secondary-command-buffer render path on the backend.
+    // Env SAMPLES (default 8) and N (default 2000) isolate MSAA vs scale on MoltenVK:
+    //   SAMPLES=8 N=64   -> tests MSAA at tiny scale,   SAMPLES=1 N=20000 -> tests scale.
+    // Forces the render (no download) so a GPU hang reproduces; prints COMPLETED otherwise.
+    let msaaTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let samples = match System.Environment.GetEnvironmentVariable "SAMPLES" with null | "" -> 8 | s -> int s
+        let n       = match System.Environment.GetEnvironmentVariable "N"       with null | "" -> 2000 | s -> int s
+        let signature =
+            runtime.CreateFramebufferSignature(
+                [ DefaultSemantic.Colors, TextureFormat.Rgba8
+                  DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ], samples = samples)
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 60.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let texArray : ITexture[] = Array.init TexCount mkTexture
+        let eff = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
+        let side = max 1 (int (ceil (sqrt (float n))))
+        let mkRO (i : int) =
+            let x, y = i % side, i / side
+            let p = V3d(float (x - side / 2) * 1.2, float (y - side / 2) * 1.2, 0.0)
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj
+                Symbol.Create "DiffuseTexture", (AVal.constant texArray.[i % TexCount] :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        let ros = Array.init n mkRO
+        Heap.forceAtlas <- true
+        let heapObjs = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo" ]) (ASet.ofArray ros)
+        Log.line "msaaTest: rendering n=%d samples=%d (atlas, offscreen) ..." n samples
+        use task = runtime.CompileRender(signature, heapObjs)
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        out.GetValue() |> ignore         // force the GPU render; a hang reproduces here
+        out.Release()
+        Heap.forceAtlas <- false
+        Log.line "msaaTest: COMPLETED n=%d samples=%d buckets=%d (no hang)" n samples Heap.lastBucketCount
+        true
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =
