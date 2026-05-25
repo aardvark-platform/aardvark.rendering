@@ -28,17 +28,15 @@ module Showcase =
               [<Normal>]                                                   n   : V3f
               [<Semantic("TexCoord")>]                                     tc  : V2f
               [<Color>]                                                    c   : V4f
-              [<Semantic("TexId"); Interpolation(InterpolationMode.Flat)>] ti  : int
               [<Semantic("WorldPos")>]                                     wp  : V3f }
 
         let shade (v : V) =
             vertex {
                 let mvp : M44f = uniform?ModelViewProjTrafo
                 let m   : M44f = uniform?ModelTrafo
-                let ti  : int  = uniform?HeapTexIndex
                 let col : V4f  = uniform?HeapColor
                 return { v with pos = mvp * v.pos; n = m.TransformDir v.n
-                                tc = v.pos.XY * 2.0f + V2f(0.6f, 0.6f); c = col; ti = ti; wp = (m * v.pos).XYZ }
+                                tc = v.pos.XY * 2.0f + V2f(0.6f, 0.6f); c = col; wp = (m * v.pos).XYZ }
             }
 
         let private L = V3f(0.4f, 0.7f, 0.6f) |> Vec.normalize
@@ -49,9 +47,11 @@ module Showcase =
                 return V4f(v.c.XYZ * (0.2f + 0.8f * max 0.0f (Vec.dot nn L)), 1.0f)
             }
 
-        let private tex =
+        // per-object texture: the heap auto-routes this single sampler to a bindless
+        // per-type array (desktop Vulkan) or a shared atlas page (MoltenVK / Vk-1.0 / GL).
+        let private diffuse =
             sampler2d {
-                textureArray uniform?Textures -1
+                texture uniform?DiffuseTexture
                 filter Filter.MinMagMipLinear
                 addressU WrapMode.Wrap
                 addressV WrapMode.Wrap
@@ -60,7 +60,7 @@ module Showcase =
             fragment {
                 let nn = Vec.normalize v.n
                 let d = 0.35f + 0.65f * max 0.0f (Vec.dot nn L)
-                return V4f(tex.[v.ti].Sample(v.tc).XYZ * d, 1.0f)
+                return V4f(diffuse.Sample(v.tc).XYZ * d, 1.0f)
             }
 
         let toon (v : V) =
@@ -124,6 +124,13 @@ module Showcase =
         let win = app.CreateGameWindow(samples = 8)   // multisampling (smooth overlay text)
         let runtime = app.Runtime
 
+        // On backends without real bindless (MoltenVK / Vulkan 1.0 / GL) the heap auto-routes
+        // per-object textures through a shared atlas page. FORCE_ATLAS=1 exercises that path
+        // even on desktop Vulkan (where unbounded sampler arrays are available).
+        if System.Environment.GetEnvironmentVariable "FORCE_ATLAS" = "1" then
+            Heap.forceAtlas <- true
+            Log.line "showcase: FORCE_ATLAS -> heap routes per-object textures through the atlas"
+
         // camera: DefaultCameraController interactively; smooth auto-orbit for recording
         let initialView = CameraView.lookAt (V3d(70.0, 70.0, 55.0)) V3d.Zero V3d.OOI
         // STATIC=1 -> fully constant camera (no win.Time dependency): isolates the
@@ -144,7 +151,7 @@ module Showcase =
                 DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
         let frustum = win.Sizes |> AVal.map (fun s -> Frustum.perspective 70.0 0.1 3000.0 (float s.X / float s.Y))
         let camLoc = cameraView |> AVal.map (fun cv -> V3f cv.Location)
-        let texU = AVal.constant ((Array.init TexCount mkTexture) : ITexture[])
+        let textures : ITexture[] = Array.init TexCount mkTexture
 
         let shapes =
             [| mkShape (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.7)) C4b.White)
@@ -168,15 +175,14 @@ module Showcase =
             |> Sg.vertexBuffer DefaultSemantic.Normals   s.nor
             |> Sg.indexBuffer s.idx
             |> Sg.trafo' model
-            |> Sg.uniform' "HeapColor"    (palette.[i % palette.Length].ToV4f())
-            |> Sg.uniform' "HeapTexIndex" (i % TexCount)
+            |> Sg.uniform' "HeapColor" (palette.[i % palette.Length].ToV4f())
+            |> Sg.texture' (Symbol.Create "DiffuseTexture") textures.[i % TexCount]
             |> Sg.effect [ effects.[i % effects.Length] ]
 
         // THE INPUT: a scenegraph (camera + globals applied at the top)
         let scene =
             Array.init n objSg
             |> Sg.ofArray
-            |> Sg.uniform "Textures"       texU
             |> Sg.uniform "CameraLocation" camLoc
             |> Sg.viewTrafo (cameraView |> AVal.map CameraView.viewTrafo)
             |> Sg.projTrafo (frustum    |> AVal.map Frustum.projTrafo)
@@ -187,7 +193,7 @@ module Showcase =
             dn?Runtime <- runtime
             dn?RenderObjects(Ag.Scope.Root)
         // heap: collapse the SAME render objects into buckets / indirect draws
-        let heapRos = Heap.ofRenderObjects runtime (Set.ofList [ "ModelTrafo"; "HeapColor"; "HeapTexIndex" ]) stdRos
+        let heapRos = Heap.ofRenderObjects runtime (Set.ofList [ "ModelTrafo"; "HeapColor" ]) stdRos
         heapRos |> ASet.toAVal |> AVal.force |> ignore
 
         let heapMode = AVal.init true
