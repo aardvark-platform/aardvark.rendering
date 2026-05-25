@@ -8,6 +8,19 @@ open Vulkan11
 #nowarn "9"
 #nowarn "51"
 
+/// Opt-in (AARDVARK_QTRACE=1) flushing tracer for VkQueue submit/present ordering — used to
+/// diagnose the MoltenVK glyph-upload fence wedge. Writes to stderr (auto-flush) so the tail
+/// survives a hang.
+module SubmitTrace =
+    let enabled = System.Environment.GetEnvironmentVariable "AARDVARK_QTRACE" = "1"
+    let private counter = ref 0
+    let next () = System.Threading.Interlocked.Increment counter
+    let log (s: string) =
+        if enabled then
+            System.Console.Error.WriteLine("[QTRACE] " + s)
+            System.Console.Error.Flush()
+    let inline tid () = System.Threading.Thread.CurrentThread.ManagedThreadId
+
 type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
     let device = family.DeviceInterface
     let mutable handle = VkQueue.Zero
@@ -90,6 +103,11 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
             if isNull fence then VkFence.Null
             else fence.Handle
 
+        if SubmitTrace.enabled then
+            let hs (a: Semaphore[]) = a |> Array.map (fun s -> sprintf "%x" s.Handle.Handle) |> String.concat ","
+            SubmitTrace.log (sprintf "submit  seq=%d tid=%d q=fam%d/%d qh=%x bufs=%d fence=%x wait=[%s] signal=[%s]"
+                (SubmitTrace.next()) (SubmitTrace.tid()) family.Info.index index (int64 handle.Handle) buffers.Length (int64 fence.Handle) (hs waitFor) (hs signal))
+
         match device.PhysicalDevice with
         | :? PhysicalDeviceGroup as group ->
             let pCommandBufferDeviceMasks = buffers |> NativePtr.stackUseArr (fun _ -> group.DeviceMask)
@@ -135,7 +153,12 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
         lock queueLock (fun () ->
             fence.Reset()
             x.Submit(buffers, waitFor, signal, fence)
-            fence.Wait())
+            if SubmitTrace.enabled then
+                SubmitTrace.log (sprintf "runsync-wait seq=%d tid=%d q=fam%d/%d qh=%x fence=%x"
+                    (SubmitTrace.next()) (SubmitTrace.tid()) family.Info.index index (int64 handle.Handle) (int64 fence.Handle))
+            fence.Wait()
+            if SubmitTrace.enabled then
+                SubmitTrace.log (sprintf "runsync-DONE tid=%d qh=%x" (SubmitTrace.tid()) (int64 handle.Handle)))
 
     member x.RunSynchronously(buffer: CommandBuffer) =
         if not buffer.IsEmpty then

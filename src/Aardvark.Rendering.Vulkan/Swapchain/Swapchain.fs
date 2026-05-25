@@ -217,7 +217,9 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
         if VkResult.isSwapFailure result then false
         else
             result |> check "could not acquire swapchain image"
+            if SubmitTrace.enabled then SubmitTrace.log (sprintf "acquire-wait seq=%d tid=%d" (SubmitTrace.next()) (SubmitTrace.tid()))
             fence.Wait()
+            if SubmitTrace.enabled then SubmitTrace.log (sprintf "acquire-DONE tid=%d buf=%d" (SubmitTrace.tid()) currentBuffer)
             true
 
     member private x.TryPresent(queue: DeviceQueue) =
@@ -230,10 +232,12 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
 
         // vkQueuePresentKHR shares the VkQueue with vkQueueSubmit; serialize via the same
         // per-queue lock so background uploads (e.g. text glyphs) can't race the present.
+        if SubmitTrace.enabled then SubmitTrace.log (sprintf "present-pre seq=%d tid=%d qh=%x buf=%d" (SubmitTrace.next()) (SubmitTrace.tid()) (int64 queue.Handle.Handle) currentBuffer)
         System.Threading.Monitor.Enter queue.QueueLock
         let result =
             try VkRaw.vkQueuePresentKHR(queue.Handle, &&presentInfo)
             finally System.Threading.Monitor.Exit queue.QueueLock
+        if SubmitTrace.enabled then SubmitTrace.log (sprintf "present-DONE tid=%d" (SubmitTrace.tid()))
 
         if VkResult.isSwapFailure result then false
         else
