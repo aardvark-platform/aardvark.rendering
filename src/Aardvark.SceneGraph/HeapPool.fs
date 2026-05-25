@@ -1146,8 +1146,13 @@ module Heap =
                     // (also GL, or exotic sampler types).
                     (let samps = e.Uniforms |> Map.toArray |> Array.filter (fun (_, p) -> typeof<ISampler>.IsAssignableFrom p.uniformType)
                      samps.Length = 0 ||
-                     (runtime.SupportsUnboundedSamplerArrays
-                      && (samps |> Array.forall (fun (_, p) -> isBindlessSamplerType p.uniformType))
+                     ((samps |> Array.forall (fun (_, p) -> isBindlessSamplerType p.uniformType))
+                      // textures go through a bindless per-type array (desktop Vulkan) OR a shared
+                      // atlas page when unbounded sampler arrays are unavailable (MoltenVK / GL).
+                      // The atlas only handles Sampler2d, so keep textured objects heapable there
+                      // iff every sampler is a Sampler2d (cube/3d/etc. still need bindless).
+                      && (runtime.SupportsUnboundedSamplerArrays
+                          || (samps |> Array.forall (fun (_, p) -> p.uniformType = typeof<Sampler2d>)))
                       && (samps
                           |> Array.choose (fun (_, p) ->
                               match p.uniformValue with
