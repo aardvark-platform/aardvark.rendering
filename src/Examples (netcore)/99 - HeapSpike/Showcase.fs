@@ -222,7 +222,7 @@ module Showcase =
         let overlayText =
             (heapMode, fps) ||> AVal.map2 (fun h f ->
                 sprintf "MODE: %s\n%d objects\n%d draw calls\n%.0f fps" (if h then "HEAP" else "STANDARD") n (if h then Heap.lastBucketCount else n) f)
-        let overlay =
+        let buildOverlay () =
             let trafo =
                 win.Sizes |> AVal.map (fun s ->
                     let border = V2d(30.0, 24.0) / V2d s
@@ -246,8 +246,11 @@ module Showcase =
         if record then
             win.Fullcreen <- true   // (sic) aardvark's spelling of the fullscreen toggle
 
-        let mainTask    = runtime.CompileRender(win.FramebufferSignature, ros)
-        let overlayTask = runtime.CompileRender(win.FramebufferSignature, overlay)
-        win.RenderTask <- RenderTask.ofList [ mainTask; overlayTask ]
+        let mainTask = runtime.CompileRender(win.FramebufferSignature, ros)
+        // NOOVERLAY=1 skips the text overlay (PrepareGlyphs) — isolates whether the glyph
+        // upload is what wedges MoltenVK in the windowed Release path.
+        win.RenderTask <-
+            if System.Environment.GetEnvironmentVariable "NOOVERLAY" = "1" then mainTask
+            else RenderTask.ofList [ mainTask; runtime.CompileRender(win.FramebufferSignature, buildOverlay()) ]
         Log.warn "Showcase: %d objects, %d effects (solid/textured/toon/bump/rim). SPACE = STANDARD <-> HEAP." n effects.Length
         win.Run()
