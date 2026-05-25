@@ -131,6 +131,8 @@ let main argv =
         if Golden.gpuGeomTestGL () then 0 else 1
     elif argv |> Array.contains "gpugeom" then
         if Golden.gpuGeomTest () then 0 else 1
+    elif argv |> Array.contains "atlas" then
+        if Golden.atlasBuildTest () then 0 else 1
     elif argv |> Array.contains "bindlessvar" then
         if Golden.bindlessVarTest () then 0 else 1
     elif argv |> Array.contains "bcbox" then

@@ -1724,6 +1724,54 @@ module Golden =
         use app = new Aardvark.Application.Slim.OpenGlApplication(false)
         gpuGeomWith "gpuGeom-GL" false (app.Runtime :> IRuntime)
 
+    // CPU-only: verifies the texture atlas builder's BORDER + MIP layout precisely
+    // (no GPU). Gutter: inner ring = clamp-replicate edge texel, outer ring = wrap
+    // opposite edge. Iliffe pyramid: mip-k at origin + mipOffset, 2x2 box-averaged.
+    let atlasBuildTest () =
+        let w, h = 4, 4
+        let img = PixImage<byte>(Col.Format.RGBA, V2i(w, h))
+        let mutable m = img.GetMatrix<C4b>()
+        for y in 0 .. h - 1 do
+            for x in 0 .. w - 1 do
+                m.[int64 x, int64 y] <- C4b(byte (10 + x * 40), byte (10 + y * 40), byte (x * 16 + y), 255uy)
+        let pages, acq = HeapAtlas.build 64 true [| 0, img |]
+        let a = acq.[0]
+        let atlas = pages.[a.PageId].GetMatrix<C4b>()
+        let ox, oy = a.OriginPx.X, a.OriginPx.Y
+        let mutable ok = true
+        let ceq (p : C4b) (q : C4b) = p.R = q.R && p.G = q.G && p.B = q.B && p.A = q.A
+        let chk name cond = if not cond then (Log.warn "atlas: FAIL %s" name; ok <- false)
+        chk "size"    (a.SizePx = V2i(4, 4))
+        chk "numMips" (a.NumMips = 3)
+        chk "pages"   (pages.Length = 1)
+        // interior == source
+        for y in 0 .. h - 1 do
+            for x in 0 .. w - 1 do
+                chk (sprintf "interior %d,%d" x y) (ceq atlas.[int64 (ox + x), int64 (oy + y)] m.[int64 x, int64 y])
+        // gutter on a middle row/col: inner = clamp (nearest edge), outer = wrap (opposite edge)
+        let pxX dx = atlas.[int64 (ox + dx), int64 (oy + 1)]
+        chk "inner-left clamp"  (ceq (pxX -1) m.[0L, 1L])
+        chk "outer-left wrap"   (ceq (pxX -2) m.[3L, 1L])
+        chk "inner-right clamp" (ceq (pxX 4)  m.[3L, 1L])
+        chk "outer-right wrap"  (ceq (pxX 5)  m.[0L, 1L])
+        let pxY dy = atlas.[int64 (ox + 1), int64 (oy + dy)]
+        chk "inner-top clamp"   (ceq (pxY -1) m.[1L, 0L])
+        chk "outer-top wrap"    (ceq (pxY -2) m.[1L, 3L])
+        chk "inner-bot clamp"   (ceq (pxY 4)  m.[1L, 3L])
+        chk "outer-bot wrap"    (ceq (pxY 5)  m.[1L, 0L])
+        // mip 1 = 2x2 box average, placed at origin + mipOffset(w,h,1) = (8,0)
+        let mo = HeapAtlas.mipOffset w h 1
+        chk "mipOffset1" (mo = V2i(8, 0))
+        let inline avg (p:byte) (q:byte) (r:byte) (s:byte) = byte ((int p + int q + int r + int s + 2) / 4)
+        let e00 =
+            let a0 = m.[0L,0L] in let b0 = m.[1L,0L] in let c0 = m.[0L,1L] in let d0 = m.[1L,1L]
+            C4b(avg a0.R b0.R c0.R d0.R, avg a0.G b0.G c0.G d0.G, avg a0.B b0.B c0.B d0.B, avg a0.A b0.A c0.A d0.A)
+        chk "mip1 box-avg"     (ceq atlas.[int64 (ox + mo.X), int64 (oy + mo.Y)] e00)
+        chk "mip1 inner clamp" (ceq atlas.[int64 (ox + mo.X - 1), int64 (oy + mo.Y)] e00)
+        if ok then Log.line "atlas: PASS (gutter clamp/wrap + Iliffe mip layout exact; %d page, %d mips)" pages.Length a.NumMips
+        else Log.warn "atlas: FAIL"
+        ok
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =
