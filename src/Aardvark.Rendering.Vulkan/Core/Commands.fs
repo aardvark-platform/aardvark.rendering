@@ -120,7 +120,10 @@ module ``Common Commands`` =
                     member x.Enqueue buffer =
                         buffer.AppendCommand()
                         use pHandles = fixed handles
-                        VkRaw.vkCmdExecuteCommands(buffer.Handle, uint32 handles.Length, pHandles)
+                        // last expr -> tail position: try/finally stops the F# .tail that would
+                        // drop the pin across the native call (dotnet/fsharp#18689).
+                        try VkRaw.vkCmdExecuteCommands(buffer.Handle, uint32 handles.Length, pHandles)
+                        finally ()
                 }
 
         static member Execute(inner: CommandBuffer) =

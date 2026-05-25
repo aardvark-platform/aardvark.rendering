@@ -25,8 +25,14 @@ type CommandPool internal(queueFamily: IDeviceQueueFamily, [<Optional; DefaultPa
                 flags |> int |> unbox,
                 uint32 queueFamily.Info.index
             )
-        VkRaw.vkCreateCommandPool(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+        let mutable h = VkCommandPool.Null
+        use pCreateInfo = fixed &createInfo
+        use pHandle = fixed &h
+        // fixed &local replaces the unsafe && address-of; the call is non-tail (|> check)
+        // so no try/finally needed to avoid the F# .tail escape (dotnet/fsharp#18689).
+        VkRaw.vkCreateCommandPool(device.Handle, pCreateInfo, NativePtr.zero, pHandle)
             |> check "could not create command pool"
+        handle <- h
 
         device.Instance.RegisterDebugTrace(handle.Handle)
 
