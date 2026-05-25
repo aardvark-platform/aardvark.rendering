@@ -62,8 +62,13 @@ module GeometryPoolUtilities =
                                 member x.Compatible = QueueFlags.All
                                 member x.Enqueue(cmd) =
                                     cmd.AppendCommand()
-                                    let mutable copyInfo = VkBufferCopy(offset, offset, size)
-                                    VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer.Handle, handle, 1u, &&copyInfo)
+                                    let copyInfo = VkBufferCopy(offset, offset, size)
+                                    // NativePtr.pin holds the pin inside the callback, immune to the F#
+                                    // tail-call that would otherwise drop &&copyInfo's stack slot across
+                                    // the native call (dotnet/fsharp#18689) — matches the Image.fs upload path.
+                                    copyInfo |> NativePtr.pin (fun pCopy ->
+                                        VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer.Handle, handle, 1u, pCopy)
+                                    )
                             }
                         )
             )
