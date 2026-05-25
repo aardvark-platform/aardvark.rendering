@@ -48,6 +48,11 @@ type Runtime(device : Device) as this =
         x.Device.EnabledFeatures.Shaders.DrawParameters
 
     member x.SupportsUnboundedSamplerArrays =
+        // MoltenVK / portability-subset devices advertise the descriptor-indexing features
+        // but cannot actually compile unbounded (nonuniform) sampler-array shaders — pipeline
+        // creation fails with VK_ERROR_INVALID_SHADER_NV. Report bindless as unavailable there
+        // so the heap (and anything else) falls back to the texture atlas.
+        not (x.Device.PhysicalDevice.HasExtension KHRPortabilitySubset.Name) &&
         x.Device.UpdateDescriptorsAfterBind &&
         x.Device.EnabledFeatures.Descriptors.RuntimeDescriptorArray &&
         x.Device.EnabledFeatures.Shaders.SampledImageArrayNonUniformIndexing
