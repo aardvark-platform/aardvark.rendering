@@ -22,11 +22,20 @@ open System.Diagnostics
 
 module StartupBench =
 
-    /// Build a fresh 20k-object SG identical-in-shape to the showcase scene
+    /// Wraps `sg` in `depth` nested singleton-group nodes. Each level is just
+    /// `Sg.ofArray [| inner |]` — a Sg.Set with one child — used to probe how
+    /// the two paths scale with SG depth above the leaves.
+    let rec private singletonStack (depth : int) (sg : ISg) : ISg =
+        if depth <= 0 then sg
+        else singletonStack (depth - 1) (Sg.ofArray [| sg |])
+
+    /// Build a fresh n-object SG identical-in-shape to the showcase scene
     /// (Sg.render → vertexBuffers → indexBuffer → trafo' → uniform' → effect),
     /// inside the standard view/proj/camera wrappers. No textures (those would
     /// need the runtime; not relevant to RO resolution timing).
-    let private buildScene (n : int) : ISg =
+    /// `depth` injects that many singleton-group nodes ABOVE EVERY LEAF before
+    /// the leaves are gathered into the top-level Set.
+    let private buildScene (n : int) (depth : int) : ISg =
         let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.7)) C4b.White).ToIndexed()
         let pos = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
         let nor = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
@@ -52,6 +61,7 @@ module StartupBench =
             |> Sg.trafo' model
             |> Sg.uniform' "HeapColor" (palette.[i % palette.Length].ToV4f())
             |> Sg.effect [ effect ]
+            |> singletonStack depth
 
         let view = CameraView.lookAt (V3d(80.0, 80.0, 50.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> AVal.constant
         let proj = Frustum.perspective 70.0 0.1 3000.0 (16.0 / 9.0) |> Frustum.projTrafo |> AVal.constant
@@ -79,8 +89,8 @@ module StartupBench =
     /// One Ag-path measurement: build SG, wrap in DynamicNode + ?Runtime, force
     /// the aset. Fresh SG every time so Ag's per-scope caches don't leak across
     /// runs.
-    let private agOnce (runtime : IRuntime) (n : int) =
-        let sg = buildScene n
+    let private agOnce (runtime : IRuntime) (n : int) (depth : int) =
+        let sg = buildScene n depth
         timeMs (fun () ->
             let dn = Sg.DynamicNode(AVal.constant sg) :> ISg
             dn?Runtime <- runtime
@@ -90,8 +100,8 @@ module StartupBench =
 
     /// One Simple-path measurement: build SG, force via GetRenderObjects with
     /// Runtime seeded on the TS.
-    let private simpleOnce (runtime : IRuntime) (n : int) =
-        let sg = buildScene n
+    let private simpleOnce (runtime : IRuntime) (n : int) (depth : int) =
+        let sg = buildScene n depth
         timeMs (fun () ->
             let ts = TraversalState.withRuntime runtime TraversalState.empty
             let ros = (sg :?> ISimpleSg).GetRenderObjects ts
@@ -132,38 +142,62 @@ module StartupBench =
             | null | "" -> 5
             | s -> int s
 
+        // Either a single DEPTH=<int> or a DEPTHS=<comma-list> sweep.
+        let depths =
+            match Environment.GetEnvironmentVariable "DEPTHS" with
+            | null | "" ->
+                match Environment.GetEnvironmentVariable "DEPTH" with
+                | null | "" -> [| 0 |]
+                | s -> [| int s |]
+            | s -> s.Split(',') |> Array.map (fun t -> int (t.Trim()))
+
         printfn ""
-        printfn "[StartupBench] N=%d, warmups=%d, iters=%d" n warmups iters
+        printfn "[StartupBench] N=%d, warmups=%d, iters=%d, depths=[%s]"
+            n warmups iters (depths |> Array.map string |> String.concat "; ")
         printfn ""
 
-        // warm up JIT and any shared static caches
+        // warm up JIT and any shared static caches once at the smallest depth.
         for _ in 1 .. warmups do
-            let _ = agOnce runtime n in ()
-            let _ = simpleOnce runtime n in ()
+            let _ = agOnce runtime n depths.[0] in ()
+            let _ = simpleOnce runtime n depths.[0] in ()
 
-        // Ag-path samples
-        let agSamples  = Array.zeroCreate<float> iters
-        let mutable agCount  = 0
-        for i in 0 .. iters - 1 do
-            let ms, c = agOnce runtime n
-            agSamples.[i] <- ms
-            agCount <- c
-            printfn "  ag      iter %d: %7.1f ms  (ros=%d)" i ms c
+        // For each depth: one Ag block of `iters`, one Simple block of `iters`, report.
+        let rows = ResizeArray<int * float * float * float * float * int>()
+        for depth in depths do
+            printfn "--- depth=%d ---" depth
 
-        // Simple-path samples
-        let simSamples = Array.zeroCreate<float> iters
-        let mutable simCount = 0
-        for i in 0 .. iters - 1 do
-            let ms, c = simpleOnce runtime n
-            simSamples.[i] <- ms
-            simCount <- c
-            printfn "  simple  iter %d: %7.1f ms  (ros=%d)" i ms c
+            let agSamples = Array.zeroCreate<float> iters
+            let mutable agCount = 0
+            for i in 0 .. iters - 1 do
+                let ms, c = agOnce runtime n depth
+                agSamples.[i] <- ms
+                agCount <- c
+                printfn "  ag      iter %d: %7.1f ms  (ros=%d)" i ms c
 
+            let simSamples = Array.zeroCreate<float> iters
+            let mutable simCount = 0
+            for i in 0 .. iters - 1 do
+                let ms, c = simpleOnce runtime n depth
+                simSamples.[i] <- ms
+                simCount <- c
+                printfn "  simple  iter %d: %7.1f ms  (ros=%d)" i ms c
+
+            Array.sortInPlace agSamples
+            Array.sortInPlace simSamples
+            let agMed  = percentile agSamples 0.5
+            let simMed = percentile simSamples 0.5
+            let agMin  = agSamples.[0]
+            let simMin = simSamples.[0]
+            rows.Add(depth, agMin, agMed, simMin, simMed, agCount)
+
+            report (sprintf "Ag      d=%d" depth) agSamples  agCount
+            report (sprintf "Simple  d=%d" depth) simSamples simCount
+            printfn "speedup (min/min): %.2fx" (agMin / simMin)
+            printfn ""
+
+        // summary table at the end
         printfn ""
-        report "Ag       (legacy)" agSamples  agCount
-        report "Simple   (TS)    " simSamples simCount
-        printfn ""
-        let agMin  = Array.min agSamples
-        let simMin = Array.min simSamples
-        let ratio  = agMin / simMin
-        printfn "speedup (min/min): %.2fx" ratio
+        printfn "============== summary (N=%d) ==============" n
+        printfn "%5s | %12s %12s | %12s %12s | %8s" "depth" "ag-min(ms)" "ag-med(ms)" "sim-min(ms)" "sim-med(ms)" "speedup"
+        for (d, aMin, aMed, sMin, sMed, _) in rows do
+            printfn "%5d | %12.1f %12.1f | %12.1f %12.1f | %7.2fx" d aMin aMed sMin sMed (aMin / sMin)
