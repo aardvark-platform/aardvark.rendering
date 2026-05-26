@@ -5,6 +5,7 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Text
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
+open Aardvark.SceneGraph.Simple
 open FSharp.Data.Adaptive
 open FSharp.Data.Traceable
 
@@ -32,6 +33,261 @@ module Sg =
         member x.Content = content
         new(content) = Shape(false, C4b.Black, Border2d.None, content)
         new(color, content) = Shape(true, color, Border2d.None, content)
+
+        /// Shared body for both the legacy Ag rule (`ShapeSem.RenderObjects`) and the
+        /// ISimpleSg.GetRenderObjects path. Parameterized over the small set of
+        /// scope/TS-derived values — Runtime, RenderPass, DepthTest, the two stencil
+        /// modes — plus a `newRO` factory that builds the base `RenderObject`
+        /// (from scope in the legacy path, from `TraversalState` in the new one).
+        static member internal BuildROs
+            ( t          : Shape,
+              runtime    : IRuntime,
+              renderPass : RenderPass,
+              depthTest  : aval<DepthTest>,
+              stencilFront : aval<StencilMode>,
+              stencilBack  : aval<StencilMode>,
+              newRO      : unit -> RenderObject ) : aset<IRenderObject> =
+
+            let defaultDepthBias = 1.0 / float (1 <<< 21)
+
+            let content = t.Content
+            let cache = ShapeCache.GetOrCreateCache(runtime)
+            let shapes = newRO ()
+
+            let content =
+                content |> AVal.map (fun c ->
+                    let shapes =
+                        c.concreteShapes
+                        |> List.groupBy (fun c -> c.z)
+                        |> List.sortBy fst
+                        |> List.collect (fun (z,g) -> g)
+                    { c with concreteShapes = shapes }
+                )
+
+            let indirectAndOffsets =
+                content |> AVal.map (fun renderText ->
+                    let indirectBuffer =
+                        renderText.concreteShapes
+                            |> List.toArray
+                            |> Array.map (ConcreteShape.shape >> cache.GetBufferRange)
+                            |> Array.mapi (fun i r ->
+                                DrawCallInfo(
+                                    FirstIndex = r.Min,
+                                    FaceVertexCount = r.Size + 1,
+                                    FirstInstance = i,
+                                    InstanceCount = 1,
+                                    BaseVertex = 0
+                                )
+                                )
+                            |> IndirectBuffer.ofArray
+
+                    let trafoR0, trafoR1 =
+                        let r0, r1 =
+                            let w = if renderText.flipViewDependent then -1.0f else 1.0f
+                            renderText.concreteShapes
+                            |> List.toArray
+                            |> Array.map (fun shape ->
+                                let r0 = V4f(V3f shape.trafo.R0, w)
+                                let r1 = V4f shape.trafo.R1.XYZO
+                                r0, r1
+                            )
+                            |> Array.unzip
+                        ArrayBuffer r0 :> IBuffer,
+                        ArrayBuffer r1 :> IBuffer
+
+                    let colors =
+                        renderText.concreteShapes
+                            |> List.toArray
+                            |> Array.map (fun s -> s.color)
+                            |> ArrayBuffer
+                            :> IBuffer
+
+                    indirectBuffer, trafoR0, trafoR1, colors
+                )
+
+            let trafoR0 = BufferView(AVal.map (fun (_,r0,_,_) -> r0) indirectAndOffsets, typeof<V4f>)
+            let trafoR1 = BufferView(AVal.map (fun (_,_,r1,_) -> r1) indirectAndOffsets, typeof<V4f>)
+            let colors  = BufferView(AVal.map (fun (_,_,_,c) -> c) indirectAndOffsets, typeof<C4b>)
+
+            let instanceAttributes =
+                let old = shapes.InstanceAttributes
+                { new IAttributeProvider with
+                    member x.All = old.All
+                    member x.TryGetAttribute sem =
+                        if sem = Path.Attributes.ShapeTrafoR0 then trafoR0 |> ValueSome
+                        elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> ValueSome
+                        elif sem = Path.Attributes.PathColor then colors |> ValueSome
+                        else old.TryGetAttribute sem
+                    member x.Dispose() = old.Dispose()
+                }
+
+            let aa =
+                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "Antialias") with
+                | ValueSome (:? aval<bool> as aa) -> aa
+                | _ -> AVal.constant false
+
+            let fill =
+                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "FillGlyphs") with
+                | ValueSome (:? aval<bool> as aa) -> aa
+                | _ -> AVal.constant true
+
+            let bias =
+                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "DepthBias") with
+                | ValueSome (:? aval<float> as bias) -> bias
+                | _ -> AVal.constant defaultDepthBias
+
+            shapes.Uniforms <-
+                let old = shapes.Uniforms
+                let ownTrafo = content |> AVal.map (fun c -> c.renderTrafo)
+                { new IUniformProvider with
+                    member x.TryGetUniform(scope, sem) =
+                        match string sem with
+                        | "Antialias" -> aa :> IAdaptiveValue |> ValueSome
+                        | "FillGlyphs" -> fill :> IAdaptiveValue |> ValueSome
+                        | "DepthBias" -> bias :> IAdaptiveValue |> ValueSome
+                        | "ModelTrafo" ->
+                            match old.TryGetUniform(scope, sem) with
+                            | ValueSome (:? aval<Trafo3d> as m) ->
+                                AVal.map2 (*) ownTrafo m :> IAdaptiveValue |> ValueSome
+                            | _ ->
+                                ownTrafo :> IAdaptiveValue |> ValueSome
+                        | _ ->
+                            old.TryGetUniform(scope, sem)
+                    member x.Dispose() = old.Dispose()
+                }
+
+            let pass = if renderPass = RenderPass.main then RenderPass.shapes else renderPass
+
+            let multisample =
+                (aa, fill) ||> AVal.map2 (fun a f -> not f || a)
+
+            shapes.RasterizerState <- { shapes.RasterizerState with Multisample = multisample }
+            shapes.RenderPass <- pass
+            shapes.BlendState <- { shapes.BlendState with Mode = AVal.constant BlendMode.Blend }
+            shapes.VertexAttributes <- cache.VertexBuffers
+            shapes.DrawCalls <- indirectAndOffsets |> AVal.map (fun (i,_,_,_) -> i) |> DrawCalls.Indirect
+            shapes.InstanceAttributes <- instanceAttributes
+            shapes.Mode <- IndexedGeometryMode.TriangleList
+            shapes.DepthState <- { shapes.DepthState with Bias = AVal.constant DepthBias.None }
+
+            let boundary = newRO ()
+            boundary.RasterizerState <- { shapes.RasterizerState with Multisample = multisample }
+            boundary.RenderPass <- pass
+            boundary.BlendState <- { boundary.BlendState with Mode = AVal.constant BlendMode.Blend }
+            boundary.VertexAttributes <- cache.VertexBuffers
+            let drawCall =
+                let range = cache.GetBufferRange Shape.Quad
+                DrawCallInfo(
+                    FirstIndex = range.Min,
+                    FaceVertexCount = range.Size + 1,
+                    FirstInstance = 0,
+                    InstanceCount = 1,
+                    BaseVertex = 0
+                )
+
+            boundary.DrawCalls <- DrawCalls.Direct ([| drawCall |] |> AVal.constant)
+            boundary.Mode <- IndexedGeometryMode.TriangleList
+
+            let bounds =
+                let e = t.BoundaryExtent
+                content |> AVal.map (fun s ->
+                    let b = s.bounds
+                    let bounds = Box2d(b.Min.X - e.left, b.Min.Y - e.bottom, b.Max.X + e.right, b.Max.Y + e.top)
+                    bounds
+                )
+
+            boundary.Uniforms <-
+                let old = boundary.Uniforms
+                { new IUniformProvider with
+                    member x.TryGetUniform(scope, sem) =
+                        match string sem with
+                        | "BoundaryColor" -> t.BoundaryColor |> AVal.constant :> IAdaptiveValue |> ValueSome
+                        | "ModelTrafo" ->
+                            let scaleTrafo =
+                                bounds |> AVal.map (fun bounds ->
+                                    if bounds.IsValid then
+                                        Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
+                                        Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
+                                    else
+                                        Trafo3d.Scale(0.0)
+                                )
+                            match old.TryGetUniform(scope, sem) with
+                            | ValueSome (:? aval<Trafo3d> as m) ->
+                                AVal.map2 (*) scaleTrafo m :> IAdaptiveValue |> ValueSome
+                            | _ ->
+                                scaleTrafo :> IAdaptiveValue |> ValueSome
+                        | _ -> old.TryGetUniform(scope, sem)
+                    member x.Dispose() = old.Dispose()
+                }
+            boundary.Surface <- Surface.Effect cache.BoundaryEffect
+
+            let writeStencil =
+                StencilMode.simple StencilOperation.Replace StencilOperation.Zero StencilOperation.Keep ComparisonFunction.Always 1
+
+            let readStencil =
+                StencilMode.simple StencilOperation.Keep StencilOperation.Keep StencilOperation.Keep ComparisonFunction.Equal 1
+
+            let writeColor =
+                if t.RenderBoundary then ColorMask.All
+                else ColorMask.None
+
+            boundary.BlendState <- { boundary.BlendState with ColorWriteMask = AVal.constant writeColor }
+            boundary.StencilState <- { boundary.StencilState with
+                                            ModeFront = AVal.constant writeStencil
+                                            ModeBack = AVal.constant writeStencil }
+            boundary.RasterizerState <- { boundary.RasterizerState with FillMode = AVal.constant FillMode.Fill }
+
+            let style = content |> AVal.map(fun x -> x.renderStyle)
+
+            let depthTestEff =
+                style |> AVal.bind (function
+                    | RenderStyle.Normal -> AVal.constant DepthTest.None
+                    | _ -> depthTest
+                )
+
+            let stencilFrontEff =
+                style |> AVal.bind (function
+                    | RenderStyle.Normal -> AVal.constant readStencil
+                    | _ -> stencilFront
+                )
+
+            let stencilBackEff =
+                style |> AVal.bind (function
+                    | RenderStyle.Normal -> AVal.constant readStencil
+                    | _ -> stencilBack
+                )
+
+            shapes.DepthState <- { shapes.DepthState with Test = depthTestEff }
+            shapes.StencilState <- { shapes.StencilState with ModeFront = stencilFrontEff; ModeBack = stencilBackEff }
+
+            style |> AVal.map(fun s ->
+                match s with
+                | RenderStyle.Normal ->
+                    shapes.Surface <- Surface.Effect cache.Effect
+                    MultiRenderObject [boundary; shapes] :> IRenderObject
+
+                | RenderStyle.NoBoundary ->
+                    shapes.Surface <- Surface.Effect cache.Effect
+                    RenderObject.Clone shapes :> IRenderObject
+
+                | RenderStyle.Billboard ->
+                    shapes.Surface <- Surface.Effect cache.BillboardEffect
+                    RenderObject.Clone shapes :> IRenderObject
+
+                |> HashSet.single
+            ) |> ASet.ofAVal
+
+        interface ISimpleSg with
+            member self.GetRenderObjects ts =
+                Shape.BuildROs(
+                    self,
+                    ts.Runtime,
+                    ts.RenderPass,
+                    ts.DepthTest,
+                    ts.StencilModeFront,
+                    ts.StencilModeBack,
+                    (fun () -> RenderObjectBuilder.ofTraversalState ts)
+                )
 
     type BillboardApplicator(child : aval<ISg>) =
         inherit Sg.AbstractApplicator(child)
@@ -262,252 +518,18 @@ module Sg =
             ) |> ASet.ofAVal
 
         member x.RenderObjects(t : Shape, scope : Ag.Scope) : aset<IRenderObject> =
-            let content = t.Content
-            let cache = ShapeCache.GetOrCreateCache(scope.Runtime)
-            let shapes = RenderObject.ofScope scope
+            // Delegate to the shared body on Shape so the Ag path and the
+            // ISimpleSg/TraversalState path stay in lock-step (single source of truth).
+            Shape.BuildROs(
+                t,
+                scope.Runtime,
+                scope.RenderPass,
+                scope.DepthTest,
+                scope.StencilModeFront,
+                scope.StencilModeBack,
+                (fun () -> RenderObject.ofScope scope)
+            )
 
-            let content =
-                content |> AVal.map (fun c ->
-
-                    let shapes =
-                        c.concreteShapes
-                        |> List.groupBy (fun c -> c.z)
-                        |> List.sortBy fst
-                        |> List.collect (fun (z,g) -> g)
-
-                    { c with concreteShapes = shapes }
-                )
-
-            let indirectAndOffsets =
-                content |> AVal.map (fun renderText ->
-                    let indirectBuffer =
-                        renderText.concreteShapes
-                            |> List.toArray
-                            |> Array.map (ConcreteShape.shape >> cache.GetBufferRange)
-                            |> Array.mapi (fun i r ->
-                                DrawCallInfo(
-                                    FirstIndex = r.Min,
-                                    FaceVertexCount = r.Size + 1,
-                                    FirstInstance = i,
-                                    InstanceCount = 1,
-                                    BaseVertex = 0
-                                )
-                                )
-                            |> IndirectBuffer.ofArray
-
-                    let trafoR0, trafoR1 =
-                        let r0, r1 =
-                            let w = if renderText.flipViewDependent then -1.0f else 1.0f
-
-                            renderText.concreteShapes
-                            |> List.toArray
-                            |> Array.map (fun shape ->
-                                let r0 = V4f(V3f shape.trafo.R0, w)
-                                let r1 = V4f shape.trafo.R1.XYZO
-                                r0, r1
-                            )
-                            |> Array.unzip
-
-
-                        ArrayBuffer r0 :> IBuffer,
-                        ArrayBuffer r1 :> IBuffer
-
-                    let colors =
-                        renderText.concreteShapes
-                            |> List.toArray
-                            |> Array.map (fun s -> s.color)
-                            |> ArrayBuffer
-                            :> IBuffer
-
-                    indirectBuffer, trafoR0, trafoR1, colors
-                )
-
-            let trafoR0 = BufferView(AVal.map (fun (_,r0,_,_) -> r0) indirectAndOffsets, typeof<V4f>)
-            let trafoR1 = BufferView(AVal.map (fun (_,_,r1,_) -> r1) indirectAndOffsets, typeof<V4f>)
-            let colors = BufferView(AVal.map (fun (_,_,_,c) -> c) indirectAndOffsets, typeof<C4b>)
-
-            let instanceAttributes =
-                let old = shapes.InstanceAttributes
-                { new IAttributeProvider with
-                    member x.All = old.All
-                    member x.TryGetAttribute sem =
-                        if sem = Path.Attributes.ShapeTrafoR0 then trafoR0 |> ValueSome
-                        elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> ValueSome
-                        elif sem = Path.Attributes.PathColor then colors |> ValueSome
-                        else old.TryGetAttribute sem
-                    member x.Dispose() = old.Dispose()
-                }
-
-
-            let aa =
-                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "Antialias") with
-                | ValueSome (:? aval<bool> as aa) -> aa
-                | _ -> AVal.constant false
-
-            let fill =
-                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "FillGlyphs") with
-                | ValueSome (:? aval<bool> as aa) -> aa
-                | _ -> AVal.constant true
-
-            let bias =
-                match shapes.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "DepthBias") with
-                | ValueSome (:? aval<float> as bias) -> bias
-                | _ -> AVal.constant defaultDepthBias
-
-            shapes.Uniforms <-
-                let old = shapes.Uniforms
-                let ownTrafo = content |> AVal.map (fun c -> c.renderTrafo)
-                { new IUniformProvider with
-                    member x.TryGetUniform(scope, sem) =
-                        match string sem with
-                        | "Antialias" -> aa :> IAdaptiveValue |> ValueSome
-                        | "FillGlyphs" -> fill :> IAdaptiveValue |> ValueSome
-                        | "DepthBias" -> bias :> IAdaptiveValue |> ValueSome
-                        | "ModelTrafo" ->
-                            match old.TryGetUniform(scope, sem) with
-                            | ValueSome (:? aval<Trafo3d> as m) ->
-                                AVal.map2 (*) ownTrafo m :> IAdaptiveValue |> ValueSome
-                            | _ ->
-                                ownTrafo :> IAdaptiveValue |> ValueSome
-
-                        | _ ->
-                            old.TryGetUniform(scope, sem)
-
-                    member x.Dispose() =
-                        old.Dispose()
-                }
-
-            let pass = scope.RenderPass
-            let pass = if pass = RenderPass.main then RenderPass.shapes else pass
-
-
-            let multisample =
-                (aa, fill) ||> AVal.map2 (fun a f ->
-                    // @krauthaufen - why always multisampling when outline only?
-                    not f || a
-                )
-
-            shapes.RasterizerState <- { shapes.RasterizerState with Multisample = multisample }
-            shapes.RenderPass <- pass
-            shapes.BlendState <- { shapes.BlendState with Mode = AVal.constant BlendMode.Blend }
-            shapes.VertexAttributes <- cache.VertexBuffers
-            shapes.DrawCalls <- indirectAndOffsets |> AVal.map (fun (i,_,_,_) -> i) |> DrawCalls.Indirect
-            shapes.InstanceAttributes <- instanceAttributes
-            shapes.Mode <- IndexedGeometryMode.TriangleList
-            shapes.DepthState <- { shapes.DepthState with Bias = AVal.constant DepthBias.None }
-
-            //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
-
-            let boundary = RenderObject.ofScope scope
-            boundary.RasterizerState <- { shapes.RasterizerState with Multisample = multisample }
-            boundary.RenderPass <- pass
-            boundary.BlendState <- { boundary.BlendState with Mode = AVal.constant BlendMode.Blend }
-            boundary.VertexAttributes <- cache.VertexBuffers
-            let drawCall =
-                let range = cache.GetBufferRange Shape.Quad
-                DrawCallInfo(
-                    FirstIndex = range.Min,
-                    FaceVertexCount = range.Size + 1,
-                    FirstInstance = 0,
-                    InstanceCount = 1,
-                    BaseVertex = 0
-                )
-
-            boundary.DrawCalls <- DrawCalls.Direct ([| drawCall |] |> AVal.constant)
-            boundary.Mode <- IndexedGeometryMode.TriangleList
-
-            let bounds =
-                let e = t.BoundaryExtent
-                content |> AVal.map (fun s ->
-                    let b = s.bounds
-                    let bounds = Box2d(b.Min.X - e.left, b.Min.Y - e.bottom, b.Max.X + e.right, b.Max.Y + e.top)
-                    bounds
-                )
-
-            boundary.Uniforms <-
-                let old = boundary.Uniforms
-                { new IUniformProvider with
-                    member x.TryGetUniform(scope, sem) =
-                        match string sem with
-                        | "BoundaryColor" -> t.BoundaryColor |> AVal.constant :> IAdaptiveValue |> ValueSome
-                        | "ModelTrafo" ->
-                            let scaleTrafo =
-                                bounds |> AVal.map (fun bounds ->
-                                    if bounds.IsValid then
-                                        Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
-                                        Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
-                                    else
-                                        Trafo3d.Scale(0.0)
-                                )
-
-                            match old.TryGetUniform(scope, sem) with
-                            | ValueSome (:? aval<Trafo3d> as m) ->
-                                AVal.map2 (*) scaleTrafo m :> IAdaptiveValue |> ValueSome
-                            | _ ->
-                                scaleTrafo :> IAdaptiveValue |> ValueSome
-
-                        | _ -> old.TryGetUniform(scope, sem)
-
-                    member x.Dispose() =
-                        old.Dispose()
-                }
-            boundary.Surface <- Surface.Effect cache.BoundaryEffect
-
-            let writeStencil =
-                StencilMode.simple StencilOperation.Replace StencilOperation.Zero StencilOperation.Keep ComparisonFunction.Always 1
-
-            let readStencil =
-                StencilMode.simple StencilOperation.Keep StencilOperation.Keep StencilOperation.Keep ComparisonFunction.Equal 1
-
-            let writeColor =
-                if t.RenderBoundary then ColorMask.All
-                else ColorMask.None
-
-            boundary.BlendState <- { boundary.BlendState with ColorWriteMask = AVal.constant writeColor }
-            boundary.StencilState <- { boundary.StencilState with
-                                            ModeFront = AVal.constant writeStencil
-                                            ModeBack = AVal.constant writeStencil }
-            boundary.RasterizerState <- { boundary.RasterizerState with FillMode = AVal.constant FillMode.Fill }
-
-            let style = content |> AVal.map(fun x -> x.renderStyle)
-
-            let depthTest =
-                style |> AVal.bind (function
-                    | RenderStyle.Normal -> AVal.constant DepthTest.None
-                    | _ -> scope.DepthTest
-                )
-
-            let stencilFront =
-                style |> AVal.bind (function
-                    | RenderStyle.Normal -> AVal.constant(readStencil)
-                    | _ -> scope.StencilModeFront
-                )
-
-            let stencilBack =
-                style |> AVal.bind (function
-                    | RenderStyle.Normal -> AVal.constant(readStencil)
-                    | _ -> scope.StencilModeBack
-                )
-
-            shapes.DepthState <- { shapes.DepthState with Test = depthTest }
-            shapes.StencilState <- { shapes.StencilState with ModeFront = stencilFront; ModeBack = stencilBack }
-
-            style |> AVal.map(fun s ->
-                match s with
-                | RenderStyle.Normal ->
-                    shapes.Surface <- Surface.Effect cache.Effect
-                    MultiRenderObject [boundary; shapes] :> IRenderObject
-
-                | RenderStyle.NoBoundary ->
-                    shapes.Surface <- Surface.Effect cache.Effect
-                    RenderObject.Clone shapes :> IRenderObject
-
-                | RenderStyle.Billboard ->
-                    shapes.Surface <- Surface.Effect cache.BillboardEffect
-                    RenderObject.Clone shapes :> IRenderObject
-
-                |> HashSet.single
-            ) |> ASet.ofAVal
 
         member x.FillGlyphs(s : ISg, scope : Ag.Scope) =
             let mode = scope.FillMode

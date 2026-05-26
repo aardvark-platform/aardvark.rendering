@@ -78,6 +78,12 @@ let main argv =
     // SDK. (On Linux this would drop libvulkan.so and fail, so guard it.)
     if System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform System.Runtime.InteropServices.OSPlatform.OSX then
         Aardvark.Rendering.Vulkan.VulkanLoader.PreferMoltenVK <- true
+
+    // Opt into the ISimpleSg-direct render path when AARDVARK_SIMPLE_SG=1
+    // (see Aardvark.SceneGraph.Simple.SimpleConfig.Enabled).
+    if System.Environment.GetEnvironmentVariable("AARDVARK_SIMPLE_SG") = "1" then
+        Aardvark.SceneGraph.Simple.SimpleConfig.Enabled <- true
+        printfn "[heap] SimpleSg path ENABLED"
     if argv |> Array.contains "bench" then
         Bench.run ()
         0
