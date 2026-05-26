@@ -90,10 +90,16 @@ module Showcase =
                 return V4f(v.c.XYZ * d + V3f(0.3f, 0.65f, 1.0f) * f, 1.0f)
             }
 
-        // five distinct effects (-> five buckets in heap mode)
+        // final stage that overrides output alpha to 0.5 — combined with Sg.transparent below
+        // this exercises the OIT pipeline end-to-end and the heap's IsTransparent bucket partition.
+        let setAlpha (v : Effects.Vertex) =
+            fragment { return V4f(v.c.XYZ, 0.5f) }
+
+        // five distinct effects (-> five buckets in heap mode), each with the alpha override
+        // appended so every shader returns alpha=0.5
         let effects =
             [| solid; textured; toon; bump; rim |]
-            |> Array.map (fun frag -> Effect.compose [ Effect.ofFunction shade; Effect.ofFunction frag ])
+            |> Array.map (fun frag -> Effect.compose [ Effect.ofFunction shade; Effect.ofFunction frag; Effect.ofFunction setAlpha ])
 
     let private mkTexture (i : int) : ITexture =
         let cols = [| C3b(235,70,70); C3b(70,205,90); C3b(70,130,235); C3b(235,205,55)
@@ -200,13 +206,16 @@ module Showcase =
             |> Sg.texture' (Symbol.Create "DiffuseTexture") textures.[i % TexCount]
             |> Sg.effect [ effects.[i % effects.Length] ]
 
-        // THE INPUT: a scenegraph (camera + globals applied at the top)
+        // THE INPUT: a scenegraph (camera + globals applied at the top). Sg.transparent marks
+        // every leaf RO with IsTransparent=true so (a) the heap partitions them into transparent
+        // buckets (see HeapPool.modeKey) and (b) TransparencyRenderTask routes them through OIT.
         let scene =
             Array.init n objSg
             |> Sg.ofArray
             |> Sg.uniform "CameraLocation" camLoc
             |> Sg.viewTrafo (cameraView |> AVal.map CameraView.viewTrafo)
             |> Sg.projTrafo (frustum    |> AVal.map Frustum.projTrafo)
+            |> Sg.transparent
 
         // standard render objects (extracted from the scenegraph)
         let stdRos : aset<IRenderObject> =
