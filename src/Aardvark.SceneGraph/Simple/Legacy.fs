@@ -81,6 +81,12 @@ module Bridge =
 
             CameraLocation           = scope?CameraLocation
             Activate                 = scope?Activate
+
+            // The one ambient (not-in-Root-seeders) attribute used in production:
+            // tolerated as nullable since callers may not have set it on the scope.
+            Runtime                  =
+                try (scope?Runtime : IRuntime)
+                with _ -> Unchecked.defaultof<IRuntime>
         }
 
 
@@ -165,6 +171,13 @@ module LegacyBridgeSemantics =
         // Environment + lifecycle
         member x.CameraLocation(a : LegacyBridge, _ : Scope) = a.Child?CameraLocation <- a.TS.CameraLocation
         member x.Activate      (a : LegacyBridge, _ : Scope) = a.Child?Activate       <- a.TS.Activate
+
+        // Ambient `Runtime` — only set when the TS carries one (entry-point seeded
+        // it). Leaves like Text.Sg.ShapeSem read `scope.Runtime` and would throw
+        // otherwise.
+        member x.Runtime(a : LegacyBridge, _ : Scope) =
+            if not (isNull a.TS.Runtime) then
+                a.Child?Runtime <- a.TS.Runtime
 
         // RenderObjects: delegate to child — same as Semantics/Adapter.fs:15.
         member x.RenderObjects(a : LegacyBridge, scope : Ag.Scope) : aset<IRenderObject> =

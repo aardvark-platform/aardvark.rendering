@@ -21,3 +21,13 @@ open FSharp.Data.Adaptive
 type ISimpleSg =
     inherit ISg
     abstract member GetRenderObjects : TraversalState -> aset<IRenderObject>
+
+
+/// Global config for the ISimpleSg path. The render-task entry point
+/// (`SceneGraphRuntimeExtensions.CompileRender` in RuntimeExtensions.fs) reads
+/// `Enabled` and dispatches via `ISimpleSg.GetRenderObjects (TraversalState …)`
+/// when true — bypassing Ag traversal entirely; goal is for every leaf to be
+/// TS-direct so we never bridge back. Default `false` until that work is complete.
+[<RequireQualifiedAccess>]
+module SimpleConfig =
+    let mutable Enabled : bool = false

@@ -69,6 +69,15 @@ type TraversalState =
 
         CameraLocation           : aval<V3d>
         Activate                 : list<unit -> IDisposable>
+
+        /// Ambient `Runtime` attribute — set via `app?Runtime <- runtime` in the
+        /// legacy `RuntimeExtensions.toRenderObjects` and consumed by third-party
+        /// leaves (Text.Sg.ShapeSem, PointCloud, RuntimeDependentUniformHolder)
+        /// via `scope?Runtime`. The only genuinely-ambient (not-in-TS) Ag attribute
+        /// used in production code; carried explicitly so the LegacyBridge can
+        /// replay it onto its child for leaves that haven't been upgraded.
+        /// `null` until seeded by an entry point (CompileRender).
+        Runtime                  : IRuntime
     }
 
 module TraversalState =
@@ -122,7 +131,14 @@ module TraversalState =
 
             CameraLocation           = AVal.constant V3d.Zero
             Activate                 = []
+
+            // IRuntime doesn't have [<AllowNullLiteral>], so use Unchecked.defaultof —
+            // null at runtime but bypasses the F# null-literal check.
+            Runtime                  = Unchecked.defaultof<IRuntime>
         }
+
+    let inline withRuntime (r : IRuntime) (ts : TraversalState) =
+        { ts with Runtime = r }
 
     // ── trafos ─────────────────────────────────────────────────────────────
     /// Prepend a trafo to the stack — same direction as Ag's
