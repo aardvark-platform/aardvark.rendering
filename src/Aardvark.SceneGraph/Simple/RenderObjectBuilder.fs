@@ -118,6 +118,61 @@ module internal UniformProviderInternals =
                                 ValueNone
 
 
+module PipelineState =
+
+    /// TS-direct analogue of `Aardvark.SceneGraph.Semantics.PipelineState.ofScope`,
+    /// used by leaves like `LodTreeNode` that need to bundle pipeline state alongside
+    /// a custom RO type. Mirrors the scope-based builder field-by-field.
+    let ofTraversalState (ts : TraversalState) : PipelineState =
+        let vertexAttributes   = AttributeProvider.ofMap ts.VertexAttributes
+        let instanceAttributes = AttributeProvider.ofMap ts.InstanceAttributes
+        let attributes = AttributeProvider.union vertexAttributes instanceAttributes
+
+        {
+            Mode                = IndexedGeometryMode.PointList
+            VertexInputTypes    = Map.empty
+
+            BlendState =
+                {
+                    Mode                = ts.BlendMode
+                    ColorWriteMask      = ts.ColorWriteMask
+                    ConstantColor       = ts.BlendConstant
+                    AttachmentMode      = ts.AttachmentBlendMode
+                    AttachmentWriteMask = ts.AttachmentColorWriteMask
+                }
+            DepthState =
+                {
+                    Test      = ts.DepthTest
+                    Bias      = ts.DepthBias
+                    WriteMask = ts.DepthWriteMask
+                    Clamp     = ts.DepthClamp
+                }
+            StencilState =
+                {
+                    ModeFront      = ts.StencilModeFront
+                    WriteMaskFront = ts.StencilWriteMaskFront
+                    ModeBack       = ts.StencilModeBack
+                    WriteMaskBack  = ts.StencilWriteMaskBack
+                }
+            RasterizerState =
+                {
+                    CullMode           = ts.CullMode
+                    FrontFacing        = ts.FrontFacing
+                    FillMode           = ts.FillMode
+                    Multisample        = ts.Multisample
+                    ConservativeRaster = ts.ConservativeRaster
+                }
+            ViewportState =
+                {
+                    Viewport = ts.Viewport
+                    Scissor  = ts.Scissor
+                } : ViewportState
+
+            GlobalUniforms      = new TraversalStateUniformProvider(ts, [attributes]) :> IUniformProvider
+            PerGeometryUniforms = Map.empty
+        }
+
+
 module RenderObjectBuilder =
 
     /// Build a `RenderObject` from a `TraversalState`. Mirrors
