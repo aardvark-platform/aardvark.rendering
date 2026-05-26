@@ -62,6 +62,7 @@ module RenderObject =
 
         rj.IsActive <- scope.IsActive
         rj.RenderPass <- scope.RenderPass
+        rj.IsTransparent <- scope.IsTransparent
 
         if not scope.Activate.IsEmpty then
             let activate() =

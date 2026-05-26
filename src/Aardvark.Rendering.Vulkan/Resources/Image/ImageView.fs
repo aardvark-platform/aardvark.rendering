@@ -193,12 +193,17 @@ module ImageView =
             return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange)
         }
 
-    let createStorageView (componentMapping : VkComponentMapping) (img : Image) (imageType : FShade.GLSL.GLSLImageType)
+    let createStorageView (_componentMapping : VkComponentMapping) (img : Image) (imageType : FShade.GLSL.GLSLImageType)
                           (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
         let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Layers
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
+
+        // Storage images must use an identity component mapping (Vulkan spec):
+        // the R,R,R,A swizzle applied to single-channel sampled images is
+        // invalid for storage descriptors.
+        let componentMapping = VkComponentMapping.Identity
 
         let aspect = VkFormat.toShaderAspect img.Format
 

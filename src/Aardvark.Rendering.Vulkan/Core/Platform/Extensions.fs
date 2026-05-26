@@ -23,6 +23,8 @@ module Extensions =
 
     let [<Literal>] CustomBorderColor               = EXTCustomBorderColor.Name
 
+    let [<Literal>] FragmentShaderInterlock         = EXTFragmentShaderInterlock.Name
+
     let [<Literal>] Debug                           = EXTDebugUtils.Name
 
     let [<Literal>] DeviceFault                     = EXTDeviceFault.Name

@@ -219,12 +219,31 @@ module RenderPass =
                 | None -> colorDescriptions
 
             let! pAttachmentDescriptions = attachmentDescriptions
+
+            // Make fragment-shader storage-image writes performed in this
+            // render pass available to fragment-shader reads in a later render
+            // pass (e.g. the A-buffer build pass writing the per-pixel k-buffer
+            // that the resolve pass then reads). This is a no-op for passes
+            // that don't write storage images (the SHADER_WRITE source access
+            // matches nothing), so it doesn't affect ordinary rendering.
+            let dependencies =
+                [|
+                    VkSubpassDependency(
+                        0u, System.UInt32.MaxValue,
+                        VkPipelineStageFlags.FragmentShaderBit,
+                        VkPipelineStageFlags.FragmentShaderBit,
+                        VkAccessFlags.ShaderWriteBit,
+                        VkAccessFlags.ShaderReadBit,
+                        Unchecked.defaultof<VkDependencyFlags>)
+                |]
+            let! pDependencies = dependencies
+
             let! pInfo =
                 VkRenderPassCreateInfo(
                     VkRenderPassCreateFlags.None,
                     uint32 attachmentDescriptions.Length, pAttachmentDescriptions,
                     1u, pSubpassDescription,
-                    0u, NativePtr.zero
+                    uint32 dependencies.Length, pDependencies
                 )
 
             let! pHandle = VkRenderPass.Null

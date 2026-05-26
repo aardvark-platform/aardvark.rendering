@@ -345,6 +345,10 @@ type ShaderFeatures =
         /// InterpolateAtCentroid, InterpolateAtOffset, and InterpolateAtSample from the GLSL.std.450 extended instruction set.
         /// This member is only meaningful if the RasterizerFeatures.SampleRateShading is true.
         SampleRateInterpolationFunctions: bool
+
+        /// Specifies whether fragment-shader pixel interlock (ordered, per-pixel
+        /// critical sections via VK_EXT_fragment_shader_interlock) is supported.
+        FragmentShaderPixelInterlock: bool
     }
 
     member internal x.Print(l : ILogger) =
@@ -410,6 +414,7 @@ type ShaderFeatures =
         l.line "variable pointers (storage buffer):  %A" x.VariablePointersStorageBuffer
         l.line "draw parameters:                     %A" x.DrawParameters
         l.line "sample rate interpolation functions: %A" x.SampleRateInterpolationFunctions
+        l.line "fragment shader pixel interlock:     %A" x.FragmentShaderPixelInterlock
 
 [<CLIMutable>]
 type QueryFeatures =
@@ -713,6 +718,7 @@ module DeviceFeatures =
     open EXTMemoryPriority
     open EXTDeviceFault
     open EXTOpacityMicromap
+    open EXTFragmentShaderInterlock
     open NVRayTracingInvocationReorder
     open NVRayTracingValidation
     open Vulkan11
@@ -859,6 +865,14 @@ module DeviceFeatures =
                 toVkBool features.Debugging.VendorBinaryDump
             )
 
+        let fsi =
+            // fragmentShaderSampleInterlock, fragmentShaderPixelInterlock, fragmentShaderShadingRateInterlock
+            VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT(
+                toVkBool false,
+                toVkBool features.Shaders.FragmentShaderPixelInterlock,
+                toVkBool false
+            )
+
         let psub =
             VkPhysicalDevicePortabilitySubsetFeaturesKHR(
                 toVkBool features.GraphicsPipeline.Blending.ConstantAlphaColorBlendFactors,
@@ -959,6 +973,7 @@ module DeviceFeatures =
         |> if hasExtension KHRRayQuery.Name  then VkStructChain.add rq  else id
         |> if hasExtension KHRBufferDeviceAddress.Name then VkStructChain.add bda else id
         |> if hasExtension EXTDeviceFault.Name then VkStructChain.add dflt else id
+        |> if hasExtension EXTFragmentShaderInterlock.Name then VkStructChain.add fsi else id
         |> if hasExtension KHRPortabilitySubset.Name then VkStructChain.add psub else id
         |> VkStructChain.add features
 
@@ -982,6 +997,7 @@ module DeviceFeatures =
                (rayQueryFeatures : VkPhysicalDeviceRayQueryFeaturesKHR)
                (bufferDeviceAddressFeatures : VkPhysicalDeviceBufferDeviceAddressFeaturesKHR)
                (deviceFaultFeatures : VkPhysicalDeviceFaultFeaturesEXT)
+               (fragmentShaderInterlockFeatures : VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT)
                (features : VkPhysicalDeviceFeatures) =
 
         {
@@ -1089,6 +1105,7 @@ module DeviceFeatures =
                     VariablePointersStorageBuffer =             toBool variablePointerFeatures.variablePointersStorageBuffer
                     DrawParameters =                            toBool shaderDrawParametersFeatures.shaderDrawParameters
                     SampleRateInterpolationFunctions =          toBool portabilitySubsetFeatures.shaderSampleRateInterpolationFunctions
+                    FragmentShaderPixelInterlock =              toBool fragmentShaderInterlockFeatures.fragmentShaderPixelInterlock
                 }
 
             Queries =

@@ -1,0 +1,388 @@
+namespace Aardvark.Rendering.Tests.Rendering
+
+open Aardvark.Base
+open Aardvark.Rendering
+open Aardvark.Rendering.Tests
+open Aardvark.SceneGraph
+open Aardvark.Application
+open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
+open Expecto
+
+module Transparency =
+
+    module private Semantic =
+        let PickData = Sym.ofString "PickData"
+
+    module private Shader =
+        open FShade
+
+        type Fragment = {
+            [<FragCoord>] coord : V4f
+        }
+
+        // Writes PickData = V4f(pickId, ndcDepth, 0, 0). The Colors output is
+        // produced by an upstream shader; this stage only adds PickData.
+        // f.coord.Z is the window-space depth (already in [0, 1]) so it's
+        // directly comparable to the depth attachment. PickId is baked into
+        // the effect as a closure (avoids per-RO uniform plumbing).
+        let writePick (pickId : float32) (f : Fragment) =
+            fragment {
+                return {| PickData = V4f(pickId, f.coord.Z, 0.0f, 0.0f) |}
+            }
+
+        // --- Smoke test: can a fragment shader write to a storage image? ---
+        type UniformScope with
+            member x.SmokeTarget : UIntImage2d<Formats.r32ui> = x?SmokeTarget
+
+        // Writes (x + y*width + 1) into the storage image at each pixel, so a
+        // readback of 0 means "the write never happened". Returns black.
+        let smokeWriteImage (width : int) (f : Fragment) =
+            fragment {
+                let px = V2i f.coord.XY
+                uniform.SmokeTarget.[px] <- V4ui(uint32 (px.X + px.Y * width + 1), 0u, 0u, 0u)
+                return V4f.Zero
+            }
+
+        // Pass 2 of the cross-pass test: reads the image written by a previous
+        // render pass via imageLoad and outputs it as colour. If cross-pass
+        // storage visibility is broken, this reads 0.
+        let smokeReadImage (f : Fragment) =
+            fragment {
+                let px = V2i f.coord.XY
+                let v = uniform.SmokeTarget.[px].X
+                return V4f(float32 v, 0.0f, 0.0f, 1.0f)
+            }
+
+        [<KeepCall>]
+        [<GLSLIntrinsic("beginInvocationInterlockARB()", "GL_ARB_fragment_shader_interlock")>]
+        let beginInterlock() : unit = failwith "shader only"
+        [<KeepCall>]
+        [<GLSLIntrinsic("endInvocationInterlockARB()", "GL_ARB_fragment_shader_interlock")>]
+        let endInterlock() : unit = failwith "shader only"
+
+        // Interlocked count read-modify-write — the A-buffer's core mechanic.
+        // Each fragment increments the per-pixel counter inside a critical
+        // section. With N overlapping draws the count must end at N.
+        let countRMW (f : Fragment) =
+            fragment {
+                let px = V2i f.coord.XY
+                beginInterlock()
+                let c = uniform.SmokeTarget.[px].X
+                uniform.SmokeTarget.[px] <- V4ui(c + 1u, 0u, 0u, 0u)
+                endInterlock()
+                return V4f.Zero
+            }
+
+    module Cases =
+
+        /// Smoke test: prove a fragment shader can write to a storage image
+        /// through the graphics pipeline (the foundation the A-buffer relies
+        /// on). A fullscreen quad writes (x + y*w + 1) into an R32UI image;
+        /// we read it back and check every pixel.
+        let fragmentImageWrite (runtime : IRuntime) =
+            let size = V2i(8)
+
+            let target = runtime.CreateTexture2D(size, TextureFormat.R32ui)
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                ])
+
+            let colorTex = runtime.CreateTexture2D(size, TextureFormat.Rgba8)
+            let fbo =
+                runtime.CreateFramebuffer(signature, Map.ofList [
+                    DefaultSemantic.Colors, colorTex.GetOutputView()
+                ])
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.texture "SmokeTarget" (AVal.constant (target :> ITexture))
+                |> Sg.shader { do! Shader.smokeWriteImage size.X }
+                |> Sg.compile runtime signature
+
+            try
+                task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
+
+                // Each pixel writes a unique id in [1 .. w*h]; verify the
+                // multiset of written values is exactly {1 .. w*h}, which
+                // proves every pixel was written exactly once (independent of
+                // the gl_FragCoord-vs-download Y orientation).
+                let data = target.Download().AsPixImage<uint32>().Data
+                let got = data |> Array.sort
+                let expected = Array.init (size.X * size.Y) (fun i -> uint32 (i + 1))
+                Expect.sequenceEqual got expected
+                    "fragment storage-image writes must cover every pixel exactly once (0 means the write never landed)"
+            finally
+                fbo.Dispose()
+                runtime.DeleteTexture target
+                runtime.DeleteTexture colorTex
+
+        /// Cross-pass storage visibility: pass 1 writes a storage image, a
+        /// SECOND render pass reads it via imageLoad and outputs to colour.
+        /// This isolates the exact mechanism the A-buffer resolve relies on.
+        let crossPassImageReadWrite (runtime : IRuntime) =
+            let size = V2i(8)
+            let target = runtime.CreateTexture2D(size, TextureFormat.R32ui)
+
+            use writeSig = runtime.CreateFramebufferSignature([ DefaultSemantic.Colors, TextureFormat.Rgba8 ])
+            use readSig  = runtime.CreateFramebufferSignature([ DefaultSemantic.Colors, TextureFormat.Rgba32f ])
+
+            let writeColor = runtime.CreateTexture2D(size, TextureFormat.Rgba8)
+            let readColor  = runtime.CreateTexture2D(size, TextureFormat.Rgba32f)
+            let writeFbo = runtime.CreateFramebuffer(writeSig, Map.ofList [ DefaultSemantic.Colors, writeColor.GetOutputView() ])
+            let readFbo  = runtime.CreateFramebuffer(readSig,  Map.ofList [ DefaultSemantic.Colors, readColor.GetOutputView() ])
+
+            use writeTask =
+                Sg.fullScreenQuad
+                |> Sg.texture "SmokeTarget" (AVal.constant (target :> ITexture))
+                |> Sg.shader { do! Shader.smokeWriteImage size.X }
+                |> Sg.compile runtime writeSig
+
+            use readTask =
+                Sg.fullScreenQuad
+                |> Sg.texture "SmokeTarget" (AVal.constant (target :> ITexture))
+                |> Sg.shader { do! Shader.smokeReadImage }
+                |> Sg.compile runtime readSig
+
+            try
+                writeTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer writeFbo)
+                readTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer readFbo)
+
+                let data = readColor.Download().AsPixImage<float32>().Data
+                // Red channel holds the value read from the storage image; 0
+                // everywhere means the second pass didn't see the first's writes.
+                let reds = [ for i in 0 .. (data.Length / 4) - 1 -> data.[i * 4] ]
+                let nonZero = reds |> List.filter (fun v -> v > 0.0f) |> List.length
+                Expect.isGreaterThan nonZero 0
+                    "second render pass must see the storage-image writes from the first pass (0 everywhere = cross-pass storage visibility is broken)"
+            finally
+                writeFbo.Dispose(); readFbo.Dispose()
+                runtime.DeleteTexture target
+                runtime.DeleteTexture writeColor
+                runtime.DeleteTexture readColor
+
+        /// The A-buffer's core mechanic: N overlapping draws each do an
+        /// interlocked read-modify-write of a per-pixel counter; a second pass
+        /// reads it back. Must equal N (interlock serialized the RMW and the
+        /// writes are visible cross-pass).
+        let interlockedCountRMW (runtime : IRuntime) =
+            let size = V2i(8)
+            let n = 3
+            let target = runtime.CreateTexture2D(size, TextureFormat.R32ui)
+
+            use writeSig = runtime.CreateFramebufferSignature([ DefaultSemantic.Colors, TextureFormat.Rgba8 ])
+            use readSig  = runtime.CreateFramebufferSignature([ DefaultSemantic.Colors, TextureFormat.Rgba32f ])
+            let writeColor = runtime.CreateTexture2D(size, TextureFormat.Rgba8)
+            let readColor  = runtime.CreateTexture2D(size, TextureFormat.Rgba32f)
+            let writeFbo = runtime.CreateFramebuffer(writeSig, Map.ofList [ DefaultSemantic.Colors, writeColor.GetOutputView() ])
+            let readFbo  = runtime.CreateFramebuffer(readSig,  Map.ofList [ DefaultSemantic.Colors, readColor.GetOutputView() ])
+
+            let quad () =
+                Sg.fullScreenQuad
+                |> Sg.texture "SmokeTarget" (AVal.constant (target :> ITexture))
+                |> Sg.shader { do! Shader.countRMW }
+
+            use writeTask = List.init n (fun _ -> quad ()) |> Sg.ofList |> Sg.compile runtime writeSig
+            use readTask =
+                Sg.fullScreenQuad
+                |> Sg.texture "SmokeTarget" (AVal.constant (target :> ITexture))
+                |> Sg.shader { do! Shader.smokeReadImage }
+                |> Sg.compile runtime readSig
+
+            try
+                runtime.Clear(target, clear { color C4ui.Zero })
+                writeTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer writeFbo)
+                readTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer readFbo)
+
+                let data = readColor.Download().AsPixImage<float32>().Data
+                let counts = [ for i in 0 .. (data.Length / 4) - 1 -> int (round data.[i * 4]) ]
+                let distinct = counts |> List.distinct |> List.sort
+                Expect.equal distinct [ n ]
+                    $"every pixel's interlocked count must equal {n} (got distinct values {distinct})"
+            finally
+                writeFbo.Dispose(); readFbo.Dispose()
+                runtime.DeleteTexture target
+                runtime.DeleteTexture writeColor
+                runtime.DeleteTexture readColor
+
+        /// Five screen-filling quads with identity camera and varying NDC z:
+        ///
+        ///   z = -0.8  transparent  A  (blue,  in front of solid)
+        ///   z = -0.3  transparent  B  (green, in front of solid)
+        ///   z =  0.0  SOLID OPAQUE     (red)
+        ///   z =  0.3  transparent  C  (yellow, behind solid — should be occluded)
+        ///   z =  0.7  transparent  D  (cyan,   behind solid — should be occluded)
+        ///
+        /// Verifies that
+        ///   - PickData[R] equals A's pick id (the closest transparent)
+        ///   - depth equals A's window-space depth
+        ///   - color is influenced by A and B but not by C or D (those are
+        ///     occluded by the solid's depth so their writes are discarded)
+        let zStackWithOccluder (runtime : IRuntime) =
+            let size = V2i(8)
+
+            let makeQuad (color : C4f) (pickId : float32) (z : float) (transparent : bool) =
+                let sg =
+                    Sg.fullScreenQuad
+                    |> Sg.translate 0.0 0.0 z
+                    |> Sg.shader {
+                        do! DefaultSurfaces.trafo
+                        do! DefaultSurfaces.constantColor color
+                        do! Shader.writePick pickId
+                    }
+                if transparent then sg |> Sg.transparent else sg
+
+            let scene =
+                Sg.ofList [
+                    makeQuad (C4f(0.0f, 0.0f, 1.0f, 0.5f)) 2.0f -0.8 true   // A
+                    makeQuad (C4f(0.0f, 1.0f, 0.0f, 0.5f)) 3.0f -0.3 true   // B
+                    makeQuad (C4f(1.0f, 0.0f, 0.0f, 1.0f)) 1.0f  0.0 false  // SOLID
+                    makeQuad (C4f(1.0f, 1.0f, 0.0f, 0.5f)) 4.0f  0.3 true   // C
+                    makeQuad (C4f(0.0f, 1.0f, 1.0f, 0.5f)) 5.0f  0.7 true   // D
+                ]
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors,       TextureFormat.Rgba32f
+                    Semantic.PickData,            TextureFormat.Rgba32f
+                    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+                ])
+
+            let colorTex = runtime.CreateTexture2D(size, TextureFormat.Rgba32f)
+            let pickTex  = runtime.CreateTexture2D(size, TextureFormat.Rgba32f)
+            let depthTex = runtime.CreateTexture2D(size, TextureFormat.Depth24Stencil8)
+
+            let fbo =
+                runtime.CreateFramebuffer(signature, Map.ofList [
+                    DefaultSemantic.Colors,       colorTex.GetOutputView()
+                    Semantic.PickData,            pickTex.GetOutputView()
+                    DefaultSemantic.DepthStencil, depthTex.GetOutputView()
+                ])
+
+            use task      = scene |> Sg.compile runtime signature
+            use clearTask =
+                runtime.CompileClear(
+                    signature,
+                    ~~(clear { color C4f.Black; depth 1.0; stencil 0 }))
+
+            try
+                clearTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
+                task.Run(     AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
+
+                // -------- PickData (R channel) --------------------------------
+                // Pass 3 must elect the closest transparent fragment (A,
+                // pickId = 2) at every pixel. PickData is RGBA32F so the
+                // interleaved Data buffer has R at indices 0, 4, 8, ...
+                let pickData = pickTex.Download().AsPixImage<float32>().Data
+                let nPixels = pickData.Length / 4
+                for i in 0 .. nPixels - 1 do
+                    let r = pickData.[i * 4]
+                    Expect.floatClose
+                        Accuracy.low
+                        (float r) 2.0
+                        $"PickData[R] @ pixel {i} must equal the closest transparent's id (A=2)"
+
+                // -------- Depth ------------------------------------------------
+                // Pass 3 must have written A's window-space depth. With the
+                // default GL depth mapping ((-1, 1) -> (0, 1)), A at NDC z=-0.8
+                // becomes window-space depth 0.1.
+                let depth = depthTex.DownloadDepth().Data
+                depth |> Array.iter (fun d ->
+                    Expect.isLessThan d 0.2f
+                        "Depth must be near A's window-space depth (~0.1); larger values mean transparent objects didn't win the depth test")
+
+                // -------- Color ------------------------------------------------
+                // The composited color should reflect A (blue) and B (green)
+                // blended over the solid red, NOT C (yellow) or D (cyan).
+                let cArr = colorTex.Download().AsPixImage<float32>().Data
+                let r0, g0, b0 = cArr.[0], cArr.[1], cArr.[2]
+
+                Expect.isLessThan r0 1.0f
+                    "Red must drop below 1 — transparents in front modify it"
+
+                Expect.isGreaterThan g0 0.0f
+                    "Green must be > 0 — quad B contributed"
+
+                Expect.isGreaterThan b0 0.0f
+                    "Blue must be > 0 — quad A contributed"
+
+                Expect.isLessThan r0 0.95f
+                    "Red must not include occluded yellow's contribution"
+
+            finally
+                fbo.Dispose()
+                runtime.DeleteTexture colorTex
+                runtime.DeleteTexture pickTex
+                runtime.DeleteTexture depthTex
+
+        /// Same transparent z-stack, but rendered into a MULTISAMPLED
+        /// framebuffer. Exercises the wrapper's framebuffer copies on MSAA
+        /// attachments (vkCmdBlitImage rejects multisampled images, so this
+        /// would throw "cannot blit from or to multisampled images" before the
+        /// copy/resolve fix). All quads are full-screen, so the MSAA resolve is
+        /// uniform per pixel and the colour expectations match the 1x case.
+        let zStackMultisampled (samples : int) (runtime : IRuntime) =
+            let size = V2i(8)
+
+            let makeQuad (color : C4f) (pickId : float32) (z : float) (transparent : bool) =
+                let sg =
+                    Sg.fullScreenQuad
+                    |> Sg.translate 0.0 0.0 z
+                    |> Sg.shader {
+                        do! DefaultSurfaces.trafo
+                        do! DefaultSurfaces.constantColor color
+                        do! Shader.writePick pickId
+                    }
+                if transparent then sg |> Sg.transparent else sg
+
+            let scene =
+                Sg.ofList [
+                    makeQuad (C4f(0.0f, 0.0f, 1.0f, 0.5f)) 2.0f -0.8 true   // A
+                    makeQuad (C4f(0.0f, 1.0f, 0.0f, 0.5f)) 3.0f -0.3 true   // B
+                    makeQuad (C4f(1.0f, 0.0f, 0.0f, 1.0f)) 1.0f  0.0 false  // SOLID
+                    makeQuad (C4f(1.0f, 1.0f, 0.0f, 0.5f)) 4.0f  0.3 true   // C
+                    makeQuad (C4f(0.0f, 1.0f, 1.0f, 0.5f)) 5.0f  0.7 true   // D
+                ]
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors,       TextureFormat.Rgba32f
+                    Semantic.PickData,            TextureFormat.Rgba32f
+                    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+                ], samples = samples)
+
+            use task = scene |> Sg.compile runtime signature
+
+            let buffer =
+                task
+                |> RenderTask.renderToColorWithClear (AVal.constant size)
+                       (clear { color C4f.Black; depth 1.0; stencil 0 })
+
+            buffer.Acquire()
+            try
+                let cArr = buffer.GetValue().Download().AsPixImage<float32>().Data
+                let r0, g0, b0 = cArr.[0], cArr.[1], cArr.[2]
+
+                Expect.isLessThan r0 1.0f
+                    $"[{samples}x] Red must drop below 1 — transparents in front modify it (regression: MSAA blit/copy)"
+                Expect.isGreaterThan g0 0.0f
+                    $"[{samples}x] Green must be > 0 — quad B contributed"
+                Expect.isGreaterThan b0 0.0f
+                    $"[{samples}x] Blue must be > 0 — quad A contributed"
+                Expect.isLessThan r0 0.95f
+                    $"[{samples}x] Red must not include occluded yellow's contribution"
+            finally
+                buffer.Release()
+
+    let tests (backend : Backend) =
+        [
+            "fragment storage-image write",  Cases.fragmentImageWrite
+            "cross-pass storage read/write", Cases.crossPassImageReadWrite
+            "interlocked count RMW",         Cases.interlockedCountRMW
+            "z-stack with opaque occluder",  Cases.zStackWithOccluder
+            "z-stack MSAA 2x",               Cases.zStackMultisampled 2
+            "z-stack MSAA 4x",               Cases.zStackMultisampled 4
+        ]
+        |> prepareCases backend "Transparency"

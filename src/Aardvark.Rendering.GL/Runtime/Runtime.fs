@@ -443,9 +443,15 @@ type Runtime(debug : IDebugConfig) =
 
     member x.ResourceManager = manager
 
-    member x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>) =
+    member private x.CompileRenderRaw (signature : IFramebufferSignature, set : aset<IRenderObject>) : IRenderTask =
         let set = ShaderDebugger.hookRenderObjects set
         new RenderTasks.RenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
+
+    member x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>) : IRenderTask =
+        if TransparencyRenderTask.needsOitTreatment set then
+            TransparencyRenderTask.create (x :> IRuntime) signature set x.CompileRenderRaw
+        else
+            x.CompileRenderRaw(signature, set)
 
     member x.PrepareRenderObject(signature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
         PreparedCommand.ofRenderObject signature manager rj :> IPreparedRenderObject

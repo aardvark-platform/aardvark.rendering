@@ -147,6 +147,36 @@ module ProgramExtensions =
 
         let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
 
+        // FShade cannot emit the fragment-stage execution-mode layout that
+        // GL_ARB_fragment_shader_interlock requires, so we inject it here when
+        // the generated code uses the interlock intrinsic. Inserted right
+        // after the interlock #extension line to keep GLSL ordering valid
+        // (layout qualifiers must follow #extension directives).
+        // Any #extension directive; the interlock execution-mode layout must be
+        // inserted after the LAST one (layouts are non-preprocessor tokens and
+        // every #extension must precede them).
+        let private anyExtRx =
+            System.Text.RegularExpressions.Regex @"#extension[^\n]*\n"
+
+        // Storage images touched inside an interlock critical section must be
+        // coherent so writes from one fragment/draw are visible to a later
+        // critical section at the same pixel.
+        let private storageImageDeclRx =
+            System.Text.RegularExpressions.Regex @"(?<!coherent[ \t])(\buniform[ \t]+(?:restrict[ \t]+)?[ui]?image\w+)"
+
+        let injectFragmentInterlock (code : string) =
+            if code.Contains "beginInvocationInterlockARB" then
+                let decl = $"layout(pixel_interlock_unordered) in;{nl}layout(early_fragment_tests) in;{nl}"
+                let ms = anyExtRx.Matches code
+                let code =
+                    if ms.Count > 0 then
+                        let last = ms.[ms.Count - 1]
+                        code.Insert(last.Index + last.Length, decl)
+                    else code
+                storageImageDeclRx.Replace(code, "coherent $1")
+            else
+                code
+
         let addPreprocessorDefine (define : string) (code : string) =
             let mutable replaced = false
             let def = $"#define {define}{nl}"
@@ -174,6 +204,7 @@ module ProgramExtensions =
 
         let private tryCompileShader (stage : ShaderStage) (code : string) (entryPoint : string) (context : Context) =
             let code = code.Replace(sprintf "%s(" entryPoint, "main(")
+            let code = if stage = ShaderStage.Fragment then injectFragmentInterlock code else code
 
             let handle = GL.CreateShader(getShaderType stage)
             GL.Check "could not create shader"

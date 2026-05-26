@@ -102,9 +102,15 @@ type Runtime(device : Device) as this =
     member x.CompileRender(renderPass : IFramebufferSignature, cmd : RuntimeCommand) =
         new CommandTask(manager, unbox renderPass, cmd)
 
-    member x.CompileRender (renderPass : IFramebufferSignature, set : aset<IRenderObject>) =
+    member private x.CompileRenderRaw (renderPass : IFramebufferSignature, set : aset<IRenderObject>) : IRenderTask =
         let set = ShaderDebugger.hookRenderObjects set
         new CommandTask(manager, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
+
+    member x.CompileRender (renderPass : IFramebufferSignature, set : aset<IRenderObject>) : IRenderTask =
+        if TransparencyRenderTask.needsOitTreatment set then
+            TransparencyRenderTask.create (x :> IRuntime) renderPass set x.CompileRenderRaw
+        else
+            x.CompileRenderRaw(renderPass, set)
 
     member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =
         new ClearTask(manager, unbox signature, values) :> IRenderTask
@@ -385,9 +391,23 @@ type Runtime(device : Device) as this =
                     let ap = if name = DefaultSemantic.DepthStencil then TextureAspect.DepthStencil else TextureAspect.Color
                     let lSrc = srcView.Image.Layout
                     let lDst = dstView.Image.Layout
+                    let sSrc = srcView.Image.Samples
+                    let sDst = dstView.Image.Samples
                     do! Command.TransformLayout(srcView.Image, VkImageLayout.TransferSrcOptimal)
                     do! Command.TransformLayout(dstView.Image, VkImageLayout.TransferDstOptimal)
-                    do! Command.Blit(srcView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, dstView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, VkFilter.Nearest)
+                    // vkCmdBlitImage cannot read from or write to multisampled
+                    // images. Use a plain image copy when the sample counts match
+                    // (vkCmdCopyImage supports MSAA and works for any aspect), and a
+                    // multisample resolve when going MSAA -> single-sample. The
+                    // single-sample path is left exactly as before.
+                    if sSrc = 1 && sDst = 1 then
+                        do! Command.Blit(srcView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, dstView.Image.[ap, 0, *], VkImageLayout.TransferDstOptimal, VkFilter.Nearest)
+                    elif sSrc = sDst then
+                        do! Command.Copy(srcView.Image.[ap, 0, *], dstView.Image.[ap, 0, *])
+                    elif sSrc > 1 && sDst = 1 then
+                        do! Command.ResolveMultisamples(srcView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, dstView.Image.[ap, 0, *], VkImageLayout.TransferDstOptimal)
+                    else
+                        failf "cannot copy framebuffer attachment '%A': %d samples -> %d samples" name sSrc sDst
                     do! Command.TransformLayout(srcView.Image, lSrc)
                     do! Command.TransformLayout(dstView.Image, lDst)
                 | _ ->

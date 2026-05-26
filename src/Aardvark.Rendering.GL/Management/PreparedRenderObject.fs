@@ -62,6 +62,7 @@ type PreparedPipelineState =
         pUniformBuffers : (struct (int * IResource<UniformBufferView, int>))[] // sorted list of uniform buffers
         pStorageBuffers : (struct (int * IResource<Buffer, int>))[] // sorted list of storage buffers
         pTextureBindings : (struct (Range1i * TextureBindingSlot))[] // sorted list of texture bindings
+        pImageBindings : (struct (int * IResource<ImageBinding, ImageBinding>))[] // sorted list of storage-image bindings
 
         pBlendColor : IResource<C4f, C4f>
         pBlendModes : IResource<nativeptr<GLBlendMode>, nativeint>
@@ -97,9 +98,12 @@ type PreparedPipelineState =
                 yield b :> _
 
             for struct (_, tb) in x.pTextureBindings do
-                match tb with 
+                match tb with
                 | ArrayBinding ta -> yield ta :> _
                 | SingleBinding (tex, sam) -> yield tex :> _; yield sam :> _
+
+            for struct (_, ib) in x.pImageBindings do
+                yield ib :> _
 
             yield x.pBlendColor :> _
             yield x.pBlendModes :> _
@@ -151,6 +155,7 @@ type PreparedPipelineState =
 
                     x.pUniformBuffers |> Array.iter (fun struct (_, ub) -> ub.Dispose())
                     x.pStorageBuffers |> Array.iter (fun struct (_, sb) -> sb.Dispose())
+                    x.pImageBindings |> Array.iter (fun struct (_, ib) -> ib.Dispose())
                     x.pProgram.Dispose()
 
                     x.pBlendColor.Dispose()
@@ -391,6 +396,9 @@ module PreparedPipelineState =
             let textureBindings = x.CreateTextureBindings(slots, rj.Uniforms, rj.AttributeScope, resources)
             GL.Check "[Prepare] Textures"
 
+            let imageBindings = x.CreateImageBindings(slots, rj.Uniforms, rj.AttributeScope, resources)
+            GL.Check "[Prepare] Images"
+
             let blendColor = x.CreateColor rj.BlendState.ConstantColor |> addResource resources
             let blendModes = x.CreateBlendModes(fboSignature, rj.BlendState.Mode, rj.BlendState.AttachmentMode) |> addResource resources
             let colorMasks = x.CreateColorMasks(fboSignature, rj.BlendState.ColorWriteMask, rj.BlendState.AttachmentWriteMask) |> addResource resources
@@ -430,6 +438,7 @@ module PreparedPipelineState =
                 pStorageBuffers = storageBuffers
                 pUniformBuffers = uniformBuffers
                 pTextureBindings = textureBindings
+                pImageBindings = imageBindings
 
                 pBlendColor = blendColor
                 pBlendModes = blendModes
@@ -481,6 +490,9 @@ module PreparedPipelineState =
             let textureBindings = x.CreateTextureBindings(slots, rj.GlobalUniforms, Ag.Scope.Root, resources)
             GL.Check "[Prepare] Textures"
 
+            let imageBindings = x.CreateImageBindings(slots, rj.GlobalUniforms, Ag.Scope.Root, resources)
+            GL.Check "[Prepare] Images"
+
             let blendColor = x.CreateColor rj.BlendState.ConstantColor |> addResource resources
             let blendModes = x.CreateBlendModes(fboSignature, rj.BlendState.Mode, rj.BlendState.AttachmentMode) |> addResource resources
             let colorMasks = x.CreateColorMasks(fboSignature, rj.BlendState.ColorWriteMask, rj.BlendState.AttachmentWriteMask) |> addResource resources
@@ -520,6 +532,7 @@ module PreparedPipelineState =
                 pStorageBuffers = storageBuffers
                 pUniformBuffers = uniformBuffers
                 pTextureBindings = textureBindings
+                pImageBindings = imageBindings
 
                 pBlendColor = blendColor
                 pBlendModes = blendModes
@@ -649,9 +662,15 @@ module PreparedPipelineStateAssembler =
                     icnt <- icnt + 3
                 | ArrayBinding ta ->
                     x.BindTexturesAndSamplers(ta) // internally will use 2 OpenGL calls glBindTextures and glBindSamplers
-                    icnt <- icnt + 1 
-                    
-            NativeStats(InstructionCount = icnt + 17) // 17 fixed instruction 
+                    icnt <- icnt + 1
+
+            // bind all storage images (read-write) — used e.g. by the A-buffer
+            // OIT pass which writes a per-pixel k-buffer from the fragment shader
+            for struct (slot, img) in me.pImageBindings do
+                x.BindImageTexture(slot, TextureAccess.ReadWrite, img)
+                icnt <- icnt + 1
+
+            NativeStats(InstructionCount = icnt + 17) // 17 fixed instruction
             
 
         member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState, prev : PreparedPipelineState) : NativeStats =
@@ -1274,7 +1293,19 @@ type PreparedObjectCommand(state : PreparedPipelineState, info : PreparedObjectI
             | _ -> ValueNone
             
         let stats = stream.SetPipelineState(s, state, prevState)
-        stats + stream.Render(s, info, prevInfo)
+        let stats = stats + stream.Render(s, info, prevInfo)
+
+        // If this object wrote to storage images (e.g. the A-buffer OIT pass),
+        // make those writes visible to subsequent texture fetches / image
+        // reads / downloads via a memory barrier.
+        if state.pImageBindings.Length > 0 then
+            stream.MemoryBarrier(
+                OpenTK.Graphics.OpenGL4.MemoryBarrierFlags.ShaderImageAccessBarrierBit |||
+                OpenTK.Graphics.OpenGL4.MemoryBarrierFlags.TextureFetchBarrierBit |||
+                OpenTK.Graphics.OpenGL4.MemoryBarrierFlags.TextureUpdateBarrierBit)
+            stats + NativeStats(InstructionCount = 1)
+        else
+            stats
 
     override x.EntryState = ValueSome state
     override x.ExitState = ValueSome state
