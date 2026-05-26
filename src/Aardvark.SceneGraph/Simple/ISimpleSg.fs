@@ -5,9 +5,9 @@ namespace Aardvark.SceneGraph.Simple
 // analogue of an Ag.Scope). Composition is natural ASet.collect; there's no caching
 // because the adaptive system already does the delta plumbing.
 //
-// This file ships THREE starter nodes (group / trafo applicator / render-object leaf).
-// More node kinds (uniform applicator, surface applicator, state setters …) follow as
-// the design proves out. The two bridges to/from the legacy Ag world live in Bridges.fs.
+// All legacy `Sg.*` node types implement this directly (next to their existing `ISg`)
+// — same data, same constructor, dual-protocol. Trees built with `Sg.*` work in both
+// the Ag world and the explicit-traversal world unchanged.
 
 open Aardvark.Base
 open Aardvark.Rendering
@@ -21,36 +21,3 @@ open FSharp.Data.Adaptive
 type ISimpleSg =
     inherit ISg
     abstract member GetRenderObjects : TraversalState -> aset<IRenderObject>
-
-
-// ── starter nodes ─────────────────────────────────────────────────────────
-
-/// Reactive group: union of children's render objects under the inherited TraversalState.
-/// Adds/removes in `children` and in any child's emitted aset propagate naturally through
-/// `ASet.collect`.
-type SimpleGroup(children : aset<ISimpleSg>) =
-    member _.Children = children
-    interface ISimpleSg with
-        member _.GetRenderObjects ts =
-            children |> ASet.collect (fun c -> c.GetRenderObjects ts)
-
-
-/// Pushes a model-trafo onto the TraversalState stack before delegating to a single child.
-/// Matches Ag's TrafoApplicator semantics — the trafo is prepended (child's own trafo first
-/// in the stack) so flattenStack reproduces the existing compose order.
-type SimpleTrafoApplicator(trafo : aval<Trafo3d>, child : ISimpleSg) =
-    member _.Trafo = trafo
-    member _.Child = child
-    interface ISimpleSg with
-        member _.GetRenderObjects ts =
-            child.GetRenderObjects (TraversalState.pushModelTrafo trafo ts)
-
-
-/// Leaf node holding a pre-computed `aset<IRenderObject>`. The TraversalState is ignored
-/// — the caller is assumed to have already baked any inherited state into the ROs (or
-/// this leaf wraps ROs that don't need any inherited state, e.g. fully-self-contained
-/// indirect-multidraw buckets produced by Heap.ofRenderObjects).
-type SimpleRenderObjects(ros : aset<IRenderObject>) =
-    member _.RenderObjects = ros
-    interface ISimpleSg with
-        member _.GetRenderObjects _ = ros

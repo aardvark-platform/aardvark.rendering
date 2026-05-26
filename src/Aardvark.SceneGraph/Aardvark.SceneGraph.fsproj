@@ -17,6 +17,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Core\Core.fs" />
+    <Compile Include="Simple\TraversalState.fs" />
+    <Compile Include="Simple\ISimpleSg.fs" />
+    <Compile Include="Simple\Legacy.fs" />
     <Compile Include="Core\Sg.fs" />
     <Compile Include="Core\Tools.fs" />
     <Compile Include="Semantics\Cache.fs" />
@@ -58,8 +61,6 @@
     <Compile Include="HeapAtlas.fs" />
     <Compile Include="HeapAtlasPool.fs" />
     <Compile Include="HeapPool.fs" />
-    <Compile Include="Simple\TraversalState.fs" />
-    <Compile Include="Simple\ISimpleSg.fs" />
     <Compile Include="Simple\Bridges.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />

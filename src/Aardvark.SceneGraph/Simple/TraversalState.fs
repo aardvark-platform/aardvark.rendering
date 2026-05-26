@@ -22,8 +22,6 @@ namespace Aardvark.SceneGraph.Simple
 
 open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.SceneGraph
-open Aardvark.SceneGraph.Semantics
 open FSharp.Data.Adaptive
 open System
 
@@ -134,11 +132,8 @@ module TraversalState =
     let inline withViewTrafo (v : aval<Trafo3d>) (ts : TraversalState) = { ts with ViewTrafo = v }
     let inline withProjTrafo (p : aval<Trafo3d>) (ts : TraversalState) = { ts with ProjTrafo = p }
 
-    /// The composed model trafo — Ag-equivalent: TrafoSemantics.flattenStack on
-    /// `ModelTrafoStack`. Constants are folded so a fully-constant chain becomes one
-    /// `AVal.constant`; otherwise the chain composes via the `<*>` operator the Ag uses.
-    let inline composedModelTrafo (ts : TraversalState) : aval<Trafo3d> =
-        TrafoSemantics.flattenStack ts.ModelTrafoStack
+    // `composedModelTrafo` (= TrafoSemantics.flattenStack of the stack) lives in
+    // Simple/Bridges.fs since it depends on Semantics/Trafo.fs which is compiled later.
 
     // ── providers + attributes ─────────────────────────────────────────────
     /// Prepend a uniform provider — matches the Ag's child-first ordering for

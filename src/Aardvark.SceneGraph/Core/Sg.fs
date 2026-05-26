@@ -5,6 +5,7 @@ open Aardvark.Base
 open Aardvark.Base.Ag
 
 open Aardvark.Rendering
+open Aardvark.SceneGraph.Simple
 open FSharp.Data.Adaptive
 
 module Sg =
@@ -59,6 +60,8 @@ module Sg =
     type RenderObjectNode(objects : aset<IRenderObject>) =
         interface ISg
         member x.Objects = objects
+        interface ISimpleSg with
+            member _.GetRenderObjects _ = objects
 
     type IndirectRenderNode(buffer : aval<IndirectBuffer>, mode : IndexedGeometryMode) =
         interface ISg
@@ -196,6 +199,11 @@ module Sg =
         inherit AbstractApplicator(child)
 
         member x.Trafo = trafo
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                let pushed = TraversalState.pushModelTrafo trafo ts
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, pushed))
 
         new(value : aval<Trafo3d>, child : ISg) = TrafoApplicator(value, AVal.constant child)
         new(value : Trafo3d, child : ISg) = TrafoApplicator(AVal.constant value, AVal.constant child)
@@ -387,6 +395,10 @@ module Sg =
 
         interface IGroup with
             member x.Children = content
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                content |> ASet.collect (fun c -> SimpleDispatch.Get(c, ts))
 
         member x.ASet = content
 
