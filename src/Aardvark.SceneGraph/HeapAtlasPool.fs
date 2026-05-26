@@ -48,6 +48,7 @@ type AtlasPool(runtime : IRuntime, pageSize : int, maxPages : int) =
     let pagesCval  = cval (Array.empty<IBackendTexture>)
     let mutable tickCounter = 0L
     let mutable nextPackKey = 0
+    let mutable disposed = false
 
     let publishPages () = transact (fun () -> pagesCval.Value <- pages.ToArray())
 
@@ -200,14 +201,21 @@ type AtlasPool(runtime : IRuntime, pageSize : int, maxPages : int) =
     member x.MaxPages = maxPages
     member x.PageSize = pageSize
 
+    // Idempotent dispose: callers can safely Dispose more than once, and the IDisposable
+    // path SuppressFinalize's so this is ready for a future bucket-teardown wiring (in
+    // HeapPool the AtlasPool is currently process-lifetime per bucket — see follow-up).
     member x.Dispose() =
-        for t in pages do runtime.DeleteTexture t
-        pages.Clear()
-        packings.Clear()
-        freeRects.Clear()
-        entries.Clear()
-        lru.Clear()
-        transact (fun () -> pagesCval.Value <- Array.empty)
+        if not disposed then
+            disposed <- true
+            for t in pages do runtime.DeleteTexture t
+            pages.Clear()
+            packings.Clear()
+            freeRects.Clear()
+            entries.Clear()
+            lru.Clear()
+            transact (fun () -> pagesCval.Value <- Array.empty)
 
     interface System.IDisposable with
-        member x.Dispose() = x.Dispose()
+        member x.Dispose() =
+            x.Dispose()
+            System.GC.SuppressFinalize x

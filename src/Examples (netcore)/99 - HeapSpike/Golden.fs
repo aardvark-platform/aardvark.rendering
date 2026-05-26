@@ -1428,10 +1428,15 @@ module Golden =
         Log.line "texHeap: %d ROs (per-object texture) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
             ros.Length Heap.lastBucketCount maxD nDiff nNonBg
         // require buckets > 0 — otherwise the ROs merely passed through and "matching
-        // classic" would be trivially (and misleadingly) true.
-        let pass = maxD <= 1 && nNonBg > total / 100L && Heap.lastBucketCount > 0
-        if pass then Log.line "texHeap: PASS (per-object textures auto-bindless via ofRenderObjects == classic; %d bucket(s))" Heap.lastBucketCount
-        else Log.warn "texHeap: FAIL (maxDelta=%d coverage=%d buckets=%d -> mis-bound or passthrough)" maxD nNonBg Heap.lastBucketCount
+        // classic" would be trivially (and misleadingly) true. The bindless path is
+        // bit-exact vs classic (maxDelta <= 1); the atlas fallback (non-bindless, e.g.
+        // MoltenVK / GL / Vulkan-1.0) resamples through bilinear + 2-px gutters + the
+        // in-shader mip pyramid, so deltas of ~3/255 are inherent. Match atlasheap's
+        // tolerance there (24) — same tolerance the atlas test passes with badPixels=0.
+        let tolerance = if runtime.SupportsUnboundedSamplerArrays then 1 else 24
+        let pass = maxD <= tolerance && nNonBg > total / 100L && Heap.lastBucketCount > 0
+        if pass then Log.line "texHeap: PASS (per-object textures auto-bindless via ofRenderObjects == classic; %d bucket(s); tol=%d)" Heap.lastBucketCount tolerance
+        else Log.warn "texHeap: FAIL (maxDelta=%d tol=%d coverage=%d buckets=%d -> mis-bound or passthrough)" maxD tolerance nNonBg Heap.lastBucketCount
         pass
 
     // RTT-relevant: a per-object texture whose IDENTITY swaps at runtime (the
