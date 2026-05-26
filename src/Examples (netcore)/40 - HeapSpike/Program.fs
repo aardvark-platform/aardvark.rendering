@@ -87,6 +87,9 @@ let main argv =
     if argv |> Array.contains "bench" then
         Bench.run ()
         0
+    elif argv |> Array.contains "startup-bench" then
+        StartupBench.run ()
+        0
     elif argv |> Array.contains "showcase-rec" then
         Showcase.run true; 0
     elif argv |> Array.contains "showcase" then

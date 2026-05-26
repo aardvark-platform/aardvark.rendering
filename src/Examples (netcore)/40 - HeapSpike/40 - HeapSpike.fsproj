@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="Shaders.fs" />
     <Compile Include="Bench.fs" />
+    <Compile Include="StartupBench.fs" />
     <Compile Include="Phase4.fs" />
     <Compile Include="Textures.fs" />
     <Compile Include="Real.fs" />
