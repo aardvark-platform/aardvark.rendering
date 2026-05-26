@@ -79,11 +79,12 @@ let main argv =
     if System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform System.Runtime.InteropServices.OSPlatform.OSX then
         Aardvark.Rendering.Vulkan.VulkanLoader.PreferMoltenVK <- true
 
-    // Opt into the ISimpleSg-direct render path when AARDVARK_SIMPLE_SG=1
-    // (see Aardvark.SceneGraph.Simple.SimpleConfig.Enabled).
-    if System.Environment.GetEnvironmentVariable("AARDVARK_SIMPLE_SG") = "1" then
-        Aardvark.SceneGraph.Simple.SimpleConfig.Enabled <- true
-        printfn "[heap] SimpleSg path ENABLED"
+    // The ISimpleSg-direct render path is on by default; AARDVARK_SIMPLE_SG=0
+    // forces back to the legacy `app?Runtime <- runtime; .RenderObjects(scope)`
+    // entry-point if anything regresses.
+    if System.Environment.GetEnvironmentVariable("AARDVARK_SIMPLE_SG") = "0" then
+        Aardvark.SceneGraph.Simple.SimpleConfig.Enabled <- false
+        printfn "[heap] SimpleSg path DISABLED (legacy Ag entry)"
     if argv |> Array.contains "bench" then
         Bench.run ()
         0

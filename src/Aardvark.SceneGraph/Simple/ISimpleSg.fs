@@ -26,8 +26,16 @@ type ISimpleSg =
 /// Global config for the ISimpleSg path. The render-task entry point
 /// (`SceneGraphRuntimeExtensions.CompileRender` in RuntimeExtensions.fs) reads
 /// `Enabled` and dispatches via `ISimpleSg.GetRenderObjects (TraversalState …)`
-/// when true — bypassing Ag traversal entirely; goal is for every leaf to be
-/// TS-direct so we never bridge back. Default `false` until that work is complete.
+/// when true — bypassing Ag traversal entirely.
+///
+/// Default: ON. Every `Sg.*` node implements `ISimpleSg`; leaves not yet
+/// TS-direct (InstancingNode, PointCloud, AirNode, DelayNode, RuntimeCommandNode,
+/// NaiveLod.LodNode, raw-`obj` AdapterNode) fall back through
+/// `SimpleDispatch.Bridge` → `LegacyBridge` so they still render correctly via
+/// Ag at the leaf boundary. Set to `false` to force the legacy
+/// `app?Runtime <- runtime; app.RenderObjects(Ag.Scope.Root)` entry-point
+/// (e.g. if you hit a regression in a third-party `ISg` that isn't
+/// `ISimpleSg`-aware).
 [<RequireQualifiedAccess>]
 module SimpleConfig =
-    let mutable Enabled : bool = false
+    let mutable Enabled : bool = true
