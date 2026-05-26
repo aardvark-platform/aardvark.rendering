@@ -2430,6 +2430,10 @@ type ResourceLocationSet() =
     // Dictionary of potentially used resource handles for each location.
     let resources = Dictionary<IResourceLocation, Resource>()
 
+    // Reusable scratch set for invalid handles found during Use's per-frame scan.
+    // Avoids per-frame HashSet allocation; cleared at use, guarded by the `resources` lock.
+    let invalidScratch = System.Collections.Generic.HashSet<IResourceLocation>()
+
     // Called when a resource location produces a resource handle.
     // Increments its reference count to prevent it from being disposed before or while we use it.
     let acquireResource (l : IResourceLocation) (r : Resource) =
@@ -2504,19 +2508,22 @@ type ResourceLocationSet() =
 
             // Try to acquire all resource handles that are potentially used.
             lock resources (fun _ ->
-                let invalid = System.Collections.Generic.HashSet()
+                // Reuse the scratch HashSet instead of allocating a fresh one per frame.
+                invalidScratch.Clear()
 
                 for KeyValue(l, r) in resources do
                     if not <| r.TryAddReference() then
-                        invalid.Add l |> ignore
+                        invalidScratch.Add l |> ignore
 
                 // Mark locations with invalid handles as outdated to ensure
-                // their readers are added to the dirty set.
-                transact (fun _ ->
-                    for l in invalid do
-                        l.MarkOutdated()
-                        resources.Remove l |> ignore
-                )
+                // their readers are added to the dirty set. Only enter `transact`
+                // when there's actually something to invalidate.
+                if invalidScratch.Count > 0 then
+                    transact (fun _ ->
+                        for l in invalidScratch do
+                            l.MarkOutdated()
+                            resources.Remove l |> ignore
+                    )
             )
 
             try
