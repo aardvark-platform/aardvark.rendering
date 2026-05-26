@@ -134,14 +134,6 @@ module Showcase =
             else
                 new Aardvark.Application.Slim.VulkanApplication(false)
         let runtime = app.Runtime
-        // Pre-warm the overlay font glyphs UP FRONT, before the window and the big scene
-        // build. Glyph geometry goes into a GeometryPool via a synchronous device upload;
-        // on MoltenVK, doing that AFTER the heavy 20000-object scene is built wedges the GPU
-        // (the upload's fence never signals -> whole-machine freeze in Release). Uploading
-        // on a quiet device first sidesteps it; the overlay below then hits the glyph cache.
-        // NOPREWARM=1 disables this (restores the freezing ordering — for validation/repro).
-        if System.Environment.GetEnvironmentVariable "NOPREWARM" <> "1" then
-            runtime.PrepareGlyphs(DefaultFonts.Hack.Regular, [| for c in 0 .. 255 -> char c |])
         // MSAA is unreliable on MoltenVK (portability subset): an 8x multisampled swapchain
         // in the secondary-command-buffer render path can GPU-hang the machine. Use the same
         // capability proxy as the heap: full MSAA only on conformant desktop Vulkan, 1x else.
