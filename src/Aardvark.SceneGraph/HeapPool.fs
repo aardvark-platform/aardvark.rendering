@@ -105,13 +105,22 @@ module Heap =
     /// per-draw gl_DrawID routing — works on Vulkan and GL 4.6+). Bindless
     /// per-object textures additionally need `runtime.SupportsUnboundedSamplerArrays`
     /// (Vulkan descriptor indexing; not available on GL).
-    let isSupported (runtime : IRuntime) = runtime.SupportsMultiDrawIndirectDrawId
+    /// Whether `runtime` can run the heap path. GL backends require gl_DrawID
+    /// (GL 4.6+ / GL_ARB_shader_draw_parameters) because gl_InstanceID omits
+    /// gl_BaseInstance there. Vulkan does NOT require gl_DrawID: the non-instanced
+    /// path uses gl_InstanceIndex with per-draw FirstInstance, and the instanced
+    /// path falls back to a per-instance vertex attribute carrying slot (so the
+    /// heap also works on MoltenVK, which advertises DrawParameters but MSL has no
+    /// DrawIndex).
+    let isSupported (runtime : IRuntime) =
+        let isGL = runtime.GetType().FullName.Contains("Aardvark.Rendering.GL")
+        if isGL then runtime.SupportsMultiDrawIndirectDrawId else true
 
     /// Throw a clear error if `runtime` cannot run the heap path. Pass
     /// `textures = true` to also require unbounded (bindless) sampler arrays.
     let checkSupport (textures : bool) (runtime : IRuntime) =
-        if not runtime.SupportsMultiDrawIndirectDrawId then
-            failwith "Heap: runtime does not support multi-draw-indirect with a per-draw gl_DrawID (required for heap routing). Needs Vulkan, or GL 4.6+ with GL_ARB_shader_draw_parameters."
+        if not (isSupported runtime) then
+            failwith "Heap: GL backend requires GL 4.6+ with GL_ARB_shader_draw_parameters (gl_DrawID). Vulkan/MoltenVK do not require it (per-instance slot attribute fallback)."
         if textures && not runtime.SupportsUnboundedSamplerArrays then
             failwith "Heap: runtime does not support unbounded (bindless) sampler arrays (descriptor indexing); per-object textures via the heap are unavailable on this device (e.g. the GL backend)."
 
@@ -895,7 +904,9 @@ module Heap =
             let symVD  = Symbol.Create "HeapVertexData"
             let symVDI = Symbol.Create "HeapVertexDataI"
 
-            let geometry : Expr<int> * DrawCallInfo[] * (Effect -> Effect) * (Symbol * BufferView) list * BufferView * (Symbol * IAdaptiveValue) list =
+            // 7th tuple element: per-INSTANCE vertex attributes the bucket needs (e.g.
+            // HeapSlotAttr on MoltenVK+instanced — see line ~1015). Empty in every other case.
+            let geometry : Expr<int> * DrawCallInfo[] * (Effect -> Effect) * (Symbol * BufferView) list * BufferView * (Symbol * IAdaptiveValue) list * (Symbol * BufferView) list =
                 if useBindless then
                     // attribute layout (effect.Inputs order): per-attr type + the float
                     // stride/offset from ro0's BufferView (so separate-tight AND interleaved
@@ -960,7 +971,7 @@ module Heap =
                                         | Some (ai, _, _, _, strideF, offF) -> Some (bindlessGatherFlat handleE ityp numAttrs ai strideF offF)
                                         | None -> None
                                     | _ -> None))
-                    slotE, entries, geomRewrite, [], idxBV, [ symVD, vtxDataU; symVDI, vtxDataU ]
+                    slotE, entries, geomRewrite, [], idxBV, [ symVD, vtxDataU; symVDI, vtxDataU ], []
                 else
                     // ── all-host bucket: fixed-function combined-buffer path ──
                     // Pack ONLY the attributes the shader consumes (effect.Inputs), each
@@ -1006,21 +1017,49 @@ module Heap =
                                     geomCache.[key] <- r
                                     r
                             DrawCallInfo(FaceVertexCount = count, FirstIndex = firstIndex, BaseVertex = baseVertex, FirstInstance = 0, InstanceCount = instanceCountOf ro))
-                    // Per-draw routing. gl_DrawID is UNSUPPORTED in MSL (MoltenVK), so on
-                    // VULKAN, when no sub-draw is instanced, route by gl_InstanceIndex + a
-                    // per-draw firstInstance. On GL gl_InstanceID omits baseInstance, so GL
-                    // uses gl_DrawID (GL 4.6); instanced sub-draws always need gl_DrawID.
+                    // Per-draw routing. Three paths:
+                    //   (a) gl_DrawID  — works on GL 4.6+ AND on real Vulkan (KHR_shader_draw_parameters).
+                    //                    Required for GL non-instanced (gl_InstanceID omits baseInstance)
+                    //                    AND chosen on Vulkan when any sub-draw is instanced (the
+                    //                    FirstInstance trick conflates slot with instance index there).
+                    //   (b) gl_InstanceIndex + per-draw FirstInstance = slot — Vulkan-only fast path
+                    //                    when every sub-draw has InstanceCount=1.
+                    //   (c) Per-instance vertex attribute carrying slot — fallback for MoltenVK
+                    //                    (DrawIndex unsupported in MSL) when any sub-draw is
+                    //                    instanced. CPU writes slot per instance into an int[]
+                    //                    sized to sum(InstanceCount); each draw's FirstInstance
+                    //                    points at its slice; Metal's [[base_instance]] does the
+                    //                    offsetting in the vertex fetcher so no gl_BaseInstance
+                    //                    shader access is needed.
                     let isGL = runtime.GetType().FullName.Contains("Aardvark.Rendering.GL")
                     let anyInstanced = baseEntries |> Array.exists (fun e -> e.InstanceCount > 1)
-                    let useDrawId = isGL || anyInstanced
-                    let slot : Expr<int> =
-                        if useDrawId then <@ getDrawId() @>
-                        else Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
-                    if not useDrawId then
-                        for di in 0 .. baseEntries.Length - 1 do baseEntries.[di].FirstInstance <- di
+                    let drawIdWorks  = runtime.SupportsMultiDrawIndirectDrawId
+                    let useDrawId    = (isGL || anyInstanced) && drawIdWorks
+                    let useSlotAttr  = anyInstanced && not drawIdWorks
+                    let slot, instanceAttribs : Expr<int> * (Symbol * BufferView) list =
+                        if useDrawId then
+                            <@ getDrawId() @>, []
+                        elif useSlotAttr then
+                            // Build per-instance slot buffer. Total = sum of all InstanceCounts;
+                            // for draw di with K instances we write `di` into entries [cursor .. cursor+K)
+                            // and set baseEntries.[di].FirstInstance = cursor.
+                            let total = baseEntries |> Array.sumBy (fun e -> int e.InstanceCount)
+                            let buf = Array.zeroCreate<int> (max 1 total)
+                            let mutable cursor = 0
+                            for di in 0 .. baseEntries.Length - 1 do
+                                let cnt = int baseEntries.[di].InstanceCount
+                                for k in 0 .. cnt - 1 do buf.[cursor + k] <- di
+                                baseEntries.[di].FirstInstance <- cursor
+                                cursor <- cursor + cnt
+                            let bv = BufferView(AVal.constant (ArrayBuffer buf :> IBuffer), typeof<int>)
+                            Expr.ReadInput<int>(ParameterKind.Input, "HeapSlotAttr"),
+                            [ Symbol.Create "HeapSlotAttr", bv ]
+                        else
+                            for di in 0 .. baseEntries.Length - 1 do baseEntries.[di].FirstInstance <- di
+                            Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId), []
                     let vtxAttribs = [ for ai in 0 .. attrTypes.Length - 1 -> let (sym, et, _) = attrTypes.[ai] in sym, packedView (packedAttr.[ai].ToArray()) et ]
-                    slot, baseEntries, id, vtxAttribs, (packedView (packedIdx.ToArray()) idxType), []
-            let (slot, baseEntries, geomRewrite, vtxAttribsList, indicesBV, vtxBindings) = geometry
+                    slot, baseEntries, id, vtxAttribs, (packedView (packedIdx.ToArray()) idxType), [], instanceAttribs
+            let (slot, baseEntries, geomRewrite, vtxAttribsList, indicesBV, vtxBindings, instanceAttribsList) = geometry
 
             // per-RO visibility gate: IsActive = false -> InstanceCount 0 (the draw
             // emits nothing), no bucket/arena churn. Reactive only when some RO has
@@ -1044,6 +1083,11 @@ module Heap =
                 else Surface.Effect (baseE |> rewriteSamplers slot samplerByName |> overrideSamplerStates samplerStateOverrides)
             ro.DrawCalls        <- DrawCalls.Indirect indirect
             ro.VertexAttributes <- AttributeProvider.ofList vtxAttribsList
+            // MoltenVK+instanced fallback: bind the per-instance slot attribute. In every
+            // other path instanceAttribsList = [] and InstanceAttributes stays as cloned
+            // from ro0 (preserves any per-instance per-RO attribute the user may have set).
+            if not (List.isEmpty instanceAttribsList) then
+                ro.InstanceAttributes <- AttributeProvider.ofList instanceAttribsList
             ro.Indices          <- Some indicesBV
 
             let arenaU   = ((arena :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)) :> IAdaptiveValue

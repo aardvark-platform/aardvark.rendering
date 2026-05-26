@@ -44,6 +44,12 @@ type Runtime(device : Device) as this =
     member x.DebugLabelsEnabled = instance.DebugLabelsEnabled
 
     member x.SupportsMultiDrawIndirectDrawId =
+        // MoltenVK / portability-subset advertises DrawParameters but the SPIR-V → MSL
+        // converter has no DrawIndex equivalent ([mvk-error] "DrawIndex is not supported
+        // in MSL"). Report unavailable there; the heap's instanced-bucket path falls
+        // back to a per-instance vertex attribute carrying slot (works via Metal's
+        // [[base_instance]] in the vertex fetcher).
+        not (x.Device.PhysicalDevice.HasExtension KHRPortabilitySubset.Name) &&
         x.Device.EnabledFeatures.GraphicsPipeline.Drawing.MultiDrawIndirect &&
         x.Device.EnabledFeatures.Shaders.DrawParameters
 
