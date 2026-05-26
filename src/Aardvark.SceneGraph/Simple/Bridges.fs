@@ -1,16 +1,20 @@
 namespace Aardvark.SceneGraph.Simple
 
-// Bridges — *late half*. Holds the bits that depend on the scope member-extensions
-// defined in `Semantics/*.fs` (so this file must compile AFTER them). The early half
-// (LegacyAdapter / LegacyBridge / LegacyBridgeSem / SimpleDispatch) lives in
-// Simple/Legacy.fs and is what the legacy `Sg.*` ISimpleSg implementations call into.
+// Bridges — late-half. Holds bits that depend on `Semantics/*`. After the global
+// flip in `Semantics/RenderObject.fs`, this file is intentionally thin:
 //
-// What this file adds:
-//   • `Bridge.ofScope` — read an Ag.Scope into a TraversalState.
-//   • `[<Rule>] SimpleSgSemantics` — Ag rule so an ISimpleSg embedded in a legacy tree
-//     yields its RenderObjects via GetRenderObjects(ofScope scope).
-//   • `composedModelTrafo` — the Ag-equivalent flattenStack helper for the model-trafo
-//     stack (uses TrafoSemantics.flattenStack).
+//   • `Bridge.ofScope` (used by the global flip and by `LegacyAdapter`) lives in
+//     `Simple/Legacy.fs` (early) — uses the raw Ag `?` operator, no scope
+//     member-extension dependency.
+//
+//   • `[<Rule>] SimpleSgSemantics` is no longer needed: every `RenderObjects`
+//     query now goes through the ISg member-extension / `Semantic.renderObjects`
+//     in `Semantics/RenderObject.fs`, which already dispatches to `ISimpleSg`. A
+//     residual fallback `?RenderObjects(scope)` on an ISimpleSg would still find
+//     its concrete-type rule (e.g. `Sg.RenderNode`), which we keep so the legacy
+//     Ag traversal continues to work for any non-flipped consumer.
+//
+// Kept as a placeholder so future late-half helpers have a home.
 
 open Aardvark.Base
 open Aardvark.Base.Ag
@@ -18,69 +22,3 @@ open Aardvark.Rendering
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open FSharp.Data.Adaptive
-
-
-module Bridge =
-
-    /// Read an Ag.Scope into a TraversalState — each field comes from the corresponding
-    /// scope member-extension in Semantics/* (Trafo / Uniforms / Attributes / Surface /
-    /// Flags / Modes / Activate).
-    let ofScope (scope : Ag.Scope) : TraversalState =
-        {
-            ModelTrafoStack          = scope.ModelTrafoStack
-            ViewTrafo                = scope.ViewTrafo
-            ProjTrafo                = scope.ProjTrafo
-
-            Uniforms                 = scope.Uniforms
-            VertexAttributes         = scope.VertexAttributes
-            InstanceAttributes       = scope.InstanceAttributes
-            VertexIndexBuffer        = scope.VertexIndexBuffer
-            FaceVertexCount          = scope.FaceVertexCount
-
-            Surface                  = scope.Surface
-            IsActive                 = scope.IsActive
-            IsTransparent            = scope.IsTransparent
-            RenderPass               = scope.RenderPass
-
-            BlendMode                = scope.BlendMode
-            BlendConstant            = scope.BlendConstant
-            ColorWriteMask           = scope.ColorWriteMask
-            AttachmentBlendMode      = scope.AttachmentBlendMode
-            AttachmentColorWriteMask = scope.AttachmentColorWriteMask
-
-            DepthTest                = scope.DepthTest
-            DepthBias                = scope.DepthBias
-            DepthWriteMask           = scope.DepthWriteMask
-            DepthClamp               = scope.DepthClamp
-
-            StencilModeFront         = scope.StencilModeFront
-            StencilWriteMaskFront    = scope.StencilWriteMaskFront
-            StencilModeBack          = scope.StencilModeBack
-            StencilWriteMaskBack     = scope.StencilWriteMaskBack
-
-            CullMode                 = scope.CullMode
-            FrontFacing              = scope.FrontFacing
-            FillMode                 = scope.FillMode
-            Multisample              = scope.Multisample
-            ConservativeRaster       = scope.ConservativeRaster
-            Viewport                 = scope.Viewport
-            Scissor                  = scope.Scissor
-
-            CameraLocation           = scope.CameraLocation
-            Activate                 = scope.Activate
-        }
-
-    // `composedModelTrafo` and `flattenStack` live in Simple/TraversalState.fs (early)
-    // because the RenderObjectBuilder needs them before Sg.fs compiles. They are
-    // bit-identical copies of `TrafoSemantics.flattenStack` (Semantics/Trafo.fs).
-
-
-[<AutoOpen>]
-module BridgeSemantics =
-
-    /// Ag rule for `ISimpleSg` in a legacy tree: read the scope into a TraversalState and
-    /// dispatch the node's GetRenderObjects. The *Simple-inside-legacy* bridge.
-    [<Rule>]
-    type SimpleSgSemantics() =
-        member x.RenderObjects(s : ISimpleSg, scope : Ag.Scope) : aset<IRenderObject> =
-            s.GetRenderObjects (Bridge.ofScope scope)

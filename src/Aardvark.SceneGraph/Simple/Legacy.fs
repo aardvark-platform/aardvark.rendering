@@ -23,6 +23,58 @@ open Aardvark.SceneGraph
 open FSharp.Data.Adaptive
 
 
+module Bridge =
+
+    /// Read an Ag.Scope into a TraversalState. Uses the raw `?` operator instead of
+    /// the per-attribute `Scope.X` member-extensions because this file compiles before
+    /// Semantics/*.fs where those extensions live — same backing Ag attribute lookup,
+    /// just no syntactic sugar. Field-by-field copy.
+    let ofScope (scope : Ag.Scope) : TraversalState =
+        {
+            ModelTrafoStack          = scope?ModelTrafoStack
+            ViewTrafo                = scope?ViewTrafo
+            ProjTrafo                = scope?ProjTrafo
+
+            Uniforms                 = scope?Uniforms
+            VertexAttributes         = scope?VertexAttributes
+            InstanceAttributes       = scope?InstanceAttributes
+            VertexIndexBuffer        = scope?VertexIndexBuffer
+            FaceVertexCount          = scope?FaceVertexCount
+
+            Surface                  = scope?Surface
+            IsActive                 = scope?IsActive
+            IsTransparent            = scope?IsTransparent
+            RenderPass               = scope?RenderPass
+
+            BlendMode                = scope?BlendMode
+            BlendConstant            = scope?BlendConstant
+            ColorWriteMask           = scope?ColorWriteMask
+            AttachmentBlendMode      = scope?AttachmentBlendMode
+            AttachmentColorWriteMask = scope?AttachmentColorWriteMask
+
+            DepthTest                = scope?DepthTest
+            DepthBias                = scope?DepthBias
+            DepthWriteMask           = scope?DepthWriteMask
+            DepthClamp               = scope?DepthClamp
+
+            StencilModeFront         = scope?StencilModeFront
+            StencilWriteMaskFront    = scope?StencilWriteMaskFront
+            StencilModeBack          = scope?StencilModeBack
+            StencilWriteMaskBack     = scope?StencilWriteMaskBack
+
+            CullMode                 = scope?CullMode
+            FrontFacing              = scope?FrontFacing
+            FillMode                 = scope?FillMode
+            Multisample              = scope?Multisample
+            ConservativeRaster       = scope?ConservativeRaster
+            Viewport                 = scope?Viewport
+            Scissor                  = scope?Scissor
+
+            CameraLocation           = scope?CameraLocation
+            Activate                 = scope?Activate
+        }
+
+
 /// Embeds a legacy ISg inside a Simple tree. Its GetRenderObjects constructs a
 /// LegacyBridge carrying the current TraversalState and asks Ag for its RenderObjects;
 /// the bridge's [<Rule>] handlers seed every attribute on the child from the TS.

@@ -119,11 +119,32 @@ module PipelineState =
 [<AutoOpen>]
 module RenderObjectSemantics =
 
+    // Global flip — every caller of `sg.RenderObjects(scope)` and
+    // `Semantic.renderObjects scope sg` is routed through the explicit-traversal
+    // ISimpleSg path when the node implements it. Inside, applicators propagate
+    // via ASet.collect / ASet.bind through `SimpleDispatch.Get` (no Ag), the
+    // upgraded leaves (RenderNode / IndirectRenderNode) build their RO via
+    // `RenderObjectBuilder.ofTraversalState`, and the not-yet-upgraded leaves
+    // (AdapterNode, DelayNode, AirNode, PointCloud, PoolNode, LodTreeNode,
+    // GeometrySetNode, RuntimeCommandNode, InstancingNode, NaiveLod.LodNode, the
+    // Picking applicators) bridge back through `SimpleDispatch.Bridge` only at
+    // the leaf boundary. The legacy `?RenderObjects(scope)` Ag dispatch stays the
+    // fallback for any non-ISimpleSg ISg (third-party trees).
     type ISg with
-        member x.RenderObjects(scope : Ag.Scope) : aset<IRenderObject> = x?RenderObjects(scope)
+        member x.RenderObjects(scope : Ag.Scope) : aset<IRenderObject> =
+            match x with
+            | :? Aardvark.SceneGraph.Simple.ISimpleSg as s ->
+                s.GetRenderObjects (Aardvark.SceneGraph.Simple.Bridge.ofScope scope)
+            | _ ->
+                x?RenderObjects(scope)
 
     module Semantic =
-        let renderObjects (scope : Ag.Scope) (s : ISg) : aset<IRenderObject> = s?RenderObjects(scope)
+        let renderObjects (scope : Ag.Scope) (s : ISg) : aset<IRenderObject> =
+            match s with
+            | :? Aardvark.SceneGraph.Simple.ISimpleSg as ss ->
+                ss.GetRenderObjects (Aardvark.SceneGraph.Simple.Bridge.ofScope scope)
+            | _ ->
+                s?RenderObjects(scope)
 
 
     [<Rule>]
