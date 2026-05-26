@@ -70,11 +70,9 @@ module Bridge =
             Activate                 = scope.Activate
         }
 
-    /// The composed model trafo — Ag-equivalent of `ModelTrafo`: flattens the stack via
-    /// `TrafoSemantics.flattenStack`. Constant chains fold to one `AVal.constant`;
-    /// otherwise the chain composes via the `<*>` operator the Ag uses.
-    let inline composedModelTrafo (ts : TraversalState) : aval<Trafo3d> =
-        TrafoSemantics.flattenStack ts.ModelTrafoStack
+    // `composedModelTrafo` and `flattenStack` live in Simple/TraversalState.fs (early)
+    // because the RenderObjectBuilder needs them before Sg.fs compiles. They are
+    // bit-identical copies of `TrafoSemantics.flattenStack` (Semantics/Trafo.fs).
 
 
 [<AutoOpen>]

@@ -22,6 +22,7 @@ namespace Aardvark.SceneGraph.Simple
 
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.TrafoOperators
 open FSharp.Data.Adaptive
 open System
 
@@ -132,8 +133,32 @@ module TraversalState =
     let inline withViewTrafo (v : aval<Trafo3d>) (ts : TraversalState) = { ts with ViewTrafo = v }
     let inline withProjTrafo (p : aval<Trafo3d>) (ts : TraversalState) = { ts with ProjTrafo = p }
 
-    // `composedModelTrafo` (= TrafoSemantics.flattenStack of the stack) lives in
-    // Simple/Bridges.fs since it depends on Semantics/Trafo.fs which is compiled later.
+    /// Flatten a `list<aval<Trafo3d>>` to one composed aval. Copy of
+    /// `TrafoSemantics.flattenStack` (Semantics/Trafo.fs) — we inline it here because
+    /// TraversalState.fs is compiled BEFORE Semantics/Trafo.fs; same constant-fold
+    /// behaviour (runs of constants collapse to one AVal.constant) so the result is
+    /// bit-identical to the Ag-derived `ModelTrafo`.
+    let flattenStack (stack : list<aval<Trafo3d>>) : aval<Trafo3d> =
+        let rec foldConstants (l : list<aval<Trafo3d>>) =
+            match l with
+            | [] -> []
+            | a :: b :: rest when a.IsConstant && b.IsConstant ->
+                let n = (AVal.constant (a.GetValue() * b.GetValue())) :: rest
+                foldConstants n
+            | a :: rest ->
+                a :: foldConstants rest
+
+        match foldConstants stack with
+        | [] -> AVal.constant Trafo3d.Identity
+        | [a] -> a
+        | [a; b] -> a <*> b
+        | s -> s |> List.fold (<*>) (AVal.constant Trafo3d.Identity)
+
+    /// The composed model trafo — Ag-equivalent of `ModelTrafo`: flatten the
+    /// `ModelTrafoStack` via `flattenStack`. Constant chains fold to one
+    /// `AVal.constant`; otherwise the chain composes via the `<*>` operator.
+    let inline composedModelTrafo (ts : TraversalState) : aval<Trafo3d> =
+        flattenStack ts.ModelTrafoStack
 
     // ── providers + attributes ─────────────────────────────────────────────
     /// Prepend a uniform provider — matches the Ag's child-first ordering for

@@ -44,10 +44,27 @@ module Sg =
         member x.Mode = mode
         member x.DrawCallInfo = call
 
-        // Leaf — RO built by RenderObjectSem.RenderObjects(r : Sg.RenderNode, scope)
-        // via a scope-coupled provider chain. Round-trip via LegacyAdapter.
+        // TS-direct — mirrors RenderObjectSem.RenderObjects(r : Sg.RenderNode, scope)
+        // in Semantics/RenderObject.fs:153 line-for-line, but uses the TS-coupled
+        // RenderObjectBuilder instead of the scope-coupled RenderObject.ofScope.
         interface ISimpleSg with
-            member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+            member _.GetRenderObjects ts =
+                let rj = RenderObjectBuilder.ofTraversalState ts
+                let drawCalls =
+                    let mutable current = [| DrawCallInfo() |]
+                    let cmp = System.Collections.Generic.EqualityComparer<DrawCallInfo>.Default
+                    AVal.custom (fun t ->
+                        let mutable info = call.GetValue t
+                        if info.FaceVertexCount < 0 then
+                            info.FaceVertexCount <- ts.FaceVertexCount.GetValue t
+                            info.BaseVertex <- 0
+                        if not <| cmp.Equals(current.[0], info) then
+                            current <- [| info |]
+                        current
+                    )
+                rj.DrawCalls <- DrawCalls.Direct drawCalls
+                rj.Mode <- mode
+                ASet.single (rj :> IRenderObject)
 
         new(call : DrawCallInfo, mode : IndexedGeometryMode) = RenderNode(AVal.constant call, mode)
         new(count : int, mode : IndexedGeometryMode) =
@@ -86,9 +103,14 @@ module Sg =
         member x.Mode = mode
         member x.Indirect = buffer
 
-        // Leaf — same story as RenderNode; round-trip via LegacyAdapter.
+        // TS-direct — mirrors RenderObjectSem.RenderObjects(r : Sg.IndirectRenderNode,
+        // scope) in Semantics/RenderObject.fs:143.
         interface ISimpleSg with
-            member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+            member _.GetRenderObjects ts =
+                let rj = RenderObjectBuilder.ofTraversalState ts
+                rj.DrawCalls <- DrawCalls.Indirect buffer
+                rj.Mode <- mode
+                ASet.single (rj :> IRenderObject)
 
     type VertexAttributeApplicator(values : Map<Symbol, BufferView>, child : aval<ISg>) =
         inherit AbstractApplicator(child)

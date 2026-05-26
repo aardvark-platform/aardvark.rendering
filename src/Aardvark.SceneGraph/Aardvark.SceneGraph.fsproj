@@ -19,6 +19,7 @@
     <Compile Include="Core\Core.fs" />
     <Compile Include="Simple\TraversalState.fs" />
     <Compile Include="Simple\ISimpleSg.fs" />
+    <Compile Include="Simple\RenderObjectBuilder.fs" />
     <Compile Include="Simple\Legacy.fs" />
     <Compile Include="Core\Sg.fs" />
     <Compile Include="Core\Tools.fs" />
