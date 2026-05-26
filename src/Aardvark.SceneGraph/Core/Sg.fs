@@ -1,4 +1,4 @@
-﻿namespace Aardvark.SceneGraph
+namespace Aardvark.SceneGraph
 
 open System
 open Aardvark.Base
@@ -24,13 +24,30 @@ module Sg =
 
         member x.Node = node
 
-    type DynamicNode(child : aval<ISg>) = inherit AbstractApplicator(child)
+        // Leaf — node is `obj`, RO construction depends entirely on Ag rules (see
+        // Semantics/Adapter.fs). Round-trip via LegacyAdapter; Ag's specificity
+        // dispatch lands on the concrete AdapterSem rule, not on SimpleSgSemantics.
+        interface ISimpleSg with
+            member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+
+    type DynamicNode(child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        // Pass-through: no TraversalState modification.
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, ts))
 
     type RenderNode(call : aval<DrawCallInfo>, mode : IndexedGeometryMode) =
         interface ISg
 
         member x.Mode = mode
         member x.DrawCallInfo = call
+
+        // Leaf — RO built by RenderObjectSem.RenderObjects(r : Sg.RenderNode, scope)
+        // via a scope-coupled provider chain. Round-trip via LegacyAdapter.
+        interface ISimpleSg with
+            member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
 
         new(call : DrawCallInfo, mode : IndexedGeometryMode) = RenderNode(AVal.constant call, mode)
         new(count : int, mode : IndexedGeometryMode) =
@@ -69,10 +86,18 @@ module Sg =
         member x.Mode = mode
         member x.Indirect = buffer
 
+        // Leaf — same story as RenderNode; round-trip via LegacyAdapter.
+        interface ISimpleSg with
+            member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+
     type VertexAttributeApplicator(values : Map<Symbol, BufferView>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Values = values
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.applyVertexAttributes values ts))
 
         new(values : Map<Symbol, BufferView>, child : ISg)            = VertexAttributeApplicator(values, AVal.constant child)
         new(semantic : Symbol, value : BufferView, child : aval<ISg>) = VertexAttributeApplicator(Map.ofList [semantic, value], child)
@@ -84,12 +109,20 @@ module Sg =
 
         member x.Value = value
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.applyVertexIndexBuffer value ts))
+
         new(value : BufferView, child : ISg)         = VertexIndexApplicator(value, AVal.constant child)
 
     type InstanceAttributeApplicator(values : Map<Symbol, BufferView>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Values = values
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.mergeInstanceAttributes values ts))
 
         new(values : Map<Symbol, BufferView>, child : ISg)            = InstanceAttributeApplicator(values, AVal.constant child)
         new(semantic : Symbol, value : BufferView, child : aval<ISg>) = InstanceAttributeApplicator(Map.ofList [semantic, value], child)
@@ -101,6 +134,11 @@ module Sg =
         inherit AbstractApplicator(child)
 
         member x.IsActive = on
+
+        // AND-combine with current IsActive — matches Semantics/Flags.fs:51.
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.andIsActive on ts))
 
         new(on : aval<bool>, child : ISg) = OnOffNode(on, AVal.constant child)
 
@@ -141,6 +179,10 @@ module Sg =
 
         member x.Activate = activateWrapped
 
+        interface ISimpleSg with
+            member self.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.pushActivate self.Activate ts))
+
         new(activate : unit -> IDisposable, child : ISg) = ActivationApplicator(activate, AVal.constant child)
 
     // TODO: Caching?
@@ -148,10 +190,18 @@ module Sg =
         interface ISg
         member x.Generator = generator
 
+        // Leaf — generator is scope-coupled (Semantics/Delay.fs). Round-trip.
+        interface ISimpleSg with
+            member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+
     type PassApplicator(pass : RenderPass, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Pass = pass
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withRenderPass pass ts))
 
         new(pass : RenderPass, child : ISg) = PassApplicator(pass, AVal.constant child)
 
@@ -160,6 +210,10 @@ module Sg =
         inherit AbstractApplicator(child)
 
         member x.IsTransparent = isTransparent
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withTransparent isTransparent ts))
 
         new(isTransparent : bool, child : ISg) = TransparentApplicator(isTransparent, AVal.constant child)
 
@@ -170,6 +224,10 @@ module Sg =
 
         member x.TryFindUniform (scope : Scope) (name : Symbol) =
             uniformHolder.TryGetUniform (scope,name)
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.pushUniforms uniformHolder ts))
 
         new(value : IUniformProvider, child : ISg) = UniformApplicator( value, AVal.constant child)
         new(name : string, value : IAdaptiveValue, child : ISg) = UniformApplicator( (new Providers.SingleUniformHolder(Symbol.Create name, value) :> IUniformProvider), AVal.constant child)
@@ -183,10 +241,17 @@ module Sg =
 
         member x.Surface = surface
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withSurface surface ts))
+
         new(value : Surface, child : ISg) = SurfaceApplicator(value, AVal.constant child)
 
     type TextureApplicator(semantic : Symbol, texture : aval<ITexture>, child : aval<ISg>) =
         inherit UniformApplicator(semantic, texture :> IAdaptiveValue, child)
+
+        // ISimpleSg inherited from UniformApplicator — texture is wired through the
+        // uniform holder, same as the Ag's UniformSem path.
 
         member x.Texture = texture
 
@@ -202,8 +267,7 @@ module Sg =
 
         interface ISimpleSg with
             member _.GetRenderObjects ts =
-                let pushed = TraversalState.pushModelTrafo trafo ts
-                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, pushed))
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.pushModelTrafo trafo ts))
 
         new(value : aval<Trafo3d>, child : ISg) = TrafoApplicator(value, AVal.constant child)
         new(value : Trafo3d, child : ISg) = TrafoApplicator(AVal.constant value, AVal.constant child)
@@ -213,12 +277,20 @@ module Sg =
 
         member x.ViewTrafo = trafo
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withViewTrafo trafo ts))
+
         new(value : aval<Trafo3d>, child : ISg) = ViewTrafoApplicator(value, AVal.constant child)
 
     type ProjectionTrafoApplicator(trafo : aval<Trafo3d>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.ProjectionTrafo = trafo
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withProjTrafo trafo ts))
 
         new(value : aval<Trafo3d>, child : ISg) = ProjectionTrafoApplicator(value, AVal.constant child)
 
@@ -228,6 +300,10 @@ module Sg =
 
         member x.Mode = mode
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withBlendMode mode ts))
+
         new(value : aval<BlendMode>, child : ISg) = BlendModeApplicator(value, AVal.constant child)
 
     type BlendConstantApplicator(color : aval<C4f>, child : aval<ISg>) =
@@ -235,12 +311,20 @@ module Sg =
 
         member x.Color = color
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withBlendConstant color ts))
+
         new(color : aval<C4f>, child : ISg) = BlendConstantApplicator(color, AVal.constant child)
 
     type ColorWriteMaskApplicator(mask : aval<ColorMask>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Mask = mask
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withColorWriteMask mask ts))
 
         new(enabled : aval<bool>, child : aval<ISg>) = ColorWriteMaskApplicator(enabled |> AVal.map ColorMask.enable, child)
         new(enabled : aval<bool>, child : ISg) = ColorWriteMaskApplicator(enabled, AVal.constant child)
@@ -251,12 +335,20 @@ module Sg =
 
         member x.Modes = value
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withAttachmentBlendMode value ts))
+
         new(value : aval<Map<Symbol, BlendMode>>, child : ISg) = AttachmentBlendModeApplicator(value, AVal.constant child)
 
     type AttachmentColorWriteMaskApplicator(value : aval<Map<Symbol, ColorMask>>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Masks = value
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withAttachmentColorWriteMask value ts))
 
         new(value : aval<Map<Symbol, bool>>, child : aval<ISg>) = AttachmentColorWriteMaskApplicator(value |> AVal.map (Map.map (fun _ x -> ColorMask.enable x)), child)
         new(value : aval<Map<Symbol, ColorMask>>, child : ISg) = AttachmentColorWriteMaskApplicator(value, AVal.constant child)
@@ -268,12 +360,20 @@ module Sg =
 
         member x.Test = test
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withDepthTest test ts))
+
         new(test : aval<DepthTest>, child : ISg) = DepthTestApplicator(test, AVal.constant child)
 
     type DepthBiasApplicator(bias : aval<DepthBias>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.State = bias
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withDepthBias bias ts))
 
         new(state : aval<DepthBias>, child : ISg) = DepthBiasApplicator(state, AVal.constant child)
 
@@ -282,12 +382,20 @@ module Sg =
 
         member x.WriteEnabled = writeEnabled
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withDepthWriteMask writeEnabled ts))
+
         new(writeEnabled : aval<bool>, child : ISg) = DepthWriteMaskApplicator(writeEnabled, AVal.constant child)
 
     type DepthClampApplicator(clamp : aval<bool>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Clamp = clamp
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withDepthClamp clamp ts))
 
         new(clamp : aval<bool>, child : ISg) = DepthClampApplicator(clamp, AVal.constant child)
 
@@ -297,12 +405,20 @@ module Sg =
 
         member x.Mode = mode
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withStencilModeFront mode ts))
+
         new(mode : aval<StencilMode>, child : ISg) = StencilModeFrontApplicator(mode, AVal.constant child)
 
     type StencilWriteMaskFrontApplicator(mask : aval<StencilMask>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Mask = mask
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withStencilWriteMaskFront mask ts))
 
         new(enabled : aval<bool>, child : aval<ISg>) = StencilWriteMaskFrontApplicator(enabled |> AVal.map StencilMask, child)
         new(enabled : aval<bool>, child : ISg) = StencilWriteMaskFrontApplicator(enabled, AVal.constant child)
@@ -315,12 +431,20 @@ module Sg =
 
         member x.Mode = mode
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withStencilModeBack mode ts))
+
         new(mode : aval<StencilMode>, child : ISg) = StencilModeBackApplicator(mode, AVal.constant child)
 
     type StencilWriteMaskBackApplicator(mask : aval<StencilMask>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Mask = mask
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withStencilWriteMaskBack mask ts))
 
         new(enabled : aval<bool>, child : aval<ISg>) = StencilWriteMaskBackApplicator(enabled |> AVal.map StencilMask, child)
         new(enabled : aval<bool>, child : ISg) = StencilWriteMaskBackApplicator(enabled, AVal.constant child)
@@ -334,6 +458,10 @@ module Sg =
 
         member x.Mode = mode
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withCullMode mode ts))
+
         new(value : aval<CullMode>, child : ISg) = CullModeApplicator(value, AVal.constant child)
 
     type FrontFacingApplicator(winding : aval<WindingOrder>, child : aval<ISg>) =
@@ -341,12 +469,20 @@ module Sg =
 
         member x.WindingOrder = winding
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withFrontFacing winding ts))
+
         new(winding : aval<WindingOrder>, child : ISg) = FrontFacingApplicator(winding, AVal.constant child)
 
     type FillModeApplicator(mode : aval<FillMode>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Mode = mode
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withFillMode mode ts))
 
         new(value : aval<FillMode>, child : ISg) = FillModeApplicator(value, AVal.constant child)
         new(value : FillMode, child : ISg) = FillModeApplicator(AVal.constant value, AVal.constant child)
@@ -356,6 +492,10 @@ module Sg =
 
         member x.Multisample = state
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withMultisample state ts))
+
         new(state : aval<bool>, child : ISg) = MultisampleApplicator(state, AVal.constant child)
 
     type ConservativeRasterApplicator(state : aval<bool>, child : aval<ISg>) =
@@ -363,12 +503,23 @@ module Sg =
 
         member x.ConservativeRaster = state
 
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withConservativeRaster state ts))
+
         new(state : aval<bool>, child : ISg) = ConservativeRasterApplicator(state, AVal.constant child)
 
     type ViewportApplicator private (uniforms : IUniformProvider, state : aval<Box2i> option, child : aval<ISg>) =
         inherit UniformApplicator(uniforms, child)
 
         member x.Viewport = state
+
+        // Override UniformApplicator's inherited ISimpleSg to ALSO set the viewport
+        // (the inherited impl only pushes the uniform holder).
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                let ts' = ts |> TraversalState.pushUniforms uniforms |> TraversalState.withViewport state
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, ts'))
 
         new(state : aval<Box2i> option, child : aval<ISg>) =
             let uniforms : IUniformProvider =
@@ -386,6 +537,10 @@ module Sg =
         inherit AbstractApplicator(child)
 
         member x.Scissor = state
+
+        interface ISimpleSg with
+            member _.GetRenderObjects ts =
+                child |> ASet.bind (fun c -> SimpleDispatch.Get(c, TraversalState.withScissor state ts))
 
         new(state : aval<Box2i> option, child : ISg) = ScissorApplicator(state, AVal.constant child)
         new(state : aval<Box2i>, child : aval<ISg>) = ScissorApplicator(Some state, child)

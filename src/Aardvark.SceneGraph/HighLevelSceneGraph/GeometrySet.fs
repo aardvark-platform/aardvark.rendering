@@ -3,6 +3,7 @@
 open System
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.SceneGraph.Simple
 open FSharp.Data.Adaptive
 
 type GeometryInstance =
@@ -27,6 +28,10 @@ module GeometrySetSgExtensions =
             member x.Signature = signature
             member x.Mode = mode
             member x.Geometries = geometries
+
+            // Leaf — RO built by GeometrySetSem. Round-trip via LegacyAdapter.
+            interface ISimpleSg with
+                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
 
         /// Draws an adaptive set of indexed geometries with instance attributes.
         let geometrySetInstanced (signature : GeometrySignature) (mode : IndexedGeometryMode) (geometries : aset<GeometryInstance>) =

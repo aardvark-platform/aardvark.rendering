@@ -155,11 +155,51 @@ module TraversalState =
     let inline withFaceVertexCount (c : aval<int>) (ts : TraversalState) =
         { ts with FaceVertexCount = c }
 
+    /// Ag-faithful version of Sg.VertexIndexApplicator: sets the index buffer AND
+    /// updates FaceVertexCount to the buffer's count. Mirrors AttributeSem in
+    /// Semantics/Attributes.fs.
+    let applyVertexIndexBuffer (view : BufferView) (ts : TraversalState) =
+        { ts with
+            VertexIndexBuffer = Some view
+            FaceVertexCount   = BufferView.getCount view }
+
+    /// Ag-faithful version of Sg.VertexAttributeApplicator: merges into the existing
+    /// map AND — only when no index buffer is set — derives FaceVertexCount from the
+    /// Positions buffer if present. Mirrors AttributeSem in Semantics/Attributes.fs.
+    let applyVertexAttributes (values : Map<Symbol, BufferView>) (ts : TraversalState) =
+        let merged = Map.union ts.VertexAttributes values
+        let newCount =
+            if ts.VertexIndexBuffer.IsNone then
+                match Map.tryFind DefaultSemantic.Positions values with
+                | Some positions -> BufferView.getCount positions
+                | _ -> ts.FaceVertexCount
+            else
+                ts.FaceVertexCount
+        { ts with VertexAttributes = merged; FaceVertexCount = newCount }
+
     // ── flags / surface ────────────────────────────────────────────────────
     let inline withSurface       s   ts = { ts with Surface = s }
     let inline withIsActive      a   ts = { ts with IsActive = a }
     let inline withTransparent   t   ts = { ts with IsTransparent = t }
     let inline withRenderPass    p   ts = { ts with RenderPass = p }
+
+    /// Ag-faithful version of Sg.OnOffNode: `IsActive` AND-combines with the current
+    /// state, with the same constant-folding the Ag's `<&>` operator does
+    /// (Semantics/Flags.fs).
+    let andIsActive (active : aval<bool>) (ts : TraversalState) =
+        let current = ts.IsActive
+        let combined =
+            match current.IsConstant, active.IsConstant with
+            | true, true ->
+                if current.GetValue() && active.GetValue() then AVal.constant true
+                else AVal.constant false
+            | true, false ->
+                if current.GetValue() then active else AVal.constant false
+            | false, true ->
+                if active.GetValue() then current else AVal.constant false
+            | _ ->
+                AVal.map2 (&&) current active
+        { ts with IsActive = combined }
 
     // ── blend / depth / stencil / rasterizer / viewport — value replacements ─
     let inline withBlendMode                m (ts : TraversalState) = { ts with BlendMode = m }

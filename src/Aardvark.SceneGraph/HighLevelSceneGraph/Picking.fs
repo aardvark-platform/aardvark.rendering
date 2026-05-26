@@ -5,6 +5,7 @@ open Aardvark.Base.Geometry
 open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Simple
 
 [<AutoOpen>]
 module ``Sg Picking Extensions`` =
@@ -202,8 +203,17 @@ module ``Sg Picking Extensions`` =
 
             member x.Pickable = pickable
 
+            // Round-trip — picking's Ag rules wire scope-coupled bounding-box
+            // attributes into the child.
+            interface ISimpleSg with
+                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+
         type RequirePickingApplicator(child : aval<ISg>) =
             inherit Sg.AbstractApplicator(child)
+
+            // Round-trip — same reason as PickableApplicator.
+            interface ISimpleSg with
+                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
 
         let pickable (shape : PickShape) (sg : ISg) =
             PickableApplicator(AVal.constant (Pickable.ofShape shape), AVal.constant sg) :> ISg

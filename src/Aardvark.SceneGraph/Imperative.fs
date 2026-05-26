@@ -6,6 +6,7 @@ open Aardvark.Base
 
 open Aardvark.Base.Ag
 open Aardvark.Rendering
+open Aardvark.SceneGraph.Simple
 open TrafoOperators
 open FSharp.Data.Adaptive
 
@@ -739,6 +740,10 @@ module ``Air Sg Interop`` =
         type AirNode(content : Air<unit>) =
             interface ISg
             member x.Content = content
+
+            // Leaf — RO built by AirNode's Ag semantic. Round-trip via LegacyAdapter.
+            interface ISimpleSg with
+                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
 
 
 [<AutoOpen>]

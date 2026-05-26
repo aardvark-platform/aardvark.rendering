@@ -6,6 +6,7 @@ open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Simple
 
 type RenderGeometryConfig =
     {
@@ -124,6 +125,10 @@ module ``Sg RuntimeCommand Extensions`` =
         type RuntimeCommandNode(command : RenderCommand) =
             interface ISg
             member x.Command = command
+
+            // Leaf — RO built by RuntimeCommandSem. Round-trip via LegacyAdapter.
+            interface ISimpleSg with
+                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
 
 
         let execute (cmd : RenderCommand) =

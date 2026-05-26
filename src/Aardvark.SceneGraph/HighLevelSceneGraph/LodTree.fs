@@ -3,6 +3,7 @@
 open Aardvark.Base
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Simple
 open Aardvark.Rendering
 
 
@@ -61,6 +62,10 @@ module LodTreeRendering =
             member x.AlphaToCoverage = alphaToCoverage
             member x.SplitFactor = splitfactor
             interface ISg
+
+            // Leaf — RO built by LodTree's Ag semantic. Round-trip via LegacyAdapter.
+            interface ISimpleSg with
+                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
 
             new(stats : cval<LodRendererStats>, pickTrees : cmap<ILodTreeNode,SimplePickTree>, alphaToCoverage : bool, budget : aval<int64>, splitfactor : aval<float>, renderBounds : aval<bool>, maxSplits : aval<int>, time : aval<System.DateTime>, clouds : aset<LodTreeInstance>) =
                 LodTreeNode(stats, Some pickTrees, alphaToCoverage, budget, splitfactor, renderBounds, maxSplits, time, clouds)

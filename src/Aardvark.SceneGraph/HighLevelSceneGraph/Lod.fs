@@ -4,6 +4,7 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Simple
 
 module NaiveLod =
 
@@ -15,7 +16,12 @@ module NaiveLod =
         member x.High = high
         member x.ViewDecider = viewDecider
 
-        new(viewDecider : System.Func<LodScope, bool>, low : ISg, high : ISg) = 
+        // Leaf-ish — RO built by LodSem with scope-dependent view decisions.
+        // Round-trip via LegacyAdapter.
+        interface ISimpleSg with
+            member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+
+        new(viewDecider : System.Func<LodScope, bool>, low : ISg, high : ISg) =
             LodNode((fun t -> viewDecider.Invoke t), AVal.constant low, AVal.constant high)
 
     module Sg =

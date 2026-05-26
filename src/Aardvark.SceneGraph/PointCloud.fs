@@ -3,6 +3,7 @@
 open System
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.SceneGraph.Simple
 open FSharp.Data.Adaptive
 
 open System.Threading
@@ -344,6 +345,10 @@ module ``PointCloud Sg Extensions`` =
             member x.Data = data
             member x.Config = config
             member x.Progress = progress
+
+            // Leaf — RO built by PointCloudRenderObjectSemantics. Round-trip via LegacyAdapter.
+            interface ISimpleSg with
+                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
 
         let pointCloud (data : ILodData) (info : PointCloudInfo) =
             PointCloud(data, info, Progress.empty) :> ISg

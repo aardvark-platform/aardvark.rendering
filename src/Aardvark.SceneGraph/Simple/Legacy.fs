@@ -110,11 +110,27 @@ module LegacyBridgeSemantics =
             a.Child?RenderObjects(scope)
 
 
-/// Dispatch helper for legacy `Sg.*` nodes' ISimpleSg implementations: prefer the fast
-/// ISimpleSg path on the child if it has one, otherwise bridge via LegacyAdapter.
+/// Dispatch helper for legacy `Sg.*` nodes' ISimpleSg implementations.
+///
+/// • `Get(child, ts)` — prefer the fast ISimpleSg path on the child if it has one,
+///   otherwise bridge via LegacyAdapter. Used by every applicator-style Sg.* node.
+///
+/// • `Bridge(self, ts)` — the round-trip for *leaf* nodes (RenderNode, AdapterNode,
+///   IndirectRenderNode, DelayNode, …) whose RenderObject construction depends on a
+///   scope-coupled provider chain (`RenderObject.ofScope` builds AttributeProvider /
+///   UniformProvider over `scope`). The round-trip goes:
+///       leaf.GetRenderObjects ts
+///         → LegacyBridge(leaf, ts) → Ag dispatch → LegacyBridgeSem.RenderObjects
+///         → leaf?RenderObjects(scope)
+///   Ag's `DefaultBinder.SelectMethod` picks the most-specific concrete-type rule, so
+///   the existing `RenderObjectSem.RenderObjects(r : Sg.RenderNode, scope)` handler
+///   wins over the generic `SimpleSgSemantics` rule — no infinite loop.
 [<AbstractClass; Sealed>]
 type SimpleDispatch private () =
     static member Get (sg : ISg, ts : TraversalState) : aset<IRenderObject> =
         match sg with
         | :? ISimpleSg as s -> s.GetRenderObjects ts
         | _                 -> (LegacyAdapter(sg) :> ISimpleSg).GetRenderObjects ts
+
+    static member Bridge (sg : ISg, ts : TraversalState) : aset<IRenderObject> =
+        (LegacyAdapter(sg) :> ISimpleSg).GetRenderObjects ts

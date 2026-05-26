@@ -2,6 +2,7 @@
 
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.SceneGraph.Simple
 open FSharp.Data.Adaptive
 
 open System
@@ -328,6 +329,10 @@ module ManagedPoolSg =
             member x.Calls = calls
             member x.Mode = mode
             member x.Storage = storage
+
+            // Leaf — RO built by PoolSem. Round-trip via LegacyAdapter.
+            interface ISimpleSg with
+                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
 
         /// Draws an adaptive set of managed draw calls of the given pool.
         let pool (pool : ManagedPool) (mode : IndexedGeometryMode) (calls : aset<ManagedDrawCall>) =

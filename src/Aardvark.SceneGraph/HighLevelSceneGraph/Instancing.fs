@@ -2,6 +2,7 @@
 
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.SceneGraph.Simple
 open FSharp.Data.Adaptive
 
 [<AutoOpen>]
@@ -13,6 +14,11 @@ module Instancing =
             member x.Count = count
             member x.Child = child
             member x.Uniforms = uniforms
+
+            // Leaf — RO built by InstancingSem. Round-trip via LegacyAdapter.
+            // (The TraversalState's child propagation is happening inside the bridge.)
+            interface ISimpleSg with
+                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
 
         let instanced' (attributes : Map<string, System.Type * aval<System.Array>>) (sg : ISg) : ISg =
             if Map.isEmpty attributes then
