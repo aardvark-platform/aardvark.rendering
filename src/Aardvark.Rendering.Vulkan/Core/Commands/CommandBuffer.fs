@@ -5,6 +5,7 @@ open System
 open System.Collections.Generic
 open System.Runtime.InteropServices
 
+#nowarn "9"
 #nowarn "51"
 
 type CommandBufferLevel =

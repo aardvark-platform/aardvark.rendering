@@ -6,6 +6,7 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open EXTCustomBorderColor
 
+#nowarn "9"
 #nowarn "51"
 
 [<AutoOpen>]

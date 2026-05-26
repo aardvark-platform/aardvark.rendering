@@ -6,6 +6,7 @@ open Aardvark.Rendering.Vulkan.Memory
 open System
 open System.Runtime.InteropServices
 
+#nowarn "9"
 #nowarn "51"
 
 /// Represents a memory allocation.

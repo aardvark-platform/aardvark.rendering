@@ -5,6 +5,7 @@ open System
 open System.Runtime.InteropServices
 open Microsoft.FSharp.Core
 
+#nowarn "9"
 #nowarn "51"
 
 [<AllowNullLiteral>]

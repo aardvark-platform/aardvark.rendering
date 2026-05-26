@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan.Memory
 
+#nowarn "9"
 #nowarn "51"
 
 open Aardvark.Base

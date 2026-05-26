@@ -3,6 +3,7 @@
 open Aardvark.Base
 open System
 
+#nowarn "9"
 #nowarn "51"
 
 type Event internal (device: IDevice) =

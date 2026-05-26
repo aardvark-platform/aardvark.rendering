@@ -5,6 +5,7 @@ open Aardvark.Rendering.Vulkan
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 
+#nowarn "9"
 #nowarn "51"
 
 type QueryPool =

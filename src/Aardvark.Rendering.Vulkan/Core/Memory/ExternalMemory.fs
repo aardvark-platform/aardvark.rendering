@@ -5,6 +5,7 @@ open Aardvark.Rendering.Vulkan
 open System
 open Vulkan11
 
+#nowarn "9"
 #nowarn "51"
 
 [<AllowNullLiteral>]
