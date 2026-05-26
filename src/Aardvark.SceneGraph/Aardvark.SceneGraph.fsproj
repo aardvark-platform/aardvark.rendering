@@ -60,6 +60,7 @@
     <Compile Include="HeapPool.fs" />
     <Compile Include="Simple\TraversalState.fs" />
     <Compile Include="Simple\ISimpleSg.fs" />
+    <Compile Include="Simple\Bridges.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
   </ItemGroup>
