@@ -1136,10 +1136,17 @@ module Heap =
         let modeKey (t : AdaptiveToken) (r : RenderObject) =
             let ra = r.RasterizerState
             let eid = match r.Surface with | Surface.Effect e -> e.Id | _ -> "?"
+            // IsTransparent partitions buckets so transparent and opaque ROs that otherwise
+            // share effect+pipeline state still emit SEPARATE grouped ROs — TransparencyRenderTask
+            // routes by RenderObject.IsTransparent (see TransparencyRenderTask.isTransparent),
+            // so each bucket's combined output must carry the same flag as its inputs.
+            // RenderObject.Clone copies IsTransparent (Pipeline/RenderObject.fs:120) so the
+            // bucket's output inherits it automatically from any input in the partition.
             (eid, r.Mode, layoutSig r,
              ra.CullMode.GetValue t, ra.FrontFacing.GetValue t, ra.FillMode.GetValue t,
              r.BlendState.Mode.GetValue t,
-             r.DepthState.Test.GetValue t, r.DepthState.WriteMask.GetValue t)
+             r.DepthState.Test.GetValue t, r.DepthState.WriteMask.GetValue t,
+             r.IsTransparent)
 
         // Eligibility: only a concrete indexed Effect RenderObject with host-array
         // (positions/normals/index) geometry and ALL heap uniforms present in a
