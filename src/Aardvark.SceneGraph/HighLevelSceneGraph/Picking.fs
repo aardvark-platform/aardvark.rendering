@@ -203,17 +203,19 @@ module ``Sg Picking Extensions`` =
 
             member x.Pickable = pickable
 
-            // Round-trip — picking's Ag rules wire scope-coupled bounding-box
-            // attributes into the child.
+            // No RenderObjects rule — picking semantics (PickObjects / RequirePicking)
+            // are separate Ag attributes; rendering is pass-through.
             interface ISimpleSg with
-                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+                member _.GetRenderObjects ts =
+                    child |> ASet.bind (fun c -> SimpleDispatch.Get(c, ts))
 
         type RequirePickingApplicator(child : aval<ISg>) =
             inherit Sg.AbstractApplicator(child)
 
-            // Round-trip — same reason as PickableApplicator.
+            // No RenderObjects rule — pure pass-through.
             interface ISimpleSg with
-                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+                member _.GetRenderObjects ts =
+                    child |> ASet.bind (fun c -> SimpleDispatch.Get(c, ts))
 
         let pickable (shape : PickShape) (sg : ISg) =
             PickableApplicator(AVal.constant (Pickable.ofShape shape), AVal.constant sg) :> ISg

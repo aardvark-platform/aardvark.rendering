@@ -24,11 +24,15 @@ module Sg =
 
         member x.Node = node
 
-        // Leaf — node is `obj`, RO construction depends entirely on Ag rules (see
-        // Semantics/Adapter.fs). Round-trip via LegacyAdapter; Ag's specificity
-        // dispatch lands on the concrete AdapterSem rule, not on SimpleSgSemantics.
+        // The Ag rule (Semantics/Adapter.fs:14) is `a.Node?RenderObjects(scope)` —
+        // forward to whatever `Node` is. TS-direct version: if the wrapped node is
+        // an ISg, dispatch through SimpleDispatch.Get (fast path for ISimpleSg,
+        // LegacyAdapter for unupgraded ISg). Only bridge if Node is a raw obj.
         interface ISimpleSg with
-            member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+            member self.GetRenderObjects ts =
+                match node with
+                | :? ISg as sg -> SimpleDispatch.Get(sg, ts)
+                | _            -> SimpleDispatch.Bridge(self, ts)
 
     type DynamicNode(child : aval<ISg>) =
         inherit AbstractApplicator(child)
