@@ -1988,6 +1988,75 @@ module Golden =
         Log.line "glyphWedge: PrepareGlyphs DONE in %.2fs — NO WEDGE" sw.Elapsed.TotalSeconds
         true
 
+    // Standalone AtlasPool test: exercises Acquire/Release/dedup/LRU/multi-page on the
+    // reactive pool (HeapAtlasPool.fs) without HeapPool integration. PASS criteria are pure
+    // bookkeeping (entry/page counts, dedup returns same Acquisition, refcount semantics,
+    // LRU eviction frees slots so the next Acquire fits without growing). Sub-rect upload
+    // is exercised on every Acquire — a backend bug there would assert or VK_ERROR here.
+    let atlasPoolTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        // small pages so overflow + eviction trigger quickly
+        let pageSz, maxPages = 512, 2
+        use pool = new AtlasPool(runtime, pageSz, maxPages)
+        Log.line "atlasPool: pageSize=%d maxPages=%d" pageSz maxPages
+
+        // Build N unique (ITexture, PixImage) pairs. ITexture key = ref identity → unique
+        // PixTexture2d wrappers ensure each Acquire is a fresh entry.
+        let mkPair (i : int) =
+            let s = 64 + (i % 4) * 16        // 64,80,96,112 → reserved ~ small/mid
+            let img = PixImage<byte>(Col.Format.RGBA, V2i(s, s))
+            let m = img.GetMatrix<C4b>()
+            let c = C4b(byte ((i * 23) % 256), byte ((i * 53) % 256), byte ((i * 91) % 256), 255uy)
+            m.SetByIndex(fun _ -> c) |> ignore
+            (PixTexture2d(img) :> ITexture), img
+        let n0 = 12
+        let pairs = Array.init n0 mkPair
+
+        // Phase 1: acquire all → unique entries; PageCount must be ≤ maxPages.
+        let acqs = pairs |> Array.map (fun (t, p) -> pool.Acquire(t, p))
+        Log.line "atlasPool: phase1 acquired %d entries on %d page(s)" pool.EntryCount pool.PageCount
+        if pool.EntryCount <> n0 then Log.warn "atlasPool: FAIL phase1 entry count %d <> %d" pool.EntryCount n0; false |> ignore
+        if pool.PageCount > maxPages then Log.warn "atlasPool: FAIL phase1 pageCount %d > maxPages %d" pool.PageCount maxPages; false |> ignore
+        let phase1Ok = pool.EntryCount = n0 && pool.PageCount <= maxPages
+
+        // Phase 2: dedup. Re-Acquire pair[0] → same Acquisition (PageId+OriginPx); EntryCount unchanged.
+        let (t0, p0) = pairs.[0]
+        let acq0' = pool.Acquire(t0, p0)
+        let dedupOk = (fst acq0').PageId = (fst acqs.[0]).PageId && (fst acq0').OriginPx = (fst acqs.[0]).OriginPx && pool.EntryCount = n0
+        Log.line "atlasPool: dedup re-acquire same slot=%b (entries=%d)" dedupOk pool.EntryCount
+
+        // Phase 3: release everything (count down all refcounts to 0).
+        // pair[0] was acquired twice → release twice. Others once.
+        pool.Release t0   // first  release for pair[0]
+        for (t, _) in pairs do pool.Release t
+        Log.line "atlasPool: phase3 released, entries still cached=%d" pool.EntryCount
+        if pool.EntryCount <> n0 then Log.warn "atlasPool: FAIL phase3 release dropped entries (%d)" pool.EntryCount; false |> ignore
+        let phase3Ok = pool.EntryCount = n0
+
+        // Phase 4: re-acquire one → must hit cache (no eviction yet). Same Acquisition again.
+        let acq0'' = pool.Acquire(t0, p0)
+        let cachedOk = (fst acq0'').PageId = (fst acqs.[0]).PageId && (fst acq0'').OriginPx = (fst acqs.[0]).OriginPx
+        Log.line "atlasPool: cached re-acquire after release=%b" cachedOk
+        pool.Release t0
+
+        // Phase 5: force LRU eviction. Add NEW distinct textures until the pool is full and
+        // must evict. With everything refcount=0 they ARE evictable; the new ones should fit.
+        let extra = Array.init 24 (fun i -> mkPair (1000 + i))
+        let mutable acquired = 0
+        try
+            for (t, p) in extra do
+                pool.Acquire(t, p) |> ignore
+                acquired <- acquired + 1
+        with ex -> Log.warn "atlasPool: extra Acquire %d/%d threw: %s" acquired extra.Length ex.Message
+        Log.line "atlasPool: phase5 LRU-evict drove %d/%d extras onto %d page(s); entries=%d" acquired extra.Length pool.PageCount pool.EntryCount
+        let evictOk = acquired = extra.Length && pool.PageCount <= maxPages
+        let pass = phase1Ok && dedupOk && phase3Ok && cachedOk && evictOk
+        if pass then Log.line "atlasPool: PASS (phase1=%b dedup=%b cache=%b evict=%b)" phase1Ok dedupOk cachedOk evictOk
+        else Log.warn "atlasPool: FAIL (phase1=%b dedup=%b phase3=%b cache=%b evict=%b)" phase1Ok dedupOk phase3Ok cachedOk evictOk
+        pass
+
     // Isolation: a plain (NON-heap) offscreen render. If this also crashes, the
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =

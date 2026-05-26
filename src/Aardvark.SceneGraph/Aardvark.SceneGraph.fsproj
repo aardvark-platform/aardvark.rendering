@@ -56,6 +56,7 @@
     <Compile Include="SgCSharp.fs" />
     <Compile Include="RuntimeExtensions.fs" />
     <Compile Include="HeapAtlas.fs" />
+    <Compile Include="HeapAtlasPool.fs" />
     <Compile Include="HeapPool.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
