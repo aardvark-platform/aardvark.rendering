@@ -119,32 +119,22 @@ module PipelineState =
 [<AutoOpen>]
 module RenderObjectSemantics =
 
-    // Global flip — every caller of `sg.RenderObjects(scope)` and
-    // `Semantic.renderObjects scope sg` is routed through the explicit-traversal
-    // ISimpleSg path when the node implements it. Inside, applicators propagate
-    // via ASet.collect / ASet.bind through `SimpleDispatch.Get` (no Ag), the
-    // upgraded leaves (RenderNode / IndirectRenderNode) build their RO via
-    // `RenderObjectBuilder.ofTraversalState`, and the not-yet-upgraded leaves
-    // (AdapterNode, DelayNode, AirNode, PointCloud, PoolNode, LodTreeNode,
-    // GeometrySetNode, RuntimeCommandNode, InstancingNode, NaiveLod.LodNode, the
-    // Picking applicators) bridge back through `SimpleDispatch.Bridge` only at
-    // the leaf boundary. The legacy `?RenderObjects(scope)` Ag dispatch stays the
-    // fallback for any non-ISimpleSg ISg (third-party trees).
+    // Note: the global ISimpleSg-flip lived here briefly (commit c143babe) but was
+    // reverted — third-party SG nodes (e.g. Aardvark.Rendering.Text.Sg.Shape) query
+    // ambient Ag attributes via raw `?` outside the TraversalState (Shape asks for
+    // `scope?Runtime`, set by `app?Runtime <- runtime` in RuntimeExtensions.fs:16
+    // and propagated through Ag's lazy scope traversal). Bypassing the Ag entry
+    // means those attributes are never set, so the leaf throws. `TraversalState`
+    // covers the SG-defined attribute set; the open set of third-party ambient
+    // attributes would need extra plumbing for a complete flip.
+    //
+    // ISimpleSg.GetRenderObjects is still available for opt-in TS-direct use, and
+    // every Sg.* node still implements it.
     type ISg with
-        member x.RenderObjects(scope : Ag.Scope) : aset<IRenderObject> =
-            match x with
-            | :? Aardvark.SceneGraph.Simple.ISimpleSg as s ->
-                s.GetRenderObjects (Aardvark.SceneGraph.Simple.Bridge.ofScope scope)
-            | _ ->
-                x?RenderObjects(scope)
+        member x.RenderObjects(scope : Ag.Scope) : aset<IRenderObject> = x?RenderObjects(scope)
 
     module Semantic =
-        let renderObjects (scope : Ag.Scope) (s : ISg) : aset<IRenderObject> =
-            match s with
-            | :? Aardvark.SceneGraph.Simple.ISimpleSg as ss ->
-                ss.GetRenderObjects (Aardvark.SceneGraph.Simple.Bridge.ofScope scope)
-            | _ ->
-                s?RenderObjects(scope)
+        let renderObjects (scope : Ag.Scope) (s : ISg) : aset<IRenderObject> = s?RenderObjects(scope)
 
 
     [<Rule>]

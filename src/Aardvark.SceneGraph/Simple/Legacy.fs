@@ -29,7 +29,16 @@ module Bridge =
     /// the per-attribute `Scope.X` member-extensions because this file compiles before
     /// Semantics/*.fs where those extensions live — same backing Ag attribute lookup,
     /// just no syntactic sugar. Field-by-field copy.
+    ///
+    /// Special case: `Ag.Scope.Root` has no node, so the Root<ISg> seeder rules
+    /// haven't populated any inherited attributes — eagerly reading them throws
+    /// `ArgumentNullException` from the internal `ConditionalWeakTable`. We return
+    /// `TraversalState.empty` instead, which mirrors every Root<ISg> seeder
+    /// one-to-one by design (Semantics/Trafo.fs, Attributes.fs, Flags.fs, …).
     let ofScope (scope : Ag.Scope) : TraversalState =
+        if System.Object.ReferenceEquals(scope, Ag.Scope.Root) then
+            TraversalState.empty
+        else
         {
             ModelTrafoStack          = scope?ModelTrafoStack
             ViewTrafo                = scope?ViewTrafo
