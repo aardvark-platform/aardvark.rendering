@@ -21,6 +21,7 @@ module GeometryInstance =
 
 [<AutoOpen>]
 module GeometrySetSgExtensions =
+    open ``Pool Semantics``  // brings DrawCallBuffer into scope (also used by the Sem)
 
     module Sg =
         type GeometrySetNode(signature : GeometrySignature, mode : IndexedGeometryMode, geometries : aset<GeometryInstance>) =
@@ -29,9 +30,41 @@ module GeometrySetSgExtensions =
             member x.Mode = mode
             member x.Geometries = geometries
 
-            // Leaf — RO built by GeometrySetSem. Round-trip via LegacyAdapter.
+            /// Shared body for the Ag rule and the ISimpleSg/TraversalState path —
+            /// single source of truth. Mirrors GeometrySetSem.RenderObjects exactly.
+            static member internal BuildROs
+                ( node : GeometrySetNode,
+                  runtime : IRuntime,
+                  newRO : unit -> RenderObject ) : aset<IRenderObject> =
+                let pool = runtime.CreateManagedPool node.Signature  // disposed via Activate
+
+                let calls =
+                    node.Geometries |> ASet.mapUse (fun g ->
+                        let ag = g.Geometry |> AdaptiveGeometry.ofIndexedGeometry (Map.toList g.InstanceAttributes)
+                        pool.Add ag
+                    )
+                    |> snd
+                    |> DrawCallBuffer.create pool.Runtime BufferStorage.Device
+
+                let mutable ro = Unchecked.defaultof<RenderObject>
+                ro <- newRO ()
+                ro.Mode <- node.Mode
+                ro.Indices <- Some pool.IndexBuffer
+                ro.VertexAttributes <- pool.VertexAttributes
+                ro.InstanceAttributes <- pool.InstanceAttributes
+                ro.DrawCalls <- DrawCalls.Indirect calls
+                ro.Activate <- fun () -> pool
+
+                ASet.single (ro :> IRenderObject)
+
+            // TS-direct — no LegacyBridge round-trip. Runtime comes from TraversalState.
             interface ISimpleSg with
-                member self.GetRenderObjects ts = SimpleDispatch.Bridge(self, ts)
+                member self.GetRenderObjects ts =
+                    GeometrySetNode.BuildROs(
+                        self,
+                        ts.Runtime,
+                        (fun () -> RenderObjectBuilder.ofTraversalState ts)
+                    )
 
         /// Draws an adaptive set of indexed geometries with instance attributes.
         let geometrySetInstanced (signature : GeometrySignature) (mode : IndexedGeometryMode) (geometries : aset<GeometryInstance>) =
@@ -93,23 +126,10 @@ module GeometrySetSemantics =
             AVal.map2 (fun (t : Trafo3d) (b : Box3d) -> b.Transformed(t)) t l
 
         member x.RenderObjects(node : Sg.GeometrySetNode, scope : Ag.Scope) : aset<IRenderObject> =
-            let pool = scope.Runtime.CreateManagedPool node.Signature    // Disposed via activate of RO
-
-            let calls =
-                node.Geometries |> ASet.mapUse (fun g ->
-                    let ag = g.Geometry |> AdaptiveGeometry.ofIndexedGeometry (Map.toList g.InstanceAttributes)
-                    pool.Add ag
-                )
-                |> snd
-                |> DrawCallBuffer.create pool.Runtime BufferStorage.Device
-
-            let mutable ro = Unchecked.defaultof<RenderObject>
-            ro <- RenderObject.ofScope scope
-            ro.Mode <- node.Mode
-            ro.Indices <- Some pool.IndexBuffer
-            ro.VertexAttributes <- pool.VertexAttributes
-            ro.InstanceAttributes <- pool.InstanceAttributes
-            ro.DrawCalls <- DrawCalls.Indirect calls
-            ro.Activate <- fun () -> pool
-
-            ASet.single (ro :> IRenderObject)
+            // Delegate to the shared body on GeometrySetNode so the Ag path and the
+            // ISimpleSg/TraversalState path stay in lock-step.
+            Sg.GeometrySetNode.BuildROs(
+                node,
+                scope.Runtime,
+                (fun () -> RenderObject.ofScope scope)
+            )
