@@ -185,6 +185,13 @@ type AtlasPool(runtime : IRuntime, pageSize : int, maxPages : int) =
                 e.LruNode <- lru.AddLast tex
         | _ -> failwithf "AtlasPool.Release: texture %A not in pool" tex
 
+    /// Non-mutating lookup: if `tex` is currently held in the pool, return its
+    /// acquisition + page index. Doesn't bump refcount or touch LRU.
+    member x.TryGet(tex : ITexture) : (HeapAtlas.Acquisition * int) voption =
+        match entries.TryGetValue tex with
+        | true, e -> ValueSome (e.Acquisition, e.Acquisition.PageId)
+        | _ -> ValueNone
+
     /// Current GPU page textures. Changes (transactionally) when a new page is added.
     member x.Pages : aval<IBackendTexture[]> = pagesCval :> aval<_>
 
