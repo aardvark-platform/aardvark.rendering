@@ -1750,13 +1750,21 @@ module Heap =
             o
 
         // header-less rewrite: uniform -> HeapData[ slot*stride + fieldOffset ],
-        // slot routed by gl_DrawID (= the sub-draw's position = the slot), so this
-        // works on GL too (firstInstance stays 0).
+        // slot routed by either:
+        //   * gl_DrawID (= sub-draw position = slot) — GL 4.6+ and real Vulkan;
+        //     each DrawCallInfo keeps FirstInstance=0.
+        //   * gl_InstanceIndex + per-draw FirstInstance=slot — MoltenVK fallback
+        //     (MSL has no DrawIndex). Each sub-draw still has InstanceCount=1, so
+        //     Metal's [[base_instance]] simply offsets the vertex fetch and the
+        //     shader reads slot from gl_InstanceIndex.
+        let useDrawId = runtime.SupportsMultiDrawIndirectDrawId
         let effect' =
-            let did : Expr<int> = <@ getDrawId() @>
+            let slotE : Expr<int> =
+                if useDrawId then <@ getDrawId() @>
+                else Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
             effect |> Effect.substituteUniforms (fun name typ _ _ ->
                 match fieldOffset.TryGetValue name with
-                | true, fo -> Some (gatherFor typ <@ %did * %(cint dataStride) + %(cint fo) @>)
+                | true, fo -> Some (gatherFor typ <@ %slotE * %(cint dataStride) + %(cint fo) @>)
                 | _ -> None)
 
         let initialSlots = 64
@@ -1807,7 +1815,10 @@ module Heap =
                         let (sz, pk) = packerOf.[n]
                         arena.Add(uniforms.[n], slot * dataStride + fieldOffset.[n], sz, pk))
                 slotWriters.[slot] <- ws
-                entries.[slot] <- DrawCallInfo(FaceVertexCount = index.Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 1)
+                // FirstInstance: 0 on the gl_DrawID path; = slot on the MoltenVK
+                // gl_InstanceIndex fallback (so [[base_instance]] offsets the slot).
+                let firstInstance = if useDrawId then 0 else slot
+                entries.[slot] <- DrawCallInfo(FaceVertexCount = index.Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = firstInstance, InstanceCount = 1)
                 arena.Touch()
                 version.Value <- version.Value + 1
                 slot)
