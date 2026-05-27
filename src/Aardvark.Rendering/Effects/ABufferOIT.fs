@@ -9,18 +9,22 @@ open FSharp.Data.Adaptive
 /// depth-sorted per-pixel array using a fragment-shader-interlock critical
 /// section; a fullscreen resolve composites them front-to-back exactly.
 ///
-/// This is the accurate (and heavier) alternative to WeightedBlendedOIT.
-/// Selection between the two happens at TransparencyRenderTask compile time.
-///
-/// Storage (all per-pixel, K slots):
+/// Storage layout (TWO images total — keep the descriptor-set binding count
+/// minimal so we don't clash with the heap path's SSBOs / sampler arrays on
+/// the same descriptor set; the binding allocator allocates per resource-type
+/// in GL terms which collapses to one Vulkan namespace and silently collides
+/// when storage images, samplers and SSBOs all sit on the same set):
 ///   ABufferCount : R32UI         — number of stored fragments (clamped to K)
-///   ABufferDepth : R32UI × K     — gl_FragCoord.z bit-cast to uint (positive
-///                                  floats keep monotonic uint ordering)
-///   ABufferColor : R32UI × K     — premultiplied RGBA packed via packUnorm4x8
-///   ABufferMask  : R32UI × K     — per-fragment coverage mask
-///                                  (gl_SampleMaskIn[0]) so MSAA-edge double
-///                                  inserts (one per adjacent triangle) get
-///                                  resolved per-sample without overcounting
+///   ABufferSlot  : RGBA32UI × K  — all per-slot data packed into one image:
+///                                    X = gl_FragCoord.z bit-cast to uint
+///                                    Y = packUnorm4x8(premultiplied RGBA)
+///                                    Z = gl_SampleMaskIn[0] coverage mask
+///                                    W = unused
+///                                  Packing the mask alongside depth/color
+///                                  lets the resolve pass run per-sample and
+///                                  pick exactly the fragments that covered
+///                                  this sample — the fix for the MSAA
+///                                  triangle-edge double-insert seam.
 ///
 /// Concurrency: same-pixel fragments serialize through
 /// begin/endInvocationInterlockARB. The required execution-mode layout
@@ -36,9 +40,7 @@ module ABufferOIT =
 
     module Semantic =
         let ABufferCount = Symbol.Create "ABufferCount"
-        let ABufferDepth = Symbol.Create "ABufferDepth"
-        let ABufferColor = Symbol.Create "ABufferColor"
-        let ABufferMask  = Symbol.Create "ABufferMask"
+        let ABufferSlot  = Symbol.Create "ABufferSlot"
 
     [<AutoOpen>]
     module private Intrinsics =
@@ -63,10 +65,8 @@ module ABufferOIT =
     // graphics image-binding path; array images would need layered binding.
     // Slot s of pixel (x, y) lives at (x * Capacity + s, y).
     type UniformScope with
-        member x.ABufferCount : UIntImage2d<Formats.r32ui> = x?ABufferCount
-        member x.ABufferDepth : UIntImage2d<Formats.r32ui> = x?ABufferDepth
-        member x.ABufferColor : UIntImage2d<Formats.r32ui> = x?ABufferColor
-        member x.ABufferMask  : UIntImage2d<Formats.r32ui> = x?ABufferMask
+        member x.ABufferCount : UIntImage2d<Formats.r32ui>    = x?ABufferCount
+        member x.ABufferSlot  : UIntImage2d<Formats.rgba32ui> = x?ABufferSlot
 
     [<AutoOpen>]
     module private Packing =
@@ -106,29 +106,26 @@ module ABufferOIT =
             let dz = packDepth f.coord.Z
             let cc = packColor pc
             let mm = uint32 f.mask.[0]
+            let slot = V4ui(dz, cc, mm, 0u)
 
             beginInterlock()
 
             let count = int (uniform.ABufferCount.[px].X)
 
             if count < Capacity then
-                uniform.ABufferDepth.[V2i(px.X * Capacity + count, px.Y)] <- V4ui(dz, 0u, 0u, 0u)
-                uniform.ABufferColor.[V2i(px.X * Capacity + count, px.Y)] <- V4ui(cc, 0u, 0u, 0u)
-                uniform.ABufferMask. [V2i(px.X * Capacity + count, px.Y)] <- V4ui(mm, 0u, 0u, 0u)
+                uniform.ABufferSlot.[V2i(px.X * Capacity + count, px.Y)] <- slot
                 uniform.ABufferCount.[px] <- V4ui(uint32 (count + 1), 0u, 0u, 0u)
             else
                 // full: replace the farthest slot if this fragment is nearer
                 let mutable maxSlot = 0
                 let mutable maxDepth = 0u
                 for i in 0 .. Capacity - 1 do
-                    let d = uniform.ABufferDepth.[V2i(px.X * Capacity + i, px.Y)].X
+                    let d = uniform.ABufferSlot.[V2i(px.X * Capacity + i, px.Y)].X
                     if d > maxDepth then
                         maxDepth <- d
                         maxSlot <- i
                 if dz < maxDepth then
-                    uniform.ABufferDepth.[V2i(px.X * Capacity + maxSlot, px.Y)] <- V4ui(dz, 0u, 0u, 0u)
-                    uniform.ABufferColor.[V2i(px.X * Capacity + maxSlot, px.Y)] <- V4ui(cc, 0u, 0u, 0u)
-                    uniform.ABufferMask. [V2i(px.X * Capacity + maxSlot, px.Y)] <- V4ui(mm, 0u, 0u, 0u)
+                    uniform.ABufferSlot.[V2i(px.X * Capacity + maxSlot, px.Y)] <- slot
 
             endInterlock()
 
@@ -138,11 +135,11 @@ module ABufferOIT =
     type ResolveFragment = {
         [<Color>]     color  : V4f
         [<FragCoord>] coord  : V4f
-        /// `gl_SampleID`. Declaring this forces sample-rate fragment-shader
-        /// invocation, so the resolve composites once per sample, not once
-        /// per pixel. Per invocation we only include the fragments whose
-        /// stored coverage mask covers this sample — which is the whole
-        /// point of `ABufferMask`.
+        /// `gl_SampleID`. Declaring this AND reading it forces sample-rate
+        /// fragment-shader invocation: FShade emits gl_SampleID, the Vulkan
+        /// pipeline gets sampleShadingEnable=true. Per invocation we only
+        /// include the fragments whose stored coverage mask covers this
+        /// sample — which is the whole point of the per-fragment mask.
         [<SampleId>]  sample : int
     }
 
@@ -155,17 +152,17 @@ module ABufferOIT =
         fragment {
             let px = V2i f.coord.XY
             let count = min Capacity (int (uniform.ABufferCount.[px].X))
-            let sampleBit = 1 <<< f.sample
+            let sampleBit = 1u <<< f.sample
 
             // gather only the slots whose coverage includes this sample
             let depths = Arr<N<8>, uint32>()
             let colors = Arr<N<8>, uint32>()
             let mutable n = 0
             for i in 0 .. count - 1 do
-                let m = int (uniform.ABufferMask.[V2i(px.X * Capacity + i, px.Y)].X)
-                if (m &&& sampleBit) <> 0 then
-                    depths.[n] <- uniform.ABufferDepth.[V2i(px.X * Capacity + i, px.Y)].X
-                    colors.[n] <- uniform.ABufferColor.[V2i(px.X * Capacity + i, px.Y)].X
+                let s = uniform.ABufferSlot.[V2i(px.X * Capacity + i, px.Y)]
+                if (s.Z &&& sampleBit) <> 0u then
+                    depths.[n] <- s.X
+                    colors.[n] <- s.Y
                     n <- n + 1
 
             // insertion sort by depth (ascending = front to back)

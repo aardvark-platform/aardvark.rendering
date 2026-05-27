@@ -128,6 +128,7 @@ module Showcase =
         Aardvark.Init()
         // VALIDATE=1 turns on the Vulkan validation layer + synchronization validation
         // (desktop only) to surface any sync hazards / VUID errors in our usage.
+        // SHADERLOG=1 prints every compiled GLSL/SPIR-V shader (PrintShaderCode=true).
         use app =
             if System.Environment.GetEnvironmentVariable "VALIDATE" = "1" then
                 let vcfg =
@@ -136,6 +137,9 @@ module Showcase =
                             Some { Aardvark.Rendering.Vulkan.ValidationLayerConfig.Standard with
                                      SynchronizationValidation = true
                                      BestPracticesValidation   = true } }   // best-practices = control: if these fire, the config path (incl. sync-val) is live
+                new Aardvark.Application.Slim.VulkanApplication(vcfg :> IDebugConfig)
+            elif System.Environment.GetEnvironmentVariable "SHADERLOG" = "1" then
+                let vcfg = { Aardvark.Rendering.Vulkan.DebugConfig.Minimal with PrintShaderCode = true }
                 new Aardvark.Application.Slim.VulkanApplication(vcfg :> IDebugConfig)
             else
                 new Aardvark.Application.Slim.VulkanApplication(false)
