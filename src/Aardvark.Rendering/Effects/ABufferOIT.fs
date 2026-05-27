@@ -17,6 +17,10 @@ open FSharp.Data.Adaptive
 ///   ABufferDepth : R32UI × K     — gl_FragCoord.z bit-cast to uint (positive
 ///                                  floats keep monotonic uint ordering)
 ///   ABufferColor : R32UI × K     — premultiplied RGBA packed via packUnorm4x8
+///   ABufferMask  : R32UI × K     — per-fragment coverage mask
+///                                  (gl_SampleMaskIn[0]) so MSAA-edge double
+///                                  inserts (one per adjacent triangle) get
+///                                  resolved per-sample without overcounting
 ///
 /// Concurrency: same-pixel fragments serialize through
 /// begin/endInvocationInterlockARB. The required execution-mode layout
@@ -34,6 +38,7 @@ module ABufferOIT =
         let ABufferCount = Symbol.Create "ABufferCount"
         let ABufferDepth = Symbol.Create "ABufferDepth"
         let ABufferColor = Symbol.Create "ABufferColor"
+        let ABufferMask  = Symbol.Create "ABufferMask"
 
     [<AutoOpen>]
     module private Intrinsics =
@@ -61,6 +66,7 @@ module ABufferOIT =
         member x.ABufferCount : UIntImage2d<Formats.r32ui> = x?ABufferCount
         member x.ABufferDepth : UIntImage2d<Formats.r32ui> = x?ABufferDepth
         member x.ABufferColor : UIntImage2d<Formats.r32ui> = x?ABufferColor
+        member x.ABufferMask  : UIntImage2d<Formats.r32ui> = x?ABufferMask
 
     [<AutoOpen>]
     module private Packing =
@@ -75,16 +81,22 @@ module ABufferOIT =
         [<ReflectedDefinition; Inline>]
         let unpackColor (u : uint32) = unpackUnorm4x8 u
 
-    type Fragment = {
-        [<Color>]     color : V4f
-        [<FragCoord>] coord : V4f
+    type InsertFragment = {
+        [<Color>]      color : V4f
+        [<FragCoord>]  coord : V4f
+        /// `gl_SampleMaskIn[0]`. In MSAA, two triangles that touch at an edge
+        /// each invoke the fragment shader once per pixel with a partial mask
+        /// (e.g. samples 0..3 and 4..7). Storing the mask lets the resolve
+        /// pick the right fragment per sample instead of compositing both as
+        /// if each fully covered the pixel.
+        [<SampleMask>] mask  : Arr<N<1>, int>
     }
 
     /// Insert writer composed onto every transparent object's surface. Takes
     /// the upstream Colors output, premultiplies, and stores it into the
     /// per-pixel k-buffer inside an interlock critical section. Color writes
     /// are masked off by the render state; this stage only touches storage.
-    let insert (f : Fragment) =
+    let insert (f : InsertFragment) =
         fragment {
             let px = V2i f.coord.XY
 
@@ -93,6 +105,7 @@ module ABufferOIT =
             let pc = V4f(f.color.XYZ * a, a)
             let dz = packDepth f.coord.Z
             let cc = packColor pc
+            let mm = uint32 f.mask.[0]
 
             beginInterlock()
 
@@ -101,6 +114,7 @@ module ABufferOIT =
             if count < Capacity then
                 uniform.ABufferDepth.[V2i(px.X * Capacity + count, px.Y)] <- V4ui(dz, 0u, 0u, 0u)
                 uniform.ABufferColor.[V2i(px.X * Capacity + count, px.Y)] <- V4ui(cc, 0u, 0u, 0u)
+                uniform.ABufferMask. [V2i(px.X * Capacity + count, px.Y)] <- V4ui(mm, 0u, 0u, 0u)
                 uniform.ABufferCount.[px] <- V4ui(uint32 (count + 1), 0u, 0u, 0u)
             else
                 // full: replace the farthest slot if this fragment is nearer
@@ -114,29 +128,48 @@ module ABufferOIT =
                 if dz < maxDepth then
                     uniform.ABufferDepth.[V2i(px.X * Capacity + maxSlot, px.Y)] <- V4ui(dz, 0u, 0u, 0u)
                     uniform.ABufferColor.[V2i(px.X * Capacity + maxSlot, px.Y)] <- V4ui(cc, 0u, 0u, 0u)
+                    uniform.ABufferMask. [V2i(px.X * Capacity + maxSlot, px.Y)] <- V4ui(mm, 0u, 0u, 0u)
 
             endInterlock()
 
             return f.color
         }
 
-    /// Fullscreen resolve. Reads the per-pixel k-buffer, sorts by depth, and
-    /// composites the fragments front-to-back with premultiplied "over" into
-    /// an output that the wrapper then alpha-blends over the opaque scene.
-    let resolve (f : Fragment) =
+    type ResolveFragment = {
+        [<Color>]     color  : V4f
+        [<FragCoord>] coord  : V4f
+        /// `gl_SampleID`. Declaring this forces sample-rate fragment-shader
+        /// invocation, so the resolve composites once per sample, not once
+        /// per pixel. Per invocation we only include the fragments whose
+        /// stored coverage mask covers this sample — which is the whole
+        /// point of `ABufferMask`.
+        [<SampleId>]  sample : int
+    }
+
+    /// Fullscreen resolve. Per sample: walk the per-pixel k-buffer, take only
+    /// fragments whose mask covers this sample, sort by depth, composite
+    /// front-to-back with premultiplied "over". Output is per-sample; the
+    /// blend pipeline composites it sample-by-sample over the opaque scene
+    /// (which itself was written per-sample), so MSAA edges look right.
+    let resolve (f : ResolveFragment) =
         fragment {
             let px = V2i f.coord.XY
             let count = min Capacity (int (uniform.ABufferCount.[px].X))
+            let sampleBit = 1 <<< f.sample
 
-            // load into local arrays
+            // gather only the slots whose coverage includes this sample
             let depths = Arr<N<8>, uint32>()
             let colors = Arr<N<8>, uint32>()
+            let mutable n = 0
             for i in 0 .. count - 1 do
-                depths.[i] <- uniform.ABufferDepth.[V2i(px.X * Capacity + i, px.Y)].X
-                colors.[i] <- uniform.ABufferColor.[V2i(px.X * Capacity + i, px.Y)].X
+                let m = int (uniform.ABufferMask.[V2i(px.X * Capacity + i, px.Y)].X)
+                if (m &&& sampleBit) <> 0 then
+                    depths.[n] <- uniform.ABufferDepth.[V2i(px.X * Capacity + i, px.Y)].X
+                    colors.[n] <- uniform.ABufferColor.[V2i(px.X * Capacity + i, px.Y)].X
+                    n <- n + 1
 
             // insertion sort by depth (ascending = front to back)
-            for i in 1 .. count - 1 do
+            for i in 1 .. n - 1 do
                 let dk = depths.[i]
                 let ck = colors.[i]
                 let mutable j = i - 1
@@ -149,7 +182,7 @@ module ABufferOIT =
 
             // premultiplied front-to-back "over"
             let mutable accum = V4f.Zero    // premultiplied rgb, alpha = coverage
-            for i in 0 .. count - 1 do
+            for i in 0 .. n - 1 do
                 let src = unpackColor colors.[i]
                 let t = 1.0f - accum.W
                 accum <- accum + t * src
