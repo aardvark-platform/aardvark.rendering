@@ -139,10 +139,22 @@ module private FShadeAdapter =
         let writesDepth =
             MapExt.containsKey "gl_Depth" iface.shaderBuiltInOutputs
 
+        // SPIR-V/Vulkan per-sample triggers in the FRAGMENT shader's builtin
+        // inputs. (The previous list had typos: `gl_SampleLocation` and
+        // `gl_SampleIndex` aren't real GLSL builtin names — they're
+        // `gl_SamplePosition` and `gl_SampleMaskIn`. `gl_SampleMaskIn` itself
+        // is intentionally NOT a trigger: it's available at pixel-rate too
+        // and gives the primitive's full coverage mask, useful for OIT
+        // INSERT without wanting per-sample invocation — forcing per-sample
+        // there would blow up an A-buffer's slot capacity.)
+        // The `sample`-interpolation qualifier on a varying input is ANOTHER
+        // per-sample trigger (used e.g. by Aardvark.Rendering.Text), but
+        // it's encoded on regular inputs rather than the builtin-input map,
+        // and SPIR-V marks the shader as SampleRateShading-capable regardless
+        // — drivers honour it without us needing to flip sampleShadingEnable.
         let sampleShading =
-            MapExt.containsKey "gl_SampleLocation" iface.shaderBuiltInInputs ||
-            MapExt.containsKey "gl_SampleID" iface.shaderBuiltInInputs ||
-            MapExt.containsKey "gl_SampleIndex" iface.shaderBuiltInInputs
+            MapExt.containsKey "gl_SampleID"       iface.shaderBuiltInInputs ||
+            MapExt.containsKey "gl_SamplePosition" iface.shaderBuiltInInputs
 
         {
             flags = (if writesDepth then FragmentFlags.DepthReplacing else FragmentFlags.DepthUnchanged)
