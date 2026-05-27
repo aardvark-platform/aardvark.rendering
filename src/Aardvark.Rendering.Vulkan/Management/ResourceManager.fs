@@ -1159,16 +1159,32 @@ module Resources =
 
             true
 
-    // TODO: Sample shading
-    type MultisampleStateResource(owner : IResourceCache, key : list<obj>, samples : int, enable : aval<bool>) =
+    // Sample shading is taken from the linked ShaderProgram's
+    // `SampleShading` flag, which `ShaderProgram.fragmentInfo` derives from
+    // whether the fragment shader references gl_SampleID / gl_SampleMaskIn /
+    // gl_SampleLocation. With the flag plumbed through, MSAA pipelines whose
+    // shader reads any of those builtins get sampleShadingEnable=true +
+    // minSampleShading=1.0 → guaranteed per-sample invocation (see
+    // `MultisampleState.create`).
+    type MultisampleStateResource(owner : IResourceCache, key : list<obj>, samples : int,
+                                  enable : aval<bool>, program : IResourceLocation<ShaderProgram>) =
         inherit AbstractPointerResource<VkPipelineMultisampleStateCreateInfo>(owner, key)
+
+        override x.Create() =
+            base.Create()
+            program.Acquire()
+
+        override x.Destroy() =
+            program.Release()
+            base.Destroy()
 
         override x.Update(handle, user, token, renderToken) =
             //let enable = enable.GetValue token
 
             // TODO: Cannot disable MSAA here...
             //let samples = if enable then samples else 1
-            let state = MultisampleState.create false samples
+            let info = program.Update(user, token, renderToken)
+            let state = MultisampleState.create info.handle.SampleShading samples
 
             let result =
                 VkPipelineMultisampleStateCreateInfo(
@@ -2272,10 +2288,14 @@ type ResourceManager(device : Device) =
                 ColorBlendStateResource(cache, key, writeMasks, blendModes, blendConstant, blendSupported)
         )
 
-    member x.CreateMultisampleState(pass : RenderPass, multisample : aval<bool>) =
+    member x.CreateMultisampleState(pass : RenderPass, multisample : aval<bool>, program : IResourceLocation<ShaderProgram>) =
         multisampleCache.GetOrCreate(
-            [pass.Samples :> obj; multisample :> obj],
-            fun cache key -> MultisampleStateResource(cache, key, pass.Samples, multisample)
+            // `program` (or its identity proxy via key) is part of the cache key
+            // so different shaders with the same RenderPass.Samples but
+            // different sampleShading needs (one reads gl_SampleID, another
+            // doesn't) get distinct multisample-state pipeline blocks.
+            [pass.Samples :> obj; multisample :> obj; program :> obj],
+            fun cache key -> MultisampleStateResource(cache, key, pass.Samples, multisample, program)
         )
 
     member x.CreateViewport(viewport : aval<Box2i>) =

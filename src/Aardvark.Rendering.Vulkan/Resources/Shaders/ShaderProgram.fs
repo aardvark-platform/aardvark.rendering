@@ -136,12 +136,12 @@ module private FShadeAdapter =
         }
 
     let fragmentInfo (iface : GLSLShaderInterface) =
-        let writesDepth = 
+        let writesDepth =
             MapExt.containsKey "gl_Depth" iface.shaderBuiltInOutputs
 
         let sampleShading =
             MapExt.containsKey "gl_SampleLocation" iface.shaderBuiltInInputs ||
-            MapExt.containsKey "gl_SampleID" iface.shaderBuiltInInputs || 
+            MapExt.containsKey "gl_SampleID" iface.shaderBuiltInInputs ||
             MapExt.containsKey "gl_SampleIndex" iface.shaderBuiltInInputs
 
         {

@@ -84,7 +84,7 @@ type ResourceManagerExtensions private() =
             )
 
         let multisampleState =
-            this.CreateMultisampleState(renderPass, state.RasterizerState.Multisample)
+            this.CreateMultisampleState(renderPass, state.RasterizerState.Multisample, program)
 
         let pipeline =
             this.CreatePipeline(
