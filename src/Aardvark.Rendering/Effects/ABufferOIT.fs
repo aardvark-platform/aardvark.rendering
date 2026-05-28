@@ -167,7 +167,16 @@ module ABufferOIT =
             // backend (toggle via AARDVARK_ABUFFER_DEBUG=1).
             let mutable dbg = V4f.Zero
             let mutable isDbg = false
-            if uniform.ABufferDebug <> 0 then
+            if uniform.ABufferDebug = 2 then
+                // Per-sample-firing test: output gl_SampleID/7. If the resolve
+                // runs per-sample, each pixel's samples carry 0..N-1 and the
+                // MSAA resolve averages them to a mid-gray; if it runs
+                // pixel-rate (sampleShadingEnable not honored), only sample 0
+                // runs → uniform BLACK. Black everywhere = per-sample broken.
+                isDbg <- true
+                let v = float32 f.sample / 7.0f
+                dbg <- V4f(v, v, v, 1.0f)
+            elif uniform.ABufferDebug = 1 then
                 isDbg <- true
                 if count > 0 then
                     // popcount of slot-0's coverage mask, normalized by 8 so the
