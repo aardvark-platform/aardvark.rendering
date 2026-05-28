@@ -145,7 +145,6 @@
     <Compile Include="Effects\Effect.fs" />
     <Compile Include="Effects\WeightedBlendedOIT.fs" />
     <Compile Include="Effects\ABufferOIT.fs" />
-    <Compile Include="Effects\FXAA.fs" />
     <Compile Include="RenderTasks\TransparencyRenderTask.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />

@@ -41,8 +41,11 @@ module ABufferOIT =
     let Capacity = 8
 
     module Semantic =
-        let ABufferCount = Symbol.Create "ABufferCount"
-        let ABufferSlot  = Symbol.Create "ABufferSlot"
+        let ABufferCount   = Symbol.Create "ABufferCount"
+        let ABufferSlot    = Symbol.Create "ABufferSlot"
+        /// Single-sample composited transparent colour, read back by the
+        /// MSAA splat pass.
+        let CompositeInput = Symbol.Create "CompositeInput"
 
     [<AutoOpen>]
     module private Intrinsics =
@@ -178,6 +181,49 @@ module ABufferOIT =
     let composeSurface (surface : Surface) : Surface =
         match surface with
         | Surface.Effect e -> Surface.Effect (Effect.compose [e; Effect.ofFunction insert])
+        | Surface.Dynamic _ -> failwith "[A-buffer] dynamic surfaces are not yet supported for transparent objects"
+        | Surface.Backend _ -> failwith "[A-buffer] backend surfaces cannot be marked transparent"
+        | Surface.None -> failwith "[A-buffer] transparent objects need a surface"
+
+    // ===== MSAA splat ==========================================================
+    //
+    // The A-buffer build + resolve run single-sampled, producing a per-pixel
+    // composited transparent colour. To get MSAA-quality edges without
+    // per-sample storage, that single-sample composite is "splatted" back onto
+    // the multisampled framebuffer by RE-RASTERIZING the transparent geometry
+    // (not a fullscreen quad). The rasterizer supplies true per-sample
+    // coverage, so silhouettes anti-alias; every covered sample of a pixel
+    // reads the same composite colour, so there's no per-sample work and no
+    // texture supersampling. Depth-tests against the opaque depth so transparent
+    // geometry behind opaque doesn't overwrite it.
+
+    let private compositeSampler =
+        sampler2d {
+            texture uniform?CompositeInput
+            filter Filter.MinMagPoint
+            addressU WrapMode.Clamp
+            addressV WrapMode.Clamp
+        }
+
+    type SplatFragment = {
+        [<Color>]     color : V4f
+        [<FragCoord>] coord : V4f
+    }
+
+    /// Splat fragment: ignore the upstream surface colour, output the
+    /// single-sample composite at this pixel. Composed AFTER the user surface
+    /// so the geometry transforms to the right screen position, but the colour
+    /// is overwritten with the composite lookup.
+    let splat (f : SplatFragment) =
+        fragment {
+            let px = V2i f.coord.XY
+            return compositeSampler.Read(px, 0)
+        }
+
+    /// Composes the splat fragment onto a surface for the MSAA re-raster pass.
+    let composeSplatSurface (surface : Surface) : Surface =
+        match surface with
+        | Surface.Effect e -> Surface.Effect (Effect.compose [e; Effect.ofFunction splat])
         | Surface.Dynamic _ -> failwith "[A-buffer] dynamic surfaces are not yet supported for transparent objects"
         | Surface.Backend _ -> failwith "[A-buffer] backend surfaces cannot be marked transparent"
         | Surface.None -> failwith "[A-buffer] transparent objects need a surface"
