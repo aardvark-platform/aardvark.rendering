@@ -182,7 +182,7 @@ module TransparencyRenderTask =
     /// the smoothed result to the user framebuffer. The A-buffer pipeline runs
     /// samples=1 throughout; FXAA replaces MSAA as the edge-AA mechanism.
     let private buildFxaaObject (inputTex : aval<ITexture>)
-                                (rcpFrame : aval<V2d>) : RenderObject =
+                                (rcpFrame : aval<V2f>) : RenderObject =
         let buffer = AVal.constant (ArrayBuffer fullscreenPositions :> IBuffer)
         let view   = BufferView(buffer, typeof<V3f>)
         let attrs  = AttributeProvider.ofList [ DefaultSemantic.Positions, view ]
@@ -300,7 +300,7 @@ module TransparencyRenderTask =
 
         // Adaptive holders for the FXAA pass (only used by the ABuffer path).
         let fxaaInputTex : cval<ITexture> = cval (NullTexture.Instance)
-        let fxaaRcpFrame : cval<V2d>      = cval V2d.Zero
+        let fxaaRcpFrame : cval<V2f>      = cval V2f.Zero
 
         // A-buffer build/resolve object sets (transparent objects with the
         // interlocked insert composed; a fullscreen resolve quad).
@@ -588,7 +588,7 @@ module TransparencyRenderTask =
                     bundle.ColorTex
                     |> Map.tryFind DefaultSemantic.Colors
                     |> Option.iter (fun t -> fxaaInputTex.Value <- t :> ITexture)
-                    fxaaRcpFrame.Value <- V2d(1.0 / float size.X, 1.0 / float size.Y))
+                    fxaaRcpFrame.Value <- V2f(1.0f / float32 size.X, 1.0f / float32 size.Y))
 
             currentBundle <- ValueSome bundle
 

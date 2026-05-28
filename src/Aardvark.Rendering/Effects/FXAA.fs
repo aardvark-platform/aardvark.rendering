@@ -26,7 +26,8 @@ module FXAA =
 
     type UniformScope with
         /// 1 / framebuffer size; reciprocal so the shader uses MULs.
-        member x.FxaaRcpFrame   : V2d       = x?FxaaRcpFrame
+        /// V2f (not V2d) — MoltenVK rejects double types in uniform buffers.
+        member x.FxaaRcpFrame   : V2f       = x?FxaaRcpFrame
 
     /// FxaaInput sampler — bilinear, clamp-to-edge so the search march
     /// past the image bounds doesn't wrap.
@@ -62,9 +63,7 @@ module FXAA =
     /// FXAA fragment shader. Pixel-rate; output is the post-processed colour.
     let frag (f : Fragment) =
         fragment {
-            // FxaaRcpFrame is uploaded as V2d but used as V2f in the shader.
-            let rcpD = uniform.FxaaRcpFrame
-            let rcp  = V2f(float32 rcpD.X, float32 rcpD.Y)
+            let rcp  = uniform.FxaaRcpFrame
             // Derive UV from FragCoord so we don't need vertex-shader UV plumbing.
             let uv   = V2f(f.coord.X * rcp.X, f.coord.Y * rcp.Y)
 
