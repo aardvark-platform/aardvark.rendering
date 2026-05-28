@@ -29,15 +29,6 @@ module TransparencyRenderTask =
 
     let technique = Technique.ABuffer
 
-    /// Effective sample count for the intermediate / OIT / composite framebuffers
-    /// and storage. ABuffer forces samples=1 (the MSAA splat re-rasterizes the
-    /// transparent geometry to recover edge AA); WeightedBlended keeps the
-    /// user's sample count.
-    let private effectiveSamples (userSamples : int) =
-        match technique with
-        | WeightedBlended -> userSamples
-        | ABuffer         -> 1
-
     /// True if the given render object should be routed through the OIT pass.
     let isTransparent (o : IRenderObject) =
         match o with
@@ -150,6 +141,13 @@ module TransparencyRenderTask =
             SourceAlphaFactor      = BlendFactor.One
             DestinationAlphaFactor = BlendFactor.InvSourceAlpha }
 
+    /// Diagnostic toggle for the resolve pass — set AARDVARK_ABUFFER_DEBUG=1 to
+    /// visualize the stored gl_SampleMaskIn coverage instead of compositing.
+    let private aBufferDebug =
+        match System.Environment.GetEnvironmentVariable "AARDVARK_ABUFFER_DEBUG" with
+        | null | "" | "0" -> 0
+        | _ -> 1
+
     /// Builds a uniform provider exposing the two A-buffer storage images.
     /// All per-slot data (depth, color, mask) lives in one RGBA32UI image —
     /// see ABufferOIT.fs for the binding-count rationale.
@@ -157,6 +155,7 @@ module TransparencyRenderTask =
         UniformProvider.ofList [
             ABufferOIT.Semantic.ABufferCount, count :> IAdaptiveValue
             ABufferOIT.Semantic.ABufferSlot,  slot  :> IAdaptiveValue
+            Symbol.Create "ABufferDebug",     AVal.constant aBufferDebug :> IAdaptiveValue
         ]
 
     /// Clones a transparent RenderObject for the A-buffer build pass: composes
@@ -176,36 +175,6 @@ module TransparencyRenderTask =
                                   ColorWriteMask      = AVal.constant ColorMask.None
                                   AttachmentWriteMask = AVal.constant Map.empty }
         copy.Uniforms      <- UniformProvider.union (aBufferImageUniforms count slot) ro.Uniforms
-        copy :> IRenderObject
-
-    /// Uniform provider exposing the single-sample composite texture to the
-    /// MSAA splat shader.
-    let private compositeInputUniform (composite : aval<ITexture>) =
-        UniformProvider.ofList [
-            ABufferOIT.Semantic.CompositeInput, composite :> IAdaptiveValue
-        ]
-
-    /// Clones a transparent RenderObject for the MSAA splat pass: re-rasterizes
-    /// the same geometry into the multisampled user framebuffer, with the splat
-    /// shader composed on (samples the single-sample composite at each pixel and
-    /// overwrites the colour). Depth-tests against the opaque depth (no write)
-    /// so transparent geometry behind opaque doesn't clobber it; blend disabled
-    /// (overwrite). Every covered MSAA sample reads the same composite colour,
-    /// so the rasterizer's coverage is the only thing that varies per sample —
-    /// which is exactly what produces the anti-aliased silhouette.
-    let private transformTransparentSplat
-                    (composite : aval<ITexture>)
-                    (ro : RenderObject) : IRenderObject =
-        let copy = RenderObject(ro)
-        copy.IsTransparent <- false
-        copy.Surface       <- ABufferOIT.composeSplatSurface ro.Surface
-        copy.DepthState    <- { ro.DepthState with WriteMask = AVal.constant false }
-        copy.BlendState    <- { ro.BlendState with
-                                  Mode                = AVal.constant BlendMode.None
-                                  AttachmentMode      = AVal.constant Map.empty
-                                  ColorWriteMask      = AVal.constant ColorMask.All
-                                  AttachmentWriteMask = AVal.constant Map.empty }
-        copy.Uniforms      <- UniformProvider.union (compositeInputUniform composite) ro.Uniforms
         copy :> IRenderObject
 
     /// Fullscreen quad that resolves the A-buffer and composites it over the
@@ -300,10 +269,6 @@ module TransparencyRenderTask =
         let abCountTex : cval<ITexture> = cval (NullTexture.Instance)
         let abSlotTex  : cval<ITexture> = cval (NullTexture.Instance)
 
-        // Adaptive holder for the MSAA splat pass: the single-sample composite
-        // texture the splat shader reads back (only used by the ABuffer path).
-        let compositeInputTex : cval<ITexture> = cval (NullTexture.Instance)
-
         // A-buffer build/resolve object sets (transparent objects with the
         // interlocked insert composed; a fullscreen resolve quad).
         let aBufferBuildSet =
@@ -312,17 +277,6 @@ module TransparencyRenderTask =
                     match o with
                     | :? RenderObject as r ->
                         Some (transformTransparentABuffer abCountTex abSlotTex r)
-                    | _ -> None
-                else None)
-
-        // MSAA splat set: the same transparent geometry re-rasterized into the
-        // multisampled user framebuffer, sampling the single-sample composite.
-        let aBufferSplatSet =
-            objects |> ASet.choose (fun o ->
-                if isTransparent o then
-                    match o with
-                    | :? RenderObject as r ->
-                        Some (transformTransparentSplat compositeInputTex r)
                     | _ -> None
                 else None)
 
@@ -351,7 +305,6 @@ module TransparencyRenderTask =
         let mutable transparentPickTask : IRenderTask voption = ValueNone
         let mutable aBufferBuildTask    : IRenderTask voption = ValueNone
         let mutable aBufferResolveTask  : IRenderTask voption = ValueNone
-        let mutable splatTask            : IRenderTask voption = ValueNone
 
         // Bounded LRU cache of FBO bundles, one per (size, samples) the
         // wrapper has seen. Render tasks typically see only a handful of
@@ -391,7 +344,6 @@ module TransparencyRenderTask =
             transparentPickTask |> ValueOption.iter (fun t -> t.Dispose())
             aBufferBuildTask    |> ValueOption.iter (fun t -> t.Dispose())
             aBufferResolveTask  |> ValueOption.iter (fun t -> t.Dispose())
-            splatTask            |> ValueOption.iter (fun t -> t.Dispose())
             intermediateSig     |> ValueOption.iter (fun s -> s.Dispose())
             oitSig              |> ValueOption.iter (fun s -> s.Dispose())
             compositeSig        |> ValueOption.iter (fun s -> s.Dispose())
@@ -401,7 +353,6 @@ module TransparencyRenderTask =
             transparentPickTask <- ValueNone
             aBufferBuildTask    <- ValueNone
             aBufferResolveTask  <- ValueNone
-            splatTask            <- ValueNone
             intermediateSig     <- ValueNone
             oitSig              <- ValueNone
             compositeSig        <- ValueNone
@@ -417,17 +368,12 @@ module TransparencyRenderTask =
                 releaseFbos ()
                 releaseTasksAndSignatures ()
 
-                // Inner sample count for intermediate / OIT / composite. The
-                // A-buffer technique runs single-sampled (the MSAA splat recovers
-                // edge AA); weighted-blended keeps the user's sample count.
-                let innerSamples = effectiveSamples samples
-
                 let interSig =
                     let entries = seq {
                         yield! userColorAtts
                         yield DefaultSemantic.DepthStencil, depthFormat
                     }
-                    runtime.CreateFramebufferSignature(entries, samples = innerSamples)
+                    runtime.CreateFramebufferSignature(entries, samples = samples)
 
                 // OIT signature: Accum + Revealage + DepthStencil only. The
                 // composed transparent shader's outputs are pared down by
@@ -439,7 +385,7 @@ module TransparencyRenderTask =
                         [ WeightedBlendedOIT.Semantic.Accum,     TextureFormat.Rgba16f
                           WeightedBlendedOIT.Semantic.Revealage, TextureFormat.R32f
                           DefaultSemantic.DepthStencil,          depthFormat ],
-                        samples = innerSamples)
+                        samples = samples)
 
                 // Composite signature: only Colors + DepthStencil. FShade's
                 // effect linker compiles outputs for every color attachment in
@@ -455,9 +401,9 @@ module TransparencyRenderTask =
                                                        |> Option.map snd
                                                        |> Option.defaultValue TextureFormat.Rgba8
                           DefaultSemantic.DepthStencil, depthFormat ],
-                        samples = innerSamples)
+                        samples = samples)
 
-                let compositeObject = buildCompositeObject innerSamples accumTex revealageTex
+                let compositeObject = buildCompositeObject samples accumTex revealageTex
                 let compositeSet    = ASet.single (compositeObject :> IRenderObject)
 
                 intermediateSig     <- ValueSome interSig
@@ -479,28 +425,20 @@ module TransparencyRenderTask =
                     aBufferBuildTask   <- ValueSome (compileRaw (cS, aBufferBuildSet))
                     aBufferResolveTask <- ValueSome (compileRaw (cS, resolveSet))
 
-                    // MSAA splat pass — re-rasterizes the transparent geometry
-                    // into the (multisampled) user framebuffer, compiled against
-                    // the user signature so its writes go directly to outFb.
-                    splatTask <- ValueSome (compileRaw (userSig, aBufferSplatSet))
-
                 currentSamples      <- samples
 
         let buildBundle (size : V2i) (samples : int) =
-            // Internal textures all use the effective sample count (1 for
-            // ABuffer, user samples for WeightedBlended).
-            let innerSamples = effectiveSamples samples
-            let dt = runtime.CreateTexture2D(size, depthFormat, samples = innerSamples)
+            let dt = runtime.CreateTexture2D(size, depthFormat, samples = samples)
 
             let ct =
                 userSig.ColorAttachments
                 |> Map.toList
                 |> List.map (fun (_, att) ->
-                    att.Name, runtime.CreateTexture2D(size, att.Format, samples = innerSamples))
+                    att.Name, runtime.CreateTexture2D(size, att.Format, samples = samples))
                 |> Map.ofList
 
-            let at = runtime.CreateTexture2D(size, TextureFormat.Rgba16f, samples = innerSamples)
-            let rt = runtime.CreateTexture2D(size, TextureFormat.R32f,    samples = innerSamples)
+            let at = runtime.CreateTexture2D(size, TextureFormat.Rgba16f, samples = samples)
+            let rt = runtime.CreateTexture2D(size, TextureFormat.R32f,    samples = samples)
 
             let interAtts =
                 ct
@@ -595,12 +533,7 @@ module TransparencyRenderTask =
                     accumTex.Value     <- bundle.AccumT :> ITexture
                     revealageTex.Value <- bundle.RevealageT :> ITexture
                     bundle.AbCount |> ValueOption.iter (fun t -> abCountTex.Value <- t :> ITexture)
-                    bundle.AbSlot  |> ValueOption.iter (fun t -> abSlotTex. Value <- t :> ITexture)
-                    // The splat shader samples the single-sample composite —
-                    // the intermediate's Colors attachment after A-buffer resolve.
-                    bundle.ColorTex
-                    |> Map.tryFind DefaultSemantic.Colors
-                    |> Option.iter (fun t -> compositeInputTex.Value <- t :> ITexture))
+                    bundle.AbSlot  |> ValueOption.iter (fun t -> abSlotTex. Value <- t :> ITexture))
 
             currentBundle <- ValueSome bundle
 
@@ -616,7 +549,6 @@ module TransparencyRenderTask =
             transparentPickTask |> ValueOption.iter (fun t -> t.Update(token, rt))
             aBufferBuildTask    |> ValueOption.iter (fun t -> t.Update(token, rt))
             aBufferResolveTask  |> ValueOption.iter (fun t -> t.Update(token, rt))
-            splatTask            |> ValueOption.iter (fun t -> t.Update(token, rt))
 
         override x.Perform(token, rt, output) =
             let outFb = output.Framebuffer
@@ -652,61 +584,53 @@ module TransparencyRenderTask =
             let bundle = currentBundle.Value
             let inter = bundle.IntermediateFb
 
-            match technique with
-            | WeightedBlended ->
-                // Seed the (MS) intermediate from the user FB and run opaque.
-                runtime.Copy(outFb, inter)
-                opaqueTask.Value.Run(token, rt, { output with Framebuffer = inter })
+            // Always: seed intermediate from user FB (preserves any pre-clear)
+            // and run the opaque pass into it.
+            runtime.Copy(outFb, inter)
+            opaqueTask.Value.Run(token, rt, { output with Framebuffer = inter })
 
-                let oit = bundle.OitFb
-                let oitClear =
-                    clear {
-                        colors [
-                            WeightedBlendedOIT.Semantic.Accum,     C4f.Zero
-                            WeightedBlendedOIT.Semantic.Revealage, C4f.White
-                        ]
-                    }
-                runtime.Clear(oit, oitClear)
-                transparentTask.Value.Run(token, rt, { output with Framebuffer = oit })
-                compositeTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
+            if hasTransparent then
+                match technique with
+                | WeightedBlended ->
+                    let oit = bundle.OitFb
+
+                    // Pass 2: OIT color compositing.
+                    // Clear only Accum + Revealage on the OIT framebuffer; the
+                    // shared depth from the opaque pass is preserved for depth
+                    // testing.
+                    let oitClear =
+                        clear {
+                            colors [
+                                WeightedBlendedOIT.Semantic.Accum,     C4f.Zero
+                                WeightedBlendedOIT.Semantic.Revealage, C4f.White
+                            ]
+                        }
+                    runtime.Clear(oit, oitClear)
+                    transparentTask.Value.Run(token, rt, { output with Framebuffer = oit })
+                    compositeTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
+
+                | ABuffer ->
+                    // Clear the per-pixel fragment count to 0, build the
+                    // k-buffer (interlocked insert; depth-tests against the
+                    // opaque depth, colour writes masked), then resolve it over
+                    // the opaque scene. The build pass's image writes are made
+                    // visible by the per-draw memory barrier in the GL backend
+                    // / render-pass dependencies in Vulkan.
+                    bundle.AbCount |> ValueOption.iter (fun c ->
+                        runtime.Clear(c, clear { color C4ui.Zero }))
+                    aBufferBuildTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
+                    aBufferResolveTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
+
+                // Pass 3: transparent depth + extras pass.
+                // Renders the *unmodified* user surfaces with depth-write on and
+                // Colors write-masked. The depth test alone selects the closest
+                // transparent fragment per pixel, so extras (PickData, etc.)
+                // and the shared depth end up with the closest-fragment's
+                // values regardless of draw order.
                 transparentPickTask.Value.Run(token, rt, { output with Framebuffer = inter })
-                runtime.Copy(inter, outFb)
 
-            | ABuffer ->
-                // Ensure the direct opaque task exists — it's used here to render
-                // the opaque scene at FULL MSAA straight into outFb.
-                match directOpaqueTask with
-                | ValueNone -> directOpaqueTask <- ValueSome (compileRaw (userSig, opaqueSet))
-                | _ -> ()
-
-                // 1. Single-sample backdrop + depth in the intermediate. Opaque
-                //    is re-rendered here (samples=1) purely as the compositing
-                //    backdrop and depth source for the A-buffer build; this copy
-                //    is never shown (it's covered by transparent geometry).
-                runtime.Clear(inter, clear { color C4f.Black; depth 1.0 })
-                opaqueTask.Value.Run(token, rt, { output with Framebuffer = inter })
-
-                // 2. Build + resolve the single-sample A-buffer. The resolve
-                //    composites the transparent stack over the backdrop into the
-                //    intermediate's Colors attachment (= the composite the splat
-                //    pass reads). Single-sample, so no per-primitive coverage
-                //    seam and no per-sample storage.
-                bundle.AbCount |> ValueOption.iter (fun c ->
-                    runtime.Clear(c, clear { color C4ui.Zero }))
-                aBufferBuildTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
-                aBufferResolveTask.Value.Run(token, rt, { output with Framebuffer = bundle.CompositeFb })
-
-                // 3. Opaque at full MSAA straight into outFb (also writes the
-                //    opaque depth the splat tests against). Opaque-only pixels
-                //    keep their MSAA quality.
-                directOpaqueTask.Value.Run(token, rt, output)
-
-                // 4. Splat: re-rasterize the transparent geometry into outFb
-                //    (MS), each fragment reading the single-sample composite at
-                //    its pixel. The rasterizer's per-sample coverage gives the
-                //    anti-aliased silhouette; depth-test against opaque depth
-                //    drops transparent fragments behind opaque.
-                splatTask.Value.Run(token, rt, output)
+            // Final blit: intermediate → user framebuffer.
+            runtime.Copy(inter, outFb)
 
         override x.Release() =
             releaseDirectTask ()

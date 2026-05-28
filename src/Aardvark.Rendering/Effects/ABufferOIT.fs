@@ -9,24 +9,22 @@ open FSharp.Data.Adaptive
 /// depth-sorted per-pixel array using a fragment-shader-interlock critical
 /// section; a fullscreen resolve composites them front-to-back exactly.
 ///
-/// MSAA strategy: A-buffer storage is single-sampled and the whole transparent
-/// pipeline runs at samples=1; an FXAA post-process at the end smooths edges.
-/// The earlier per-sample/mask approach worked on NVIDIA but exposed seam
-/// artifacts on MoltenVK and would have required per-sample storage (memory
-/// cost ~2 GB at 1920×1080×8 samples). Going single-sampled + FXAA sidesteps
-/// every per-sample-coverage portability concern at the cost of FXAA-quality
-/// edges instead of MSAA-quality edges.
-///
 /// Storage layout (TWO images total — keep the descriptor-set binding count
 /// minimal so we don't clash with the heap path's SSBOs / sampler arrays on
 /// the same descriptor set; the binding allocator allocates per resource-type
 /// in GL terms which collapses to one Vulkan namespace and silently collides
 /// when storage images, samplers and SSBOs all sit on the same set):
 ///   ABufferCount : R32UI         — number of stored fragments (clamped to K)
-///   ABufferSlot  : RGBA32UI × K  — per-slot data:
+///   ABufferSlot  : RGBA32UI × K  — all per-slot data packed into one image:
 ///                                    X = gl_FragCoord.z bit-cast to uint
 ///                                    Y = packUnorm4x8(premultiplied RGBA)
-///                                    Z, W = unused
+///                                    Z = gl_SampleMaskIn[0] coverage mask
+///                                    W = unused
+///                                  Packing the mask alongside depth/color
+///                                  lets the resolve pass run per-sample and
+///                                  pick exactly the fragments that covered
+///                                  this sample — the fix for the MSAA
+///                                  triangle-edge double-insert seam.
 ///
 /// Concurrency: same-pixel fragments serialize through
 /// begin/endInvocationInterlockARB. The required execution-mode layout
@@ -41,11 +39,8 @@ module ABufferOIT =
     let Capacity = 8
 
     module Semantic =
-        let ABufferCount   = Symbol.Create "ABufferCount"
-        let ABufferSlot    = Symbol.Create "ABufferSlot"
-        /// Single-sample composited transparent colour, read back by the
-        /// MSAA splat pass.
-        let CompositeInput = Symbol.Create "CompositeInput"
+        let ABufferCount = Symbol.Create "ABufferCount"
+        let ABufferSlot  = Symbol.Create "ABufferSlot"
 
     [<AutoOpen>]
     module private Intrinsics =
@@ -72,6 +67,13 @@ module ABufferOIT =
     type UniformScope with
         member x.ABufferCount : UIntImage2d<Formats.r32ui>    = x?ABufferCount
         member x.ABufferSlot  : UIntImage2d<Formats.rgba32ui> = x?ABufferSlot
+        /// Diagnostic toggle. 0 = normal composite. 1 = visualize the stored
+        /// gl_SampleMaskIn coverage of slot 0 as a red intensity (full coverage
+        /// 0xFF → bright red; partial-coverage edge pixels → dark red). If this
+        /// shows uniform bright red even on triangle-interior edges, the
+        /// backend's gl_SampleMaskIn isn't producing per-primitive coverage
+        /// (suspected on MoltenVK under fragment_shader_interlock).
+        member x.ABufferDebug : int = x?ABufferDebug
 
     [<AutoOpen>]
     module private Packing =
@@ -87,8 +89,14 @@ module ABufferOIT =
         let unpackColor (u : uint32) = unpackUnorm4x8 u
 
     type InsertFragment = {
-        [<Color>]     color : V4f
-        [<FragCoord>] coord : V4f
+        [<Color>]      color : V4f
+        [<FragCoord>]  coord : V4f
+        /// `gl_SampleMaskIn[0]`. In MSAA, two triangles that touch at an edge
+        /// each invoke the fragment shader once per pixel with a partial mask
+        /// (e.g. samples 0..3 and 4..7). Storing the mask lets the resolve
+        /// pick the right fragment per sample instead of compositing both as
+        /// if each fully covered the pixel.
+        [<SampleMask>] mask  : Arr<N<1>, int>
     }
 
     /// Insert writer composed onto every transparent object's surface. Takes
@@ -104,7 +112,8 @@ module ABufferOIT =
             let pc = V4f(f.color.XYZ * a, a)
             let dz = packDepth f.coord.Z
             let cc = packColor pc
-            let slot = V4ui(dz, cc, 0u, 0u)
+            let mm = uint32 f.mask.[0]
+            let slot = V4ui(dz, cc, mm, 0u)
 
             beginInterlock()
 
@@ -131,27 +140,63 @@ module ABufferOIT =
         }
 
     type ResolveFragment = {
-        [<Color>]     color : V4f
-        [<FragCoord>] coord : V4f
+        [<Color>]     color  : V4f
+        [<FragCoord>] coord  : V4f
+        /// `gl_SampleID`. Declaring this AND reading it forces sample-rate
+        /// fragment-shader invocation: FShade emits gl_SampleID, the Vulkan
+        /// pipeline gets sampleShadingEnable=true. Per invocation we only
+        /// include the fragments whose stored coverage mask covers this
+        /// sample — which is the whole point of the per-fragment mask.
+        [<SampleId>]  sample : int
     }
 
-    /// Fullscreen resolve. Walks the per-pixel k-buffer, sorts by depth,
-    /// composites front-to-back with premultiplied "over". Pixel-rate; the
-    /// entire transparent pipeline runs at samples=1.
+    /// Fullscreen resolve. Per sample: walk the per-pixel k-buffer, take only
+    /// fragments whose mask covers this sample, sort by depth, composite
+    /// front-to-back with premultiplied "over". Output is per-sample; the
+    /// blend pipeline composites it sample-by-sample over the opaque scene
+    /// (which itself was written per-sample), so MSAA edges look right.
     let resolve (f : ResolveFragment) =
         fragment {
             let px = V2i f.coord.XY
             let count = min Capacity (int (uniform.ABufferCount.[px].X))
+            let sampleBit = 1u <<< f.sample
 
+            // DIAGNOSTIC: visualize slot-0's stored coverage mask. Full coverage
+            // (0xFF) → bright red; partial-coverage edge pixels → dark red. Used
+            // to verify gl_SampleMaskIn produces per-primitive coverage per
+            // backend (toggle via AARDVARK_ABUFFER_DEBUG=1).
+            let mutable dbg = V4f.Zero
+            let mutable isDbg = false
+            if uniform.ABufferDebug <> 0 then
+                isDbg <- true
+                if count > 0 then
+                    // popcount of slot-0's coverage mask, normalized by 8 so the
+                    // value is independent of subtle bit-position differences:
+                    // full 8x coverage -> 1.0, full 4x -> 0.5, partial-coverage
+                    // edge pixels -> proportionally less. If MoltenVK's
+                    // gl_SampleMaskIn is broken this is uniform everywhere; if it
+                    // works, triangle-interior edges read darker than interiors.
+                    let mutable m = uniform.ABufferSlot.[V2i(px.X * Capacity, px.Y)].Z &&& 0xFFu
+                    let mutable pc = 0u
+                    for _i in 0 .. 7 do
+                        pc <- pc + (m &&& 1u)
+                        m <- m >>> 1
+                    let v = float32 pc / 8.0f
+                    dbg <- V4f(v, v, v, 1.0f)
+
+            // gather only the slots whose coverage includes this sample
             let depths = Arr<N<8>, uint32>()
             let colors = Arr<N<8>, uint32>()
+            let mutable n = 0
             for i in 0 .. count - 1 do
                 let s = uniform.ABufferSlot.[V2i(px.X * Capacity + i, px.Y)]
-                depths.[i] <- s.X
-                colors.[i] <- s.Y
+                if (s.Z &&& sampleBit) <> 0u then
+                    depths.[n] <- s.X
+                    colors.[n] <- s.Y
+                    n <- n + 1
 
             // insertion sort by depth (ascending = front to back)
-            for i in 1 .. count - 1 do
+            for i in 1 .. n - 1 do
                 let dk = depths.[i]
                 let ck = colors.[i]
                 let mutable j = i - 1
@@ -164,12 +209,12 @@ module ABufferOIT =
 
             // premultiplied front-to-back "over"
             let mutable accum = V4f.Zero    // premultiplied rgb, alpha = coverage
-            for i in 0 .. count - 1 do
+            for i in 0 .. n - 1 do
                 let src = unpackColor colors.[i]
                 let t = 1.0f - accum.W
                 accum <- accum + t * src
 
-            return accum
+            return (if isDbg then dbg else accum)
         }
 
     /// Effect form of the fullscreen resolve.
@@ -181,49 +226,6 @@ module ABufferOIT =
     let composeSurface (surface : Surface) : Surface =
         match surface with
         | Surface.Effect e -> Surface.Effect (Effect.compose [e; Effect.ofFunction insert])
-        | Surface.Dynamic _ -> failwith "[A-buffer] dynamic surfaces are not yet supported for transparent objects"
-        | Surface.Backend _ -> failwith "[A-buffer] backend surfaces cannot be marked transparent"
-        | Surface.None -> failwith "[A-buffer] transparent objects need a surface"
-
-    // ===== MSAA splat ==========================================================
-    //
-    // The A-buffer build + resolve run single-sampled, producing a per-pixel
-    // composited transparent colour. To get MSAA-quality edges without
-    // per-sample storage, that single-sample composite is "splatted" back onto
-    // the multisampled framebuffer by RE-RASTERIZING the transparent geometry
-    // (not a fullscreen quad). The rasterizer supplies true per-sample
-    // coverage, so silhouettes anti-alias; every covered sample of a pixel
-    // reads the same composite colour, so there's no per-sample work and no
-    // texture supersampling. Depth-tests against the opaque depth so transparent
-    // geometry behind opaque doesn't overwrite it.
-
-    let private compositeSampler =
-        sampler2d {
-            texture uniform?CompositeInput
-            filter Filter.MinMagPoint
-            addressU WrapMode.Clamp
-            addressV WrapMode.Clamp
-        }
-
-    type SplatFragment = {
-        [<Color>]     color : V4f
-        [<FragCoord>] coord : V4f
-    }
-
-    /// Splat fragment: ignore the upstream surface colour, output the
-    /// single-sample composite at this pixel. Composed AFTER the user surface
-    /// so the geometry transforms to the right screen position, but the colour
-    /// is overwritten with the composite lookup.
-    let splat (f : SplatFragment) =
-        fragment {
-            let px = V2i f.coord.XY
-            return compositeSampler.Read(px, 0)
-        }
-
-    /// Composes the splat fragment onto a surface for the MSAA re-raster pass.
-    let composeSplatSurface (surface : Surface) : Surface =
-        match surface with
-        | Surface.Effect e -> Surface.Effect (Effect.compose [e; Effect.ofFunction splat])
         | Surface.Dynamic _ -> failwith "[A-buffer] dynamic surfaces are not yet supported for transparent objects"
         | Surface.Backend _ -> failwith "[A-buffer] backend surfaces cannot be marked transparent"
         | Surface.None -> failwith "[A-buffer] transparent objects need a surface"
