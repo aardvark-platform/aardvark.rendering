@@ -9,22 +9,24 @@ open FSharp.Data.Adaptive
 /// depth-sorted per-pixel array using a fragment-shader-interlock critical
 /// section; a fullscreen resolve composites them front-to-back exactly.
 ///
+/// MSAA strategy: A-buffer storage is single-sampled and the whole transparent
+/// pipeline runs at samples=1; an FXAA post-process at the end smooths edges.
+/// The earlier per-sample/mask approach worked on NVIDIA but exposed seam
+/// artifacts on MoltenVK and would have required per-sample storage (memory
+/// cost ~2 GB at 1920×1080×8 samples). Going single-sampled + FXAA sidesteps
+/// every per-sample-coverage portability concern at the cost of FXAA-quality
+/// edges instead of MSAA-quality edges.
+///
 /// Storage layout (TWO images total — keep the descriptor-set binding count
 /// minimal so we don't clash with the heap path's SSBOs / sampler arrays on
 /// the same descriptor set; the binding allocator allocates per resource-type
 /// in GL terms which collapses to one Vulkan namespace and silently collides
 /// when storage images, samplers and SSBOs all sit on the same set):
 ///   ABufferCount : R32UI         — number of stored fragments (clamped to K)
-///   ABufferSlot  : RGBA32UI × K  — all per-slot data packed into one image:
+///   ABufferSlot  : RGBA32UI × K  — per-slot data:
 ///                                    X = gl_FragCoord.z bit-cast to uint
 ///                                    Y = packUnorm4x8(premultiplied RGBA)
-///                                    Z = gl_SampleMaskIn[0] coverage mask
-///                                    W = unused
-///                                  Packing the mask alongside depth/color
-///                                  lets the resolve pass run per-sample and
-///                                  pick exactly the fragments that covered
-///                                  this sample — the fix for the MSAA
-///                                  triangle-edge double-insert seam.
+///                                    Z, W = unused
 ///
 /// Concurrency: same-pixel fragments serialize through
 /// begin/endInvocationInterlockARB. The required execution-mode layout
@@ -82,14 +84,8 @@ module ABufferOIT =
         let unpackColor (u : uint32) = unpackUnorm4x8 u
 
     type InsertFragment = {
-        [<Color>]      color : V4f
-        [<FragCoord>]  coord : V4f
-        /// `gl_SampleMaskIn[0]`. In MSAA, two triangles that touch at an edge
-        /// each invoke the fragment shader once per pixel with a partial mask
-        /// (e.g. samples 0..3 and 4..7). Storing the mask lets the resolve
-        /// pick the right fragment per sample instead of compositing both as
-        /// if each fully covered the pixel.
-        [<SampleMask>] mask  : Arr<N<1>, int>
+        [<Color>]     color : V4f
+        [<FragCoord>] coord : V4f
     }
 
     /// Insert writer composed onto every transparent object's surface. Takes
@@ -105,8 +101,7 @@ module ABufferOIT =
             let pc = V4f(f.color.XYZ * a, a)
             let dz = packDepth f.coord.Z
             let cc = packColor pc
-            let mm = uint32 f.mask.[0]
-            let slot = V4ui(dz, cc, mm, 0u)
+            let slot = V4ui(dz, cc, 0u, 0u)
 
             beginInterlock()
 
@@ -133,40 +128,27 @@ module ABufferOIT =
         }
 
     type ResolveFragment = {
-        [<Color>]     color  : V4f
-        [<FragCoord>] coord  : V4f
-        /// `gl_SampleID`. Declaring this AND reading it forces sample-rate
-        /// fragment-shader invocation: FShade emits gl_SampleID, the Vulkan
-        /// pipeline gets sampleShadingEnable=true. Per invocation we only
-        /// include the fragments whose stored coverage mask covers this
-        /// sample — which is the whole point of the per-fragment mask.
-        [<SampleId>]  sample : int
+        [<Color>]     color : V4f
+        [<FragCoord>] coord : V4f
     }
 
-    /// Fullscreen resolve. Per sample: walk the per-pixel k-buffer, take only
-    /// fragments whose mask covers this sample, sort by depth, composite
-    /// front-to-back with premultiplied "over". Output is per-sample; the
-    /// blend pipeline composites it sample-by-sample over the opaque scene
-    /// (which itself was written per-sample), so MSAA edges look right.
+    /// Fullscreen resolve. Walks the per-pixel k-buffer, sorts by depth,
+    /// composites front-to-back with premultiplied "over". Pixel-rate; the
+    /// entire transparent pipeline runs at samples=1.
     let resolve (f : ResolveFragment) =
         fragment {
             let px = V2i f.coord.XY
             let count = min Capacity (int (uniform.ABufferCount.[px].X))
-            let sampleBit = 1u <<< f.sample
 
-            // gather only the slots whose coverage includes this sample
             let depths = Arr<N<8>, uint32>()
             let colors = Arr<N<8>, uint32>()
-            let mutable n = 0
             for i in 0 .. count - 1 do
                 let s = uniform.ABufferSlot.[V2i(px.X * Capacity + i, px.Y)]
-                if (s.Z &&& sampleBit) <> 0u then
-                    depths.[n] <- s.X
-                    colors.[n] <- s.Y
-                    n <- n + 1
+                depths.[i] <- s.X
+                colors.[i] <- s.Y
 
             // insertion sort by depth (ascending = front to back)
-            for i in 1 .. n - 1 do
+            for i in 1 .. count - 1 do
                 let dk = depths.[i]
                 let ck = colors.[i]
                 let mutable j = i - 1
@@ -179,7 +161,7 @@ module ABufferOIT =
 
             // premultiplied front-to-back "over"
             let mutable accum = V4f.Zero    // premultiplied rgb, alpha = coverage
-            for i in 0 .. n - 1 do
+            for i in 0 .. count - 1 do
                 let src = unpackColor colors.[i]
                 let t = 1.0f - accum.W
                 accum <- accum + t * src

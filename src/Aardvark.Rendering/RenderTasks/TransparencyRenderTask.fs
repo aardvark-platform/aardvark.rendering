@@ -29,6 +29,14 @@ module TransparencyRenderTask =
 
     let technique = Technique.ABuffer
 
+    /// Effective sample count for the intermediate / OIT / composite framebuffers
+    /// and storage. ABuffer forces samples=1 (FXAA replaces MSAA); WeightedBlended
+    /// keeps the user's sample count.
+    let private effectiveSamples (userSamples : int) =
+        match technique with
+        | WeightedBlended -> userSamples
+        | ABuffer         -> 1
+
     /// True if the given render object should be routed through the OIT pass.
     let isTransparent (o : IRenderObject) =
         match o with
@@ -169,6 +177,35 @@ module TransparencyRenderTask =
         copy.Uniforms      <- UniformProvider.union (aBufferImageUniforms count slot) ro.Uniforms
         copy :> IRenderObject
 
+    /// Fullscreen quad that runs the FXAA post-process. Reads from a
+    /// single-sample colour texture (the composited intermediate) and writes
+    /// the smoothed result to the user framebuffer. The A-buffer pipeline runs
+    /// samples=1 throughout; FXAA replaces MSAA as the edge-AA mechanism.
+    let private buildFxaaObject (inputTex : aval<ITexture>)
+                                (rcpFrame : aval<V2d>) : RenderObject =
+        let buffer = AVal.constant (ArrayBuffer fullscreenPositions :> IBuffer)
+        let view   = BufferView(buffer, typeof<V3f>)
+        let attrs  = AttributeProvider.ofList [ DefaultSemantic.Positions, view ]
+        let drawCall = DrawCallInfo(FaceVertexCount = 4, InstanceCount = 1)
+
+        let ro = RenderObject()
+        ro.AttributeScope   <- Ag.Scope.Root
+        ro.Mode             <- IndexedGeometryMode.TriangleStrip
+        ro.DrawCalls        <- DrawCalls.Direct (AVal.constant [| drawCall |])
+        ro.VertexAttributes <- attrs
+        ro.Uniforms         <-
+            UniformProvider.ofList [
+                FXAA.Semantic.FxaaInput, inputTex :> IAdaptiveValue
+                Symbol.Create "FxaaRcpFrame", rcpFrame :> IAdaptiveValue
+            ]
+        ro.Surface          <- Surface.Effect FXAA.effect
+        ro.DepthState       <- { DepthState.Default with
+                                    Test      = AVal.constant DepthTest.None
+                                    WriteMask = AVal.constant false }
+        ro.BlendState       <- { BlendState.Default with
+                                    Mode = AVal.constant BlendMode.None }
+        ro
+
     /// Fullscreen quad that resolves the A-buffer and composites it over the
     /// opaque scene with premultiplied "over".
     let private buildABufferResolveObject
@@ -261,6 +298,10 @@ module TransparencyRenderTask =
         let abCountTex : cval<ITexture> = cval (NullTexture.Instance)
         let abSlotTex  : cval<ITexture> = cval (NullTexture.Instance)
 
+        // Adaptive holders for the FXAA pass (only used by the ABuffer path).
+        let fxaaInputTex : cval<ITexture> = cval (NullTexture.Instance)
+        let fxaaRcpFrame : cval<V2d>      = cval V2d.Zero
+
         // A-buffer build/resolve object sets (transparent objects with the
         // interlocked insert composed; a fullscreen resolve quad).
         let aBufferBuildSet =
@@ -297,6 +338,7 @@ module TransparencyRenderTask =
         let mutable transparentPickTask : IRenderTask voption = ValueNone
         let mutable aBufferBuildTask    : IRenderTask voption = ValueNone
         let mutable aBufferResolveTask  : IRenderTask voption = ValueNone
+        let mutable fxaaTask            : IRenderTask voption = ValueNone
 
         // Bounded LRU cache of FBO bundles, one per (size, samples) the
         // wrapper has seen. Render tasks typically see only a handful of
@@ -336,6 +378,7 @@ module TransparencyRenderTask =
             transparentPickTask |> ValueOption.iter (fun t -> t.Dispose())
             aBufferBuildTask    |> ValueOption.iter (fun t -> t.Dispose())
             aBufferResolveTask  |> ValueOption.iter (fun t -> t.Dispose())
+            fxaaTask            |> ValueOption.iter (fun t -> t.Dispose())
             intermediateSig     |> ValueOption.iter (fun s -> s.Dispose())
             oitSig              |> ValueOption.iter (fun s -> s.Dispose())
             compositeSig        |> ValueOption.iter (fun s -> s.Dispose())
@@ -345,6 +388,7 @@ module TransparencyRenderTask =
             transparentPickTask <- ValueNone
             aBufferBuildTask    <- ValueNone
             aBufferResolveTask  <- ValueNone
+            fxaaTask            <- ValueNone
             intermediateSig     <- ValueNone
             oitSig              <- ValueNone
             compositeSig        <- ValueNone
@@ -360,12 +404,17 @@ module TransparencyRenderTask =
                 releaseFbos ()
                 releaseTasksAndSignatures ()
 
+                // Inner sample count for intermediate / OIT / composite. The
+                // A-buffer technique runs single-sampled (FXAA replaces MSAA);
+                // weighted-blended keeps the user's sample count.
+                let innerSamples = effectiveSamples samples
+
                 let interSig =
                     let entries = seq {
                         yield! userColorAtts
                         yield DefaultSemantic.DepthStencil, depthFormat
                     }
-                    runtime.CreateFramebufferSignature(entries, samples = samples)
+                    runtime.CreateFramebufferSignature(entries, samples = innerSamples)
 
                 // OIT signature: Accum + Revealage + DepthStencil only. The
                 // composed transparent shader's outputs are pared down by
@@ -377,7 +426,7 @@ module TransparencyRenderTask =
                         [ WeightedBlendedOIT.Semantic.Accum,     TextureFormat.Rgba16f
                           WeightedBlendedOIT.Semantic.Revealage, TextureFormat.R32f
                           DefaultSemantic.DepthStencil,          depthFormat ],
-                        samples = samples)
+                        samples = innerSamples)
 
                 // Composite signature: only Colors + DepthStencil. FShade's
                 // effect linker compiles outputs for every color attachment in
@@ -393,9 +442,9 @@ module TransparencyRenderTask =
                                                        |> Option.map snd
                                                        |> Option.defaultValue TextureFormat.Rgba8
                           DefaultSemantic.DepthStencil, depthFormat ],
-                        samples = samples)
+                        samples = innerSamples)
 
-                let compositeObject = buildCompositeObject samples accumTex revealageTex
+                let compositeObject = buildCompositeObject innerSamples accumTex revealageTex
                 let compositeSet    = ASet.single (compositeObject :> IRenderObject)
 
                 intermediateSig     <- ValueSome interSig
@@ -417,20 +466,29 @@ module TransparencyRenderTask =
                     aBufferBuildTask   <- ValueSome (compileRaw (cS, aBufferBuildSet))
                     aBufferResolveTask <- ValueSome (compileRaw (cS, resolveSet))
 
+                    // FXAA fullscreen pass — compiled against the user
+                    // signature so its writes go directly to outFb.
+                    let fxaaObject = buildFxaaObject fxaaInputTex fxaaRcpFrame
+                    let fxaaSet    = ASet.single (fxaaObject :> IRenderObject)
+                    fxaaTask <- ValueSome (compileRaw (userSig, fxaaSet))
+
                 currentSamples      <- samples
 
         let buildBundle (size : V2i) (samples : int) =
-            let dt = runtime.CreateTexture2D(size, depthFormat, samples = samples)
+            // Internal textures all use the effective sample count (1 for
+            // ABuffer, user samples for WeightedBlended).
+            let innerSamples = effectiveSamples samples
+            let dt = runtime.CreateTexture2D(size, depthFormat, samples = innerSamples)
 
             let ct =
                 userSig.ColorAttachments
                 |> Map.toList
                 |> List.map (fun (_, att) ->
-                    att.Name, runtime.CreateTexture2D(size, att.Format, samples = samples))
+                    att.Name, runtime.CreateTexture2D(size, att.Format, samples = innerSamples))
                 |> Map.ofList
 
-            let at = runtime.CreateTexture2D(size, TextureFormat.Rgba16f, samples = samples)
-            let rt = runtime.CreateTexture2D(size, TextureFormat.R32f,    samples = samples)
+            let at = runtime.CreateTexture2D(size, TextureFormat.Rgba16f, samples = innerSamples)
+            let rt = runtime.CreateTexture2D(size, TextureFormat.R32f,    samples = innerSamples)
 
             let interAtts =
                 ct
@@ -525,7 +583,12 @@ module TransparencyRenderTask =
                     accumTex.Value     <- bundle.AccumT :> ITexture
                     revealageTex.Value <- bundle.RevealageT :> ITexture
                     bundle.AbCount |> ValueOption.iter (fun t -> abCountTex.Value <- t :> ITexture)
-                    bundle.AbSlot  |> ValueOption.iter (fun t -> abSlotTex. Value <- t :> ITexture))
+                    bundle.AbSlot  |> ValueOption.iter (fun t -> abSlotTex. Value <- t :> ITexture)
+                    // FXAA samples from the intermediate's Colors attachment.
+                    bundle.ColorTex
+                    |> Map.tryFind DefaultSemantic.Colors
+                    |> Option.iter (fun t -> fxaaInputTex.Value <- t :> ITexture)
+                    fxaaRcpFrame.Value <- V2d(1.0 / float size.X, 1.0 / float size.Y))
 
             currentBundle <- ValueSome bundle
 
@@ -541,6 +604,7 @@ module TransparencyRenderTask =
             transparentPickTask |> ValueOption.iter (fun t -> t.Update(token, rt))
             aBufferBuildTask    |> ValueOption.iter (fun t -> t.Update(token, rt))
             aBufferResolveTask  |> ValueOption.iter (fun t -> t.Update(token, rt))
+            fxaaTask            |> ValueOption.iter (fun t -> t.Update(token, rt))
 
         override x.Perform(token, rt, output) =
             let outFb = output.Framebuffer
@@ -576,9 +640,19 @@ module TransparencyRenderTask =
             let bundle = currentBundle.Value
             let inter = bundle.IntermediateFb
 
-            // Always: seed intermediate from user FB (preserves any pre-clear)
-            // and run the opaque pass into it.
-            runtime.Copy(outFb, inter)
+            // Seed the intermediate before running the opaque pass.
+            // - WeightedBlended: inter samples match outFb samples → copy
+            //   preserves any pre-clear values from the user.
+            // - ABuffer: inter is samples=1 while outFb may be MS, so a MS→1x
+            //   copy of the depth aspect would fail (vkCmdResolveImage doesn't
+            //   handle depth). Just clear the intermediate to defaults — the
+            //   FXAA pass at the end writes the final colour to outFb without
+            //   relying on a pre-seeded background there.
+            match technique with
+            | WeightedBlended ->
+                runtime.Copy(outFb, inter)
+            | ABuffer ->
+                runtime.Clear(inter, clear { color C4f.Black; depth 1.0 })
             opaqueTask.Value.Run(token, rt, { output with Framebuffer = inter })
 
             if hasTransparent then
@@ -621,8 +695,15 @@ module TransparencyRenderTask =
                 // values regardless of draw order.
                 transparentPickTask.Value.Run(token, rt, { output with Framebuffer = inter })
 
-            // Final blit: intermediate → user framebuffer.
-            runtime.Copy(inter, outFb)
+            // Final pass to user framebuffer.
+            // ABuffer: FXAA fullscreen pass (intermediate is samples=1, user FB
+            // may be multisampled — the pixel-rate FXAA writes broadcast to
+            // all samples). WeightedBlended: plain blit (matching samples).
+            match technique with
+            | ABuffer ->
+                fxaaTask.Value.Run(token, rt, output)
+            | WeightedBlended ->
+                runtime.Copy(inter, outFb)
 
         override x.Release() =
             releaseDirectTask ()
