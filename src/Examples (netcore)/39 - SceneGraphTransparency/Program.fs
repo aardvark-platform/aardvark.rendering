@@ -58,34 +58,14 @@ let main argv =
         PixTexture2d(img, TextureParams.WantMipMaps) :> ITexture 
     
     let sg =
-        // thankfully aardvark defines a primitive box
-        Sg.ofList [
-            Sg.box (AVal.constant color) (AVal.constant box)
-            |> Sg.diffuseTexture DefaultTextures.checkerboard
-
-            Sg.sphere 5 (AVal.constant color) (AVal.constant 0.7)
-            |> Sg.diffuseTexture' rainbow
-
-            Sg.cone' 16 C4b.Red 0.1 0.2
-            |> Sg.shader {
-                do! DefaultSurfaces.trafo
-                do! DefaultSurfaces.constantColor C4f.Yellow
-                do! Shader.alpha
-            }
-
-            Sg.box (AVal.constant color) (AVal.constant sbox)
-            |> Sg.trafo off
-            |> Sg.diffuseTexture' radialRings
-        ]
+        // DIAGNOSTIC: single flat-coloured transparent box — isolates the
+        // interior face-diagonal seam with no texture / overlapping geometry.
+        Sg.box (AVal.constant color) (AVal.constant box)
         |> Sg.uniform "Alpha" alpha
         |> Sg.transparent
-        // apply a shader ...
-        // * transforming all vertices
-        // * looking up the DiffuseTexture
-        // * applying a simple lighting to the geometry (headlight)
         |> Sg.shader {
             do! DefaultSurfaces.trafo
-            do! DefaultSurfaces.diffuseTexture
+            do! DefaultSurfaces.constantColor (C4f(0.2f, 0.6f, 1.0f, 1.0f))
             do! Shader.alpha
         }
 
