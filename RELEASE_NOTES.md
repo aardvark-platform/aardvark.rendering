@@ -1,6 +1,19 @@
-- [GL] Added `Context.GetDebugMessages`
-- [GL] Added `Context.OnDispose`
+### 5.7.0-prerelease0002
+- [Sg] Heap runtime: bucketed indirect-multidraw of render objects sharing an effect, per-draw uniforms gathered from a shared SSBO arena. Opt-in via `HeapConfig.Enabled <- true` (default OFF). `Heap.ofRenderObjects` collapses an `aset<IRenderObject>` into a few bucket render objects with dirty-tracked sparse arena updates; `HeapScene` is an imperative growable single bucket with O(1) Add/Remove. Bindless geometry through `HeapVertexData`; bindless textures with a Vulkan-1.0 / MoltenVK atlas-page fallback (`HeapAtlas`, `HeapAtlasPool`, reactive multi-page with LRU and dedup). Currently Vulkan-only.
+- [Sg] `ISimpleSg` direct-construction render path: every `Sg.*` node implements an explicit `TraversalState` carrying the Ag-attribute set; ~7-8× faster SG resolution at 20k objects vs the legacy attribute-grammar entry. On by default (`SimpleConfig.Enabled = true`); set `AARDVARK_SIMPLE_SG=0` (and `SimpleConfig.Enabled <- false`) to fall back to the Ag path.
+- [Rendering] A-buffer order-independent transparency: exact per-pixel k-buffer via `GL_ARB_fragment_shader_interlock`, with per-sample mask resolve for MSAA. `TransparencyRenderTask.technique` toggles between the existing `WeightedBlended` and the new `ABuffer` path. Diagnostic via `AARDVARK_ABUFFER_DEBUG=1` (coverage) / `=2` (sample-id).
+- [Vulkan] MSAA: `MultisampleState` honours `ShaderProgram.SampleShading`; `minSampleShading=1.0` when sample-shading enabled. `gl_SampleID`/`gl_SamplePosition` detection fixed in `ShaderProgram.fragmentInfo`.
+- [Vulkan] Fragment-shader interlock + storage-write render-pass dependency wiring.
+- [Vulkan] Fix framebuffer copy on multisampled images (A-buffer OIT + MSAA).
+- [Vulkan] MoltenVK upload wedge fixed by pinning `VkBufferCopy` (F# tail-call escape, dotnet/fsharp#18689).
+- [Vulkan] `&&` (byref-of-temp) → `fixed &` sweep across Core sync/commands/device/queues, Memory allocator/external-memory, resources (image/sampler/pipeline/swapchain), raytracing (accel-struct/micromap/pipeline) — dotnet/fsharp#18689 compatibility.
+- [Vulkan] `ResourceLocationSet.Use`: reuse `invalidScratch` HashSet + skip `transact` when nothing invalid.
+- [Vulkan] Conservative-state `pNext` use-after-move fix (sub-struct stored in unmanaged memory).
+- [Application] `VulkanLoader.PreferMoltenVK` to load aardvark's bundled MoltenVK over a system Vulkan SDK on macOS.
+- [GL] Added `Context.GetDebugMessages`.
+- [GL] Added `Context.OnDispose`.
 - [GL] Represent `NullTexture` with a proper texture object instead of a texture with handle 0.
+- [deps] FShade `5.7.3 → 5.7.9`: GLSL binding-allocator clamps unbounded-array step to 1 (was decrementing the global counter); unbounded sampler / image / SSBO arrays via `count = -1`; `nonuniformEXT` for bindless storage-buffer / sampler array indexing; storage-buffer `ssbCount` reported in the interface.
 
 ### 5.7.0-prerelease0001
 - [Vulkan] Reworked loading of Vulkan library
