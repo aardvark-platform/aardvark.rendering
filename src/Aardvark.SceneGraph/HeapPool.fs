@@ -68,6 +68,21 @@ module HeapUniforms =
         /// the atlas page dimensions in pixels (to normalize atlas-pixel coords)
         member x.HeapAtlasPxSize : V2f   = uniform?HeapAtlasPxSize
 
+/// Opt-in for the heap runtime. Default OFF — apps that want heap-based
+/// rendering must set `HeapConfig.Enabled <- true` at startup. While disabled,
+/// `Heap.ofRenderObjects` and `HeapScene` throw, so an accidental call doesn't
+/// silently change rendering behaviour.
+[<RequireQualifiedAccess>]
+module HeapConfig =
+    let mutable Enabled : bool = false
+
+    let internal requireEnabled (caller : string) =
+        if not Enabled then
+            failwithf
+                "[Aardvark.SceneGraph] %s requires the heap runtime. \
+                 Set HeapConfig.Enabled <- true at startup to opt in."
+                caller
+
 module Heap =
 
     /// One per-draw uniform binding: how big it is in the arena (in floats),
@@ -720,6 +735,7 @@ module Heap =
     /// Render objects that aren't heap-eligible (see `isHeapable` below) are passed
     /// through to the output set UNCHANGED — so a mixed scene degrades gracefully.
     let ofRenderObjects (runtime : IRuntime) (heapNames : Set<string>) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        HeapConfig.requireEnabled "Heap.ofRenderObjects"
         checkSupport false runtime
         let names = heapNames |> Set.toArray |> Array.sort
         let fieldStride = names.Length
@@ -1735,6 +1751,7 @@ module Heap =
                    positions : V3f[], normals : V3f[], index : int[],
                    schema : (string * System.Type)[], globals : IUniformProvider) =
 
+        do HeapConfig.requireEnabled "HeapScene"
         do checkSupport false runtime
 
         // fixed layout from the schema

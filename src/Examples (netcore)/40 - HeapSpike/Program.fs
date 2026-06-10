@@ -85,6 +85,10 @@ let main argv =
     if System.Environment.GetEnvironmentVariable("AARDVARK_SIMPLE_SG") = "0" then
         Aardvark.SceneGraph.Simple.SimpleConfig.Enabled <- false
         printfn "[heap] SimpleSg path DISABLED (legacy Ag entry)"
+
+    // The heap runtime is opt-in (default off). HeapSpike *is* the demo for it,
+    // so flip it on unconditionally here.
+    Aardvark.SceneGraph.HeapConfig.Enabled <- true
     if argv |> Array.contains "bench" then
         Bench.run ()
         0
