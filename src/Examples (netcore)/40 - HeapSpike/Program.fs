@@ -155,6 +155,8 @@ let main argv =
         if Golden.churnProbeTest () then 0 else 1
     elif argv |> Array.contains "geomchurn" then
         if Golden.geomChurnTest () then 0 else 1
+    elif argv |> Array.contains "geomdrift" then
+        if Golden.geomDriftTest () then 0 else 1
     elif argv |> Array.contains "submitstress" then
         if Golden.submitStressTest () then 0 else 1
     elif argv |> Array.contains "glyphwedge" then

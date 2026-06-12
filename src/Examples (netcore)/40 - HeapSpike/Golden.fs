@@ -2609,6 +2609,7 @@ module Golden =
             out.Acquire()
             out.GetValue() |> ignore
             let bytes0 = Heap.lastPackedGeomBytes
+            let comps0 = Heap.compactionCount
             let mutable maxBytes = bytes0
             for i in 0 .. frames - 1 do
                 transact (fun () ->
@@ -2628,9 +2629,12 @@ module Golden =
             refOut.Release()
             let (maxDelta, nDiff, nNonBg, total) = diff img refImg
             let flat = maxBytes = bytes0
-            Log.line "geomChurn[%s]: packedBytes start=%d maxDuringChurn=%d flat=%b  maxChannelDelta=%d diffPixels=%d/%d coverage=%d"
-                label bytes0 maxBytes flat maxDelta nDiff total nNonBg
-            let pass = flat && maxDelta = 0 && nNonBg > 1000L
+            // exact-size churn must be served by allocator reuse BEFORE any
+            // compaction can trigger (no waste accumulates -> no fire)
+            let noCompact = Heap.compactionCount = comps0
+            Log.line "geomChurn[%s]: packedBytes start=%d maxDuringChurn=%d flat=%b compactions=%d  maxChannelDelta=%d diffPixels=%d/%d coverage=%d"
+                label bytes0 maxBytes flat (Heap.compactionCount - comps0) maxDelta nDiff total nNonBg
+            let pass = flat && noCompact && maxDelta = 0 && nNonBg > 1000L
             if pass then Log.line "geomChurn[%s]: PASS" label
             else Log.warn "geomChurn[%s]: FAIL" label
             pass
@@ -2640,3 +2644,138 @@ module Golden =
         let pass = hostOk && gpuOk
         if pass then Log.line "geomChurn: ALL PASS" else Log.warn "geomChurn: FAIL (host=%b bindless=%b)" hostOk gpuOk
         pass
+
+    // Drift golden test: 320 frames of churn with RANDOM-SIZED distinct
+    // geometries (cone fans with random rim counts) and random per-RO instance
+    // counts on the FORCED slot-attribute fallback (Heap.forceNoDrawId), so
+    // EVERY reclamation site drifts: packed vertex ranges, packed index ranges,
+    // arena float regions and the per-instance slot-attribute ranges. The
+    // coalescing allocators plus waste-triggered compaction must keep every
+    // footprint bounded by ~2.5x the live working set (+ 2x the compaction
+    // floor, which is lowered for the test so the small buffers compact too),
+    // and the final image must be pixel-identical to a freshly-built scene of
+    // the same final population (compaction rewrote FirstIndex/BaseVertex/
+    // FirstInstance/headers/arena offsets correctly). A bulk 75% removal at
+    // half-time deterministically trips the live<50% trigger.
+    let geomDriftTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 16.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let n = 48
+        let frames = 320
+        let rnd = RandomSystem 1234
+        let side = 8
+        let posOf (i : int) = V3d(float (i % side - side / 2) * 1.4, float (i / side % side - side / 2) * 1.4, 0.0)
+        // random-size cone fan: m rim vertices + apex, 3m indices — every
+        // geometry is identity-distinct AND size-distinct, so exact-size reuse
+        // alone cannot keep the packed buffers flat (the drift this test bounds).
+        let mkGeom () =
+            let m = 24 + rnd.UniformInt 240
+            let s = 0.35 + 0.4 * rnd.UniformDouble()
+            let positions =
+                Array.init (m + 1) (fun j ->
+                    if j = 0 then V3f(0.0f, 0.0f, float32 s)
+                    else
+                        let a = float (j - 1) / float m * System.Math.PI * 2.0
+                        V3f(float32 (cos a * s), float32 (sin a * s), 0.0f))
+            let normals =
+                Array.init (m + 1) (fun j ->
+                    if j = 0 then V3f.OOI
+                    else Vec.normalize (V3f(positions.[j].X, positions.[j].Y, 0.5f)))
+            let index = [| for t in 0 .. m - 1 do yield 0; yield 1 + t; yield 1 + ((t + 1) % m) |]
+            positions, normals, index
+        let effect = Effect.compose [ Effect.ofFunction GG.shade; Effect.ofFunction GG.frag ]
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
+        let mkRO (i : int) =
+            let (positions, normals, index) = mkGeom ()
+            let k = 2 + rnd.UniformInt 8        // random instance count (>1 -> instanced bucket)
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect effect
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+            ro.Indices   <- Some (bv index typeof<int>)
+            // K identical instances per draw: the slot-attribute routing (not the
+            // image) is what varies — wrong instData slots would fetch the wrong
+            // per-draw uniforms and change pixels.
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = k) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation (posOf (i % n))).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj ]
+            ro :> IRenderObject
+        let all = Array.init (n + frames + n) mkRO
+        let names = Set.ofList [ "HeapModelTrafo"; "HeapColor" ]
+
+        let floor0 = Heap.compactionWasteFloorBytes
+        let comps0 = Heap.compactionCount
+        Heap.forceNoDrawId <- true
+        Heap.compactionWasteFloorBytes <- 512   // tiny floor so the small arena/inst buffers compact too
+        try
+            let ros = cset (Array.sub all 0 n)
+            let live = System.Collections.Generic.List<IRenderObject>(Array.sub all 0 n)
+            let mutable next = n
+            let heapObjs = Heap.ofRenderObjects runtime names (ros :> aset<_>)
+            use task = runtime.CompileRender(signature, heapObjs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            out.GetValue() |> ignore
+            let mutable violations = 0
+            let check (label : string) (bytes : int) (liveB : int) =
+                let bound = int (2.5 * float liveB) + 2 * Heap.compactionWasteFloorBytes
+                if bytes > bound then
+                    violations <- violations + 1
+                    Log.warn "geomDrift: %s footprint %d B exceeds bound %d B (live %d B)" label bytes bound liveB
+            for f in 0 .. frames - 1 do
+                transact (fun () ->
+                    if f = frames / 2 then
+                        // bulk shrink: 75% of the population leaves in ONE pass
+                        for _ in 1 .. (live.Count * 3) / 4 do
+                            let j = rnd.UniformInt live.Count
+                            ros.Remove live.[j] |> ignore
+                            live.RemoveAt j
+                    else
+                        let j = rnd.UniformInt live.Count
+                        ros.Remove live.[j] |> ignore
+                        live.RemoveAt j
+                        ros.Add all.[next] |> ignore; live.Add all.[next]; next <- next + 1
+                        if live.Count < n then      // regrow after the bulk shrink
+                            ros.Add all.[next] |> ignore; live.Add all.[next]; next <- next + 1)
+                out.GetValue() |> ignore
+                check "packedGeom" Heap.lastPackedGeomBytes Heap.lastPackedGeomLiveBytes
+                check "arena"      Heap.lastArenaBytes      Heap.lastArenaLiveBytes
+                check "inst"       Heap.lastInstBytes       Heap.lastInstLiveBytes
+            let img = out.GetValue().Download().ToPixImage<byte>()
+            out.Release()
+            let compactions = Heap.compactionCount - comps0
+
+            // reference: the SAME final membership built fresh
+            let refRos = cset (live.ToArray())
+            let refObjs = Heap.ofRenderObjects runtime names (refRos :> aset<_>)
+            use refTask = runtime.CompileRender(signature, refObjs)
+            let refOut = refTask |> RenderTask.renderToColor size
+            refOut.Acquire()
+            let refImg = refOut.GetValue().Download().ToPixImage<byte>()
+            refOut.Release()
+            let (maxDelta, nDiff, nNonBg, total) = diff img refImg
+            Log.line "geomDrift: %d frames, %d compactions, boundViolations=%d  final: packed=%d/%d arena=%d/%d inst=%d/%d (bytes/live)"
+                frames compactions violations
+                Heap.lastPackedGeomBytes Heap.lastPackedGeomLiveBytes
+                Heap.lastArenaBytes Heap.lastArenaLiveBytes
+                Heap.lastInstBytes Heap.lastInstLiveBytes
+            Log.line "geomDrift: maxChannelDelta=%d diffPixels=%d/%d coverage=%d" maxDelta nDiff total nNonBg
+            let pass = violations = 0 && compactions > 0 && maxDelta = 0 && nNonBg > 1000L
+            if pass then Log.line "geomDrift: PASS"
+            else Log.warn "geomDrift: FAIL (violations=%d compactions=%d maxDelta=%d coverage=%d)" violations compactions maxDelta nNonBg
+            pass
+        finally
+            Heap.forceNoDrawId <- false
+            Heap.compactionWasteFloorBytes <- floor0
