@@ -746,6 +746,57 @@ module Heap =
             | :? RegionWriter as w -> pending.Add w |> ignore
             | _ -> ()
 
+    /// Adaptive per-slot visibility gate of an incremental bucket: reads the
+    /// member's dynamic IsActive and yields the slot's effective instance
+    /// count. Marked (via the source) only when that gate changes, so the
+    /// draw-record mirror re-stages exactly the TOGGLED slots — O(toggled),
+    /// not O(members with dynamic visibility).
+    type internal GateWriter(src : aval<bool>, slot : int, instances : int) =
+        inherit AdaptiveObject()
+        do (src :> IAdaptiveValue).Acquire()
+        let mutable disposed = false
+        member _.Slot = slot
+        member _.IsDisposed = disposed
+        /// evaluate the gate; `write slot count` runs iff re-evaluation was needed
+        member x.Update(token : AdaptiveToken, write : int -> int -> unit) =
+            x.EvaluateIfNeeded token () (fun token ->
+                write slot (if src.GetValue token then instances else 0))
+        member x.Dispose() =
+            disposed <- true
+            (src :> IAdaptiveValue).Release()
+            (src :> IAdaptiveValue).Outputs.Remove x |> ignore
+            x.Outputs.Clear()
+
+    /// Stable-identity GPU mirror of one of a bucket's per-slot tables (draw
+    /// records / headers / per-instance slot attributes). The bucket's delta
+    /// pass mutates the CPU array and records dirty ranges; Compute — pulled
+    /// by the consuming aval — first evaluates `Dependency` (the membership
+    /// updater, whose evaluation performs those mutations) and then runs the
+    /// bucket-provided `Flush`, which uploads ONLY the dirty sub-ranges via
+    /// Write. The backend buffer instance changes ONLY on growth, so the
+    /// resource layer recognizes the unchanged handle and re-prepares /
+    /// re-uploads nothing on content-only versions (the same contract the
+    /// geometry buffers and HeapArena already rely on). Gate writers (dynamic
+    /// per-slot IsActive) mark this buffer directly and are collected like
+    /// HeapArena's region writers — no transact during evaluation anywhere.
+    type internal MirrorBuffer(runtime : IBufferRuntime, initialBytes : int, usage : BufferUsage) =
+        inherit AdaptiveBuffer(runtime, uint64 (max 1 initialBytes), usage, BufferStorage.Host)
+        let dirtyGates = LockedSet<GateWriter>()
+        member val Dependency : IAdaptiveValue option = None with get, set
+        member val Flush : AdaptiveToken -> System.Collections.Generic.HashSet<GateWriter> -> unit = (fun _ _ -> ()) with get, set
+        /// register a NEW gate writer for evaluation on the next flush
+        member _.MarkGate(w : GateWriter) = dirtyGates.Add w |> ignore
+        override x.Compute(t, rt) =
+            match x.Dependency with
+            | Some d -> d.GetValueUntyped t |> ignore
+            | None -> ()
+            x.Flush t (dirtyGates.GetAndClear())
+            base.Compute(t, rt)
+        override x.InputChangedObject(_, o) =
+            match o with
+            | :? GateWriter as w -> dirtyGates.Add w |> ignore
+            | _ -> ()
+
     /// Logical address space for the heap reclamation sites (units are caller-
     /// defined: floats, vertices, indices, instance slots) — packed geometry
     /// vertex + index ranges, arena uniform regions, per-instance slot-attribute
@@ -1297,8 +1348,18 @@ module Heap =
         //    threshold compaction (maybeCompact). ──
         let mutable instData : int[] = Array.zeroCreate 16
         let instAlloc = HeapSpace()                     // units: instances (ints)
-        let mutable instChanged = false
-        let mutable instBuffer : IBuffer = ArrayBuffer (Array.zeroCreate<int> 0) :> IBuffer
+
+        // ── dirty tracking for the stable mirror buffers (draw records /
+        //    headers / slot attributes): the delta pass records WHAT changed,
+        //    the flushes below upload exactly those sub-ranges; compactions
+        //    request a full re-stage instead. ──
+        let dirtyDraws = System.Collections.Generic.HashSet<int>()      // slots
+        let mutable drawsAllDirty = false
+        let dirtyHeaders = System.Collections.Generic.HashSet<int>()    // slots
+        let mutable headersAllDirty = false
+        let instDirty = System.Collections.Generic.List<struct(int * int)>()  // [start, end) int ranges
+        let mutable instAllDirty = false
+
         let allocInst (slot : int) (k : int) : Management.Block<unit> =
             let b = instAlloc.Alloc k
             if instAlloc.Extent > instData.Length then
@@ -1308,7 +1369,7 @@ module Heap =
                 instData <- nd
             let off = int b.Offset
             for i in 0 .. k - 1 do instData.[off + i] <- slot
-            instChanged <- true
+            instDirty.Add(struct(off, off + k))
             b
         let freeInst (b : Management.Block<unit>) =
             instAlloc.Free b
@@ -1330,9 +1391,9 @@ module Heap =
         // buckets in the same update) or refilled (AddInternal re-seats the owner).
         let mutable globalsRO = ro0
         // slots whose IsActive is NON-constant (constant gates are baked into the
-        // entry at add time) — the indirect aval only re-reads these. The int is
-        // the slot's structural instance count (restored when the gate opens).
-        let dynActives = System.Collections.Generic.Dictionary<int, struct(aval<bool> * int)>()
+        // entry at add time) — each gets a GateWriter marked only when ITS gate
+        // changes; the draw mirror re-stages exactly the toggled slots.
+        let gateWriters = System.Collections.Generic.Dictionary<int, GateWriter>()
 
         // ── texture tables (one per bindless sampler TYPE, or one atlas) ──
         let mkDummy2d () = runtime.CreateTexture2D(V2i.II, TextureFormat.Rgba8, levels = 1, samples = 1) :> ITexture
@@ -1529,6 +1590,7 @@ module Heap =
                     entries.[s.Slot].FirstIndex <- e.FirstIndex
                     entries.[s.Slot].BaseVertex <- e.BaseVertex
                 | _ -> ()
+            drawsAllDirty <- true
 
         let compactIdx () =
             let live = geomCache.Values |> Seq.toArray |> Array.sortBy (fun e -> e.FirstIndex)
@@ -1585,13 +1647,14 @@ module Heap =
                     e.Offset <- off
                     e.Writer.Off <- off                 // future packs target the new offset
             // … then rewrite every live slot's baked header cells (the per-field
-            // region offsets at slot*fieldStride + fi); headersAval re-snapshots
-            // per updater version, so the whole table re-uploads this pass.
+            // region offsets at slot*fieldStride + fi); the whole header table
+            // re-uploads once this pass (headersAllDirty).
             for KeyValue(_, s) in slots do
                 for i in 0 .. names.Length - 1 do
                     match regions.TryGetValue s.RegionKeys.[i] with
                     | true, e -> headers.[s.Slot * fieldStride + nameToField.[names.[i]]] <- e.Offset
                     | _ -> ()
+            headersAllDirty <- true
             // one full [0, live) re-upload of the moved floats on the arena's next
             // Compute (rule-clean — the arena depends on the updater) + shrink the
             // staging mirror/GPU buffer back toward the live size.
@@ -1610,7 +1673,8 @@ module Heap =
                 s.InstBlock <- b
                 entries.[s.Slot].FirstInstance <- off
             instData <- nd
-            instChanged <- true
+            instAllDirty <- true
+            drawsAllDirty <- true       // FirstInstance of every live record moved
             compactionCount <- compactionCount + 1
 
         /// trigger check, run after removals (cheap: a few integer compares).
@@ -1623,28 +1687,132 @@ module Heap =
             if need arenaAlloc 4 then compactArena ()
             if useSlotAttr && need instAlloc 4 then compactInst ()
 
-        // ── reactive views over the mutable state. All are driven by `updater`,
-        //    so they refresh exactly when membership changed. headers + indirect
-        //    return FRESH values each version (an in-place-mutated array would
-        //    never re-upload); geometry returns the SAME buffer instance unless
-        //    it grew. The indirect additionally reads the members' IsActive so
-        //    per-RO visibility keeps working without a rebuild.
-        let headersAval =
-            updater |> AVal.map (fun _ ->
+        // ── stable mirror buffers + reactive views over the mutable state. All
+        //    are driven by `updater` (via MirrorBuffer.Dependency), so they
+        //    refresh exactly when membership changed and evaluation order
+        //    doesn't matter. Draw records, headers and slot attributes live in
+        //    OWNED backend buffers whose identity is stable (growth aside): the
+        //    flushes upload only the recorded dirty sub-ranges, and the
+        //    resource layer sees the unchanged handle and re-prepares nothing —
+        //    a structural version costs O(changed), not O(slots). Draw records
+        //    are staged in INDEXED layout (VkDrawIndexedIndirectCommand /
+        //    GL DrawElementsIndirectCommand: BaseVertex and FirstInstance
+        //    swapped vs the DrawCallInfo struct) and the IndirectBuffer record
+        //    carries Indexed = true, so BOTH backends bind the GPU buffer
+        //    directly — no layout conversion, no per-version copy. Geometry
+        //    returns the SAME buffer instance unless it grew, as before.
+        let drawBuf    = MirrorBuffer(runtime, entries.Length * sizeof<DrawCallInfo>, BufferUsage.Indirect)
+        let headersBuf = MirrorBuffer(runtime, headers.Length * 4, BufferUsage.Storage)
+        let instBuf    = MirrorBuffer(runtime, instData.Length * 4, BufferUsage.Vertex)
+        // CPU staging of the draw records in INDEXED layout (uploaded ranges
+        // must be contiguous; entries itself stays in DrawCallInfo layout)
+        let mutable drawStaging : DrawCallInfo[] = Array.zeroCreate entries.Length
+
+        let flushDraws (t : AdaptiveToken) (gates : System.Collections.Generic.HashSet<GateWriter>) =
+            // toggled dynamic gates -> InstanceCount of exactly those slots
+            for w in gates do
+                if not w.IsDisposed then
+                    w.Update(t, fun slot count ->
+                        if entries.[slot].InstanceCount <> count then
+                            entries.[slot].InstanceCount <- count
+                            dirtyDraws.Add slot |> ignore)
+            if drawStaging.Length < entries.Length then
+                let ns = Array.zeroCreate<DrawCallInfo> entries.Length
+                System.Array.Copy(drawStaging, ns, drawStaging.Length)
+                drawStaging <- ns
+            let stride = sizeof<DrawCallInfo>
+            drawBuf.ResizeInPlace(uint64 (drawStaging.Length * stride))
+            let inline stage (s : int) =
+                let mutable c = entries.[s]
+                DrawCallInfo.ToggleIndexed(&c)
+                drawStaging.[s] <- c
+            if drawsAllDirty then
+                drawsAllDirty <- false
+                dirtyDraws.Clear()
+                if highWater > 0 then
+                    for s in 0 .. highWater - 1 do stage s
+                    drawBuf.Write(drawStaging, 0UL, 0, highWater)
+            elif dirtyDraws.Count > 0 then
+                let ss = System.Collections.Generic.List<int>(dirtyDraws)
+                dirtyDraws.Clear()
+                ss.Sort()
+                // runs separated by SMALL gaps merge: the staging mirror is
+                // always valid (a slot is re-staged whenever its entry
+                // changes), so re-uploading a gap's bytes is harmless and far
+                // cheaper than per-run upload-call overhead under dense churn.
+                let flush lo hi = drawBuf.Write(drawStaging, uint64 (lo * stride), lo, hi - lo + 1)
+                let mutable lo = ss.[0]
+                let mutable hi = ss.[0]
+                stage ss.[0]
+                for i in 1 .. ss.Count - 1 do
+                    let s = ss.[i]
+                    stage s
+                    if s <= hi + 64 then hi <- s
+                    else flush lo hi; lo <- s; hi <- s
+                flush lo hi
+
+        let flushHeaders (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
+            headersBuf.ResizeInPlace(uint64 (headers.Length * 4))
+            if headersAllDirty then
+                headersAllDirty <- false
+                dirtyHeaders.Clear()
                 let n = highWater * fieldStride
-                let a = Array.zeroCreate<int> (max 1 n)
-                System.Array.Copy(headers, a, n)
-                a)
+                if n > 0 then headersBuf.Write(headers, 0UL, 0, n)
+            elif dirtyHeaders.Count > 0 && fieldStride > 0 then
+                let ss = System.Collections.Generic.List<int>(dirtyHeaders)
+                dirtyHeaders.Clear()
+                ss.Sort()
+                // small gaps merge — `headers` is the always-valid source of
+                // truth, so a gap's bytes re-upload unchanged (see flushDraws)
+                let flush lo hi = headersBuf.Write(headers, uint64 (lo * fieldStride * 4), lo * fieldStride, (hi - lo + 1) * fieldStride)
+                let mutable lo = ss.[0]
+                let mutable hi = ss.[0]
+                for i in 1 .. ss.Count - 1 do
+                    let s = ss.[i]
+                    if s <= hi + 64 then hi <- s
+                    else flush lo hi; lo <- s; hi <- s
+                flush lo hi
+            else dirtyHeaders.Clear()
+
+        let flushInst (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
+            instBuf.ResizeInPlace(uint64 (instData.Length * 4))
+            if instAllDirty then
+                instAllDirty <- false
+                instDirty.Clear()
+                if instAlloc.Extent > 0 then instBuf.Write(instData, 0UL, 0, instAlloc.Extent)
+            elif instDirty.Count > 0 then
+                instDirty.Sort(fun (struct(a, _)) (struct(b, _)) -> compare a b)
+                // small gaps merge — instData is the always-valid source of truth
+                let flush lo hi = instBuf.Write(instData, uint64 (lo * 4), lo, hi - lo)
+                let mutable lo = let (struct(l, _)) = instDirty.[0] in l
+                let mutable hi = let (struct(_, h)) = instDirty.[0] in h
+                for i in 1 .. instDirty.Count - 1 do
+                    let (struct(o, e)) = instDirty.[i]
+                    if o <= hi + 256 then hi <- max hi e
+                    else flush lo hi; lo <- o; hi <- e
+                flush lo hi
+                instDirty.Clear()
+
+        do
+            let dep = Some (updater :> IAdaptiveValue)
+            drawBuf.Dependency <- dep
+            drawBuf.Flush <- flushDraws
+            drawBuf.Name <- "HeapIndirect"
+            headersBuf.Dependency <- dep
+            headersBuf.Flush <- flushHeaders
+            headersBuf.Name <- "HeapHeaders"
+            instBuf.Dependency <- dep
+            instBuf.Flush <- flushInst
+            instBuf.Name <- "HeapSlotAttr"
+
+        let headersAval = (headersBuf :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)
         let indirectAval =
             AVal.custom (fun t ->
-                updater.GetValue t |> ignore
-                let arr = Array.sub entries 0 highWater
-                for KeyValue(slot, struct(a, k)) in dynActives do
-                    arr.[slot].InstanceCount <- if a.GetValue t then k else 0
-                IndirectBuffer.ofArray arr)
+                let b = (drawBuf :> aval<IBackendBuffer>).GetValue t :> IBuffer
+                IndirectBuffer.ofBuffer true 0UL sizeof<DrawCallInfo> highWater b)
         let attrAvals = Array.init (if useBindlessGeom then 0 else numAttrs) (fun i -> updater |> AVal.map (fun _ -> attrBuffers.[i]))
         let idxAval = updater |> AVal.map (fun _ -> idxBuffer)
-        let instAval = updater |> AVal.map (fun _ -> instBuffer)
+        let instAval = (instBuf :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
         // re-reads only the live slots' avals (cheap when unchanged); a fresh
@@ -1790,20 +1958,17 @@ module Heap =
         member _.RenderObject = bucketRO :> IRenderObject
         member _.Count = slots.Count
 
-        /// flush geometry / instance-buffer changes: FRESH ArrayBuffers (full
-        /// re-upload, amortized — geometry changes only when an unseen geometry
-        /// was added, whether appended or written into a reclaimed range, or when
-        /// a compaction rewrote the packed bytes; the instance-slot buffer changes
-        /// on instanced adds and compactions)
+        /// flush geometry changes: FRESH ArrayBuffers (full re-upload, amortized —
+        /// geometry changes only when an unseen geometry was added, whether
+        /// appended or written into a reclaimed range, or when a compaction
+        /// rewrote the packed bytes). The instance-slot buffer needs no flush
+        /// here: instDirty ranges upload on the inst mirror's next pull.
         member private _.FlushGeometry() =
             if geomDirty then
                 geomDirty <- false
                 if not useBindlessGeom then
                     attrBuffers <- attrInfos |> Array.map (fun (ai, _, _, et, es, _, _) -> toTyped packedAttr.[ai] et es)
                 idxBuffer <- toTyped packedIdx idxType idxSize
-            if instChanged then
-                instChanged <- false
-                instBuffer <- ArrayBuffer (Array.sub instData 0 instAlloc.Extent) :> IBuffer
             // footprint diagnostics (cheap; published every update)
             lastPackedGeomBytes <- packedIdx.Count + (packedAttr |> Array.sumBy (fun l -> l.Count))
             lastPackedGeomLiveBytes <- idxAlloc.Live * idxSize + vtxAlloc.Live * bytesPerVertex
@@ -1825,6 +1990,7 @@ module Heap =
                     | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing per-draw uniform '%s'" names.[i]
                 keys.[i] <- av
                 headers.[slot * fieldStride + nameToField.[names.[i]]] <- allocRegion av
+            if fieldStride > 0 then dirtyHeaders.Add slot |> ignore
             let geomKey = geomKeyOf ro
             let geom =
                 if useBindlessGeom then
@@ -1853,14 +2019,17 @@ module Heap =
                     | ValueSome v -> v
                     | ValueNone -> failwithf "Heap.ofRenderObjects: atlas texture %A missing" tn))
             | None -> ()
-            // constant visibility is baked into the record; dynamic gates are
-            // re-read by the indirect aval (dynActives)
+            // constant visibility is baked into the record; a dynamic gate gets
+            // a GateWriter (pending on the draw mirror, so the first flush
+            // reads its actual value) re-staged only when IT toggles
             let k = if instanced then instanceCountOf ro else 1
             let active = ro.IsActive
             let instCount =
                 if active.IsConstant then (if AVal.force active then k else 0)
                 else
-                    dynActives.[slot] <- struct(active, k)
+                    let w = GateWriter(active, slot, k)
+                    gateWriters.[slot] <- w
+                    drawBuf.MarkGate w
                     k
             let instBlock = if useSlotAttr then allocInst slot k else null
             let firstInstance =
@@ -1869,6 +2038,7 @@ module Heap =
                 else slot
             entries.[slot] <- DrawCallInfo(FaceVertexCount = geom.IndexCount, FirstIndex = geom.FirstIndex, BaseVertex = geom.BaseVertex,
                                            FirstInstance = firstInstance, InstanceCount = instCount)
+            dirtyDraws.Add slot |> ignore
             slots.[ro] <- { Slot = slot; RegionKeys = keys; Active = active; Instances = k; InstOffset = firstInstance
                             InstBlock = instBlock; GeomKey = geomKey }
 
@@ -1885,7 +2055,10 @@ module Heap =
                 | None -> ()
                 if useSlotAttr then freeInst s.InstBlock
                 entries.[s.Slot] <- DrawCallInfo(FaceVertexCount = 0, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 0)
-                dynActives.Remove s.Slot |> ignore
+                dirtyDraws.Add s.Slot |> ignore
+                match gateWriters.TryGetValue s.Slot with
+                | true, w -> w.Dispose(); gateWriters.Remove s.Slot |> ignore
+                | _ -> ()
                 freeSlots.Push s.Slot
                 slots.Remove ro |> ignore
                 // the globals fall-through must not retain a member that left:
@@ -1937,6 +2110,8 @@ module Heap =
         member _.Dispose() =
             for KeyValue(_, e) in regions do arena.Remove e.Writer
             regions.Clear()
+            for KeyValue(_, w) in gateWriters do w.Dispose()
+            gateWriters.Clear()
             for (_, _, _, table) in bindlessTexTables do table.Dispose()
             match atlasState with
             | Some (pool, dummy, table) ->
