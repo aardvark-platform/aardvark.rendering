@@ -2949,6 +2949,84 @@ module Golden =
         if pass then Log.line "geomChurn: ALL PASS" else Log.warn "geomChurn: FAIL (host=%b bindless=%b)" hostOk gpuOk
         pass
 
+    // VALUE-level geometry dedup golden: two ROs wrapping the SAME arrays in
+    // FRESH BufferViews/avals (exactly what Sg combinators + Primitives.Box
+    // produce per leaf) must share ONE packed geometry allocation — the arena
+    // footprint (Heap.lastPackedGeomBytes) must equal the identity-shared
+    // baseline (both ROs using the very same BufferView instances) and the
+    // image must be pixel-identical to it. A fresh-COPY control (identity- AND
+    // value-distinct arrays of the same content) must pack MORE bytes, proving
+    // the assertion is not vacuous.
+    let geomValueDedupTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 6.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let effect = Effect.compose [ Effect.ofFunction GG.shade; Effect.ofFunction GG.frag ]
+
+        // ONE set of shared box arrays — the value-level identity under test
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.8)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+
+        let palette = [| C4f.Red; C4f.DodgerBlue |]
+        let mkRO (i : int) (attrs : IAttributeProvider) (idxBV : BufferView) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect effect
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- attrs
+            ro.Indices   <- Some idxBV
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation(V3d(float i * 1.6 - 0.8, 0.0, 0.0))).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "HeapColor",      (AVal.constant (palette.[i % 2].ToV4f()) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj ]
+            ro :> IRenderObject
+
+        let render (mk : int -> IRenderObject) =
+            let ros = ASet.ofArray [| mk 0; mk 1 |]
+            let heapObjs = Heap.ofRenderObjects runtime ros
+            use task = runtime.CompileRender(signature, heapObjs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            let img = out.GetValue().Download().ToPixImage<byte>()
+            let bytes = Heap.lastPackedGeomBytes
+            out.Release()
+            bytes, img
+
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        // A — identity-shared baseline: ONE BufferView/aval instance per attribute,
+        // referenced by BOTH ROs (the dedup that always worked)
+        let sharedAttrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let sharedIdx = bv index typeof<int>
+        let bytesA, imgA = render (fun i -> mkRO i sharedAttrs sharedIdx)
+        // B — FRESH BufferView + fresh AVal.constant(ArrayBuffer ...) per RO,
+        // all wrapping the SAME arrays: must dedup at the VALUE level
+        let bytesB, imgB =
+            render (fun i ->
+                let attrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+                mkRO i attrs (bv index typeof<int>))
+        // C — control: fresh array COPIES per RO (value-distinct) must NOT dedup
+        let bytesC, _ =
+            render (fun i ->
+                let attrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv (Array.copy positions) typeof<V3f>; DefaultSemantic.Normals, bv (Array.copy normals) typeof<V3f> ]
+                mkRO i attrs (bv (Array.copy index) typeof<int>))
+
+        let (maxDelta, nDiff, nNonBg, total) = diff imgB imgA
+        Log.line "geomValue: packedBytes identity-shared=%d fresh-wrappers=%d fresh-copies=%d  maxChannelDelta=%d diffPixels=%d/%d coverage=%d"
+            bytesA bytesB bytesC maxDelta nDiff total nNonBg
+        let pass = bytesB = bytesA && bytesC > bytesB && maxDelta = 0 && nNonBg > 1000L
+        if pass then Log.line "geomValue: PASS" else Log.warn "geomValue: FAIL"
+        pass
+
     // Drift golden test: 320 frames of churn with RANDOM-SIZED distinct
     // geometries (cone fans with random rim counts) and random per-RO instance
     // counts on the FORCED slot-attribute fallback (Heap.forceNoDrawId), so

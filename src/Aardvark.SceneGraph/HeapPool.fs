@@ -545,6 +545,21 @@ module Heap =
                 arr)
         | b -> failwithf "Heap.ofRenderObjects: expected host (INativeBuffer) geometry, got %A" (b.GetType())
 
+    /// VALUE-level geometry dedup source: CONSTANT buffer avals are forced once
+    /// at ingest and ArrayBuffer-backed ones key on the UNDERLYING ARRAY
+    /// reference (ArrayBuffer.Equals semantics) — per-leaf fresh BufferView/aval
+    /// wrappers around one shared array (exactly what Sg combinators +
+    /// Primitives.Box produce) dedup to ONE packed allocation. Non-constant or
+    /// non-ArrayBuffer sources keep aval-identity keying (their bytes may differ
+    /// per evaluation / per backend handle).
+    let private geomDedupSource (bv : BufferView) : obj =
+        let b = bv.Buffer
+        if b.IsConstant then
+            match b.GetValue() with
+            | :? ArrayBuffer as ab -> ab.Data :> obj
+            | _ -> b :> obj
+        else b :> obj
+
     /// Read a buffer-view's raw bytes whether host (INativeBuffer) or GPU-resident
     /// (IBackendBuffer, downloaded). Used only to COMBINE per-object INDEX buffers
     /// (small); vertex buffers are never downloaded — they're bound for vertex-pull.
@@ -927,8 +942,8 @@ module Heap =
           mutable Block : Management.Block<unit>; HeaderWords : int }
 
     /// Refcounted STATIC allocation in the bucket arena (one vertex attribute's
-    /// bytes, or one index range — written once, deduped by source-buffer
-    /// identity + byte offset). Ref is the allocation's HEADER word offset
+    /// bytes, or one index range — written once, deduped by VALUE-level source
+    /// + byte offset + format typeId). Ref is the allocation's HEADER word offset
     /// (data at Ref + AllocHeaderWords); re-seated by arena compaction. Count
     /// is the element count (the per-slot draw record's FaceVertexCount for
     /// index allocations).
@@ -940,8 +955,10 @@ module Heap =
     /// compaction header rewrite)
     [<RequireQualifiedAccess>]
     type internal AttrKey =
-        /// static host buffer: keyed by (buffer aval identity, byte offset)
-        | Static of struct(obj * int)
+        /// static host buffer: keyed by (value-level source — underlying array
+        /// for constant ArrayBuffer avals, aval identity otherwise — byte
+        /// offset, storage typeId)
+        | Static of struct(obj * int * int)
         /// SingleValueBuffer attribute: keyed by the inner value aval
         | Single of IAdaptiveValue
 
@@ -957,8 +974,9 @@ module Heap =
           mutable InstBlock : Management.Block<unit>
           /// per consumed attribute (host buckets; empty for bindless)
           AttrKeys : AttrKey[]
-          /// the slot's index allocation key (buffer aval identity, byte offset)
-          IdxKey : struct(obj * int) }
+          /// the slot's index allocation key (value-level source, byte offset,
+          /// index typeId)
+          IdxKey : struct(obj * int * int) }
 
     /// Immutable per-RO facts (STRUCTURE only — surface, geometry layout, uniform
     /// presence; never aval VALUES). Cached per RO in a ConditionalWeakTable so a
@@ -1572,17 +1590,20 @@ module Heap =
         //    Bindless buckets keep the per-object SSBO descriptor array for the
         //    VERTEX data (GPU-resident buffers are bound zero-copy, never
         //    downloaded); only their INDEX bytes are arena allocations. ──
-        // dedup keys are (source IDENTITY, byte offset) — a hand-rolled comparer
-        // (reference hash + int) avoids the generic structural-hashing path that
+        // dedup keys are (VALUE-level source, byte offset, format typeId): the
+        // source is the UNDERLYING ARRAY for constant ArrayBuffer-backed views
+        // (geomDedupSource — fresh per-leaf BufferView/aval wrappers around one
+        // shared array dedup), the buffer aval otherwise. A hand-rolled comparer
+        // (reference hash + ints) avoids the generic structural-hashing path that
         // showed up in the per-add/remove cost of churn profiles.
         let geomKeyComparer =
-            { new System.Collections.Generic.IEqualityComparer<struct(obj * int)> with
-                member _.GetHashCode(struct(o, i)) =
-                    System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode o ^^^ (i * 0x9E3779B1)
-                member _.Equals(struct(a, ai), struct(b, bi)) =
-                    System.Object.ReferenceEquals(a, b) && ai = bi }
-        let attrStatic = System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>(geomKeyComparer)
-        let idxStatic  = System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>(geomKeyComparer)
+            { new System.Collections.Generic.IEqualityComparer<struct(obj * int * int)> with
+                member _.GetHashCode(struct(o, i, t)) =
+                    System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode o ^^^ (i * 0x9E3779B1) ^^^ (t * 0x85EBCA6B)
+                member _.Equals(struct(a, ai, at), struct(b, bi, bt)) =
+                    System.Object.ReferenceEquals(a, b) && ai = bi && at = bt }
+        let attrStatic = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(geomKeyComparer)
+        let idxStatic  = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(geomKeyComparer)
         // singleton-attribute regions (adaptive, header + RegionWriter at ref+4),
         // deduped by the inner value aval — DISTINCT from `regions` (a uniform
         // field and a singleton attribute sharing an aval would need different
@@ -1764,8 +1785,8 @@ module Heap =
 
         /// STATIC allocation (immutable bytes + header), refcounted/deduped in
         /// `dict` by source identity. Returns the cached entry on a hit.
-        let allocStatic (dict : System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>)
-                        (key : struct(obj * int)) (bytes : byte[]) (typeId : int) (count : int) (strideBytes : int) : StaticEntry =
+        let allocStatic (dict : System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>)
+                        (key : struct(obj * int * int)) (bytes : byte[]) (typeId : int) (count : int) (strideBytes : int) : StaticEntry =
             match dict.TryGetValue key with
             | true, e -> e.RefCount <- e.RefCount + 1; e
             | _ ->
@@ -1779,7 +1800,7 @@ module Heap =
                 dict.[key] <- e
                 e
 
-        let freeStatic (dict : System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>) (key : struct(obj * int)) =
+        let freeStatic (dict : System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>) (key : struct(obj * int * int)) =
             match dict.TryGetValue key with
             | true, e ->
                 e.RefCount <- e.RefCount - 1
@@ -1792,16 +1813,17 @@ module Heap =
         /// buffer) with a header carrying the ELEMENT TYPE (u16 vs 32-bit) —
         /// the shader's index decode branches on it, so one bucket freely
         /// mixes 16- and 32-bit-indexed members.
-        let idxFor (ro : RenderObject) : struct(obj * int) * StaticEntry =
+        let idxFor (ro : RenderObject) : struct(obj * int * int) * StaticEntry =
             let bv = match ro.Indices with Some b -> b | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
-            let key = struct(bv.Buffer :> obj, bv.Offset)
+            let es = elemSize bv.ElementType
+            let tid = if es = 2 then IdxType16 else IdxType32
+            let key = struct(geomDedupSource bv, bv.Offset, tid)
             match idxStatic.TryGetValue key with
             | true, e -> e.RefCount <- e.RefCount + 1; key, e
             | _ ->
                 let bytes = readGeomBytes runtime bv
-                let es = elemSize bv.ElementType
                 let cnt = bytes.Length / es
-                key, allocStatic idxStatic key bytes (if es = 2 then IdxType16 else IdxType32) cnt es
+                key, allocStatic idxStatic key bytes tid cnt es
 
         /// one consumed attribute of a new slot: singleton -> adaptive region,
         /// real buffer -> static allocation. Returns (release key, header ref).
@@ -1817,16 +1839,16 @@ module Heap =
             | :? ISingleValueBuffer as svb ->
                 AttrKey.Single svb.Value, allocSingle svb.Value bv.ElementType
             | _ ->
-                let key = struct(bv.Buffer :> obj, bv.Offset)
+                let et = bv.ElementType
+                let tid =
+                    match attrTypeId et with
+                    | ValueSome t -> t
+                    | ValueNone -> failwithf "Heap: attribute %A element type %A has no storage typeId" sym et
+                let key = struct(geomDedupSource bv, bv.Offset, tid)
                 match attrStatic.TryGetValue key with
                 | true, e -> e.RefCount <- e.RefCount + 1; AttrKey.Static key, e.Ref
                 | _ ->
-                    let et = bv.ElementType
                     let es = elemSize et
-                    let tid =
-                        match attrTypeId et with
-                        | ValueSome t -> t
-                        | ValueNone -> failwithf "Heap: attribute %A element type %A has no storage typeId" sym et
                     let bytes = readBytesView bv
                     let e = allocStatic attrStatic key bytes tid (bytes.Length / es) es
                     AttrKey.Static key, e.Ref
