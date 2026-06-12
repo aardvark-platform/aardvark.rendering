@@ -525,8 +525,11 @@ module Heap =
 
     /// Size in bytes of a blittable attribute/index element type (-1 if it isn't
     /// blittable — such an RO is then treated as un-heapable and passed through).
+    /// Cached per type: Marshal.SizeOf is a marshalling-info lookup and the
+    /// eligibility checks call this several times per classified RO.
+    let private elemSizeCache = System.Collections.Concurrent.ConcurrentDictionary<System.Type, int>()
     let private elemSize (t : System.Type) =
-        try System.Runtime.InteropServices.Marshal.SizeOf t with _ -> -1
+        elemSizeCache.GetOrAdd(t, fun t -> try System.Runtime.InteropServices.Marshal.SizeOf t with _ -> -1)
 
     /// Read a host buffer-view's raw bytes (respecting its byte Offset). Works for
     /// ArrayBuffer and any INativeBuffer (incl. a user-supplied NativeMemoryBuffer).
@@ -740,6 +743,13 @@ module Heap =
                 if src.Length % 4 <> 0 then staging.[off + words - 1] <- 0.0f
                 System.Buffer.BlockCopy(src, 0, staging, off * 4, src.Length)
                 pendingStatic.Add(struct(off, off + words))
+        /// Stage a ONE-SHOT region write (CONSTANT sources — no RegionWriter
+        /// subscription, no per-flush re-evaluation): `pack` writes into the
+        /// staging mirror NOW; the covered word range uploads on the next
+        /// Compute (same pendingStatic path as headers/static bytes).
+        member _.StageOnce(off : int, size : int, pack : float32[] -> unit) =
+            pack staging
+            pendingStatic.Add(struct(off, off + size))
         /// Add a region writer; returns it so it can be removed later.
         member x.Add(src, off, size, pack) : RegionWriter =
             let w = RegionWriter(src, off, size, pack)
@@ -909,7 +919,9 @@ module Heap =
     /// range in the arena HeapSpace (re-allocated on compaction). Size is the
     /// TOTAL allocation size (incl. header words); HeaderWords is 0 for raw
     /// uniform-field regions and AllocHeaderWords for singleton-attribute
-    /// allocations (whose writer packs at Offset + HeaderWords).
+    /// allocations (whose writer packs at Offset + HeaderWords). Writer is
+    /// null for CONSTANT sources (packed once via HeapArena.StageOnce — no
+    /// subscription, nothing to re-evaluate or dispose).
     type internal RegionEntry =
         { mutable Offset : int; Size : int; Writer : RegionWriter; mutable RefCount : int
           mutable Block : Management.Block<unit>; HeaderWords : int }
@@ -1560,8 +1572,17 @@ module Heap =
         //    Bindless buckets keep the per-object SSBO descriptor array for the
         //    VERTEX data (GPU-resident buffers are bound zero-copy, never
         //    downloaded); only their INDEX bytes are arena allocations. ──
-        let attrStatic = System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>(HashIdentity.Structural)
-        let idxStatic  = System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>(HashIdentity.Structural)
+        // dedup keys are (source IDENTITY, byte offset) — a hand-rolled comparer
+        // (reference hash + int) avoids the generic structural-hashing path that
+        // showed up in the per-add/remove cost of churn profiles.
+        let geomKeyComparer =
+            { new System.Collections.Generic.IEqualityComparer<struct(obj * int)> with
+                member _.GetHashCode(struct(o, i)) =
+                    System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode o ^^^ (i * 0x9E3779B1)
+                member _.Equals(struct(a, ai), struct(b, bi)) =
+                    System.Object.ReferenceEquals(a, b) && ai = bi }
+        let attrStatic = System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>(geomKeyComparer)
+        let idxStatic  = System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>(geomKeyComparer)
         // singleton-attribute regions (adaptive, header + RegionWriter at ref+4),
         // deduped by the inner value aval — DISTINCT from `regions` (a uniform
         // field and a singleton attribute sharing an aval would need different
@@ -1683,7 +1704,14 @@ module Heap =
                 // arena's own Compute (which depends on the updater whose
                 // evaluation we are inside) — no transact happens here.
                 arena.EnsureFloats arenaAlloc.Extent
-                let w = arena.Add(av, off, sz, pk)
+                // CONSTANT sources are packed ONCE into staging — no RegionWriter
+                // (no adaptive subscription to create at add / dispose at remove,
+                // nothing for the flush to re-evaluate). Writer = null marks them.
+                let w =
+                    if av.IsConstant then
+                        arena.StageOnce(off, sz, fun st -> pk (av.GetValueUntyped AdaptiveToken.Top) st off)
+                        Unchecked.defaultof<RegionWriter>
+                    else arena.Add(av, off, sz, pk)
                 regions.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b; HeaderWords = 0 }
                 off
 
@@ -1692,7 +1720,7 @@ module Heap =
             | true, e ->
                 e.RefCount <- e.RefCount - 1
                 if e.RefCount = 0 then
-                    arena.Remove e.Writer
+                    if not (isNull e.Writer) then arena.Remove e.Writer
                     regions.Remove av |> ignore
                     arenaAlloc.Free e.Block
             | _ -> ()
@@ -1715,7 +1743,12 @@ module Heap =
                 let off = int b.Offset
                 arena.EnsureFloats arenaAlloc.Extent
                 arena.WriteHeader(off, tid, 1, 0)
-                let w = arena.Add(av, off + AllocHeaderWords, szF, pk)
+                // constant singleton value -> one-shot staging write (see allocRegion)
+                let w =
+                    if av.IsConstant then
+                        arena.StageOnce(off + AllocHeaderWords, szF, fun st -> pk (av.GetValueUntyped AdaptiveToken.Top) st (off + AllocHeaderWords))
+                        Unchecked.defaultof<RegionWriter>
+                    else arena.Add(av, off + AllocHeaderWords, szF, pk)
                 singleRegions.[av] <- { Offset = off; Size = sizeF; Writer = w; RefCount = 1; Block = b; HeaderWords = AllocHeaderWords }
                 off
 
@@ -1724,7 +1757,7 @@ module Heap =
             | true, e ->
                 e.RefCount <- e.RefCount - 1
                 if e.RefCount = 0 then
-                    arena.Remove e.Writer
+                    if not (isNull e.Writer) then arena.Remove e.Writer
                     singleRegions.Remove av |> ignore
                     arenaAlloc.Free e.Block
             | _ -> ()
@@ -1818,11 +1851,13 @@ module Heap =
             for KeyValue(_, e) in regions do
                 let ee = e
                 res.Add(struct(ee.Offset, ee.Size, fun off b ->
-                    ee.Offset <- off; ee.Block <- b; ee.Writer.Off <- off))
+                    ee.Offset <- off; ee.Block <- b
+                    if not (isNull ee.Writer) then ee.Writer.Off <- off))
             for KeyValue(_, e) in singleRegions do
                 let ee = e
                 res.Add(struct(ee.Offset, ee.Size, fun off b ->
-                    ee.Offset <- off; ee.Block <- b; ee.Writer.Off <- off + AllocHeaderWords))
+                    ee.Offset <- off; ee.Block <- b
+                    if not (isNull ee.Writer) then ee.Writer.Off <- off + AllocHeaderWords))
             for KeyValue(_, e) in attrStatic do
                 let ee = e
                 res.Add(struct(ee.Ref, ee.SizeF, fun off b -> ee.Ref <- off; ee.Block <- b))
@@ -2361,9 +2396,11 @@ module Heap =
         /// Release all adaptive references (region writers, texture writers) and
         /// the bucket-owned GPU resources (atlas pages, dummy textures).
         member _.Dispose() =
-            for KeyValue(_, e) in regions do arena.Remove e.Writer
+            for KeyValue(_, e) in regions do
+                if not (isNull e.Writer) then arena.Remove e.Writer
             regions.Clear()
-            for KeyValue(_, e) in singleRegions do arena.Remove e.Writer
+            for KeyValue(_, e) in singleRegions do
+                if not (isNull e.Writer) then arena.Remove e.Writer
             singleRegions.Clear()
             attrStatic.Clear()
             idxStatic.Clear()
@@ -2524,12 +2561,52 @@ module Heap =
                         diag (sprintf "uniform '%s' is effect-consumed and RO-supplied but UNPACKABLE (ContentType = %s) — it stays a shared global resolved from ONE bucket member; if it genuinely varies per object, supply it in a packable type (M44f/Trafo3d/M44d/V4f/C4f/V3f/V2f/float32/float/int)." n v.ContentType.Name)
                         false
                 | ValueNone -> false)
+        // device capability is constant — read it once, not per classified RO
+        // (the Vulkan property re-walks extension/feature tables on every call)
+        let supportsUnbounded = runtime.SupportsUnboundedSamplerArrays
+        // the sampler eligibility verdict depends only on the EFFECT (uniform
+        // declarations incl. sampler states) and the runtime caps — cache it
+        // per effect id so per-RO classification skips the Map walks.
+        let samplerIssueCache = System.Collections.Generic.Dictionary<string, string option>()
+        let samplerIssueOf (e : Effect) : string option =
+            match samplerIssueCache.TryGetValue e.Id with
+            | true, v -> v
+            | _ ->
+                let v =
+                    let samps = e.Uniforms |> Map.toArray |> Array.filter (fun (_, p) -> typeof<ISampler>.IsAssignableFrom p.uniformType)
+                    let badType = samps |> Array.tryFind (fun (_, p) -> not (isBindlessSamplerType p.uniformType))
+                    match badType with
+                    | Some (n, p) -> Some (sprintf "sampler '%s' has unsupported type %s (supported: Sampler2d, SamplerCube)" n p.uniformType.Name)
+                    | None ->
+                        if samps.Length > 0
+                           && not supportsUnbounded
+                           && not (samps |> Array.forall (fun (_, p) -> p.uniformType = typeof<Sampler2d>)) then
+                            Some "per-object textures need descriptor indexing for non-2d samplers (the atlas fallback handles Sampler2d only)"
+                        else
+                            let mismatch =
+                                samps
+                                |> Array.choose (fun (n, p) ->
+                                    match p.uniformValue with
+                                    | UniformValue.Sampler(_, st) -> Some (p.uniformType, (n, st))
+                                    | UniformValue.SamplerArray a when a.Length > 0 -> Some (p.uniformType, (n, snd a.[0]))
+                                    | _ -> None)
+                                |> Array.groupBy fst
+                                |> Array.tryPick (fun (ty, g) ->
+                                    let (_, (_, st0)) = g.[0]
+                                    if g |> Array.forall (fun (_, (_, st)) -> st = st0) then None
+                                    else Some (sprintf "samplers of type %s use DIFFERING sampler states (one bindless array per type carries ONE state): %s" ty.Name (g |> Array.map (fst << snd) |> String.concat ", ")))
+                            mismatch
+                samplerIssueCache.[e.Id] <- v
+                v
         // eligible iff: an Effect surface, an indexed draw with a 2-/4-byte
         // readable index buffer, every attribute the SHADER reads
         // (effect.Inputs) either host-storage-decodable (incl. singletons) or
         // bindless vertex-pull eligible, and supported samplers. Anything else
         // -> passthrough, with a deduped diagnostic line when Heap.Diagnostics.
-        let whyNotHeapable (o : IRenderObject) : string option =
+        // Returns (ineligibility reason, all-host-tight): the flag is the
+        // host-vs-bindless geometry routing decision (hostIssue = None), so
+        // factsOf never re-walks the attribute table.
+        let classify (o : IRenderObject) : struct(string option * bool) =
             match o with
             | :? RenderObject as ro ->
                 match ro.Surface with
@@ -2537,13 +2614,13 @@ module Heap =
                     // ── index buffer: required; element type 2 or 4 bytes;
                     //    readable (host INativeBuffer or downloadable backend buffer) ──
                     match ro.Indices with
-                    | None -> Some "RO has no index buffer (non-indexed draws pass through; supply Indices)"
+                    | None -> struct(Some "RO has no index buffer (non-indexed draws pass through; supply Indices)", false)
                     | Some ibv ->
                         let ies = elemSize ibv.ElementType
                         if ies <> 2 && ies <> 4 then
-                            Some (sprintf "index element type %s unsupported (need a 2- or 4-byte integer type)" ibv.ElementType.Name)
+                            struct(Some (sprintf "index element type %s unsupported (need a 2- or 4-byte integer type)" ibv.ElementType.Name), false)
                         elif not (isReadableIndex ibv) then
-                            Some (sprintf "index buffer of type %s is neither host-readable nor a backend buffer" (ibv.Buffer.GetValue().GetType().Name))
+                            struct(Some (sprintf "index buffer of type %s is neither host-readable nor a backend buffer" (ibv.Buffer.GetValue().GetType().Name)), false)
                         else
                         // ── attributes: HOST storage decode OR bindless vertex-pull ──
                         let hostIssue =
@@ -2556,8 +2633,11 @@ module Heap =
                                     elif not (hostDecodable bv.ElementType inputT) then
                                         Some (sprintf "attribute '%s' element type %s cannot be storage-decoded into shader input %s (supported sources: float32/V2f/V3f/V4f, C3f/C4f/C4b, int/V2i/V3i/V4i, float/V2d/V3d/V4d/C3d/C4d; supported inputs: float32/V2f/V3f/V4f, int/V2i/V3i/V4i)" name bv.ElementType.Name inputT.Name)
                                     else None)
-                        let bindlessIssue =
-                            if not runtime.SupportsUnboundedSamplerArrays then
+                        // evaluated LAZILY: when the host path is eligible the
+                        // bindless fallback's verdict is irrelevant (factsOf
+                        // routes host-tight geometry to the packed path anyway)
+                        let bindlessIssue () =
+                            if not supportsUnbounded then
                                 Some "vertex-pull needs descriptor indexing (unbounded SSBO arrays) — unavailable on this runtime (e.g. GL)"
                             elif instanceCountOf ro <> 1 then
                                 Some "vertex-pull does not support pre-instanced draws (per-draw FirstInstance routes the handle)"
@@ -2568,60 +2648,57 @@ module Heap =
                                     | ValueSome bv ->
                                         if isBindlessAttr bv then None
                                         else Some (sprintf "attribute '%s' (%s, offset %d, stride %d) is not vertex-pull eligible (need a float/int vector type with 4-byte-aligned offset/stride)" name bv.ElementType.Name bv.Offset bv.Stride))
-                        match hostIssue, bindlessIssue with
-                        | Some h, Some b -> Some (sprintf "%s; bindless fallback also ineligible: %s" h b)
-                        | _ ->
-                        // ── samplers: bindless per-type arrays / atlas fallback ──
-                        let samps = e.Uniforms |> Map.toArray |> Array.filter (fun (_, p) -> typeof<ISampler>.IsAssignableFrom p.uniformType)
-                        let badType = samps |> Array.tryFind (fun (_, p) -> not (isBindlessSamplerType p.uniformType))
-                        match badType with
-                        | Some (n, p) -> Some (sprintf "sampler '%s' has unsupported type %s (supported: Sampler2d, SamplerCube)" n p.uniformType.Name)
+                        let geomIssue =
+                            match hostIssue with
+                            | None -> None
+                            | Some h ->
+                                match bindlessIssue () with
+                                | Some b -> Some (sprintf "%s; bindless fallback also ineligible: %s" h b)
+                                | None -> None
+                        match geomIssue with
+                        | Some _ -> struct(geomIssue, false)
                         | None ->
-                            if samps.Length > 0
-                               && not runtime.SupportsUnboundedSamplerArrays
-                               && not (samps |> Array.forall (fun (_, p) -> p.uniformType = typeof<Sampler2d>)) then
-                                Some "per-object textures need descriptor indexing for non-2d samplers (the atlas fallback handles Sampler2d only)"
-                            else
-                                let mismatch =
-                                    samps
-                                    |> Array.choose (fun (n, p) ->
-                                        match p.uniformValue with
-                                        | UniformValue.Sampler(_, st) -> Some (p.uniformType, (n, st))
-                                        | UniformValue.SamplerArray a when a.Length > 0 -> Some (p.uniformType, (n, snd a.[0]))
-                                        | _ -> None)
-                                    |> Array.groupBy fst
-                                    |> Array.tryPick (fun (ty, g) ->
-                                        let (_, (_, st0)) = g.[0]
-                                        if g |> Array.forall (fun (_, (_, st)) -> st = st0) then None
-                                        else Some (sprintf "samplers of type %s use DIFFERING sampler states (one bindless array per type carries ONE state): %s" ty.Name (g |> Array.map (fst << snd) |> String.concat ", ")))
-                                mismatch
-                | s -> Some (sprintf "surface is not an FShade Effect (%A) — only Surface.Effect render objects are heapable" (s.GetType().Name))
-            | _ -> Some (sprintf "not a concrete RenderObject (%s) — command/multi render objects pass through" (o.GetType().Name))
-
-        let isHeapable (o : IRenderObject) =
-            match whyNotHeapable o with
-            | None -> true
-            | Some reason ->
-                diag (sprintf "pass-through: %s" reason)
-                false
-
-        let objsAval = objects |> ASet.toAVal
+                            // ── samplers: bindless per-type arrays / atlas fallback
+                            //    (effect-level verdict, cached per effect id) ──
+                            struct(samplerIssueOf e, hostIssue.IsNone)
+                | s -> struct(Some (sprintf "surface is not an FShade Effect (%A) — only Surface.Effect render objects are heapable" (s.GetType().Name)), false)
+            | _ -> struct(Some (sprintf "not a concrete RenderObject (%s) — command/multi render objects pass through" (o.GetType().Name)), false)
 
         // ── incremental driver ───────────────────────────────────────────
-        // ONE updater aval per call: it reads the object-set snapshot, groups by
-        // (token-reactive) mode key and DIFFS each bucket's membership against
-        // its persistent IncrementalBucket — an add/remove is O(changed) instead
+        // ONE updater aval per call: it consumes the object-set reader's
+        // CHANGES (a true delta — no snapshot read, no HashSet.computeDelta),
+        // groups by (token-reactive) mode key and feeds each bucket's
+        // persistent IncrementalBucket — an add/remove is O(changed) instead
         // of O(bucket), for EVERY bucket kind (host or bindless geometry,
         // bindless-textured, atlas, instanced). Every bucket-internal aval
         // (indirect, headers, geometry, textures, arena flush) hangs off the
         // updater, so evaluation order doesn't matter.
+        let objReader = objects.GetReader()
 
         // intern mode keys to unique tokens, so the per-change grouping hashes
         // object references instead of 10-tuples-with-strings (20k ROs/change).
         // keyValues is the reverse map: token -> the RESOLVED mode-key tuple, so a
         // bucket can bake its pipeline state from the KEY's values (a member's
         // dynamic mode aval can then never bend the bucket it leaves — it moves).
-        let keyInterner = System.Collections.Generic.Dictionary<_, obj>()
+        // hand-rolled comparer: the F# generic structural comparer on this
+        // 10-tuple (two strings + BlendMode + enums) costs µs per intern lookup
+        let modeKeyComparer =
+            { new System.Collections.Generic.IEqualityComparer<string * IndexedGeometryMode * string * CullMode * WindingOrder * FillMode * BlendMode * DepthTest * bool * bool> with
+                member _.GetHashCode((eid, m, layout, cull, ff, fill, blend, dt, dw, tr)) =
+                    let mutable h = eid.GetHashCode()
+                    h <- h * 31 + layout.GetHashCode()
+                    h <- h * 31 + int m
+                    h <- h * 31 + int cull
+                    h <- h * 31 + int ff
+                    h <- h * 31 + int fill
+                    h <- h * 31 + blend.GetHashCode()
+                    h <- h * 31 + int dt
+                    h <- h * 31 + (if dw then 1 else 0)
+                    h * 2 + (if tr then 1 else 0)
+                member _.Equals((e1, m1, l1, c1, f1, fl1, b1, d1, w1, t1), (e2, m2, l2, c2, f2, fl2, b2, d2, w2, t2)) =
+                    m1 = m2 && c1 = c2 && f1 = f2 && fl1 = fl2 && d1 = d2 && w1 = w2 && t1 = t2
+                    && b1.Equals b2 && e1 = e2 && l1 = l2 }
+        let keyInterner = System.Collections.Generic.Dictionary<_, obj>(modeKeyComparer)
         let keyValues = System.Collections.Generic.Dictionary<obj, string * IndexedGeometryMode * string * CullMode * WindingOrder * FillMode * BlendMode * DepthTest * bool * bool>(HashIdentity.Reference)
         let internKey k =
             match keyInterner.TryGetValue k with
@@ -2633,19 +2710,19 @@ module Heap =
             match roFacts.TryGetValue o with
             | true, f -> f
             | _ ->
+                let struct(reason, hostGeom) = classify o
+                let heapable =
+                    match reason with
+                    | None -> true
+                    | Some why ->
+                        diag (sprintf "pass-through: %s" why)
+                        false
                 let f =
-                    if isHeapable o then
+                    if heapable then
                         let r = o :?> RenderObject
-                        // geometry class: all-host-tight -> packed combined buffers;
-                        // anything else (heapable => bindless-eligible) -> vertex-pull.
-                        let hostGeom =
-                            match r.Surface with
-                            | Surface.Effect e ->
-                                e.Inputs |> Map.forall (fun name inputT ->
-                                    match r.VertexAttributes.TryGetAttribute (Symbol.Create name) with
-                                    | ValueSome bv -> isHostTight bv && hostDecodable bv.ElementType inputT
-                                    | ValueNone -> false)
-                            | _ -> false
+                        // geometry class (from classify): all-host-tight ->
+                        // packed combined buffers; anything else (heapable =>
+                        // bindless-eligible) -> vertex-pull.
                         let bindless = not hostGeom
                         let inst = instanceCountOf r > 1
                         // per-draw field set: DETECTED (effect-consumed ∩
@@ -2687,7 +2764,6 @@ module Heap =
         // dynamic-mode ROs in the set)
         let roBucket = System.Collections.Generic.Dictionary<RenderObject, obj>(HashIdentity.Reference)
         let updaterRef = ref (Unchecked.defaultof<aval<int>>)
-        let lastContent = ref HashSet.empty<IRenderObject>
         // number of heapable ROs in the set whose mode key is DYNAMIC (any
         // non-constant pipeline-state aval). While > 0 the grouping must be
         // recomputed every evaluation (token-reactive re-partitioning).
@@ -2710,9 +2786,7 @@ module Heap =
 
         let updater =
             AVal.custom (fun t ->
-                let cur = objsAval.GetValue t
-                let delta = HashSet.computeDelta lastContent.Value cur
-                lastContent.Value <- cur
+                let delta = objReader.GetChanges t
 
                 // facts + dynamic-RO census from the delta (cheap: O(changed))
                 for op in delta do
@@ -2733,7 +2807,7 @@ module Heap =
                     roBucket.Clear()
                     passSet.Clear()
                     let groups = System.Collections.Generic.Dictionary<obj, System.Collections.Generic.List<struct(RenderObject * RoFacts)>>(HashIdentity.Reference)
-                    for o in cur do
+                    for o in objReader.State do
                         let f = factsOf t o
                         if f.Heapable then
                             let r = o :?> RenderObject
