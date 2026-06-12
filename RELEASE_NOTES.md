@@ -1,3 +1,7 @@
+### 5.7.0-prerelease0007
+- [Sg] Heap: the last O(N)-per-structural-version effort is gone — draw records (indirect), headers and the MoltenVK instance buffer live in stable GPU-resident `MirrorBuffer`s (identity-stable backend buffers, dirty-sub-range uploads from the delta pass, gap-merged); `IsActive` toggles write single cells (O(toggled)). Both backends bind the buffers directly (indexed indirect record = `DrawCallInfo.ToggleIndexed`; no GL fallback needed). Measured per-version overhead vs population: ~2.8 ms -> ~0.2 ms at 200k objects, flat in N.
+- [Vulkan] DescriptorSetLayout: Debug assert updated for unbounded descriptor arrays (binding numbers must be strictly increasing; the prefix-sum-of-DescriptorCounts invariant predates descriptor arrays).
+
 ### 5.7.0-prerelease0006
 - [Sg] Heap: the hand-rolled range allocator is gone — all four heap allocation sites (geometry vertex/index ranges, arena uniform regions, instance-attribute ranges) now use the existing generic `Management.MemoryManager` (size-sorted free list, O(log n) best-fit, both-neighbor coalescing) over a virtual `Memory` instance; a thin wrapper adds the live/extent counters the compaction trigger needs. Net code removal; behavior and `geomdrift`/`geomchurn` guarantees unchanged.
 
