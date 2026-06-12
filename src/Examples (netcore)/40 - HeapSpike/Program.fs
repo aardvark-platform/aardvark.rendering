@@ -151,6 +151,8 @@ let main argv =
         if Golden.atlasHeapTest () then 0 else 1
     elif argv |> Array.contains "msaa" then
         if Golden.msaaTest () then 0 else 1
+    elif argv |> Array.contains "churnprobe" then
+        if Golden.churnProbeTest () then 0 else 1
     elif argv |> Array.contains "submitstress" then
         if Golden.submitStressTest () then 0 else 1
     elif argv |> Array.contains "glyphwedge" then

@@ -2441,3 +2441,102 @@ module Golden =
         if pass then Log.line "visibility: PASS (deactivating half ~halves coverage, no rebuild)"
         else Log.warn "visibility: FAIL"
         pass
+
+    // Headless churn probe: per-frame cost of ONE add + ONE remove in a TEXTURED
+    // bucket (bindless sampler array) and in a BINDLESS-geometry bucket — the two
+    // bucket kinds that used to take the full buildBucket rebuild path on every
+    // membership change. Informational (prints median/max frame times); always
+    // returns true. Env N overrides the bucket size (default 5000).
+    let churnProbeTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 60.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let n = match System.Environment.GetEnvironmentVariable "N" with null | "" -> 5000 | s -> int s
+        let frames = 30
+        let warmup = 5
+        let side = max 1 (int (ceil (sqrt (float n))))
+        let posOf (i : int) = V3d(float (i % side - side / 2) * 1.2, float (i / side - side / 2) * 1.2, 0.0)
+
+        let run (label : string) (n : int) (names : Set<string>) (mkRO : int -> IRenderObject) =
+            let all = Array.init (n + warmup + frames) mkRO
+            let ros = cset (Array.sub all 0 n)
+            let heapObjs = Heap.ofRenderObjects runtime names (ros :> aset<_>)
+            use task = runtime.CompileRender(signature, heapObjs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            out.GetValue() |> ignore
+            for i in 0 .. warmup - 1 do
+                transact (fun () ->
+                    ros.Remove all.[i] |> ignore
+                    ros.Add all.[n + i] |> ignore)
+                out.GetValue() |> ignore
+            let times = System.Collections.Generic.List<float>()
+            for i in 0 .. frames - 1 do
+                let sw = System.Diagnostics.Stopwatch.StartNew()
+                transact (fun () ->
+                    ros.Remove all.[warmup + i] |> ignore
+                    ros.Add all.[n + warmup + i] |> ignore)
+                out.GetValue() |> ignore
+                sw.Stop()
+                times.Add sw.Elapsed.TotalMilliseconds
+            out.Release()
+            let sorted = times |> Seq.sort |> Seq.toArray
+            Log.line "churnProbe[%s]: n=%d  add+remove/frame  median=%.2f ms  p90=%.2f ms  max=%.2f ms"
+                label n sorted.[sorted.Length / 2] sorted.[(sorted.Length * 9) / 10] sorted.[sorted.Length - 1]
+
+        // ── textured bucket (per-object DiffuseTexture -> bindless sampler array) ──
+        let texArray : ITexture[] = Array.init TexCount mkTexture
+        let effTex = Effect.compose [ Effect.ofFunction TH.shade; Effect.ofFunction TH.frag ]
+        let vattrsHost = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let mkTexRO (i : int) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect effTex
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrsHost
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation (posOf i)).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj
+                Symbol.Create "DiffuseTexture", (AVal.constant texArray.[i % TexCount] :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        run "textured" n (Set.ofList [ "HeapModelTrafo" ]) mkTexRO
+
+        // ── bindless-geometry bucket (GPU-resident buffers -> vertex-pull) ──
+        let posGpu = runtime.PrepareBuffer(ArrayBuffer positions :> IBuffer)
+        let nrmGpu = runtime.PrepareBuffer(ArrayBuffer normals   :> IBuffer)
+        let idxGpu = runtime.PrepareBuffer(ArrayBuffer index     :> IBuffer)
+        let gbv (b : IBackendBuffer) t = BufferView(AVal.constant (b :> IBuffer), t)
+        let vattrsGpu = AttributeProvider.ofList [ Symbol.Create "Positions", gbv posGpu typeof<V3f>; Symbol.Create "Normals", gbv nrmGpu typeof<V3f> ]
+        let effGeom = Effect.compose [ Effect.ofFunction GG.shade; Effect.ofFunction GG.frag ]
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
+        let mkGpuRO (i : int) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect effGeom
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrsGpu
+            ro.Indices   <- Some (gbv idxGpu typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation (posOf i)).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj ]
+            ro :> IRenderObject
+        // the unbounded SSBO array binding is device-capped at 1024 descriptors
+        // (slots * numAttrs), a pre-existing backend limit of the vertex-pull
+        // path — size the bindless bucket within it (2 attrs -> <= 512 slots).
+        run "bindless-geom" (min n 480) (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) mkGpuRO
+        true
