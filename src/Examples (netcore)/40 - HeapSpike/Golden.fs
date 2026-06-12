@@ -333,6 +333,16 @@ module Golden =
                 return { v with pos = vp * (m * v.pos); c = col; n = m.TransformDir v.n }
             }
 
+        // reads the color from the Colors VERTEX ATTRIBUTE (v.c) instead of a
+        // uniform — exercises singleton (SingleValueBuffer) + real-buffer
+        // attribute decode in one bucket.
+        let vertCol (v : Shaders.Vertex) =
+            vertex {
+                let m   : M44f = uniform?ModelTrafo
+                let vp  : M44f = uniform?ViewProjTrafo
+                return { v with pos = vp * (m * v.pos); n = m.TransformDir v.n }
+            }
+
     let sgHeapTest () =
         Aardvark.Init()
         use app = new Aardvark.Application.Slim.VulkanApplication(false)
@@ -400,9 +410,38 @@ module Golden =
         let bucketsAg = Heap.lastBucketCount
         let passAg = report "ag" classicPix heapAgPix bucketsAg
 
-        let pass = passTs && passAg
-        if pass then Log.line "sgheap: ALL PASS (Sg.heap == classic, %d leaves -> 1 bucket, both dispatch paths)" (s * s)
-        else Log.warn "sgheap: FAILED (ts=%b ag=%b)" passTs passAg
+        // ── mixed SINGLETON-color + REAL-BUFFER-color boxes -> ONE bucket ──
+        // half the leaves get their Colors attribute as a SingleValueBuffer<C4f>
+        // (Primitives.box style, Sg.vertexBufferValue'), the other half as a real
+        // C4f[] buffer. Both decode through the SAME header-driven storage fetch
+        // (singleton = length-1/stride-0 allocation, wrapped by vid % length), so
+        // the element types match (C4f) and ALL leaves share one bucket; the
+        // image must equal the classic per-RO render.
+        let g2 = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let nVerts = (g2.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>).Length
+        let boxSg2 = Sg.ofIndexedGeometry g2
+        let leaves2 =
+            Array.init (s * s) (fun i ->
+                let p = V3d(float (i % s - s/2) * 1.2, float (i / s - s/2) * 1.2, 0.0)
+                let c = palette.[i % palette.Length]
+                let colored =
+                    if i % 2 = 0 then boxSg2 |> Sg.vertexBufferValue' DefaultSemantic.Colors c          // singleton
+                    else boxSg2 |> Sg.vertexAttribute' DefaultSemantic.Colors (Array.replicate nVerts c) // real buffer
+                colored |> Sg.trafo' (Trafo3d.Translation p))
+        let scene2 (wrap : ISg -> ISg) =
+            leaves2
+            |> Sg.ofArray
+            |> wrap
+            |> Sg.effect [ Effect.ofFunction SGH.vertCol; Effect.ofFunction Shaders.shadeFrag ]
+            |> Sg.viewTrafo (AVal.constant view)
+            |> Sg.projTrafo (AVal.constant proj)
+        let classic2 = renderToPix (scene2 id)
+        let heap2 = renderToPix (scene2 Sg.heap)
+        let passMixed = report "mixed-singleton" classic2 heap2 Heap.lastBucketCount
+
+        let pass = passTs && passAg && passMixed
+        if pass then Log.line "sgheap: ALL PASS (Sg.heap == classic, %d leaves -> 1 bucket, both dispatch paths; mixed singleton+buffer colors -> 1 bucket)" (s * s)
+        else Log.warn "sgheap: FAILED (ts=%b ag=%b mixed=%b)" passTs passAg passMixed
         pass
 
     // offscreen reproduction of the WINDOWED demo (2 effects -> 2 buckets, varied
@@ -739,15 +778,52 @@ module Golden =
                 Symbol.Create "ModelTrafo",    (AVal.constant Trafo3d.Identity :> IAdaptiveValue)
                 Symbol.Create "ViewProjTrafo", vp ]
             ro :> IRenderObject
+        // a second un-heapable RO: positions in a non-decodable element type (V3d
+        // doubles) -> neither host-storage-decodable nor vertex-pull eligible
+        let odd2 =
+            let posD = positions |> Array.map (fun (v : V3f) -> V3d v)
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect eff
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv posD typeof<V3d>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+            ro.Indices <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms <- UniformProvider.ofList [
+                Symbol.Create "ModelTrafo",    (AVal.constant Trafo3d.Identity :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo", vp ]
+            ro :> IRenderObject
+        // a HEAPABLE RO supplying a consumed uniform in an UNPACKABLE type: it
+        // stays heapable (the uniform falls through as a shared global) but
+        // Diagnostics must call it out. Different detected field set -> own bucket.
+        let oddUniform =
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect eff
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms <- UniformProvider.ofList [
+                Symbol.Create "ModelTrafo",    (AVal.constant V2i.Zero :> IAdaptiveValue)   // consumed, supplied, UNPACKABLE
+                Symbol.Create "ViewProjTrafo", vp ]
+            ro :> IRenderObject
 
-        let input = ASet.ofArray (Array.append heapable [| odd |])
+        Heap.Diagnostics <- true
+        let input = ASet.ofArray (Array.concat [ heapable; [| odd; odd2; oddUniform |] ])
         let outSet = Heap.ofRenderObjects runtime input
         let out = outSet |> ASet.toAVal |> AVal.force |> HashSet.toArray
+        Heap.Diagnostics <- false
         let buckets = Heap.lastBucketCount
         let passedThrough = out |> Array.exists (fun o -> System.Object.ReferenceEquals(o, odd))
-        Log.line "passthrough: in=5 (4 heapable + 1 odd) -> out=%d buckets=%d oddPassedThrough=%b" out.Length buckets passedThrough
-        let pass = buckets = 1 && passedThrough && out.Length = buckets + 1
-        if pass then Log.line "passthrough: PASS (heapable collapsed to 1 bucket; un-heapable RO passed through unchanged)"
+        let passedThrough2 = out |> Array.exists (fun o -> System.Object.ReferenceEquals(o, odd2))
+        let msgs = Heap.diagnosticMessages ()
+        for m in msgs do Log.line "passthrough: diag: %s" m
+        let diagOk =
+            msgs |> Array.exists (fun m -> m.Contains "no index buffer") &&
+            msgs |> Array.exists (fun m -> m.Contains "storage-decoded") &&
+            msgs |> Array.exists (fun m -> m.Contains "UNPACKABLE")
+        Log.line "passthrough: in=7 (4 heapable + 2 odd + 1 unpackable-uniform) -> out=%d buckets=%d oddPassedThrough=%b/%b diags=%d" out.Length buckets passedThrough passedThrough2 msgs.Length
+        let pass = buckets = 2 && passedThrough && passedThrough2 && out.Length = buckets + 2 && diagOk
+        if pass then Log.line "passthrough: PASS (heapable collapsed; un-heapable ROs passed through unchanged; Diagnostics emitted deduped reasons)"
         else Log.warn "passthrough: FAIL (out=%d buckets=%d passedThrough=%b)" out.Length buckets passedThrough
         pass
 
