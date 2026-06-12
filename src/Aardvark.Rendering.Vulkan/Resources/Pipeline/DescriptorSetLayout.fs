@@ -133,9 +133,15 @@ module DescriptorSetLayout =
     let empty (d : Device) = new DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty, None)
 
     let create (bindings : array<DescriptorSetLayoutBinding>) (device : Device) =
+        // Binding numbers must be strictly increasing (the variable-count
+        // selection below relies on max-binding ordering). NOTE: the former
+        // invariant "binding = prefix sum of preceding DescriptorCounts"
+        // predates unbounded descriptor arrays — an array binding does NOT
+        // consume binding numbers in Vulkan, so densely numbered layouts
+        // with a DescriptorCount > 1 binding in the middle are valid (and
+        // exactly what the heap's bindless paths produce in Debug builds).
         assert (
-            let offsets = (0, bindings) ||> Array.scan (fun o b -> o + b.DescriptorCount) |> Array.take bindings.Length
-            (bindings, offsets) ||> Array.map2 (fun b o -> b.Binding = o) |> Array.forall id
+            bindings |> Array.pairwise |> Array.forall (fun (a, b) -> a.Binding < b.Binding)
         )
 
         let features =
