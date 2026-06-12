@@ -86,9 +86,6 @@ let main argv =
         Aardvark.SceneGraph.Simple.SimpleConfig.Enabled <- false
         printfn "[heap] SimpleSg path DISABLED (legacy Ag entry)"
 
-    // The heap runtime is opt-in (default off). HeapSpike *is* the demo for it,
-    // so flip it on unconditionally here.
-    Aardvark.SceneGraph.HeapConfig.Enabled <- true
     if argv |> Array.contains "bench" then
         Bench.run ()
         0
@@ -105,6 +102,8 @@ let main argv =
         if Golden.run () then 0 else 1
     elif argv |> Array.contains "autofields" then
         if Golden.autoFieldsTest () then 0 else 1
+    elif argv |> Array.contains "sgheap" then
+        if Golden.sgHeapTest () then 0 else 1
     elif argv |> Array.contains "vis" then
         if Golden.visibilityTest () then 0 else 1
     elif argv |> Array.contains "buckets" then

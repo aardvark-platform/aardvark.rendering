@@ -222,12 +222,14 @@ module Showcase =
             |> Sg.transparent
 
         // standard render objects (extracted from the scenegraph)
-        let stdRos : aset<IRenderObject> =
-            let dn = Sg.DynamicNode(AVal.constant scene) :> ISg
+        let extract (sg : ISg) : aset<IRenderObject> =
+            let dn = Sg.DynamicNode(AVal.constant sg) :> ISg
             dn?Runtime <- runtime
             dn?RenderObjects(Ag.Scope.Root)
-        // heap: collapse the SAME render objects into buckets / indirect draws
-        let heapRos = Heap.ofRenderObjects runtime stdRos
+        let stdRos = extract scene
+        // heap: the SAME scene wrapped in Sg.heap — its render objects collapse
+        // into buckets / indirect draws inside the graph (Heap.ofRenderObjects)
+        let heapRos = extract (Sg.heap scene)
         heapRos |> ASet.toAVal |> AVal.force |> ignore
 
         let heapMode = AVal.init true

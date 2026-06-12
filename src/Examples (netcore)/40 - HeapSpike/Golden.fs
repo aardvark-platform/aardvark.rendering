@@ -312,6 +312,99 @@ module Golden =
         else Log.warn "autoFields: FAIL (fieldsOk=%b pixOk=%b splitOk=%b)" fieldsOk pixOk splitOk
         pass
 
+    // `Sg.heap` — the scene-graph node around Heap.ofRenderObjects. ONE scene
+    // built entirely with ordinary Sg combinators (per-leaf Sg.trafo' + Sg.uniform'
+    // boxes, effect + camera applied above), rendered three ways:
+    //   * classic           — the plain Sg, per-object ROs
+    //   * Sg.heap (TS path) — ISimpleSg/TraversalState dispatch (default entry)
+    //   * Sg.heap (Ag path) — SimpleConfig.Enabled <- false, legacy Ag entry
+    // Both heap renders must be pixel-IDENTICAL to classic (same effect both ways;
+    // the rewrite changes only WHERE the per-draw uniforms come from), and the N
+    // per-leaf ROs must collapse to ONE bucket (same effect / layout / field set).
+    module SGH =
+        // reads the Sg-conventional ModelTrafo (per-leaf trafo stack) + the shared
+        // ViewProjTrafo SEPARATELY (no derived ModelViewProjTrafo), so classic and
+        // heap run the same in-shader multiply on the same float32 values.
+        let vert (v : Shaders.Vertex) =
+            vertex {
+                let m   : M44f = uniform?ModelTrafo
+                let vp  : M44f = uniform?ViewProjTrafo
+                let col : V4f  = uniform?HeapColor
+                return { v with pos = vp * (m * v.pos); c = col; n = m.TransformDir v.n }
+            }
+
+    let sgHeapTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+
+        let boxSg =
+            IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White
+            |> Sg.ofIndexedGeometry
+
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
+        let s = 16
+        let leaves =
+            Array.init (s * s) (fun i ->
+                let p = V3d(float (i % s - s/2) * 1.2, float (i / s - s/2) * 1.2, 0.0)
+                boxSg
+                |> Sg.trafo' (Trafo3d.Translation p)
+                |> Sg.uniform' "HeapColor" (palette.[i % palette.Length].ToV4f()))
+
+        // effect + camera ABOVE the (optional) heap node — attributes flow to the
+        // leaves through the scope either way.
+        let scene (wrap : ISg -> ISg) =
+            leaves
+            |> Sg.ofArray
+            |> wrap
+            |> Sg.effect [ Effect.ofFunction SGH.vert; Effect.ofFunction Shaders.shadeFrag ]
+            |> Sg.viewTrafo (AVal.constant view)
+            |> Sg.projTrafo (AVal.constant proj)
+
+        let renderToPix (sg : ISg) =
+            use task = runtime.CompileRender(signature, sg)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>()
+            finally out.Release()
+
+        let report (label : string) (classicPix : PixImage<uint8>) (heapPix : PixImage<uint8>) (buckets : int) =
+            let maxDelta, nDiff, nNonBg, total = diff classicPix heapPix
+            Log.line "sgheap[%s]: -> %d bucket(s)  maxChannelDelta=%d  diffPixels=%d/%d  coverage=%d px"
+                label buckets maxDelta nDiff total nNonBg
+            let pass = maxDelta <= 1 && nNonBg > total / 100L && buckets = 1
+            if pass then Log.line "sgheap[%s]: PASS" label
+            else Log.warn "sgheap[%s]: FAIL (maxDelta=%d buckets=%d nNonBg=%d)" label maxDelta buckets nNonBg
+            pass
+
+        let classicPix = renderToPix (scene id)
+
+        // ISimpleSg/TraversalState dispatch (the default CompileRender entry)
+        let heapTsPix = renderToPix (scene Sg.heap)
+        let bucketsTs = Heap.lastBucketCount
+        let passTs = report "ts" classicPix heapTsPix bucketsTs
+
+        // legacy Ag dispatch (app?Runtime <- runtime; RenderObjects(Ag.Scope.Root))
+        Aardvark.SceneGraph.Simple.SimpleConfig.Enabled <- false
+        let heapAgPix =
+            try renderToPix (scene Sg.heap)
+            finally Aardvark.SceneGraph.Simple.SimpleConfig.Enabled <- true
+        let bucketsAg = Heap.lastBucketCount
+        let passAg = report "ag" classicPix heapAgPix bucketsAg
+
+        let pass = passTs && passAg
+        if pass then Log.line "sgheap: ALL PASS (Sg.heap == classic, %d leaves -> 1 bucket, both dispatch paths)" (s * s)
+        else Log.warn "sgheap: FAILED (ts=%b ag=%b)" passTs passAg
+        pass
+
     // offscreen reproduction of the WINDOWED demo (2 effects -> 2 buckets, varied
     // box/sphere/torus geometry), CLASSIC vs HEAP, saved to PPM so the macOS
     // breakage can be inspected. samples=1 so the result is downloadable.

@@ -68,21 +68,6 @@ module HeapUniforms =
         /// the atlas page dimensions in pixels (to normalize atlas-pixel coords)
         member x.HeapAtlasPxSize : V2f   = uniform?HeapAtlasPxSize
 
-/// Opt-in for the heap runtime. Default OFF — apps that want heap-based
-/// rendering must set `HeapConfig.Enabled <- true` at startup. While disabled,
-/// `Heap.ofRenderObjects` and `HeapScene` throw, so an accidental call doesn't
-/// silently change rendering behaviour.
-[<RequireQualifiedAccess>]
-module HeapConfig =
-    let mutable Enabled : bool = false
-
-    let internal requireEnabled (caller : string) =
-        if not Enabled then
-            failwithf
-                "[Aardvark.SceneGraph] %s requires the heap runtime. \
-                 Set HeapConfig.Enabled <- true at startup to opt in."
-                caller
-
 module Heap =
 
     /// One per-draw uniform binding: how big it is in the arena (in floats),
@@ -2153,7 +2138,6 @@ module Heap =
     /// `isHeapable` below) are passed through to the output set UNCHANGED — a
     /// mixed scene degrades gracefully.
     let ofRenderObjects (runtime : IRuntime) (objects : aset<IRenderObject>) : aset<IRenderObject> =
-        HeapConfig.requireEnabled "Heap.ofRenderObjects"
         checkSupport false runtime
         let scope = Ag.Scope.Root
 
@@ -2999,7 +2983,6 @@ module Heap =
                    positions : V3f[], normals : V3f[], index : int[],
                    schema : (string * System.Type)[], globals : IUniformProvider) =
 
-        do HeapConfig.requireEnabled "HeapScene"
         do checkSupport false runtime
 
         // fixed layout from the schema
@@ -3125,3 +3108,66 @@ module Heap =
 
         interface System.IDisposable with
             member x.Dispose() = x.Dispose()
+
+
+// ── Sg.heap — scene-graph node for Heap.ofRenderObjects ─────────────────────
+// Collapses the subtree's render objects through `Heap.ofRenderObjects`: the
+// child's RenderObjects set is piped through the heap transform with the
+// traversal's runtime. Non-heapable ROs pass through unchanged (that is
+// `ofRenderObjects`' own behaviour), so a mixed subtree degrades gracefully.
+//
+// Dual-protocol like every Sg node (mirrors GeometrySetNode):
+//   * Ag path        — RenderObjects rule (HeapApplicatorSem below); the runtime
+//     comes from the ambient `Runtime` attribute (`scope.Runtime`, seeded by
+//     `app?Runtime <- runtime` in RuntimeExtensions.toRenderObjects).
+//   * ISimpleSg path — GetRenderObjects; the runtime comes from the explicit
+//     TraversalState (`ts.Runtime`, seeded by TraversalState.withRuntime in the
+//     CompileRender entry point).
+[<AutoOpen>]
+module HeapSgExtensions =
+    open Aardvark.SceneGraph.Simple
+
+    module Sg =
+        type HeapApplicator(child : aval<ISg>) =
+            inherit Sg.AbstractApplicator(child)
+
+            // TS-direct — child ROs gathered with the unchanged TraversalState,
+            // then collapsed with the TS's runtime.
+            interface ISimpleSg with
+                member _.GetRenderObjects ts =
+                    child
+                    |> ASet.bind (fun c -> SimpleDispatch.Get(c, ts))
+                    |> Heap.ofRenderObjects ts.Runtime
+
+            new(child : ISg) = HeapApplicator(AVal.constant child)
+
+        /// Collapses the subtree's render objects through `Heap.ofRenderObjects`
+        /// (N per-object draws -> one indirect multidraw per bucket). Non-heapable
+        /// render objects pass through unchanged.
+        let heap (sg : ISg) : ISg = HeapApplicator(sg) :> ISg
+
+
+namespace Aardvark.SceneGraph.Semantics
+
+open Aardvark.Base
+open Aardvark.Base.Ag
+open Aardvark.Rendering
+open Aardvark.SceneGraph
+open FSharp.Data.Adaptive
+
+module HeapApplicatorSemantics =
+
+    [<Rule>]
+    type HeapApplicatorSem() =
+
+        // Ag path: same child traversal as the generic IApplicator rule
+        // (RenderObjectSem.RenderObjects in Semantics/RenderObject.fs), then the
+        // collapse with the scope's ambient runtime. This concrete-type rule wins
+        // over the IApplicator rule (most-specific dispatch — cf. NaiveLod.LodSem).
+        member x.RenderObjects(h : Sg.HeapApplicator, scope : Ag.Scope) : aset<IRenderObject> =
+            let runtime = scope.Runtime
+            aset {
+                let! c = h.Child
+                yield! c.RenderObjects(scope)
+            }
+            |> Heap.ofRenderObjects runtime
