@@ -746,86 +746,59 @@ module Heap =
             | :? RegionWriter as w -> pending.Add w |> ignore
             | _ -> ()
 
-    /// Coalescing range allocator over an abstract integer address space (units
-    /// are caller-defined: floats, vertices, indices, instance slots). ONE shared
-    /// implementation for every heap reclamation site — packed geometry vertex +
-    /// index ranges, arena uniform regions, per-instance slot-attribute ranges.
-    /// Free ranges are kept sorted by offset and are never adjacent (coalesced on
-    /// Free); Alloc is best-fit with split (a freed 100-unit range can serve a
-    /// 60-unit request, the 40-unit remainder goes back on the list), falling
-    /// back to bumping the high-water cursor. A range freed at the very END of
-    /// the space retracts the cursor instead of joining the list. Ops are
-    /// O(#free-ranges) (scan / binary search + array shift) — coalescing keeps
-    /// the range count low and the churn paths hit the allocator O(changed)
-    /// times per update.
-    type internal RangeAllocator() =
-        let free = System.Collections.Generic.SortedList<int, int>()    // offset -> size
-        let mutable cursor = 0
-        let mutable totalFree = 0
+    /// Logical address space for the heap reclamation sites (units are caller-
+    /// defined: floats, vertices, indices, instance slots) — packed geometry
+    /// vertex + index ranges, arena uniform regions, per-instance slot-attribute
+    /// ranges. The allocation policy is Aardvark.Rendering's generic
+    /// `Management.MemoryManager` (size-sorted SortedSetExt free list: O(log n)
+    /// best-fit with split, both-neighbor coalescing on Free) instantiated over
+    /// a VIRTUAL memory (`Memory.nop`, 'a = unit): no real bytes are managed —
+    /// the actual storage lives in the ByteStores / staging mirrors, which the
+    /// call sites grow to `Extent`. Callers hold the returned `Block<unit>` per
+    /// allocation and pass it back to `Free`, so the manager coalesces properly.
+    /// This wrapper only adds the two counters the compaction trigger and the
+    /// buffer sizing need and which the manager does not expose: `Live` (units
+    /// in live allocations) and `Extent` (high-water end of the allocated
+    /// space; retracts when the tail allocation is freed, so it tracks the
+    /// tight cursor, not the manager's pow2 capacity). `Reset` (compaction)
+    /// swaps in a fresh manager; the compactors then re-alloc the live entries
+    /// tightly in ascending old-offset order.
+    type internal HeapSpace() =
+        static let mkManager () = new Management.MemoryManager<unit>(Management.Memory.nop, 16n)
+        let mutable mm = mkManager ()
+        let mutable live = 0
+        let mutable extent = 0
         /// high-water end of the allocated address space (in units)
-        member _.Cursor = cursor
-        /// sum of free units below the cursor (the reclaimable waste)
-        member _.TotalFree = totalFree
-        /// units referenced by live allocations (Cursor - TotalFree)
-        member _.Live = cursor - totalFree
-        member _.Alloc(size : int) : int =
-            if size <= 0 then 0
-            else
-                // best-fit over the free list; exact fits win automatically
-                let keys = free.Keys
-                let vals = free.Values
-                let mutable best = -1
-                let mutable bestSize = System.Int32.MaxValue
-                for i in 0 .. free.Count - 1 do
-                    let s = vals.[i]
-                    if s >= size && s < bestSize then
-                        best <- i
-                        bestSize <- s
-                if best >= 0 then
-                    let off = keys.[best]
-                    free.RemoveAt best
-                    if bestSize > size then free.Add(off + size, bestSize - size)
-                    totalFree <- totalFree - size
-                    off
-                else
-                    let o = cursor
-                    cursor <- cursor + size
-                    o
-        member _.Free(offset : int, size : int) =
-            if size > 0 then
-                let keys = free.Keys
-                // binary search: index of the first free range with offset > `offset`
-                let mutable lo = 0
-                let mutable hi = free.Count
-                while lo < hi do
-                    let m = (lo + hi) / 2
-                    if keys.[m] < offset then lo <- m + 1 else hi <- m
-                let mutable off = offset
-                let mutable sz = size
-                // coalesce with the successor …
-                if lo < free.Count && keys.[lo] = offset + size then
-                    let ns = free.Values.[lo]
-                    sz <- sz + ns
-                    totalFree <- totalFree - ns
-                    free.RemoveAt lo
-                // … and the predecessor (indices < lo are unaffected by the removal)
-                if lo > 0 then
-                    let po = keys.[lo - 1]
-                    let ps = free.Values.[lo - 1]
-                    if po + ps = off then
-                        off <- po
-                        sz <- sz + ps
-                        totalFree <- totalFree - ps
-                        free.RemoveAt (lo - 1)
-                if off + sz = cursor then cursor <- off     // tail range -> retract
-                else
-                    free.Add(off, sz)
-                    totalFree <- totalFree + sz
-        /// drop all free ranges and set the cursor to `liveEnd` (after compaction)
-        member _.Reset(liveEnd : int) =
-            free.Clear()
-            totalFree <- 0
-            cursor <- liveEnd
+        member _.Extent = extent
+        /// units referenced by live allocations
+        member _.Live = live
+        /// reclaimable units below Extent (the waste)
+        member _.Waste = extent - live
+        member _.Alloc(size : int) : Management.Block<unit> =
+            let b = mm.Alloc(nativeint size)
+            live <- live + size
+            extent <- max extent (int b.Offset + size)
+            b
+        member _.Free(b : Management.Block<unit>) =
+            if not (isNull b) && not b.IsFree && b.Size > 0n then
+                live <- live - int b.Size
+                // a block freed at the very END of the space retracts the extent
+                // to the start of the resulting free tail (free blocks are never
+                // adjacent, so the chain after a tail block is at most one free
+                // block before null).
+                let newExtent =
+                    if isNull b.Next || (b.Next.IsFree && isNull b.Next.Next) then
+                        if not (isNull b.Prev) && b.Prev.IsFree then int b.Prev.Offset else int b.Offset
+                    else extent
+                mm.Free b
+                extent <- newExtent
+        /// drop everything and start a fresh address space (used by compaction,
+        /// which re-allocs the live entries tightly right afterwards)
+        member _.Reset() =
+            mm.Dispose()
+            mm <- mkManager ()
+            live <- 0
+            extent <- 0
 
     /// Growable byte store for the packed combined geometry buffers (replaces
     /// List&lt;byte&gt;): supports in-place writes at arbitrary offsets (allocator-
@@ -854,32 +827,37 @@ module Heap =
                 System.Array.Clear(data, off, len)
 
     /// Mutable refcounted arena region (deduped by source-aval identity).
-    /// Offset is re-seated by arena compaction.
+    /// Offset is re-seated by arena compaction. Block is the region's float
+    /// range in the arena HeapSpace (re-allocated on compaction).
     type internal RegionEntry =
-        { mutable Offset : int; Size : int; Writer : RegionWriter; mutable RefCount : int }
+        { mutable Offset : int; Size : int; Writer : RegionWriter; mutable RefCount : int
+          mutable Block : Management.Block<unit> }
 
     /// Refcounted per-geometry ranges in a bucket's combined buffers (geometries
     /// are deduped by buffer identity). Host geometry owns the vertex range
     /// [BaseVertex, BaseVertex+VtxAlloc) in every packed attribute plus an index
     /// range; bindless geometry only the index range (VtxAlloc = 0). When the
-    /// last referencing slot dies the ranges return to the bucket's coalescing
-    /// range allocators; compaction re-seats FirstIndex/BaseVertex of live
-    /// entries. VtxCount is the UNIFORM vertex count (0 for ragged inputs whose
-    /// attributes disagree — VtxAlloc then covers the longest attribute, so the
-    /// range is still safely reusable).
+    /// last referencing slot dies the ranges (held as HeapSpace blocks) return
+    /// to the bucket's allocators; compaction re-seats FirstIndex/BaseVertex
+    /// (and re-allocs the blocks) of live entries. VtxCount is the UNIFORM
+    /// vertex count (0 for ragged inputs whose attributes disagree — VtxAlloc
+    /// then covers the longest attribute, so the range is still safely
+    /// reusable).
     type internal GeomEntry =
         { mutable FirstIndex : int; mutable BaseVertex : int; IndexCount : int
-          VtxCount : int; VtxAlloc : int; mutable RefCount : int }
+          VtxCount : int; VtxAlloc : int; mutable RefCount : int
+          mutable IdxBlock : Management.Block<unit>; mutable VtxBlock : Management.Block<unit> }
 
     /// Per-member bookkeeping of an incremental bucket: the draw-record slot,
     /// the arena regions it references, its visibility gate, its (structural)
     /// instance count, the identity key of its packed geometry (for refcounted
     /// range reclamation) and — on the MoltenVK slot-attribute path — the offset
     /// of its per-instance range in the slot-attribute buffer (re-seated by
-    /// compaction).
+    /// compaction; InstBlock is the backing HeapSpace block).
     type internal HeapSlot =
         { Slot : int; RegionKeys : IAdaptiveValue[]; Active : aval<bool>
-          Instances : int; mutable InstOffset : int; GeomKey : struct(obj * obj) }
+          Instances : int; mutable InstOffset : int
+          mutable InstBlock : Management.Block<unit>; GeomKey : struct(obj * obj) }
 
     /// Immutable per-RO facts (STRUCTURE only — surface, geometry layout, uniform
     /// presence; never aval VALUES). Cached per RO in a ConditionalWeakTable so a
@@ -1268,7 +1246,7 @@ module Heap =
         let arena = HeapArena(runtime, 1024)
         do arena.ExtraDependency <- Some (updater :> IAdaptiveValue)
         let regions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
-        let arenaAlloc = RangeAllocator()
+        let arenaAlloc = HeapSpace()
 
         // ── geometry. Host buckets: packed byte stores (attributes + indices),
         //    deduped by buffer identity. Bindless buckets: only the combined
@@ -1283,8 +1261,8 @@ module Heap =
         let packedAttr = if useBindlessGeom then [||] else attrInfos |> Array.map (fun _ -> ByteStore 16)
         let mutable packedIdx = ByteStore 16
         let geomCache = System.Collections.Generic.Dictionary<struct(obj * obj), GeomEntry>(HashIdentity.Structural)
-        let idxAlloc = RangeAllocator()                 // units: indices
-        let vtxAlloc = RangeAllocator()                 // units: vertices (shared by ALL attribute stores)
+        let idxAlloc = HeapSpace()                      // units: indices
+        let vtxAlloc = HeapSpace()                      // units: vertices (shared by ALL attribute stores)
         // bytes one vertex occupies across all packed attribute stores (host only)
         let bytesPerVertex = if useBindlessGeom then 0 else attrInfos |> Array.sumBy (fun (_, _, _, _, es, _, _) -> es)
         let mutable geomDirty = false
@@ -1318,21 +1296,22 @@ module Heap =
         //    is split for a smaller request); residual drift is bounded by
         //    threshold compaction (maybeCompact). ──
         let mutable instData : int[] = Array.zeroCreate 16
-        let instAlloc = RangeAllocator()                // units: instances (ints)
+        let instAlloc = HeapSpace()                     // units: instances (ints)
         let mutable instChanged = false
         let mutable instBuffer : IBuffer = ArrayBuffer (Array.zeroCreate<int> 0) :> IBuffer
-        let allocInst (slot : int) (k : int) : int =
-            let off = instAlloc.Alloc k
-            if instAlloc.Cursor > instData.Length then
-                let n = Fun.NextPowerOfTwo instAlloc.Cursor
+        let allocInst (slot : int) (k : int) : Management.Block<unit> =
+            let b = instAlloc.Alloc k
+            if instAlloc.Extent > instData.Length then
+                let n = Fun.NextPowerOfTwo instAlloc.Extent
                 let nd = Array.zeroCreate<int> n
                 System.Array.Copy(instData, nd, instData.Length)
                 instData <- nd
+            let off = int b.Offset
             for i in 0 .. k - 1 do instData.[off + i] <- slot
             instChanged <- true
-            off
-        let freeInst (off : int) (k : int) =
-            instAlloc.Free(off, k)
+            b
+        let freeInst (b : Management.Block<unit>) =
+            instAlloc.Free b
 
         // ── draw records + headers: slot-indexed, growable, free-listed ──
         let mutable entries : DrawCallInfo[] = Array.zeroCreate 16
@@ -1402,13 +1381,14 @@ module Heap =
             | true, e -> e.RefCount <- e.RefCount + 1; e.Offset
             | _ ->
                 let (sz, pk) = packerFor av.ContentType
-                let off = arenaAlloc.Alloc sz
+                let b = arenaAlloc.Alloc sz
+                let off = int b.Offset
                 // grows only the staging mirror; the GPU resize is deferred to the
                 // arena's own Compute (which depends on the updater whose
                 // evaluation we are inside) — no transact happens here.
-                arena.EnsureFloats arenaAlloc.Cursor
+                arena.EnsureFloats arenaAlloc.Extent
                 let w = arena.Add(av, off, sz, pk)
-                regions.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1 }
+                regions.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b }
                 off
 
         let freeRegion (av : IAdaptiveValue) =
@@ -1418,17 +1398,17 @@ module Heap =
                 if e.RefCount = 0 then
                     arena.Remove e.Writer
                     regions.Remove av |> ignore
-                    arenaAlloc.Free(e.Offset, e.Size)
+                    arenaAlloc.Free e.Block
             | _ -> ()
 
         /// place `bytes` (`count` index elements) into the combined index buffer:
-        /// allocator-placed (reused/split free range, else cursor bump). Returns
-        /// the element offset.
-        let placeIdx (bytes : byte[]) (count : int) : int =
-            let off = idxAlloc.Alloc count
-            packedIdx.EnsureCount (idxAlloc.Cursor * idxSize)
-            packedIdx.WriteAt(off * idxSize, bytes)
-            off
+        /// allocator-placed (reused/split free range, else high-water growth).
+        /// Returns the block (element offset = Block.Offset).
+        let placeIdx (bytes : byte[]) (count : int) : Management.Block<unit> =
+            let b = idxAlloc.Alloc count
+            packedIdx.EnsureCount (idxAlloc.Extent * idxSize)
+            packedIdx.WriteAt(int b.Offset * idxSize, bytes)
+            b
 
         /// host geometry: pack the RO's attributes + indices into the combined
         /// buffers (deduped by buffer identity; refcounted; ranges placed by the
@@ -1440,7 +1420,8 @@ module Heap =
                 let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
                 let ib = readBytesView idxBV
                 let thisIdx = ib.Length / idxSize
-                let firstIndex = placeIdx ib thisIdx
+                let idxBlock = placeIdx ib thisIdx
+                let firstIndex = int idxBlock.Offset
                 let attrBytes =
                     attrInfos |> Array.map (fun (_, _, sym, _, _, _, _) ->
                         match ro.VertexAttributes.TryGetAttribute sym with
@@ -1466,17 +1447,19 @@ module Heap =
                         attrInfos |> Array.iteri (fun i (_, _, _, _, es, _, _) ->
                             mx <- max mx ((attrBytes.[i].Length + es - 1) / es))
                         mx
-                let baseVertex = vtxAlloc.Alloc vtxUnits
+                let vtxBlock = vtxAlloc.Alloc vtxUnits
+                let baseVertex = int vtxBlock.Offset
                 attrInfos |> Array.iteri (fun i (ai, _, _, _, es, _, _) ->
                     let store = packedAttr.[ai]
-                    store.EnsureCount (vtxAlloc.Cursor * es)
+                    store.EnsureCount (vtxAlloc.Extent * es)
                     store.WriteAt(baseVertex * es, attrBytes.[i])
                     // zero the ragged tail padding (deterministic content for the
                     // reuse path — a fresh build would have zeros there too)
                     store.ZeroFill(baseVertex * es + attrBytes.[i].Length, vtxUnits * es - attrBytes.[i].Length))
                 geomDirty <- true
                 let e = { FirstIndex = firstIndex; BaseVertex = baseVertex; IndexCount = thisIdx
-                          VtxCount = (if uniformCounts then thisVtx else 0); VtxAlloc = vtxUnits; RefCount = 1 }
+                          VtxCount = (if uniformCounts then thisVtx else 0); VtxAlloc = vtxUnits; RefCount = 1
+                          IdxBlock = idxBlock; VtxBlock = vtxBlock }
                 geomCache.[key] <- e
                 e
 
@@ -1490,9 +1473,10 @@ module Heap =
                 let ibv = match ro.Indices with Some b -> b | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
                 let ib = readGeomBytes runtime ibv
                 let cnt = ib.Length / idxSize
-                let fi = placeIdx ib cnt
+                let b = placeIdx ib cnt
                 geomDirty <- true
-                let e = { FirstIndex = fi; BaseVertex = 0; IndexCount = cnt; VtxCount = 0; VtxAlloc = 0; RefCount = 1 }
+                let e = { FirstIndex = int b.Offset; BaseVertex = 0; IndexCount = cnt; VtxCount = 0; VtxAlloc = 0; RefCount = 1
+                          IdxBlock = b; VtxBlock = null }
                 geomCache.[key] <- e
                 e
 
@@ -1521,8 +1505,8 @@ module Heap =
                 e.RefCount <- e.RefCount - 1
                 if e.RefCount = 0 then
                     geomCache.Remove key |> ignore
-                    idxAlloc.Free(e.FirstIndex, e.IndexCount)
-                    if e.VtxAlloc > 0 then vtxAlloc.Free(e.BaseVertex, e.VtxAlloc)
+                    idxAlloc.Free e.IdxBlock
+                    if e.VtxAlloc > 0 then vtxAlloc.Free e.VtxBlock
             | _ -> ()
 
         // ── threshold-triggered compaction. After removals, a buffer whose live
@@ -1549,15 +1533,17 @@ module Heap =
         let compactIdx () =
             let live = geomCache.Values |> Seq.toArray |> Array.sortBy (fun e -> e.FirstIndex)
             let fresh = ByteStore (idxAlloc.Live * idxSize)
-            let mutable cur = 0
+            idxAlloc.Reset()
+            // re-alloc in ascending old offset against the fresh space -> tight
+            // ascending placement (the manager bump-splits its single free block)
             for e in live do
-                let off = cur
-                cur <- cur + e.IndexCount
+                let b = idxAlloc.Alloc e.IndexCount
+                let off = int b.Offset
                 fresh.WriteAt(off * idxSize, packedIdx.Data, e.FirstIndex * idxSize, e.IndexCount * idxSize)
                 e.FirstIndex <- off
-            fresh.EnsureCount (cur * idxSize)
+                e.IdxBlock <- b
+            fresh.EnsureCount (idxAlloc.Extent * idxSize)
             packedIdx <- fresh
-            idxAlloc.Reset cur
             geomDirty <- true
             compactionCount <- compactionCount + 1
             fixGeomRecords ()
@@ -1570,17 +1556,17 @@ module Heap =
                 |> Array.sortBy (fun e -> e.BaseVertex)
             let liveUnits = vtxAlloc.Live
             let freshStores = attrInfos |> Array.map (fun (_, _, _, _, es, _, _) -> ByteStore (liveUnits * es))
-            let mutable cur = 0
+            vtxAlloc.Reset()
             for e in live do
-                let off = cur
-                cur <- cur + e.VtxAlloc
+                let b = vtxAlloc.Alloc e.VtxAlloc
+                let off = int b.Offset
                 attrInfos |> Array.iteri (fun i (ai, _, _, _, es, _, _) ->
                     freshStores.[i].WriteAt(off * es, packedAttr.[ai].Data, e.BaseVertex * es, e.VtxAlloc * es))
                 e.BaseVertex <- off
+                e.VtxBlock <- b
             attrInfos |> Array.iteri (fun i (ai, _, _, _, es, _, _) ->
-                freshStores.[i].EnsureCount (cur * es)
+                freshStores.[i].EnsureCount (vtxAlloc.Extent * es)
                 packedAttr.[ai] <- freshStores.[i])
-            vtxAlloc.Reset cur
             geomDirty <- true
             compactionCount <- compactionCount + 1
             fixGeomRecords ()
@@ -1589,15 +1575,15 @@ module Heap =
             // re-seat regions in ascending old offset so the staging memmove is
             // front-to-back (new offset <= old offset, no overlap hazard) …
             let regs = regions.Values |> Seq.toArray |> Array.sortBy (fun e -> e.Offset)
-            let mutable cur = 0
+            arenaAlloc.Reset()
             for e in regs do
-                let off = cur
-                cur <- cur + e.Size
+                let b = arenaAlloc.Alloc e.Size
+                let off = int b.Offset
+                e.Block <- b
                 if off <> e.Offset then
                     arena.MoveStaging(e.Offset, off, e.Size)
                     e.Offset <- off
                     e.Writer.Off <- off                 // future packs target the new offset
-            arenaAlloc.Reset cur
             // … then rewrite every live slot's baked header cells (the per-field
             // region offsets at slot*fieldStride + fi); headersAval re-snapshots
             // per updater version, so the whole table re-uploads this pass.
@@ -1609,29 +1595,29 @@ module Heap =
             // one full [0, live) re-upload of the moved floats on the arena's next
             // Compute (rule-clean — the arena depends on the updater) + shrink the
             // staging mirror/GPU buffer back toward the live size.
-            arena.RequestFullUpload cur
-            arena.ShrinkFloats cur
+            arena.RequestFullUpload arenaAlloc.Extent
+            arena.ShrinkFloats arenaAlloc.Extent
             compactionCount <- compactionCount + 1
 
         let compactInst () =
             let nd = Array.zeroCreate<int> (max 16 (Fun.NextPowerOfTwo (max 1 instAlloc.Live)))
-            let mutable cur = 0
+            instAlloc.Reset()
             for KeyValue(_, s) in slots do
-                let off = cur
-                cur <- cur + s.Instances
+                let b = instAlloc.Alloc s.Instances
+                let off = int b.Offset
                 for i in 0 .. s.Instances - 1 do nd.[off + i] <- s.Slot
                 s.InstOffset <- off
+                s.InstBlock <- b
                 entries.[s.Slot].FirstInstance <- off
             instData <- nd
-            instAlloc.Reset cur
             instChanged <- true
             compactionCount <- compactionCount + 1
 
         /// trigger check, run after removals (cheap: a few integer compares).
         let maybeCompact () =
-            let inline need (a : RangeAllocator) (unitBytes : int) =
-                a.Live * 2 < a.Cursor &&
-                int64 a.TotalFree * int64 unitBytes > int64 compactionWasteFloorBytes
+            let inline need (a : HeapSpace) (unitBytes : int) =
+                a.Live * 2 < a.Extent &&
+                int64 a.Waste * int64 unitBytes > int64 compactionWasteFloorBytes
             if need idxAlloc idxSize then compactIdx ()
             if not useBindlessGeom && need vtxAlloc bytesPerVertex then compactVtx ()
             if need arenaAlloc 4 then compactArena ()
@@ -1817,13 +1803,13 @@ module Heap =
                 idxBuffer <- toTyped packedIdx idxType idxSize
             if instChanged then
                 instChanged <- false
-                instBuffer <- ArrayBuffer (Array.sub instData 0 instAlloc.Cursor) :> IBuffer
+                instBuffer <- ArrayBuffer (Array.sub instData 0 instAlloc.Extent) :> IBuffer
             // footprint diagnostics (cheap; published every update)
             lastPackedGeomBytes <- packedIdx.Count + (packedAttr |> Array.sumBy (fun l -> l.Count))
             lastPackedGeomLiveBytes <- idxAlloc.Live * idxSize + vtxAlloc.Live * bytesPerVertex
-            lastArenaBytes <- arenaAlloc.Cursor * 4
+            lastArenaBytes <- arenaAlloc.Extent * 4
             lastArenaLiveBytes <- arenaAlloc.Live * 4
-            lastInstBytes <- instAlloc.Cursor * 4
+            lastInstBytes <- instAlloc.Extent * 4
             lastInstLiveBytes <- instAlloc.Live * 4
 
         member private _.AddInternal(ro : RenderObject) =
@@ -1876,13 +1862,15 @@ module Heap =
                 else
                     dynActives.[slot] <- struct(active, k)
                     k
+            let instBlock = if useSlotAttr then allocInst slot k else null
             let firstInstance =
-                if useSlotAttr then allocInst slot k
+                if useSlotAttr then int instBlock.Offset
                 elif useDrawId then 0
                 else slot
             entries.[slot] <- DrawCallInfo(FaceVertexCount = geom.IndexCount, FirstIndex = geom.FirstIndex, BaseVertex = geom.BaseVertex,
                                            FirstInstance = firstInstance, InstanceCount = instCount)
-            slots.[ro] <- { Slot = slot; RegionKeys = keys; Active = active; Instances = k; InstOffset = firstInstance; GeomKey = geomKey }
+            slots.[ro] <- { Slot = slot; RegionKeys = keys; Active = active; Instances = k; InstOffset = firstInstance
+                            InstBlock = instBlock; GeomKey = geomKey }
 
         member private _.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with
@@ -1895,7 +1883,7 @@ module Heap =
                 match atlasState with
                 | Some (_, _, table) -> table.RemoveSlot s.Slot
                 | None -> ()
-                if useSlotAttr then freeInst s.InstOffset s.Instances
+                if useSlotAttr then freeInst s.InstBlock
                 entries.[s.Slot] <- DrawCallInfo(FaceVertexCount = 0, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 0)
                 dynActives.Remove s.Slot |> ignore
                 freeSlots.Push s.Slot
