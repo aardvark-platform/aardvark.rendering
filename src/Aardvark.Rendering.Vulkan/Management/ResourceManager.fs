@@ -855,27 +855,67 @@ module Resources =
             | :? IResourceLocation<ImageSampler> as r -> pending.Add r |> ignore
             | _ -> ()
 
-    /// A FIXED array of storage buffers (the heap builds one per bucket; the set is
-    /// constant for the bucket's lifetime). Acquires each element location, produces
-    /// ResourceInfo<Buffer>[], bumps version when any element changes. Simpler than
-    /// ImageSamplerArrayResource (no incremental amap deltas needed).
-    type StorageBufferArrayResource(owner : IResourceCache, key : list<obj>, buffers : IResourceLocation<Buffer>[]) =
+    /// An ADAPTIVE array of storage buffers. The source aval<IBuffer[]> is re-read
+    /// on every update (the heap re-emits its per-bucket HeapVertexData array
+    /// whenever membership churn rebinds a slot to a different geometry buffer, and
+    /// the array GROWS with the slot table): positions whose element identity
+    /// changed swap their buffer location (release old, acquire new) and their
+    /// reported per-element VERSION is offset past the previous one — two distinct
+    /// locations may otherwise report the same version and DescriptorSetResource
+    /// would skip the descriptor write (same scheme as ImageSamplerArrayResource's
+    /// versionOffsets). Unchanged positions just pass their location's info through.
+    type StorageBufferArrayResource(owner : IResourceCache, key : list<obj>,
+                                    input : aval<IBuffer[]>, mkLocation : IBuffer -> IResourceLocation<Buffer>) =
         inherit AbstractResourceLocation<StorageBufferArray>(owner, key)
 
-        let handle = Array.init buffers.Length (fun _ -> { version = -1; handle = Unchecked.defaultof<Buffer> })
+        let mutable last : IBuffer[] = [||]
+        let mutable locations : IResourceLocation<Buffer>[] = [||]
+        let mutable offsets : int[] = [||]
+        let mutable handle : StorageBufferArray = [||]
         let mutable version = 0
 
-        override x.Create() = for b in buffers do b.Acquire()
-        override x.Destroy() = for b in buffers do b.Release()
+        override x.Create() = ()
+        override x.Destroy() =
+            for l in locations do
+                if not (isNull (box l)) then l.Release()
+            last <- [||]
+            locations <- [||]
+            offsets <- [||]
+            handle <- [||]
 
         override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
+                let arr = input.GetValue token
                 let mutable changed = false
-                for i = 0 to buffers.Length - 1 do
-                    let info = buffers.[i].Update(user, token, renderToken)
-                    if info.version <> handle.[i].version || not (Object.ReferenceEquals(info.handle, handle.[i].handle)) then
-                        handle.[i] <- info
+                if arr.Length <> locations.Length then
+                    // resize keeping the prefix (the heap only grows; handle shrink for safety)
+                    for i = arr.Length to locations.Length - 1 do
+                        if not (isNull (box locations.[i])) then locations.[i].Release()
+                    let resize (def : 'a) (old : 'a[]) =
+                        Array.init arr.Length (fun i -> if i < old.Length then old.[i] else def)
+                    last <- resize Unchecked.defaultof<IBuffer> last
+                    locations <- resize Unchecked.defaultof<IResourceLocation<Buffer>> locations
+                    offsets <- resize 0 offsets
+                    handle <- resize { version = -1; handle = Unchecked.defaultof<Buffer> } handle
+                    changed <- true
+                for i = 0 to arr.Length - 1 do
+                    if isNull (box locations.[i]) || not (Object.ReferenceEquals(arr.[i], last.[i])) then
+                        // element identity changed -> swap location, bump effective version
+                        let l = mkLocation arr.[i]
+                        l.Acquire()
+                        if not (isNull (box locations.[i])) then locations.[i].Release()
+                        locations.[i] <- l
+                        last.[i] <- arr.[i]
+                        let info = l.Update(user, token, renderToken)
+                        offsets.[i] <- (handle.[i].version + 1) - info.version
+                        handle.[i] <- { info with version = info.version + offsets.[i] }
                         changed <- true
+                    else
+                        let info = locations.[i].Update(user, token, renderToken)
+                        let v = info.version + offsets.[i]
+                        if v <> handle.[i].version || not (Object.ReferenceEquals(info.handle, handle.[i].handle)) then
+                            handle.[i] <- { info with version = v }
+                            changed <- true
                 if changed then inc &version
             { handle = handle; version = version }
 
@@ -1870,6 +1910,10 @@ type ResourceManager(device : Device) =
     let imageSamplerArrayCache  = ResourceLocationCache<ImageSamplerArray>(device)
     let imageSamplerMapCache    = ImageSamplerMapCache()
     let storageBufferArrayCache = ResourceLocationCache<StorageBufferArray>(device)
+    // dedup for storage-buffer-array elements: the same IBuffer instance appearing
+    // at several positions (or re-appearing after a swap) maps to ONE constant aval
+    // -> ONE cached BufferResource in bufferCache.
+    let storageBufferElemCache  = System.Runtime.CompilerServices.ConditionalWeakTable<IBuffer, aval<IBuffer>>()
     let dynamicProgramCache     = ResourceLocationCache<ShaderProgram>(device)
 
     let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(device)
@@ -2099,14 +2143,18 @@ type ResourceManager(device : Device) =
             [count :> obj, empty :> obj; input :> obj], fun cache key -> ImageSamplerArrayResource(cache, key, count, empty, input)
         )
 
-    /// Bindless array of storage buffers. The buffer set is assumed constant (the
-    /// heap builds one per bucket); each element is wrapped as a storage-buffer
-    /// resource and collected into a StorageBufferArray.
+    /// Bindless array of storage buffers (e.g. the heap's per-bucket HeapVertexData).
+    /// ADAPTIVE in both the array length (the heap's slot table grows) and the
+    /// per-element buffer identities (membership churn rebinds slots): the resource
+    /// re-reads the aval and swaps only the changed elements' buffer locations.
+    /// Elements are deduped by IBuffer identity (the same buffer at many positions —
+    /// shared geometry — maps to ONE cached buffer resource).
     member x.CreateStorageBufferArray(name : Symbol, buffers : aval<IBuffer[]>) =
         storageBufferArrayCache.GetOrCreate([buffers :> obj], fun cache key ->
-            let arr = AVal.force buffers
-            let locs = arr |> Array.map (fun b -> x.CreateStorageBuffer(name, AVal.constant b))
-            StorageBufferArrayResource(cache, key, locs) :> IResourceLocation<StorageBufferArray>
+            let mkLocation (b : IBuffer) =
+                let cb = storageBufferElemCache.GetValue(b, fun b -> AVal.constant b)
+                x.CreateStorageBuffer(name, cb)
+            StorageBufferArrayResource(cache, key, buffers, mkLocation) :> IResourceLocation<StorageBufferArray>
         )
 
     member x.CreateShaderProgram(pass : RenderPass, program : ShaderProgram) =

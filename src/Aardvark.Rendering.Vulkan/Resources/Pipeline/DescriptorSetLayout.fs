@@ -36,10 +36,27 @@ type DescriptorSetLayoutBinding =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSetLayoutBinding =
 
-    /// Ceiling for an unbounded (bindless) sampler array's reserved descriptor
-    /// capacity. This is only the layout upper bound (and the per-set count when
-    /// variable descriptor count is unavailable); with variable descriptor count
+    /// Ceiling for an unbounded (bindless) sampler / storage-buffer array's reserved
+    /// descriptor capacity. This is only the layout upper bound (and the per-set count
+    /// when variable descriptor count is unavailable); with variable descriptor count
     /// each set allocates just the textures it actually uses. Clamped per device.
+    ///
+    /// NOT a free knob, deliberately kept at 1024 rather than lifted to the device
+    /// limit (~2^20 per-stage storage buffers on desktop):
+    ///   * for a NON-constant unbounded binding (e.g. the heap's HeapVertexData /
+    ///     HeapVertexDataI aval&lt;IBuffer[]&gt;) the AdaptiveDescriptor cache and
+    ///     DescriptorSetResource version mirrors are allocated at this capacity PER
+    ///     SET (PreparedRenderObject falls back to b.DescriptorCount when the array
+    ///     aval isn't constant), so the CPU cost scales linearly with it;
+    ///   * descriptor POOLS budget `perTypeCount * 8` for the array-capable types
+    ///     (ContextDescriptorPoolExtensions.CreateDescriptorPool) — a set holding
+    ///     several full-capacity unbounded arrays must still fit one pool, so raising
+    ///     the ceiling requires scaling that budget in lockstep;
+    ///   * without variable descriptor count / update-after-bind every set allocates
+    ///     the FULL capacity up front.
+    /// Consequence for the heap's vertex-pull path: at most 1024 (slots × attributes)
+    /// per bucket. Lifting it = raise this constant + the pool budget + accept the
+    /// capacity-proportional per-set mirrors (or make those grow on demand).
     [<Literal>]
     let UnboundedSamplerArrayCeiling = 1024u
 
