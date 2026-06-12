@@ -227,7 +227,7 @@ module Showcase =
             dn?Runtime <- runtime
             dn?RenderObjects(Ag.Scope.Root)
         // heap: collapse the SAME render objects into buckets / indirect draws
-        let heapRos = Heap.ofRenderObjects runtime (Set.ofList [ "ModelTrafo"; "HeapColor" ]) stdRos
+        let heapRos = Heap.ofRenderObjects runtime stdRos
         heapRos |> ASet.toAVal |> AVal.force |> ignore
 
         let heapMode = AVal.init true

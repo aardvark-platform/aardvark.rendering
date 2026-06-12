@@ -98,7 +98,7 @@ module Bench =
             sw.Stop()
             sw.Elapsed.TotalMilliseconds / float k
 
-        let heap = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ])
+        let heap = Heap.ofRenderObjects runtime
 
         printfn ""
         printfn "  N    | ALL changed/frame      | 16 changed/frame       | draws"

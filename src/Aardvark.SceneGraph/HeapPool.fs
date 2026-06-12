@@ -509,8 +509,9 @@ module Heap =
     // O(buckets), and binds ONE descriptor set per bucket instead of N).
     //
     // Assumptions: inputs are `RenderObject`s sharing geometry layout within a
-    // bucket; per-draw heap uniforms named in `heapNames` are present on
-    // every RO with a consistent type. Globals (camera etc.) are delegated
+    // bucket; the per-draw heap fields (auto-detected, part of the bucket key)
+    // are present on every member with a consistent type by construction.
+    // Globals (camera etc.) are delegated
     // to a LIVE member's uniform provider (bucket-homogeneous; re-seated when
     // that member leaves). Membership changes are incremental (per-bucket
     // O(changed) diffs); per-draw value marks flow through the reactive arena
@@ -584,7 +585,7 @@ module Heap =
     let mutable lastBucketCount = 0
 
     /// The per-draw heap-field names detected for the most recently classified
-    /// heapable RO on the AUTO-DETECT path (diagnostic / for tests). Sorted.
+    /// heapable RO (diagnostic / for tests). Sorted.
     let mutable lastAutoFields : string[] = [||]
 
     /// Force the texture-atlas path even where descriptor-indexed sampler arrays ARE
@@ -2143,15 +2144,15 @@ module Heap =
             slots.Clear()
 
     /// Collapse an adaptive set of N render objects into B bucket render objects
-    /// (one per effect), each drawn as ONE indirect multidraw against a shared
-    /// dirty-tracked arena. `explicitNames = Some s`: the uniforms named in `s`
-    /// are gathered per-draw in the rewritten shader; everything else is treated
-    /// as a global. `explicitNames = None`: the per-draw field set is AUTO-
-    /// DETECTED per RO (see `detectFields` below) and becomes part of the bucket
-    /// key. Render objects that aren't heap-eligible (see `isHeapable` below) are
-    /// passed through to the output set UNCHANGED — a mixed scene degrades
-    /// gracefully.
-    let private ofRenderObjectsImpl (runtime : IRuntime) (explicitNames : Set<string> option) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+    /// (one per effect + pipeline state + geometry layout + field set), each
+    /// drawn as ONE indirect multidraw against a shared dirty-tracked arena.
+    /// Per-draw heap fields = the uniforms your objects supply: AUTO-DETECTED
+    /// per RO (see `detectFields` below) and part of the bucket key; uniforms
+    /// shared via one aval (camera, lights, …) dedup to one arena region or stay
+    /// ordinary globals. Render objects that aren't heap-eligible (see
+    /// `isHeapable` below) are passed through to the output set UNCHANGED — a
+    /// mixed scene degrades gracefully.
+    let ofRenderObjects (runtime : IRuntime) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         HeapConfig.requireEnabled "Heap.ofRenderObjects"
         checkSupport false runtime
         let scope = Ag.Scope.Root
@@ -2169,9 +2170,6 @@ module Heap =
                 let v = ns, (ns |> Array.mapi (fun i n -> n, i) |> Map.ofArray)
                 fieldSetInterner.[k] <- v
                 v
-        // explicit-names call: ONE fixed field set for every heapable RO (the
-        // caller restricts/overrides detection — exactly the legacy behavior).
-        let explicitFields = explicitNames |> Option.map (fun s -> internFields (s |> Set.toArray |> Array.sort))
 
         // Bucket key = effect + topology + the VALUES of the per-RO pipeline state
         // (cull / front-face / fill / blend / depth test+write). Reading the state
@@ -2242,7 +2240,7 @@ module Heap =
                 [ typeof<M44f>; typeof<Trafo3d>; typeof<M44d>; typeof<V4f>; typeof<C4f>
                   typeof<V3f>; typeof<V2f>; typeof<float32>; typeof<float>; typeof<int> ])
 
-        // ── per-draw field auto-detection (explicitNames = None) ─────────
+        // ── per-draw field auto-detection ────────────────────────────────
         // Classification rule (deterministic per RO, memoized in RoFacts like
         // layoutSig): a uniform name becomes a PER-DRAW HEAP FIELD iff
         //   * the effect CONSUMES it — taken AFTER derived-rule expansion, so an
@@ -2254,12 +2252,11 @@ module Heap =
         // Everything else — names falling through to scene/global scope (camera,
         // lights), RO-supplied names the effect never reads, consumed+supplied
         // names of unpackable type — stays an ordinary uniform: NOT a field, the
-        // RO stays heapable (exactly what an explicit call omitting that name
-        // does), and the read resolves through the bucket's globals fall-through.
+        // RO stays heapable, and the read resolves through the bucket's globals
+        // fall-through.
         // NOTE the fall-through answers from ONE live member: a consumed+supplied
         // UNPACKABLE uniform that genuinely varies per RO therefore merges on
-        // that member's value — same pre-existing limitation as the explicit
-        // path; use the explicit overload (or a packable type) if that matters.
+        // that member's value — use a packable type if that matters.
         let consumedCache = System.Collections.Generic.Dictionary<string, string[]>()
         let consumedNonSamplerNames (e : Effect) =
             match consumedCache.TryGetValue e.Id with
@@ -2313,18 +2310,9 @@ module Heap =
                         instanceCountOf ro = 1 &&
                         (match ro.Indices with Some bv -> isReadableIndex bv | None -> false) && attrOk isBindlessAttr
                     (hostGeom || bindlessGeom) &&
-                    // explicit-names call: EVERY named uniform must be supplied in
-                    // a packable type (missing/odd-typed -> passthrough, as
-                    // before). Auto-detect imposes no uniform requirement: a
-                    // consumed uniform the RO doesn't supply (or supplies
-                    // unpackably) simply isn't detected as a field.
-                    (match explicitFields with
-                     | Some (ns, _) ->
-                         ns |> Array.forall (fun n ->
-                             match ro.Uniforms.TryGetUniform(scope, Symbol.Create n) with
-                             | ValueSome v -> packable.Contains v.ContentType
-                             | ValueNone -> false)
-                     | None -> true) &&
+                    // field detection imposes no uniform requirement: a consumed
+                    // uniform the RO doesn't supply (or supplies unpackably)
+                    // simply isn't detected as a field.
                     // textures: every sampler must be a SUPPORTED bindless type (sampler2d
                     // / samplerCube / …) AND the device must support unbounded sampler
                     // arrays. One array per type carries ONE state, so all samplers of a
@@ -2394,16 +2382,13 @@ module Heap =
                              | _ -> false)
                         let bindless = not hostGeom
                         let inst = instanceCountOf r > 1
-                        // per-draw field set: the caller's (explicit) or DETECTED
-                        // (effect-consumed ∩ RO-supplied ∩ packable), interned.
+                        // per-draw field set: DETECTED (effect-consumed ∩
+                        // RO-supplied ∩ packable), interned.
                         let (fields, fieldMap) =
-                            match explicitFields with
-                            | Some fm -> fm
-                            | None ->
-                                let e = match r.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
-                                let fm = internFields (detectFields r e)
-                                lastAutoFields <- fst fm
-                                fm
+                            let e = match r.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
+                            let fm = internFields (detectFields r e)
+                            lastAutoFields <- fst fm
+                            fm
                         // geometry class + instanced-ness + field set PARTITION
                         // buckets (a bucket RO's surface / routing / geometry
                         // strategy and its baked field layout are fixed at
@@ -2564,28 +2549,6 @@ module Heap =
                     i <- i + 1
                 out)                                    // collapsed buckets ∪ untouched passthrough
         resultAval |> ASet.ofAVal
-
-    /// Collapse an adaptive set of N render objects into B bucket render objects
-    /// (one per effect + pipeline state + geometry layout), each drawn as ONE
-    /// indirect multidraw against a shared dirty-tracked arena. The uniforms
-    /// named in `heapNames` are gathered per-draw in the rewritten shader;
-    /// everything else is treated as a global. The explicit set RESTRICTS /
-    /// OVERRIDES auto-detection: an RO missing one of the names (or supplying it
-    /// in an unpackable type) is passed through UNCHANGED. Prefer the names-free
-    /// overload below unless you need that restriction.
-    let ofRenderObjects (runtime : IRuntime) (heapNames : Set<string>) (objects : aset<IRenderObject>) : aset<IRenderObject> =
-        ofRenderObjectsImpl runtime (Some heapNames) objects
-
-    /// Names-free variant of `ofRenderObjects`: the per-draw heap fields are
-    /// AUTO-DETECTED per RO — every uniform the effect consumes (after derived-
-    /// rule expansion, samplers excluded) that the RO's own uniform provider
-    /// supplies in a packable type becomes a per-draw heap field; names that fall
-    /// through to scene/global scope (camera, lights, …) stay ordinary uniforms,
-    /// and sampler/texture uniforms keep the bindless/atlas path. The detected
-    /// field set is part of the bucket key, so ROs with different sets land in
-    /// different buckets.
-    let ofRenderObjectsAuto (runtime : IRuntime) (objects : aset<IRenderObject>) : aset<IRenderObject> =
-        ofRenderObjectsImpl runtime None objects
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)

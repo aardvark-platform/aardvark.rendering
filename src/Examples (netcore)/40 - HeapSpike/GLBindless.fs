@@ -116,7 +116,7 @@ module GLBindless =
                     Symbol.Create "ViewProjTrafo",  viewProj
                     Symbol.Create "TexHandles",     handleU ]
                 ro :> IRenderObject)
-        let heap = Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapTexIndex" ]) (ASet.ofArray inputs)
+        let heap = Heap.ofRenderObjects runtime (ASet.ofArray inputs)
 
         use task = runtime.CompileRender(signature, heap)
         let out = task |> RenderTask.renderToColor size
@@ -181,6 +181,6 @@ module GLBindless =
                     Symbol.Create "ViewProjTrafo",  viewProj
                     Symbol.Create "TexHandles",     handleU ]
                 ro :> IRenderObject)
-        win.Scene <- Sg.renderObjectSet (Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapTexIndex" ]) (ASet.ofArray inputs))
+        win.Scene <- Sg.renderObjectSet (Heap.ofRenderObjects runtime (ASet.ofArray inputs))
         Log.warn "gl-bindless window: %d cubes, %d ARB_bindless textures, GL backend, one indirect draw" inputs.Length texCount
         win.Run()

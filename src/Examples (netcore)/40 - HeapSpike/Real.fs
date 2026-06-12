@@ -73,7 +73,7 @@ module Real =
 
         // heap-managed per-object uniforms; ModelViewProjTrafo is DERIVED from
         // ModelTrafo (arena) + ViewProjTrafo (global) by the general rule system.
-        let heap = Heap.ofRenderObjects win.Runtime (Set.ofList [ "ModelTrafo"; "HeapColor" ]) (ASet.ofArray inputs)
+        let heap = Heap.ofRenderObjects win.Runtime (ASet.ofArray inputs)
         heap |> ASet.toAVal |> AVal.force |> ignore
         Log.warn "real-uniforms: %d objects (Trafo3d ModelTrafo + derived ModelViewProjTrafo) -> %d bucket(s)" inputs.Length Heap.lastBucketCount
 

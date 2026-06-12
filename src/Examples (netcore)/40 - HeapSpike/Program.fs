@@ -288,7 +288,7 @@ let main argv =
     let inputSet = ASet.ofArray inputs
 
     // THE INTEGRATION: N independent ROs -> B bucket ROs (one indirect draw each)
-    let heapObjects = Heap.ofRenderObjects win.Runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) inputSet
+    let heapObjects = Heap.ofRenderObjects win.Runtime inputSet
 
     win.Keyboard.DownWithRepeats.Values.Add (fun k ->
         if k = Keys.Space then
