@@ -583,6 +583,10 @@ module Heap =
     /// (diagnostic / for logging).
     let mutable lastBucketCount = 0
 
+    /// The per-draw heap-field names detected for the most recently classified
+    /// heapable RO on the AUTO-DETECT path (diagnostic / for tests). Sorted.
+    let mutable lastAutoFields : string[] = [||]
+
     /// Force the texture-atlas path even where descriptor-indexed sampler arrays ARE
     /// available (for testing the atlas on desktop Vulkan, which reports them supported).
     let mutable forceAtlas = false
@@ -921,7 +925,15 @@ module Heap =
     /// bucket's geometry strategy and slot routing are fixed at creation.
     type internal RoFacts =
         { Heapable : bool; Layout : string; ConstToken : obj
-          Bindless : bool; Instanced : bool }
+          Bindless : bool; Instanced : bool
+          /// per-draw heap-field names (sorted) + name -> field index, INTERNED
+          /// per distinct set (ROs sharing a set share one array/map instance).
+          /// Explicit-names calls: the caller's set, same for every heapable RO.
+          /// Auto-detect calls: the DETECTED set (effect-consumed ∩ RO-supplied ∩
+          /// packable); folded into Layout, so it is part of the bucket key — the
+          /// rewritten shader bakes the field layout, so ROs with different field
+          /// sets must land in different buckets.
+          Fields : string[]; FieldMap : Map<string, int> }
 
     /// an input RO may ALREADY be instanced (instanceCount > 1); preserved per-slot.
     /// STRUCTURAL read (forced once, cached in RoFacts): an RO whose Direct call list
@@ -2132,17 +2144,34 @@ module Heap =
 
     /// Collapse an adaptive set of N render objects into B bucket render objects
     /// (one per effect), each drawn as ONE indirect multidraw against a shared
-    /// dirty-tracked arena. The uniforms named in `heapNames` are gathered
-    /// per-draw in the rewritten shader; everything else is treated as a global.
-    /// Render objects that aren't heap-eligible (see `isHeapable` below) are passed
-    /// through to the output set UNCHANGED — so a mixed scene degrades gracefully.
-    let ofRenderObjects (runtime : IRuntime) (heapNames : Set<string>) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+    /// dirty-tracked arena. `explicitNames = Some s`: the uniforms named in `s`
+    /// are gathered per-draw in the rewritten shader; everything else is treated
+    /// as a global. `explicitNames = None`: the per-draw field set is AUTO-
+    /// DETECTED per RO (see `detectFields` below) and becomes part of the bucket
+    /// key. Render objects that aren't heap-eligible (see `isHeapable` below) are
+    /// passed through to the output set UNCHANGED — a mixed scene degrades
+    /// gracefully.
+    let private ofRenderObjectsImpl (runtime : IRuntime) (explicitNames : Set<string> option) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         HeapConfig.requireEnabled "Heap.ofRenderObjects"
         checkSupport false runtime
-        let names = heapNames |> Set.toArray |> Array.sort
-        let fieldStride = names.Length
-        let nameToField = names |> Array.mapi (fun i n -> n, i) |> Map.ofArray
         let scope = Ag.Scope.Root
+
+        // ── per-draw field sets ──────────────────────────────────────────
+        // Distinct field sets are interned (sorted names -> ONE shared array +
+        // name->index map): per-RO facts then carry two references, and identical
+        // sets compare cheaply. The joined string is folded into the bucket key.
+        let fieldSetInterner = System.Collections.Generic.Dictionary<string, string[] * Map<string, int>>()
+        let internFields (ns : string[]) =
+            let k = String.concat ";" ns
+            match fieldSetInterner.TryGetValue k with
+            | true, v -> v
+            | _ ->
+                let v = ns, (ns |> Array.mapi (fun i n -> n, i) |> Map.ofArray)
+                fieldSetInterner.[k] <- v
+                v
+        // explicit-names call: ONE fixed field set for every heapable RO (the
+        // caller restricts/overrides detection — exactly the legacy behavior).
+        let explicitFields = explicitNames |> Option.map (fun s -> internFields (s |> Set.toArray |> Array.sort))
 
         // Bucket key = effect + topology + the VALUES of the per-RO pipeline state
         // (cull / front-face / fill / blend / depth test+write). Reading the state
@@ -2212,6 +2241,49 @@ module Heap =
             System.Collections.Generic.HashSet<System.Type>(
                 [ typeof<M44f>; typeof<Trafo3d>; typeof<M44d>; typeof<V4f>; typeof<C4f>
                   typeof<V3f>; typeof<V2f>; typeof<float32>; typeof<float>; typeof<int> ])
+
+        // ── per-draw field auto-detection (explicitNames = None) ─────────
+        // Classification rule (deterministic per RO, memoized in RoFacts like
+        // layoutSig): a uniform name becomes a PER-DRAW HEAP FIELD iff
+        //   * the effect CONSUMES it — taken AFTER derived-rule expansion, so an
+        //     effect reading ModelViewProjTrafo detects its bases (ModelTrafo,
+        //     ViewProjTrafo), matching what `rewrite` will actually gather, and
+        //   * it is not a sampler (textures keep the bindless/atlas path), and
+        //   * the RO's OWN uniform provider supplies it (TryGetUniform succeeds)
+        //     in a packable ContentType.
+        // Everything else — names falling through to scene/global scope (camera,
+        // lights), RO-supplied names the effect never reads, consumed+supplied
+        // names of unpackable type — stays an ordinary uniform: NOT a field, the
+        // RO stays heapable (exactly what an explicit call omitting that name
+        // does), and the read resolves through the bucket's globals fall-through.
+        // NOTE the fall-through answers from ONE live member: a consumed+supplied
+        // UNPACKABLE uniform that genuinely varies per RO therefore merges on
+        // that member's value — same pre-existing limitation as the explicit
+        // path; use the explicit overload (or a packable type) if that matters.
+        let consumedCache = System.Collections.Generic.Dictionary<string, string[]>()
+        let consumedNonSamplerNames (e : Effect) =
+            match consumedCache.TryGetValue e.Id with
+            | true, v -> v
+            | _ ->
+                // expand derived rules to a fixpoint (same loop as `rewrite`)
+                let hasDerived (eff : Effect) = eff.Uniforms |> Map.exists (fun n _ -> standardDerivedRules.ContainsKey n)
+                let mutable cur = e
+                let mutable i = 0
+                while hasDerived cur && i < 8 do
+                    cur <- cur |> Effect.substituteUniforms (fun name _ _ _ -> Map.tryFind name standardDerivedRules)
+                    i <- i + 1
+                let v =
+                    cur.Uniforms |> Map.toArray            // sorted by name
+                    |> Array.choose (fun (n, p) ->
+                        if typeof<ISampler>.IsAssignableFrom p.uniformType then None else Some n)
+                consumedCache.[e.Id] <- v
+                v
+        let detectFields (r : RenderObject) (e : Effect) =
+            consumedNonSamplerNames e
+            |> Array.filter (fun n ->
+                match r.Uniforms.TryGetUniform(scope, Symbol.Create n) with
+                | ValueSome v -> packable.Contains v.ContentType
+                | ValueNone -> false)
         // eligible iff: an Effect surface, an indexed (host/tight) draw, every
         // attribute the SHADER reads (effect.Inputs) present host/tight, and every
         // heap uniform present in a packable type. Anything else -> passthrough.
@@ -2241,10 +2313,18 @@ module Heap =
                         instanceCountOf ro = 1 &&
                         (match ro.Indices with Some bv -> isReadableIndex bv | None -> false) && attrOk isBindlessAttr
                     (hostGeom || bindlessGeom) &&
-                    (names |> Array.forall (fun n ->
-                        match ro.Uniforms.TryGetUniform(scope, Symbol.Create n) with
-                        | ValueSome v -> packable.Contains v.ContentType
-                        | ValueNone -> false)) &&
+                    // explicit-names call: EVERY named uniform must be supplied in
+                    // a packable type (missing/odd-typed -> passthrough, as
+                    // before). Auto-detect imposes no uniform requirement: a
+                    // consumed uniform the RO doesn't supply (or supplies
+                    // unpackably) simply isn't detected as a field.
+                    (match explicitFields with
+                     | Some (ns, _) ->
+                         ns |> Array.forall (fun n ->
+                             match ro.Uniforms.TryGetUniform(scope, Symbol.Create n) with
+                             | ValueSome v -> packable.Contains v.ContentType
+                             | ValueNone -> false)
+                     | None -> true) &&
                     // textures: every sampler must be a SUPPORTED bindless type (sampler2d
                     // / samplerCube / …) AND the device must support unbounded sampler
                     // arrays. One array per type carries ONE state, so all samplers of a
@@ -2314,13 +2394,25 @@ module Heap =
                              | _ -> false)
                         let bindless = not hostGeom
                         let inst = instanceCountOf r > 1
-                        // geometry class + instanced-ness PARTITION buckets (a
-                        // bucket RO's surface / routing / geometry strategy is
-                        // fixed at creation), so fold them into the layout sig.
+                        // per-draw field set: the caller's (explicit) or DETECTED
+                        // (effect-consumed ∩ RO-supplied ∩ packable), interned.
+                        let (fields, fieldMap) =
+                            match explicitFields with
+                            | Some fm -> fm
+                            | None ->
+                                let e = match r.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
+                                let fm = internFields (detectFields r e)
+                                lastAutoFields <- fst fm
+                                fm
+                        // geometry class + instanced-ness + field set PARTITION
+                        // buckets (a bucket RO's surface / routing / geometry
+                        // strategy and its baked field layout are fixed at
+                        // creation), so fold them into the layout sig.
                         let layout =
                             layoutSig r
                             + (if bindless then "|gpu" else "|host")
                             + (if inst then "|inst" else "")
+                            + "|f:" + String.concat ";" fields
                         let ra = r.RasterizerState
                         let allConst =
                             ra.CullMode.IsConstant && ra.FrontFacing.IsConstant && ra.FillMode.IsConstant &&
@@ -2329,9 +2421,12 @@ module Heap =
                           Layout = layout
                           ConstToken = if allConst then internKey (modeKey layout t r) else null
                           Bindless = bindless
-                          Instanced = inst }
+                          Instanced = inst
+                          Fields = fields
+                          FieldMap = fieldMap }
                     else
-                        { Heapable = false; Layout = null; ConstToken = null; Bindless = false; Instanced = false }
+                        { Heapable = false; Layout = null; ConstToken = null; Bindless = false; Instanced = false
+                          Fields = [||]; FieldMap = Map.empty }
                 roFacts.Add(o, f)
                 f
 
@@ -2356,7 +2451,9 @@ module Heap =
         let mkBucket (key : obj) (r0 : RenderObject) (f0 : RoFacts) =
             let effect = match r0.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
             let (_, _, _, cull, ff, fill, blend, dtest, dwrite, _) = keyValues.[key]
-            let c = IncrementalBucket(runtime, names, nameToField, effect, r0, updaterRef.Value, f0.Bindless, f0.Instanced,
+            // field names/layout come from the FACTS (per-bucket: the field set is
+            // part of the bucket key, so every member shares f0's interned set)
+            let c = IncrementalBucket(runtime, f0.Fields, f0.FieldMap, effect, r0, updaterRef.Value, f0.Bindless, f0.Instanced,
                                       (cull, ff, fill, blend, dtest, dwrite))
             caches.[key] <- c
             c
@@ -2467,6 +2564,28 @@ module Heap =
                     i <- i + 1
                 out)                                    // collapsed buckets ∪ untouched passthrough
         resultAval |> ASet.ofAVal
+
+    /// Collapse an adaptive set of N render objects into B bucket render objects
+    /// (one per effect + pipeline state + geometry layout), each drawn as ONE
+    /// indirect multidraw against a shared dirty-tracked arena. The uniforms
+    /// named in `heapNames` are gathered per-draw in the rewritten shader;
+    /// everything else is treated as a global. The explicit set RESTRICTS /
+    /// OVERRIDES auto-detection: an RO missing one of the names (or supplying it
+    /// in an unpackable type) is passed through UNCHANGED. Prefer the names-free
+    /// overload below unless you need that restriction.
+    let ofRenderObjects (runtime : IRuntime) (heapNames : Set<string>) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        ofRenderObjectsImpl runtime (Some heapNames) objects
+
+    /// Names-free variant of `ofRenderObjects`: the per-draw heap fields are
+    /// AUTO-DETECTED per RO — every uniform the effect consumes (after derived-
+    /// rule expansion, samplers excluded) that the RO's own uniform provider
+    /// supplies in a packable type becomes a per-draw heap field; names that fall
+    /// through to scene/global scope (camera, lights, …) stay ordinary uniforms,
+    /// and sampler/texture uniforms keep the bindless/atlas path. The detected
+    /// field set is part of the bucket key, so ROs with different sets land in
+    /// different buckets.
+    let ofRenderObjectsAuto (runtime : IRuntime) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        ofRenderObjectsImpl runtime None objects
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)

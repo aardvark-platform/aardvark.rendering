@@ -103,6 +103,8 @@ let main argv =
         if Golden.plainTest () then 0 else 1
     elif argv |> Array.contains "golden" then
         if Golden.run () then 0 else 1
+    elif argv |> Array.contains "autofields" then
+        if Golden.autoFieldsTest () then 0 else 1
     elif argv |> Array.contains "vis" then
         if Golden.visibilityTest () then 0 else 1
     elif argv |> Array.contains "buckets" then

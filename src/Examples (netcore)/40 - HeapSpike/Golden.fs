@@ -211,6 +211,111 @@ module Golden =
         else Log.warn "golden: FAILED"
         pass
 
+    // Auto-detected per-draw heap fields (Heap.ofRenderObjectsAuto): the same
+    // scene rendered classic, heap-with-EXPLICIT-names and heap-with-AUTO-
+    // detection must agree pixel-for-pixel. Also asserts the classification
+    // itself via Heap.lastAutoFields:
+    //   * consumed + RO-supplied + packable  -> per-draw field, including the
+    //     SHARED ViewProjTrafo aval (dedups to ONE arena region), and
+    //   * RO-supplied but NOT consumed       -> ignored,
+    // and that DIFFERENT detected field sets split buckets (the field set is
+    // part of the bucket key).
+    module AF =
+        let gammaFrag (v : Shaders.Vertex) =
+            fragment {
+                let g : float32 = uniform?Gamma
+                return V4f(v.c.XYZ * g, 1.0f)
+            }
+
+    let autoFieldsTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue   // ONE shared aval
+
+        let mkRO (uniforms : list<Symbol * IAdaptiveValue>) (effect : Effect) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect effect
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList uniforms
+            ro :> IRenderObject
+
+        let renderToPix (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>()
+            finally out.Release()
+
+        let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
+        let s = 16
+        let inputs =
+            Array.init (s * s) (fun i ->
+                let p = V3d(float (i % s - s/2) * 1.2, float (i / s - s/2) * 1.2, 0.0)
+                mkRO [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                       Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                       Symbol.Create "ViewProjTrafo",  viewProj
+                       // supplied (packable) but NOT consumed by the effect ->
+                       // auto-detection must IGNORE it
+                       Symbol.Create "NotConsumed",    (AVal.constant i :> IAdaptiveValue) ] effect)
+
+        let classicPix  = renderToPix (ASet.ofArray inputs)
+        let explicitPix = renderToPix (Heap.ofRenderObjects runtime (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) (ASet.ofArray inputs))
+        let autoPix     = renderToPix (Heap.ofRenderObjectsAuto runtime (ASet.ofArray inputs))
+        let autoBuckets = Heap.lastBucketCount
+        let detected    = Heap.lastAutoFields
+
+        // classification: consumed ∩ supplied ∩ packable, NotConsumed ignored
+        let expected = [| "HeapColor"; "HeapModelTrafo"; "ViewProjTrafo" |]
+        let fieldsOk = detected = expected
+        if not fieldsOk then Log.warn "autoFields: detected fields %A (expected %A)" detected expected
+
+        let dE, nE, nbgE, total = diff explicitPix autoPix
+        let dC, nC, _, _        = diff classicPix autoPix
+        Log.line "autoFields: fields=%A  buckets=%d" detected autoBuckets
+        Log.line "autoFields: auto vs explicit maxDelta=%d diffPixels=%d/%d  auto vs classic maxDelta=%d diffPixels=%d  coverage=%d px"
+            dE nE total dC nC nbgE
+        let pixOk = dE <= 1 && dC <= 1 && nbgE > total / 100L && autoBuckets = 1
+
+        // different DETECTED field sets must land in different buckets: same
+        // effect (consumes Gamma), half the ROs supply Gamma, half don't.
+        let effectG = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction AF.gammaFrag ]
+        let mixed =
+            Array.init 4 (fun i ->
+                let p = V3d(float i * 1.5, 0.0, 0.0)
+                let base' =
+                    [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                      Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                      Symbol.Create "ViewProjTrafo",  viewProj ]
+                let us = if i % 2 = 0 then (Symbol.Create "Gamma", (AVal.constant 1.0f :> IAdaptiveValue)) :: base' else base'
+                mkRO us effectG)
+        let splitCount = Heap.ofRenderObjectsAuto runtime (ASet.ofArray mixed) |> ASet.force |> HashSet.count
+        let splitOk = splitCount = 2 && Heap.lastBucketCount = 2
+        if not splitOk then Log.warn "autoFields: field-set bucket split: %d output RO(s), %d bucket(s) (expected 2/2)" splitCount Heap.lastBucketCount
+
+        let pass = fieldsOk && pixOk && splitOk
+        if pass then Log.line "autoFields: PASS (auto-detected fields == explicit-names rendering; NotConsumed ignored; field-set splits buckets)"
+        else Log.warn "autoFields: FAIL (fieldsOk=%b pixOk=%b splitOk=%b)" fieldsOk pixOk splitOk
+        pass
+
     // offscreen reproduction of the WINDOWED demo (2 effects -> 2 buckets, varied
     // box/sphere/torus geometry), CLASSIC vs HEAP, saved to PPM so the macOS
     // breakage can be inspected. samples=1 so the result is downloadable.
