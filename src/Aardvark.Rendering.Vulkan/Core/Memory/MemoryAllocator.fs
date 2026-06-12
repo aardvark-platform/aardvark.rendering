@@ -239,6 +239,21 @@ type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativein
                 this.CreateImage(&info, preferDevice, hostAccess, priority, export, bind, mayAlias)
         }
 
+    /// Current VMA allocation statistics summed over all memory heaps:
+    /// (number of live allocations, total allocated bytes). Cheap (no full
+    /// VMA walk — uses the budget query) and intended for leak diagnostics.
+    member _.Statistics : struct (int * uint64) =
+        let heaps = device.PhysicalDevice.MemoryHeaps
+        let heapBudgets = Array.zeroCreate<VmaBudget> heaps.Length
+        use pHeapBudgets = fixed heapBudgets
+        Vma.getHeapBudgets(allocator, pHeapBudgets)
+        let mutable count = 0
+        let mutable bytes = 0UL
+        for i = 0 to heaps.Length - 1 do
+            count <- count + int heapBudgets.[i].statistics.allocationCount
+            bytes <- bytes + uint64 heapBudgets.[i].statistics.allocationBytes
+        struct (count, bytes)
+
     member _.PrintUsage([<Optional; DefaultParameterValue(2)>] verbosity: int) =
         let l = Logger.Get verbosity
         let heaps = device.PhysicalDevice.MemoryHeaps

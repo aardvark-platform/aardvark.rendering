@@ -2779,3 +2779,109 @@ module Golden =
         finally
             Heap.forceNoDrawId <- false
             Heap.compactionWasteFloorBytes <- floor0
+
+    // Lifetime golden test: repeatedly (30x) build a heap scene — a PLAIN
+    // uniform bucket plus a TEXTURED atlas bucket (forceAtlas), so the draw/
+    // header mirrors, the HeapArena AND the atlas pool are all covered —
+    // render a few frames, then tear it down through the API's disposal entry
+    // (empty the input set -> the incremental driver disposes the buckets;
+    // the render task's delta processing releases the prepared resources) and
+    // dispose the task. After every cycle the device's VMA statistics
+    // (allocation count + allocated bytes) must return to the post-warmup
+    // baseline: the heap-owned AdaptiveBuffers are destroyed by the resource
+    // layer's Release (IAdaptiveResource refcounting). On the pre-fix tree the
+    // bucket avals stripped IAdaptiveResource (plain AVal.map/custom), nothing
+    // ever destroyed the buffers, and the metrics grow monotonically -> FAIL.
+    let lifetimeTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let device = runtime.Device
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProjM = AVal.init (view * proj)
+        let viewProj = viewProjM :> IAdaptiveValue
+        let texArray : ITexture[] = Array.init 8 mkTexture
+        // effects built ONCE so shader modules / pipelines are cached across cycles
+        let effPlain = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        let effTex   = Effect.compose [ Effect.ofFunction TH.shade;      Effect.ofFunction TH.frag ]
+        let names = Set.ofList [ "HeapModelTrafo"; "HeapColor" ]
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
+        let mkRO (i : int) (eff : Effect) (tex : bool) =
+            let p = V3d(float (i % 8 - 4) * 1.2, float (i / 8 - 4) * 1.2, (if tex then 0.7 else -0.7))
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                yield Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                yield Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                yield Symbol.Create "ViewProjTrafo",  viewProj
+                if tex then yield Symbol.Create "DiffuseTexture", (AVal.constant texArray.[i % texArray.Length] :> IAdaptiveValue) ]
+            ro :> IRenderObject
+
+        let stats () = let struct (c, b) = device.MemoryStatistics in (c, b)
+
+        let runCycle (ci : int) =
+            // FRESH render objects + fresh heap each cycle (fresh geometry array
+            // identities would defeat pipeline caching, so geometry is shared;
+            // the heap's packed buffers are per-bucket and rebuilt anyway).
+            let ros = cset (Array.init 64 (fun i -> if i % 2 = 0 then mkRO i effPlain false else mkRO i effTex true))
+            let heapObjs = Heap.ofRenderObjects runtime names (ros :> aset<_>)
+            use task = runtime.CompileRender(signature, heapObjs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            // a few frames (camera nudges force re-submission)
+            for f in 0 .. 2 do
+                transact (fun () -> viewProjM.Value <- CameraView.lookAt (V3d(0.02 * float (ci + f), -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> fun v -> v * proj)
+                out.GetValue() |> ignore
+            let buckets = Heap.lastBucketCount
+            // teardown via the API's disposal entry: empty the input set -> the
+            // updater disposes the (now key-less) buckets and the render task's
+            // delta processing RELEASES the bucket RO's resources (which, via
+            // IAdaptiveResource refcounting, destroys the heap-owned buffers).
+            transact (fun () -> ros.Clear())
+            out.GetValue() |> ignore
+            out.Release()
+            buckets
+
+        // force the ATLAS texture path (desktop Vulkan would go bindless), so a
+        // bucket-owned AtlasPool + dummy textures are created/destroyed per cycle.
+        Heap.forceAtlas <- true
+        try
+            // warm-up cycles populate caches (shader modules, pipelines, sampler /
+            // descriptor machinery, VMA block pools); baseline taken after them.
+            for ci in 0 .. 2 do runCycle ci |> ignore
+            let (count0, bytes0) = stats ()
+            let cycles = 30
+            let mutable buckets = 0
+            for ci in 0 .. cycles - 1 do
+                buckets <- max buckets (runCycle (3 + ci))
+                let (c, b) = stats ()
+                if ci % 10 = 0 || ci = cycles - 1 then
+                    Log.line "lifetime: cycle %2d  allocations=%d (baseline %d)  bytes=%d (baseline %d)" ci c count0 b bytes0
+            let (countN, bytesN) = stats ()
+            // post-cycle stats must RETURN to baseline (small slack for lazily
+            // created caches); in-cycle peaks are naturally higher (live scene).
+            let countGrowth = countN - count0
+            let bytesGrowth = int64 bytesN - int64 bytes0
+            Log.line "lifetime: %d cycles, %d bucket(s)/cycle  growth: allocations=%+d bytes=%+d" cycles buckets countGrowth bytesGrowth
+            let pass = buckets >= 2 && countGrowth <= 8 && bytesGrowth <= 4L * 1024L * 1024L
+            if pass then Log.line "lifetime: PASS (device memory returns to baseline after each scene teardown)"
+            else Log.warn "lifetime: FAIL (allocations %d -> %d, bytes %d -> %d)" count0 countN bytes0 bytesN
+            pass
+        finally
+            Heap.forceAtlas <- false

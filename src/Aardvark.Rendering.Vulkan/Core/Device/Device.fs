@@ -360,6 +360,11 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
     member x.PrintMemoryUsage([<Optional; DefaultParameterValue(2)>] verbosity: int) =
         memoryAllocator.PrintUsage verbosity
 
+    /// Current device memory allocation statistics:
+    /// (number of live allocations, total allocated bytes), summed over all heaps.
+    member x.MemoryStatistics : struct (int * uint64) =
+        memoryAllocator.Statistics
+
     interface IDevice with
         member x.VKVM = x.VKVM
         member x.Handle = x.Handle

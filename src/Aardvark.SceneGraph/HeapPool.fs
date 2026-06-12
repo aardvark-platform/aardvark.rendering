@@ -1805,14 +1805,23 @@ module Heap =
             instBuf.Flush <- flushInst
             instBuf.Name <- "HeapSlotAttr"
 
-        let headersAval = (headersBuf :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)
+        // ACQUISITION-PROPAGATING views over the bucket-owned AdaptiveBuffers:
+        // AdaptiveResource.mapNonAdaptive keeps the IAdaptiveResource interface
+        // (plain AVal.map would strip it), so the backends' resource locations —
+        // which Acquire on prepare and Release on dispose — refcount the
+        // underlying MirrorBuffer / HeapArena and DESTROY its backend buffer
+        // when the bucket RO leaves the render task. The mapping is re-run on
+        // every demanded pull (cheap: an upcast / a record alloc), which the
+        // indirect view RELIES on: highWater can change without the backend
+        // handle changing, and the fresh record picks it up.
+        let headersAval = (headersBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
         let indirectAval =
-            AVal.custom (fun t ->
-                let b = (drawBuf :> aval<IBackendBuffer>).GetValue t :> IBuffer
-                IndirectBuffer.ofBuffer true 0UL sizeof<DrawCallInfo> highWater b)
+            (drawBuf :> aval<IBackendBuffer>)
+            |> AdaptiveResource.mapNonAdaptive (fun b ->
+                IndirectBuffer.ofBuffer true 0UL sizeof<DrawCallInfo> highWater (b :> IBuffer))
         let attrAvals = Array.init (if useBindlessGeom then 0 else numAttrs) (fun i -> updater |> AVal.map (fun _ -> attrBuffers.[i]))
         let idxAval = updater |> AVal.map (fun _ -> idxBuffer)
-        let instAval = (instBuf :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)
+        let instAval = (instBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
         // re-reads only the live slots' avals (cheap when unchanged); a fresh
@@ -1831,7 +1840,7 @@ module Heap =
                         vtxLast.[pos] <- b
                         out.[pos] <- b
                 out)
-        let arenaU = ((arena :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)) :> IAdaptiveValue
+        let arenaU = ((arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         let headersU = headersAval :> IAdaptiveValue
 
         // texture / atlas / vertex-pull uniform bindings of the bucket RO
@@ -2954,7 +2963,9 @@ module Heap =
         let gate = obj()
         let bv (arr : System.Array) t = BufferView(AVal.constant (ArrayBuffer(arr) :> IBuffer), t)
         let indirectAval = version |> AVal.map (fun _ -> lock gate (fun () -> IndirectBuffer.ofArray (Array.sub entries 0 highWater)))
-        let heapDataU = ((arena :> aval<IBackendBuffer>) |> AVal.map (fun b -> b :> IBuffer)) :> IAdaptiveValue
+        // acquisition-propagating (see IncrementalBucket): the render task's
+        // Release of the HeapData binding destroys the arena's backend buffer.
+        let heapDataU = ((arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         let symHeap = Symbol.Create "HeapData"
 
         let ro = RenderObject()
