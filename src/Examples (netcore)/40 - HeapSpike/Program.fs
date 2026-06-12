@@ -154,6 +154,8 @@ let main argv =
         if Golden.msaaTest () then 0 else 1
     elif argv |> Array.contains "churnprobe" then
         if Golden.churnProbeTest () then 0 else 1
+    elif argv |> Array.contains "noindex" then
+        if Golden.nonIndexedTest () then 0 else 1
     elif argv |> Array.contains "geomvalue" then
         if Golden.geomValueDedupTest () then 0 else 1
     elif argv |> Array.contains "geomchurn" then

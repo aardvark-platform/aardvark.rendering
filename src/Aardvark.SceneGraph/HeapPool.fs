@@ -1011,6 +1011,18 @@ module Heap =
             | arr -> max 1 arr.[0].InstanceCount
         | _ -> 1
 
+    /// a NON-indexed slot's vertex count: the RO's Direct draw call (classify
+    /// requires Direct, single-call, zero offsets for non-indexed ROs).
+    /// STRUCTURAL read like instanceCountOf — forced once at add, never
+    /// re-read (the heap treats draw-call shape as immutable).
+    let private faceVertexCountOf (ro : RenderObject) =
+        match ro.DrawCalls with
+        | DrawCalls.Direct calls ->
+            match AVal.force calls with
+            | [||] -> 0
+            | arr -> arr.[0].FaceVertexCount
+        | _ -> 0
+
     // ── bindless vertex-pull helpers (shared by the incremental buckets and the
     //    standalone Heap.bindless) ─────────────────────────────────────────────
     let private vidExpr    : Expr = Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId)
@@ -1055,9 +1067,13 @@ module Heap =
     /// decode the vertex index for `gl_VertexIndex = v` from the index
     /// allocation whose HEADER lives at arena word offset `r`: u16 elements
     /// (typeId 2) unpack two-per-word, anything else reads a whole word.
+    /// NON-indexed slots carry the sentinel ref -1 (no index allocation):
+    /// the vertex index passes through unchanged. The branch is coherent per
+    /// draw — all vertices of a slot read the same header cell.
     [<ReflectedDefinition>]
     let private decodeHeapIndex (r : int) (v : int) : int =
-        if uniform.HeapDataI.[r] = 2 then
+        if r < 0 then v
+        elif uniform.HeapDataI.[r] = 2 then
             (uniform.HeapDataI.[r + 4 + (v >>> 1)] >>> ((v &&& 1) <<< 4)) &&& 0xFFFF
         else
             uniform.HeapDataI.[r + 4 + v]
@@ -1813,6 +1829,11 @@ module Heap =
         /// buffer) with a header carrying the ELEMENT TYPE (u16 vs 32-bit) —
         /// the shader's index decode branches on it, so one bucket freely
         /// mixes 16- and 32-bit-indexed members.
+        /// sentinel slot key for NON-indexed members: never inserted into
+        /// idxStatic, so freeStatic on remove is a clean no-op and the
+        /// compaction header rewrite skips it (TryGetValue miss).
+        let noIdxKey : struct(obj * int * int) = struct(null, 0, 0)
+
         let idxFor (ro : RenderObject) : struct(obj * int * int) * StaticEntry =
             let bv = match ro.Indices with Some b -> b | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
             let es = elemSize bv.ElementType
@@ -2307,8 +2328,17 @@ module Heap =
                         let (key, r) = attrFor ro sym
                         headers.[slot * headerStride + fieldStride + ai] <- r
                         key)
-            let (idxKey, idxEntry) = idxFor ro
-            headers.[slot * headerStride + idxCell] <- idxEntry.Ref
+            // index allocation — or the -1 sentinel for NON-indexed members
+            // (the shader's decodeHeapIndex passes gl_VertexIndex through);
+            // their vertex count comes from the RO's Direct draw call.
+            let struct(idxKey, idxRef, vertexCount) =
+                match ro.Indices with
+                | Some _ ->
+                    let (k, e) = idxFor ro
+                    struct(k, e.Ref, e.Count)
+                | None ->
+                    struct(noIdxKey, -1, faceVertexCountOf ro)
+            headers.[slot * headerStride + idxCell] <- idxRef
             dirtyHeaders.Add slot |> ignore
             // register the slot's textures (bindless per-type tables / atlas)
             for (_, _, texSyms, table) in bindlessTexTables do
@@ -2341,8 +2371,9 @@ module Heap =
                 elif useDrawId then 0
                 else slot
             // NON-indexed record: vertexCount = the slot's INDEX count (the
-            // shader maps gl_VertexIndex through the index allocation).
-            entries.[slot] <- DrawCallInfo(FaceVertexCount = idxEntry.Count, FirstIndex = 0, BaseVertex = 0,
+            // shader maps gl_VertexIndex through the index allocation), or
+            // the RO's own draw-call vertex count for index-free members.
+            entries.[slot] <- DrawCallInfo(FaceVertexCount = vertexCount, FirstIndex = 0, BaseVertex = 0,
                                            FirstInstance = firstInstance, InstanceCount = instCount)
             dirtyDraws.Add slot |> ignore
             slots.[ro] <- { Slot = slot; RegionKeys = keys; Active = active; Instances = k; InstOffset = firstInstance
@@ -2620,8 +2651,9 @@ module Heap =
                             mismatch
                 samplerIssueCache.[e.Id] <- v
                 v
-        // eligible iff: an Effect surface, an indexed draw with a 2-/4-byte
-        // readable index buffer, every attribute the SHADER reads
+        // eligible iff: an Effect surface, an INDEXED draw with a 2-/4-byte
+        // readable index buffer OR a NON-indexed single-call Direct draw,
+        // every attribute the SHADER reads
         // (effect.Inputs) either host-storage-decodable (incl. singletons) or
         // bindless vertex-pull eligible, and supported samplers. Anything else
         // -> passthrough, with a deduped diagnostic line when Heap.Diagnostics.
@@ -2633,17 +2665,35 @@ module Heap =
             | :? RenderObject as ro ->
                 match ro.Surface with
                 | Surface.Effect e ->
-                    // ── index buffer: required; element type 2 or 4 bytes;
-                    //    readable (host INativeBuffer or downloadable backend buffer) ──
-                    match ro.Indices with
-                    | None -> struct(Some "RO has no index buffer (non-indexed draws pass through; supply Indices)", false)
-                    | Some ibv ->
-                        let ies = elemSize ibv.ElementType
-                        if ies <> 2 && ies <> 4 then
-                            struct(Some (sprintf "index element type %s unsupported (need a 2- or 4-byte integer type)" ibv.ElementType.Name), false)
-                        elif not (isReadableIndex ibv) then
-                            struct(Some (sprintf "index buffer of type %s is neither host-readable nor a backend buffer" (ibv.Buffer.GetValue().GetType().Name)), false)
-                        else
+                    // ── indices: OPTIONAL. Indexed draws need a 2-/4-byte
+                    //    readable index buffer (host INativeBuffer or
+                    //    downloadable backend buffer); NON-indexed draws ride
+                    //    the heap too — the slot's header carries the -1
+                    //    sentinel and decodeHeapIndex passes gl_VertexIndex
+                    //    through. Their vertex count is read STRUCTURALLY from
+                    //    the Direct draw call, so a single zero-offset call is
+                    //    required. ──
+                    let idxIssue =
+                        match ro.Indices with
+                        | None ->
+                            match ro.DrawCalls with
+                            | DrawCalls.Direct calls ->
+                                match AVal.force calls with
+                                | [| c |] when c.FirstIndex = 0 && c.BaseVertex = 0 -> None
+                                | [||] -> None
+                                | [| _ |] -> Some "non-indexed RO has a draw call with nonzero FirstIndex/BaseVertex (the heap draws [0, FaceVertexCount))"
+                                | _ -> Some "non-indexed RO has multiple draw calls (the heap packs one record per RO)"
+                            | _ -> Some "non-indexed RO with Indirect draw calls (vertex count unknowable at add; supply Direct calls or Indices)"
+                        | Some ibv ->
+                            let ies = elemSize ibv.ElementType
+                            if ies <> 2 && ies <> 4 then
+                                Some (sprintf "index element type %s unsupported (need a 2- or 4-byte integer type)" ibv.ElementType.Name)
+                            elif not (isReadableIndex ibv) then
+                                Some (sprintf "index buffer of type %s is neither host-readable nor a backend buffer" (ibv.Buffer.GetValue().GetType().Name))
+                            else None
+                    match idxIssue with
+                    | Some _ -> struct(idxIssue, false)
+                    | None ->
                         // ── attributes: HOST storage decode OR bindless vertex-pull ──
                         let hostIssue =
                             e.Inputs |> Map.toSeq |> Seq.tryPick (fun (name, inputT) ->

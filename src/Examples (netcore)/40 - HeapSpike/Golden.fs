@@ -742,8 +742,9 @@ module Golden =
         finally out.Release()
 
     // Graceful fallback: a mixed aset of heapable + un-heapable ROs. Heapable ones
-    // collapse to buckets; the un-heapable one (here: no index buffer) must be
-    // passed through UNCHANGED (same instance) in the output, not dropped or crashed.
+    // collapse to buckets; the un-heapable one (here: a non-indexed MULTI-call
+    // draw — single-call non-indexed draws ride the heap now) must be passed
+    // through UNCHANGED (same instance) in the output, not dropped or crashed.
     let passthroughTest () =
         Aardvark.Init()
         use app = new Aardvark.Application.Slim.VulkanApplication(false)
@@ -770,14 +771,18 @@ module Golden =
                     Symbol.Create "ModelTrafo",    (AVal.constant (Trafo3d.Translation(V3d(float i, 0.0, 0.0))) :> IAdaptiveValue)
                     Symbol.Create "ViewProjTrafo", vp ]
                 ro :> IRenderObject)
-        // 1 un-heapable RO: NO index buffer -> not eligible -> must pass through
+        // 1 un-heapable RO: non-indexed with MULTIPLE draw calls (single-call
+        // non-indexed draws ride the heap now) -> not eligible -> pass through
         let odd =
             let ro = RenderObject()
             ro.Surface <- Surface.Effect eff
             ro.Mode <- IndexedGeometryMode.TriangleList
             ro.VertexAttributes <- vattrs
             ro.Indices <- None
-            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = positions.Length, InstanceCount = 1) |])
+            let twoCalls =
+                [| DrawCallInfo(FaceVertexCount = positions.Length / 2, InstanceCount = 1)
+                   DrawCallInfo(FaceVertexCount = positions.Length / 2, FirstIndex = positions.Length / 2, InstanceCount = 1) |]
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant twoCalls)
             ro.Uniforms <- UniformProvider.ofList [
                 Symbol.Create "ModelTrafo",    (AVal.constant Trafo3d.Identity :> IAdaptiveValue)
                 Symbol.Create "ViewProjTrafo", vp ]
@@ -823,7 +828,7 @@ module Golden =
         let msgs = Heap.diagnosticMessages ()
         for m in msgs do Log.line "passthrough: diag: %s" m
         let diagOk =
-            msgs |> Array.exists (fun m -> m.Contains "no index buffer") &&
+            msgs |> Array.exists (fun m -> m.Contains "multiple draw calls") &&
             msgs |> Array.exists (fun m -> m.Contains "storage-decoded") &&
             msgs |> Array.exists (fun m -> m.Contains "UNPACKABLE")
         Log.line "passthrough: in=7 (4 heapable + 2 odd + 1 unpackable-uniform) -> out=%d buckets=%d oddPassedThrough=%b/%b diags=%d" out.Length buckets passedThrough passedThrough2 msgs.Length
@@ -3025,6 +3030,70 @@ module Golden =
             bytesA bytesB bytesC maxDelta nDiff total nNonBg
         let pass = bytesB = bytesA && bytesC > bytesB && maxDelta = 0 && nNonBg > 1000L
         if pass then Log.line "geomValue: PASS" else Log.warn "geomValue: FAIL"
+        pass
+
+    // NON-indexed golden: ROs WITHOUT an index buffer (single zero-offset
+    // Direct draw call) must ride the heap too — the slot's header carries the
+    // -1 sentinel and the shader's decodeHeapIndex passes gl_VertexIndex
+    // through. Three scenes over the same two-triangle membership: all-indexed
+    // (reference), MIXED indexed + non-indexed in ONE bucket (per-slot decode
+    // branch), and all-non-indexed. All must collapse to 1 bucket (no
+    // pass-through) and render pixel-identical.
+    let nonIndexedTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 4.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let effect = Effect.compose [ Effect.ofFunction GG.shade; Effect.ofFunction GG.frag ]
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+
+        // a quad as two triangles, vertices ALREADY unrolled so the indexed
+        // variant ([0..5]) and the non-indexed variant draw identical streams
+        let positions = [| V3f.Zero; V3f.IOO; V3f.OIO;  V3f.OIO; V3f.IOO; V3f(1.0f, 1.0f, 0.0f) |]
+        let normals   = Array.create 6 V3f.OOI
+        let index     = [| 0; 1; 2; 3; 4; 5 |]
+
+        let palette = [| C4f.Red; C4f.DodgerBlue |]
+        let mkRO (i : int) (indexed : bool) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect effect
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+            ro.Indices   <- if indexed then Some (bv index typeof<int>) else None
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = 6, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation(V3d(float i * 1.3 - 1.1, 0.0, 0.0))).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "HeapColor",      (AVal.constant (palette.[i % 2].ToV4f()) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj ]
+            ro :> IRenderObject
+
+        let render (mk : int -> IRenderObject) =
+            let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray [| mk 0; mk 1 |])
+            use task = runtime.CompileRender(signature, heapObjs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            let img = out.GetValue().Download().ToPixImage<byte>()
+            let buckets = Heap.lastBucketCount
+            out.Release()
+            buckets, img
+
+        let bRef,   imgRef   = render (fun i -> mkRO i true)
+        let bMixed, imgMixed = render (fun i -> mkRO i (i = 0))
+        let bNoIdx, imgNoIdx = render (fun i -> mkRO i false)
+
+        let (d1, n1, nNonBg, total) = diff imgMixed imgRef
+        let (d2, n2, _, _) = diff imgNoIdx imgRef
+        Log.line "noindex: buckets ref=%d mixed=%d nonindexed=%d  mixedDelta=%d/%d nonIdxDelta=%d/%d coverage=%d/%d"
+            bRef bMixed bNoIdx d1 n1 d2 n2 nNonBg total
+        let pass = bRef = 1 && bMixed = 1 && bNoIdx = 1 && d1 = 0 && d2 = 0 && nNonBg > 1000L
+        if pass then Log.line "noindex: PASS" else Log.warn "noindex: FAIL"
         pass
 
     // Drift golden test: 320 frames of churn with RANDOM-SIZED distinct
