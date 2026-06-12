@@ -637,8 +637,10 @@ module Heap =
     // ── per-allocation headers (wombat parity: pools.ts writeAttribute) ──────
     // Every host geometry allocation in the bucket arena (vertex attribute,
     // singleton attribute, index range) starts with a 4-word header
-    //   word0 = typeId   (encoding class; the INDEX decode branches on it,
-    //                     attribute decodes are baked per element type)
+    //   word0 = typeId   (encoding class; BOTH the index decode and the
+    //                     attribute decode branch on it at fetch time — the
+    //                     source element type is per allocation, never part
+    //                     of the bucket key; see attrTypeId / decodeHeapV4f)
     //   word1 = length   (element count; 1 for singletons — the attribute
     //                     fetch broadcasts via `vid % length`, wombat-style)
     //   word2 = stride   (bytes per element; 0 for singletons)
@@ -948,7 +950,7 @@ module Heap =
 
     /// Immutable per-RO facts (STRUCTURE only — surface, geometry layout, uniform
     /// presence; never aval VALUES). Cached per RO in a ConditionalWeakTable so a
-    /// membership diff doesn't re-derive them (isHeapable + layoutSig over 20k ROs
+    /// membership diff doesn't re-derive them (isHeapable + layout sig over 20k ROs
     /// per change would dominate the frame). ConstToken is the interned bucket key
     /// when ALL the RO's pipeline-state avals are constant (the common case), null
     /// when any is dynamic (then the key is re-read through the token every run).
@@ -994,16 +996,31 @@ module Heap =
         elif t = typeof<V4f> || t = typeof<V4i> then 4
         else failwithf "Heap: unsupported attribute type %A (expected float32/V2f/V3f/V4f or int/V2i/V3i/V4i)" t
 
-    let private isIntegral (t : System.Type) : bool =
-        t = typeof<int> || t = typeof<V2i> || t = typeof<V3i> || t = typeof<V4i>
 
-
-    /// attribute typeId (informational/debug — the gather bakes the decode
-    /// from the bucket's layout signature, only the INDEX decode branches)
-    let private attrTypeId (t : System.Type) : int =
-        if   isIntegral t      then 3
-        elif t = typeof<C4b>   then 4
-        else 1                                          // float-component data
+    /// attribute typeIds (header word0): the DECODER branches on these at FETCH
+    /// time and converts to the shader's input type, so the SOURCE element type
+    /// is per ALLOCATION, not part of the bucket key — one bucket freely mixes
+    /// e.g. C4b singleton colors with C4f buffers next to default V3f boxes.
+    /// Encoding: 10+N = f32 xN (float32/V2f/V3f/V4f, C3f/C4f), 20+N = i32 xN,
+    /// 30+N = f64 xN (float/V2d/V3d/V4d, C3d/C4d — bit-decoded, no
+    /// shaderFloat64 dependency), 40 = normalized C4b. The per-element stride
+    /// is implied by the typeId (host allocations are tightly packed).
+    /// (INDEX allocations use the separate ids 1/2 above.)
+    let private attrTypeId (t : System.Type) : int voption =
+        if   t = typeof<float32> then ValueSome 11
+        elif t = typeof<V2f>     then ValueSome 12
+        elif t = typeof<V3f> || t = typeof<C3f> then ValueSome 13
+        elif t = typeof<V4f> || t = typeof<C4f> then ValueSome 14
+        elif t = typeof<int>     then ValueSome 21
+        elif t = typeof<V2i>     then ValueSome 22
+        elif t = typeof<V3i>     then ValueSome 23
+        elif t = typeof<V4i>     then ValueSome 24
+        elif t = typeof<float>   then ValueSome 31
+        elif t = typeof<V2d>     then ValueSome 32
+        elif t = typeof<V3d> || t = typeof<C3d> then ValueSome 33
+        elif t = typeof<V4d> || t = typeof<C4d> then ValueSome 34
+        elif t = typeof<C4b>     then ValueSome 40
+        else ValueNone
 
     /// decode the vertex index for `gl_VertexIndex = v` from the index
     /// allocation whose HEADER lives at arena word offset `r`: u16 elements
@@ -1015,72 +1032,147 @@ module Heap =
         else
             uniform.HeapDataI.[r + 4 + v]
 
-    /// storage-decoded attribute fetch: given the allocation's header ref and
-    /// the decoded vertex index, reconstruct a value of the SHADER input type
-    /// `inputT` from host element type `hostT`. The element index wraps via
-    /// `vid % length` (header word1), so length-1 singleton allocations
-    /// broadcast through the SAME fetch (wombat's loadAttributeByRef). The
-    /// per-element stride is BAKED from the element type (part of the bucket
-    /// key via layoutSig) — singletons read element 0 regardless, so the
-    /// baked stride never misaddresses them. Returns None for unsupported
-    /// (hostT, inputT) combinations (the RO then passes through).
-    let private hostGather (hostT : System.Type) (inputT : System.Type) (refE : Expr<int>) (vidE : Expr<int>) : Expr option =
+    /// reconstruct ONE f32 from a little-endian f64 at int-view word offset `p`
+    /// (lo word, hi word) — pure bit manipulation, NO shaderFloat64 dependency:
+    /// rebias the exponent (1023 -> 127), keep the top 23 mantissa bits with
+    /// guard-bit rounding. Zero/denormal/underflow -> 0, overflow/NaN -> ±inf.
+    [<ReflectedDefinition>]
+    let private decodeHeapF64 (p : int) : float32 =
+        let lo = uniform.HeapDataI.[p]
+        let hi = uniform.HeapDataI.[p + 1]
+        let e = ((hi >>> 20) &&& 0x7FF) - 896
+        let s = (hi >>> 31) <<< 31
+        if e >= 255 then Fun.FloatFromBits(s ||| 0x7F800000)
+        elif e <= 0 then 0.0f
+        else
+            let m = ((hi &&& 0xFFFFF) <<< 3) ||| ((lo >>> 29) &&& 0x7)
+            Fun.FloatFromBits((s ||| (e <<< 23) ||| m) + ((lo >>> 28) &&& 1))
+
+    /// storage-decoded attribute fetch (wombat's loadAttributeByRef,
+    /// generalized): BRANCH on the allocation header's typeId at fetch time and
+    /// CONVERT the source element to a float4 — widen with (0,0,0,1) fill
+    /// (fixed-function parity), normalize C4b (/255), cast int sources,
+    /// bit-decode f64 sources. Narrowing happens at the call site (swizzle).
+    /// The element index wraps via `vid % length` (header word1), so length-1
+    /// singleton allocations broadcast through the SAME fetch; the per-element
+    /// stride is implied by the typeId (allocations are tight), which
+    /// singletons never misaddress (element 0). The branch is COHERENT per
+    /// draw — all vertices of a draw read the same header.
+    [<ReflectedDefinition>]
+    let private decodeHeapV4f (r : int) (v : int) : V4f =
+        let tid = uniform.HeapDataI.[r]
+        let e = v % uniform.HeapDataI.[r + 1]
+        if tid = 13 then                                            // f32 x3 (V3f/C3f)
+            let o = r + 4 + e * 3
+            V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], 1.0f)
+        elif tid = 14 then                                          // f32 x4 (V4f/C4f)
+            let o = r + 4 + e * 4
+            V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], uniform.HeapData.[o + 3])
+        elif tid = 40 then                                          // normalized C4b (BGRA memory layout)
+            let w = uniform.HeapDataI.[r + 4 + e]
+            V4f(float32 ((w >>> 16) &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 (w &&& 0xFF), float32 ((w >>> 24) &&& 0xFF)) / 255.0f
+        elif tid = 12 then                                          // f32 x2
+            let o = r + 4 + e * 2
+            V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], 0.0f, 1.0f)
+        elif tid = 11 then                                          // f32 x1
+            V4f(uniform.HeapData.[r + 4 + e], 0.0f, 0.0f, 1.0f)
+        elif tid = 33 then                                          // f64 x3 (V3d/C3d)
+            let o = r + 4 + e * 6
+            V4f(decodeHeapF64 o, decodeHeapF64 (o + 2), decodeHeapF64 (o + 4), 1.0f)
+        elif tid = 34 then                                          // f64 x4 (V4d/C4d)
+            let o = r + 4 + e * 8
+            V4f(decodeHeapF64 o, decodeHeapF64 (o + 2), decodeHeapF64 (o + 4), decodeHeapF64 (o + 6))
+        elif tid = 32 then                                          // f64 x2
+            let o = r + 4 + e * 4
+            V4f(decodeHeapF64 o, decodeHeapF64 (o + 2), 0.0f, 1.0f)
+        elif tid = 31 then                                          // f64 x1
+            V4f(decodeHeapF64 (r + 4 + e * 2), 0.0f, 0.0f, 1.0f)
+        elif tid = 23 then                                          // i32 x3 -> float cast
+            let o = r + 4 + e * 3
+            V4f(float32 uniform.HeapDataI.[o], float32 uniform.HeapDataI.[o + 1], float32 uniform.HeapDataI.[o + 2], 1.0f)
+        elif tid = 24 then                                          // i32 x4 -> float cast
+            let o = r + 4 + e * 4
+            V4f(float32 uniform.HeapDataI.[o], float32 uniform.HeapDataI.[o + 1], float32 uniform.HeapDataI.[o + 2], float32 uniform.HeapDataI.[o + 3])
+        elif tid = 22 then                                          // i32 x2 -> float cast
+            let o = r + 4 + e * 2
+            V4f(float32 uniform.HeapDataI.[o], float32 uniform.HeapDataI.[o + 1], 0.0f, 1.0f)
+        elif tid = 21 then                                          // i32 x1 -> float cast
+            V4f(float32 uniform.HeapDataI.[r + 4 + e], 0.0f, 0.0f, 1.0f)
+        else V4f(0.0f, 0.0f, 0.0f, 1.0f)
+
+    /// int-target twin of decodeHeapV4f: i32 sources pass through, f32/f64
+    /// sources truncate (well-defined casts), C4b unpacks to raw 0..255 ints.
+    [<ReflectedDefinition>]
+    let private decodeHeapV4i (r : int) (v : int) : V4i =
+        let tid = uniform.HeapDataI.[r]
+        let e = v % uniform.HeapDataI.[r + 1]
+        if tid = 23 then                                            // i32 x3
+            let o = r + 4 + e * 3
+            V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], 1)
+        elif tid = 24 then                                          // i32 x4
+            let o = r + 4 + e * 4
+            V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], uniform.HeapDataI.[o + 3])
+        elif tid = 22 then                                          // i32 x2
+            let o = r + 4 + e * 2
+            V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], 0, 1)
+        elif tid = 21 then                                          // i32 x1
+            V4i(uniform.HeapDataI.[r + 4 + e], 0, 0, 1)
+        elif tid = 13 then                                          // f32 x3 -> int cast
+            let o = r + 4 + e * 3
+            V4i(int uniform.HeapData.[o], int uniform.HeapData.[o + 1], int uniform.HeapData.[o + 2], 1)
+        elif tid = 14 then                                          // f32 x4 -> int cast
+            let o = r + 4 + e * 4
+            V4i(int uniform.HeapData.[o], int uniform.HeapData.[o + 1], int uniform.HeapData.[o + 2], int uniform.HeapData.[o + 3])
+        elif tid = 12 then                                          // f32 x2 -> int cast
+            let o = r + 4 + e * 2
+            V4i(int uniform.HeapData.[o], int uniform.HeapData.[o + 1], 0, 1)
+        elif tid = 11 then                                          // f32 x1 -> int cast
+            V4i(int uniform.HeapData.[r + 4 + e], 0, 0, 1)
+        elif tid = 40 then                                          // C4b (BGRA memory layout) -> raw 0..255
+            let w = uniform.HeapDataI.[r + 4 + e]
+            V4i((w >>> 16) &&& 0xFF, (w >>> 8) &&& 0xFF, w &&& 0xFF, (w >>> 24) &&& 0xFF)
+        elif tid = 33 then                                          // f64 x3 -> int cast
+            let o = r + 4 + e * 6
+            V4i(int (decodeHeapF64 o), int (decodeHeapF64 (o + 2)), int (decodeHeapF64 (o + 4)), 1)
+        elif tid = 34 then                                          // f64 x4 -> int cast
+            let o = r + 4 + e * 8
+            V4i(int (decodeHeapF64 o), int (decodeHeapF64 (o + 2)), int (decodeHeapF64 (o + 4)), int (decodeHeapF64 (o + 6)))
+        elif tid = 32 then                                          // f64 x2 -> int cast
+            let o = r + 4 + e * 4
+            V4i(int (decodeHeapF64 o), int (decodeHeapF64 (o + 2)), 0, 1)
+        elif tid = 31 then                                          // f64 x1 -> int cast
+            V4i(int (decodeHeapF64 (r + 4 + e * 2)), 0, 0, 1)
+        else V4i(0, 0, 0, 1)
+
+    /// per-input attribute gather: ONE call into the typeId-branching decoder,
+    /// swizzled down to the shader's input type (the conversion handles widen /
+    /// narrow / normalize / casts per SOURCE typeId at fetch time — the input
+    /// type is fixed per effect, the source type varies per allocation).
+    /// Returns None for unsupported shader input types.
+    let private hostGather (inputT : System.Type) (refE : Expr<int>) (vidE : Expr<int>) : Expr option =
         let inline f1 (q : Expr<'a>) = Some q.Raw
-        if hostT = typeof<float32> && inputT = typeof<float32> then
-            f1 <@ let r = %refE in uniform.HeapData.[r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1])] @>
-        elif hostT = typeof<V2f> && inputT = typeof<V2f> then
-            f1 <@ let r = %refE
-                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 2
-                  V2f(uniform.HeapData.[o], uniform.HeapData.[o + 1]) @>
-        elif (hostT = typeof<V3f> || hostT = typeof<C3f>) && inputT = typeof<V3f> then
-            f1 <@ let r = %refE
-                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 3
-                  V3f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2]) @>
-        elif hostT = typeof<V3f> && inputT = typeof<V4f> then
-            // fixed-function parity: a vec4 input fed from a 3-component buffer gets w = 1
-            f1 <@ let r = %refE
-                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 3
-                  V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], 1.0f) @>
-        elif (hostT = typeof<V4f> || hostT = typeof<C4f>) && inputT = typeof<V4f> then
-            f1 <@ let r = %refE
-                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 4
-                  V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], uniform.HeapData.[o + 3]) @>
-        elif (hostT = typeof<V4f> || hostT = typeof<C4f>) && inputT = typeof<V3f> then
-            f1 <@ let r = %refE
-                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 4
-                  V3f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2]) @>
-        elif hostT = typeof<C4b> && inputT = typeof<V4f> then
-            // normalized ubyte4 unpack (fixed-function UNSIGNED_BYTE-normalized parity)
-            f1 <@ let r = %refE
-                  let w = uniform.HeapDataI.[r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1])]
-                  V4f(float32 (w &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 ((w >>> 16) &&& 0xFF), float32 ((w >>> 24) &&& 0xFF)) / 255.0f @>
-        elif hostT = typeof<C4b> && inputT = typeof<V3f> then
-            f1 <@ let r = %refE
-                  let w = uniform.HeapDataI.[r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1])]
-                  V3f(float32 (w &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 ((w >>> 16) &&& 0xFF)) / 255.0f @>
-        elif hostT = typeof<int> && inputT = typeof<int> then
-            f1 <@ let r = %refE in uniform.HeapDataI.[r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1])] @>
-        elif hostT = typeof<V2i> && inputT = typeof<V2i> then
-            f1 <@ let r = %refE
-                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 2
-                  V2i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1]) @>
-        elif hostT = typeof<V3i> && inputT = typeof<V3i> then
-            f1 <@ let r = %refE
-                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 3
-                  V3i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2]) @>
-        elif hostT = typeof<V4i> && inputT = typeof<V4i> then
-            f1 <@ let r = %refE
-                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 4
-                  V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], uniform.HeapDataI.[o + 3]) @>
+        if   inputT = typeof<V4f>     then f1 <@ decodeHeapV4f %refE %vidE @>
+        elif inputT = typeof<V3f>     then f1 <@ (decodeHeapV4f %refE %vidE).XYZ @>
+        elif inputT = typeof<V2f>     then f1 <@ (decodeHeapV4f %refE %vidE).XY @>
+        elif inputT = typeof<float32> then f1 <@ (decodeHeapV4f %refE %vidE).X @>
+        elif inputT = typeof<V4i>     then f1 <@ decodeHeapV4i %refE %vidE @>
+        elif inputT = typeof<V3i>     then f1 <@ (decodeHeapV4i %refE %vidE).XYZ @>
+        elif inputT = typeof<V2i>     then f1 <@ (decodeHeapV4i %refE %vidE).XY @>
+        elif inputT = typeof<int>     then f1 <@ (decodeHeapV4i %refE %vidE).X @>
         else None
 
-    /// can `hostT` be storage-decoded into shader input type `inputT`?
-    /// (memoized — building the probe quotations per RO classification would
-    /// otherwise show up in high-churn membership updates)
-    let private hostDecodableCache = System.Collections.Concurrent.ConcurrentDictionary<struct(System.Type * System.Type), bool>()
+    /// supported shader INPUT types of the storage decode (the decoder pair
+    /// above covers every (source typeId, target) combination)
+    let private hostTargetTypes =
+        System.Collections.Generic.HashSet<System.Type>(
+            [ typeof<float32>; typeof<V2f>; typeof<V3f>; typeof<V4f>
+              typeof<int>; typeof<V2i>; typeof<V3i>; typeof<V4i> ])
+
+    /// can host element type `hostT` be storage-decoded into shader input type
+    /// `inputT`? Decoding branches per allocation, so the answer FACTORS: the
+    /// SOURCE needs a typeId, the TARGET a decoder — no pair table needed.
     let private hostDecodable (hostT : System.Type) (inputT : System.Type) =
-        hostDecodableCache.GetOrAdd(struct(hostT, inputT), fun (struct(h, i)) ->
-            (hostGather h i <@ 0 @> <@ 0 @>).IsSome)
+        (attrTypeId hostT).IsSome && hostTargetTypes.Contains inputT
 
     /// generic native-layout packer for singleton-attribute values: blits the
     /// boxed struct's bytes (same layout as a 1-element array of it) into the
@@ -1421,14 +1513,14 @@ module Heap =
             elif useSlotAttr then Expr.ReadInput<int>(ParameterKind.Input, "HeapSlotAttr")
             else Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
 
-        // fixed geometry layout from ro0 (the bucket key includes layoutSig, so
-        // every member shares attribute ELEMENT TYPES; the index element type is
-        // NOT part of the key — it is decoded per allocation via its header):
-        // (ai, name, sym, elementType, elemSize, strideF, offF)
-        // strideF/offF (in floats, from ro0's BufferViews) are used by the
-        // BINDLESS vertex-pull gather only (they are baked into its shader, and
-        // folded into the bindless bucket key); host storage decode bakes the
-        // per-element stride from the element type alone.
+        // consumed-attribute table: (ai, name, sym, elementType, elemSize,
+        // strideF, offF). For HOST buckets only ai/name/sym matter — both the
+        // attribute ELEMENT TYPES and the index element type are decoded PER
+        // ALLOCATION via their headers' typeIds, so neither is part of the
+        // bucket key (ro0's et/es here are informational). elementType/strideF/
+        // offF (from ro0's BufferViews) are used by the BINDLESS vertex-pull
+        // gather only (baked into its shader and folded into the bindless
+        // bucket key).
         let attrInfos =
             effect.Inputs |> Map.toArray
             |> Array.mapi (fun ai (name, _) ->
@@ -1613,12 +1705,16 @@ module Heap =
             match singleRegions.TryGetValue av with
             | true, e -> e.RefCount <- e.RefCount + 1; e.Offset
             | _ ->
+                let tid =
+                    match attrTypeId et with
+                    | ValueSome t -> t
+                    | ValueNone -> failwithf "Heap: singleton attribute element type %A has no storage typeId" et
                 let (szF, pk) = attrPackerFor av.ContentType
                 let sizeF = AllocHeaderWords + szF
                 let b = arenaAlloc.Alloc sizeF
                 let off = int b.Offset
                 arena.EnsureFloats arenaAlloc.Extent
-                arena.WriteHeader(off, attrTypeId et, 1, 0)
+                arena.WriteHeader(off, tid, 1, 0)
                 let w = arena.Add(av, off + AllocHeaderWords, szF, pk)
                 singleRegions.[av] <- { Offset = off; Size = sizeF; Writer = w; RefCount = 1; Block = b; HeaderWords = AllocHeaderWords }
                 off
@@ -1676,21 +1772,30 @@ module Heap =
 
         /// one consumed attribute of a new slot: singleton -> adaptive region,
         /// real buffer -> static allocation. Returns (release key, header ref).
-        let attrFor (ro : RenderObject) (sym : Symbol) (et : System.Type) (es : int) : AttrKey * int =
+        /// The allocation's header carries the RO's OWN element typeId — the
+        /// shader decode branches on it at fetch time, so member element types
+        /// vary freely within a bucket (they are NOT part of the bucket key).
+        let attrFor (ro : RenderObject) (sym : Symbol) : AttrKey * int =
             let bv =
                 match ro.VertexAttributes.TryGetAttribute sym with
                 | ValueSome b -> b
                 | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym
             match bv.Buffer with
             | :? ISingleValueBuffer as svb ->
-                AttrKey.Single svb.Value, allocSingle svb.Value et
+                AttrKey.Single svb.Value, allocSingle svb.Value bv.ElementType
             | _ ->
                 let key = struct(bv.Buffer :> obj, bv.Offset)
                 match attrStatic.TryGetValue key with
                 | true, e -> e.RefCount <- e.RefCount + 1; AttrKey.Static key, e.Ref
                 | _ ->
+                    let et = bv.ElementType
+                    let es = elemSize et
+                    let tid =
+                        match attrTypeId et with
+                        | ValueSome t -> t
+                        | ValueNone -> failwithf "Heap: attribute %A element type %A has no storage typeId" sym et
                     let bytes = readBytesView bv
-                    let e = allocStatic attrStatic key bytes (attrTypeId et) (bytes.Length / es) es
+                    let e = allocStatic attrStatic key bytes tid (bytes.Length / es) es
                     AttrKey.Static key, e.Ref
 
         // ── threshold-triggered compaction. After removals, a buffer whose live
@@ -1985,9 +2090,11 @@ module Heap =
         //   vid = decodeHeapIndex(headers[slot].idxRef, gl_VertexIndex) — the
         // index ELEMENT TYPE comes from the allocation header, not the bucket
         // key. Attribute reads become
-        //   * host buckets:     header-driven arena gathers (length from the
-        //                       header wraps singletons; stride baked per
-        //                       element type from the layout sig),
+        //   * host buckets:     header-driven arena gathers branching on the
+        //                       allocation's typeId (decodeHeapV4f/V4i): the
+        //                       SOURCE element type is per allocation, auto-
+        //                       converted to the shader input type; length
+        //                       from the header wraps singletons,
         //   * bindless buckets: per-handle SSBO-array vertex-pull (the
         //                       objects' EXISTING GPU buffers, zero-copy).
         let heapRewrite : Effect -> Effect =
@@ -2018,14 +2125,14 @@ module Heap =
                                 | None -> None
                             | ParameterKind.Input, None when isVertex ->
                                 match attrInfos |> Array.tryFind (fun (_, n, _, _, _, _, _) -> n = name) with
-                                | Some (ai, _, _, et, _, strideF, offF) ->
+                                | Some (ai, _, _, _, _, strideF, offF) ->
                                     if useBindlessGeom then
                                         Some (bindlessGatherFlat handleE vidE.Raw ityp numAttrs ai strideF offF)
                                     else
                                         let refE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint (fieldStride + ai)) ] @>
-                                        match hostGather et ityp refE vidE with
+                                        match hostGather ityp refE vidE with
                                         | Some g -> Some g
-                                        | None -> failwithf "Heap: cannot storage-decode attribute '%s' (%A -> shader input %A)" name et ityp
+                                        | None -> failwithf "Heap: cannot storage-decode shader input '%s' (%A — supported: float32/V2f/V3f/V4f and int/V2i/V3i/V4i)" name ityp
                                 | None -> None
                             | _ -> None)
                     let body = if isVertex then Expr.Let(vidVar, (<@ decodeHeapIndex %idxRefE %vtxE @>).Raw, body) else body
@@ -2139,8 +2246,8 @@ module Heap =
                         vtxLast.[pos] <- bv.Buffer.GetValue()
                     [||]
                 else
-                    attrInfos |> Array.map (fun (ai, _, sym, et, es, _, _) ->
-                        let (key, r) = attrFor ro sym et es
+                    attrInfos |> Array.map (fun (ai, _, sym, _, _, _, _) ->
+                        let (key, r) = attrFor ro sym
                         headers.[slot * headerStride + fieldStride + ai] <- r
                         key)
             let (idxKey, idxEntry) = idxFor ro
@@ -2306,32 +2413,24 @@ module Heap =
         // simply each RO's state aval (often derived from its data); constant state
         // never re-partitions. Only mode changes rebuild buckets; per-draw value
         // changes still flow through the arena with no rebuild.
-        // geometry layout signature: the shader inputs' actual element types + the
-        // index type. Different layouts need different vertex-input pipelines, so
-        // they must land in different buckets (and pack consistently).
-        // geometry layout signature = the CONSUMED attributes' element types
-        // only. The index element type is NOT part of it (decoded per
-        // allocation via its header), nor are offsets/strides for HOST
-        // geometry (per-attribute allocations are tightly packed; the decode
-        // stride is a function of the element type). BINDLESS buckets append
-        // offset+stride per attribute (their vertex-pull shader bakes them
-        // from ro0's BufferViews) — see factsOf.
-        let layoutSig (r : RenderObject) =
-            match r.Surface with
-            | Surface.Effect e ->
-                e.Inputs |> Map.toList |> List.map (fun (name, _) ->
-                    match r.VertexAttributes.TryGetAttribute (Symbol.Create name) with
-                    | ValueSome bv -> sprintf "%s:%s" name bv.ElementType.FullName
-                    | ValueNone -> name + ":?") |> String.concat ";"
-            | _ -> ""
-        // bindless extra: per-attribute offset:stride (baked into the gather)
+        // geometry layout signature: HOST buckets carry NO per-attribute
+        // element types at all — the shader decode branches on each
+        // allocation's header typeId at fetch time and auto-converts the
+        // SOURCE element to the shader's input type, so ROs with e.g. C4b
+        // singleton colors, C4f buffers and default C4b-colored boxes share
+        // ONE bucket (the index element type was already per-allocation).
+        // What still partitions buckets (folded into Layout in factsOf):
+        // host-vs-bindless geometry strategy, instanced-ness, and the
+        // per-draw field set. BINDLESS buckets keep per-attribute element
+        // type + offset + stride (their vertex-pull gather bakes all three
+        // from ro0's BufferViews).
         let bindlessSig (r : RenderObject) =
             match r.Surface with
             | Surface.Effect e ->
                 e.Inputs |> Map.toList |> List.map (fun (name, _) ->
                     match r.VertexAttributes.TryGetAttribute (Symbol.Create name) with
-                    | ValueSome bv -> sprintf "%d:%d" bv.Offset bv.Stride
-                    | ValueNone -> "?") |> String.concat ";"
+                    | ValueSome bv -> sprintf "%s:%s:%d:%d" name bv.ElementType.FullName bv.Offset bv.Stride
+                    | ValueNone -> name + ":?") |> String.concat ";"
             | _ -> ""
         let modeKey (layout : string) (t : AdaptiveToken) (r : RenderObject) =
             let ra = r.RasterizerState
@@ -2455,7 +2554,7 @@ module Heap =
                                     if not (isHostTight bv) then
                                         Some (sprintf "attribute '%s' (%s) is not host-readable/tightly-packed (buffer %s, stride %d)" name bv.ElementType.Name (bv.Buffer.GetValue().GetType().Name) bv.Stride)
                                     elif not (hostDecodable bv.ElementType inputT) then
-                                        Some (sprintf "attribute '%s' element type %s cannot be storage-decoded into shader input %s (supported: float32/V2f/V3f/V4f/C3f/C4f/C4b and int vectors)" name bv.ElementType.Name inputT.Name)
+                                        Some (sprintf "attribute '%s' element type %s cannot be storage-decoded into shader input %s (supported sources: float32/V2f/V3f/V4f, C3f/C4f/C4b, int/V2i/V3i/V4i, float/V2d/V3d/V4d/C3d/C4d; supported inputs: float32/V2f/V3f/V4f, int/V2i/V3i/V4i)" name bv.ElementType.Name inputT.Name)
                                     else None)
                         let bindlessIssue =
                             if not runtime.SupportsUnboundedSamplerArrays then
@@ -2561,8 +2660,7 @@ module Heap =
                         // strategy and its baked field layout are fixed at
                         // creation), so fold them into the layout sig.
                         let layout =
-                            layoutSig r
-                            + (if bindless then "|gpu:" + bindlessSig r else "|host")
+                            (if bindless then "gpu:" + bindlessSig r else "host")
                             + (if inst then "|inst" else "")
                             + "|f:" + String.concat ";" fields
                         let ra = r.RasterizerState

@@ -410,13 +410,14 @@ module Golden =
         let bucketsAg = Heap.lastBucketCount
         let passAg = report "ag" classicPix heapAgPix bucketsAg
 
-        // ── mixed SINGLETON-color + REAL-BUFFER-color boxes -> ONE bucket ──
-        // half the leaves get their Colors attribute as a SingleValueBuffer<C4f>
-        // (Primitives.box style, Sg.vertexBufferValue'), the other half as a real
-        // C4f[] buffer. Both decode through the SAME header-driven storage fetch
-        // (singleton = length-1/stride-0 allocation, wrapped by vid % length), so
-        // the element types match (C4f) and ALL leaves share one bucket; the
-        // image must equal the classic per-RO render.
+        // ── mixed-TYPE colors -> ONE bucket ──
+        // the Colors attribute arrives in FOUR different shapes: the DEFAULT box
+        // buffer (C4b[], solidBox's own colors), a C4b SINGLETON, a real C4f[]
+        // buffer and a C4f singleton. Element types are NOT part of the bucket
+        // key — the decoder branches on each allocation's header typeId at fetch
+        // time (C4b normalizes /255 in BGRA layout, singletons wrap via
+        // vid % length) and converts to the shader's V4f input — so ALL leaves
+        // share ONE bucket; the image must equal the classic per-RO render.
         let g2 = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
         let nVerts = (g2.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>).Length
         let boxSg2 = Sg.ofIndexedGeometry g2
@@ -425,8 +426,11 @@ module Golden =
                 let p = V3d(float (i % s - s/2) * 1.2, float (i / s - s/2) * 1.2, 0.0)
                 let c = palette.[i % palette.Length]
                 let colored =
-                    if i % 2 = 0 then boxSg2 |> Sg.vertexBufferValue' DefaultSemantic.Colors c          // singleton
-                    else boxSg2 |> Sg.vertexAttribute' DefaultSemantic.Colors (Array.replicate nVerts c) // real buffer
+                    match i % 4 with
+                    | 0 -> boxSg2                                                                            // default box: its own C4b[] buffer
+                    | 1 -> boxSg2 |> Sg.vertexBufferValue' DefaultSemantic.Colors (c.ToC4b())                // C4b singleton
+                    | 2 -> boxSg2 |> Sg.vertexAttribute' DefaultSemantic.Colors (Array.replicate nVerts c)   // real C4f[] buffer
+                    | _ -> boxSg2 |> Sg.vertexBufferValue' DefaultSemantic.Colors c                          // C4f singleton
                 colored |> Sg.trafo' (Trafo3d.Translation p))
         let scene2 (wrap : ISg -> ISg) =
             leaves2
@@ -437,10 +441,10 @@ module Golden =
             |> Sg.projTrafo (AVal.constant proj)
         let classic2 = renderToPix (scene2 id)
         let heap2 = renderToPix (scene2 Sg.heap)
-        let passMixed = report "mixed-singleton" classic2 heap2 Heap.lastBucketCount
+        let passMixed = report "mixed-types" classic2 heap2 Heap.lastBucketCount
 
         let pass = passTs && passAg && passMixed
-        if pass then Log.line "sgheap: ALL PASS (Sg.heap == classic, %d leaves -> 1 bucket, both dispatch paths; mixed singleton+buffer colors -> 1 bucket)" (s * s)
+        if pass then Log.line "sgheap: ALL PASS (Sg.heap == classic, %d leaves -> 1 bucket, both dispatch paths; mixed C4b/C4f singleton+buffer colors -> 1 bucket)" (s * s)
         else Log.warn "sgheap: FAILED (ts=%b ag=%b mixed=%b)" passTs passAg passMixed
         pass
 
@@ -778,14 +782,15 @@ module Golden =
                 Symbol.Create "ModelTrafo",    (AVal.constant Trafo3d.Identity :> IAdaptiveValue)
                 Symbol.Create "ViewProjTrafo", vp ]
             ro :> IRenderObject
-        // a second un-heapable RO: positions in a non-decodable element type (V3d
-        // doubles) -> neither host-storage-decodable nor vertex-pull eligible
+        // a second un-heapable RO: positions in a non-decodable element type
+        // (uint16 scalars — f64 sources like V3d are storage-decodable now) ->
+        // neither host-storage-decodable nor vertex-pull eligible
         let odd2 =
-            let posD = positions |> Array.map (fun (v : V3f) -> V3d v)
+            let posU16 = Array.zeroCreate<uint16> positions.Length
             let ro = RenderObject()
             ro.Surface <- Surface.Effect eff
             ro.Mode <- IndexedGeometryMode.TriangleList
-            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv posD typeof<V3d>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv posU16 typeof<uint16>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
             ro.Indices <- Some (bv index typeof<int>)
             ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
             ro.Uniforms <- UniformProvider.ofList [
@@ -960,8 +965,38 @@ module Golden =
         let maxD, nDiff, nNonBg, total = diff classicPix heapPix
         Log.line "varType: V4f pos + uint16 idx  buckets=%d classic-vs-heap maxDelta=%d diffPixels=%d/%d coverage=%d" buckets maxD nDiff total nNonBg
         let pass = buckets = 1 && nNonBg > 1000 && maxD <= 1
-        if pass then Log.line "varType: PASS (V4f positions + uint16 indices heaped == classic; no type assumptions)"
-        else Log.warn "varType: FAIL (buckets=%d maxDelta=%d coverage=%d)" buckets maxD nNonBg
+
+        // ── f64 sources + per-allocation source types: HALF the ROs supply
+        //    Positions as V3d DOUBLES (bit-decoded in the shader, w = 1 fill),
+        //    half as the V4f above. Source element types are NOT part of the
+        //    bucket key (the decode branches on each allocation's header
+        //    typeId), so the mixed set collapses to ONE bucket — and since the
+        //    V3d values hold exactly the V3f positions, the image must equal
+        //    the all-V4f classic render. ──
+        let posD = pos3 |> Array.map (fun p -> V3d p)
+        let vattrsD = AttributeProvider.ofList [ DefaultSemantic.Positions, bv posD typeof<V3d>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let mkWith (va : IAttributeProvider) (x : int) (y : int) =
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect eff
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- va
+            ro.Indices <- Some (bv idx16 typeof<uint16>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = idx16.Length, InstanceCount = 1) |])
+            ro.Uniforms <- UniformProvider.ofList [
+                Symbol.Create "ModelTrafo",    (AVal.constant (Trafo3d.Translation(V3d(float x * 1.3, float y * 1.3, 0.0))) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo", vp ]
+            ro :> IRenderObject
+        let mixed = [| for x in -2 .. 2 do for y in -2 .. 2 -> mkWith (if (x + y) % 2 = 0 then vattrsD else vattrs) x y |]
+        let heapMixedPix = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray mixed))
+        let bucketsM = Heap.lastBucketCount
+        let maxDM, nDiffM, _, totalM = diff classicPix heapMixedPix
+        Log.line "varType: mixed V3d/V4f pos  buckets=%d vs-classic maxDelta=%d diffPixels=%d/%d" bucketsM maxDM nDiffM totalM
+        let passMixed = bucketsM = 1 && maxDM <= 1
+        if not passMixed then Log.warn "varType: f64 phase FAIL (buckets=%d maxDelta=%d)" bucketsM maxDM
+
+        let pass = pass && passMixed
+        if pass then Log.line "varType: PASS (V4f positions + uint16 indices heaped == classic; mixed V3d/V4f sources -> 1 bucket, f64 decode == classic)"
+        else Log.warn "varType: FAIL (buckets=%d maxDelta=%d coverage=%d passMixed=%b)" buckets maxD nNonBg passMixed
         pass
 
     // Bindless storage-buffer ARRAY end-to-end: a shader vertex-PULLS its position
