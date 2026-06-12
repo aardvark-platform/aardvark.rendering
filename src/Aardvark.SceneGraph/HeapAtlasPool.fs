@@ -11,8 +11,14 @@ namespace Aardvark.SceneGraph
 //                                                       new page / LRU-evict-and-retry.
 //   pool.Release(tex)                                 -- refcount--; at 0 entry is LRU-evictable
 //                                                       (slot stays cached for reuse).
-//   pool.Pages              : aval<IBackendTexture[]> -- current GPU page array (grows on
-//                                                       new-page; cval-transacted).
+//   pool.PageArray          : IBackendTexture[]       -- snapshot of the current GPU pages
+//                                                       (grows on new-page). NOT adaptive:
+//                                                       Acquire runs INSIDE adaptive
+//                                                       evaluation (AtlasPlacementTable.
+//                                                       Compute), so the pool must never
+//                                                       transact; consumers PULL the array
+//                                                       after forcing whatever evaluation
+//                                                       performs the Acquires.
 //   pool.Dispose()                                    -- frees all GPU pages.
 //
 // LRU: entries with RefCount=0 are linked into a list (front = oldest); eviction frees their
@@ -45,13 +51,14 @@ type AtlasPool(runtime : IRuntime, pageSize : int, maxPages : int) =
     let freeRects  = ResizeArray<List<Box2i>>()
     let entries    = Dictionary<ITexture, AtlasEntry>(HashIdentity.Reference)
     let lru        = LinkedList<ITexture>()                                      // front = oldest evictable
-    let pagesCval  = cval (Array.empty<IBackendTexture>)
     let mutable tickCounter = 0L
     let mutable nextPackKey = 0
     let mutable disposed = false
 
-    let publishPages () = transact (fun () -> pagesCval.Value <- pages.ToArray())
-
+    // No transact here: Acquire is called from inside adaptive evaluation
+    // (AtlasPlacementTable.Compute), where marking is forbidden. New pages are
+    // published by PULL — the consumer reads PageArray after forcing the
+    // evaluation that performed the Acquires (see HeapPool's padded-pages aval).
     let tryAddPage () =
         if pages.Count >= maxPages then false
         else
@@ -59,7 +66,6 @@ type AtlasPool(runtime : IRuntime, pageSize : int, maxPages : int) =
             pages.Add tex
             packings.Add (TexturePacking<int>.Empty(V2i(pageSize, pageSize), false))
             freeRects.Add (List<Box2i>())
-            publishPages()
             true
 
     /// Best-fit search over free rects across all pages. Returns (pageIdx, freeRectIdx, rect).
@@ -193,17 +199,20 @@ type AtlasPool(runtime : IRuntime, pageSize : int, maxPages : int) =
         | true, e -> ValueSome (e.Acquisition, e.Acquisition.PageId)
         | _ -> ValueNone
 
-    /// Current GPU page textures. Changes (transactionally) when a new page is added.
-    member x.Pages : aval<IBackendTexture[]> = pagesCval :> aval<_>
+    /// Snapshot of the current GPU page textures (grows when an Acquire adds a page).
+    /// Deliberately NOT adaptive — Acquire runs inside adaptive evaluation, so page
+    /// publication is pull-based (read this after forcing the acquiring computation).
+    member x.PageArray : IBackendTexture[] = pages.ToArray()
 
     member x.PageCount = pages.Count
     member x.EntryCount = entries.Count
     member x.MaxPages = maxPages
     member x.PageSize = pageSize
 
-    // Idempotent dispose: callers can safely Dispose more than once, and the IDisposable
-    // path SuppressFinalize's so this is ready for a future bucket-teardown wiring (in
-    // HeapPool the AtlasPool is currently process-lifetime per bucket — see follow-up).
+    // Idempotent dispose: callers can safely Dispose more than once. May be called
+    // from inside adaptive evaluation (the incremental driver disposes a bucket —
+    // and with it its pool — when its membership becomes empty), so it must not
+    // transact either; it only frees GPU pages and clears local state.
     member x.Dispose() =
         if not disposed then
             disposed <- true
@@ -213,7 +222,6 @@ type AtlasPool(runtime : IRuntime, pageSize : int, maxPages : int) =
             freeRects.Clear()
             entries.Clear()
             lru.Clear()
-            transact (fun () -> pagesCval.Value <- Array.empty)
 
     interface System.IDisposable with
         member x.Dispose() =

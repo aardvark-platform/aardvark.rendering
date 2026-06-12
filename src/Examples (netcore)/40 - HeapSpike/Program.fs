@@ -39,7 +39,7 @@ let runDynamic () =
 
     let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
     let scene =
-        Heap.HeapScene(win.Runtime, effect, IndexedGeometryMode.TriangleList, positions, normals, index,
+        new Heap.HeapScene(win.Runtime, effect, IndexedGeometryMode.TriangleList, positions, normals, index,
                        [| "HeapModelTrafo", typeof<M44f>; "HeapColor", typeof<V4f> |], globals)
 
     let live = System.Collections.Generic.List<int>()
@@ -153,6 +153,8 @@ let main argv =
         if Golden.msaaTest () then 0 else 1
     elif argv |> Array.contains "churnprobe" then
         if Golden.churnProbeTest () then 0 else 1
+    elif argv |> Array.contains "geomchurn" then
+        if Golden.geomChurnTest () then 0 else 1
     elif argv |> Array.contains "submitstress" then
         if Golden.submitStressTest () then 0 else 1
     elif argv |> Array.contains "glyphwedge" then

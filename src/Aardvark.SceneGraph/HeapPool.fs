@@ -508,12 +508,13 @@ module Heap =
     // CompileRender / CommandTask machinery (so the command stream encodes
     // O(buckets), and binds ONE descriptor set per bucket instead of N).
     //
-    // v1 assumptions: inputs are `RenderObject`s sharing geometry within a
+    // Assumptions: inputs are `RenderObject`s sharing geometry layout within a
     // bucket; per-draw heap uniforms named in `heapNames` are present on
     // every RO with a consistent type. Globals (camera etc.) are delegated
-    // to the first RO's uniform provider. Bucketing on set change is coarse
-    // (rebuild affected buckets); per-draw value marks flow through the
-    // reactive arena with offsets/headers held constant.
+    // to a LIVE member's uniform provider (bucket-homogeneous; re-seated when
+    // that member leaves). Membership changes are incremental (per-bucket
+    // O(changed) diffs); per-draw value marks flow through the reactive arena
+    // with offsets/headers held constant.
 
     let private packerFor (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
         if   t = typeof<M44f>    then 16, (fun o a off -> packM44 (o :?> M44f) a off)
@@ -586,22 +587,16 @@ module Heap =
     /// available (for testing the atlas on desktop Vulkan, which reports them supported).
     let mutable forceAtlas = false
 
+    /// Combined packed geometry bytes (indices + attributes) of the most recently
+    /// geometry-flushed bucket (diagnostic). Under exact-size distinct-geometry
+    /// churn this stays FLAT: a freed geometry's ranges are recycled in place.
+    let mutable lastPackedGeomBytes = 0
+
     /// Extract a host PixImage&lt;byte&gt; (RGBA) from an ITexture for atlas packing.
     let private toAtlasPixImage (t : ITexture) : PixImage<byte> =
         match t with
         | :? PixTexture2d as pt -> pt.PixImageMipMap.[0].ToPixImage<byte>()
         | _ -> failwithf "Heap atlas: unsupported ITexture %A (host PixTexture2d only)" (t.GetType())
-
-    /// Pick a single square page size that fits all reserved (gutter+mip) rects without
-    /// rotation, clamped to the atlas page cap.
-    let private atlasPageSizeFor (pixs : (int * PixImage<byte>)[]) : int =
-        let area =
-            pixs |> Array.sumBy (fun (_, p) ->
-                let w, h = int p.Size.X, int p.Size.Y
-                let s = HeapAtlas.reservedSize true (HeapAtlas.defaultMipCount w h) w h
-                float (s.X * s.Y))
-        let est = Fun.NextPowerOfTwo (max 256 (int (ceil (sqrt (area * 1.6)))))
-        min HeapAtlas.PageSize est
 
     /// Distinct trafo-link slots uploaded on the most recent chain-arena flush
     /// (diagnostic). A shared-root change over N objects should be 1, not N.
@@ -633,11 +628,15 @@ module Heap =
         let mutable capacity = max 1 initialFloats
         let mutable staging = Array.zeroCreate<float32> capacity
         let pending = LockedSet<RegionWriter>()
-        /// Grow the buffer + staging to hold at least n floats (call in transact).
+        /// Grow the staging mirror to hold at least n floats. The GPU-side resize is
+        /// DEFERRED to the next Compute (ResizeInPlace there — content-preserving),
+        /// so this is rule-clean inside adaptive evaluation: no transact/MarkOutdated
+        /// happens here. Both call sites guarantee a subsequent re-evaluation: the
+        /// incremental updater is itself the arena's ExtraDependency (already
+        /// evaluating), and HeapScene.Add runs in a transact and calls Touch().
         member x.EnsureFloats(n : int) =
             if n > capacity then
                 let nf = Fun.NextPowerOfTwo n
-                x.Resize(uint64 (nf * 4))           // copies existing GPU content
                 let ns = Array.zeroCreate<float32> nf
                 System.Array.Copy(staging, ns, capacity)
                 staging <- ns
@@ -664,6 +663,10 @@ module Heap =
             match x.ExtraDependency with
             | Some d -> d.GetValueUntyped t |> ignore
             | None -> ()
+            // apply any deferred growth (EnsureFloats) — content-preserving resize,
+            // performed HERE so no transact ever happens during evaluation.
+            if uint64 capacity * 4UL > x.Size then
+                x.ResizeInPlace(uint64 capacity * 4UL)
             let dirty = pending.GetAndClear()
             if dirty.Count > 0 then
                 let ranges = System.Collections.Generic.List<struct(int * int)>(dirty.Count)
@@ -689,13 +692,24 @@ module Heap =
     type internal RegionEntry =
         { Offset : int; Size : int; Writer : RegionWriter; mutable RefCount : int }
 
+    /// Refcounted per-geometry ranges in a bucket's combined buffers (geometries
+    /// are deduped by buffer identity). Host geometry owns a vertex range
+    /// [BaseVertex, BaseVertex+VtxCount) in every packed attribute plus an index
+    /// range; bindless geometry only the index range (VtxCount = 0). When the
+    /// last referencing slot dies the ranges go onto per-SIZE free lists and a
+    /// later unseen geometry of the EXACT same size reuses them in place.
+    type internal GeomEntry =
+        { FirstIndex : int; BaseVertex : int; IndexCount : int; VtxCount : int
+          mutable RefCount : int }
+
     /// Per-member bookkeeping of an incremental bucket: the draw-record slot,
     /// the arena regions it references, its visibility gate, its (structural)
-    /// instance count and — on the MoltenVK slot-attribute path — the offset of
-    /// its per-instance range in the slot-attribute buffer.
+    /// instance count, the identity key of its packed geometry (for refcounted
+    /// range reclamation) and — on the MoltenVK slot-attribute path — the offset
+    /// of its per-instance range in the slot-attribute buffer.
     type internal HeapSlot =
         { Slot : int; RegionKeys : IAdaptiveValue[]; Active : aval<bool>
-          Instances : int; InstOffset : int }
+          Instances : int; InstOffset : int; GeomKey : struct(obj * obj) }
 
     /// Immutable per-RO facts (STRUCTURE only — surface, geometry layout, uniform
     /// presence; never aval VALUES). Cached per RO in a ConditionalWeakTable so a
@@ -711,6 +725,9 @@ module Heap =
           Bindless : bool; Instanced : bool }
 
     /// an input RO may ALREADY be instanced (instanceCount > 1); preserved per-slot.
+    /// STRUCTURAL read (forced once, cached in RoFacts): an RO whose Direct call list
+    /// changes its instance count later is NOT re-bucketed — the heap treats draw-call
+    /// shape as immutable, like the geometry layout.
     let private instanceCountOf (ro : RenderObject) =
         match ro.DrawCalls with
         | DrawCalls.Direct calls ->
@@ -993,7 +1010,10 @@ module Heap =
     /// texture resources update).
     type internal IncrementalBucket(runtime : IRuntime, names : string[], nameToField : Map<string, int>,
                                     effect : Effect, ro0 : RenderObject, updater : aval<int>,
-                                    useBindlessGeom : bool, instanced : bool) =
+                                    useBindlessGeom : bool, instanced : bool,
+                                    // the bucket KEY's resolved pipeline-state values
+                                    // (cull, frontFacing, fill, blend, depthTest, depthWrite)
+                                    pipeKey : CullMode * WindingOrder * FillMode * BlendMode * DepthTest * bool) =
         let fieldStride = names.Length
         let scope = Ag.Scope.Root
         let symData = Symbol.Create "HeapData"
@@ -1081,19 +1101,39 @@ module Heap =
         let freeOffsets = System.Collections.Generic.Dictionary<int, System.Collections.Generic.Stack<int>>()
         let mutable cursor = 0
 
-        // ── geometry. Host buckets: append-only packed byte lists (attributes +
-        //    indices), deduped by buffer identity. Bindless buckets: only the
-        //    combined LOCAL index buffer is packed (append-only, deduped per
-        //    geometry); the objects' EXISTING vertex buffers are bound (no copy)
-        //    into the per-slot HeapVertexData array. Removed members do NOT
-        //    reclaim packed geometry (amortized; re-added shared geometry hits
-        //    the cache again). ──
+        // ── geometry. Host buckets: packed byte lists (attributes + indices),
+        //    deduped by buffer identity. Bindless buckets: only the combined
+        //    LOCAL index buffer is packed (deduped per geometry); the objects'
+        //    EXISTING vertex buffers are bound (no copy) into the per-slot
+        //    HeapVertexData array. Geometry entries are REFCOUNTED: when the
+        //    last referencing slot dies, the entry's vertex/index ranges go onto
+        //    per-SIZE free lists and a later unseen geometry of the EXACT same
+        //    size reuses them in place (one full re-upload, like an append).
+        //    No compaction: differently-sized ranges never coalesce, so churn
+        //    over distinct sizes still fragments — the combined buffers grow to
+        //    the high-water footprint of live + unreclaimed-size ranges. Exact-
+        //    size churn (the common case: a geometry leaving and an equal-sized
+        //    one arriving) is fully reclaimed. ──
         let packedAttr = if useBindlessGeom then [||] else attrInfos |> Array.map (fun _ -> System.Collections.Generic.List<byte>())
         let packedIdx = System.Collections.Generic.List<byte>()
-        let geomCache = System.Collections.Generic.Dictionary<struct(obj * obj), struct(int * int * int)>(HashIdentity.Structural)
+        let geomCache = System.Collections.Generic.Dictionary<struct(obj * obj), GeomEntry>(HashIdentity.Structural)
+        let idxFreeRanges = System.Collections.Generic.Dictionary<int, System.Collections.Generic.Stack<int>>()   // indexCount -> firstIndex
+        let vtxFreeRanges = System.Collections.Generic.Dictionary<int, System.Collections.Generic.Stack<int>>()   // vtxCount   -> baseVertex
+        let popFree (d : System.Collections.Generic.Dictionary<int, System.Collections.Generic.Stack<int>>) (size : int) =
+            match d.TryGetValue size with
+            | true, st when st.Count > 0 -> ValueSome (st.Pop())
+            | _ -> ValueNone
+        let pushFree (d : System.Collections.Generic.Dictionary<int, System.Collections.Generic.Stack<int>>) (size : int) (off : int) =
+            let st =
+                match d.TryGetValue size with
+                | true, s -> s
+                | _ -> let s = System.Collections.Generic.Stack<int>() in d.[size] <- s; s
+            st.Push off
+        let writeBytesAt (dst : System.Collections.Generic.List<byte>) (off : int) (src : byte[]) =
+            for i in 0 .. src.Length - 1 do dst.[off + i] <- src.[i]
         let mutable vtxCount = 0
         let mutable idxCount = 0
-        let mutable geomGrew = false
+        let mutable geomDirty = false
         let toTyped (bytes : System.Collections.Generic.List<byte>) (et : System.Type) (es : int) : IBuffer =
             let raw = bytes.ToArray()
             let n = raw.Length / max 1 es
@@ -1159,6 +1199,16 @@ module Heap =
         let freeSlots = System.Collections.Generic.Stack<int>()
         let mutable highWater = 0
         let slots = System.Collections.Generic.Dictionary<RenderObject, HeapSlot>(HashIdentity.Reference)
+        // globals fall-through OWNER: the bucket RO answers the heap/sampler names
+        // itself; everything else (camera, lights, scene-scope globals) falls
+        // through to a LIVE member's uniform provider. Tracked so the bucket never
+        // retains a member that left the set: globals are resolved at COMPILE time
+        // of the bucket RO from scene scope (bucket-homogeneous for heapable ROs),
+        // so switching the owner is purely a GC measure — already-compiled bindings
+        // keep the avals they resolved. A bucket emptied by removals keeps the last
+        // owner only until it is disposed (the incremental driver disposes empty
+        // buckets in the same update) or refilled (AddInternal re-seats the owner).
+        let mutable globalsRO = ro0
         // slots whose IsActive is NON-constant (constant gates are baked into the
         // entry at add time) — the indirect aval only re-reads these. The int is
         // the slot's structural instance count (restored when the gate opens).
@@ -1217,9 +1267,9 @@ module Heap =
                     | _ ->
                         let o = cursor
                         cursor <- cursor + sz
-                        // the arena is guaranteed out-of-date here (it depends on
-                        // the updater whose evaluation we are inside), so the
-                        // MarkOutdated inside Resize is a no-op.
+                        // grows only the staging mirror; the GPU resize is deferred
+                        // to the arena's own Compute (which depends on the updater
+                        // whose evaluation we are inside) — no transact happens here.
                         arena.EnsureFloats cursor
                         o
                 let w = arena.Add(av, off, sz, pk)
@@ -1240,57 +1290,112 @@ module Heap =
                     st.Push e.Offset
             | _ -> ()
 
-        /// host geometry: append-pack the RO's attributes + indices (deduped by
-        /// buffer identity); returns (firstIndex, baseVertex, indexCount).
-        let geomFor (ro : RenderObject) : struct(int * int * int) =
-            let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
-            let firstAttr =
-                let (_, _, sym, _, _, _, _) = attrInfos.[0]
-                match ro.VertexAttributes.TryGetAttribute sym with
-                | ValueSome b -> b.Buffer :> obj
-                | ValueNone -> null
-            let key = struct(firstAttr, idxBV.Buffer :> obj)
+        /// place `bytes` (elements of size `elemBytes`, `count` of them) into the
+        /// combined index buffer: exact-size free range if available (in-place
+        /// rewrite), else append. Returns the element offset.
+        let placeIdx (bytes : byte[]) (count : int) : int =
+            match popFree idxFreeRanges count with
+            | ValueSome off ->
+                writeBytesAt packedIdx (off * idxSize) bytes
+                off
+            | ValueNone ->
+                let off = idxCount
+                packedIdx.AddRange bytes
+                idxCount <- idxCount + count
+                off
+
+        /// host geometry: pack the RO's attributes + indices into the combined
+        /// buffers (deduped by buffer identity; refcounted; freed exact-size
+        /// ranges are reused in place).
+        let geomFor (key : struct(obj * obj)) (ro : RenderObject) : GeomEntry =
             match geomCache.TryGetValue key with
-            | true, r -> r
+            | true, e -> e.RefCount <- e.RefCount + 1; e
             | _ ->
-                let firstIndex = idxCount
-                let baseVertex = vtxCount
+                let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
                 let ib = readBytesView idxBV
                 let thisIdx = ib.Length / idxSize
-                packedIdx.AddRange ib
-                idxCount <- idxCount + thisIdx
-                let mutable thisVtx = 0
-                attrInfos |> Array.iter (fun (ai, _, sym, _, es, _, _) ->
-                    let bv =
+                let firstIndex = placeIdx ib thisIdx
+                let attrBytes =
+                    attrInfos |> Array.map (fun (_, _, sym, _, _, _, _) ->
                         match ro.VertexAttributes.TryGetAttribute sym with
-                        | ValueSome b -> b
-                        | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym
-                    let bytes = readBytesView bv
-                    packedAttr.[ai].AddRange bytes
-                    thisVtx <- bytes.Length / es)
-                vtxCount <- vtxCount + thisVtx
-                geomGrew <- true
-                let r = struct(firstIndex, baseVertex, thisIdx)
-                geomCache.[key] <- r
-                r
+                        | ValueSome b -> readBytesView b
+                        | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym)
+                let thisVtx =
+                    let (_, _, _, _, es0, _, _) = attrInfos.[0]
+                    attrBytes.[0].Length / es0
+                // ragged inputs (attributes disagreeing on vertex count) must never
+                // take the in-place reuse path: a long attribute would overwrite a
+                // NEIGHBORING live geometry's bytes. Appending keeps the historic
+                // tail-padding behavior for such (already-misrendered) inputs.
+                let uniformCounts =
+                    let mutable ok = true
+                    attrInfos |> Array.iteri (fun i (_, _, _, _, es, _, _) ->
+                        if attrBytes.[i].Length <> thisVtx * es then ok <- false)
+                    ok
+                let baseVertex =
+                    match (if uniformCounts then popFree vtxFreeRanges thisVtx else ValueNone) with
+                    | ValueSome off ->
+                        attrInfos |> Array.iteri (fun i (ai, _, _, _, es, _, _) ->
+                            writeBytesAt packedAttr.[ai] (off * es) attrBytes.[i])
+                        off
+                    | ValueNone ->
+                        let off = vtxCount
+                        attrInfos |> Array.iteri (fun i (ai, _, _, _, _, _, _) ->
+                            packedAttr.[ai].AddRange attrBytes.[i])
+                        vtxCount <- vtxCount + thisVtx
+                        off
+                geomDirty <- true
+                // ragged entries record VtxCount = 0 so freeGeom never recycles their
+                // (under-measured) vertex range; their index range is still exact.
+                let e = { FirstIndex = firstIndex; BaseVertex = baseVertex; IndexCount = thisIdx
+                          VtxCount = (if uniformCounts then thisVtx else 0); RefCount = 1 }
+                geomCache.[key] <- e
+                e
 
-        /// bindless geometry: append the RO's LOCAL index bytes to the combined
+        /// bindless geometry: pack the RO's LOCAL index bytes into the combined
         /// index buffer (deduped by index-buffer identity — indices are local, so
-        /// shared index data is shared verbatim); returns (firstIndex, count).
-        let idxFor (ro : RenderObject) : struct(int * int) =
-            let ibv = match ro.Indices with Some b -> b | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
-            let key = struct(ibv.Buffer :> obj, box ibv.Offset)
+        /// shared index data is shared verbatim; refcounted, exact-size reuse).
+        let idxFor (key : struct(obj * obj)) (ro : RenderObject) : GeomEntry =
             match geomCache.TryGetValue key with
-            | true, struct(fi, _, cnt) -> struct(fi, cnt)
+            | true, e -> e.RefCount <- e.RefCount + 1; e
             | _ ->
+                let ibv = match ro.Indices with Some b -> b | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
                 let ib = readGeomBytes runtime ibv
                 let cnt = ib.Length / idxSize
-                let fi = idxCount
-                packedIdx.AddRange ib
-                idxCount <- idxCount + cnt
-                geomGrew <- true
-                geomCache.[key] <- struct(fi, 0, cnt)
-                struct(fi, cnt)
+                let fi = placeIdx ib cnt
+                geomDirty <- true
+                let e = { FirstIndex = fi; BaseVertex = 0; IndexCount = cnt; VtxCount = 0; RefCount = 1 }
+                geomCache.[key] <- e
+                e
+
+        /// identity key of an RO's geometry in `geomCache`. Host: (first attribute
+        /// buffer aval, index buffer aval) — geometries sharing those are assumed to
+        /// share ALL attribute buffers (they come from one IndexedGeometry). Bindless:
+        /// (index buffer aval, boxed byte offset).
+        let geomKeyOf (ro : RenderObject) : struct(obj * obj) =
+            let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
+            if useBindlessGeom then struct(idxBV.Buffer :> obj, box idxBV.Offset)
+            else
+                let firstAttr =
+                    let (_, _, sym, _, _, _, _) = attrInfos.[0]
+                    match ro.VertexAttributes.TryGetAttribute sym with
+                    | ValueSome b -> b.Buffer :> obj
+                    | ValueNone -> null
+                struct(firstAttr, idxBV.Buffer :> obj)
+
+        /// drop one reference to a packed geometry; the LAST reference frees its
+        /// ranges onto the exact-size free lists (the stale bytes stay in the
+        /// combined buffers — never drawn, no live record references them — until
+        /// an equal-sized geometry reuses the range).
+        let freeGeom (key : struct(obj * obj)) =
+            match geomCache.TryGetValue key with
+            | true, e ->
+                e.RefCount <- e.RefCount - 1
+                if e.RefCount = 0 then
+                    geomCache.Remove key |> ignore
+                    pushFree idxFreeRanges e.IndexCount e.FirstIndex
+                    if e.VtxCount > 0 then pushFree vtxFreeRanges e.VtxCount e.BaseVertex
+            | _ -> ()
 
         // ── reactive views over the mutable state. All are driven by `updater`,
         //    so they refresh exactly when membership changed. headers + indirect
@@ -1340,10 +1445,17 @@ module Heap =
         do
             match atlasState with
             | Some (pool, dummy, table) ->
-                // padded pages[8] derived from pool.Pages (length-grow on new
-                // page); unused tail slots point at the per-bucket dummy texture.
+                let t = table :> aval<V4f[] * V4f[] * int[] * int[]>
+                // padded pages[8]: pulled AFTER the placement table — whose Compute
+                // performs the Acquires that may CREATE pages — so page publication
+                // needs no transact inside evaluation (rule-clean); the table
+                // dependency re-pulls this whenever membership or a member's texture
+                // changed, i.e. whenever a page can possibly have been added. Unused
+                // tail slots point at the per-bucket dummy texture.
                 let padded =
-                    pool.Pages |> AVal.map (fun arr ->
+                    AVal.custom (fun tok ->
+                        t.GetValue tok |> ignore
+                        let arr = pool.PageArray
                         let out = Array.zeroCreate<ITexture> HeapAtlas.MaxPagesPerFormat
                         for i in 0 .. HeapAtlas.MaxPagesPerFormat - 1 do
                             out.[i] <- if i < arr.Length then arr.[i] :> ITexture else dummy
@@ -1352,7 +1464,6 @@ module Heap =
                     let pi = i
                     texLookup.[Symbol.Create (sprintf "HeapAtlasTex%d" pi)] <- (padded |> AVal.map (fun arr -> arr.[pi])) :> IAdaptiveValue
                 texLookup.[Symbol.Create "HeapAtlasPxSize"] <- AVal.constant (V2f(float32 HeapAtlas.PageSize, float32 HeapAtlas.PageSize)) :> IAdaptiveValue
-                let t = table :> aval<V4f[] * V4f[] * int[] * int[]>
                 texLookup.[Symbol.Create "HeapAtlasOrigin"] <- (t |> AVal.map (fun (o, _, _, _) -> o)) :> IAdaptiveValue
                 texLookup.[Symbol.Create "HeapAtlasSize"]   <- (t |> AVal.map (fun (_, z, _, _) -> z)) :> IAdaptiveValue
                 texLookup.[Symbol.Create "HeapAtlasFmt"]    <- (t |> AVal.map (fun (_, _, f, _) -> f)) :> IAdaptiveValue
@@ -1396,6 +1507,25 @@ module Heap =
         let bucketRO =
             let ro = RenderObject.Clone ro0
             ro.IsActive <- AVal.constant true      // per-draw gating lives in the indirect buffer
+            // The KEYED pipeline state comes from the bucket KEY's resolved VALUES,
+            // never from a member's live avals: a member whose dynamic mode aval
+            // changes MOVES buckets (regroup pass) and must not be able to bend the
+            // bucket it leaves. Non-keyed state (stencil, color/attachment masks,
+            // blend constant, multisample, depth bias/clamp, …) still comes from
+            // ro0's clone — the mode key assumes heapable ROs only vary in the keyed
+            // subset; ROs differing in non-keyed state merge on ro0's values (same
+            // pre-existing limitation as the bucket key itself).
+            let (cull, frontFacing, fill, blend, depthTest, depthWrite) = pipeKey
+            ro.RasterizerState <-
+                { ro.RasterizerState with
+                    CullMode = AVal.constant cull
+                    FrontFacing = AVal.constant frontFacing
+                    FillMode = AVal.constant fill }
+            ro.BlendState <- { ro.BlendState with Mode = AVal.constant blend }
+            ro.DepthState <-
+                { ro.DepthState with
+                    Test = AVal.constant depthTest
+                    WriteMask = AVal.constant depthWrite }
             ro.Surface <-
                 let baseE = rewrite slotE nameToField fieldStride standardDerivedRules effect |> geomRewrite
                 if useAtlas then Surface.Effect (baseE |> rewriteAtlasSamples slotE atlasByName)
@@ -1405,11 +1535,16 @@ module Heap =
             ro.VertexAttributes <-
                 if useBindlessGeom then AttributeProvider.ofList ([] : (Symbol * BufferView) list)
                 else AttributeProvider.ofList [ for (ai, _, sym, et, _, _, _) in attrInfos -> sym, BufferView(attrAvals.[ai], et) ]
-            // MoltenVK+instanced fallback: bind the per-instance slot attribute. In
-            // every other path InstanceAttributes stays as cloned from ro0
-            // (preserves any per-instance per-RO attribute the user may have set).
+            // MoltenVK+instanced fallback: bind the per-instance slot attribute.
+            // Every other path gets an EMPTY instance provider: isHeapable requires
+            // every shader input to resolve from VertexAttributes, so no heapable
+            // effect can read an instance attribute — keeping ro0's cloned provider
+            // would only retain the dead ro0 (and would bind ro0's per-RO data for
+            // ALL members if it ever overlapped a semantic).
             if useSlotAttr then
                 ro.InstanceAttributes <- AttributeProvider.ofList [ symSlotAttr, BufferView(instAval, typeof<int>) ]
+            else
+                ro.InstanceAttributes <- AttributeProvider.ofList ([] : (Symbol * BufferView) list)
             ro.Indices <- Some (BufferView(idxAval, idxType))
             ro.Uniforms <-
                 { new IUniformProvider with
@@ -1422,27 +1557,31 @@ module Heap =
                             | _ ->
                                 if heapSyms.Contains name then ValueNone
                                 elif samplerSyms.Contains name then ValueNone
-                                else ro0.Uniforms.TryGetUniform(s, name)
+                                else globalsRO.Uniforms.TryGetUniform(s, name)
                     member _.Dispose() = () }
             ro
 
         member _.RenderObject = bucketRO :> IRenderObject
         member _.Count = slots.Count
 
-        /// flush geometry / instance-buffer growth: FRESH ArrayBuffers (full
-        /// re-upload, amortized — geometry growth only happens when an unseen
-        /// geometry was added; the instance-slot buffer changes on instanced adds)
+        /// flush geometry / instance-buffer changes: FRESH ArrayBuffers (full
+        /// re-upload, amortized — geometry changes only when an unseen geometry
+        /// was added, whether appended or written into a reclaimed range; the
+        /// instance-slot buffer changes on instanced adds)
         member private _.FlushGeometry() =
-            if geomGrew then
-                geomGrew <- false
+            if geomDirty then
+                geomDirty <- false
                 if not useBindlessGeom then
                     attrBuffers <- attrInfos |> Array.map (fun (ai, _, _, et, es, _, _) -> toTyped packedAttr.[ai] et es)
                 idxBuffer <- toTyped packedIdx idxType idxSize
+                lastPackedGeomBytes <- packedIdx.Count + (packedAttr |> Array.sumBy (fun l -> l.Count))
             if instChanged then
                 instChanged <- false
                 instBuffer <- ArrayBuffer (Array.sub instData 0 instCursor) :> IBuffer
 
         member private _.AddInternal(ro : RenderObject) =
+            // (re)seat the globals fall-through on a live member
+            if slots.Count = 0 then globalsRO <- ro
             let slot = if freeSlots.Count > 0 then freeSlots.Pop() else let s = highWater in highWater <- s + 1; s
             ensureSlot slot
             let keys = Array.zeroCreate<IAdaptiveValue> names.Length
@@ -1453,9 +1592,10 @@ module Heap =
                     | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing per-draw uniform '%s'" names.[i]
                 keys.[i] <- av
                 headers.[slot * fieldStride + nameToField.[names.[i]]] <- allocRegion av
-            let (struct(firstIndex, baseVertex, count)) =
+            let geomKey = geomKeyOf ro
+            let geom =
                 if useBindlessGeom then
-                    let (struct(fi, cnt)) = idxFor ro
+                    let e = idxFor geomKey ro
                     // register the slot's vertex buffers for the per-handle gather
                     for (ai, _, sym, _, _, _, _) in attrInfos do
                         let bv =
@@ -1465,8 +1605,8 @@ module Heap =
                         let pos = slot * numAttrs + ai
                         vtxAvals.[pos] <- bv.Buffer
                         vtxLast.[pos] <- bv.Buffer.GetValue()
-                    struct(fi, 0, cnt)
-                else geomFor ro
+                    e
+                else geomFor geomKey ro
             // register the slot's textures (bindless per-type tables / atlas)
             for (_, _, texSyms, table) in bindlessTexTables do
                 table.AddSlot(slot, texSyms |> Array.map (fun tn ->
@@ -1493,14 +1633,15 @@ module Heap =
                 if useSlotAttr then allocInst slot k
                 elif useDrawId then 0
                 else slot
-            entries.[slot] <- DrawCallInfo(FaceVertexCount = count, FirstIndex = firstIndex, BaseVertex = baseVertex,
+            entries.[slot] <- DrawCallInfo(FaceVertexCount = geom.IndexCount, FirstIndex = geom.FirstIndex, BaseVertex = geom.BaseVertex,
                                            FirstInstance = firstInstance, InstanceCount = instCount)
-            slots.[ro] <- { Slot = slot; RegionKeys = keys; Active = active; Instances = k; InstOffset = firstInstance }
+            slots.[ro] <- { Slot = slot; RegionKeys = keys; Active = active; Instances = k; InstOffset = firstInstance; GeomKey = geomKey }
 
         member private _.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with
             | true, s ->
                 for k in s.RegionKeys do freeRegion k
+                freeGeom s.GeomKey
                 if useBindlessGeom then
                     for ai in 0 .. numAttrs - 1 do vtxAvals.[s.Slot * numAttrs + ai] <- Unchecked.defaultof<_>
                 for (_, _, _, table) in bindlessTexTables do table.RemoveSlot s.Slot
@@ -1512,6 +1653,11 @@ module Heap =
                 dynActives.Remove s.Slot |> ignore
                 freeSlots.Push s.Slot
                 slots.Remove ro |> ignore
+                // the globals fall-through must not retain a member that left:
+                // switch to any live member (bucket-homogeneous for the resolved
+                // globals — see globalsRO above).
+                if System.Object.ReferenceEquals(ro, globalsRO) && slots.Count > 0 then
+                    globalsRO <- Seq.head slots.Keys
             | _ -> ()
 
         /// Add ONE new member (no-op if already present). Called from the updater.
@@ -1713,11 +1859,15 @@ module Heap =
 
         // intern mode keys to unique tokens, so the per-change grouping hashes
         // object references instead of 10-tuples-with-strings (20k ROs/change).
+        // keyValues is the reverse map: token -> the RESOLVED mode-key tuple, so a
+        // bucket can bake its pipeline state from the KEY's values (a member's
+        // dynamic mode aval can then never bend the bucket it leaves — it moves).
         let keyInterner = System.Collections.Generic.Dictionary<_, obj>()
+        let keyValues = System.Collections.Generic.Dictionary<obj, string * IndexedGeometryMode * string * CullMode * WindingOrder * FillMode * BlendMode * DepthTest * bool * bool>(HashIdentity.Reference)
         let internKey k =
             match keyInterner.TryGetValue k with
             | true, tok -> tok
-            | _ -> let tok = obj() in keyInterner.[k] <- tok; tok
+            | _ -> let tok = obj() in keyInterner.[k] <- tok; keyValues.[tok] <- k; tok
 
         let roFacts = System.Runtime.CompilerServices.ConditionalWeakTable<IRenderObject, RoFacts>()
         let factsOf (t : AdaptiveToken) (o : IRenderObject) =
@@ -1781,7 +1931,9 @@ module Heap =
 
         let mkBucket (key : obj) (r0 : RenderObject) (f0 : RoFacts) =
             let effect = match r0.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
-            let c = IncrementalBucket(runtime, names, nameToField, effect, r0, updaterRef.Value, f0.Bindless, f0.Instanced)
+            let (_, _, _, cull, ff, fill, blend, dtest, dwrite, _) = keyValues.[key]
+            let c = IncrementalBucket(runtime, names, nameToField, effect, r0, updaterRef.Value, f0.Bindless, f0.Instanced,
+                                      (cull, ff, fill, blend, dtest, dwrite))
             caches.[key] <- c
             c
 
@@ -1927,6 +2079,10 @@ module Heap =
                     (view : aval<Trafo3d>) (proj : aval<Trafo3d>) (models : aval<Trafo3d>[]) : ISg =
         checkSupport false runtime
         let n = models.Length
+        // NOTE: the compute resources created below (buffers, shader, program, input
+        // binding) live as long as the process — the returned ISg has no teardown
+        // hook. Intentional: this is a fixed-population demo/research entry point;
+        // call it once per scene, not per frame.
         let stride = 32                 // floats per object: MVP(16) + NormalMatrix(16)
         let outBuf   = runtime.CreateBuffer<M44f>(max 1 (2 * n))
         let modelBuf = runtime.CreateBuffer<M44d>(max 1 n)
@@ -2061,6 +2217,8 @@ module Heap =
                          (chains : aval<Trafo3d>[][]) : ISg =
         checkSupport false runtime
         let n = chains.Length
+        // NOTE: like derivedFp64, the GPU resources below are process-lifetime
+        // (no teardown hook on the returned ISg) — fixed-population entry point.
         let stride = 32                     // floats per object: MVP(16) + NormalMatrix(16)
 
         // flatten chains, DEDUP links by aval identity: a shared parent => one slot.
@@ -2424,19 +2582,38 @@ module Heap =
                 version.Value <- version.Value + 1
                 slot)
 
-        /// Remove a previously added draw. Call in transact.
+        /// Remove a previously added draw. Call in transact. Idempotent: removing
+        /// an unknown / already-removed slot is a no-op (it must NOT be pushed onto
+        /// the free list again, or two later Adds would share one slot).
         member _.Remove(slot : int) =
             lock gate (fun () ->
                 match slotWriters.TryGetValue slot with
                 | true, ws ->
                     for w in ws do arena.Remove w
                     slotWriters.Remove slot |> ignore
-                | _ -> ()
-                if slot < entries.Length then
-                    entries.[slot] <- DrawCallInfo(FaceVertexCount = 0, FirstInstance = 0, InstanceCount = 0)
-                freeList.Push slot
-                version.Value <- version.Value + 1)
+                    if slot < entries.Length then
+                        entries.[slot] <- DrawCallInfo(FaceVertexCount = 0, FirstInstance = 0, InstanceCount = 0)
+                    freeList.Push slot
+                    version.Value <- version.Value + 1
+                | _ -> ())
 
         member _.Count = slotWriters.Count
         member _.RenderObject = ro :> IRenderObject
         member x.Sg = Sg.renderObjectSet (ASet.single x.RenderObject)
+
+        /// Release every slot's region writers (and with them their Acquire on the
+        /// per-draw source avals). Call in transact, after (or while) removing the
+        /// scene from rendering — the indirect buffer collapses to zero draws. The
+        /// arena's GPU buffer itself is freed by the render task that acquired it
+        /// (AdaptiveResource refcounting) once the scene's RenderObject is dropped.
+        member _.Dispose() =
+            lock gate (fun () ->
+                for KeyValue(_, ws) in slotWriters do
+                    for w in ws do arena.Remove w
+                slotWriters.Clear()
+                freeList.Clear()
+                highWater <- 0
+                version.Value <- version.Value + 1)
+
+        interface System.IDisposable with
+            member x.Dispose() = x.Dispose()

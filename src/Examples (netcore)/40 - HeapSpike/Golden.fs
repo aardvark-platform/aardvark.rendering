@@ -2540,3 +2540,103 @@ module Golden =
         // path — size the bindless bucket within it (2 attrs -> <= 512 slots).
         run "bindless-geom" (min n 480) (Set.ofList [ "HeapModelTrafo"; "HeapColor" ]) mkGpuRO
         true
+
+    // Geometry reclamation probe: DISTINCT per-RO geometry, one remove + one add per
+    // frame with a FRESH equal-sized geometry. The combined packed buffers must stay
+    // FLAT after the initial build (a freed geometry's exact-size ranges are reused
+    // in place — Heap.lastPackedGeomBytes) and the churned scene's final image must
+    // equal a freshly-built scene of the same membership. Two phases: host-packed
+    // geometry (vertex + index ranges) and bindless/vertex-pull (index ranges only).
+    let geomChurnTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 16.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let n = 50                  // NOT divisible by the size/color cycles below,
+        let frames = 96             // so a replacement RO differs visibly from its victim
+        let side = 8
+        let posOf (i : int) = V3d(float (i % side - side / 2) * 1.4, float (i / side - side / 2) * 1.4, 0.0)
+        // FRESH (identity-distinct) box arrays per call — same vertex/index COUNTS
+        // (exact-size reuse), i-dependent size so stale-range bugs change pixels.
+        let mkGeom (i : int) =
+            let s = 0.45 + 0.25 * float (i % 4) / 3.0
+            let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * s)) C4b.White).ToIndexed()
+            (g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]> |> Array.copy),
+            (g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]> |> Array.copy),
+            (g.IndexArray |> unbox<int[]> |> Array.copy)
+        let effect = Effect.compose [ Effect.ofFunction GG.shade; Effect.ofFunction GG.frag ]
+        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
+        let mkRO (i : int) (attrs : IAttributeProvider) (idxBV : BufferView) (faceVertexCount : int) =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect effect
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- attrs
+            ro.Indices   <- Some idxBV
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = faceVertexCount, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation (posOf (i % n))).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj ]
+            ro :> IRenderObject
+        let mkHostRO (i : int) =
+            let (positions, normals, index) = mkGeom i
+            let attrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+            mkRO i attrs (bv index typeof<int>) index.Length
+        let mkGpuRO (i : int) =
+            let (positions, normals, index) = mkGeom i
+            let gbv (b : IBackendBuffer) t = BufferView(AVal.constant (b :> IBuffer), t)
+            let posGpu = runtime.PrepareBuffer(ArrayBuffer positions :> IBuffer)
+            let nrmGpu = runtime.PrepareBuffer(ArrayBuffer normals   :> IBuffer)
+            let idxGpu = runtime.PrepareBuffer(ArrayBuffer index     :> IBuffer)
+            let attrs = AttributeProvider.ofList [ Symbol.Create "Positions", gbv posGpu typeof<V3f>; Symbol.Create "Normals", gbv nrmGpu typeof<V3f> ]
+            mkRO i attrs (gbv idxGpu typeof<int>) index.Length
+        let names = Set.ofList [ "HeapModelTrafo"; "HeapColor" ]
+
+        let runPhase (label : string) (mk : int -> IRenderObject) =
+            let all = Array.init (n + frames) mk
+            let ros = cset (Array.sub all 0 n)
+            let heapObjs = Heap.ofRenderObjects runtime names (ros :> aset<_>)
+            use task = runtime.CompileRender(signature, heapObjs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            out.GetValue() |> ignore
+            let bytes0 = Heap.lastPackedGeomBytes
+            let mutable maxBytes = bytes0
+            for i in 0 .. frames - 1 do
+                transact (fun () ->
+                    ros.Remove all.[i] |> ignore
+                    ros.Add all.[n + i] |> ignore)
+                out.GetValue() |> ignore
+                maxBytes <- max maxBytes Heap.lastPackedGeomBytes
+            let img = out.GetValue().Download().ToPixImage<byte>()
+            out.Release()
+            // reference: the SAME final membership (all.[frames .. frames+n-1]) built fresh
+            let refRos = cset (Array.sub all frames n)
+            let refObjs = Heap.ofRenderObjects runtime names (refRos :> aset<_>)
+            use refTask = runtime.CompileRender(signature, refObjs)
+            let refOut = refTask |> RenderTask.renderToColor size
+            refOut.Acquire()
+            let refImg = refOut.GetValue().Download().ToPixImage<byte>()
+            refOut.Release()
+            let (maxDelta, nDiff, nNonBg, total) = diff img refImg
+            let flat = maxBytes = bytes0
+            Log.line "geomChurn[%s]: packedBytes start=%d maxDuringChurn=%d flat=%b  maxChannelDelta=%d diffPixels=%d/%d coverage=%d"
+                label bytes0 maxBytes flat maxDelta nDiff total nNonBg
+            let pass = flat && maxDelta = 0 && nNonBg > 1000L
+            if pass then Log.line "geomChurn[%s]: PASS" label
+            else Log.warn "geomChurn[%s]: FAIL" label
+            pass
+
+        let hostOk = runPhase "host" mkHostRO
+        let gpuOk  = runPhase "bindless" mkGpuRO
+        let pass = hostOk && gpuOk
+        if pass then Log.line "geomChurn: ALL PASS" else Log.warn "geomChurn: FAIL (host=%b bindless=%b)" hostOk gpuOk
+        pass
