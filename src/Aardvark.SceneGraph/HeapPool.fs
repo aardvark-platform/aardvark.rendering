@@ -18,8 +18,12 @@ namespace Aardvark.SceneGraph
 //
 // Two entry points:
 //   * Heap.ofRenderObjects — adaptive aset<IRenderObject> -> aset<IRenderObject>
-//     transform; buckets by effect, packs shared/varied geometry, dirty-tracks
-//     the arena (sparse per-frame mutation uploads only changed sub-ranges).
+//     transform; buckets by effect, stores host geometry (attributes AND
+//     indices, incl. SingleValueBuffer singletons) as per-allocation-headed
+//     ranges in the bucket's storage arena — NO fixed-function vertex input;
+//     draws are non-indexed and the rewritten vertex shader storage-decodes
+//     everything (wombat-style). Dirty-tracks the arena (sparse per-frame
+//     mutation uploads only changed sub-ranges).
 //   * Heap.HeapScene       — imperative, growable single bucket with O(1)
 //     Add/Remove (free-list slots); for streaming workloads.
 
@@ -41,6 +45,10 @@ open Microsoft.FSharp.NativeInterop
 module HeapUniforms =
     type UniformScope with
         member x.HeapData    : float32[] = uniform?StorageBuffer?HeapData
+        // the SAME arena buffer bound a second time as an int view: per-allocation
+        // headers (typeId/length/stride), index data and integral attributes decode
+        // their 4-byte words as ints (bit pattern is identical).
+        member x.HeapDataI   : int[]     = uniform?StorageBuffer?HeapDataI
         member x.HeapHeaders : int[]     = uniform?StorageBuffer?HeapHeaders
         // Bindless geometry: ONE flat float32 SSBO array indexed by handle
         // (gl_InstanceIndex). Element [h] is object h's interleaved vertex floats;
@@ -534,17 +542,6 @@ module Heap =
                 arr)
         | b -> failwithf "Heap.ofRenderObjects: expected host (INativeBuffer) geometry, got %A" (b.GetType())
 
-    /// Build a packed vertex/index buffer view of an arbitrary element type from
-    /// raw bytes (the backend derives the vertex/index format from `et`, so no
-    /// shader-side decoding is needed for standard formats).
-    let private packedView (bytes : byte[]) (et : System.Type) : BufferView =
-        let n = bytes.Length / max 1 (elemSize et)
-        let a = System.Array.CreateInstance(et, n)
-        let gc = System.Runtime.InteropServices.GCHandle.Alloc(a, System.Runtime.InteropServices.GCHandleType.Pinned)
-        try System.Runtime.InteropServices.Marshal.Copy(bytes, 0, gc.AddrOfPinnedObject(), bytes.Length)
-        finally gc.Free()
-        BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), et)
-
     /// Read a buffer-view's raw bytes whether host (INativeBuffer) or GPU-resident
     /// (IBackendBuffer, downloaded). Used only to COMBINE per-object INDEX buffers
     /// (small); vertex buffers are never downloaded — they're bound for vertex-pull.
@@ -573,13 +570,29 @@ module Heap =
     /// heapable RO (diagnostic / for tests). Sorted.
     let mutable lastAutoFields : string[] = [||]
 
+    /// When true, the heap logs ONE deduped, actionable line per pass-through
+    /// reason (why an RO was not heap-eligible: attribute/buffer type, missing
+    /// effect input, sampler mismatch, non-Effect surface, …) and per consumed-
+    /// but-unpackable per-draw uniform. Default false (zero logging overhead).
+    let mutable Diagnostics = false
+    let private diagSeen = System.Collections.Generic.HashSet<string>()
+    let internal diag (msg : string) =
+        if Diagnostics then
+            let fresh = lock diagSeen (fun () -> diagSeen.Add msg)
+            if fresh then Log.warn "[Heap] %s" msg
+    /// the deduped diagnostic messages emitted so far (testing/tooling)
+    let diagnosticMessages () : string[] =
+        lock diagSeen (fun () -> Seq.toArray diagSeen)
+
     /// Force the texture-atlas path even where descriptor-indexed sampler arrays ARE
     /// available (for testing the atlas on desktop Vulkan, which reports them supported).
     let mutable forceAtlas = false
 
-    /// Combined packed geometry bytes (indices + attributes) of the most recently
-    /// geometry-flushed bucket (diagnostic). Under exact-size distinct-geometry
-    /// churn this stays FLAT: a freed geometry's ranges are recycled in place.
+    /// Storage-arena footprint (bytes) of the most recently updated bucket
+    /// (diagnostic). Geometry (attribute/index allocations), singleton
+    /// attributes and per-draw uniform regions all live in ONE arena, so this
+    /// equals lastArenaBytes. Under exact-size distinct-geometry churn it stays
+    /// FLAT: a freed allocation's ranges are recycled in place.
     let mutable lastPackedGeomBytes = 0
 
     // ── reclamation knobs + diagnostics (per-bucket values, written by the most
@@ -621,6 +634,25 @@ module Heap =
     /// (diagnostic). A shared-root change over N objects should be 1, not N.
     let mutable lastChainLinkUploads = 0
 
+    // ── per-allocation headers (wombat parity: pools.ts writeAttribute) ──────
+    // Every host geometry allocation in the bucket arena (vertex attribute,
+    // singleton attribute, index range) starts with a 4-word header
+    //   word0 = typeId   (encoding class; the INDEX decode branches on it,
+    //                     attribute decodes are baked per element type)
+    //   word1 = length   (element count; 1 for singletons — the attribute
+    //                     fetch broadcasts via `vid % length`, wombat-style)
+    //   word2 = stride   (bytes per element; 0 for singletons)
+    //   word3 = 0        (pad — data starts 16 bytes after the header start)
+    // Allocations are NOT globally 16-byte aligned (the decode is scalar word
+    // reads, unlike wombat's vec4 loads), so no alignment padding is needed.
+    [<Literal>]
+    let internal AllocHeaderWords = 4
+    /// index-allocation typeIds (header word0): 1 = 32-bit, 2 = 16-bit elements
+    [<Literal>]
+    let internal IdxType32 = 1
+    [<Literal>]
+    let internal IdxType16 = 2
+
     /// Adaptive writer for one arena region. Reads its source aval and packs
     /// the floats into the arena's shared staging at its offset. Marked (via
     /// the source) only when that source changes.
@@ -654,6 +686,9 @@ module Heap =
         // a compaction requested a one-shot upload of [0, fullUploadFloats)
         // (handled in Compute alongside the dirty-writer runs)
         let mutable fullUploadFloats = 0
+        // one-shot static writes (allocation headers + immutable geometry bytes),
+        // staged by the updater's evaluation, uploaded on the next Compute.
+        let pendingStatic = System.Collections.Generic.List<struct(int * int)>()
         /// Grow the staging mirror to hold at least n floats. The GPU-side resize is
         /// DEFERRED to the next Compute (ResizeInPlace there — content-preserving),
         /// so this is rule-clean inside adaptive evaluation: no transact/MarkOutdated
@@ -685,6 +720,24 @@ module Heap =
         /// rule-clean: no transact, the arena re-evaluates via ExtraDependency).
         member _.RequestFullUpload(n : int) =
             fullUploadFloats <- max fullUploadFloats n
+        /// Write a 4-word per-allocation header (typeId, length, strideBytes, 0)
+        /// at word offset `off` (staging only; uploaded on the next Compute).
+        member _.WriteHeader(off : int, typeId : int, length : int, strideBytes : int) =
+            let inline bits (v : int) = System.BitConverter.ToSingle(System.BitConverter.GetBytes v, 0)
+            staging.[off + 0] <- bits typeId
+            staging.[off + 1] <- bits length
+            staging.[off + 2] <- bits strideBytes
+            staging.[off + 3] <- 0.0f
+            pendingStatic.Add(struct(off, off + AllocHeaderWords))
+        /// Blit immutable bytes (attribute/index data) into staging at word
+        /// offset `off`; the covered word range uploads on the next Compute.
+        /// A ragged tail word is zero-padded (deterministic content).
+        member _.WriteStaticBytes(off : int, src : byte[]) =
+            let words = (src.Length + 3) / 4
+            if words > 0 then
+                if src.Length % 4 <> 0 then staging.[off + words - 1] <- 0.0f
+                System.Buffer.BlockCopy(src, 0, staging, off * 4, src.Length)
+                pendingStatic.Add(struct(off, off + words))
         /// Add a region writer; returns it so it can be removed later.
         member x.Add(src, off, size, pack) : RegionWriter =
             let w = RegionWriter(src, off, size, pack)
@@ -715,14 +768,22 @@ module Heap =
             let dirty = pending.GetAndClear()
             let full = fullUploadFloats
             fullUploadFloats <- 0
-            if dirty.Count > 0 || full > 0 then
-                let ranges = System.Collections.Generic.List<struct(int * int)>(dirty.Count + 1)
+            if dirty.Count > 0 || full > 0 || pendingStatic.Count > 0 then
+                let ranges = System.Collections.Generic.List<struct(int * int)>(dirty.Count + pendingStatic.Count + 1)
                 for w in dirty do
                     w.Pack(t, staging)
                     ranges.Add(struct(w.Off, w.Off + w.Size))
+                ranges.AddRange pendingStatic
+                pendingStatic.Clear()
                 if full > 0 then ranges.Add(struct(0, full))
                 ranges.Sort(fun (struct(a, _)) (struct(b, _)) -> compare a b)
-                let flush lo hi = x.Write(staging, uint64 (lo * 4), lo, hi - lo, false)
+                // clamp to the (possibly shrunk) staging capacity: a compaction in
+                // the same pass may have re-seated content below stale static ranges
+                // (the full upload it requested covers the moved bytes).
+                let flush lo hi =
+                    let lo = min lo capacity
+                    let hi = min hi capacity
+                    if hi > lo then x.Write(staging, uint64 (lo * 4), lo, hi - lo, false)
                 let mutable lo = let (struct(l, _)) = ranges.[0] in l
                 let mutable hi = let (struct(_, h)) = ranges.[0] in h
                 for i in 1 .. ranges.Count - 1 do
@@ -794,7 +855,7 @@ module Heap =
     /// `Management.MemoryManager` (size-sorted SortedSetExt free list: O(log n)
     /// best-fit with split, both-neighbor coalescing on Free) instantiated over
     /// a VIRTUAL memory (`Memory.nop`, 'a = unit): no real bytes are managed —
-    /// the actual storage lives in the ByteStores / staging mirrors, which the
+    /// the actual storage lives in the arena staging mirrors, which the
     /// call sites grow to `Extent`. Callers hold the returned `Block<unit>` per
     /// allocation and pass it back to `Free`, so the manager coalesces properly.
     /// This wrapper only adds the two counters the compaction trigger and the
@@ -841,53 +902,34 @@ module Heap =
             live <- 0
             extent <- 0
 
-    /// Growable byte store for the packed combined geometry buffers (replaces
-    /// List&lt;byte&gt;): supports in-place writes at arbitrary offsets (allocator-
-    /// placed ranges) and explicit logical-length control so every attribute
-    /// store tracks the shared vertex cursor exactly.
-    type internal ByteStore(initialBytes : int) =
-        let mutable data = Array.zeroCreate<byte> (max 16 (Fun.NextPowerOfTwo (max 1 initialBytes)))
-        let mutable count = 0
-        member _.Data = data
-        member _.Count = count
-        member _.EnsureCount(n : int) =
-            if n > data.Length then
-                let nd = Array.zeroCreate<byte> (Fun.NextPowerOfTwo n)
-                System.Array.Copy(data, nd, count)
-                data <- nd
-            if n > count then count <- n
-        member x.WriteAt(off : int, src : byte[]) =
-            x.EnsureCount(off + src.Length)
-            System.Array.Copy(src, 0, data, off, src.Length)
-        member x.WriteAt(off : int, src : byte[], srcOff : int, len : int) =
-            x.EnsureCount(off + len)
-            System.Array.Copy(src, srcOff, data, off, len)
-        member x.ZeroFill(off : int, len : int) =
-            if len > 0 then
-                x.EnsureCount(off + len)
-                System.Array.Clear(data, off, len)
-
     /// Mutable refcounted arena region (deduped by source-aval identity).
     /// Offset is re-seated by arena compaction. Block is the region's float
-    /// range in the arena HeapSpace (re-allocated on compaction).
+    /// range in the arena HeapSpace (re-allocated on compaction). Size is the
+    /// TOTAL allocation size (incl. header words); HeaderWords is 0 for raw
+    /// uniform-field regions and AllocHeaderWords for singleton-attribute
+    /// allocations (whose writer packs at Offset + HeaderWords).
     type internal RegionEntry =
         { mutable Offset : int; Size : int; Writer : RegionWriter; mutable RefCount : int
+          mutable Block : Management.Block<unit>; HeaderWords : int }
+
+    /// Refcounted STATIC allocation in the bucket arena (one vertex attribute's
+    /// bytes, or one index range — written once, deduped by source-buffer
+    /// identity + byte offset). Ref is the allocation's HEADER word offset
+    /// (data at Ref + AllocHeaderWords); re-seated by arena compaction. Count
+    /// is the element count (the per-slot draw record's FaceVertexCount for
+    /// index allocations).
+    type internal StaticEntry =
+        { mutable Ref : int; SizeF : int; Count : int; mutable RefCount : int
           mutable Block : Management.Block<unit> }
 
-    /// Refcounted per-geometry ranges in a bucket's combined buffers (geometries
-    /// are deduped by buffer identity). Host geometry owns the vertex range
-    /// [BaseVertex, BaseVertex+VtxAlloc) in every packed attribute plus an index
-    /// range; bindless geometry only the index range (VtxAlloc = 0). When the
-    /// last referencing slot dies the ranges (held as HeapSpace blocks) return
-    /// to the bucket's allocators; compaction re-seats FirstIndex/BaseVertex
-    /// (and re-allocs the blocks) of live entries. VtxCount is the UNIFORM
-    /// vertex count (0 for ragged inputs whose attributes disagree — VtxAlloc
-    /// then covers the longest attribute, so the range is still safely
-    /// reusable).
-    type internal GeomEntry =
-        { mutable FirstIndex : int; mutable BaseVertex : int; IndexCount : int
-          VtxCount : int; VtxAlloc : int; mutable RefCount : int
-          mutable IdxBlock : Management.Block<unit>; mutable VtxBlock : Management.Block<unit> }
+    /// how a slot references one of its attribute allocations (for release +
+    /// compaction header rewrite)
+    [<RequireQualifiedAccess>]
+    type internal AttrKey =
+        /// static host buffer: keyed by (buffer aval identity, byte offset)
+        | Static of struct(obj * int)
+        /// SingleValueBuffer attribute: keyed by the inner value aval
+        | Single of IAdaptiveValue
 
     /// Per-member bookkeeping of an incremental bucket: the draw-record slot,
     /// the arena regions it references, its visibility gate, its (structural)
@@ -898,7 +940,11 @@ module Heap =
     type internal HeapSlot =
         { Slot : int; RegionKeys : IAdaptiveValue[]; Active : aval<bool>
           Instances : int; mutable InstOffset : int
-          mutable InstBlock : Management.Block<unit>; GeomKey : struct(obj * obj) }
+          mutable InstBlock : Management.Block<unit>
+          /// per consumed attribute (host buckets; empty for bindless)
+          AttrKeys : AttrKey[]
+          /// the slot's index allocation key (buffer aval identity, byte offset)
+          IdxKey : struct(obj * int) }
 
     /// Immutable per-RO facts (STRUCTURE only — surface, geometry layout, uniform
     /// presence; never aval VALUES). Cached per RO in a ConditionalWeakTable so a
@@ -951,40 +997,140 @@ module Heap =
     let private isIntegral (t : System.Type) : bool =
         t = typeof<int> || t = typeof<V2i> || t = typeof<V3i> || t = typeof<V4i>
 
+
+    /// attribute typeId (informational/debug — the gather bakes the decode
+    /// from the bucket's layout signature, only the INDEX decode branches)
+    let private attrTypeId (t : System.Type) : int =
+        if   isIntegral t      then 3
+        elif t = typeof<C4b>   then 4
+        else 1                                          // float-component data
+
+    /// decode the vertex index for `gl_VertexIndex = v` from the index
+    /// allocation whose HEADER lives at arena word offset `r`: u16 elements
+    /// (typeId 2) unpack two-per-word, anything else reads a whole word.
+    [<ReflectedDefinition>]
+    let private decodeHeapIndex (r : int) (v : int) : int =
+        if uniform.HeapDataI.[r] = 2 then
+            (uniform.HeapDataI.[r + 4 + (v >>> 1)] >>> ((v &&& 1) <<< 4)) &&& 0xFFFF
+        else
+            uniform.HeapDataI.[r + 4 + v]
+
+    /// storage-decoded attribute fetch: given the allocation's header ref and
+    /// the decoded vertex index, reconstruct a value of the SHADER input type
+    /// `inputT` from host element type `hostT`. The element index wraps via
+    /// `vid % length` (header word1), so length-1 singleton allocations
+    /// broadcast through the SAME fetch (wombat's loadAttributeByRef). The
+    /// per-element stride is BAKED from the element type (part of the bucket
+    /// key via layoutSig) — singletons read element 0 regardless, so the
+    /// baked stride never misaddresses them. Returns None for unsupported
+    /// (hostT, inputT) combinations (the RO then passes through).
+    let private hostGather (hostT : System.Type) (inputT : System.Type) (refE : Expr<int>) (vidE : Expr<int>) : Expr option =
+        let inline f1 (q : Expr<'a>) = Some q.Raw
+        if hostT = typeof<float32> && inputT = typeof<float32> then
+            f1 <@ let r = %refE in uniform.HeapData.[r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1])] @>
+        elif hostT = typeof<V2f> && inputT = typeof<V2f> then
+            f1 <@ let r = %refE
+                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 2
+                  V2f(uniform.HeapData.[o], uniform.HeapData.[o + 1]) @>
+        elif (hostT = typeof<V3f> || hostT = typeof<C3f>) && inputT = typeof<V3f> then
+            f1 <@ let r = %refE
+                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 3
+                  V3f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2]) @>
+        elif hostT = typeof<V3f> && inputT = typeof<V4f> then
+            // fixed-function parity: a vec4 input fed from a 3-component buffer gets w = 1
+            f1 <@ let r = %refE
+                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 3
+                  V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], 1.0f) @>
+        elif (hostT = typeof<V4f> || hostT = typeof<C4f>) && inputT = typeof<V4f> then
+            f1 <@ let r = %refE
+                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 4
+                  V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], uniform.HeapData.[o + 3]) @>
+        elif (hostT = typeof<V4f> || hostT = typeof<C4f>) && inputT = typeof<V3f> then
+            f1 <@ let r = %refE
+                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 4
+                  V3f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2]) @>
+        elif hostT = typeof<C4b> && inputT = typeof<V4f> then
+            // normalized ubyte4 unpack (fixed-function UNSIGNED_BYTE-normalized parity)
+            f1 <@ let r = %refE
+                  let w = uniform.HeapDataI.[r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1])]
+                  V4f(float32 (w &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 ((w >>> 16) &&& 0xFF), float32 ((w >>> 24) &&& 0xFF)) / 255.0f @>
+        elif hostT = typeof<C4b> && inputT = typeof<V3f> then
+            f1 <@ let r = %refE
+                  let w = uniform.HeapDataI.[r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1])]
+                  V3f(float32 (w &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 ((w >>> 16) &&& 0xFF)) / 255.0f @>
+        elif hostT = typeof<int> && inputT = typeof<int> then
+            f1 <@ let r = %refE in uniform.HeapDataI.[r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1])] @>
+        elif hostT = typeof<V2i> && inputT = typeof<V2i> then
+            f1 <@ let r = %refE
+                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 2
+                  V2i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1]) @>
+        elif hostT = typeof<V3i> && inputT = typeof<V3i> then
+            f1 <@ let r = %refE
+                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 3
+                  V3i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2]) @>
+        elif hostT = typeof<V4i> && inputT = typeof<V4i> then
+            f1 <@ let r = %refE
+                  let o = r + 4 + ((%vidE) % uniform.HeapDataI.[r + 1]) * 4
+                  V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], uniform.HeapDataI.[o + 3]) @>
+        else None
+
+    /// can `hostT` be storage-decoded into shader input type `inputT`?
+    /// (memoized — building the probe quotations per RO classification would
+    /// otherwise show up in high-churn membership updates)
+    let private hostDecodableCache = System.Collections.Concurrent.ConcurrentDictionary<struct(System.Type * System.Type), bool>()
+    let private hostDecodable (hostT : System.Type) (inputT : System.Type) =
+        hostDecodableCache.GetOrAdd(struct(hostT, inputT), fun (struct(h, i)) ->
+            (hostGather h i <@ 0 @> <@ 0 @>).IsSome)
+
+    /// generic native-layout packer for singleton-attribute values: blits the
+    /// boxed struct's bytes (same layout as a 1-element array of it) into the
+    /// arena staging at the region's float offset.
+    let private attrPackerFor (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
+        let es = elemSize t
+        if es <= 0 then failwithf "Heap: singleton attribute type %A is not blittable" t
+        let szF = (es + 3) / 4
+        szF, fun (o : obj) (a : float32[]) (off : int) ->
+            let h = System.Runtime.InteropServices.GCHandle.Alloc(o, System.Runtime.InteropServices.GCHandleType.Pinned)
+            try
+                let tmp = Array.zeroCreate<byte> (szF * 4)
+                System.Runtime.InteropServices.Marshal.Copy(h.AddrOfPinnedObject(), tmp, 0, es)
+                System.Buffer.BlockCopy(tmp, 0, a, off * 4, szF * 4)
+            finally h.Free()
+
     /// vertex-pull gather for ofRenderObjects' GPU-geometry buckets: object `slot`'s
     /// attribute `ai` lives at HeapVertexData[slot*numAttrs + ai] — an object-major
     /// flatten of the objects' EXISTING GPU buffers (no copy). Decodes `typ` at element
     /// (vid*strideF + offF); strideF/offF (in floats) come from the BufferView so both
     /// separate-tight and interleaved buffers work. Integral types use the int view.
     /// `handleE` is the per-draw handle expr (gl_InstanceIndex on Vulkan, gl_DrawID on GL).
-    let private bindlessGatherFlat (handleE : Expr) (typ : System.Type) (numAttrs : int) (ai : int) (strideF : int) (offF : int) : Expr =
+    let private bindlessGatherFlat (handleE : Expr) (vidE : Expr) (typ : System.Type) (numAttrs : int) (ai : int) (strideF : int) (offF : int) : Expr =
         if typ = typeof<float32> then
-            <@@ let b = (%%handleE : int) * numAttrs + ai in uniform.HeapVertexData.[b].[ (%%vidExpr : int) * strideF + offF ] @@>
+            <@@ let b = (%%handleE : int) * numAttrs + ai in uniform.HeapVertexData.[b].[ (%%vidE : int) * strideF + offF ] @@>
         elif typ = typeof<V2f> then
             <@@ let b = (%%handleE : int) * numAttrs + ai
-                let o = (%%vidExpr : int) * strideF + offF
+                let o = (%%vidE : int) * strideF + offF
                 V2f(uniform.HeapVertexData.[b].[o], uniform.HeapVertexData.[b].[o+1]) @@>
         elif typ = typeof<V3f> then
             <@@ let b = (%%handleE : int) * numAttrs + ai
-                let o = (%%vidExpr : int) * strideF + offF
+                let o = (%%vidE : int) * strideF + offF
                 V3f(uniform.HeapVertexData.[b].[o], uniform.HeapVertexData.[b].[o+1], uniform.HeapVertexData.[b].[o+2]) @@>
         elif typ = typeof<V4f> then
             <@@ let b = (%%handleE : int) * numAttrs + ai
-                let o = (%%vidExpr : int) * strideF + offF
+                let o = (%%vidE : int) * strideF + offF
                 V4f(uniform.HeapVertexData.[b].[o], uniform.HeapVertexData.[b].[o+1], uniform.HeapVertexData.[b].[o+2], uniform.HeapVertexData.[b].[o+3]) @@>
         elif typ = typeof<int> then
-            <@@ let b = (%%handleE : int) * numAttrs + ai in uniform.HeapVertexDataI.[b].[ (%%vidExpr : int) * strideF + offF ] @@>
+            <@@ let b = (%%handleE : int) * numAttrs + ai in uniform.HeapVertexDataI.[b].[ (%%vidE : int) * strideF + offF ] @@>
         elif typ = typeof<V2i> then
             <@@ let b = (%%handleE : int) * numAttrs + ai
-                let o = (%%vidExpr : int) * strideF + offF
+                let o = (%%vidE : int) * strideF + offF
                 V2i(uniform.HeapVertexDataI.[b].[o], uniform.HeapVertexDataI.[b].[o+1]) @@>
         elif typ = typeof<V3i> then
             <@@ let b = (%%handleE : int) * numAttrs + ai
-                let o = (%%vidExpr : int) * strideF + offF
+                let o = (%%vidE : int) * strideF + offF
                 V3i(uniform.HeapVertexDataI.[b].[o], uniform.HeapVertexDataI.[b].[o+1], uniform.HeapVertexDataI.[b].[o+2]) @@>
         else
             <@@ let b = (%%handleE : int) * numAttrs + ai
-                let o = (%%vidExpr : int) * strideF + offF
+                let o = (%%vidE : int) * strideF + offF
                 V4i(uniform.HeapVertexDataI.[b].[o], uniform.HeapVertexDataI.[b].[o+1], uniform.HeapVertexDataI.[b].[o+2], uniform.HeapVertexDataI.[b].[o+3]) @@>
 
     /// Adaptive per-(slot, sampler) texture reference for the incremental texture
@@ -1214,6 +1360,7 @@ module Heap =
         let fieldStride = names.Length
         let scope = Ag.Scope.Root
         let symData = Symbol.Create "HeapData"
+        let symDataI = Symbol.Create "HeapDataI"
         let symHeaders = Symbol.Create "HeapHeaders"
         let nameSyms = names |> Array.map Symbol.Create
         let heapSyms = System.Collections.Generic.HashSet<Symbol>(nameSyms)
@@ -1275,8 +1422,13 @@ module Heap =
             else Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
 
         // fixed geometry layout from ro0 (the bucket key includes layoutSig, so
-        // every member shares element types / offsets / strides):
+        // every member shares attribute ELEMENT TYPES; the index element type is
+        // NOT part of the key — it is decoded per allocation via its header):
         // (ai, name, sym, elementType, elemSize, strideF, offF)
+        // strideF/offF (in floats, from ro0's BufferViews) are used by the
+        // BINDLESS vertex-pull gather only (they are baked into its shader, and
+        // folded into the bindless bucket key); host storage decode bakes the
+        // per-element stride from the element type alone.
         let attrInfos =
             effect.Inputs |> Map.toArray
             |> Array.mapi (fun ai (name, _) ->
@@ -1287,8 +1439,13 @@ module Heap =
                     ai, name, sym, bv.ElementType, es, (if bv.Stride = 0 then es else bv.Stride) / 4, bv.Offset / 4
                 | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym)
         let numAttrs = attrInfos.Length
-        let idxType = match ro0.Indices with Some bv -> bv.ElementType | None -> failwith "Heap.ofRenderObjects: heapable RO must be indexed"
-        let idxSize = elemSize idxType
+
+        // ── per-slot header table layout: [0, fieldStride) per-draw uniform
+        //    region offsets, then (host buckets only) one allocation REF per
+        //    consumed attribute, then ONE index-allocation ref. ──
+        let attrCells = if useBindlessGeom then 0 else numAttrs
+        let headerStride = fieldStride + attrCells + 1
+        let idxCell = fieldStride + attrCells
 
         // ── arena: deduped per-draw uniform regions, refcounted, placed by a
         //    coalescing range allocator (float units) ──
@@ -1297,39 +1454,27 @@ module Heap =
         let regions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
         let arenaAlloc = HeapSpace()
 
-        // ── geometry. Host buckets: packed byte stores (attributes + indices),
-        //    deduped by buffer identity. Bindless buckets: only the combined
-        //    LOCAL index buffer is packed (deduped per geometry); the objects'
-        //    EXISTING vertex buffers are bound (no copy) into the per-slot
-        //    HeapVertexData array. Geometry entries are REFCOUNTED: when the
-        //    last referencing slot dies its vertex/index ranges return to the
-        //    coalescing allocators (merged with free neighbors, split on reuse),
-        //    so a freed 100-vertex range can serve a later 60-vertex geometry.
-        //    Residual fragmentation is bounded by threshold-triggered compaction
-        //    (see maybeCompact below). ──
-        let packedAttr = if useBindlessGeom then [||] else attrInfos |> Array.map (fun _ -> ByteStore 16)
-        let mutable packedIdx = ByteStore 16
-        let geomCache = System.Collections.Generic.Dictionary<struct(obj * obj), GeomEntry>(HashIdentity.Structural)
-        let idxAlloc = HeapSpace()                      // units: indices
-        let vtxAlloc = HeapSpace()                      // units: vertices (shared by ALL attribute stores)
-        // bytes one vertex occupies across all packed attribute stores (host only)
-        let bytesPerVertex = if useBindlessGeom then 0 else attrInfos |> Array.sumBy (fun (_, _, _, _, es, _, _) -> es)
-        let mutable geomDirty = false
-        let toTyped (bytes : ByteStore) (et : System.Type) (es : int) : IBuffer =
-            let n = bytes.Count / max 1 es
-            let a = System.Array.CreateInstance(et, n)
-            if bytes.Count > 0 then
-                let gc = System.Runtime.InteropServices.GCHandle.Alloc(a, System.Runtime.InteropServices.GCHandleType.Pinned)
-                try System.Runtime.InteropServices.Marshal.Copy(bytes.Data, 0, gc.AddrOfPinnedObject(), bytes.Count)
-                finally gc.Free()
-            ArrayBuffer a :> IBuffer
-        // CURRENT combined buffers; replaced by FRESH ArrayBuffers only when the
-        // geometry grew (otherwise the SAME instance is returned and the resource
-        // layer skips the upload — MutableResourceLocation compares values).
-        let mutable attrBuffers : IBuffer[] =
-            if useBindlessGeom then [||]
-            else attrInfos |> Array.map (fun (_, _, _, et, _, _, _) -> ArrayBuffer (System.Array.CreateInstance(et, 0)) :> IBuffer)
-        let mutable idxBuffer : IBuffer = ArrayBuffer (System.Array.CreateInstance(idxType, 0)) :> IBuffer
+        // ── geometry. EVERYTHING host-readable lives as ALLOCATIONS in the
+        //    bucket's storage arena (the same HeapData buffer the per-draw
+        //    uniform regions live in): per-attribute byte ranges, singleton
+        //    (SingleValueBuffer) attribute values and index ranges, each with a
+        //    4-word header (typeId/length/strideBytes/pad, wombat parity). The
+        //    fixed-function vertex input path is GONE — the rewritten vertex
+        //    shader storage-decodes attributes AND indices (draw records are
+        //    NON-indexed; vertexCount = index count). Allocations are
+        //    REFCOUNTED and deduped by source identity; freed ranges return to
+        //    the coalescing arena allocator; residual fragmentation is bounded
+        //    by threshold-triggered compaction (maybeCompact).
+        //    Bindless buckets keep the per-object SSBO descriptor array for the
+        //    VERTEX data (GPU-resident buffers are bound zero-copy, never
+        //    downloaded); only their INDEX bytes are arena allocations. ──
+        let attrStatic = System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>(HashIdentity.Structural)
+        let idxStatic  = System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>(HashIdentity.Structural)
+        // singleton-attribute regions (adaptive, header + RegionWriter at ref+4),
+        // deduped by the inner value aval — DISTINCT from `regions` (a uniform
+        // field and a singleton attribute sharing an aval would need different
+        // layouts).
+        let singleRegions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
         // bindless: per-(slot, attribute) source buffer avals + the last buffer
         // each position yielded. Tombstoned slots null their aval but KEEP the
         // last buffer — never read (their draw record is InstanceCount = 0), but
@@ -1374,7 +1519,7 @@ module Heap =
 
         // ── draw records + headers: slot-indexed, growable, free-listed ──
         let mutable entries : DrawCallInfo[] = Array.zeroCreate 16
-        let mutable headers : int[] = Array.zeroCreate (16 * max 1 fieldStride)
+        let mutable headers : int[] = Array.zeroCreate (16 * headerStride)
         let freeSlots = System.Collections.Generic.Stack<int>()
         let mutable highWater = 0
         let slots = System.Collections.Generic.Dictionary<RenderObject, HeapSlot>(HashIdentity.Reference)
@@ -1424,7 +1569,7 @@ module Heap =
                 let ne = Array.zeroCreate<DrawCallInfo> n
                 System.Array.Copy(entries, ne, entries.Length)
                 entries <- ne
-                let nh = Array.zeroCreate<int> (n * max 1 fieldStride)
+                let nh = Array.zeroCreate<int> (n * headerStride)
                 System.Array.Copy(headers, nh, headers.Length)
                 headers <- nh
                 if useBindlessGeom then
@@ -1447,7 +1592,7 @@ module Heap =
                 // evaluation we are inside) — no transact happens here.
                 arena.EnsureFloats arenaAlloc.Extent
                 let w = arena.Add(av, off, sz, pk)
-                regions.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b }
+                regions.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b; HeaderWords = 0 }
                 off
 
         let freeRegion (av : IAdaptiveValue) =
@@ -1460,113 +1605,93 @@ module Heap =
                     arenaAlloc.Free e.Block
             | _ -> ()
 
-        /// place `bytes` (`count` index elements) into the combined index buffer:
-        /// allocator-placed (reused/split free range, else high-water growth).
-        /// Returns the block (element offset = Block.Offset).
-        let placeIdx (bytes : byte[]) (count : int) : Management.Block<unit> =
-            let b = idxAlloc.Alloc count
-            packedIdx.EnsureCount (idxAlloc.Extent * idxSize)
-            packedIdx.WriteAt(int b.Offset * idxSize, bytes)
-            b
-
-        /// host geometry: pack the RO's attributes + indices into the combined
-        /// buffers (deduped by buffer identity; refcounted; ranges placed by the
-        /// coalescing allocators).
-        let geomFor (key : struct(obj * obj)) (ro : RenderObject) : GeomEntry =
-            match geomCache.TryGetValue key with
-            | true, e -> e.RefCount <- e.RefCount + 1; e
+        /// SINGLETON attribute (SingleValueBuffer): a header + an adaptive
+        /// region writer packing the value's native bytes at ref+4. length = 1,
+        /// stride = 0 — the shader's `vid % length` fetch broadcasts it, and an
+        /// aval change re-packs O(1) (one writer, one sub-range upload).
+        let allocSingle (av : IAdaptiveValue) (et : System.Type) : int =
+            match singleRegions.TryGetValue av with
+            | true, e -> e.RefCount <- e.RefCount + 1; e.Offset
             | _ ->
-                let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
-                let ib = readBytesView idxBV
-                let thisIdx = ib.Length / idxSize
-                let idxBlock = placeIdx ib thisIdx
-                let firstIndex = int idxBlock.Offset
-                let attrBytes =
-                    attrInfos |> Array.map (fun (_, _, sym, _, _, _, _) ->
-                        match ro.VertexAttributes.TryGetAttribute sym with
-                        | ValueSome b -> readBytesView b
-                        | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym)
-                let thisVtx =
-                    let (_, _, _, _, es0, _, _) = attrInfos.[0]
-                    attrBytes.[0].Length / es0
-                // ragged inputs (attributes disagreeing on vertex count) allocate
-                // the LONGEST attribute's vertex count, so every attribute fits in
-                // its own range and can never overwrite a neighboring geometry —
-                // which also makes ragged ranges safely reusable/compactable
-                // (historically they were append-only and never reclaimed).
-                let uniformCounts =
-                    let mutable ok = true
-                    attrInfos |> Array.iteri (fun i (_, _, _, _, es, _, _) ->
-                        if attrBytes.[i].Length <> thisVtx * es then ok <- false)
-                    ok
-                let vtxUnits =
-                    if uniformCounts then thisVtx
-                    else
-                        let mutable mx = 0
-                        attrInfos |> Array.iteri (fun i (_, _, _, _, es, _, _) ->
-                            mx <- max mx ((attrBytes.[i].Length + es - 1) / es))
-                        mx
-                let vtxBlock = vtxAlloc.Alloc vtxUnits
-                let baseVertex = int vtxBlock.Offset
-                attrInfos |> Array.iteri (fun i (ai, _, _, _, es, _, _) ->
-                    let store = packedAttr.[ai]
-                    store.EnsureCount (vtxAlloc.Extent * es)
-                    store.WriteAt(baseVertex * es, attrBytes.[i])
-                    // zero the ragged tail padding (deterministic content for the
-                    // reuse path — a fresh build would have zeros there too)
-                    store.ZeroFill(baseVertex * es + attrBytes.[i].Length, vtxUnits * es - attrBytes.[i].Length))
-                geomDirty <- true
-                let e = { FirstIndex = firstIndex; BaseVertex = baseVertex; IndexCount = thisIdx
-                          VtxCount = (if uniformCounts then thisVtx else 0); VtxAlloc = vtxUnits; RefCount = 1
-                          IdxBlock = idxBlock; VtxBlock = vtxBlock }
-                geomCache.[key] <- e
-                e
+                let (szF, pk) = attrPackerFor av.ContentType
+                let sizeF = AllocHeaderWords + szF
+                let b = arenaAlloc.Alloc sizeF
+                let off = int b.Offset
+                arena.EnsureFloats arenaAlloc.Extent
+                arena.WriteHeader(off, attrTypeId et, 1, 0)
+                let w = arena.Add(av, off + AllocHeaderWords, szF, pk)
+                singleRegions.[av] <- { Offset = off; Size = sizeF; Writer = w; RefCount = 1; Block = b; HeaderWords = AllocHeaderWords }
+                off
 
-        /// bindless geometry: pack the RO's LOCAL index bytes into the combined
-        /// index buffer (deduped by index-buffer identity — indices are local, so
-        /// shared index data is shared verbatim; refcounted, exact-size reuse).
-        let idxFor (key : struct(obj * obj)) (ro : RenderObject) : GeomEntry =
-            match geomCache.TryGetValue key with
-            | true, e -> e.RefCount <- e.RefCount + 1; e
-            | _ ->
-                let ibv = match ro.Indices with Some b -> b | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
-                let ib = readGeomBytes runtime ibv
-                let cnt = ib.Length / idxSize
-                let b = placeIdx ib cnt
-                geomDirty <- true
-                let e = { FirstIndex = int b.Offset; BaseVertex = 0; IndexCount = cnt; VtxCount = 0; VtxAlloc = 0; RefCount = 1
-                          IdxBlock = b; VtxBlock = null }
-                geomCache.[key] <- e
-                e
-
-        /// identity key of an RO's geometry in `geomCache`. Host: (first attribute
-        /// buffer aval, index buffer aval) — geometries sharing those are assumed to
-        /// share ALL attribute buffers (they come from one IndexedGeometry). Bindless:
-        /// (index buffer aval, boxed byte offset).
-        let geomKeyOf (ro : RenderObject) : struct(obj * obj) =
-            let idxBV = match ro.Indices with Some bv -> bv | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
-            if useBindlessGeom then struct(idxBV.Buffer :> obj, box idxBV.Offset)
-            else
-                let firstAttr =
-                    let (_, _, sym, _, _, _, _) = attrInfos.[0]
-                    match ro.VertexAttributes.TryGetAttribute sym with
-                    | ValueSome b -> b.Buffer :> obj
-                    | ValueNone -> null
-                struct(firstAttr, idxBV.Buffer :> obj)
-
-        /// drop one reference to a packed geometry; the LAST reference returns its
-        /// ranges to the coalescing allocators (the stale bytes stay in the
-        /// combined buffers — never drawn, no live record references them — until
-        /// reuse or compaction reclaims the range).
-        let freeGeom (key : struct(obj * obj)) =
-            match geomCache.TryGetValue key with
+        let freeSingle (av : IAdaptiveValue) =
+            match singleRegions.TryGetValue av with
             | true, e ->
                 e.RefCount <- e.RefCount - 1
                 if e.RefCount = 0 then
-                    geomCache.Remove key |> ignore
-                    idxAlloc.Free e.IdxBlock
-                    if e.VtxAlloc > 0 then vtxAlloc.Free e.VtxBlock
+                    arena.Remove e.Writer
+                    singleRegions.Remove av |> ignore
+                    arenaAlloc.Free e.Block
             | _ -> ()
+
+        /// STATIC allocation (immutable bytes + header), refcounted/deduped in
+        /// `dict` by source identity. Returns the cached entry on a hit.
+        let allocStatic (dict : System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>)
+                        (key : struct(obj * int)) (bytes : byte[]) (typeId : int) (count : int) (strideBytes : int) : StaticEntry =
+            match dict.TryGetValue key with
+            | true, e -> e.RefCount <- e.RefCount + 1; e
+            | _ ->
+                let sizeF = AllocHeaderWords + (bytes.Length + 3) / 4
+                let b = arenaAlloc.Alloc sizeF
+                let off = int b.Offset
+                arena.EnsureFloats arenaAlloc.Extent
+                arena.WriteHeader(off, typeId, count, strideBytes)
+                arena.WriteStaticBytes(off + AllocHeaderWords, bytes)
+                let e = { Ref = off; SizeF = sizeF; Count = count; RefCount = 1; Block = b }
+                dict.[key] <- e
+                e
+
+        let freeStatic (dict : System.Collections.Generic.Dictionary<struct(obj * int), StaticEntry>) (key : struct(obj * int)) =
+            match dict.TryGetValue key with
+            | true, e ->
+                e.RefCount <- e.RefCount - 1
+                if e.RefCount = 0 then
+                    dict.Remove key |> ignore
+                    arenaAlloc.Free e.Block
+            | _ -> ()
+
+        /// the slot's index allocation: raw index bytes (host or downloaded GPU
+        /// buffer) with a header carrying the ELEMENT TYPE (u16 vs 32-bit) —
+        /// the shader's index decode branches on it, so one bucket freely
+        /// mixes 16- and 32-bit-indexed members.
+        let idxFor (ro : RenderObject) : struct(obj * int) * StaticEntry =
+            let bv = match ro.Indices with Some b -> b | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
+            let key = struct(bv.Buffer :> obj, bv.Offset)
+            match idxStatic.TryGetValue key with
+            | true, e -> e.RefCount <- e.RefCount + 1; key, e
+            | _ ->
+                let bytes = readGeomBytes runtime bv
+                let es = elemSize bv.ElementType
+                let cnt = bytes.Length / es
+                key, allocStatic idxStatic key bytes (if es = 2 then IdxType16 else IdxType32) cnt es
+
+        /// one consumed attribute of a new slot: singleton -> adaptive region,
+        /// real buffer -> static allocation. Returns (release key, header ref).
+        let attrFor (ro : RenderObject) (sym : Symbol) (et : System.Type) (es : int) : AttrKey * int =
+            let bv =
+                match ro.VertexAttributes.TryGetAttribute sym with
+                | ValueSome b -> b
+                | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym
+            match bv.Buffer with
+            | :? ISingleValueBuffer as svb ->
+                AttrKey.Single svb.Value, allocSingle svb.Value et
+            | _ ->
+                let key = struct(bv.Buffer :> obj, bv.Offset)
+                match attrStatic.TryGetValue key with
+                | true, e -> e.RefCount <- e.RefCount + 1; AttrKey.Static key, e.Ref
+                | _ ->
+                    let bytes = readBytesView bv
+                    let e = allocStatic attrStatic key bytes (attrTypeId et) (bytes.Length / es) es
+                    AttrKey.Static key, e.Ref
 
         // ── threshold-triggered compaction. After removals, a buffer whose live
         //    bytes dropped below 50% of its high-water (waste > live) AND whose
@@ -1579,79 +1704,50 @@ module Heap =
         //    updater version, so the rewrites are safe within the pass; cost is
         //    O(live) per fire and amortizes like growth doubling (between fires
         //    at least max(live, floor) bytes must be freed). ──
-        let fixGeomRecords () =
-            // re-point every live slot's draw record at its (possibly re-seated)
-            // geometry entry; tombstoned records are already all-zero.
-            for KeyValue(_, s) in slots do
-                match geomCache.TryGetValue s.GeomKey with
-                | true, e ->
-                    entries.[s.Slot].FirstIndex <- e.FirstIndex
-                    entries.[s.Slot].BaseVertex <- e.BaseVertex
-                | _ -> ()
-            drawsAllDirty <- true
-
-        let compactIdx () =
-            let live = geomCache.Values |> Seq.toArray |> Array.sortBy (fun e -> e.FirstIndex)
-            let fresh = ByteStore (idxAlloc.Live * idxSize)
-            idxAlloc.Reset()
-            // re-alloc in ascending old offset against the fresh space -> tight
-            // ascending placement (the manager bump-splits its single free block)
-            for e in live do
-                let b = idxAlloc.Alloc e.IndexCount
-                let off = int b.Offset
-                fresh.WriteAt(off * idxSize, packedIdx.Data, e.FirstIndex * idxSize, e.IndexCount * idxSize)
-                e.FirstIndex <- off
-                e.IdxBlock <- b
-            fresh.EnsureCount (idxAlloc.Extent * idxSize)
-            packedIdx <- fresh
-            geomDirty <- true
-            compactionCount <- compactionCount + 1
-            fixGeomRecords ()
-
-        let compactVtx () =
-            let live =
-                geomCache.Values
-                |> Seq.filter (fun e -> e.VtxAlloc > 0)
-                |> Seq.toArray
-                |> Array.sortBy (fun e -> e.BaseVertex)
-            let liveUnits = vtxAlloc.Live
-            let freshStores = attrInfos |> Array.map (fun (_, _, _, _, es, _, _) -> ByteStore (liveUnits * es))
-            vtxAlloc.Reset()
-            for e in live do
-                let b = vtxAlloc.Alloc e.VtxAlloc
-                let off = int b.Offset
-                attrInfos |> Array.iteri (fun i (ai, _, _, _, es, _, _) ->
-                    freshStores.[i].WriteAt(off * es, packedAttr.[ai].Data, e.BaseVertex * es, e.VtxAlloc * es))
-                e.BaseVertex <- off
-                e.VtxBlock <- b
-            attrInfos |> Array.iteri (fun i (ai, _, _, _, es, _, _) ->
-                freshStores.[i].EnsureCount (vtxAlloc.Extent * es)
-                packedAttr.[ai] <- freshStores.[i])
-            geomDirty <- true
-            compactionCount <- compactionCount + 1
-            fixGeomRecords ()
-
         let compactArena () =
-            // re-seat regions in ascending old offset so the staging memmove is
-            // front-to-back (new offset <= old offset, no overlap hazard) …
-            let regs = regions.Values |> Seq.toArray |> Array.sortBy (fun e -> e.Offset)
+            // collect EVERY arena resident — uniform-field regions, singleton-
+            // attribute regions, static attribute/index allocations — and re-seat
+            // them in ascending old offset so the staging memmove is front-to-back
+            // (new offset <= old offset, no overlap hazard) …
+            let res = System.Collections.Generic.List<struct(int * int * (int -> Management.Block<unit> -> unit))>()
+            for KeyValue(_, e) in regions do
+                let ee = e
+                res.Add(struct(ee.Offset, ee.Size, fun off b ->
+                    ee.Offset <- off; ee.Block <- b; ee.Writer.Off <- off))
+            for KeyValue(_, e) in singleRegions do
+                let ee = e
+                res.Add(struct(ee.Offset, ee.Size, fun off b ->
+                    ee.Offset <- off; ee.Block <- b; ee.Writer.Off <- off + AllocHeaderWords))
+            for KeyValue(_, e) in attrStatic do
+                let ee = e
+                res.Add(struct(ee.Ref, ee.SizeF, fun off b -> ee.Ref <- off; ee.Block <- b))
+            for KeyValue(_, e) in idxStatic do
+                let ee = e
+                res.Add(struct(ee.Ref, ee.SizeF, fun off b -> ee.Ref <- off; ee.Block <- b))
+            res.Sort(fun (struct(a, _, _)) (struct(b, _, _)) -> compare a b)
             arenaAlloc.Reset()
-            for e in regs do
-                let b = arenaAlloc.Alloc e.Size
+            for (struct(oldOff, size, reseat)) in res do
+                let b = arenaAlloc.Alloc size
                 let off = int b.Offset
-                e.Block <- b
-                if off <> e.Offset then
-                    arena.MoveStaging(e.Offset, off, e.Size)
-                    e.Offset <- off
-                    e.Writer.Off <- off                 // future packs target the new offset
-            // … then rewrite every live slot's baked header cells (the per-field
-            // region offsets at slot*fieldStride + fi); the whole header table
+                if off <> oldOff then arena.MoveStaging(oldOff, off, size)
+                reseat off b
+            // … then rewrite every live slot's baked header cells (field region
+            // offsets, attribute refs, index ref); the whole header table
             // re-uploads once this pass (headersAllDirty).
-            for KeyValue(_, s) in slots do
+            for KeyValue(_, slt) in slots do
+                let hb = slt.Slot * headerStride
                 for i in 0 .. names.Length - 1 do
-                    match regions.TryGetValue s.RegionKeys.[i] with
-                    | true, e -> headers.[s.Slot * fieldStride + nameToField.[names.[i]]] <- e.Offset
+                    match regions.TryGetValue slt.RegionKeys.[i] with
+                    | true, e -> headers.[hb + nameToField.[names.[i]]] <- e.Offset
                     | _ -> ()
+                slt.AttrKeys |> Array.iteri (fun ai k ->
+                    headers.[hb + fieldStride + ai] <-
+                        match k with
+                        | AttrKey.Single av -> singleRegions.[av].Offset
+                        | AttrKey.Static key -> attrStatic.[key].Ref)
+                match idxStatic.TryGetValue slt.IdxKey with
+                | true, e -> headers.[hb + idxCell] <- e.Ref
+                | _ -> ()
             headersAllDirty <- true
             // one full [0, live) re-upload of the moved floats on the arena's next
             // Compute (rule-clean — the arena depends on the updater) + shrink the
@@ -1680,8 +1776,6 @@ module Heap =
             let inline need (a : HeapSpace) (unitBytes : int) =
                 a.Live * 2 < a.Extent &&
                 int64 a.Waste * int64 unitBytes > int64 compactionWasteFloorBytes
-            if need idxAlloc idxSize then compactIdx ()
-            if not useBindlessGeom && need vtxAlloc bytesPerVertex then compactVtx ()
             if need arenaAlloc 4 then compactArena ()
             if useSlotAttr && need instAlloc 4 then compactInst ()
 
@@ -1693,12 +1787,11 @@ module Heap =
         //    flushes upload only the recorded dirty sub-ranges, and the
         //    resource layer sees the unchanged handle and re-prepares nothing —
         //    a structural version costs O(changed), not O(slots). Draw records
-        //    are staged in INDEXED layout (VkDrawIndexedIndirectCommand /
-        //    GL DrawElementsIndirectCommand: BaseVertex and FirstInstance
-        //    swapped vs the DrawCallInfo struct) and the IndirectBuffer record
-        //    carries Indexed = true, so BOTH backends bind the GPU buffer
-        //    directly — no layout conversion, no per-version copy. Geometry
-        //    returns the SAME buffer instance unless it grew, as before.
+        //    are NON-indexed (vertexCount = the slot's index count; the vertex
+        //    shader decodes indices from storage), which IS the DrawCallInfo
+        //    struct layout, and the IndirectBuffer record carries
+        //    Indexed = false, so BOTH backends bind the GPU buffer directly —
+        //    no layout conversion, no per-version copy.
         let drawBuf    = MirrorBuffer(runtime, entries.Length * sizeof<DrawCallInfo>, BufferUsage.Indirect)
         let headersBuf = MirrorBuffer(runtime, headers.Length * 4, BufferUsage.Storage)
         let instBuf    = MirrorBuffer(runtime, instData.Length * 4, BufferUsage.Vertex)
@@ -1720,10 +1813,11 @@ module Heap =
                 drawStaging <- ns
             let stride = sizeof<DrawCallInfo>
             drawBuf.ResizeInPlace(uint64 (drawStaging.Length * stride))
+            // draws are NON-indexed (the shader storage-decodes the indices), so
+            // the DrawCallInfo layout IS the native VkDrawIndirectCommand /
+            // GL DrawArraysIndirectCommand layout — staged verbatim.
             let inline stage (s : int) =
-                let mutable c = entries.[s]
-                DrawCallInfo.ToggleIndexed(&c)
-                drawStaging.[s] <- c
+                drawStaging.[s] <- entries.[s]
             if drawsAllDirty then
                 drawsAllDirty <- false
                 dirtyDraws.Clear()
@@ -1754,15 +1848,15 @@ module Heap =
             if headersAllDirty then
                 headersAllDirty <- false
                 dirtyHeaders.Clear()
-                let n = highWater * fieldStride
+                let n = highWater * headerStride
                 if n > 0 then headersBuf.Write(headers, 0UL, 0, n)
-            elif dirtyHeaders.Count > 0 && fieldStride > 0 then
+            elif dirtyHeaders.Count > 0 then
                 let ss = System.Collections.Generic.List<int>(dirtyHeaders)
                 dirtyHeaders.Clear()
                 ss.Sort()
                 // small gaps merge — `headers` is the always-valid source of
                 // truth, so a gap's bytes re-upload unchanged (see flushDraws)
-                let flush lo hi = headersBuf.Write(headers, uint64 (lo * fieldStride * 4), lo * fieldStride, (hi - lo + 1) * fieldStride)
+                let flush lo hi = headersBuf.Write(headers, uint64 (lo * headerStride * 4), lo * headerStride, (hi - lo + 1) * headerStride)
                 let mutable lo = ss.[0]
                 let mutable hi = ss.[0]
                 for i in 1 .. ss.Count - 1 do
@@ -1816,9 +1910,7 @@ module Heap =
         let indirectAval =
             (drawBuf :> aval<IBackendBuffer>)
             |> AdaptiveResource.mapNonAdaptive (fun b ->
-                IndirectBuffer.ofBuffer true 0UL sizeof<DrawCallInfo> highWater (b :> IBuffer))
-        let attrAvals = Array.init (if useBindlessGeom then 0 else numAttrs) (fun i -> updater |> AVal.map (fun _ -> attrBuffers.[i]))
-        let idxAval = updater |> AVal.map (fun _ -> idxBuffer)
+                IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> highWater (b :> IBuffer))
         let instAval = (instBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
@@ -1880,26 +1972,64 @@ module Heap =
                 texLookup.[Symbol.Create "HeapVertexData"] <- u
                 texLookup.[Symbol.Create "HeapVertexDataI"] <- u
 
-        // bindless: rewrite vertex-input reads into per-handle gathers — ONLY in
-        // the VERTEX stage (a later stage's input of the same semantic is an
-        // interpolated varying and must keep its value; injecting the handle
-        // there would be invalid). Uses the SHADER INPUT type so the gather
-        // type matches.
-        let geomRewrite : Effect -> Effect =
-            if not useBindlessGeom then id
-            else
-                let handleE = slotE.Raw
-                fun e ->
-                    e |> Effect.map (fun s ->
-                        if s.shaderStage <> ShaderStage.Vertex then s
-                        else
-                            s |> Shader.substituteReads (fun kind ityp name _ _ ->
-                                match kind with
-                                | ParameterKind.Input ->
-                                    match attrInfos |> Array.tryFind (fun (_, n, _, _, _, _, _) -> n = name) with
-                                    | Some (ai, _, _, _, _, strideF, offF) -> Some (bindlessGatherFlat handleE ityp numAttrs ai strideF offF)
-                                    | None -> None
-                                | _ -> None))
+        // ── the heap shader rewrite: ONE SubstituteReads pass per shader ──
+        // Per-draw uniform fields (all stages) and the storage-decoded geometry
+        // (vertex stage only: attributes + the let-bound decoded vertex index)
+        // are substituted in a SINGLE pass. This matters: FShade's preprocessor
+        // records a uniform's SCOPE from the accessor expression, and a later
+        // pass mixing fresh `uniform?StorageBuffer?HeapData` reads with the
+        // previous pass's already-desugared ReadInput nodes of the same name
+        // trips its conflicting-scope validation. Derived rules are expanded to
+        // a fixpoint FIRST (they emit only plain uniform reads — distinct
+        // names, no scope mixing).
+        //   vid = decodeHeapIndex(headers[slot].idxRef, gl_VertexIndex) — the
+        // index ELEMENT TYPE comes from the allocation header, not the bucket
+        // key. Attribute reads become
+        //   * host buckets:     header-driven arena gathers (length from the
+        //                       header wraps singletons; stride baked per
+        //                       element type from the layout sig),
+        //   * bindless buckets: per-handle SSBO-array vertex-pull (the
+        //                       objects' EXISTING GPU buffers, zero-copy).
+        let heapRewrite : Effect -> Effect =
+            let handleE = slotE.Raw
+            let vtxE : Expr<int> = Expr.Cast (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId))
+            let idxRefE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint idxCell) ] @>
+            let fieldOff (fi : int) : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint fi) ] @>
+            let rules = standardDerivedRules
+            fun e ->
+                // 1) expand derived rules to a fixpoint (plain uniform reads only)
+                let hasDerived (eff : Effect) = eff.Uniforms |> Map.exists (fun n _ -> rules.ContainsKey n)
+                let mutable cur = e
+                let mutable i = 0
+                while hasDerived cur && i < 8 do
+                    cur <- cur |> Effect.substituteUniforms (fun name _ _ _ -> Map.tryFind name rules)
+                    i <- i + 1
+                // 2) one pass per shader
+                cur |> Effect.map (fun sh ->
+                    let isVertex = sh.shaderStage = ShaderStage.Vertex
+                    let vidVar = Var("heapVid", typeof<int>)
+                    let vidE : Expr<int> = Expr.Cast (Expr.Var vidVar)
+                    let body =
+                        sh.shaderBody.SubstituteReads (fun kind ityp name idx _ ->
+                            match kind, idx with
+                            | ParameterKind.Uniform, None ->
+                                match Map.tryFind name nameToField with
+                                | Some fi -> Some (gatherFor ityp (fieldOff fi))
+                                | None -> None
+                            | ParameterKind.Input, None when isVertex ->
+                                match attrInfos |> Array.tryFind (fun (_, n, _, _, _, _, _) -> n = name) with
+                                | Some (ai, _, _, et, _, strideF, offF) ->
+                                    if useBindlessGeom then
+                                        Some (bindlessGatherFlat handleE vidE.Raw ityp numAttrs ai strideF offF)
+                                    else
+                                        let refE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint (fieldStride + ai)) ] @>
+                                        match hostGather et ityp refE vidE with
+                                        | Some g -> Some g
+                                        | None -> failwithf "Heap: cannot storage-decode attribute '%s' (%A -> shader input %A)" name et ityp
+                                | None -> None
+                            | _ -> None)
+                    let body = if isVertex then Expr.Let(vidVar, (<@ decodeHeapIndex %idxRefE %vtxE @>).Raw, body) else body
+                    Shader.withBody body sh)
 
         // the bucket's render object — created ONCE; identity is stable across
         // membership changes. Rewritten surface, indirect draws, HeapData /
@@ -1928,14 +2058,14 @@ module Heap =
                     Test = AVal.constant depthTest
                     WriteMask = AVal.constant depthWrite }
             ro.Surface <-
-                let baseE = rewrite slotE nameToField fieldStride standardDerivedRules effect |> geomRewrite
+                let baseE = heapRewrite effect
                 if useAtlas then Surface.Effect (baseE |> rewriteAtlasSamples slotE atlasByName)
                 elif samplers.Length > 0 then Surface.Effect (baseE |> rewriteSamplers slotE samplerByName |> overrideSamplerStates samplerStateOverrides)
                 else Surface.Effect baseE
             ro.DrawCalls <- DrawCalls.Indirect indirectAval
-            ro.VertexAttributes <-
-                if useBindlessGeom then AttributeProvider.ofList ([] : (Symbol * BufferView) list)
-                else AttributeProvider.ofList [ for (ai, _, sym, et, _, _, _) in attrInfos -> sym, BufferView(attrAvals.[ai], et) ]
+            // NO fixed-function vertex input: attributes are storage-decoded
+            // (host: arena allocations; bindless: SSBO descriptor array).
+            ro.VertexAttributes <- AttributeProvider.ofList ([] : (Symbol * BufferView) list)
             // MoltenVK+instanced fallback: bind the per-instance slot attribute.
             // Every other path gets an EMPTY instance provider: isHeapable requires
             // every shader input to resolve from VertexAttributes, so no heapable
@@ -1946,11 +2076,15 @@ module Heap =
                 ro.InstanceAttributes <- AttributeProvider.ofList [ symSlotAttr, BufferView(instAval, typeof<int>) ]
             else
                 ro.InstanceAttributes <- AttributeProvider.ofList ([] : (Symbol * BufferView) list)
-            ro.Indices <- Some (BufferView(idxAval, idxType))
+            // indices are storage-decoded too: draws are NON-indexed
+            ro.Indices <- None
             ro.Uniforms <-
                 { new IUniformProvider with
                     member _.TryGetUniform(s, name) =
-                        if name = symData then ValueSome arenaU
+                        // HeapData + HeapDataI: the SAME arena buffer, bound as a
+                        // float and as an int view (headers / indices / integral
+                        // attributes decode the int view).
+                        if name = symData || name = symDataI then ValueSome arenaU
                         elif name = symHeaders then ValueSome headersU
                         else
                             match texLookup.TryGetValue name with
@@ -1965,20 +2099,13 @@ module Heap =
         member _.RenderObject = bucketRO :> IRenderObject
         member _.Count = slots.Count
 
-        /// flush geometry changes: FRESH ArrayBuffers (full re-upload, amortized —
-        /// geometry changes only when an unseen geometry was added, whether
-        /// appended or written into a reclaimed range, or when a compaction
-        /// rewrote the packed bytes). The instance-slot buffer needs no flush
-        /// here: instDirty ranges upload on the inst mirror's next pull.
-        member private _.FlushGeometry() =
-            if geomDirty then
-                geomDirty <- false
-                if not useBindlessGeom then
-                    attrBuffers <- attrInfos |> Array.map (fun (ai, _, _, et, es, _, _) -> toTyped packedAttr.[ai] et es)
-                idxBuffer <- toTyped packedIdx idxType idxSize
-            // footprint diagnostics (cheap; published every update)
-            lastPackedGeomBytes <- packedIdx.Count + (packedAttr |> Array.sumBy (fun l -> l.Count))
-            lastPackedGeomLiveBytes <- idxAlloc.Live * idxSize + vtxAlloc.Live * bytesPerVertex
+        /// footprint diagnostics (cheap; published every update). Geometry now
+        /// lives in the arena, so the "packed geometry" metrics mirror the
+        /// arena footprint (kept for tooling/tests: exact-size churn must keep
+        /// them FLAT — freed allocations are reused in place).
+        member private _.PublishStats() =
+            lastPackedGeomBytes <- arenaAlloc.Extent * 4
+            lastPackedGeomLiveBytes <- arenaAlloc.Live * 4
             lastArenaBytes <- arenaAlloc.Extent * 4
             lastArenaLiveBytes <- arenaAlloc.Live * 4
             lastInstBytes <- instAlloc.Extent * 4
@@ -1996,12 +2123,11 @@ module Heap =
                     | ValueSome v -> v
                     | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing per-draw uniform '%s'" names.[i]
                 keys.[i] <- av
-                headers.[slot * fieldStride + nameToField.[names.[i]]] <- allocRegion av
-            if fieldStride > 0 then dirtyHeaders.Add slot |> ignore
-            let geomKey = geomKeyOf ro
-            let geom =
+                headers.[slot * headerStride + nameToField.[names.[i]]] <- allocRegion av
+            // geometry: per-attribute arena allocations (host) or the per-slot
+            // SSBO-array registration (bindless), plus the index allocation.
+            let attrKeys =
                 if useBindlessGeom then
-                    let e = idxFor geomKey ro
                     // register the slot's vertex buffers for the per-handle gather
                     for (ai, _, sym, _, _, _, _) in attrInfos do
                         let bv =
@@ -2011,8 +2137,15 @@ module Heap =
                         let pos = slot * numAttrs + ai
                         vtxAvals.[pos] <- bv.Buffer
                         vtxLast.[pos] <- bv.Buffer.GetValue()
-                    e
-                else geomFor geomKey ro
+                    [||]
+                else
+                    attrInfos |> Array.map (fun (ai, _, sym, et, es, _, _) ->
+                        let (key, r) = attrFor ro sym et es
+                        headers.[slot * headerStride + fieldStride + ai] <- r
+                        key)
+            let (idxKey, idxEntry) = idxFor ro
+            headers.[slot * headerStride + idxCell] <- idxEntry.Ref
+            dirtyHeaders.Add slot |> ignore
             // register the slot's textures (bindless per-type tables / atlas)
             for (_, _, texSyms, table) in bindlessTexTables do
                 table.AddSlot(slot, texSyms |> Array.map (fun tn ->
@@ -2043,17 +2176,23 @@ module Heap =
                 if useSlotAttr then int instBlock.Offset
                 elif useDrawId then 0
                 else slot
-            entries.[slot] <- DrawCallInfo(FaceVertexCount = geom.IndexCount, FirstIndex = geom.FirstIndex, BaseVertex = geom.BaseVertex,
+            // NON-indexed record: vertexCount = the slot's INDEX count (the
+            // shader maps gl_VertexIndex through the index allocation).
+            entries.[slot] <- DrawCallInfo(FaceVertexCount = idxEntry.Count, FirstIndex = 0, BaseVertex = 0,
                                            FirstInstance = firstInstance, InstanceCount = instCount)
             dirtyDraws.Add slot |> ignore
             slots.[ro] <- { Slot = slot; RegionKeys = keys; Active = active; Instances = k; InstOffset = firstInstance
-                            InstBlock = instBlock; GeomKey = geomKey }
+                            InstBlock = instBlock; AttrKeys = attrKeys; IdxKey = idxKey }
 
         member private _.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with
             | true, s ->
                 for k in s.RegionKeys do freeRegion k
-                freeGeom s.GeomKey
+                for k in s.AttrKeys do
+                    match k with
+                    | AttrKey.Single av -> freeSingle av
+                    | AttrKey.Static key -> freeStatic attrStatic key
+                freeStatic idxStatic s.IdxKey
                 if useBindlessGeom then
                     for ai in 0 .. numAttrs - 1 do vtxAvals.[s.Slot * numAttrs + ai] <- Unchecked.defaultof<_>
                 for (_, _, _, table) in bindlessTexTables do table.RemoveSlot s.Slot
@@ -2079,7 +2218,7 @@ module Heap =
         member x.AddOne(ro : RenderObject) =
             if not (slots.ContainsKey ro) then
                 x.AddInternal ro
-                x.FlushGeometry()
+                x.PublishStats()
 
         /// Remove ONE member: tombstone its record, recycle slot + regions.
         /// Waste-triggered compaction (and the buffer swap it implies) runs in
@@ -2087,7 +2226,7 @@ module Heap =
         member x.RemoveOne(ro : RenderObject) =
             x.RemoveInternal ro
             maybeCompact ()
-            x.FlushGeometry()
+            x.PublishStats()
 
         /// the CURRENT members (snapshot)
         member _.Members = slots.Keys |> Seq.toArray
@@ -2110,13 +2249,17 @@ module Heap =
                 maybeCompact ()
             for ro in ros do
                 if not (slots.ContainsKey ro) then x.AddInternal ro
-            x.FlushGeometry()
+            x.PublishStats()
 
         /// Release all adaptive references (region writers, texture writers) and
         /// the bucket-owned GPU resources (atlas pages, dummy textures).
         member _.Dispose() =
             for KeyValue(_, e) in regions do arena.Remove e.Writer
             regions.Clear()
+            for KeyValue(_, e) in singleRegions do arena.Remove e.Writer
+            singleRegions.Clear()
+            attrStatic.Clear()
+            idxStatic.Clear()
             for KeyValue(_, w) in gateWriters do w.Dispose()
             gateWriters.Clear()
             for (_, _, _, table) in bindlessTexTables do table.Dispose()
@@ -2166,19 +2309,30 @@ module Heap =
         // geometry layout signature: the shader inputs' actual element types + the
         // index type. Different layouts need different vertex-input pipelines, so
         // they must land in different buckets (and pack consistently).
+        // geometry layout signature = the CONSUMED attributes' element types
+        // only. The index element type is NOT part of it (decoded per
+        // allocation via its header), nor are offsets/strides for HOST
+        // geometry (per-attribute allocations are tightly packed; the decode
+        // stride is a function of the element type). BINDLESS buckets append
+        // offset+stride per attribute (their vertex-pull shader bakes them
+        // from ro0's BufferViews) — see factsOf.
         let layoutSig (r : RenderObject) =
-            let attrs =
-                match r.Surface with
-                | Surface.Effect e ->
-                    e.Inputs |> Map.toList |> List.map (fun (name, _) ->
-                        match r.VertexAttributes.TryGetAttribute (Symbol.Create name) with
-                        // include offset+stride: the bindless vertex-pull shader bakes them
-                        // from ro0, so a bucket must not mix different per-attribute layouts.
-                        | ValueSome bv -> sprintf "%s:%s:%d:%d" name bv.ElementType.FullName bv.Offset bv.Stride
-                        | ValueNone -> name + ":?") |> String.concat ";"
-                | _ -> ""
-            let it = match r.Indices with Some bv -> bv.ElementType.FullName | None -> "none"
-            attrs + "|" + it
+            match r.Surface with
+            | Surface.Effect e ->
+                e.Inputs |> Map.toList |> List.map (fun (name, _) ->
+                    match r.VertexAttributes.TryGetAttribute (Symbol.Create name) with
+                    | ValueSome bv -> sprintf "%s:%s" name bv.ElementType.FullName
+                    | ValueNone -> name + ":?") |> String.concat ";"
+            | _ -> ""
+        // bindless extra: per-attribute offset:stride (baked into the gather)
+        let bindlessSig (r : RenderObject) =
+            match r.Surface with
+            | Surface.Effect e ->
+                e.Inputs |> Map.toList |> List.map (fun (name, _) ->
+                    match r.VertexAttributes.TryGetAttribute (Symbol.Create name) with
+                    | ValueSome bv -> sprintf "%d:%d" bv.Offset bv.Stride
+                    | ValueNone -> "?") |> String.concat ";"
+            | _ -> ""
         let modeKey (layout : string) (t : AdaptiveToken) (r : RenderObject) =
             let ra = r.RasterizerState
             let eid = match r.Surface with | Surface.Effect e -> e.Id | _ -> "?"
@@ -2205,7 +2359,9 @@ module Heap =
         let isHostTight (bv : BufferView) =
             let es = elemSize bv.ElementType
             es > 0 && (bv.Stride = 0 || bv.Stride = es) &&
-            (match bv.Buffer.GetValue() with :? INativeBuffer -> true | _ -> false)
+            (match bv.Buffer with
+             | :? ISingleValueBuffer -> true        // adaptive singleton (length-1 allocation)
+             | b -> (match b.GetValue() with :? INativeBuffer -> true | _ -> false))
         // bindless vertex-pull eligibility: a supported (float/int vector) attribute type,
         // 4-byte-aligned offset/stride (so it reinterprets as float[]/int[]). The buffer may
         // be host OR GPU-resident (bound, not copied). Indices may be host or GPU (combined).
@@ -2263,64 +2419,92 @@ module Heap =
             consumedNonSamplerNames e
             |> Array.filter (fun n ->
                 match r.Uniforms.TryGetUniform(scope, Symbol.Create n) with
-                | ValueSome v -> packable.Contains v.ContentType
+                | ValueSome v ->
+                    if packable.Contains v.ContentType then true
+                    else
+                        diag (sprintf "uniform '%s' is effect-consumed and RO-supplied but UNPACKABLE (ContentType = %s) — it stays a shared global resolved from ONE bucket member; if it genuinely varies per object, supply it in a packable type (M44f/Trafo3d/M44d/V4f/C4f/V3f/V2f/float32/float/int)." n v.ContentType.Name)
+                        false
                 | ValueNone -> false)
-        // eligible iff: an Effect surface, an indexed (host/tight) draw, every
-        // attribute the SHADER reads (effect.Inputs) present host/tight, and every
-        // heap uniform present in a packable type. Anything else -> passthrough.
-        let isHeapable (o : IRenderObject) =
+        // eligible iff: an Effect surface, an indexed draw with a 2-/4-byte
+        // readable index buffer, every attribute the SHADER reads
+        // (effect.Inputs) either host-storage-decodable (incl. singletons) or
+        // bindless vertex-pull eligible, and supported samplers. Anything else
+        // -> passthrough, with a deduped diagnostic line when Heap.Diagnostics.
+        let whyNotHeapable (o : IRenderObject) : string option =
             match o with
             | :? RenderObject as ro ->
                 match ro.Surface with
                 | Surface.Effect e ->
-                    // geometry: either ALL host-tight (fixed-function combined-buffer path)
-                    // OR bindless-eligible (GPU/host buffers vertex-pulled; non-instanced,
-                    // since per-draw FirstInstance routes the handle).
-                    let attrOk (pred : BufferView -> bool) =
-                        e.Inputs |> Map.forall (fun name _ ->
-                            match ro.VertexAttributes.TryGetAttribute (Symbol.Create name) with
-                            | ValueSome bv -> pred bv
-                            | ValueNone -> false)
-                    let hostGeom =
-                        (match ro.Indices with Some bv -> isHostTight bv | None -> false) && attrOk isHostTight
-                    let bindlessGeom =
-                        // vertex-pull needs descriptor indexing: a dynamically-indexed
-                        // unbounded SSBO array (HeapVertexData[]). Same capability as
-                        // unbounded sampler arrays — Vulkan has it, GL does not (GL can't
-                        // dynamically index an unsized SSBO array, and sized arrays hit the
-                        // tiny SSBO-binding limit). On GL, GPU-resident geometry therefore
-                        // falls through to passthrough (the legacy path), rendered as-is.
-                        runtime.SupportsUnboundedSamplerArrays &&
-                        instanceCountOf ro = 1 &&
-                        (match ro.Indices with Some bv -> isReadableIndex bv | None -> false) && attrOk isBindlessAttr
-                    (hostGeom || bindlessGeom) &&
-                    // field detection imposes no uniform requirement: a consumed
-                    // uniform the RO doesn't supply (or supplies unpackably)
-                    // simply isn't detected as a field.
-                    // textures: every sampler must be a SUPPORTED bindless type (sampler2d
-                    // / samplerCube / …) AND the device must support unbounded sampler
-                    // arrays. One array per type carries ONE state, so all samplers of a
-                    // given type must share their sampler state; otherwise pass through
-                    // (also GL, or exotic sampler types).
-                    (let samps = e.Uniforms |> Map.toArray |> Array.filter (fun (_, p) -> typeof<ISampler>.IsAssignableFrom p.uniformType)
-                     samps.Length = 0 ||
-                     ((samps |> Array.forall (fun (_, p) -> isBindlessSamplerType p.uniformType))
-                      // textures go through a bindless per-type array (desktop Vulkan) OR a shared
-                      // atlas page when unbounded sampler arrays are unavailable (MoltenVK / GL).
-                      // The atlas only handles Sampler2d, so keep textured objects heapable there
-                      // iff every sampler is a Sampler2d (cube/3d/etc. still need bindless).
-                      && (runtime.SupportsUnboundedSamplerArrays
-                          || (samps |> Array.forall (fun (_, p) -> p.uniformType = typeof<Sampler2d>)))
-                      && (samps
-                          |> Array.choose (fun (_, p) ->
-                              match p.uniformValue with
-                              | UniformValue.Sampler(_, st) -> Some (p.uniformType, st)
-                              | UniformValue.SamplerArray a when a.Length > 0 -> Some (p.uniformType, snd a.[0])
-                              | _ -> None)
-                          |> Array.groupBy fst
-                          |> Array.forall (fun (_, g) -> match g with | [||] -> true | _ -> let (_, st0) = g.[0] in g |> Array.forall (fun (_, st) -> st = st0)))))
-                | _ -> false
-            | _ -> false
+                    // ── index buffer: required; element type 2 or 4 bytes;
+                    //    readable (host INativeBuffer or downloadable backend buffer) ──
+                    match ro.Indices with
+                    | None -> Some "RO has no index buffer (non-indexed draws pass through; supply Indices)"
+                    | Some ibv ->
+                        let ies = elemSize ibv.ElementType
+                        if ies <> 2 && ies <> 4 then
+                            Some (sprintf "index element type %s unsupported (need a 2- or 4-byte integer type)" ibv.ElementType.Name)
+                        elif not (isReadableIndex ibv) then
+                            Some (sprintf "index buffer of type %s is neither host-readable nor a backend buffer" (ibv.Buffer.GetValue().GetType().Name))
+                        else
+                        // ── attributes: HOST storage decode OR bindless vertex-pull ──
+                        let hostIssue =
+                            e.Inputs |> Map.toSeq |> Seq.tryPick (fun (name, inputT) ->
+                                match ro.VertexAttributes.TryGetAttribute (Symbol.Create name) with
+                                | ValueNone -> Some (sprintf "effect input '%s' has no vertex attribute on the RO" name)
+                                | ValueSome bv ->
+                                    if not (isHostTight bv) then
+                                        Some (sprintf "attribute '%s' (%s) is not host-readable/tightly-packed (buffer %s, stride %d)" name bv.ElementType.Name (bv.Buffer.GetValue().GetType().Name) bv.Stride)
+                                    elif not (hostDecodable bv.ElementType inputT) then
+                                        Some (sprintf "attribute '%s' element type %s cannot be storage-decoded into shader input %s (supported: float32/V2f/V3f/V4f/C3f/C4f/C4b and int vectors)" name bv.ElementType.Name inputT.Name)
+                                    else None)
+                        let bindlessIssue =
+                            if not runtime.SupportsUnboundedSamplerArrays then
+                                Some "vertex-pull needs descriptor indexing (unbounded SSBO arrays) — unavailable on this runtime (e.g. GL)"
+                            elif instanceCountOf ro <> 1 then
+                                Some "vertex-pull does not support pre-instanced draws (per-draw FirstInstance routes the handle)"
+                            else
+                                e.Inputs |> Map.toSeq |> Seq.tryPick (fun (name, _) ->
+                                    match ro.VertexAttributes.TryGetAttribute (Symbol.Create name) with
+                                    | ValueNone -> Some (sprintf "effect input '%s' has no vertex attribute on the RO" name)
+                                    | ValueSome bv ->
+                                        if isBindlessAttr bv then None
+                                        else Some (sprintf "attribute '%s' (%s, offset %d, stride %d) is not vertex-pull eligible (need a float/int vector type with 4-byte-aligned offset/stride)" name bv.ElementType.Name bv.Offset bv.Stride))
+                        match hostIssue, bindlessIssue with
+                        | Some h, Some b -> Some (sprintf "%s; bindless fallback also ineligible: %s" h b)
+                        | _ ->
+                        // ── samplers: bindless per-type arrays / atlas fallback ──
+                        let samps = e.Uniforms |> Map.toArray |> Array.filter (fun (_, p) -> typeof<ISampler>.IsAssignableFrom p.uniformType)
+                        let badType = samps |> Array.tryFind (fun (_, p) -> not (isBindlessSamplerType p.uniformType))
+                        match badType with
+                        | Some (n, p) -> Some (sprintf "sampler '%s' has unsupported type %s (supported: Sampler2d, SamplerCube)" n p.uniformType.Name)
+                        | None ->
+                            if samps.Length > 0
+                               && not runtime.SupportsUnboundedSamplerArrays
+                               && not (samps |> Array.forall (fun (_, p) -> p.uniformType = typeof<Sampler2d>)) then
+                                Some "per-object textures need descriptor indexing for non-2d samplers (the atlas fallback handles Sampler2d only)"
+                            else
+                                let mismatch =
+                                    samps
+                                    |> Array.choose (fun (n, p) ->
+                                        match p.uniformValue with
+                                        | UniformValue.Sampler(_, st) -> Some (p.uniformType, (n, st))
+                                        | UniformValue.SamplerArray a when a.Length > 0 -> Some (p.uniformType, (n, snd a.[0]))
+                                        | _ -> None)
+                                    |> Array.groupBy fst
+                                    |> Array.tryPick (fun (ty, g) ->
+                                        let (_, (_, st0)) = g.[0]
+                                        if g |> Array.forall (fun (_, (_, st)) -> st = st0) then None
+                                        else Some (sprintf "samplers of type %s use DIFFERING sampler states (one bindless array per type carries ONE state): %s" ty.Name (g |> Array.map (fst << snd) |> String.concat ", ")))
+                                mismatch
+                | s -> Some (sprintf "surface is not an FShade Effect (%A) — only Surface.Effect render objects are heapable" (s.GetType().Name))
+            | _ -> Some (sprintf "not a concrete RenderObject (%s) — command/multi render objects pass through" (o.GetType().Name))
+
+        let isHeapable (o : IRenderObject) =
+            match whyNotHeapable o with
+            | None -> true
+            | Some reason ->
+                diag (sprintf "pass-through: %s" reason)
+                false
 
         let objsAval = objects |> ASet.toAVal
 
@@ -2356,14 +2540,13 @@ module Heap =
                         // geometry class: all-host-tight -> packed combined buffers;
                         // anything else (heapable => bindless-eligible) -> vertex-pull.
                         let hostGeom =
-                            (match r.Indices with Some bv -> isHostTight bv | None -> false) &&
-                            (match r.Surface with
-                             | Surface.Effect e ->
-                                 e.Inputs |> Map.forall (fun name _ ->
-                                     match r.VertexAttributes.TryGetAttribute (Symbol.Create name) with
-                                     | ValueSome bv -> isHostTight bv
-                                     | ValueNone -> false)
-                             | _ -> false)
+                            match r.Surface with
+                            | Surface.Effect e ->
+                                e.Inputs |> Map.forall (fun name inputT ->
+                                    match r.VertexAttributes.TryGetAttribute (Symbol.Create name) with
+                                    | ValueSome bv -> isHostTight bv && hostDecodable bv.ElementType inputT
+                                    | ValueNone -> false)
+                            | _ -> false
                         let bindless = not hostGeom
                         let inst = instanceCountOf r > 1
                         // per-draw field set: DETECTED (effect-consumed ∩
@@ -2379,7 +2562,7 @@ module Heap =
                         // creation), so fold them into the layout sig.
                         let layout =
                             layoutSig r
-                            + (if bindless then "|gpu" else "|host")
+                            + (if bindless then "|gpu:" + bindlessSig r else "|host")
                             + (if inst then "|inst" else "")
                             + "|f:" + String.concat ";" fields
                         let ra = r.RasterizerState
