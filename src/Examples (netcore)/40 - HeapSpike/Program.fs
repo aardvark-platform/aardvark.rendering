@@ -126,6 +126,8 @@ let main argv =
         if Golden.domBoxChainTest () then 0 else 1
     elif argv |> Array.contains "hierchain" then
         if Golden.hierChainTest () then 0 else 1
+    elif argv |> Array.contains "livechaindeep" then
+        if Golden.liveChainDeepTest () then 0 else 1
     elif argv |> Array.contains "livechain" then
         if Golden.liveChainTest () then 0 else 1
     elif argv |> Array.contains "chainbench" then

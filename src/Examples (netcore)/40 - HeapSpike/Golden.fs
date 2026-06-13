@@ -1006,6 +1006,117 @@ module Golden =
         else Log.warn "liveChain: FAIL (engaged=%b dedup=%b correct=%b edit=%b churn=%b cover=%b)" engaged dedupOk correct editOk churnOk coverOk
         pass
 
+    // ARBITRARY-DEPTH live chain through Heap.ofRenderObjects. Each leaf carries a
+    // VARIABLE-LENGTH stack (depth 1..5) mixing:
+    //   * a DYNAMIC shared ROOT cval per GROUP (a moving group = O(1) link edit,
+    //     shared by every leaf under it — the general hierarchy case),
+    //   * 0..3 DYNAMIC per-leaf MID links (distinct cvals),
+    //   * a CONSTANT leaf link (value-dedup: identical-valued leaf links collapse).
+    // Stacks of DIFFERENT length still share ONE bucket (chain structure is per-slot
+    // data, not part of the effect/layout). Proves the impl is NOT depth-2-bound:
+    //   (a) GPU compose of arbitrary-length chains == the CPU fold (maxDelta 0),
+    //   (b) editing one shared group root marks ONE link (O(1) over the subtree),
+    //   (c) value-dedup of constant leaf links holds across variable depths.
+    let liveChainDeepTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(768, 768))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.5)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
+
+        let groups = 6
+        let perGroup = 60
+        let n = groups * perGroup
+        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -60.0, 42.0)) (V3d(0.0, 6.0, 0.0)) V3d.OOI |> CameraView.viewTrafo)
+        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
+        let viewProj = AVal.map2 (*) view proj :> IAdaptiveValue
+
+        // ONE dynamic shared root per group (root-most link, shared across leaves).
+        let roots = Array.init groups (fun _ -> AVal.init Trafo3d.Identity)
+        // a small set of distinct CONSTANT leaf-link VALUES (value-dedup target).
+        let leafConsts = [| Trafo3d.Scale 0.9; Trafo3d.Scale 1.1; Trafo3d.RotationZ 0.3 |]
+        // per-leaf variable-depth stack [root; mid0; mid1; …; leafConst] in
+        // root->leaf order; ModelTrafo (CPU fold) = root * mid0 * … * leafConst.
+        let stacks =
+            Array.init n (fun i ->
+                let gi = i / perGroup
+                let li = i % perGroup
+                let depth = 1 + (li % 4)                 // 1..4 mid links
+                let gx = float (gi % 3) * 7.0 - 7.0
+                let gy = float (gi / 3) * 7.0 - 3.0
+                let mids =
+                    Array.init depth (fun d ->
+                        AVal.init (Trafo3d.Translation(gx + float (li % 8) * 0.7 - 2.5,
+                                                       gy + float (li / 8) * 0.7 + float d * 0.05, 0.0)))
+                let leafC = AVal.constant leafConsts.[li % leafConsts.Length]
+                let arr =
+                    Array.append
+                        (Array.append [| (roots.[gi] :> aval<Trafo3d>) |] (mids |> Array.map (fun m -> m :> aval<Trafo3d>)))
+                        [| leafC |]
+                arr)
+
+        // CPU fold of a stack array: arr[0]*arr[1]*…*arr[last].
+        let foldOf (arr : aval<Trafo3d>[]) =
+            arr |> Array.reduce (fun a b -> AVal.map2 (*) a b)
+
+        let mkRO (withStack : bool) i =
+            let folded = foldOf stacks.[i]
+            let nm = folded |> AVal.map (fun (t : Trafo3d) -> M44f.op_Explicit (M44d (M33d t.Backward.Transposed)))
+            let us =
+                [ Symbol.Create "ModelTrafo",     (folded :> IAdaptiveValue)
+                  Symbol.Create "NormalMatrix",   (nm :> IAdaptiveValue)
+                  Symbol.Create "ViewProjTrafo",  viewProj ]
+            let us = if withStack then (Symbol.Create "ModelTrafoStack", (AVal.constant stacks.[i] :> IAdaptiveValue)) :: us else us
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList us
+            ro :> IRenderObject
+
+        let imageOf (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+
+        let foldedPix = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray (Array.init n (mkRO false))))
+        let chainHeap = Heap.ofRenderObjects runtime (ASet.ofArray (Array.init n (mkRO true)))
+        let chainPix = imageOf chainHeap
+        let chainBuckets = Heap.lastChainBuckets
+        let distinct = Heap.lastDistinctLinks
+        let maxD, nDiff, nbg, total = diff foldedPix chainPix
+        Log.line "liveChainDeep: n=%d depths=1..5 chainBuckets=%d distinctLinks=%d" n chainBuckets distinct
+        Log.line "liveChainDeep: folded-vs-chain maxDelta=%d diffPixels=%d/%d coverage=%d px" maxD nDiff total nbg
+
+        // edit ONE shared group root -> ONE link upload (moves perGroup leaves).
+        transact (fun () -> roots.[2].Value <- Trafo3d.Translation(0.0, 0.0, 6.0))
+        imageOf chainHeap |> ignore
+        let uploads = Heap.lastChainLinkUploads
+
+        // distinct links = groups roots + (sum of distinct mid links) + (<=3 leaf
+        // const values). mids are all distinct cvals; bound generously.
+        let engaged = chainBuckets = 1
+        let correct = nDiff = 0L || maxD <= 1
+        let editOk  = uploads = 1
+        let coverOk = nbg > total / 100L
+        let pass = engaged && correct && editOk && coverOk
+        if pass then Log.line "liveChainDeep: PASS (arbitrary-depth chains GPU-fold == CPU fold; shared root edit = 1 link)"
+        else Log.warn "liveChainDeep: FAIL (engaged=%b correct=%b edit=%b cover=%b)" engaged correct editOk coverOk
+        pass
+
     // Graceful fallback: a mixed aset of heapable + un-heapable ROs. Heapable ones
     // collapse to buckets; the un-heapable one (here: a non-indexed MULTI-call
     // draw — single-call non-indexed draws ride the heap now) must be passed

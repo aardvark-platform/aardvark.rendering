@@ -664,6 +664,13 @@ module Heap =
     /// trafo-chain (chainMode) on the most recent evaluation (diagnostic).
     let mutable lastChainBuckets = 0
 
+    /// Force-disable the GPU trafo-chain (chainMode) even for ROs that expose
+    /// ModelTrafoStack — they fall back to the CPU-folded ModelTrafo arena region.
+    /// A knob for A/B measurement of the chain vs folded path on the SAME inputs.
+    /// Defaults from AARDVARK_HEAP_NOCHAIN=1; settable directly.
+    let mutable disableChain =
+        System.Environment.GetEnvironmentVariable "AARDVARK_HEAP_NOCHAIN" = "1"
+
     // ── per-allocation headers (wombat parity: pools.ts writeAttribute) ──────
     // Every host geometry allocation in the bucket arena (vertex attribute,
     // singleton attribute, index range) starts with a 4-word header
@@ -3209,6 +3216,7 @@ module Heap =
                         // AND the RO exposes the UNFOLDED stack as aval<aval<Trafo3d>[]>.
                         // Then ModelTrafo is GPU-folded (chainOut) — NOT an arena region.
                         let chain =
+                            not disableChain &&
                             (consumedNonSamplerNames e |> Array.contains "ModelTrafo") &&
                             (match r.Uniforms.TryGetUniform(scope, Symbol.Create "ModelTrafoStack") with
                              | ValueSome (:? aval<aval<Trafo3d>[]>) -> true
