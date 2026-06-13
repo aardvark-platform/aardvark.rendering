@@ -1886,6 +1886,18 @@ module Heap =
         // the SSBO array cell must stay bound to a live buffer.
         let mutable vtxAvals : aval<IBuffer>[] = if useBindlessGeom then Array.zeroCreate (16 * max 1 numAttrs) else [||]
         let mutable vtxLast : IBuffer[] = if useBindlessGeom then Array.zeroCreate (16 * max 1 numAttrs) else [||]
+        // INCREMENTAL vertex-pull gather state: the output SSBO-array is refreshed
+        // ONLY at positions whose slot was added/removed since the last pull
+        // (vtxStructDirty) plus positions whose source buffer aval is non-constant
+        // (vtxDynPos, re-read every pull). A churn of r slots then refreshes the
+        // gather in O(r) — the previous code re-scanned ALL highWater*numAttrs
+        // positions and allocated a fresh array on EVERY membership transaction
+        // (O(N)-per-structural-tx for bindless buckets with distinct per-slot
+        // buffers; the loop was iterations-O(N) even when each cell was cheap).
+        let vtxStructDirty = if useBindlessGeom then System.Collections.Generic.HashSet<int>() else null
+        let vtxDynPos = if useBindlessGeom then System.Collections.Generic.HashSet<int>() else null
+        let mutable vtxOut : IBuffer[] = if useBindlessGeom then Array.zeroCreate (max 1 (16 * max 1 numAttrs)) else [||]
+        let mutable vtxOutHighWater = -1
 
         // ── MoltenVK instanced fallback: growable per-instance slot buffer.
         //    The draw of slot s with K instances owns instData[off .. off+K)
@@ -2424,19 +2436,38 @@ module Heap =
         // re-reads only the live slots' avals (cheap when unchanged); a fresh
         // array is produced per version, tombstoned positions keep the last
         // buffer so the SSBO array binding stays valid.
+        let vtxStamp (t : AdaptiveToken) (pos : int) =
+            let av = vtxAvals.[pos]
+            if System.Object.ReferenceEquals(av, null) then vtxOut.[pos] <- vtxLast.[pos]
+            else let b = av.GetValue t in vtxLast.[pos] <- b; vtxOut.[pos] <- b
         let vtxGatherAval =
             AVal.custom (fun t ->
                 updater.GetValue t |> ignore
                 let n = highWater * numAttrs
-                let out = Array.zeroCreate<IBuffer> (max 1 n)
-                for pos in 0 .. n - 1 do
-                    let av = vtxAvals.[pos]
-                    if System.Object.ReferenceEquals(av, null) then out.[pos] <- vtxLast.[pos]
-                    else
-                        let b = av.GetValue t
-                        vtxLast.[pos] <- b
-                        out.[pos] <- b
-                out)
+                // grow the persistent output (rare; pow2-amortized by the vtxAvals
+                // doubling). A grow forces a one-time full restamp of live cells.
+                if vtxOut.Length < max 1 n then
+                    let no = Array.zeroCreate<IBuffer> (Fun.NextPowerOfTwo (max 1 n))
+                    System.Array.Copy(vtxOut, no, vtxOut.Length)
+                    vtxOut <- no
+                    vtxOutHighWater <- -1
+                // structural refresh: highWater only changes on grow/shrink (churn
+                // reuses freed slots, so highWater is stable) — then a full restamp
+                // is needed once; otherwise restamp exactly the slots added/removed
+                // since the last pull (O(touched)).
+                if vtxOutHighWater <> highWater then
+                    vtxOutHighWater <- highWater
+                    for pos in 0 .. n - 1 do vtxStamp t pos
+                    vtxStructDirty.Clear()
+                else
+                    for pos in vtxStructDirty do if pos < n then vtxStamp t pos
+                    vtxStructDirty.Clear()
+                // non-constant source buffers: their backend handle can change
+                // without a membership change, so re-read them every pull (few).
+                for pos in vtxDynPos do if pos < n then vtxStamp t pos
+                // the SSBO binding indexes [0,n): hand back the persistent array
+                // when it is exactly sized, else a snapshot (ref-copy, no aval reads).
+                if vtxOut.Length = n then vtxOut else Array.sub vtxOut 0 (max 1 n))
         let arenaU = ((arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         let headersU = headersAval :> IAdaptiveValue
 
@@ -2730,6 +2761,11 @@ module Heap =
                         let pos = slot * numAttrs + ai
                         vtxAvals.[pos] <- bv.Buffer
                         vtxLast.[pos] <- bv.Buffer.GetValue()
+                        vtxStructDirty.Add pos |> ignore
+                        // a non-constant source buffer aval must be re-read on every
+                        // gather pull (handle can change without a membership change);
+                        // constant ones are stamped once here / on structural refresh.
+                        if not bv.Buffer.IsConstant then vtxDynPos.Add pos |> ignore
                     [||]
                 else
                     attrInfos |> Array.map (fun (ai, _, sym, _, _, _, _) ->
@@ -2798,7 +2834,14 @@ module Heap =
                     | AttrKey.Static key -> freeStatic attrStatic key
                 freeStatic idxStatic s.IdxKey
                 if useBindlessGeom then
-                    for ai in 0 .. numAttrs - 1 do vtxAvals.[s.Slot * numAttrs + ai] <- Unchecked.defaultof<_>
+                    for ai in 0 .. numAttrs - 1 do
+                        let pos = s.Slot * numAttrs + ai
+                        vtxAvals.[pos] <- Unchecked.defaultof<_>
+                        // tombstone: cell keeps its last live buffer (draw record is
+                        // InstanceCount=0 so the SSBO cell is never read) — restamp it
+                        // and drop it from the dynamic re-read set.
+                        vtxStructDirty.Add pos |> ignore
+                        vtxDynPos.Remove pos |> ignore
                 for (_, _, _, table) in bindlessTexTables do table.RemoveSlot s.Slot
                 match atlasState with
                 | Some (_, _, table) -> table.RemoveSlot s.Slot
