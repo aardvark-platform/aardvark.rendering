@@ -122,6 +122,10 @@ let main argv =
         if Golden.derivedChainTest () then 0 else 1
     elif argv |> Array.contains "chainfan" then
         if Golden.chainFanoutTest () then 0 else 1
+    elif argv |> Array.contains "domboxchain" then
+        if Golden.domBoxChainTest () then 0 else 1
+    elif argv |> Array.contains "hierchain" then
+        if Golden.hierChainTest () then 0 else 1
     elif argv |> Array.contains "chaindemo" then
         ChainDemo.run (); 0
     elif argv |> Array.contains "passthru" then

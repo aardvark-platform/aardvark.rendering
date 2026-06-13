@@ -652,6 +652,11 @@ module Heap =
     /// (diagnostic). A shared-root change over N objects should be 1, not N.
     let mutable lastChainLinkUploads = 0
 
+    /// Number of DISTINCT trafo-link slots in the most recently built chain arena
+    /// (diagnostic). With value-dedup, N leaves each carrying an identical constant
+    /// box link + a distinct dynamic node link give ~N+1 distinct slots, not 2N.
+    let mutable lastDistinctLinks = 0
+
     // ── per-allocation headers (wombat parity: pools.ts writeAttribute) ──────
     // Every host geometry allocation in the bucket arena (vertex attribute,
     // singleton attribute, index range) starts with a 4-word header
@@ -3138,8 +3143,18 @@ module Heap =
         // (no teardown hook on the returned ISg) — fixed-population entry point.
         let stride = 32                     // floats per object: MVP(16) + NormalMatrix(16)
 
-        // flatten chains, DEDUP links by aval identity: a shared parent => one slot.
-        let slotOf      = System.Collections.Generic.Dictionary<IAdaptiveValue, int>(HashIdentity.Reference)
+        // flatten chains, DEDUP links to one arena slot each. TWO dedup keys,
+        // mirroring the geometry/region value-dedup landed elsewhere in the heap:
+        //   * DYNAMIC links (cval / mapped) key on aval IDENTITY — a shared parent
+        //     scope reused across leaves is ONE slot, so editing it marks one slot.
+        //   * CONSTANT links key on their Trafo3d VALUE — the per-leaf box link is a
+        //     DISTINCT `AVal.constant` instance per Box (dom builds `box |> AVal.map
+        //     (Scale*Translation)`), so identity-dedup would keep 20000 copies; by
+        //     value they collapse to ONE slot (all boxes share Box3d.Unit's link).
+        //     This is the per-leaf-constant-link "folds once on GPU + dedups across
+        //     leaves" the chain feeding is meant to deliver.
+        let slotById  = System.Collections.Generic.Dictionary<IAdaptiveValue, int>(HashIdentity.Reference)
+        let slotByVal = System.Collections.Generic.Dictionary<Trafo3d, int>(HashIdentity.Structural)
         let distinct    = System.Collections.Generic.List<aval<Trafo3d>>()
         let chainOffset = Array.zeroCreate<int> (max 1 n)
         let chainLen    = Array.zeroCreate<int> (max 1 n)
@@ -3150,13 +3165,20 @@ module Heap =
             chainLen.[i] <- chains.[i].Length
             for l in chains.[i] do
                 let slot =
-                    match slotOf.TryGetValue (l :> IAdaptiveValue) with
-                    | true, s -> s
-                    | _ -> let s = distinct.Count in slotOf.[l :> IAdaptiveValue] <- s; distinct.Add l; s
+                    if l.IsConstant then
+                        let v = AVal.force l
+                        match slotByVal.TryGetValue v with
+                        | true, s -> s
+                        | _ -> let s = distinct.Count in slotByVal.[v] <- s; distinct.Add (AVal.constant v); s
+                    else
+                        match slotById.TryGetValue (l :> IAdaptiveValue) with
+                        | true, s -> s
+                        | _ -> let s = distinct.Count in slotById.[l :> IAdaptiveValue] <- s; distinct.Add l; s
                 idxList.Add slot
                 cur <- cur + 1
         let linkIdx = idxList.ToArray()
         let distinctArr = distinct.ToArray()
+        lastDistinctLinks <- distinctArr.Length
 
         // distinct links live in a dirty-tracked fp64 arena (shared link = 1 slot,
         // one upload on change); chain structure buffers are static (uploaded once).

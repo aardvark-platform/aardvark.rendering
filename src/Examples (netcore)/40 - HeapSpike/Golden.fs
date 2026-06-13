@@ -741,6 +741,153 @@ module Golden =
             pass
         finally out.Release()
 
+    // The DOM box scenario: each leaf carries the SAME stack the aardvark.dom
+    // traversal produces for `Sg.Trafo node.Trafo; Primitives.Box(Box3d.Unit)` —
+    // a DISTINCT per-leaf CONSTANT box link (Scale*Translation over Box3d.Unit,
+    // identical VALUE for every leaf, but a fresh AVal.constant instance per box)
+    // followed by a DYNAMIC per-leaf node trafo (a cval). This is exactly the
+    // depth-2 stack the heap currently CPU-folds per leaf (20000 AVal.map2 (*)
+    // folds). The chain feeding composes it on the GPU instead.
+    //
+    // Proves three things the chain feeding is meant to deliver:
+    //   (a) VALUE-DEDUP: the n identical constant box links collapse to ONE arena
+    //       slot (distinct links ~ n+1, not 2n) — "folds once on GPU + dedups".
+    //   (b) CORRECTNESS: GPU chain compose == the CPU-folded ModelTrafo image.
+    //   (c) EDIT FAN-OUT: editing ONE node link marks ONE arena slot (uploads=1),
+    //       and the CPU-fold cost (re-folding box*node per touched leaf) is gone
+    //       from the chain path. We time the CPU fold the folded path must pay.
+    let domBoxChainTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(768, 768))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.Unit) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+
+        let nSide = 40
+        let n = nSide * nSide                                       // 1600 leaves
+        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -70.0, 50.0)) (V3d(24.0, 24.0, 0.0)) V3d.OOI |> CameraView.viewTrafo)
+        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
+        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
+
+        // EXACTLY what aardvark.dom's Primitives.Box builds for Box3d.Unit:
+        //   trafo = box |> AVal.map (fun b -> Scale b.Size * Translation b.Min)
+        // -> for Box3d.Unit: Scale(1) * Translation(0) = identity, but a DISTINCT
+        // AVal.constant per leaf (value-dedup must collapse them, identity won't).
+        let boxLink (_ : int) : aval<Trafo3d> =
+            AVal.constant (Trafo3d.Scale(Box3d.Unit.Size) * Trafo3d.Translation(Box3d.Unit.Min))
+        // per-leaf DYNAMIC node trafo (the grid placement; what an edit moves).
+        let nodeTrafos =
+            Array.init n (fun i ->
+                AVal.init (Trafo3d.Translation(float (i % nSide) * 1.2, float (i / nSide) * 1.2, 0.0)))
+        // the dom stack, root->leaf compose order: [boxLink; nodeTrafo].
+        let chains = Array.init n (fun i -> [| boxLink i; (nodeTrafos.[i] :> aval<Trafo3d>) |])
+
+        // FOLDED path: the per-leaf CPU AVal.map2 (*) fold the dom modelTrafo does.
+        let folded = nodeTrafos |> Array.map (fun nt -> AVal.map2 (*) (boxLink 0) (nt :> aval<Trafo3d>))
+        let composedSg = Heap.derivedFp64      runtime IndexedGeometryMode.TriangleList positions normals index eff view proj folded
+        let chainSg    = Heap.derivedChainFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj chains
+
+        let imageOf (sg : ISg) =
+            use task = sg |> Sg.compile runtime signature
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+
+        let ca = imageOf composedSg
+        let distinct = Heap.lastDistinctLinks
+        let cb = imageOf chainSg
+        let maxD, nDiff, _, total = diff ca cb
+        Log.line "domBoxChain: n=%d  distinctLinks=%d (ideal n+1=%d, naive 2n=%d)" n distinct (n+1) (2*n)
+        Log.line "domBoxChain: composed-vs-chain maxDelta=%d diffPixels=%d/%d" maxD nDiff total
+
+        // (c) edit fan-out: move ONE node link; the chain arena must upload 1 slot.
+        // also time the CPU fold the FOLDED path re-pays for the same edit (the
+        // box*node map2 the heap currently folds per touched leaf).
+        let sw = System.Diagnostics.Stopwatch()
+        // chain: edit one node link -> one upload
+        transact (fun () -> nodeTrafos.[n/2].Value <- Trafo3d.Translation(99.0, 99.0, 0.0))
+        (chainSg |> Sg.compile runtime signature |> fun t -> let o = t |> RenderTask.renderToColor size in o.Acquire(); o.GetValue() |> ignore; o.Release(); t.Dispose())
+        let uploads = Heap.lastChainLinkUploads
+        // folded: time the CPU map2 (*) re-fold for the SAME single edit, x1000
+        sw.Restart()
+        for _ in 1 .. 1000 do
+            transact (fun () -> nodeTrafos.[n/2].Value <- Trafo3d.Translation(float (sw.ElapsedTicks % 7L), 0.0, 0.0))
+            folded.[n/2].GetValue() |> ignore                       // forces box*node fold
+        sw.Stop()
+        let foldUs = sw.Elapsed.TotalMilliseconds * 1000.0 / 1000.0
+        Log.line "domBoxChain: chain edit uploads=%d link(s); folded-path CPU box*node re-fold = %.2f us/edit" uploads foldUs
+
+        let dedupOk   = distinct <= n + 2                           // box link collapsed to 1 slot
+        let correct   = nDiff = 0L || maxD <= 1
+        let editOk    = uploads = 1
+        let pass = dedupOk && correct && editOk
+        if pass then Log.line "domBoxChain: PASS (box link value-deduped to 1 slot; GPU chain == folded image; 1-link edit)"
+        else Log.warn "domBoxChain: FAIL (dedupOk=%b correct=%b editOk=%b)" dedupOk correct editOk
+        pass
+
+    // HIERARCHICAL micro-probe: a 2-level shared-parent tree. ONE parent link is
+    // shared by a whole subtree of M leaves; editing it must cost O(1) on the
+    // chain path (one distinct link slot marked), whereas the CPU-fold path is
+    // O(subtree) — every leaf under the parent re-folds parent*child. Proves the
+    // mechanism's reach beyond per-leaf constants: a moving GROUP is O(1).
+    let hierChainTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.4)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+
+        let groups = 8
+        let perGroup = 64
+        let n = groups * perGroup
+        // ONE shared parent cval PER GROUP; each group's leaves share that link.
+        let parents = Array.init groups (fun _ -> AVal.init Trafo3d.Identity)
+        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -50.0, 35.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo)
+        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
+        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
+        // stack [groupParent(shared, dynamic); leafTranslation(distinct, const)].
+        let chains =
+            Array.init n (fun i ->
+                let gi = i / perGroup
+                let li = i % perGroup
+                let lx = float (li % 8) * 0.7 - 2.5 + float (gi % 4) * 6.0
+                let ly = float (li / 8) * 0.7 - 2.5 + float (gi / 4) * 6.0
+                [| (parents.[gi] :> aval<Trafo3d>); AVal.constant (Trafo3d.Translation(lx, ly, 0.0)) |])
+        let sg = Heap.derivedChainFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj chains
+        use task = sg |> Sg.compile runtime signature
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        try
+            out.GetValue() |> ignore
+            let distinct = Heap.lastDistinctLinks
+            // edit ONE group parent: a subtree of perGroup leaves moves at once.
+            transact (fun () -> parents.[3].Value <- Trafo3d.Translation(0.0, 0.0, 5.0))
+            out.GetValue() |> ignore
+            let uploads = Heap.lastChainLinkUploads
+            Log.line "hierChain: groups=%d perGroup=%d n=%d distinctLinks=%d  edit-one-parent uploads=%d (CPU-fold would re-fold %d leaves)"
+                groups perGroup n distinct uploads perGroup
+            // distinct = groups dynamic parents + (distinct leaf translations).
+            // The win: editing a parent that moves perGroup leaves costs ONE upload.
+            let pass = uploads = 1 && distinct <= groups + n
+            if pass then Log.line "hierChain: PASS (moving a %d-leaf group = 1 link upload, O(1) not O(subtree))" perGroup
+            else Log.warn "hierChain: FAIL (uploads=%d distinct=%d)" uploads distinct
+            pass
+        finally out.Release()
+
     // Graceful fallback: a mixed aset of heapable + un-heapable ROs. Heapable ones
     // collapse to buckets; the un-heapable one (here: a non-indexed MULTI-call
     // draw — single-call non-indexed draws ride the heap now) must be passed
