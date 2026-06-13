@@ -17,6 +17,11 @@ type Descriptor =
     | StorageImage          of slot: int * view: ImageView
     | AccelerationStructure of slot: int * accel: AccelerationStructure
 
+// Instrumentation backing store for DescriptorSet.LiveCount. A plain module-level
+// mutable so we can take its address for Interlocked from the DescriptorSet ctor/dtor.
+module internal DescriptorSetInstrumentation =
+    let mutable liveCountRef = 0
+
 type internal DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool : int) =
     inherit CachedResource(device)
 
@@ -80,6 +85,12 @@ and DescriptorSet =
 
         val mutable private poolBag : Option<DescriptorPoolBag>
 
+        // Instrumentation: net count of live (allocated but not yet freed) descriptor
+        // sets across the whole device (see DescriptorSetInstrumentation below). Used
+        // by leak-detection probes to confirm the per-frame compute/render path does
+        // not accumulate descriptor sets.
+        static member LiveCount = DescriptorSetInstrumentation.liveCountRef
+
         member internal x.SetPoolBag(bag : DescriptorPoolBag) =
             x.poolBag <- Some bag
 
@@ -95,10 +106,12 @@ and DescriptorSet =
                     x.Handle <- VkDescriptorSet.Null
                     x.Pool.FreeSet()
                 )
+                System.Threading.Interlocked.Decrement(&DescriptorSetInstrumentation.liveCountRef) |> ignore
 
                 x.poolBag |> Option.iter (fun b -> b.RemoveSet(x))
 
         new(device : Device, pool : DescriptorPool, layout : DescriptorSetLayout, handle : VkDescriptorSet) =
+            System.Threading.Interlocked.Increment(&DescriptorSetInstrumentation.liveCountRef) |> ignore
             { inherit Resource<_>(device, handle); Pool = pool; Layout = layout; poolBag = None }
     end
 

@@ -3,11 +3,20 @@
 open Aardvark.Base
 open System.Threading
 
+// Instrumentation backing store for Resource.LiveCount. Counts every live (created
+// but not yet destroyed) backend Resource<'T> handle — buffers, images, image views,
+// samplers, uniform buffers, query pools, etc. Used by leak-detection probes.
+module internal ResourceInstrumentation =
+    let mutable liveCountRef = 0
+
 [<AbstractClass>]
 type Resource =
     class
         val public Device : Device
         val mutable private refCount : int
+
+        /// Net count of live backend Resource handles across the whole device.
+        static member LiveCount = ResourceInstrumentation.liveCountRef
 
         member x.ReferenceCount =
             x.refCount
@@ -30,6 +39,7 @@ type Resource =
             if refs < 0 then
                 Log.warn $"[Vulkan] Resource {x} has negative reference count ({refs})"
             elif refs = 0 then
+                Interlocked.Decrement(&ResourceInstrumentation.liveCountRef) |> ignore
                 x.Destroy()
 
         abstract member IsValid : bool
@@ -38,8 +48,12 @@ type Resource =
 
         abstract member Destroy : unit -> unit
 
-        new(device: Device) = { Device = device; refCount = 1 }
-        new(device: Device, referenceCount: int) = { Device = device; refCount = referenceCount }
+        new(device: Device) =
+            Interlocked.Increment(&ResourceInstrumentation.liveCountRef) |> ignore
+            { Device = device; refCount = 1 }
+        new(device: Device, referenceCount: int) =
+            Interlocked.Increment(&ResourceInstrumentation.liveCountRef) |> ignore
+            { Device = device; refCount = referenceCount }
 
         interface IResource with
             member x.AddReference() = x.AddReference()

@@ -1006,6 +1006,175 @@ module Golden =
         else Log.warn "liveChain: FAIL (engaged=%b dedup=%b correct=%b edit=%b churn=%b cover=%b)" engaged dedupOk correct editOk churnOk coverOk
         pass
 
+    // ── PER-FRAME RESOURCE-LEAK REGRESSION ──────────────────────────────────
+    // The `lifetime` test checks that device memory RETURNS to baseline after each
+    // SCENE is torn down. It does NOT catch a leak that accumulates per FRAME inside
+    // ONE long-lived scene — which is what crashes large heap scenes after a few
+    // thousand frames (native exit 1, no managed stack).
+    //
+    // This probe builds ONE long-lived heap scene (chainMode engaged) and renders it
+    // for FRAMES frames, editing it each frame (default: a single-link trafo value
+    // edit — the pure-value-edit case; CHURN=1 instead removes+adds one member each
+    // frame). It samples three leak metrics every SAMPLE frames:
+    //   * device VMA allocations (Device.MemoryStatistics)        — buffers / images,
+    //   * live Vulkan descriptor sets (DescriptorSet.LiveCount)   — set machinery,
+    //   * live backend Resource handles (Resource.LiveCount)      — EVERY Resource<'T>
+    //     (buffers, images, views, samplers, query pools, uniform buffers, …).
+    // PASS = all three metrics are BOUNDED (flat after warm-up) over all frames. A
+    // per-frame acquire-without-release shows as monotonic growth and FAILS here
+    // while the per-scene `lifetime` test stays green (its teardown hides the
+    // accumulation). Knobs: FRAMES (4000), NSIDE (30 -> 900 ROs), SAMPLE (250),
+    // CHURN=1 (membership churn instead of value edit), BINDLESS=1 (GPU-resident
+    // per-slot geometry -> vertex-pull gather path; keep NSIDE small, the bindless
+    // SSBO-array has a fixed shader-declared capacity ~512 buffers).
+    let chainLeakProbeTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let device = runtime.Device
+        let frames = match System.Environment.GetEnvironmentVariable "FRAMES" with null | "" -> 4000 | s -> int s
+        let sample = match System.Environment.GetEnvironmentVariable "SAMPLE" with null | "" -> 250  | s -> int s
+        let nSide  = match System.Environment.GetEnvironmentVariable "NSIDE"  with null | "" -> 30   | s -> int s
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.Unit) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        // BINDLESS=1 -> each RO gets DISTINCT per-slot vertex source buffers (not the
+        // shared constant geometry), forcing the useBindlessGeom vertex-pull GATHER
+        // path — the path whose O(N)-per-structural-tx restamp was the suspect.
+        let bindless = match System.Environment.GetEnvironmentVariable "BINDLESS" with "1" -> true | _ -> false
+        let gbv (b : IBackendBuffer) t = BufferView(AVal.constant (b :> IBuffer), t)
+        // FIXED pool of GPU-resident per-slot vertex buffers, created ONCE. Churn
+        // reuses these (so the PROBE allocates zero GPU buffers per edit) — any
+        // per-frame VMA/resource growth is then attributable to the HEAP, not the
+        // probe. Pool is large enough that adjacent churn picks distinct buffers.
+        let nbv = nSide * nSide
+        let bindlessPool =
+            if not bindless then [||]
+            else
+                Array.init (max 64 (nbv * 2)) (fun k ->
+                    let p2 = positions |> Array.map (fun (v : V3f) -> v + V3f(float32 k * 1.0e-4f, 0.0f, 0.0f))
+                    let pb = runtime.PrepareBuffer(ArrayBuffer(p2))
+                    let nb = runtime.PrepareBuffer(ArrayBuffer(normals))
+                    AttributeProvider.ofList [ DefaultSemantic.Positions, gbv pb typeof<V3f>; DefaultSemantic.Normals, gbv nb typeof<V3f> ])
+        let mkVattrs (slotIx : int) =
+            if not bindless then vattrs
+            else bindlessPool.[slotIx % bindlessPool.Length]
+        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
+        let n = nSide * nSide
+        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -55.0, 40.0)) (V3d(18.0, 18.0, 0.0)) V3d.OOI |> CameraView.viewTrafo)
+        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
+        let viewProj = AVal.map2 (*) view proj :> IAdaptiveValue
+        let boxValue = Trafo3d.Scale(0.8, 0.8, 1.4) * Trafo3d.Translation(0.1, 0.1, 0.0)
+        let boxLink () : aval<Trafo3d> = AVal.constant boxValue
+        let nodeTrafos =
+            Array.init n (fun i -> AVal.init (Trafo3d.Translation(float (i % nSide) * 1.2, float (i / nSide) * 1.2, 0.0)))
+        let stackOf i : aval<Trafo3d>[] = [| (nodeTrafos.[i] :> aval<Trafo3d>); boxLink () |]
+        let foldedOf i = AVal.map2 (*) (nodeTrafos.[i] :> aval<Trafo3d>) (boxLink ())
+        let mkRO i =
+            let folded = foldedOf i
+            let nm = folded |> AVal.map (fun (t : Trafo3d) -> M44f.op_Explicit (M44d (M33d t.Backward.Transposed)))
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- mkVattrs i
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "ModelTrafo",       (folded :> IAdaptiveValue)
+                Symbol.Create "NormalMatrix",     (nm :> IAdaptiveValue)
+                Symbol.Create "ModelTrafoStack",  (AVal.constant (stackOf i) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",    viewProj ]
+            ro :> IRenderObject
+        // CHURN=1 -> each frame removes one member and adds a FRESH RO (the cad-bench
+        // churn path: exercises bucket slot recycle + chain-link interning/free + the
+        // membership delta machinery, none of which the pure-trafo loop touches).
+        let churn = match System.Environment.GetEnvironmentVariable "CHURN" with "1" -> true | _ -> false
+        let freshCounter = ref n
+        let mkFresh () =
+            let j = System.Threading.Interlocked.Increment freshCounter
+            let folded = AVal.constant (Trafo3d.Translation(float (j % nSide) * 1.2, float (j / nSide % nSide) * 1.2, 0.0) * boxValue)
+            let nm = folded |> AVal.map (fun (t : Trafo3d) -> M44f.op_Explicit (M44d (M33d t.Backward.Transposed)))
+            let dyn = AVal.init boxValue
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- mkVattrs j
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "ModelTrafo",       (folded :> IAdaptiveValue)
+                Symbol.Create "NormalMatrix",     (nm :> IAdaptiveValue)
+                Symbol.Create "ModelTrafoStack",  (AVal.constant [| (dyn :> aval<Trafo3d>); boxLink () |] :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",    viewProj ]
+            ro :> IRenderObject
+        let ros = Array.init n mkRO
+        let memberSet = cset (ros :> seq<_>)
+        let churnMirror = System.Collections.Generic.List<IRenderObject>(ros)
+        let heap = Heap.ofRenderObjects runtime (memberSet :> aset<_>)
+        use task = runtime.CompileRender(signature, heap)
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let rnd = System.Random(1234)
+        let liveDs () = Aardvark.Rendering.Vulkan.DescriptorSet.LiveCount
+        let liveRes () = Aardvark.Rendering.Vulkan.Resource.LiveCount
+        let memCount () = let struct (c, _) = device.MemoryStatistics in c
+        // warm-up: first renders create all caches/pipelines/atlas; baseline AFTER.
+        out.GetValue() |> ignore
+        for w in 0 .. 4 do
+            transact (fun () -> nodeTrafos.[w % n].Value <- Trafo3d.Translation(float (w % nSide) * 1.2, float (w / nSide % nSide) * 1.2, float w * 1.0e-4))
+            out.GetValue() |> ignore
+        let chainBuckets = Heap.lastChainBuckets
+        let mem0, ds0, res0 = memCount (), liveDs (), liveRes ()
+        Log.line "chainLeakProbe: n=%d chainBuckets=%d FRAMES=%d churn=%b  baseline: VMA-allocs=%d liveDescriptorSets=%d liveResources=%d" n chainBuckets frames churn mem0 ds0 res0
+        let mutable maxMem, maxDs, maxRes = mem0, ds0, res0
+        for f in 1 .. frames do
+            if churn then
+                // remove one random member, add a fresh one (membership stays at n)
+                transact (fun () ->
+                    let i = rnd.Next churnMirror.Count
+                    let dead = churnMirror.[i]
+                    churnMirror.[i] <- churnMirror.[churnMirror.Count - 1]
+                    churnMirror.RemoveAt(churnMirror.Count - 1)
+                    memberSet.Remove dead |> ignore
+                    let fresh = mkFresh ()
+                    churnMirror.Add fresh
+                    memberSet.Add fresh |> ignore)
+            else
+                // pure VALUE edit of ONE link per frame: stable membership, the case that
+                // crashed on trafo (k≈55k). Re-pulls chainOut -> the per-frame chain path.
+                let i = f % n
+                transact (fun () -> nodeTrafos.[i].Value <- Trafo3d.Translation(float (i % nSide) * 1.2, float (i / nSide) * 1.2, float f * 1.0e-4))
+            out.GetValue() |> ignore
+            let m, d, r = memCount (), liveDs (), liveRes ()
+            maxMem <- max maxMem m
+            maxDs  <- max maxDs d
+            maxRes <- max maxRes r
+            if f % sample = 0 || f = frames then
+                Log.line "chainLeakProbe: frame %5d  VMA-allocs=%d (Δ%+d)  liveDescriptorSets=%d (Δ%+d)  liveResources=%d (Δ%+d)" f m (m - mem0) d (d - ds0) r (r - res0)
+        out.Release()
+        let memGrowth = maxMem - mem0
+        let dsGrowth  = maxDs - ds0
+        let resGrowth = maxRes - res0
+        Log.line "chainLeakProbe: %d frames done. peak growth: VMA-allocs=%+d  liveDescriptorSets=%+d  liveResources=%+d" frames memGrowth dsGrowth resGrowth
+        // bounded slack: caches may settle a few entries above baseline, but no
+        // metric may scale with frame count. With FRAMES=4000 a per-frame leak would
+        // be thousands; a healthy path stays within tens.
+        let memOk = memGrowth <= 64
+        let dsOk  = dsGrowth  <= 64
+        let resOk = resGrowth <= 64
+        let pass = chainBuckets >= 1 && memOk && dsOk && resOk
+        if pass then Log.line "chainLeakProbe: PASS (per-frame resource metrics BOUNDED over %d frames)" frames
+        else Log.warn "chainLeakProbe: FAIL (VMA growth %+d, descriptorSet growth %+d, resource growth %+d [ok<=64] over %d frames — per-frame leak)" memGrowth dsGrowth resGrowth frames
+        pass
+
     // ARBITRARY-DEPTH live chain through Heap.ofRenderObjects. Each leaf carries a
     // VARIABLE-LENGTH stack (depth 1..5) mixing:
     //   * a DYNAMIC shared ROOT cval per GROUP (a moving group = O(1) link edit,
