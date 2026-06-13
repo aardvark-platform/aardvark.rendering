@@ -888,6 +888,124 @@ module Golden =
             pass
         finally out.Release()
 
+    // LIVE GPU trafo-chain through Heap.ofRenderObjects (the real IncrementalBucket
+    // ingest, NOT the standalone derivedChainFp64 driver). Each RO exposes the
+    // dom-shaped depth-2 model stack [boxLink; nodeTrafo] as the well-known
+    // "ModelTrafoStack" uniform AND the CPU-folded "ModelTrafo" — so the SAME
+    // input set renders two ways:
+    //   * FOLDED: ROs WITHOUT the stack -> ModelTrafo packed as an arena region.
+    //   * CHAIN : ROs WITH the stack -> chainMode bucket -> ModelTrafo GPU-folded
+    //             from the deduped growable link arena (chainOut[slot]).
+    // The box link is NON-IDENTITY (a real Scale*Translation) so the compose ORDER
+    // is actually exercised (domboxchain's Box3d.Unit link is identity and can't
+    // catch a reversed multiply). Proves, on the LIVE path:
+    //   (a) chainMode engaged (lastChainBuckets = 1; ModelTrafo NOT an arena field),
+    //   (b) box link value-dedups to ONE slot across all leaves (distinct ~ n+1),
+    //   (c) GPU chain image == CPU-folded image (maxDelta 0),
+    //   (d) editing ONE node link marks ONE arena slot (uploads = 1),
+    //   (e) add/remove churn keeps chainMode + correct image (free-list reuse).
+    let liveChainTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(768, 768))
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.Unit) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
+
+        let nSide = 30
+        let n = nSide * nSide
+        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -55.0, 40.0)) (V3d(18.0, 18.0, 0.0)) V3d.OOI |> CameraView.viewTrafo)
+        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
+        let viewProj = AVal.map2 (*) view proj :> IAdaptiveValue
+
+        // NON-IDENTITY box link, IDENTICAL value across leaves but a DISTINCT
+        // AVal.constant per leaf (exactly the dom Primitives.Box shape).
+        let boxValue = Trafo3d.Scale(0.8, 0.8, 1.4) * Trafo3d.Translation(0.1, 0.1, 0.0)
+        let boxLink () : aval<Trafo3d> = AVal.constant boxValue
+        let nodeTrafos =
+            Array.init n (fun i ->
+                AVal.init (Trafo3d.Translation(float (i % nSide) * 1.2, float (i / nSide) * 1.2, 0.0)))
+        // dom stack array order is [leaf; …; root]; here [nodeTrafo; boxLink] would
+        // mean node is leaf-most. Match the dom fold ModelTrafo = arr[0]*arr[1]*…:
+        // the dom traversal pushes box UNDER node, so node is outer (arr[0]).
+        // ModelTrafo = node * box. We expose exactly that.
+        let stackOf i : aval<Trafo3d>[] = [| (nodeTrafos.[i] :> aval<Trafo3d>); boxLink () |]
+        let foldedOf i = AVal.map2 (*) (nodeTrafos.[i] :> aval<Trafo3d>) (boxLink ())   // node*box
+
+        let mkRO (withStack : bool) i =
+            let folded = foldedOf i
+            let nm = folded |> AVal.map (fun (t : Trafo3d) -> M44f.op_Explicit (M44d (M33d t.Backward.Transposed)))
+            let us =
+                [ Symbol.Create "ModelTrafo",     (folded :> IAdaptiveValue)
+                  Symbol.Create "NormalMatrix",   (nm :> IAdaptiveValue)
+                  Symbol.Create "ViewProjTrafo",  viewProj ]
+            let us = if withStack then (Symbol.Create "ModelTrafoStack", (AVal.constant (stackOf i) :> IAdaptiveValue)) :: us else us
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- vattrs
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList us
+            ro :> IRenderObject
+
+        let imageOf (objs : aset<IRenderObject>) =
+            use task = runtime.CompileRender(signature, objs)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+
+        let foldedInputs = Array.init n (mkRO false)
+        let chainInputs  = Array.init n (mkRO true)
+        let foldedPix = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray foldedInputs))
+        let foldChainBuckets = Heap.lastChainBuckets        // expect 0 (no stack)
+        let chainSet = cset (chainInputs :> seq<_>)
+        let chainHeap = Heap.ofRenderObjects runtime (chainSet :> aset<_>)
+        let chainPix = imageOf chainHeap
+        let chainBuckets = Heap.lastChainBuckets            // expect 1
+        let distinct = Heap.lastDistinctLinks               // expect ~ n+1
+
+        let maxD, nDiff, nbg, total = diff foldedPix chainPix
+        Log.line "liveChain: n=%d foldChainBuckets=%d chainBuckets=%d distinctLinks=%d (ideal n+1=%d)" n foldChainBuckets chainBuckets distinct (n+1)
+        Log.line "liveChain: folded-vs-chain maxDelta=%d diffPixels=%d/%d coverage=%d px" maxD nDiff total nbg
+
+        // (d) edit ONE node link -> ONE arena slot uploaded
+        transact (fun () -> nodeTrafos.[n/2].Value <- Trafo3d.Translation(99.0, 99.0, 5.0))
+        imageOf chainHeap |> ignore
+        let uploads = Heap.lastChainLinkUploads
+
+        // (e) churn: remove 3, add 3 fresh -> chainMode preserved, image sane
+        let extra =
+            Array.init 3 (fun j ->
+                let i = n - 1 - j
+                nodeTrafos.[i].Value <- Trafo3d.Translation(float (i % nSide) * 1.2, float (i / nSide) * 1.2, 0.0)
+                mkRO true i)
+        transact (fun () ->
+            for j in 0 .. 2 do chainSet.Remove chainInputs.[j] |> ignore
+            for ro in extra do chainSet.Add ro |> ignore)
+        imageOf chainHeap |> ignore
+        let churnBuckets = Heap.lastChainBuckets
+
+        let engaged  = foldChainBuckets = 0 && chainBuckets = 1
+        let dedupOk  = distinct <= n + 2
+        let correct  = nDiff = 0L || maxD <= 1
+        let editOk   = uploads = 1
+        let churnOk  = churnBuckets = 1
+        let coverOk  = nbg > total / 100L
+        let pass = engaged && dedupOk && correct && editOk && churnOk && coverOk
+        if pass then Log.line "liveChain: PASS (live chainMode == folded image; box link 1 slot; 1-link edit; churn keeps chain)"
+        else Log.warn "liveChain: FAIL (engaged=%b dedup=%b correct=%b edit=%b churn=%b cover=%b)" engaged dedupOk correct editOk churnOk coverOk
+        pass
+
     // Graceful fallback: a mixed aset of heapable + un-heapable ROs. Heapable ones
     // collapse to buckets; the un-heapable one (here: a non-indexed MULTI-call
     // draw — single-call non-indexed draws ride the heap now) must be passed
