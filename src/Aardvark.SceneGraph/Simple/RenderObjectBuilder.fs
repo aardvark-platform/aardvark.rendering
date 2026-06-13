@@ -39,6 +39,16 @@ module internal UniformProviderInternals =
         // Lazy because composedModelTrafo allocates an aval chain.
         let modelTrafo = lazy (TraversalState.composedModelTrafo ts)
 
+        // The UNFOLDED model-trafo stack (root->leaf, `Trafo3d *` compose order),
+        // exposed ALONGSIDE the folded "ModelTrafo" so a GPU-chain consumer (the
+        // heap) can compose the per-leaf chain on the GPU and dedup shared/constant
+        // ancestor links across leaves instead of pulling the CPU-folded product.
+        // Carried as a CONSTANT `aval<aval<Trafo3d>[]>` (the structure is immutable
+        // per RO); the consumer forces it once to recover the links. Non-chain
+        // consumers never request the name, so the folded path is untouched.
+        let modelTrafoStack =
+            lazy (AVal.constant (List.toArray ts.ModelTrafoStack))
+
         // ViewportSize / RcpViewportSize derived from the optional Viewport box.
         let viewportSize : Lazy<aval<V2i> voption> =
             lazy (
@@ -57,6 +67,7 @@ module internal UniformProviderInternals =
         let tryDerive (name : string) : IAdaptiveValue voption =
             match name with
             | "ModelTrafo"      -> modelTrafo.Value :> IAdaptiveValue |> ValueSome
+            | "ModelTrafoStack" -> modelTrafoStack.Value :> IAdaptiveValue |> ValueSome
             | "ViewTrafo"       -> ts.ViewTrafo :> IAdaptiveValue |> ValueSome
             | "ProjTrafo"       -> ts.ProjTrafo :> IAdaptiveValue |> ValueSome
             | "CameraLocation"  -> ts.CameraLocation :> IAdaptiveValue |> ValueSome

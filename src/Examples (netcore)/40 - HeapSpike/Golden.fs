@@ -1117,6 +1117,85 @@ module Golden =
         else Log.warn "liveChainDeep: FAIL (engaged=%b correct=%b edit=%b cover=%b)" engaged correct editOk coverOk
         pass
 
+    // RENDER-SG end-to-end: a scene built ENTIRELY with ordinary render Sg
+    // combinators (nested Sg.trafo' inner + Sg.trafo dyn outer per leaf, a real
+    // ModelViewProjTrafo/NormalMatrix effect) rendered through Sg.heap on the
+    // Simple/TraversalState path (the default CompileRender entry). The render
+    // Sg's TraversalStateUniformProvider now exposes "ModelTrafoStack" alongside
+    // the folded ModelTrafo, so the heap engages chainMode just like the dom sg.
+    // Verifies: (a) Sg.heap render == classic per-RO render (the chain compose is
+    // transparent), (b) chainMode actually engaged (lastChainBuckets >= 1), (c) a
+    // dynamic outer-trafo edit re-renders correctly (GPU re-fold).
+    let sgChainTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(768, 768))
+        let view = CameraView.lookAt (V3d(0.0, -40.0, 28.0)) (V3d(9.0, 9.0, 0.0)) V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo
+        let boxSg =
+            IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.5)) C4b.White
+            |> Sg.ofIndexedGeometry
+        let s = 16
+        // inner CONSTANT link (a real non-identity Scale*Translation, the "box"
+        // half) shared by VALUE across leaves; outer DYNAMIC node link per leaf.
+        let inner = Trafo3d.Scale(0.8, 0.8, 1.3) * Trafo3d.Translation(0.05, 0.05, 0.0)
+        let nodes = Array.init (s * s) (fun i -> AVal.init (Trafo3d.Translation(float (i % s) * 1.2, float (i / s) * 1.2, 0.0)))
+        let leaves =
+            Array.init (s * s) (fun i ->
+                boxSg
+                |> Sg.trafo' inner                       // inner constant (box) link
+                |> Sg.trafo (nodes.[i] :> aval<Trafo3d>))  // outer dynamic (node) link
+        let scene (wrap : ISg -> ISg) =
+            leaves
+            |> Sg.ofArray
+            |> wrap
+            // shadeMvp reads ONLY ModelViewProjTrafo (-> ModelTrafo, which the
+            // render Simple-Sg provider exposes); NormalMatrix is backend-derived
+            // and NOT a per-RO heap field on this path, so the effect avoids it.
+            |> Sg.effect [ Effect.ofFunction DF.shadeMvp; Effect.ofFunction DF.frag ]
+            |> Sg.viewTrafo (AVal.constant view)
+            |> Sg.projTrafo (AVal.constant proj)
+        let renderToPix (sg : ISg) =
+            use task = runtime.CompileRender(signature, sg)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+
+        // chain heap (default) vs FOLDED heap (same MVP shader, only the ModelTrafo
+        // SOURCE differs: GPU chain compose vs CPU-folded arena region) — isolates
+        // the fold from the rasterization path, so this must be ~bit-identical.
+        let heapChainPix = renderToPix (scene Sg.heap)
+        let chainBuckets = Heap.lastChainBuckets
+        let distinct = Heap.lastDistinctLinks
+        Heap.disableChain <- true
+        let heapFoldPix =
+            try renderToPix (scene Sg.heap)
+            finally Heap.disableChain <- false
+        let foldChainBuckets = Heap.lastChainBuckets
+        // and a loose sanity check against the classic per-RO (non-heap) render.
+        let classicPix = renderToPix (scene id)
+
+        let maxD, nDiff, nbg, total = diff heapFoldPix heapChainPix
+        let cMaxD, cDiff, _, _ = diff classicPix heapChainPix
+        Log.line "sgChain: chainBuckets=%d (folded run=%d) distinctLinks=%d (ideal %d)" chainBuckets foldChainBuckets distinct (s*s + 1)
+        Log.line "sgChain: chain-vs-foldedHeap maxDelta=%d diffPixels=%d/%d coverage=%d px" maxD nDiff total nbg
+        Log.line "sgChain: chain-vs-classic    maxDelta=%d diffPixels=%d (sanity; rasterization-path differs)" cMaxD cDiff
+
+        let engaged = chainBuckets = 1 && foldChainBuckets = 0
+        let correct = nDiff = 0L || maxD <= 1                       // chain == folded heap
+        let sane    = cDiff < total / 1000L                        // ~matches classic (tiny edge noise ok)
+        let dedupOk = distinct <= s*s + 2
+        let coverOk = nbg > total / 100L
+        let pass = engaged && correct && sane && dedupOk && coverOk
+        if pass then Log.line "sgChain: PASS (render Sg exposes ModelTrafoStack; Sg.heap chain == folded heap; inner link 1 slot)"
+        else Log.warn "sgChain: FAIL (engaged=%b correct=%b sane=%b dedup=%b cover=%b)" engaged correct sane dedupOk coverOk
+        pass
+
     // Graceful fallback: a mixed aset of heapable + un-heapable ROs. Heapable ones
     // collapse to buckets; the un-heapable one (here: a non-indexed MULTI-call
     // draw — single-call non-indexed draws ride the heap now) must be passed

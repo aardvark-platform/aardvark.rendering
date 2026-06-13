@@ -130,6 +130,8 @@ let main argv =
         if Golden.liveChainDeepTest () then 0 else 1
     elif argv |> Array.contains "livechain" then
         if Golden.liveChainTest () then 0 else 1
+    elif argv |> Array.contains "sgchain" then
+        if Golden.sgChainTest () then 0 else 1
     elif argv |> Array.contains "chainbench" then
         let n = match argv |> Array.tryFindIndex ((=) "--n") with | Some i when i+1 < argv.Length -> int argv.[i+1] | _ -> 20000
         ChainBench.run (not (argv |> Array.contains "--folded")) n
