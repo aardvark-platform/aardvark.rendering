@@ -181,6 +181,10 @@ let main argv =
         if Golden.submitStressTest () then 0 else 1
     elif argv |> Array.contains "chainleak" then
         if Golden.chainLeakProbeTest () then 0 else 1
+    elif argv |> Array.contains "hostboxcrash" then
+        if Golden.hostBoxCrashTest () then 0 else 1
+    elif argv |> Array.contains "bindlessovercap" then
+        if Golden.bindlessOverCapacityTest () then 0 else 1
     elif argv |> Array.contains "glyphwedge" then
         if Golden.glyphWedgeTest () then 0 else 1
     elif argv |> Array.contains "atlaspool" then

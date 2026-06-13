@@ -1175,6 +1175,174 @@ module Golden =
         else Log.warn "chainLeakProbe: FAIL (VMA growth %+d, descriptorSet growth %+d, resource growth %+d [ok<=64] over %d frames — per-frame leak)" memGrowth dsGrowth resGrowth frames
         pass
 
+    // ── EXACT SgCostBench LL host-box repro (the scene that crashed) ─────────
+    // Faithful replica of SgCostBench.buildLL: N boxes, SHARED ArrayBuffer box
+    // geometry (host-tight -> HOST-PACK arena path, NOT bindless vertex-pull),
+    // HeapModelTrafo + HeapColor per-draw uniforms, no ModelTrafoStack (no chain).
+    // Renders FRAMES frames; each frame edits EDITK random nodes' trafo (KIND=trafo,
+    // default) or color (KIND=color) in one transaction — the exact pattern whose
+    // trafo cell died ~k=55184 and color cell ~k=10289 at N=100000 on published 0016.
+    // Samples the same three leak metrics. PASS = runs to completion without crash
+    // AND metrics bounded. Knobs: N (default 100000), FRAMES (default 8000),
+    // EDITK (default 55184 — the trafo death point), KIND (trafo|color), SAMPLE.
+    let hostBoxCrashTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let device = runtime.Device
+        let n      = match System.Environment.GetEnvironmentVariable "N"      with null | "" -> 100000 | s -> int s
+        let frames = match System.Environment.GetEnvironmentVariable "FRAMES" with null | "" -> 8000   | s -> int s
+        let editK  = match System.Environment.GetEnvironmentVariable "EDITK"  with null | "" -> 55184  | s -> int s
+        let kind   = match System.Environment.GetEnvironmentVariable "KIND"   with null | "" -> "trafo"| s -> s
+        let sample = match System.Environment.GetEnvironmentVariable "SAMPLE" with null | "" -> 500    | s -> int s
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let g = (IndexedGeometryPrimitives.Box.solidBox Box3d.Unit C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        // ONE shared host-tight attribute provider + index view — host-pack path.
+        let attrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
+        let indexView = bv index typeof<int>
+        let fvc = index.Length
+        let eff = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        let side = ceil (sqrt (float n)) |> int
+        let view = CameraView.lookAt (V3d(6.0, 6.0, 4.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 60.0 0.1 100.0 1.333 |> Frustum.projTrafo
+        let viewProjU = AVal.constant ((view * proj).Forward |> M44f.op_Explicit) :> IAdaptiveValue
+        let bases  = Array.init n (fun i -> Trafo3d.Translation(float (i % side) * 1.2, float (i / side) * 1.2, 0.0))
+        let trafos = bases |> Array.map cval
+        let colors = Array.init n (fun _ -> cval (C4b(158uy, 173uy, 199uy, 255uy).ToV4f()))
+        let angles = Array.zeroCreate<float> n
+        let mkRO i =
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- attrs
+            ro.Indices   <- Some indexView
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = fvc, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (trafos.[i] |> AVal.map (fun (t : Trafo3d) -> M44f.op_Explicit t.Forward) :> IAdaptiveValue)
+                Symbol.Create "HeapColor",      (colors.[i] :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProjU ]
+            ro :> IRenderObject
+        let ros = Array.init n mkRO
+        let heap = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        use task = runtime.CompileRender(signature, heap)
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let liveDs () = Aardvark.Rendering.Vulkan.DescriptorSet.LiveCount
+        let liveRes () = Aardvark.Rendering.Vulkan.Resource.LiveCount
+        let memCount () = let struct (c, _) = device.MemoryStatistics in c
+        out.GetValue() |> ignore
+        let buckets = Heap.lastBucketCount
+        let mem0, ds0, res0 = memCount (), liveDs (), liveRes ()
+        Log.line "hostBoxCrash: N=%d buckets=%d KIND=%s EDITK=%d FRAMES=%d  baseline: VMA=%d descSets=%d resources=%d" n buckets kind editK frames mem0 ds0 res0
+        let s = 0x9E3779B9u
+        let mutable st = s
+        let next bound = st <- st ^^^ (st <<< 13); st <- st ^^^ (st >>> 17); st <- st ^^^ (st <<< 5); int (st % uint32 bound)
+        let mutable maxMem, maxDs, maxRes = mem0, ds0, res0
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for f in 1 .. frames do
+            st <- s
+            transact (fun () ->
+                if kind = "color" then
+                    for _ in 1 .. editK do
+                        let i = next n
+                        colors.[i].Value <- C4f(float (next 256) / 255.0, 0.5, 0.5, 1.0).ToV4f()
+                else
+                    for _ in 1 .. editK do
+                        let i = next n
+                        angles.[i] <- angles.[i] + 0.05
+                        trafos.[i].Value <- Trafo3d.RotationZ angles.[i] * bases.[i])
+            out.GetValue() |> ignore
+            let m, d, r = memCount (), liveDs (), liveRes ()
+            maxMem <- max maxMem m; maxDs <- max maxDs d; maxRes <- max maxRes r
+            if f % sample = 0 || f = frames then
+                Log.line "hostBoxCrash: frame %5d (cumEdits=%d)  VMA=%d (Δ%+d)  descSets=%d (Δ%+d)  resources=%d (Δ%+d)  %.1fs" f (f * editK) m (m-mem0) d (d-ds0) r (r-res0) sw.Elapsed.TotalSeconds
+        out.Release()
+        let memGrowth, dsGrowth, resGrowth = maxMem - mem0, maxDs - ds0, maxRes - res0
+        Log.line "hostBoxCrash: SURVIVED %d frames (%d cumulative edits). peak growth: VMA=%+d descSets=%+d resources=%+d" frames (frames * editK) memGrowth dsGrowth resGrowth
+        let pass = buckets >= 1 && memGrowth <= 64 && dsGrowth <= 64 && resGrowth <= 64
+        if pass then Log.line "hostBoxCrash: PASS (host-box scene runs past old crash point, resources bounded)"
+        else Log.warn "hostBoxCrash: FAIL (VMA %+d descSets %+d resources %+d over %d frames)" memGrowth dsGrowth resGrowth frames
+        pass
+
+    // ── BINDLESS over-capacity must NOT crash (regression) ───────────────────
+    // A bindless vertex-pull bucket whose slots×attrs exceed the unbounded
+    // storage-buffer-array capacity (UnboundedSamplerArrayCeiling, clamped per
+    // device — 1024 here) used to abort the render with a raw IndexOutOfRange in
+    // AdaptiveDescriptor.StorageBuffers.GetDescriptors (cache sized to the binding
+    // capacity, loop wrote one entry per runtime buffer). Now the descriptor write
+    // is bounded: it binds what fits and warns once instead of crashing. This test
+    // builds a bucket with GPU-resident per-slot geometry well over the cap (650
+    // ROs × 2 attrs = 1300 > 1024), renders several frames, and asserts the render
+    // COMPLETES (no exception) with bounded resources.
+    let bindlessOverCapacityTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let device = runtime.Device
+        let n = match System.Environment.GetEnvironmentVariable "N" with null | "" -> 650 | s -> int s
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let g = (IndexedGeometryPrimitives.Box.solidBox Box3d.Unit C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let gbv (b : IBackendBuffer) t = BufferView(AVal.constant (b :> IBuffer), t)
+        let eff = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        let side = ceil (sqrt (float n)) |> int
+        let view = CameraView.lookAt (V3d(0.0, -55.0, 40.0)) (V3d(18.0, 18.0, 0.0)) V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo
+        let viewProjU = AVal.constant ((view * proj).Forward |> M44f.op_Explicit) :> IAdaptiveValue
+        // distinct GPU-resident per-slot vertex buffers -> bindless vertex-pull;
+        // n*2 attrs > 1024 cap forces the over-capacity path.
+        let mkRO i =
+            let p2 = positions |> Array.map (fun (v : V3f) -> v + V3f(float32 i * 1.0e-4f, 0.0f, 0.0f))
+            let pb = runtime.PrepareBuffer(ArrayBuffer(p2))
+            let nb = runtime.PrepareBuffer(ArrayBuffer(normals))
+            let ro = RenderObject()
+            ro.Surface   <- Surface.Effect eff
+            ro.Mode      <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, gbv pb typeof<V3f>; DefaultSemantic.Normals, gbv nb typeof<V3f> ]
+            ro.Indices   <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation(float (i % side) * 1.2, float (i / side) * 1.2, 0.0)).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "HeapColor",      (AVal.constant (C4f.White.ToV4f()) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProjU ]
+            ro :> IRenderObject
+        let ros = Array.init n mkRO
+        let heap = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        use task = runtime.CompileRender(signature, heap)
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let memCount () = let struct (c, _) = device.MemoryStatistics in c
+        Log.line "bindlessOverCapacity: n=%d (slots*attrs=%d, cap=1024) — render must NOT crash" n (n * 2)
+        let mutable ok = true
+        try
+            for _ in 0 .. 4 do out.GetValue() |> ignore
+        with e ->
+            ok <- false
+            Log.warn "bindlessOverCapacity: FAIL — render threw %s: %s" (e.GetType().Name) e.Message
+        let mem1 = memCount ()
+        for _ in 0 .. 9 do out.GetValue() |> ignore
+        let memGrowth = memCount () - mem1
+        out.Release()
+        let pass = ok && memGrowth <= 8
+        if pass then Log.line "bindlessOverCapacity: PASS (over-capacity bucket renders without abort; resources bounded)"
+        else Log.warn "bindlessOverCapacity: FAIL (threw=%b memGrowth=%+d)" (not ok) memGrowth
+        pass
+
     // ARBITRARY-DEPTH live chain through Heap.ofRenderObjects. Each leaf carries a
     // VARIABLE-LENGTH stack (depth 1..5) mixing:
     //   * a DYNAMIC shared ROOT cval per GROUP (a moving group = O(1) link edit,

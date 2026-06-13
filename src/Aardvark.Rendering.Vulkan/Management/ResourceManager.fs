@@ -531,13 +531,25 @@ module Resources =
         type CombinedImageSampler(slot : int, count : int, images : IResourceLocation<_>) =
             inherit Abstract.AdaptiveDescriptor<ImageSamplerArray>(slot, count, images)
 
+            let mutable warnedOverflow = false
+
             override x.GetUpdateAfterBindFeature(features) =
                 features.BindingSampledImageUpdateAfterBind
 
             override x.GetDescriptors(images, cache) =
                 let images = images.handle
 
-                for i = 0 to images.Length - 1 do
+                // The descriptor SET was allocated for `count` (= cache.Length)
+                // elements — the unbounded-array binding's reserved capacity. A
+                // runtime array longer than that cannot be bound (the extra
+                // descriptors have no storage); writing past `cache.Length` would be
+                // a raw IndexOutOfRange abort with no managed context. Clamp and warn
+                // ONCE so the failure is a named, diagnosable cap overflow instead.
+                if images.Length > cache.Length && not warnedOverflow then
+                    warnedOverflow <- true
+                    Log.warn "[Vulkan] bindless sampler array has %d elements but the binding capacity is %d — extra elements are NOT bound (raise UnboundedSamplerArrayCeiling / shard the producer)" images.Length cache.Length
+                let m = min images.Length cache.Length
+                for i = 0 to m - 1 do
                     let { Image = v; Sampler = s } = images.[i].handle
                     let desc = Descriptor.CombinedImageSampler(slot, i, v, s, v.Image.SamplerLayout)
                     cache.[i] <- { Version = images.[i].version; Descriptor = desc }
@@ -547,13 +559,24 @@ module Resources =
         type StorageBuffers(slot : int, count : int, buffers : IResourceLocation<_>) =
             inherit Abstract.AdaptiveDescriptor<StorageBufferArray>(slot, count, buffers)
 
+            let mutable warnedOverflow = false
+
             override x.GetUpdateAfterBindFeature(features) =
                 features.BindingStorageBufferUpdateAfterBind
 
             override x.GetDescriptors(buffers, cache) =
                 let buffers = buffers.handle
 
-                for i = 0 to buffers.Length - 1 do
+                // See CombinedImageSampler.GetDescriptors: the descriptor set is
+                // sized to the binding capacity (cache.Length). A longer runtime
+                // array (e.g. a heap vertex-pull bucket whose slots×attrs exceed the
+                // unbounded-array ceiling) must not write past it — that was a silent
+                // IndexOutOfRange abort. Clamp + warn once instead of crashing.
+                if buffers.Length > cache.Length && not warnedOverflow then
+                    warnedOverflow <- true
+                    Log.warn "[Vulkan] bindless storage-buffer array has %d elements but the binding capacity is %d — extra elements are NOT bound (raise UnboundedSamplerArrayCeiling / shard the producer; for the heap: a vertex-pull bucket exceeded slots×attrs <= capacity)" buffers.Length cache.Length
+                let m = min buffers.Length cache.Length
+                for i = 0 to m - 1 do
                     let b = buffers.[i].handle
                     let desc = Descriptor.StorageBuffer(slot, i, b, 0UL, b.Size)
                     cache.[i] <- { Version = buffers.[i].version; Descriptor = desc }
