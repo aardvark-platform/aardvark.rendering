@@ -195,14 +195,20 @@ module Heap =
     /// camera-dependent factors stay globals (UBO, one upload per camera move).
     let standardDerivedRules : Map<string, DerivedRule> =
         Map.ofList [
-            // ViewProjTrafo is deliberately NOT derived: deriving it from
-            // ProjTrafo*ViewTrafo forces the heap to request those bases from every RO,
-            // breaking the (normal) ROs that supply ViewProjTrafo DIRECTLY. It's an
-            // ordinary uniform — a RO supplying it as ONE shared aval dedups to one
-            // ref-counted region (the dom memoizes it for exactly that); per-RO-distinct
-            // view-proj avals are the provider's bug to fix, not rewritten away here.
-            "ModelViewProjTrafo", <@ (uniform?ViewProjTrafo : M44f) * (uniform?ModelTrafo : M44f) @>.Raw
-            "ModelViewTrafo",     <@ (uniform?ViewTrafo     : M44f) * (uniform?ModelTrafo : M44f) @>.Raw
+            // ViewProjTrafo is derived from its constituents so the heap never requests
+            // it per-RO: ViewTrafo/ProjTrafo (like ModelTrafo) are universal constituents
+            // a reasonable consumer always provides, and they're shared avals -> one
+            // ref-counted region each -> a camera move is O(1) regardless of the provider.
+            // (Trafo3d's `View*Proj` has .Forward = Proj.F*View.F, hence ProjTrafo*ViewTrafo.)
+            // Non-heap consumers that read ViewProjTrafo directly still get it from the
+            // dom's memoized cache.
+            // composed in DOUBLE (constituents read as M44d -> real-double regions ->
+            // fp64 compose), result converted to the shader's requested M44f. This
+            // matches a CPU-side double `view*proj` (then downcast) exactly, instead of
+            // the f32 in-shader product which drifts ~1ulp at triangle edges.
+            "ViewProjTrafo",      <@ M44f((uniform?ProjTrafo : M44d) * (uniform?ViewTrafo : M44d)) @>.Raw
+            "ModelViewProjTrafo", <@ M44f((uniform?ProjTrafo : M44d) * (uniform?ViewTrafo : M44d) * (uniform?ModelTrafo : M44d)) @>.Raw
+            "ModelViewTrafo",     <@ M44f((uniform?ViewTrafo : M44d) * (uniform?ModelTrafo : M44d)) @>.Raw
         ]
 
     /// gl_DrawID (the sub-draw index within a multi-draw), via a GLSL intrinsic —
@@ -576,14 +582,23 @@ module Heap =
         let b = System.BitConverter.GetBytes d
         a.[i]   <- System.BitConverter.ToSingle(b, 0)
         a.[i+1] <- System.BitConverter.ToSingle(b, 4)
-    /// (words, pack) for a double-REQUESTED type — words = 2 * scalarCount. The
-    /// provided value is the matching double type (the provider's natural precision).
+    // coerce a PROVIDED boxed uniform value to the shader's REQUESTED double type — the
+    // write converts to what the shader asked for, at full precision (upcast f32
+    // siblings; extract Trafo3d.Forward). This is what lets the derived ModelView/MVP
+    // compose chain run in double from constituents the consumer provides as Trafo3d.
+    let private asV2d (o:obj) = match o with | :? V2d as v -> v | :? V2f as v -> V2d v | _ -> failwithf "Heap: cannot convert %s to V2d" (o.GetType().Name)
+    let private asV3d (o:obj) = match o with | :? V3d as v -> v | :? V3f as v -> V3d v | _ -> failwithf "Heap: cannot convert %s to V3d" (o.GetType().Name)
+    let private asV4d (o:obj) = match o with | :? V4d as v -> v | :? V4f as v -> V4d v | _ -> failwithf "Heap: cannot convert %s to V4d" (o.GetType().Name)
+    let private asM33d (o:obj) = match o with | :? M33d as m -> m | :? M33f as m -> M33d m | _ -> failwithf "Heap: cannot convert %s to M33d" (o.GetType().Name)
+    let private asM44d (o:obj) = match o with | :? M44d as m -> m | :? M44f as m -> M44d m | :? Trafo3d as t -> t.Forward | _ -> failwithf "Heap: cannot convert %s to M44d" (o.GetType().Name)
+    /// (words, pack) for a double-REQUESTED type — words = 2 * scalarCount. The pack
+    /// coerces whatever the provider gave to the requested double type.
     let private doublePackerFor (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
-        if   t = typeof<V2d>  then 4,  (fun o a off -> let v = o :?> V2d in wd a off v.X; wd a (off+2) v.Y)
-        elif t = typeof<V3d>  then 6,  (fun o a off -> let v = o :?> V3d in wd a off v.X; wd a (off+2) v.Y; wd a (off+4) v.Z)
-        elif t = typeof<V4d>  then 8,  (fun o a off -> let v = o :?> V4d in wd a off v.X; wd a (off+2) v.Y; wd a (off+4) v.Z; wd a (off+6) v.W)
-        elif t = typeof<M33d> then 18, (fun o a off -> let m = o :?> M33d in wd a off m.M00; wd a (off+2) m.M01; wd a (off+4) m.M02; wd a (off+6) m.M10; wd a (off+8) m.M11; wd a (off+10) m.M12; wd a (off+12) m.M20; wd a (off+14) m.M21; wd a (off+16) m.M22)
-        elif t = typeof<M44d> then 32, (fun o a off -> let m = o :?> M44d in wd a (off+0) m.M00; wd a (off+2) m.M01; wd a (off+4) m.M02; wd a (off+6) m.M03; wd a (off+8) m.M10; wd a (off+10) m.M11; wd a (off+12) m.M12; wd a (off+14) m.M13; wd a (off+16) m.M20; wd a (off+18) m.M21; wd a (off+20) m.M22; wd a (off+22) m.M23; wd a (off+24) m.M30; wd a (off+26) m.M31; wd a (off+28) m.M32; wd a (off+30) m.M33)
+        if   t = typeof<V2d>  then 4,  (fun o a off -> let v = asV2d o in wd a off v.X; wd a (off+2) v.Y)
+        elif t = typeof<V3d>  then 6,  (fun o a off -> let v = asV3d o in wd a off v.X; wd a (off+2) v.Y; wd a (off+4) v.Z)
+        elif t = typeof<V4d>  then 8,  (fun o a off -> let v = asV4d o in wd a off v.X; wd a (off+2) v.Y; wd a (off+4) v.Z; wd a (off+6) v.W)
+        elif t = typeof<M33d> then 18, (fun o a off -> let m = asM33d o in wd a off m.M00; wd a (off+2) m.M01; wd a (off+4) m.M02; wd a (off+6) m.M10; wd a (off+8) m.M11; wd a (off+10) m.M12; wd a (off+12) m.M20; wd a (off+14) m.M21; wd a (off+16) m.M22)
+        elif t = typeof<M44d> then 32, (fun o a off -> let m = asM44d o in wd a (off+0) m.M00; wd a (off+2) m.M01; wd a (off+4) m.M02; wd a (off+6) m.M03; wd a (off+8) m.M10; wd a (off+10) m.M11; wd a (off+12) m.M12; wd a (off+14) m.M13; wd a (off+16) m.M20; wd a (off+18) m.M21; wd a (off+20) m.M22; wd a (off+22) m.M23; wd a (off+24) m.M30; wd a (off+26) m.M31; wd a (off+28) m.M32; wd a (off+30) m.M33)
         else failwithf "Heap: unsupported double per-draw uniform type %A" t
 
     /// Size in bytes of a blittable attribute/index element type (-1 if it isn't

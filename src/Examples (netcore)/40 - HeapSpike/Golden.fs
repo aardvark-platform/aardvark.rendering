@@ -244,7 +244,11 @@ module Golden =
 
         let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
         let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
-        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue   // ONE shared aval
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue   // ONE shared aval (classic reads it directly)
+        // View/Proj are universal constituents a reasonable consumer always provides;
+        // the heap DERIVES ViewProjTrafo from them (ProjTrafo*ViewTrafo), shared -> one region each.
+        let viewT = AVal.constant view :> IAdaptiveValue
+        let projT = AVal.constant proj :> IAdaptiveValue
 
         let mkRO (uniforms : list<Symbol * IAdaptiveValue>) (effect : Effect) =
             let ro = RenderObject()
@@ -274,6 +278,8 @@ module Golden =
                 let p = V3d(float (i % s - s/2) * 1.2, float (i / s - s/2) * 1.2, 0.0)
                 mkRO [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
                        Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                       Symbol.Create "ViewTrafo",      viewT
+                       Symbol.Create "ProjTrafo",      projT
                        Symbol.Create "ViewProjTrafo",  viewProj
                        Symbol.Create "Tint",           tint
                        // supplied (packable) but NOT consumed by the effect ->
@@ -285,8 +291,10 @@ module Golden =
         let autoBuckets = Heap.lastBucketCount
         let detected    = Heap.lastAutoFields
 
-        // classification: consumed ∩ supplied ∩ packable, NotConsumed ignored
-        let expected = [| "HeapColor"; "HeapModelTrafo"; "Tint"; "ViewProjTrafo" |]
+        // classification: consumed (after derived-rule expansion) ∩ supplied ∩ packable.
+        // ViewProjTrafo is DERIVED to ProjTrafo*ViewTrafo, so those bases are the fields
+        // and ViewProjTrafo itself becomes supplied-but-not-consumed (ignored, like NotConsumed).
+        let expected = [| "HeapColor"; "HeapModelTrafo"; "ProjTrafo"; "Tint"; "ViewTrafo" |]
         let fieldsOk = detected = expected
         if not fieldsOk then Log.warn "autoFields: detected fields %A (expected %A)" detected expected
 
@@ -304,7 +312,8 @@ module Golden =
                 let base' =
                     [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
                       Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
-                      Symbol.Create "ViewProjTrafo",  viewProj ]
+                      Symbol.Create "ViewTrafo",      viewT
+                      Symbol.Create "ProjTrafo",      projT ]
                 let us = if i % 2 = 0 then (Symbol.Create "Gamma", (AVal.constant 1.0f :> IAdaptiveValue)) :: base' else base'
                 mkRO us effectG)
         let splitCount = Heap.ofRenderObjects runtime (ASet.ofArray mixed) |> ASet.force |> HashSet.count
