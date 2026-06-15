@@ -143,6 +143,16 @@ module Heap =
         elif typ = typeof<V2f> then <@ let o = %off in V2f(uniform.HeapData.[o], uniform.HeapData.[o+1]) @>.Raw
         elif typ = typeof<V3f> then <@ let o = %off in V3f(uniform.HeapData.[o], uniform.HeapData.[o+1], uniform.HeapData.[o+2]) @>.Raw
         elif typ = typeof<V4f> then <@ let o = %off in V4f(uniform.HeapData.[o], uniform.HeapData.[o+1], uniform.HeapData.[o+2], uniform.HeapData.[o+3]) @>.Raw
+        elif typ = typeof<M33f> then
+            <@ let o = %off in
+               M33f(uniform.HeapData.[o+0], uniform.HeapData.[o+1], uniform.HeapData.[o+2],
+                    uniform.HeapData.[o+3], uniform.HeapData.[o+4], uniform.HeapData.[o+5],
+                    uniform.HeapData.[o+6], uniform.HeapData.[o+7], uniform.HeapData.[o+8]) @>.Raw
+        // A shader requesting a DOUBLE-precision type (V2d/V3d/V4d/M33d/M44d) must get
+        // REAL doubles — decoding the f32 HeapData and widening would silently drop the
+        // precision it asked for. Those are served from the native double arena view
+        // (HeapDataD); until that path is in, a double request falls through to the
+        // failwith below rather than lying with f32.
         elif typ = typeof<M44f> then
             <@ let o = %off in
                M44f(uniform.HeapData.[o+0],  uniform.HeapData.[o+1],  uniform.HeapData.[o+2],  uniform.HeapData.[o+3],
@@ -167,6 +177,10 @@ module Heap =
     /// camera-dependent factors stay globals (UBO, one upload per camera move).
     let standardDerivedRules : Map<string, DerivedRule> =
         Map.ofList [
+            // derived so the heap never requests "ViewProjTrafo" per-RO from the
+            // provider (dom mints a fresh AVal.map2 per request → O(N) camera fan-out).
+            // ViewTrafo/ProjTrafo are the shared state.View/state.Proj avals.
+            "ViewProjTrafo",      <@ (uniform?ProjTrafo     : M44f) * (uniform?ViewTrafo  : M44f) @>.Raw
             "ModelViewProjTrafo", <@ (uniform?ViewProjTrafo : M44f) * (uniform?ModelTrafo : M44f) @>.Raw
             "ModelViewTrafo",     <@ (uniform?ViewTrafo     : M44f) * (uniform?ModelTrafo : M44f) @>.Raw
         ]
@@ -521,6 +535,11 @@ module Heap =
         elif t = typeof<C4f>     then 4,  (fun o a off -> let c = o :?> C4f in a.[off]<-c.R; a.[off+1]<-c.G; a.[off+2]<-c.B; a.[off+3]<-c.A)
         elif t = typeof<V3f>     then 3,  (fun o a off -> let v = o :?> V3f in a.[off]<-v.X; a.[off+1]<-v.Y; a.[off+2]<-v.Z)
         elif t = typeof<V2f>     then 2,  (fun o a off -> let v = o :?> V2f in a.[off]<-v.X; a.[off+1]<-v.Y)
+        elif t = typeof<V3d>     then 3,  (fun o a off -> let v = o :?> V3d in a.[off]<-float32 v.X; a.[off+1]<-float32 v.Y; a.[off+2]<-float32 v.Z)
+        elif t = typeof<V2d>     then 2,  (fun o a off -> let v = o :?> V2d in a.[off]<-float32 v.X; a.[off+1]<-float32 v.Y)
+        elif t = typeof<V4d>     then 4,  (fun o a off -> let v = o :?> V4d in a.[off]<-float32 v.X; a.[off+1]<-float32 v.Y; a.[off+2]<-float32 v.Z; a.[off+3]<-float32 v.W)
+        elif t = typeof<M33d>    then 9,  (fun o a off -> let m = o :?> M33d in a.[off]<-float32 m.M00; a.[off+1]<-float32 m.M01; a.[off+2]<-float32 m.M02; a.[off+3]<-float32 m.M10; a.[off+4]<-float32 m.M11; a.[off+5]<-float32 m.M12; a.[off+6]<-float32 m.M20; a.[off+7]<-float32 m.M21; a.[off+8]<-float32 m.M22)
+        elif t = typeof<M33f>    then 9,  (fun o a off -> let m = o :?> M33f in a.[off]<-m.M00; a.[off+1]<-m.M01; a.[off+2]<-m.M02; a.[off+3]<-m.M10; a.[off+4]<-m.M11; a.[off+5]<-m.M12; a.[off+6]<-m.M20; a.[off+7]<-m.M21; a.[off+8]<-m.M22)
         elif t = typeof<float32> then 1,  (fun o a off -> a.[off] <- (o :?> float32))
         elif t = typeof<float>   then 1,  (fun o a off -> a.[off] <- float32 (o :?> float))
         elif t = typeof<int>     then 1,  (fun o a off -> a.[off] <- float32 (o :?> int))
@@ -1958,16 +1977,12 @@ module Heap =
         let freeSlots = System.Collections.Generic.Stack<int>()
         let mutable highWater = 0
         let slots = System.Collections.Generic.Dictionary<RenderObject, HeapSlot>(HashIdentity.Reference)
-        // globals fall-through OWNER: the bucket RO answers the heap/sampler names
-        // itself; everything else (camera, lights, scene-scope globals) falls
-        // through to a LIVE member's uniform provider. Tracked so the bucket never
-        // retains a member that left the set: globals are resolved at COMPILE time
-        // of the bucket RO from scene scope (bucket-homogeneous for heapable ROs),
-        // so switching the owner is purely a GC measure — already-compiled bindings
-        // keep the avals they resolved. A bucket emptied by removals keeps the last
-        // owner only until it is disposed (the incremental driver disposes empty
-        // buckets in the same update) or refilled (AddInternal re-seats the owner).
-        let mutable globalsRO = ro0
+        // NO globals: there is no global/per-object distinction. Every uniform the
+        // shader reads is a ref-counted-by-aval region (regions/singleRegions); a
+        // value shared by all objects is just a slot with refcount = object count.
+        // The bucket RO answers ONLY the heap-internal names (arena/headers/chain/
+        // textures); anything else is a region gathered in the rewritten shader, so
+        // the provider never resolves user uniforms (camera/lights/model included).
         // slots whose IsActive is NON-constant (constant gates are baked into the
         // entry at add time) — each gets a GateWriter marked only when ITS gate
         // changes; the draw mirror re-stages exactly the toggled slots.
@@ -2703,9 +2718,9 @@ module Heap =
                             match texLookup.TryGetValue name with
                             | true, v -> ValueSome v
                             | _ ->
-                                if heapSyms.Contains name then ValueNone
-                                elif samplerSyms.Contains name then ValueNone
-                                else globalsRO.Uniforms.TryGetUniform(s, name)
+                                // every user uniform is a gathered region (rewritten
+                                // out of the shader); nothing falls through to a global.
+                                ValueNone
                     member _.Dispose() = () }
             ro
 
@@ -2727,8 +2742,6 @@ module Heap =
             lastInstLiveBytes <- instAlloc.Live * 4
 
         member private _.AddInternal(ro : RenderObject) =
-            // (re)seat the globals fall-through on a live member
-            if slots.Count = 0 then globalsRO <- ro
             let slot = if freeSlots.Count > 0 then freeSlots.Pop() else let s = highWater in highWater <- s + 1; s
             ensureSlot slot
             let keys = Array.zeroCreate<IAdaptiveValue> names.Length
@@ -2854,11 +2867,6 @@ module Heap =
                 | _ -> ()
                 freeSlots.Push s.Slot
                 slots.Remove ro |> ignore
-                // the globals fall-through must not retain a member that left:
-                // switch to any live member (bucket-homogeneous for the resolved
-                // globals — see globalsRO above).
-                if System.Object.ReferenceEquals(ro, globalsRO) && slots.Count > 0 then
-                    globalsRO <- Seq.head slots.Keys
             | _ -> ()
 
         /// Add ONE new member (no-op if already present). Called from the updater.
@@ -3024,7 +3032,8 @@ module Heap =
         let packable =
             System.Collections.Generic.HashSet<System.Type>(
                 [ typeof<M44f>; typeof<Trafo3d>; typeof<M44d>; typeof<V4f>; typeof<C4f>
-                  typeof<V3f>; typeof<V2f>; typeof<float32>; typeof<float>; typeof<int> ])
+                  typeof<V3f>; typeof<V2f>; typeof<float32>; typeof<float>; typeof<int>
+                  typeof<V3d>; typeof<V2d>; typeof<V4d>; typeof<M33d> ])
 
         // ── per-draw field auto-detection ────────────────────────────────
         // Classification rule (deterministic per RO, memoized in RoFacts like
