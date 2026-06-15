@@ -263,7 +263,10 @@ module Golden =
             try out.GetValue().Download().AsPixImage<uint8>()
             finally out.Release()
 
-        let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
+        // shadeFragTint requests Tint at DOUBLE precision (V3d) — exercises the heap's
+        // real-double storage/gather (HeapDataD). One shared aval -> one double region.
+        let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFragTint ]
+        let tint = AVal.constant (V3d(0.5, 0.7, 0.9)) :> IAdaptiveValue
         let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
         let s = 16
         let inputs =
@@ -272,6 +275,7 @@ module Golden =
                 mkRO [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
                        Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
                        Symbol.Create "ViewProjTrafo",  viewProj
+                       Symbol.Create "Tint",           tint
                        // supplied (packable) but NOT consumed by the effect ->
                        // auto-detection must IGNORE it
                        Symbol.Create "NotConsumed",    (AVal.constant i :> IAdaptiveValue) ] effect)
@@ -282,7 +286,7 @@ module Golden =
         let detected    = Heap.lastAutoFields
 
         // classification: consumed ∩ supplied ∩ packable, NotConsumed ignored
-        let expected = [| "HeapColor"; "HeapModelTrafo"; "ViewProjTrafo" |]
+        let expected = [| "HeapColor"; "HeapModelTrafo"; "Tint"; "ViewProjTrafo" |]
         let fieldsOk = detected = expected
         if not fieldsOk then Log.warn "autoFields: detected fields %A (expected %A)" detected expected
 

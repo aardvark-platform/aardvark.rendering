@@ -49,6 +49,12 @@ module HeapUniforms =
         // headers (typeId/length/stride), index data and integral attributes decode
         // their 4-byte words as ints (bit pattern is identical).
         member x.HeapDataI   : int[]     = uniform?StorageBuffer?HeapDataI
+        // the SAME arena buffer bound a THIRD time as a native double view: a uniform
+        // the shader requests at DOUBLE precision (M33d/M44d/V*d) is stored as real
+        // doubles (8-byte aligned, 2 words/scalar) and read here with full precision —
+        // never f32-widened. (shaderFloat64; the heap already uses double storage
+        // buffers in its fp64 compose path.)
+        member x.HeapDataD   : float[]   = uniform?StorageBuffer?HeapDataD
         member x.HeapHeaders : int[]     = uniform?StorageBuffer?HeapHeaders
         // GPU trafo-chain: per-slot GPU-folded ModelTrafo (M44f), written by the
         // composeModel compute pass and gathered by gl_InstanceIndex / gl_DrawID.
@@ -148,11 +154,23 @@ module Heap =
                M33f(uniform.HeapData.[o+0], uniform.HeapData.[o+1], uniform.HeapData.[o+2],
                     uniform.HeapData.[o+3], uniform.HeapData.[o+4], uniform.HeapData.[o+5],
                     uniform.HeapData.[o+6], uniform.HeapData.[o+7], uniform.HeapData.[o+8]) @>.Raw
-        // A shader requesting a DOUBLE-precision type (V2d/V3d/V4d/M33d/M44d) must get
-        // REAL doubles — decoding the f32 HeapData and widening would silently drop the
-        // precision it asked for. Those are served from the native double arena view
-        // (HeapDataD); until that path is in, a double request falls through to the
-        // failwith below rather than lying with f32.
+        // DOUBLE-precision requests get REAL doubles from the native double arena view
+        // (HeapDataD), never f32 widened. The header stores a WORD (float-index) offset;
+        // the region is 8-byte aligned, so the double index is off >>> 1.
+        elif typ = typeof<V2d> then <@ let d = %off >>> 1 in V2d(uniform.HeapDataD.[d], uniform.HeapDataD.[d+1]) @>.Raw
+        elif typ = typeof<V3d> then <@ let d = %off >>> 1 in V3d(uniform.HeapDataD.[d], uniform.HeapDataD.[d+1], uniform.HeapDataD.[d+2]) @>.Raw
+        elif typ = typeof<V4d> then <@ let d = %off >>> 1 in V4d(uniform.HeapDataD.[d], uniform.HeapDataD.[d+1], uniform.HeapDataD.[d+2], uniform.HeapDataD.[d+3]) @>.Raw
+        elif typ = typeof<M33d> then
+            <@ let d = %off >>> 1 in
+               M33d(uniform.HeapDataD.[d+0], uniform.HeapDataD.[d+1], uniform.HeapDataD.[d+2],
+                    uniform.HeapDataD.[d+3], uniform.HeapDataD.[d+4], uniform.HeapDataD.[d+5],
+                    uniform.HeapDataD.[d+6], uniform.HeapDataD.[d+7], uniform.HeapDataD.[d+8]) @>.Raw
+        elif typ = typeof<M44d> then
+            <@ let d = %off >>> 1 in
+               M44d(uniform.HeapDataD.[d+0],  uniform.HeapDataD.[d+1],  uniform.HeapDataD.[d+2],  uniform.HeapDataD.[d+3],
+                    uniform.HeapDataD.[d+4],  uniform.HeapDataD.[d+5],  uniform.HeapDataD.[d+6],  uniform.HeapDataD.[d+7],
+                    uniform.HeapDataD.[d+8],  uniform.HeapDataD.[d+9],  uniform.HeapDataD.[d+10], uniform.HeapDataD.[d+11],
+                    uniform.HeapDataD.[d+12], uniform.HeapDataD.[d+13], uniform.HeapDataD.[d+14], uniform.HeapDataD.[d+15]) @>.Raw
         elif typ = typeof<M44f> then
             <@ let o = %off in
                M44f(uniform.HeapData.[o+0],  uniform.HeapData.[o+1],  uniform.HeapData.[o+2],  uniform.HeapData.[o+3],
@@ -177,10 +195,12 @@ module Heap =
     /// camera-dependent factors stay globals (UBO, one upload per camera move).
     let standardDerivedRules : Map<string, DerivedRule> =
         Map.ofList [
-            // derived so the heap never requests "ViewProjTrafo" per-RO from the
-            // provider (dom mints a fresh AVal.map2 per request → O(N) camera fan-out).
-            // ViewTrafo/ProjTrafo are the shared state.View/state.Proj avals.
-            "ViewProjTrafo",      <@ (uniform?ProjTrafo     : M44f) * (uniform?ViewTrafo  : M44f) @>.Raw
+            // ViewProjTrafo is deliberately NOT derived: deriving it from
+            // ProjTrafo*ViewTrafo forces the heap to request those bases from every RO,
+            // breaking the (normal) ROs that supply ViewProjTrafo DIRECTLY. It's an
+            // ordinary uniform — a RO supplying it as ONE shared aval dedups to one
+            // ref-counted region (the dom memoizes it for exactly that); per-RO-distinct
+            // view-proj avals are the provider's bug to fix, not rewritten away here.
             "ModelViewProjTrafo", <@ (uniform?ViewProjTrafo : M44f) * (uniform?ModelTrafo : M44f) @>.Raw
             "ModelViewTrafo",     <@ (uniform?ViewTrafo     : M44f) * (uniform?ModelTrafo : M44f) @>.Raw
         ]
@@ -544,6 +564,27 @@ module Heap =
         elif t = typeof<float>   then 1,  (fun o a off -> a.[off] <- float32 (o :?> float))
         elif t = typeof<int>     then 1,  (fun o a off -> a.[off] <- float32 (o :?> int))
         else failwithf "Heap: unsupported per-draw uniform content type %A" t
+
+    /// A uniform the SHADER requests at double precision is stored as REAL doubles:
+    /// 2 arena words per scalar (the double's bit pattern), 8-byte aligned so the
+    /// native double view (HeapDataD) reads it back exactly — no f32 downcast.
+    let private isDoubleUniform (t : System.Type) =
+        t = typeof<V2d> || t = typeof<V3d> || t = typeof<V4d> || t = typeof<M33d> || t = typeof<M44d>
+    // write one double as 2 consecutive arena words (bit-exact; netstandard2.0 has no
+    // Int32BitsToSingle, so reinterpret the 8 bytes as two float32 slots).
+    let private wd (a : float32[]) (i : int) (d : float) =
+        let b = System.BitConverter.GetBytes d
+        a.[i]   <- System.BitConverter.ToSingle(b, 0)
+        a.[i+1] <- System.BitConverter.ToSingle(b, 4)
+    /// (words, pack) for a double-REQUESTED type — words = 2 * scalarCount. The
+    /// provided value is the matching double type (the provider's natural precision).
+    let private doublePackerFor (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
+        if   t = typeof<V2d>  then 4,  (fun o a off -> let v = o :?> V2d in wd a off v.X; wd a (off+2) v.Y)
+        elif t = typeof<V3d>  then 6,  (fun o a off -> let v = o :?> V3d in wd a off v.X; wd a (off+2) v.Y; wd a (off+4) v.Z)
+        elif t = typeof<V4d>  then 8,  (fun o a off -> let v = o :?> V4d in wd a off v.X; wd a (off+2) v.Y; wd a (off+4) v.Z; wd a (off+6) v.W)
+        elif t = typeof<M33d> then 18, (fun o a off -> let m = o :?> M33d in wd a off m.M00; wd a (off+2) m.M01; wd a (off+4) m.M02; wd a (off+6) m.M10; wd a (off+8) m.M11; wd a (off+10) m.M12; wd a (off+12) m.M20; wd a (off+14) m.M21; wd a (off+16) m.M22)
+        elif t = typeof<M44d> then 32, (fun o a off -> let m = o :?> M44d in wd a (off+0) m.M00; wd a (off+2) m.M01; wd a (off+4) m.M02; wd a (off+6) m.M03; wd a (off+8) m.M10; wd a (off+10) m.M11; wd a (off+12) m.M12; wd a (off+14) m.M13; wd a (off+16) m.M20; wd a (off+18) m.M21; wd a (off+20) m.M22; wd a (off+22) m.M23; wd a (off+24) m.M30; wd a (off+26) m.M31; wd a (off+28) m.M32; wd a (off+30) m.M33)
+        else failwithf "Heap: unsupported double per-draw uniform type %A" t
 
     /// Size in bytes of a blittable attribute/index element type (-1 if it isn't
     /// blittable — such an RO is then treated as un-heapable and passed through).
@@ -1771,6 +1812,7 @@ module Heap =
         let scope = Ag.Scope.Root
         let symData = Symbol.Create "HeapData"
         let symDataI = Symbol.Create "HeapDataI"
+        let symDataD = Symbol.Create "HeapDataD"   // native double view of the arena (fp64-requested uniforms)
         let symHeaders = Symbol.Create "HeapHeaders"
         let symModelChain = Symbol.Create "HeapModelChain"
         let symModelStack = Symbol.Create "ModelTrafoStack"
@@ -2081,13 +2123,33 @@ module Heap =
             chOffset.[slot] <- 0
             chainDirtyStruct.Add slot |> ignore
 
-        let allocRegion (av : IAdaptiveValue) : int =
+        // each field's SHADER-requested type (after derived-rule expansion) — drives
+        // whether its region is f32 or true-double storage. The bucket's `effect` is
+        // the ORIGINAL (pre-rewrite) effect, so its consumed-uniform types are intact.
+        let fieldRequestedType : string -> System.Type =
+            let mutable cur = effect
+            let mutable i = 0
+            while (cur.Uniforms |> Map.exists (fun n _ -> standardDerivedRules.ContainsKey n)) && i < 8 do
+                cur <- cur |> Effect.substituteUniforms (fun name _ _ _ -> Map.tryFind name standardDerivedRules)
+                i <- i + 1
+            let m = cur.Uniforms |> Map.map (fun _ p -> p.uniformType)
+            fun name -> match Map.tryFind name m with | Some t -> t | None -> typeof<float32>
+
+        // `requested` is the shader's declared type for this field; it decides STORAGE:
+        // f32-requested -> f32 words (packerFor converts the provided value, incl.
+        // double->f32); double-requested -> REAL doubles (2 words/scalar, 8-byte aligned
+        // for the native HeapDataD view). Either way the slot holds what the shader asked.
+        let allocRegion (av : IAdaptiveValue) (requested : System.Type) : int =
             match regions.TryGetValue av with
             | true, e -> e.RefCount <- e.RefCount + 1; e.Offset
             | _ ->
-                let (sz, pk) = packerFor av.ContentType
-                let b = arenaAlloc.Alloc sz
-                let off = int b.Offset
+                let dbl = isDoubleUniform requested
+                let (sz, pk) = if dbl then doublePackerFor requested else packerFor av.ContentType
+                // double regions start at an EVEN word (8-byte) so HeapDataD addresses
+                // them; over-allocate one word and align the start up.
+                let b = arenaAlloc.Alloc (if dbl then sz + 1 else sz)
+                let raw = int b.Offset
+                let off = if dbl && (raw &&& 1) = 1 then raw + 1 else raw
                 // grows only the staging mirror; the GPU resize is deferred to the
                 // arena's own Compute (which depends on the updater whose
                 // evaluation we are inside) — no transact happens here.
@@ -2711,7 +2773,7 @@ module Heap =
                         // HeapData + HeapDataI: the SAME arena buffer, bound as a
                         // float and as an int view (headers / indices / integral
                         // attributes decode the int view).
-                        if name = symData || name = symDataI then ValueSome arenaU
+                        if name = symData || name = symDataI || name = symDataD then ValueSome arenaU
                         elif name = symHeaders then ValueSome headersU
                         elif chainMode && name = symModelChain then ValueSome chainOutU
                         else
@@ -2751,7 +2813,7 @@ module Heap =
                     | ValueSome v -> v
                     | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing per-draw uniform '%s'" names.[i]
                 keys.[i] <- av
-                headers.[slot * headerStride + nameToField.[names.[i]]] <- allocRegion av
+                headers.[slot * headerStride + nameToField.[names.[i]]] <- allocRegion av (fieldRequestedType names.[i])
             // GPU trafo-chain: route the slot's UNFOLDED model stack into the link
             // arena (deduped) + a chIdx run; the GPU folds it to chainOut[slot].
             // "ModelTrafo" is NOT a region in this mode.

@@ -29,6 +29,19 @@ module Shaders =
             return V4f(v.c.XYZ * d, 1.0f)
         }
 
+    // Validation of the heap's DOUBLE-precision storage path: requests a uniform at
+    // double precision (V3d Tint). The heap must store/gather it as a REAL double
+    // (HeapDataD, 2 words/scalar, 8-byte aligned), matching the classic UBO path
+    // pixel-for-pixel. A non-trivial tint makes any gather/alignment/bit error visible.
+    let shadeFragTint (v : Vertex) =
+        fragment {
+            let l  = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
+            let nn = Vec.normalize v.n
+            let d  = 0.25f + 0.75f * max 0.0f (Vec.dot nn l)
+            let t  : V3d = uniform?Tint
+            return V4f(v.c.XYZ * d * V3f(float32 t.X, float32 t.Y, float32 t.Z), 1.0f)
+        }
+
     // a second, distinct effect (rim-lit) -> lands in its own bucket
     let shadeFragRim (v : Vertex) =
         fragment {
