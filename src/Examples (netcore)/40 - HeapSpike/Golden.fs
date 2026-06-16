@@ -318,9 +318,13 @@ module Golden =
                       Symbol.Create "ProjTrafo",      projT ]
                 let us = if i % 2 = 0 then (Symbol.Create "Gamma", (AVal.constant 1.0f :> IAdaptiveValue)) :: base' else base'
                 mkRO us effectG)
+        // Heap.lastBucketCount is the authoritative split metric (2 distinct field-sets ->
+        // 2 buckets). The output RO set additionally carries one draw-less DERIVE pre-pass
+        // RO per derive-bucket; both buckets here derive ViewProjTrafo, so 2 draw + 2 derive
+        // = 4 output ROs. (The derive RO runs the fp64 composite compute as a render pass.)
         let splitCount = Heap.ofRenderObjects runtime (ASet.ofArray mixed) |> ASet.force |> HashSet.count
-        let splitOk = splitCount = 2 && Heap.lastBucketCount = 2
-        if not splitOk then Log.warn "autoFields: field-set bucket split: %d output RO(s), %d bucket(s) (expected 2/2)" splitCount Heap.lastBucketCount
+        let splitOk = Heap.lastBucketCount = 2 && splitCount = 4
+        if not splitOk then Log.warn "autoFields: field-set bucket split: %d output RO(s) (expected 4 = 2 draw + 2 derive), %d bucket(s) (expected 2)" splitCount Heap.lastBucketCount
 
         let pass = fieldsOk && pixOk && splitOk
         if pass then Log.line "autoFields: PASS (auto-detected fields render == classic; NotConsumed ignored; field-set splits buckets)"
@@ -1649,16 +1653,24 @@ module Golden =
         let buckets = Heap.lastBucketCount
         let passedThrough = out |> Array.exists (fun o -> System.Object.ReferenceEquals(o, odd))
         let passedThrough2 = out |> Array.exists (fun o -> System.Object.ReferenceEquals(o, odd2))
+        // oddUniform STAYS heapable (its unpackable ModelTrafo just falls through as a global
+        // + emits the UNPACKABLE diagnostic), so it is collapsed into its own bucket — NOT
+        // passed through as a standalone RO.
+        let oddUniformHeaped = not (out |> Array.exists (fun o -> System.Object.ReferenceEquals(o, oddUniform)))
         let msgs = Heap.diagnosticMessages ()
         for m in msgs do Log.line "passthrough: diag: %s" m
         let diagOk =
             msgs |> Array.exists (fun m -> m.Contains "multiple draw calls") &&
             msgs |> Array.exists (fun m -> m.Contains "storage-decoded") &&
             msgs |> Array.exists (fun m -> m.Contains "UNPACKABLE")
-        Log.line "passthrough: in=7 (4 heapable + 2 odd + 1 unpackable-uniform) -> out=%d buckets=%d oddPassedThrough=%b/%b diags=%d" out.Length buckets passedThrough passedThrough2 msgs.Length
-        let pass = buckets = 2 && passedThrough && passedThrough2 && out.Length = buckets + 2 && diagOk
+        Log.line "passthrough: in=7 (4 heapable + 2 odd + 1 unpackable-uniform) -> out=%d buckets=%d oddPassedThrough=%b/%b oddUniformHeaped=%b diags=%d" out.Length buckets passedThrough passedThrough2 oddUniformHeaped msgs.Length
+        // out = 2 buckets + 2 passthroughs (odd, odd2) + 1 derive pre-pass RO. The heapable
+        // bucket consumes ModelViewProjTrafo (shadeMvp), derived MATMUL(ModelTrafo,ViewProjTrafo),
+        // so it emits a draw-less derive RO; oddUniform's bucket can't derive it (ModelTrafo
+        // UNPACKABLE -> global fallthrough), so it emits none. Hence buckets + 2 + 1 = 5.
+        let pass = buckets = 2 && passedThrough && passedThrough2 && oddUniformHeaped && out.Length = buckets + 3 && diagOk
         if pass then Log.line "passthrough: PASS (heapable collapsed; un-heapable ROs passed through unchanged; Diagnostics emitted deduped reasons)"
-        else Log.warn "passthrough: FAIL (out=%d buckets=%d passedThrough=%b)" out.Length buckets passedThrough
+        else Log.warn "passthrough: FAIL (out=%d buckets=%d passedThrough=%b/%b oddUniformHeaped=%b)" out.Length buckets passedThrough passedThrough2 oddUniformHeaped
         pass
 
     // NativeMemoryBuffer geometry is heap-eligible: a user-supplied native buffer

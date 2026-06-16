@@ -2112,6 +2112,68 @@ module private RuntimeCommands =
     
 
 
+    /// A compute dispatch that runs as a PRE-PASS (before BeginRenderPass) — compute
+    /// is illegal inside a render pass, so its in-pass stream is left EMPTY and the
+    /// dispatch is recorded into a separate `ComputeStream` the CommandTask replays
+    /// before the pass. A compute-write → compute/vertex-read memory barrier is
+    /// appended so the render (and any following dispatch) sees the writes. The
+    /// prepared `ComputeInputBinding` (descriptors) is passed via the "__input"
+    /// argument; its descriptor-set resource is tracked so it is prepared/updated.
+    and DispatchCommand(compiler : Compiler, shader : IComputeShader, groups : aval<V3i>, arguments : Map<string, obj>) =
+        inherit PreparedCommand()
+
+        let input =
+            match Map.tryFind "__input" arguments with
+            | Some o -> unbox<ComputeInputBinding> o
+            | None -> failf "[Vulkan] render-integrated DispatchCommand requires a prepared '__input' ComputeInputBinding"
+
+        let computeStream = new VKVM.CommandStream()
+        do compiler.resources.Add input.DescriptorSets
+
+        member _.ComputeStream = computeStream
+
+        /// (Re)record the dispatch into the separate compute stream, reading the CURRENT
+        /// group count and descriptor-set pointer. Called every frame from the pre-pass
+        /// (not just on Compile): a membership edit can keep the group count stable while
+        /// the resource system reallocates the descriptor underneath — recording fresh each
+        /// frame guarantees the replay never derefs a stale descriptor pointer (a stale one
+        /// binds a freed buffer → out-of-bounds shader access → GPU hang / device-lost).
+        member x.Record(token : AdaptiveToken) =
+            let g = groups.GetValue token
+            computeStream.Clear()
+            // PRE-dispatch barrier: the inputs the derive reads (arena constituents staged
+            // by transfer uploads on a membership edit + the camera-independent chain fold
+            // written by a prior compute dispatch) must be visible before this compute reads
+            // them. Without it a membership realloc lets the derive read not-yet-copied data
+            // — a garbage header offset → an unbounded shader loop → GPU hang/device-lost.
+            computeStream.PipelineBarrier(
+                VkPipelineStageFlags.TransferBit ||| VkPipelineStageFlags.ComputeShaderBit,
+                VkPipelineStageFlags.ComputeShaderBit,
+                [| VkMemoryBarrier(VkAccessFlags.TransferWriteBit ||| VkAccessFlags.ShaderWriteBit, VkAccessFlags.ShaderReadBit ||| VkAccessFlags.ShaderWriteBit) |],
+                [||], [||]) |> ignore
+            computeStream.BindPipeline(VkPipelineBindPoint.Compute, shader.Pipeline) |> ignore
+            computeStream.IndirectBindDescriptorSets(input.DescriptorSets.Pointer) |> ignore
+            computeStream.Dispatch(uint32 (max 1 g.X), uint32 (max 1 g.Y), uint32 (max 1 g.Z)) |> ignore
+            computeStream.PipelineBarrier(
+                VkPipelineStageFlags.ComputeShaderBit,
+                VkPipelineStageFlags.ComputeShaderBit ||| VkPipelineStageFlags.VertexShaderBit,
+                [| VkMemoryBarrier(VkAccessFlags.ShaderWriteBit, VkAccessFlags.ShaderReadBit) |],
+                [||], [||]) |> ignore
+
+        override x.Compile(token, _) =
+            // in-pass stream stays empty (compute is illegal inside the render pass); the
+            // compute is recorded into the separate stream and replayed in the pre-pass.
+            x.Record token
+
+        override x.Free() =
+            // CRITICAL: drop ourselves from the replay list. The DispatchCmd Compile case
+            // adds every DispatchCommand to compiler.dispatches; if a Free'd one lingered,
+            // the pre-pass would replay a disposed stream binding a removed descriptor →
+            // out-of-bounds shader access → GPU hang / device-lost.
+            compiler.dispatches.Remove x |> ignore
+            compiler.resources.Remove input.DescriptorSets
+            computeStream.Dispose()
+
     and Compiler =
         {
             task            : AbstractRenderTask
@@ -2119,6 +2181,7 @@ module private RuntimeCommands =
             manager         : ResourceManager
             renderPass      : RenderPass
             stats           : nativeptr<V2i>
+            dispatches      : ResizeArray<DispatchCommand>
         }
 
         member x.Compile (cmd : RuntimeCommand) : PreparedCommand =
@@ -2155,8 +2218,10 @@ module private RuntimeCommands =
                 new IndirectDrawCommand(x, effect, state, fun () -> geometries.GetReader() :> _)
                     :> PreparedCommand
 
-            | RuntimeCommand.DispatchCmd _  ->
-                failwith "[Vulkan] compute commands not implemented"
+            | RuntimeCommand.DispatchCmd(shader, groups, arguments) ->
+                let d = new DispatchCommand(x, shader, groups, arguments)
+                x.dispatches.Add d
+                d :> PreparedCommand
 
 type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : RuntimeCommand) as this =
     inherit AbstractRenderTask()
@@ -2187,6 +2252,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             RuntimeCommands.Compiler.manager         = manager
             RuntimeCommands.Compiler.renderPass      = renderPass
             RuntimeCommands.Compiler.stats           = stats
+            RuntimeCommands.Compiler.dispatches      = ResizeArray()
         }
 
     let compiled = compiler.Compile command
@@ -2287,6 +2353,22 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
                 for q in vulkanQueries do
                     do! Command.Begin q
+
+                // compute PRE-PASS: replay any DispatchCommands' compute streams BEFORE
+                // the render pass (compute is illegal inside a pass). Each stream ends
+                // with a compute→compute/vertex barrier so dependent dispatches and the
+                // render see the writes. Only runs when the command tree has dispatches
+                // (so non-compute render tasks are byte-identical to before).
+                for d in compiler.dispatches do
+                    // re-record fresh each frame so the replayed stream always derefs the
+                    // CURRENT descriptor pointer + group count (a membership edit can move
+                    // the descriptor while keeping the group count stable).
+                    d.Record token
+                    do! { new Command() with
+                            member _.Compatible = QueueFlags.Graphics
+                            member _.Enqueue (c : CommandBuffer) =
+                                c.AppendCommand()
+                                device.VKVM.Run(c.Handle, d.ComputeStream) }
 
                 let views = Map.toArray fbo.Attachments
                 let oldLayouts = Array.zeroCreate views.Length

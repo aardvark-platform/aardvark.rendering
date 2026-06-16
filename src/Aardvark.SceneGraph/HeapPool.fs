@@ -2948,8 +2948,39 @@ module Heap =
         let chainInvShader = if chainBwdActive then runtime.CreateComputeShader Chain.composeModelInv else Unchecked.defaultof<_>
         let chainInvInput  = if chainBwdActive then runtime.CreateInputBinding chainInvShader else Unchecked.defaultof<_>
         let derivedShader = if hasDerived then runtime.CreateComputeShader Derived.composeDerived else Unchecked.defaultof<_>
-        let derivedInput  = if hasDerived then runtime.CreateInputBinding derivedShader else Unchecked.defaultof<_>
-        let mutable recBuf : IBuffer<int> = Unchecked.defaultof<_>
+        // the derive's records buffer is bucket-constant: upload it ONCE, eagerly, so the
+        // pure-aval provider below can hand it out as a constant (no lazy init inside an eval).
+        let recBuf : IBuffer<int> =
+            if not hasDerived then Unchecked.defaultof<_>
+            else
+                let b = runtime.CreateBuffer<int>(max 1 derivedRecords.Length, BufferUsage.Storage)
+                if derivedRecords.Length > 0 then b.Upload(derivedRecords, 0, 0, derivedRecords.Length)
+                b
+        // The derive's input binding is a PURE aval-based provider (NOT a
+        // MutableComputeInputBinding): its values track the heap's live buffer/scalar avals
+        // directly, so the backend descriptor stays current with NO manual Flush. Flush uses
+        // `transact`, which is unsafe here — the derive dispatch runs render-integrated in a
+        // SEPARATE resource update (the pre-pass), reading the descriptor asynchronously, so
+        // a deferred transact would race. (The chain folds keep Flush + an IMMEDIATE Run, so
+        // their values are consumed synchronously in the same eval — no hazard there.)
+        let derivedInput : IComputeInputBinding =
+            if not hasDerived then Unchecked.defaultof<_>
+            else
+                let nAval = AVal.custom (fun t -> updater.GetValue t |> ignore; highWater)
+                let provider =
+                    { new IUniformProvider with
+                        member _.TryGetUniform(_, name) =
+                            match string name with
+                            | "n"           -> ValueSome (nAval :> IAdaptiveValue)
+                            | "nRec"        -> ValueSome (AVal.constant numDerivedRecords :> IAdaptiveValue)
+                            | "hstride"     -> ValueSome (AVal.constant headerStride :> IAdaptiveValue)
+                            | "records"     -> ValueSome (AVal.constant (recBuf :> IBuffer) :> IAdaptiveValue)
+                            | "HeapHeaders" -> ValueSome headersU
+                            | "HeapDataD"   -> ValueSome arenaU
+                            | "HeapData"    -> ValueSome arenaU
+                            | _             -> ValueNone
+                        member _.Dispose() = () }
+                runtime.CreateInputBinding(derivedShader, provider)
         let mutable chOffBuf : IBuffer<int> = Unchecked.defaultof<_>
         let mutable chLenBuf : IBuffer<int> = Unchecked.defaultof<_>
         let mutable chIdxBuf : IBuffer<int> = Unchecked.defaultof<_>
@@ -2960,8 +2991,12 @@ module Heap =
         // command buffer every call, which on a camera orbit (composeDerived re-runs
         // each frame) dominated the frame time. CompileCompute amortizes the build;
         // the input bindings are mutable, so updating values + Run re-executes.
-        let mutable derivedProg : IComputeTask = Unchecked.defaultof<_>
-        let mutable derivedProgG = -1
+        // the per-slot derive runs as a render-integrated pre-pass (a DispatchCmd in
+        // the bucket's CommandRenderObject), so no IComputeTask/Run for it — just the
+        // dispatch group count, reactive on membership (highWater).
+        let derivedGroups =
+            if not hasDerived then AVal.constant V3i.III
+            else AVal.custom (fun t -> updater.GetValue t |> ignore; V3i(max 1 ((highWater + 63) / 64), 1, 1))
         let mutable chainProg : IComputeTask = Unchecked.defaultof<_>
         let mutable chainInvProg : IComputeTask = Unchecked.defaultof<_>
         let mutable chainProgG = -1
@@ -2972,7 +3007,12 @@ module Heap =
         let mutable chainFoldStale = chainActive
         let mutable lastLinkGen = -1
         let derivedU =
-            if not hasDerived then arenaU
+            // No derive work happens here anymore — the per-slot derive is a
+            // render-integrated pre-pass (DispatchCmd in the bucket CommandRenderObject).
+            // derivedU only survives for CHAIN buckets, which must fold the Model chain into
+            // the arena (camera-independent, edit-gated) BEFORE the derive reads it; for a
+            // non-chain bucket HeapData is simply the arena buffer.
+            if not hasDerived || not chainActive then arenaU
             else
                 AVal.custom (fun t ->
                     updater.GetValue t |> ignore
@@ -2980,10 +3020,6 @@ module Heap =
                     // Model space allocated) + the per-slot header offsets, current.
                     let arenaBuf = (arena :> aval<IBackendBuffer>).GetValue t
                     let hdrBuf   = (headersBuf :> aval<IBackendBuffer>).GetValue t
-                    // static records uploaded once (bucket-constant layout).
-                    if isNull (box recBuf) then
-                        recBuf <- runtime.CreateBuffer<int>(max 1 derivedRecords.Length, BufferUsage.Storage)
-                        if derivedRecords.Length > 0 then recBuf.Upload(derivedRecords, 0, 0, derivedRecords.Length)
                     // (1) chain fold → Model fwd/bwd constituents — re-dispatched ONLY
                     // when the chain structure or a link value changed (the fold output
                     // is camera-independent, so a pure camera move skips it entirely).
@@ -3045,22 +3081,8 @@ module Heap =
                                 chainProgG <- g
                             chainProg.Run()
                             if chainBwdActive then chainInvProg.Run()
-                    // (2) derive every consumed composite into the arena (every frame —
-                    // a camera move changes View/Proj, so the composites must refresh).
-                    derivedInput.["n"]           <- highWater
-                    derivedInput.["nRec"]        <- numDerivedRecords
-                    derivedInput.["hstride"]     <- headerStride
-                    derivedInput.["records"]     <- recBuf
-                    derivedInput.["HeapHeaders"] <- hdrBuf
-                    derivedInput.["HeapDataD"]   <- arenaBuf
-                    derivedInput.["HeapData"]    <- arenaBuf
-                    derivedInput.Flush()
-                    let g = (highWater + derivedShader.LocalSize.X - 1) / derivedShader.LocalSize.X
-                    if derivedProgG <> g || isNull (box derivedProg) then
-                        if not (isNull (box derivedProg)) then derivedProg.Dispose()
-                        derivedProg <- runtime.CompileCompute [ ComputeCommand.Bind derivedShader; ComputeCommand.SetInput derivedInput; ComputeCommand.Dispatch (max 1 g) ]
-                        derivedProgG <- g
-                    derivedProg.Run()
+                    // the Model chain is now folded into the arena; the render-integrated
+                    // derive pre-pass reads it. HeapData = the arena buffer.
                     arenaBuf :> IBuffer) :> IAdaptiveValue
 
         // texture / atlas / vertex-pull uniform bindings of the bucket RO
@@ -3233,7 +3255,24 @@ module Heap =
                     member _.Dispose() = () }
             ro
 
+        // The per-slot fp64 derive runs as a render-integrated PRE-PASS: a SEPARATE,
+        // draw-less CommandRenderObject carrying ONLY the DispatchCmd. The Vulkan
+        // CommandTask lifts every DispatchCommand out of the command tree and replays it
+        // (with a compute→vertex barrier) BEFORE the render pass, in the SAME submission as
+        // the draws — so there is no separate synchronous compute submission / fence-wait.
+        // CRUCIALLY the bucket draw RO is still exposed DIRECTLY (not wrapped in a
+        // CommandRenderObject): wrapping the dynamic indirect bucket in OrderedCmd+RenderCmd
+        // breaks membership churn (the inner render command does not track the bucket's
+        // dynamic draw count → GPU hang). Both ROs come from the same Heap.ofRenderObjects
+        // aset → same render task → same submission, so the pre-pass ordering holds.
+        let deriveRO : IRenderObject =
+            if not hasDerived then Unchecked.defaultof<_>
+            else
+                let dispatch = RuntimeCommand.Dispatch(derivedShader, derivedGroups, Map.ofList [ "__input", box derivedInput ])
+                CommandRenderObject(RenderPass.main, scope, dispatch) :> IRenderObject
+
         member _.RenderObject = bucketRO :> IRenderObject
+        member _.DeriveRO = if hasDerived then ValueSome deriveRO else ValueNone
         member _.Count = slots.Count
         member _.IsChain = chainMode
         member _.ChainDistinct = if chainMode then chainLinks.DistinctCount else 0
@@ -3472,7 +3511,7 @@ module Heap =
             // release the derived-uniform compute resources (else the runtime's
             // resource cache keeps live references to the ComputeProgram).
             let disp (o : obj) = match o with | :? System.IDisposable as d -> d.Dispose() | _ -> ()
-            if hasDerived then disp derivedProg; disp derivedInput; disp derivedShader
+            if hasDerived then disp derivedInput; disp derivedShader; disp recBuf
             if chainActive then
                 disp chainProg; disp chainInput; disp chainShader
                 if not (isNull (box chOffBuf)) then chOffBuf.Dispose()
@@ -4013,15 +4052,21 @@ module Heap =
         updaterRef.Value <- updater
         let resultAval =
             updater |> AVal.map (fun _ ->
-                let out = Array.zeroCreate<IRenderObject> (caches.Count + passSet.Count)
+                // each derive-bucket also contributes a draw-less derive RO (pre-pass dispatch)
+                let mutable nDerive = 0
+                for KeyValue(_, c) in caches do (match c.DeriveRO with ValueSome _ -> nDerive <- nDerive + 1 | ValueNone -> ())
+                let out = Array.zeroCreate<IRenderObject> (caches.Count + nDerive + passSet.Count)
                 let mutable i = 0
                 for KeyValue(_, c) in caches do
+                    match c.DeriveRO with
+                    | ValueSome d -> out.[i] <- d; i <- i + 1
+                    | ValueNone -> ()
                     out.[i] <- c.RenderObject
                     i <- i + 1
                 for o in passSet do
                     out.[i] <- o
                     i <- i + 1
-                out)                                    // collapsed buckets ∪ untouched passthrough
+                out)                                    // derive pre-passes ∪ collapsed buckets ∪ untouched passthrough
         resultAval |> ASet.ofAVal
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────

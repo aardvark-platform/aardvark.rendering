@@ -9,14 +9,9 @@ open FSharp.Data.Adaptive
 
 module internal ComputeTaskInternals =
 
-    type ComputeInputBinding =
-        {
-            Shader         : IComputeShader
-            DescriptorSets : INativeResourceLocation<DescriptorSetBinding>
-        }
-
-        interface IComputeInputBinding with
-            member x.Shader = x.Shader
+    // ComputeInputBinding moved to Runtime\ComputeInputBinding.fs (before CommandTask)
+    // so the render-integrated compute pre-pass can read its DescriptorSets; it is
+    // AutoOpen so the unqualified uses below still resolve.
 
     type PushConstant(shader: IComputeShader, name: Symbol, inputType: Type) =
         let layout =
