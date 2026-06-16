@@ -1,3 +1,7 @@
+### 5.7.0-prerelease0020
+- [Sg] Heap: the per-slot derive compute uses PERSISTENT `CompileCompute` programs (recompiled only when the dispatch count changes) instead of a per-frame `runtime.Run` that rebuilt + submitted + fence-waited a throwaway command buffer — on a camera orbit (composeDerived re-runs each frame) this halved the per-frame CPU overhead.
+- [Sg] Heap: the chainMode Model fold is re-dispatched ONLY when the chain structure or a link value changed (a `GrowChainLinks.Generation` counter), never on a pure camera move — the fold output is camera-independent, so an orbit skips it entirely.
+
 ### 5.7.0-prerelease0019
 - [Sg] Heap: derived camera/normal composites (`ModelViewProjTrafo`, `ModelViewTrafo`, `ViewProjTrafo`, `NormalMatrix`, their `*Inv` forms, the trafo passthroughs) are produced ONCE PER SLOT by an fp64 GPU compute pass and gathered in-shader as a plain field — never composed per vertex. Replaces the previous per-vertex inline derivation (the 0.6→1.9ms regression). `ofRenderObjects` only; works in chain and non-chain mode.
 - [Sg] Heap: chainMode folds each slot's Model link chain in fp64 directly into the arena Model constituent (forward AND, for `NormalMatrix`/`*Inv`, the backward half from the links' uploaded `Trafo3d.Backward`). NO shader ever calls `.Inverse`: an inverse is the uploaded backward half, an inverse-of-product is the reverse-order product, `NormalMatrix = transpose(Model⁻¹)` upper-3×3.

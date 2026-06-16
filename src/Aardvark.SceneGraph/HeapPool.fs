@@ -1677,6 +1677,9 @@ module Heap =
         let pendingOnce = System.Collections.Generic.HashSet<int>()   // constant slots packed once
         let freeSlots = System.Collections.Generic.Stack<int>()
         let mutable highWater = 0
+        // bumps whenever a Compute actually uploads changed link values — lets the
+        // derived dispatch tell a Model edit (re-fold needed) from a camera move.
+        let mutable generation = 0
 
         let ensureCap (n : int) =
             if n > capacity then
@@ -1737,6 +1740,8 @@ module Heap =
         /// distinct live links (diagnostic / linkArena byte size lower bound)
         member _.DistinctCount = entryBySlot.Count
         member _.HighWater = highWater
+        /// bumped on every Compute that uploads changed link values.
+        member _.Generation = generation
 
         override x.Compute(t, rt) =
             x.ResizeInPlace(uint64 (max 1 capacity * 256))
@@ -1747,6 +1752,7 @@ module Heap =
             for w in dirty do
                 if not w.IsDisposed then w.PackBoth(t, staging); slots.Add w.Slot
             if slots.Count > 0 then
+                generation <- generation + 1
                 lastChainLinkUploads <- slots.Count
                 slots.Sort()
                 // each link slot s = 2 interleaved M44d (Forward, Backward) → write
@@ -2949,6 +2955,22 @@ module Heap =
         let mutable chIdxBuf : IBuffer<int> = Unchecked.defaultof<_>
         let mutable chainCap = 0
         let mutable chIdxBufCap = 0
+        // PERSISTENT compute programs (compile once, recompile only when the dispatch
+        // group count changes) — `runtime.Run` builds + submits + WAITS on a throwaway
+        // command buffer every call, which on a camera orbit (composeDerived re-runs
+        // each frame) dominated the frame time. CompileCompute amortizes the build;
+        // the input bindings are mutable, so updating values + Run re-executes.
+        let mutable derivedProg : IComputeTask = Unchecked.defaultof<_>
+        let mutable derivedProgG = -1
+        let mutable chainProg : IComputeTask = Unchecked.defaultof<_>
+        let mutable chainInvProg : IComputeTask = Unchecked.defaultof<_>
+        let mutable chainProgG = -1
+        // the chain fold output (Model fwd/bwd constituents) is camera-INDEPENDENT;
+        // re-dispatch it ONLY when the chain structure or a link value changed, never
+        // on a pure camera move. addChain/removeChain set the structure-dirty flag;
+        // GrowChainLinks bumps its Generation on a link upload.
+        let mutable chainFoldStale = chainActive
+        let mutable lastLinkGen = -1
         let derivedU =
             if not hasDerived then arenaU
             else
@@ -2962,9 +2984,12 @@ module Heap =
                     if isNull (box recBuf) then
                         recBuf <- runtime.CreateBuffer<int>(max 1 derivedRecords.Length, BufferUsage.Storage)
                         if derivedRecords.Length > 0 then recBuf.Upload(derivedRecords, 0, 0, derivedRecords.Length)
-                    // (1) chain fold → Model forward constituent (M44d) in the arena
+                    // (1) chain fold → Model fwd/bwd constituents — re-dispatched ONLY
+                    // when the chain structure or a link value changed (the fold output
+                    // is camera-independent, so a pure camera move skips it entirely).
                     if chainActive then
                         let linkBuf = (chainLinks :> aval<IBackendBuffer>).GetValue t
+                        if chainLinks.Generation <> lastLinkGen then lastLinkGen <- chainLinks.Generation; chainFoldStale <- true
                         let n = max 1 highWater
                         if n > chainCap then
                             let cap = Fun.NextPowerOfTwo n
@@ -2986,32 +3011,42 @@ module Heap =
                             chOffBuf.Upload(chOffset, 0, 0, highWater)
                             chLenBuf.Upload(chLen, 0, 0, highWater)
                             if chIdxAlloc.Extent > 0 then chIdxBuf.Upload(chIdx, 0, 0, chIdxAlloc.Extent)
-                        chainInput.["n"]           <- highWater
-                        chainInput.["hstride"]     <- headerStride
-                        chainInput.["mCell"]       <- modelFwdCell
-                        chainInput.["chainOffset"] <- chOffBuf
-                        chainInput.["chainLen"]    <- chLenBuf
-                        chainInput.["linkIdx"]     <- chIdxBuf
-                        chainInput.["links"]       <- linkBuf
-                        chainInput.["HeapHeaders"] <- hdrBuf
-                        chainInput.["HeapDataD"]   <- arenaBuf
-                        chainInput.Flush()
-                        let g = (highWater + chainShader.LocalSize.X - 1) / chainShader.LocalSize.X
-                        runtime.Run [ ComputeCommand.Bind chainShader; ComputeCommand.SetInput chainInput; ComputeCommand.Dispatch (max 1 g) ]
-                        // (1b) backward fold → Model backward constituent (M44d)
-                        if chainBwdActive then
-                            chainInvInput.["n"]           <- highWater
-                            chainInvInput.["hstride"]     <- headerStride
-                            chainInvInput.["mCell"]       <- modelBwdCell
-                            chainInvInput.["chainOffset"] <- chOffBuf
-                            chainInvInput.["chainLen"]    <- chLenBuf
-                            chainInvInput.["linkIdx"]     <- chIdxBuf
-                            chainInvInput.["links"]       <- linkBuf
-                            chainInvInput.["HeapHeaders"] <- hdrBuf
-                            chainInvInput.["HeapDataD"]   <- arenaBuf
-                            chainInvInput.Flush()
-                            runtime.Run [ ComputeCommand.Bind chainInvShader; ComputeCommand.SetInput chainInvInput; ComputeCommand.Dispatch (max 1 g) ]
-                    // (2) derive every consumed composite into the arena
+                            chainFoldStale <- true
+                        if chainFoldStale then
+                            chainFoldStale <- false
+                            let g = (highWater + chainShader.LocalSize.X - 1) / chainShader.LocalSize.X
+                            chainInput.["n"]           <- highWater
+                            chainInput.["hstride"]     <- headerStride
+                            chainInput.["mCell"]       <- modelFwdCell
+                            chainInput.["chainOffset"] <- chOffBuf
+                            chainInput.["chainLen"]    <- chLenBuf
+                            chainInput.["linkIdx"]     <- chIdxBuf
+                            chainInput.["links"]       <- linkBuf
+                            chainInput.["HeapHeaders"] <- hdrBuf
+                            chainInput.["HeapDataD"]   <- arenaBuf
+                            chainInput.Flush()
+                            if chainBwdActive then
+                                chainInvInput.["n"]           <- highWater
+                                chainInvInput.["hstride"]     <- headerStride
+                                chainInvInput.["mCell"]       <- modelBwdCell
+                                chainInvInput.["chainOffset"] <- chOffBuf
+                                chainInvInput.["chainLen"]    <- chLenBuf
+                                chainInvInput.["linkIdx"]     <- chIdxBuf
+                                chainInvInput.["links"]       <- linkBuf
+                                chainInvInput.["HeapHeaders"] <- hdrBuf
+                                chainInvInput.["HeapDataD"]   <- arenaBuf
+                                chainInvInput.Flush()
+                            if chainProgG <> g || isNull (box chainProg) then
+                                if not (isNull (box chainProg)) then chainProg.Dispose()
+                                chainProg <- runtime.CompileCompute [ ComputeCommand.Bind chainShader; ComputeCommand.SetInput chainInput; ComputeCommand.Dispatch (max 1 g) ]
+                                if chainBwdActive then
+                                    if not (isNull (box chainInvProg)) then chainInvProg.Dispose()
+                                    chainInvProg <- runtime.CompileCompute [ ComputeCommand.Bind chainInvShader; ComputeCommand.SetInput chainInvInput; ComputeCommand.Dispatch (max 1 g) ]
+                                chainProgG <- g
+                            chainProg.Run()
+                            if chainBwdActive then chainInvProg.Run()
+                    // (2) derive every consumed composite into the arena (every frame —
+                    // a camera move changes View/Proj, so the composites must refresh).
                     derivedInput.["n"]           <- highWater
                     derivedInput.["nRec"]        <- numDerivedRecords
                     derivedInput.["hstride"]     <- headerStride
@@ -3021,7 +3056,11 @@ module Heap =
                     derivedInput.["HeapData"]    <- arenaBuf
                     derivedInput.Flush()
                     let g = (highWater + derivedShader.LocalSize.X - 1) / derivedShader.LocalSize.X
-                    runtime.Run [ ComputeCommand.Bind derivedShader; ComputeCommand.SetInput derivedInput; ComputeCommand.Dispatch (max 1 g) ]
+                    if derivedProgG <> g || isNull (box derivedProg) then
+                        if not (isNull (box derivedProg)) then derivedProg.Dispose()
+                        derivedProg <- runtime.CompileCompute [ ComputeCommand.Bind derivedShader; ComputeCommand.SetInput derivedInput; ComputeCommand.Dispatch (max 1 g) ]
+                        derivedProgG <- g
+                    derivedProg.Run()
                     arenaBuf :> IBuffer) :> IAdaptiveValue
 
         // texture / atlas / vertex-pull uniform bindings of the bucket RO
@@ -3433,13 +3472,13 @@ module Heap =
             // release the derived-uniform compute resources (else the runtime's
             // resource cache keeps live references to the ComputeProgram).
             let disp (o : obj) = match o with | :? System.IDisposable as d -> d.Dispose() | _ -> ()
-            if hasDerived then disp derivedInput; disp derivedShader
+            if hasDerived then disp derivedProg; disp derivedInput; disp derivedShader
             if chainActive then
-                disp chainInput; disp chainShader
+                disp chainProg; disp chainInput; disp chainShader
                 if not (isNull (box chOffBuf)) then chOffBuf.Dispose()
                 if not (isNull (box chLenBuf)) then chLenBuf.Dispose()
                 if not (isNull (box chIdxBuf)) then chIdxBuf.Dispose()
-            if chainBwdActive then disp chainInvInput; disp chainInvShader
+            if chainBwdActive then disp chainInvProg; disp chainInvInput; disp chainInvShader
             slots.Clear()
 
     /// Collapse an adaptive set of N render objects into B bucket render objects

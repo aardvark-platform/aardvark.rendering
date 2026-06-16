@@ -60,9 +60,14 @@ module ChainBench =
         let eff = Effect.compose [ Effect.ofFunction Golden.DF.shadeFp64; Effect.ofFunction Golden.DF.frag ]
 
         let side = int (ceil (sqrt (float n)))
-        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -1.0, 1.0) * (float side * 1.5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo)
+        let center = V3d.Zero
+        let up = V3d.OOI
+        let dist = float side * 1.5
+        // View is a cval (the orbit sweep rotates it); View+Proj are supplied
+        // SEPARATELY so ViewProjTrafo / ModelViewProjTrafo are DERIVED on the GPU
+        // (the CadBench contract) — a camera move then re-runs the per-slot compose.
+        let view = AVal.init (CameraView.lookAt (V3d(0.0, -1.0, 1.0) * dist) center up |> CameraView.viewTrafo)
         let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
-        let viewProj = AVal.map2 (*) view proj :> IAdaptiveValue
 
         // dom Primitives.Box shape: a DISTINCT AVal.constant per leaf, identical
         // value -> value-dedup collapses to one arena/link slot.
@@ -79,7 +84,8 @@ module ChainBench =
             let us =
                 [ Symbol.Create "ModelTrafo",    (folded :> IAdaptiveValue)
                   Symbol.Create "NormalMatrix",  (nm :> IAdaptiveValue)
-                  Symbol.Create "ViewProjTrafo", viewProj ]
+                  Symbol.Create "ViewTrafo",     (view :> IAdaptiveValue)
+                  Symbol.Create "ProjTrafo",     (proj :> IAdaptiveValue) ]
             let us =
                 if chain then (Symbol.Create "ModelTrafoStack", (AVal.constant [| (node :> aval<Trafo3d>); boxLink () |] :> IAdaptiveValue)) :: us
                 else us
@@ -173,4 +179,23 @@ module ChainBench =
                 if f > warmup then edit <- edit + e; frame <- frame + fr; gpu <- gpu + gp
             Log.line "  r=%-5d edit %.3f ms  frame %.3f ms  gpu %.3f ms  chainBuckets=%d distinct=%d"
                 r (edit / float frames) (frame / float frames) (gpu / float frames) Heap.lastChainBuckets (if chain then Heap.lastDistinctLinks else 0)
+
+        // ── orbit sweep: camera moves every frame, Model is STATIC (the CadBench
+        // regression case). View/Proj are derived constituents, so a camera move
+        // re-runs composeDerived per slot but SKIPS the chain fold (Model unchanged).
+        Log.line "chainBench[%s]: orbit sweep" (if chain then "chain" else "folded")
+        let mutable oe = 0.0
+        let mutable ofr = 0.0
+        let mutable ogp = 0.0
+        for f in 1 .. warmup + frames do
+            let ang = float f * 0.03
+            let eye = center + V3d(cos ang, sin ang, 0.7) * dist
+            sw.Restart()
+            transact (fun () -> view.Value <- CameraView.lookAt eye center up |> CameraView.viewTrafo)
+            let e = sw.Elapsed.TotalMilliseconds
+            sw.Restart()
+            let gp = renderFrame ()
+            let fr = e + sw.Elapsed.TotalMilliseconds
+            if f > warmup then oe <- oe + e; ofr <- ofr + fr; ogp <- ogp + gp
+        Log.line "  orbit  edit %.3f ms  frame %.3f ms  gpu %.3f ms" (oe / float frames) (ofr / float frames) (ogp / float frames)
         0
