@@ -291,10 +291,12 @@ module Golden =
         let autoBuckets = Heap.lastBucketCount
         let detected    = Heap.lastAutoFields
 
-        // classification: consumed (after derived-rule expansion) ∩ supplied ∩ packable.
-        // ViewProjTrafo is DERIVED to ProjTrafo*ViewTrafo, so those bases are the fields
-        // and ViewProjTrafo itself becomes supplied-but-not-consumed (ignored, like NotConsumed).
-        let expected = [| "HeapColor"; "HeapModelTrafo"; "ProjTrafo"; "Tint"; "ViewTrafo" |]
+        // classification (compute-derived model): consumed ∩ (recipe-derivable OR
+        // supplied+packable). ViewProjTrafo is a DERIVED composite → a per-slot compute
+        // OUTPUT field; its constituents ProjTrafo/ViewTrafo are NOT fields (internal
+        // M44d regions the compute reads), and the supplied-but-unconsumed NotConsumed
+        // is ignored. So the field set is the direct uniforms + the composite output.
+        let expected = [| "HeapColor"; "HeapModelTrafo"; "Tint"; "ViewProjTrafo" |]
         let fieldsOk = detected = expected
         if not fieldsOk then Log.warn "autoFields: detected fields %A (expected %A)" detected expected
 
@@ -625,12 +627,19 @@ module Golden =
         let imgNormal  = imageOf (sceneFp64 V3d.Zero)
         let imgGeoFp64 = imageOf (sceneFp64 earth)
 
-        // (c) f32 inline heap at geodetic scale (ModelViewProjTrafo derived in f32)
+        // (c) f32 heap at geodetic scale: the per-vertex f32 MVP path is GONE (the
+        // heap now derives in fp64), so to reproduce the historic f32 jitter we supply
+        // ModelViewProjTrafo DIRECTLY as an f32 matrix product (Proj·View cast to f32,
+        // THEN multiplied by the earth-scale f32 Model) — the heap gathers the supplied
+        // composite as a plain field (its View/Proj constituents aren't provided, so it
+        // can't fp64-derive it). This also exercises the direct-supply fallback.
         let imgGeoF32 =
-            let viewProj = AVal.constant ((CameraView.lookAt (earth + relEye) earth V3d.OOI |> CameraView.viewTrafo) * proj)
+            let viewProjT = (CameraView.lookAt (earth + relEye) earth V3d.OOI |> CameraView.viewTrafo) * proj
+            let vpF32 = M44f.op_Explicit viewProjT.Forward
             let effMvp = Effect.compose [ Effect.ofFunction DF.shadeMvp; Effect.ofFunction DF.frag ]
             let inputs =
                 offsets |> Array.map (fun o ->
+                    let mF32 = M44f.op_Explicit (Trafo3d.Translation(earth + o)).Forward
                     let ro = RenderObject()
                     ro.Surface <- Surface.Effect effMvp
                     ro.Mode <- IndexedGeometryMode.TriangleList
@@ -638,8 +647,8 @@ module Golden =
                     ro.Indices <- Some (bv index typeof<int>)
                     ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
                     ro.Uniforms <- UniformProvider.ofList [
-                        Symbol.Create "ModelTrafo",    (AVal.constant (Trafo3d.Translation(earth + o)) :> IAdaptiveValue)
-                        Symbol.Create "ViewProjTrafo", (viewProj :> IAdaptiveValue) ]
+                        Symbol.Create "ModelTrafo",          (AVal.constant mF32 :> IAdaptiveValue)
+                        Symbol.Create "ModelViewProjTrafo",  (AVal.constant (vpF32 * mF32) :> IAdaptiveValue) ]
                     ro :> IRenderObject)
             imageOf (Sg.renderObjectSet (Heap.ofRenderObjects runtime (ASet.ofArray inputs)))
 
@@ -957,10 +966,14 @@ module Golden =
         let mkRO (withStack : bool) i =
             let folded = foldedOf i
             let nm = folded |> AVal.map (fun (t : Trafo3d) -> M44f.op_Explicit (M44d (M33d t.Backward.Transposed)))
+            // new contract: provide the View/Proj CONSTITUENTS (the heap derives
+            // ModelViewProjTrafo + NormalMatrix on the GPU); the supplied NormalMatrix
+            // is now ignored (derived) — kept to prove the result matches (Model⁻¹)ᵀ.
             let us =
                 [ Symbol.Create "ModelTrafo",     (folded :> IAdaptiveValue)
                   Symbol.Create "NormalMatrix",   (nm :> IAdaptiveValue)
-                  Symbol.Create "ViewProjTrafo",  viewProj ]
+                  Symbol.Create "ViewTrafo",      (view :> IAdaptiveValue)
+                  Symbol.Create "ProjTrafo",      (proj :> IAdaptiveValue) ]
             let us = if withStack then (Symbol.Create "ModelTrafoStack", (AVal.constant (stackOf i) :> IAdaptiveValue)) :: us else us
             let ro = RenderObject()
             ro.Surface   <- Surface.Effect eff
@@ -1104,7 +1117,8 @@ module Golden =
                 Symbol.Create "ModelTrafo",       (folded :> IAdaptiveValue)
                 Symbol.Create "NormalMatrix",     (nm :> IAdaptiveValue)
                 Symbol.Create "ModelTrafoStack",  (AVal.constant (stackOf i) :> IAdaptiveValue)
-                Symbol.Create "ViewProjTrafo",    viewProj ]
+                Symbol.Create "ViewTrafo",        (view :> IAdaptiveValue)
+                Symbol.Create "ProjTrafo",        (proj :> IAdaptiveValue) ]
             ro :> IRenderObject
         // CHURN=1 -> each frame removes one member and adds a FRESH RO (the cad-bench
         // churn path: exercises bucket slot recycle + chain-link interning/free + the
@@ -1126,7 +1140,8 @@ module Golden =
                 Symbol.Create "ModelTrafo",       (folded :> IAdaptiveValue)
                 Symbol.Create "NormalMatrix",     (nm :> IAdaptiveValue)
                 Symbol.Create "ModelTrafoStack",  (AVal.constant [| (dyn :> aval<Trafo3d>); boxLink () |] :> IAdaptiveValue)
-                Symbol.Create "ViewProjTrafo",    viewProj ]
+                Symbol.Create "ViewTrafo",        (view :> IAdaptiveValue)
+                Symbol.Create "ProjTrafo",        (proj :> IAdaptiveValue) ]
             ro :> IRenderObject
         let ros = Array.init n mkRO
         let memberSet = cset (ros :> seq<_>)
@@ -1422,10 +1437,14 @@ module Golden =
         let mkRO (withStack : bool) i =
             let folded = foldOf stacks.[i]
             let nm = folded |> AVal.map (fun (t : Trafo3d) -> M44f.op_Explicit (M44d (M33d t.Backward.Transposed)))
+            // new contract: provide the View/Proj CONSTITUENTS (the heap derives
+            // ModelViewProjTrafo + NormalMatrix on the GPU); the supplied NormalMatrix
+            // is now ignored (derived) — kept to prove the result matches (Model⁻¹)ᵀ.
             let us =
                 [ Symbol.Create "ModelTrafo",     (folded :> IAdaptiveValue)
                   Symbol.Create "NormalMatrix",   (nm :> IAdaptiveValue)
-                  Symbol.Create "ViewProjTrafo",  viewProj ]
+                  Symbol.Create "ViewTrafo",      (view :> IAdaptiveValue)
+                  Symbol.Create "ProjTrafo",      (proj :> IAdaptiveValue) ]
             let us = if withStack then (Symbol.Create "ModelTrafoStack", (AVal.constant stacks.[i] :> IAdaptiveValue)) :: us else us
             let ro = RenderObject()
             ro.Surface   <- Surface.Effect eff

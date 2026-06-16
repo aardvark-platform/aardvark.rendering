@@ -483,7 +483,7 @@ module Heap =
                              FirstInstance = 0, InstanceCount = 1))
             |> IndirectBuffer.ofArray
 
-        let effect = rewrite (<@ getDrawId() @>) nameToField fieldStride standardDerivedRules effect
+        let effect = rewrite (<@ getDrawId() @>) nameToField fieldStride Map.empty effect
 
         Sg.indirectDraw mode (AVal.constant indirect)
         |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(AVal.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>))
@@ -522,7 +522,7 @@ module Heap =
                 let a = Array.zeroCreate<float32> totalF
                 for (input, o) in distinct do input.packInto t a o
                 a)
-        let effect = rewrite (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)) nameToField fieldStride standardDerivedRules effect
+        let effect = rewrite (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)) nameToField fieldStride Map.empty effect
         let n = instances.Length
         // ONE instanced indirect draw: firstInstance 0, instanceCount N. Built
         // declaratively (like `scene`) so ambient Sg.uniform globals merge in.
@@ -1070,7 +1070,13 @@ module Heap =
           AttrKeys : AttrKey[]
           /// the slot's index allocation key (value-level source, byte offset,
           /// index typeId)
-          IdxKey : struct(obj * int * int) }
+          IdxKey : struct(obj * int * int)
+          /// derived-uniform compute bookkeeping: uploaded constituent regions to
+          /// release (base aval + inverse flag), per-slot output region blocks and
+          /// chain-folded Model constituent blocks to free on remove.
+          ConstKeys : struct(IAdaptiveValue * bool)[]
+          OutBlocks : Management.Block<unit>[]
+          FoldBlocks : Management.Block<unit>[] }
 
     /// Immutable per-RO facts (STRUCTURE only — surface, geometry layout, uniform
     /// presence; never aval VALUES). Cached per RO in a ConditionalWeakTable so a
@@ -1589,6 +1595,15 @@ module Heap =
         member _.IsDisposed = disposed
         member x.Pack(token : AdaptiveToken, staging : M44d[]) =
             x.EvaluateIfNeeded token () (fun token -> staging.[slot] <- (src.GetValue token).Forward)
+        /// pack BOTH halves into an interleaved arena (slot s → [2s]=Forward,
+        /// [2s+1]=Backward). Used by GrowChainLinks so the GPU can fold the backward
+        /// Model (NormalMatrix / *Inv) from the uploaded Backward halves — no shader
+        /// `.Inverse`. One GetValue serves both.
+        member x.PackBoth(token : AdaptiveToken, staging : M44d[]) =
+            x.EvaluateIfNeeded token () (fun token ->
+                let t = src.GetValue token
+                staging.[2*slot]   <- t.Forward
+                staging.[2*slot+1] <- t.Backward)
         member x.Dispose() =
             if not disposed then
                 disposed <- true
@@ -1647,9 +1662,13 @@ module Heap =
     type internal ChainLinkEntry =
         { Slot : int; mutable RefCount : int; Writer : LinkWriter }
 
+    // Links are stored INTERLEAVED — slot s occupies M44d slots [2s]=Forward,
+    // [2s+1]=Backward (256 bytes/link) — so the SAME buffer feeds both the forward
+    // Model fold (composeModel reads 2*idx) and the backward fold (composeModelInv
+    // reads 2*idx+1), the backward half being the uploaded Trafo3d.Backward.
     type internal GrowChainLinks(runtime : IBufferRuntime) =
-        inherit AdaptiveBuffer(runtime, 128UL, BufferUsage.Storage, BufferStorage.Host)
-        let mutable staging = Array.zeroCreate<M44d> 1
+        inherit AdaptiveBuffer(runtime, 256UL, BufferUsage.Storage, BufferStorage.Host)
+        let mutable staging = Array.zeroCreate<M44d> 2
         let mutable capacity = 1
         let byVal = System.Collections.Generic.Dictionary<Trafo3d, ChainLinkEntry>(HashIdentity.Structural)
         let byId  = System.Collections.Generic.Dictionary<IAdaptiveValue, ChainLinkEntry>(HashIdentity.Reference)
@@ -1662,8 +1681,8 @@ module Heap =
         let ensureCap (n : int) =
             if n > capacity then
                 let nf = Fun.NextPowerOfTwo n
-                let ns = Array.zeroCreate<M44d> nf
-                System.Array.Copy(staging, ns, capacity)
+                let ns = Array.zeroCreate<M44d> (2 * nf)
+                System.Array.Copy(staging, ns, 2 * capacity)
                 staging <- ns
                 capacity <- nf
 
@@ -1680,7 +1699,8 @@ module Heap =
                 | true, e -> e.RefCount <- e.RefCount + 1; e.Slot
                 | _ ->
                     let s = allocSlot ()
-                    staging.[s] <- v.Forward
+                    staging.[2*s]   <- v.Forward
+                    staging.[2*s+1] <- v.Backward
                     pendingOnce.Add s |> ignore
                     let e = { Slot = s; RefCount = 1; Writer = Unchecked.defaultof<LinkWriter> }
                     byVal.[v] <- e; entryBySlot.[s] <- e; s
@@ -1719,17 +1739,19 @@ module Heap =
         member _.HighWater = highWater
 
         override x.Compute(t, rt) =
-            x.ResizeInPlace(uint64 (max 1 capacity * 128))
+            x.ResizeInPlace(uint64 (max 1 capacity * 256))
             let dirty = pending.GetAndClear()
             let slots = System.Collections.Generic.List<int>()
             for s in pendingOnce do slots.Add s
             pendingOnce.Clear()
             for w in dirty do
-                if not w.IsDisposed then w.Pack(t, staging); slots.Add w.Slot
+                if not w.IsDisposed then w.PackBoth(t, staging); slots.Add w.Slot
             if slots.Count > 0 then
                 lastChainLinkUploads <- slots.Count
                 slots.Sort()
-                let flush lo hi = x.Write(staging, uint64 (lo * 128), lo, hi - lo + 1, false)
+                // each link slot s = 2 interleaved M44d (Forward, Backward) → write
+                // M44d-element offset 2*lo, count 2*(run length).
+                let flush lo hi = x.Write(staging, uint64 (lo * 256), 2 * lo, 2 * (hi - lo + 1), false)
                 let mutable lo = slots.[0]
                 let mutable hi = slots.[0]
                 for i in 1 .. slots.Count - 1 do
@@ -1742,6 +1764,37 @@ module Heap =
             match o with
             | :? LinkWriter as w -> pending.Add w |> ignore
             | _ -> ()
+
+    /// Storage writers used by the chain fold + derived compute kernel — row-major
+    /// into the arena, matching `gatherFor`'s read layout (M44f: 16 contiguous
+    /// M00..M33; M33f: 9 contiguous M00..M22; M44d: into the 8-byte-aligned DOUBLE
+    /// view at word offset woff → double index woff>>>1). [<ReflectedDefinition>] so
+    /// FShade lowers them into the compute body.
+    [<RequireQualifiedAccess>]
+    module internal HeapWrite =
+        // Write straight into the arena storage buffers (uniform?StorageBuffer?…),
+        // accessed DIRECTLY — never passed as a function parameter (FShade can't
+        // resolve a storage buffer through an array arg; it would emit an unsized
+        // local). m44/m33 → HeapData (f32, row-major matching gatherFor); m44dInto →
+        // the 8-byte-aligned HeapDataD double view at word offset woff (idx = woff>>>1).
+        [<ReflectedDefinition>]
+        let m44 (off : int) (m : M44f) =
+            uniform.HeapData.[off+0]<-m.M00;  uniform.HeapData.[off+1]<-m.M01;  uniform.HeapData.[off+2]<-m.M02;  uniform.HeapData.[off+3]<-m.M03
+            uniform.HeapData.[off+4]<-m.M10;  uniform.HeapData.[off+5]<-m.M11;  uniform.HeapData.[off+6]<-m.M12;  uniform.HeapData.[off+7]<-m.M13
+            uniform.HeapData.[off+8]<-m.M20;  uniform.HeapData.[off+9]<-m.M21;  uniform.HeapData.[off+10]<-m.M22; uniform.HeapData.[off+11]<-m.M23
+            uniform.HeapData.[off+12]<-m.M30; uniform.HeapData.[off+13]<-m.M31; uniform.HeapData.[off+14]<-m.M32; uniform.HeapData.[off+15]<-m.M33
+        [<ReflectedDefinition>]
+        let m33 (off : int) (m : M33f) =
+            uniform.HeapData.[off+0]<-m.M00; uniform.HeapData.[off+1]<-m.M01; uniform.HeapData.[off+2]<-m.M02
+            uniform.HeapData.[off+3]<-m.M10; uniform.HeapData.[off+4]<-m.M11; uniform.HeapData.[off+5]<-m.M12
+            uniform.HeapData.[off+6]<-m.M20; uniform.HeapData.[off+7]<-m.M21; uniform.HeapData.[off+8]<-m.M22
+        [<ReflectedDefinition>]
+        let m44dInto (woff : int) (m : M44d) =
+            let o = woff >>> 1
+            uniform.HeapDataD.[o+0]<-m.M00;  uniform.HeapDataD.[o+1]<-m.M01;  uniform.HeapDataD.[o+2]<-m.M02;  uniform.HeapDataD.[o+3]<-m.M03
+            uniform.HeapDataD.[o+4]<-m.M10;  uniform.HeapDataD.[o+5]<-m.M11;  uniform.HeapDataD.[o+6]<-m.M12;  uniform.HeapDataD.[o+7]<-m.M13
+            uniform.HeapDataD.[o+8]<-m.M20;  uniform.HeapDataD.[o+9]<-m.M21;  uniform.HeapDataD.[o+10]<-m.M22; uniform.HeapDataD.[o+11]<-m.M23
+            uniform.HeapDataD.[o+12]<-m.M30; uniform.HeapDataD.[o+13]<-m.M31; uniform.HeapDataD.[o+14]<-m.M32; uniform.HeapDataD.[o+15]<-m.M33
 
     // ── GPU transform propagation (wombat §7 "modelChain") ──────────────
     // Instead of CPU-composing each RO's ModelTrafo — a shared parent over N
@@ -1776,31 +1829,195 @@ module Heap =
             }
 
         // LIVE-bucket variant: one thread per slot composes the slot's chain in
-        // fp64 and writes ONLY the folded ModelTrafo (M44f) to outp.[i] — the
-        // heap's ModelTrafo gather reads it directly (view/proj stay UBO globals,
-        // so a camera move needs NO re-dispatch, only the per-frame VP multiply in
-        // the rewritten shader, exactly as for the arena-fold path). Tombstoned
+        // fp64 and writes the folded ModelTrafo as a real M44d into the slot's Model
+        // FORWARD constituent region (arena DOUBLE view at the `mCell` header offset)
+        // — the unified derived compute pass then reads it like any other arena
+        // constituent (no special-cased dedicated buffer, no M44f round-trip that
+        // would drop the geodetic precision the fp64 fold just computed). Tombstoned
         // slots (len = 0) write identity. linkIdx is fed slot-major so the chain's
         // links sit at [off, off+len); chains are fed root-LAST (reversed model
         // stack), so the reversed multiply below reproduces the CPU fold
         // arr[0].F · arr[1].F · … (see the bucket ingest for the ordering).
         [<LocalSize(X = 64)>]
-        let composeModel (n : int)
+        let composeModel (n : int) (hstride : int) (mCell : int)
                          (chainOffset : int[]) (chainLen : int[]) (linkIdx : int[])
-                         (links : M44d[]) (outp : M44f[]) =
+                         (links : M44d[]) =
             compute {
                 let i = getGlobalId().X
                 if i < n then
                     let len = chainLen.[i]
-                    if len <= 0 then
-                        outp.[i] <- M44f.Identity
-                    else
+                    let mutable m = M44d.Identity
+                    if len > 0 then
                         let off = chainOffset.[i]
-                        let mutable m = links.[linkIdx.[off + len - 1]]
+                        m <- links.[2 * linkIdx.[off + len - 1]]
                         for k in 1 .. len - 1 do
-                            m <- m * links.[linkIdx.[off + len - 1 - k]]
-                        outp.[i] <- M44f(m)
+                            m <- m * links.[2 * linkIdx.[off + len - 1 - k]]
+                    HeapWrite.m44dInto uniform.HeapHeaders.[i * hstride + mCell] m
             }
+
+        // BACKWARD model fold (chainMode): the per-slot ModelTrafo INVERSE, used by
+        // NormalMatrix and the *Inv composites, written as M44d into the slot's Model
+        // BACKWARD constituent region (arena DOUBLE view at `mCell`). (L0·…·Llen-1)⁻¹
+        // = Llen-1⁻¹·…·L0⁻¹, and each link's inverse is its UPLOADED `.Backward` half
+        // (links carry Forward; linksB carry Backward) — never a shader `.Inverse`.
+        // Forward folds the links reversed (Ln-1.F·…·L0.F); the backward therefore
+        // folds them in ARRAY order (L0.B·…·Ln-1.B), which is exactly (Forward)⁻¹.
+        [<LocalSize(X = 64)>]
+        let composeModelInv (n : int) (hstride : int) (mCell : int)
+                            (chainOffset : int[]) (chainLen : int[]) (linkIdx : int[])
+                            (links : M44d[]) =
+            compute {
+                let i = getGlobalId().X
+                if i < n then
+                    let len = chainLen.[i]
+                    let mutable m = M44d.Identity
+                    if len > 0 then
+                        let off = chainOffset.[i]
+                        // backward halves at 2*idx+1, folded in ARRAY order (= inverse
+                        // of the forward product).
+                        m <- links.[2 * linkIdx.[off] + 1]
+                        for k in 1 .. len - 1 do
+                            m <- m * links.[2 * linkIdx.[off + k] + 1]
+                    HeapWrite.m44dInto uniform.HeapHeaders.[i * hstride + mCell] m
+            }
+
+    // ── ofRenderObjects derived-uniform COMPUTE pass (wombat §7, real fp64) ─────
+    // The incremental heap derives camera/normal composites ONCE PER SLOT in an
+    // fp64 compute pre-pass — NEVER per vertex. A consumed derived uniform
+    // (ModelViewProjTrafo, ModelViewTrafo, ViewProjTrafo, NormalMatrix, their
+    // *Inv forms, …) is produced from the base-trafo constituents (Model per slot;
+    // View/Proj per frame) and written to an arena f32 region the rewritten shader
+    // gathers like any other field. fp64 throughout (M44d), matching a CPU double
+    // compose bit-for-bit. NO shader ever calls `.Inverse`: an inverse is the
+    // uploaded `.Backward` half, and an inverse-of-product is the reverse-order
+    // product of backward halves ((P·V·M)⁻¹ = M⁻¹·V⁻¹·P⁻¹); NormalMatrix is
+    // transpose(Model_backward) upper-3×3. v0 ships the standard recipes with one
+    // fixed kernel arm each; the rule table + per-record (ruleId, outCell) layout
+    // are the seam a user-supplied rule plugs into later (a new arm / generic
+    // lowering) without reshaping the records or dispatch.
+
+    /// A base-trafo constituent: one of Model/View/Proj, forward or backward half.
+    type internal Constituent = { CBase : string; CInv : bool }
+    /// How a derived uniform is produced from its constituents by the compute pass.
+    type internal DerivedOp =
+        | DMatMul of Constituent list        // out = matrix product in listed (multiplication) order
+        | DNormal of Constituent             // out = transpose(constituent) upper-3x3 (mat3)
+
+    [<RequireQualifiedAccess>]
+    module internal Derived =
+        let MBASE = "ModelTrafo"
+        let VBASE = "ViewTrafo"
+        let PBASE = "ProjTrafo"
+        let VPBASE = "ViewProjTrafo"   // a combined View·Proj a consumer may supply directly
+        let fwd b = { CBase = b; CInv = false }
+        let bwd b = { CBase = b; CInv = true }
+
+        // Kernel arms — the value the kernel switches on. Each arm reads its inputs
+        // generically from per-record constituent CELLS (no constituent is special-
+        // cased: Model, View, Proj — forward or backward — are all ref-counted-by-
+        // aval arena M44d regions, View/Proj shared to one slot each). A future
+        // user rule is a new arm id (or a generic-lowering arm) over the same record
+        // layout, not a reshape.
+        let ARM_COLLAPSE = 1    // out = in0 (a single constituent, fwd/bwd)
+        let ARM_MATMUL2  = 2    // out = in0 * in1
+        let ARM_MATMUL3  = 3    // out = in0 * in1 * in2
+        let ARM_NORMAL   = 9    // out = transpose(in0) upper-3x3 (mat3)
+
+        /// The standard recipes, keyed by the derived uniform name each produces.
+        /// The base trafos collapse a constituent (forward, or the uploaded BACKWARD
+        /// half for the *Inv passthroughs). An inverse-of-product is the reverse-order
+        /// product of backward halves ((P·V·M)⁻¹ = M⁻¹·V⁻¹·P⁻¹) — never a `.Inverse`.
+        /// NormalMatrix = transpose(Model_backward) upper-3×3.
+        // Each name maps to RANKED alternative recipes; the bucket picks the first
+        // whose constituents are all available for the RO. So ModelViewProjTrafo
+        // prefers Proj·View·Model (constituents provided) but falls back to
+        // ViewProjTrafo·Model when only a combined ViewProjTrafo is supplied — the
+        // heap derives whatever it can from what the consumer actually provides.
+        let standard : Map<string, (int * DerivedOp) list> =
+            Map.ofList [
+                "ModelTrafo",            [ ARM_COLLAPSE, DMatMul [ fwd MBASE ] ]
+                "ModelTrafoInv",         [ ARM_COLLAPSE, DMatMul [ bwd MBASE ] ]
+                "ViewTrafo",             [ ARM_COLLAPSE, DMatMul [ fwd VBASE ] ]
+                "ViewTrafoInv",          [ ARM_COLLAPSE, DMatMul [ bwd VBASE ] ]
+                "ProjTrafo",             [ ARM_COLLAPSE, DMatMul [ fwd PBASE ] ]
+                "ProjTrafoInv",          [ ARM_COLLAPSE, DMatMul [ bwd PBASE ] ]
+                "ViewProjTrafo",         [ ARM_MATMUL2,  DMatMul [ fwd PBASE; fwd VBASE ] ]
+                "ViewProjTrafoInv",      [ ARM_MATMUL2,  DMatMul [ bwd VBASE; bwd PBASE ] ]
+                "ModelViewTrafo",        [ ARM_MATMUL2,  DMatMul [ fwd VBASE; fwd MBASE ] ]
+                "ModelViewTrafoInv",     [ ARM_MATMUL2,  DMatMul [ bwd MBASE; bwd VBASE ] ]
+                "ModelViewProjTrafo",    [ (ARM_MATMUL3, DMatMul [ fwd PBASE; fwd VBASE; fwd MBASE ])
+                                           (ARM_MATMUL2, DMatMul [ fwd VPBASE; fwd MBASE ]) ]
+                "ModelViewProjTrafoInv", [ (ARM_MATMUL3, DMatMul [ bwd MBASE; bwd VBASE; bwd PBASE ])
+                                           (ARM_MATMUL2, DMatMul [ bwd MBASE; bwd VPBASE ]) ]
+                "NormalMatrix",          [ ARM_NORMAL,   DNormal (bwd MBASE) ]
+            ]
+
+        let isDerived (n : string) = Map.containsKey n standard
+        let tryRules (n : string) = Map.tryFind n standard
+        /// the constituents a derived name consumes, in multiplication order.
+        let constituentsOf (op : DerivedOp) = match op with | DMatMul cs -> cs | DNormal c -> [ c ]
+        /// the first alternative recipe whose constituents are ALL available for the
+        /// RO (per `avail baseName`), or None if the name isn't derivable here.
+        let pickRule (avail : string -> bool) (n : string) : (int * DerivedOp) option =
+            match tryRules n with
+            | Some alts -> alts |> List.tryFind (fun (_, op) -> constituentsOf op |> List.forall (fun c -> avail c.CBase))
+            | None -> None
+        /// does any alternative for `n` consume Model (chain-eligibility signal)?
+        let dependsOnModel (n : string) =
+            match tryRules n with
+            | Some alts -> alts |> List.exists (fun (_, op) -> constituentsOf op |> List.exists (fun c -> c.CBase = MBASE))
+            | None -> false
+
+        // one thread per slot. Each record is [arm; outCell; inCell0; inCell1;
+        // inCell2] (unused input cells = the slot's own header base, harmlessly
+        // re-read). Every constituent — Model/View/Proj, forward/backward — is an
+        // arena M44d region whose per-slot WORD offset lives in this slot's header
+        // at the named cell; View/Proj are shared regions, so their cell holds the
+        // same offset in every slot. `dataD`/`dataF` alias the SAME arena buffer
+        // (double-read / f32-write); output regions are disjoint from the inputs, so
+        // there is no in-pass read-after-write hazard. recStride = 5.
+        [<ReflectedDefinition>]
+        let private ldM44 (woff : int) : M44d =
+            let o = woff >>> 1
+            M44d(uniform.HeapDataD.[o+0],  uniform.HeapDataD.[o+1],  uniform.HeapDataD.[o+2],  uniform.HeapDataD.[o+3],
+                 uniform.HeapDataD.[o+4],  uniform.HeapDataD.[o+5],  uniform.HeapDataD.[o+6],  uniform.HeapDataD.[o+7],
+                 uniform.HeapDataD.[o+8],  uniform.HeapDataD.[o+9],  uniform.HeapDataD.[o+10], uniform.HeapDataD.[o+11],
+                 uniform.HeapDataD.[o+12], uniform.HeapDataD.[o+13], uniform.HeapDataD.[o+14], uniform.HeapDataD.[o+15])
+
+        [<Literal>]
+        let REC_STRIDE = 5
+
+        // The arena (HeapDataD double-read view / HeapData f32-write view) and the
+        // header table are the SAME storage buffers the render shader uses
+        // (uniform?StorageBuffer?…), bound by name; `records` is the only entry-point
+        // array param (int[] binds cleanly, unlike a float[] entry param which FShade
+        // would emit as an unsized uniform array). recStride = 5.
+        [<LocalSize(X = 64)>]
+        let composeDerived (n : int) (nRec : int) (hstride : int) (records : int[]) =
+            compute {
+                let slot = getGlobalId().X
+                if slot < n then
+                    let hb = slot * hstride
+                    for r in 0 .. nRec - 1 do
+                        let rb = r * REC_STRIDE
+                        let outOff = uniform.HeapHeaders.[hb + records.[rb + 1]]
+                        let a = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 2]])
+                        match records.[rb] with
+                        | 1 -> HeapWrite.m44 outOff (M44f(a))
+                        | 2 -> let b = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 3]])
+                               HeapWrite.m44 outOff (M44f(a * b))
+                        | 3 -> let b = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 3]])
+                               let c = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 4]])
+                               HeapWrite.m44 outOff (M44f(a * b * c))
+                        | _ ->
+                            // NormalMatrix = transpose(Model_backward) upper-3x3.
+                            let t = a.Transposed
+                            HeapWrite.m33 outOff
+                                (M33f(float32 t.M00, float32 t.M01, float32 t.M02,
+                                      float32 t.M10, float32 t.M11, float32 t.M12,
+                                      float32 t.M20, float32 t.M21, float32 t.M22))
+            }
+
     /// Persistent state of ONE bucket — host OR bindless (vertex-pull) geometry,
     /// untextured / bindless-textured / atlas-textured, instanced or not. The
     /// geometry class and instanced-ness are part of the bucket key, so each
@@ -1824,6 +2041,56 @@ module Heap =
                                     // an arena region. "ModelTrafo" is NOT in `names` in this mode.
                                     chainMode : bool) =
         let fieldStride = names.Length
+        // ── derived-uniform compute plan (wombat §7, fp64) ───────────────
+        // Shader-consumed names that are standard recipes are COMPUTE OUTPUTS:
+        // produced once per slot in fp64 by `Derived.composeDerived` and gathered
+        // like any field. Their constituents (Model/View/Proj, forward/backward)
+        // are arena M44d regions placed in each slot's header AFTER the field cells
+        // (cells [fieldStride, fieldStride+numConst)); Model is per-slot (chain-
+        // folded in chainMode, else uploaded from the RO's ModelTrafo), View/Proj
+        // are ref-counted by aval (shared → one slot, a camera move marks one
+        // region → O(1)). Records are static per bucket: [arm; outCell; in0; in1;
+        // in2] over header CELLS (REC_STRIDE = 5), the kernel reads each input's
+        // per-slot arena offset from the slot's header at that cell.
+        // a base trafo is available for derivation if the RO supplies it in a TRAFO
+        // type (Trafo3d/M44d/M44f — packable into the fp64 constituent), or (for Model)
+        // exposes the unfolded ModelTrafoStack (chainMode fold). A consumed name
+        // supplied in some OTHER type (e.g. a V2i) is NOT a constituent — the recipe
+        // simply isn't derivable and the name falls back to a plain/diagnosed field.
+        let isTrafoSupply (t : System.Type) = t = typeof<Trafo3d> || t = typeof<M44d> || t = typeof<M44f>
+        let ro0BaseSupplied (b : string) =
+            (match ro0.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create b) with ValueSome v -> isTrafoSupply v.ContentType | _ -> false)
+            || (b = Derived.MBASE &&
+                (match ro0.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "ModelTrafoStack") with ValueSome _ -> true | _ -> false))
+        let derivedPlan =                       // (fieldCell, arm, constituents in mul order)
+            names |> Array.mapi (fun i n -> i, n)
+                  |> Array.choose (fun (i, n) ->
+                      // pick the first recipe alternative whose constituents are all
+                      // available; otherwise (e.g. a combined ViewProjTrafo supplied
+                      // without View/Proj AND no VP·M fallback applies) it stays a plain
+                      // direct field gathering the supplied value — derive when we can,
+                      // never crash.
+                      match Derived.pickRule ro0BaseSupplied n with
+                      | Some (arm, op) -> Some (i, arm, Derived.constituentsOf op |> List.toArray)
+                      | None -> None)
+        let neededConstituents =                // distinct (base,inv), stable first-seen order
+            derivedPlan |> Array.collect (fun (_, _, cs) -> cs) |> Array.distinct
+        let constCell : System.Collections.Generic.IDictionary<Constituent, int> =
+            neededConstituents |> Array.mapi (fun k c -> c, fieldStride + k) |> dict
+        let numConst = neededConstituents.Length
+        let hasDerived = derivedPlan.Length > 0
+        // Model forward / backward constituent cells (chainMode fold targets); -1 if
+        // no consumed recipe needs that half.
+        let cellOf (c : Constituent) = match constCell.TryGetValue c with | true, k -> k | _ -> -1
+        let modelFwdCell = cellOf (Derived.fwd Derived.MBASE)
+        let modelBwdCell = cellOf (Derived.bwd Derived.MBASE)
+        // static records: one per derived output, packed [arm; outCell; in0..in2].
+        let derivedRecords =
+            derivedPlan |> Array.collect (fun (fieldCell, arm, cs) ->
+                let cell k = if k < cs.Length then constCell.[cs.[k]] else constCell.[cs.[0]]
+                [| arm; fieldCell; cell 0; cell 1; cell 2 |])
+        let numDerivedRecords = derivedPlan.Length
+        let derivedCells = derivedPlan |> Array.map (fun (c, _, _) -> c) |> Set.ofArray
         let scope = Ag.Scope.Root
         let symData = Symbol.Create "HeapData"
         let symDataI = Symbol.Create "HeapDataI"
@@ -1837,6 +2104,24 @@ module Heap =
         // ── sampler structure (a function of the EFFECT + runtime, not of the
         //    membership — every member shares the effect via the bucket key) ──
         let samplers = samplerUniforms effect           // (name, texName, type, state)[]
+        // USER-managed unbounded sampler ARRAYS (e.g. `Sampler2d[] Textures`, indexed
+        // by a per-draw HeapTexIndex) — distinct from the heap's auto-bindless of
+        // single per-object samplers. They are NOT per-draw fields and NOT rewritten;
+        // the heap simply binds the RO-supplied shared array through (bucket-
+        // homogeneous), the per-draw index being an ordinary gathered field.
+        let samplerNameSet = samplers |> Array.map (fun (n, _, _, _) -> n) |> Set.ofArray
+        // user-managed unbounded sampler ARRAYS (e.g. `Sampler2d[] textures` from
+        // `textureArray uniform?Textures`, indexed in-shader by a per-draw field) that
+        // the per-object bindless path did NOT claim. Returns the TEXTURE SEMANTIC
+        // ("Textures") — the name the render binds and the RO supplies — NOT the FShade
+        // value name ("textures").
+        let userSamplerArrays =
+            effect.Uniforms |> Map.toArray
+            |> Array.choose (fun (n, p) ->
+                match p.uniformValue with
+                | UniformValue.SamplerArray arr when arr.Length > 0 && not (samplerNameSet.Contains n) -> Some (fst arr.[0])
+                | _ -> None)
+            |> Array.distinct
         let samplersByType =
             samplers
             |> Array.groupBy (fun (_, _, ty, _) -> ty)
@@ -1912,9 +2197,14 @@ module Heap =
         // ── per-slot header table layout: [0, fieldStride) per-draw uniform
         //    region offsets, then (host buckets only) one allocation REF per
         //    consumed attribute, then ONE index-allocation ref. ──
+        // header cells: [0,fieldStride) per-draw field region offsets (incl. derived
+        // OUTPUT regions), then [fieldStride, fieldStride+numConst) derived-uniform
+        // CONSTITUENT region offsets (Model/View/Proj fwd/bwd), then one allocation
+        // REF per consumed attribute (host buckets), then ONE index-allocation ref.
+        let attrBase = fieldStride + numConst
         let attrCells = if useBindlessGeom then 0 else numAttrs
-        let headerStride = fieldStride + attrCells + 1
-        let idxCell = fieldStride + attrCells
+        let headerStride = attrBase + attrCells + 1
+        let idxCell = attrBase + attrCells
 
         // ── arena: deduped per-draw uniform regions, refcounted, placed by a
         //    coalescing range allocator (float units) ──
@@ -2138,16 +2428,13 @@ module Heap =
             chOffset.[slot] <- 0
             chainDirtyStruct.Add slot |> ignore
 
-        // each field's SHADER-requested type (after derived-rule expansion) — drives
-        // whether its region is f32 or true-double storage. The bucket's `effect` is
-        // the ORIGINAL (pre-rewrite) effect, so its consumed-uniform types are intact.
+        // each field's SHADER-requested type, read straight from the effect's
+        // declared uniform types. Derived composites are NOT expanded away (they are
+        // compute OUTPUTS, gathered like any field): a shader reading
+        // `ModelViewProjTrafo : M44f` gets an f32 output region, `NormalMatrix : M33f`
+        // a mat3 region, etc.
         let fieldRequestedType : string -> System.Type =
-            let mutable cur = effect
-            let mutable i = 0
-            while (cur.Uniforms |> Map.exists (fun n _ -> standardDerivedRules.ContainsKey n)) && i < 8 do
-                cur <- cur |> Effect.substituteUniforms (fun name _ _ _ -> Map.tryFind name standardDerivedRules)
-                i <- i + 1
-            let m = cur.Uniforms |> Map.map (fun _ p -> p.uniformType)
+            let m = effect.Uniforms |> Map.map (fun _ p -> p.uniformType)
             fun name -> match Map.tryFind name m with | Some t -> t | None -> typeof<float32>
 
         // `requested` is the shader's declared type for this field; it decides STORAGE:
@@ -2189,6 +2476,76 @@ module Heap =
                     regions.Remove av |> ignore
                     arenaAlloc.Free e.Block
             | _ -> ()
+
+        // ── derived-uniform regions ──────────────────────────────────────
+        // CONSTITUENT: a base trafo's forward / backward half as a real M44d (32
+        // words, 8-byte aligned for the double view), uploaded from the RO's
+        // ViewTrafo/ProjTrafo/ModelTrafo aval. Ref-counted by (aval, inv) so a
+        // camera shared across draws is ONE region (its mark re-packs once). The
+        // backward half is the uploaded `Trafo3d.Backward` — never a `.Inverse`.
+        let packM44dInto (m : M44d) (a : float32[]) (off : int) =
+            wd a (off+0)  m.M00; wd a (off+2)  m.M01; wd a (off+4)  m.M02; wd a (off+6)  m.M03
+            wd a (off+8)  m.M10; wd a (off+10) m.M11; wd a (off+12) m.M12; wd a (off+14) m.M13
+            wd a (off+16) m.M20; wd a (off+18) m.M21; wd a (off+20) m.M22; wd a (off+22) m.M23
+            wd a (off+24) m.M30; wd a (off+26) m.M31; wd a (off+28) m.M32; wd a (off+30) m.M33
+        let constituentPack (inv : bool) : obj -> float32[] -> int -> unit =
+            fun o a off ->
+                let m =
+                    match o with
+                    | :? Trafo3d as t -> if inv then t.Backward else t.Forward
+                    | :? M44d as m -> if inv then failwith "Heap: derived inverse needs a Trafo3d constituent (no .Inverse); got M44d" else m
+                    | :? M44f as m -> if inv then failwith "Heap: derived inverse needs a Trafo3d constituent (no .Inverse); got M44f" else M44d m
+                    | _ -> failwithf "Heap: derived constituent must be Trafo3d/M44d/M44f, got %s" (o.GetType().Name)
+                packM44dInto m a off
+        let constituentsF = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        let constituentsB = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        let allocConstituent (av : IAdaptiveValue) (inv : bool) : int =
+            let d = if inv then constituentsB else constituentsF
+            match d.TryGetValue av with
+            | true, e -> e.RefCount <- e.RefCount + 1; e.Offset
+            | _ ->
+                let sz = 32
+                let b = arenaAlloc.Alloc (sz + 1)
+                let raw = int b.Offset
+                let off = if (raw &&& 1) = 1 then raw + 1 else raw
+                arena.EnsureFloats arenaAlloc.Extent
+                let pk = constituentPack inv
+                let w =
+                    if av.IsConstant then
+                        arena.StageOnce(off, sz, fun st -> pk (av.GetValueUntyped AdaptiveToken.Top) st off)
+                        Unchecked.defaultof<RegionWriter>
+                    else arena.Add(av, off, sz, pk)
+                d.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b; HeaderWords = 0 }
+                off
+        let freeConstituent (av : IAdaptiveValue) (inv : bool) =
+            let d = if inv then constituentsB else constituentsF
+            match d.TryGetValue av with
+            | true, e ->
+                e.RefCount <- e.RefCount - 1
+                if e.RefCount = 0 then
+                    if not (isNull e.Writer) then arena.Remove e.Writer
+                    d.Remove av |> ignore
+                    arenaAlloc.Free e.Block
+            | _ -> ()
+        // an 8-byte-aligned M44d slot the CHAIN fold writes (no aval / writer) — the
+        // per-slot Model forward/backward constituent in chainMode.
+        let allocFoldConstituent () : int * Management.Block<unit> =
+            let sz = 32
+            let b = arenaAlloc.Alloc (sz + 1)
+            let raw = int b.Offset
+            let off = if (raw &&& 1) = 1 then raw + 1 else raw
+            arena.EnsureFloats arenaAlloc.Extent
+            off, b
+        // OUTPUT: a per-slot region the compute writes (no aval / writer), stored as
+        // the shader's requested type (f32 M44f = 16 words, M33f = 9, …).
+        let allocOutput (requested : System.Type) : int * Management.Block<unit> =
+            let dbl = isDoubleUniform requested
+            let (sz, _) = if dbl then doublePackerFor requested else packerFor requested
+            let b = arenaAlloc.Alloc (if dbl then sz + 1 else sz)
+            let raw = int b.Offset
+            let off = if dbl && (raw &&& 1) = 1 then raw + 1 else raw
+            arena.EnsureFloats arenaAlloc.Extent
+            off, b
 
         /// SINGLETON attribute (SingleValueBuffer): a header + an adaptive
         /// region writer packing the value's native bytes at ref+4. length = 1,
@@ -2352,7 +2709,7 @@ module Heap =
                     | true, e -> headers.[hb + nameToField.[names.[i]]] <- e.Offset
                     | _ -> ()
                 slt.AttrKeys |> Array.iteri (fun ai k ->
-                    headers.[hb + fieldStride + ai] <-
+                    headers.[hb + attrBase + ai] <-
                         match k with
                         | AttrKey.Single av -> singleRegions.[av].Offset
                         | AttrKey.Static key -> attrStatic.[key].Ref)
@@ -2563,73 +2920,109 @@ module Heap =
         let arenaU = ((arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         let headersU = headersAval :> IAdaptiveValue
 
-        // ── GPU trafo-chain dispatch (chainMode) ─────────────────────────
-        // composeModel folds each slot's chain (gathered through chIdx into the
-        // deduped link arena) on the GPU and writes the per-slot ModelTrafo (M44f)
-        // to chainOut. The ModelTrafo gather (heapRewrite below) reads chainOut[slot]
-        // instead of an arena region. The dispatch is hung off chainOutU's pull,
-        // which depends on (a) the membership updater — a slot add/remove re-uploads
-        // the chain structure + re-dispatches, and (b) the link arena buffer — a
-        // changed link uploads ONE slot and re-dispatches. ACQUISITION-PROPAGATING
-        // & rule-clean: no transact in evaluation, mirroring derivedChainFp64.
-        let chainShader = if chainMode then runtime.CreateComputeShader Chain.composeModel else Unchecked.defaultof<_>
-        let chainInput  = if chainMode then runtime.CreateInputBinding chainShader else Unchecked.defaultof<_>
-        let mutable chainOutBuf : IBuffer<M44f> = Unchecked.defaultof<_>
+        // ── derived-uniform COMPUTE dispatch (fp64, once per slot) ────────
+        // Two compute passes write straight into the arena the render gathers (no
+        // per-vertex derivation):
+        //   (1) chainMode only — fold each slot's Model link chain in fp64 and write
+        //       the result as M44d into the slot's Model FORWARD constituent region.
+        //   (2) composeDerived — for every consumed composite, read its constituents
+        //       (Model/View/Proj fwd/bwd) from the arena double view and write the
+        //       result (f32) to the slot's output region.
+        // Hung off arenaU's pull (constituents staged), the membership updater (slot
+        // add/remove ⇒ structure re-upload), and — chainMode — the link arena (a
+        // shared parent edit ⇒ ONE link upload ⇒ re-dispatch). A camera move marks a
+        // shared View/Proj constituent ⇒ arena re-stage ⇒ re-dispatch, O(1) CPU.
+        // ACQUISITION-PROPAGATING & rule-clean (no transact in evaluation).
+        let chainActive = chainMode && modelFwdCell >= 0
+        // backward fold: chainMode + a consumed recipe that needs Model⁻¹ (NormalMatrix
+        // / *Inv). Folds the links' uploaded Backward halves in array order.
+        let chainBwdActive = chainMode && modelBwdCell >= 0
+        let chainShader = if chainActive then runtime.CreateComputeShader Chain.composeModel else Unchecked.defaultof<_>
+        let chainInput  = if chainActive then runtime.CreateInputBinding chainShader else Unchecked.defaultof<_>
+        let chainInvShader = if chainBwdActive then runtime.CreateComputeShader Chain.composeModelInv else Unchecked.defaultof<_>
+        let chainInvInput  = if chainBwdActive then runtime.CreateInputBinding chainInvShader else Unchecked.defaultof<_>
+        let derivedShader = if hasDerived then runtime.CreateComputeShader Derived.composeDerived else Unchecked.defaultof<_>
+        let derivedInput  = if hasDerived then runtime.CreateInputBinding derivedShader else Unchecked.defaultof<_>
+        let mutable recBuf : IBuffer<int> = Unchecked.defaultof<_>
         let mutable chOffBuf : IBuffer<int> = Unchecked.defaultof<_>
         let mutable chLenBuf : IBuffer<int> = Unchecked.defaultof<_>
         let mutable chIdxBuf : IBuffer<int> = Unchecked.defaultof<_>
-        let mutable chainOutCap = 0
+        let mutable chainCap = 0
         let mutable chIdxBufCap = 0
-        let chainOutU =
-            if not chainMode then Unchecked.defaultof<IAdaptiveValue>
+        let derivedU =
+            if not hasDerived then arenaU
             else
                 AVal.custom (fun t ->
-                    // (a) membership current (applies pending add/remove -> chOffset/
-                    //     chLen/chIdx + chainDirtyStruct + link interning)
                     updater.GetValue t |> ignore
-                    // (b) link values current (uploads only changed link slots)
-                    let linkBuf = (chainLinks :> aval<IBackendBuffer>).GetValue t
-                    let n = max 1 highWater
-                    // (re)create per-slot structure + output buffers on growth; a
-                    // grow forces a full structure re-upload (cheap; only on churn).
-                    if n > chainOutCap then
-                        let cap = Fun.NextPowerOfTwo n
-                        if not (isNull (box chainOutBuf)) then chainOutBuf.Dispose()
-                        if not (isNull (box chOffBuf)) then chOffBuf.Dispose()
-                        if not (isNull (box chLenBuf)) then chLenBuf.Dispose()
-                        chainOutBuf <- runtime.CreateBuffer<M44f>(cap, BufferUsage.Storage)
-                        chOffBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Storage)
-                        chLenBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Storage)
-                        chainOutCap <- cap
-                        chainStructAllDirty <- true
-                    let idxExtent = max 1 chIdxAlloc.Extent
-                    if idxExtent > chIdxBufCap then
-                        let cap = Fun.NextPowerOfTwo idxExtent
-                        if not (isNull (box chIdxBuf)) then chIdxBuf.Dispose()
-                        chIdxBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Storage)
-                        chIdxBufCap <- cap
-                        chainStructAllDirty <- true
-                    // upload chain structure. The whole-arrays upload is O(highWater)
-                    // and only happens when structure actually changed (add/remove);
-                    // a pure trafo edit changes NO structure (chainDirtyStruct empty)
-                    // and only re-uploads the touched LINK + re-dispatches.
-                    if chainStructAllDirty || chainDirtyStruct.Count > 0 then
-                        chainStructAllDirty <- false
-                        chainDirtyStruct.Clear()
-                        chOffBuf.Upload(chOffset, 0, 0, highWater)
-                        chLenBuf.Upload(chLen, 0, 0, highWater)
-                        if chIdxAlloc.Extent > 0 then chIdxBuf.Upload(chIdx, 0, 0, chIdxAlloc.Extent)
-                    // dispatch over all live slots (tombstones write identity)
-                    chainInput.["n"]           <- highWater
-                    chainInput.["chainOffset"] <- chOffBuf
-                    chainInput.["chainLen"]    <- chLenBuf
-                    chainInput.["linkIdx"]     <- chIdxBuf
-                    chainInput.["links"]       <- linkBuf
-                    chainInput.["outp"]        <- chainOutBuf
-                    chainInput.Flush()
-                    let groups = (highWater + chainShader.LocalSize.X - 1) / chainShader.LocalSize.X
-                    runtime.Run [ ComputeCommand.Bind chainShader; ComputeCommand.SetInput chainInput; ComputeCommand.Dispatch (max 1 groups) ]
-                    chainOutBuf :> IBuffer) :> IAdaptiveValue
+                    // arena buffer with constituents staged (View/Proj uploaded;
+                    // Model space allocated) + the per-slot header offsets, current.
+                    let arenaBuf = (arena :> aval<IBackendBuffer>).GetValue t
+                    let hdrBuf   = (headersBuf :> aval<IBackendBuffer>).GetValue t
+                    // static records uploaded once (bucket-constant layout).
+                    if isNull (box recBuf) then
+                        recBuf <- runtime.CreateBuffer<int>(max 1 derivedRecords.Length, BufferUsage.Storage)
+                        if derivedRecords.Length > 0 then recBuf.Upload(derivedRecords, 0, 0, derivedRecords.Length)
+                    // (1) chain fold → Model forward constituent (M44d) in the arena
+                    if chainActive then
+                        let linkBuf = (chainLinks :> aval<IBackendBuffer>).GetValue t
+                        let n = max 1 highWater
+                        if n > chainCap then
+                            let cap = Fun.NextPowerOfTwo n
+                            if not (isNull (box chOffBuf)) then chOffBuf.Dispose(); chLenBuf.Dispose()
+                            chOffBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Storage)
+                            chLenBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Storage)
+                            chainCap <- cap
+                            chainStructAllDirty <- true
+                        let idxExtent = max 1 chIdxAlloc.Extent
+                        if idxExtent > chIdxBufCap then
+                            let cap = Fun.NextPowerOfTwo idxExtent
+                            if not (isNull (box chIdxBuf)) then chIdxBuf.Dispose()
+                            chIdxBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Storage)
+                            chIdxBufCap <- cap
+                            chainStructAllDirty <- true
+                        if chainStructAllDirty || chainDirtyStruct.Count > 0 then
+                            chainStructAllDirty <- false
+                            chainDirtyStruct.Clear()
+                            chOffBuf.Upload(chOffset, 0, 0, highWater)
+                            chLenBuf.Upload(chLen, 0, 0, highWater)
+                            if chIdxAlloc.Extent > 0 then chIdxBuf.Upload(chIdx, 0, 0, chIdxAlloc.Extent)
+                        chainInput.["n"]           <- highWater
+                        chainInput.["hstride"]     <- headerStride
+                        chainInput.["mCell"]       <- modelFwdCell
+                        chainInput.["chainOffset"] <- chOffBuf
+                        chainInput.["chainLen"]    <- chLenBuf
+                        chainInput.["linkIdx"]     <- chIdxBuf
+                        chainInput.["links"]       <- linkBuf
+                        chainInput.["HeapHeaders"] <- hdrBuf
+                        chainInput.["HeapDataD"]   <- arenaBuf
+                        chainInput.Flush()
+                        let g = (highWater + chainShader.LocalSize.X - 1) / chainShader.LocalSize.X
+                        runtime.Run [ ComputeCommand.Bind chainShader; ComputeCommand.SetInput chainInput; ComputeCommand.Dispatch (max 1 g) ]
+                        // (1b) backward fold → Model backward constituent (M44d)
+                        if chainBwdActive then
+                            chainInvInput.["n"]           <- highWater
+                            chainInvInput.["hstride"]     <- headerStride
+                            chainInvInput.["mCell"]       <- modelBwdCell
+                            chainInvInput.["chainOffset"] <- chOffBuf
+                            chainInvInput.["chainLen"]    <- chLenBuf
+                            chainInvInput.["linkIdx"]     <- chIdxBuf
+                            chainInvInput.["links"]       <- linkBuf
+                            chainInvInput.["HeapHeaders"] <- hdrBuf
+                            chainInvInput.["HeapDataD"]   <- arenaBuf
+                            chainInvInput.Flush()
+                            runtime.Run [ ComputeCommand.Bind chainInvShader; ComputeCommand.SetInput chainInvInput; ComputeCommand.Dispatch (max 1 g) ]
+                    // (2) derive every consumed composite into the arena
+                    derivedInput.["n"]           <- highWater
+                    derivedInput.["nRec"]        <- numDerivedRecords
+                    derivedInput.["hstride"]     <- headerStride
+                    derivedInput.["records"]     <- recBuf
+                    derivedInput.["HeapHeaders"] <- hdrBuf
+                    derivedInput.["HeapDataD"]   <- arenaBuf
+                    derivedInput.["HeapData"]    <- arenaBuf
+                    derivedInput.Flush()
+                    let g = (highWater + derivedShader.LocalSize.X - 1) / derivedShader.LocalSize.X
+                    runtime.Run [ ComputeCommand.Bind derivedShader; ComputeCommand.SetInput derivedInput; ComputeCommand.Dispatch (max 1 g) ]
+                    arenaBuf :> IBuffer) :> IAdaptiveValue
 
         // texture / atlas / vertex-pull uniform bindings of the bucket RO
         let texLookup = System.Collections.Generic.Dictionary<Symbol, IAdaptiveValue>(HashIdentity.Structural)
@@ -2669,6 +3062,11 @@ module Heap =
                 let u = vtxGatherAval :> IAdaptiveValue
                 texLookup.[Symbol.Create "HeapVertexData"] <- u
                 texLookup.[Symbol.Create "HeapVertexDataI"] <- u
+            // user-managed sampler arrays: bind the (shared) RO-supplied array through.
+            for n in userSamplerArrays do
+                match ro0.Uniforms.TryGetUniform(scope, Symbol.Create n) with
+                | ValueSome v -> texLookup.[Symbol.Create n] <- v
+                | ValueNone -> ()
 
         // ── the heap shader rewrite: ONE SubstituteReads pass per shader ──
         // Per-draw uniform fields (all stages) and the storage-decoded geometry
@@ -2677,9 +3075,11 @@ module Heap =
         // records a uniform's SCOPE from the accessor expression, and a later
         // pass mixing fresh `uniform?StorageBuffer?HeapData` reads with the
         // previous pass's already-desugared ReadInput nodes of the same name
-        // trips its conflicting-scope validation. Derived rules are expanded to
-        // a fixpoint FIRST (they emit only plain uniform reads — distinct
-        // names, no scope mixing).
+        // trips its conflicting-scope validation. Derived composites are NOT
+        // expanded/inlined here — they are produced by the per-slot fp64 compute
+        // pass and stored in their own arena OUTPUT region, so a `ModelViewProjTrafo`
+        // / `NormalMatrix` / `ModelTrafo` read is just another field gather (its cell
+        // is `nameToField.[name]`), never a per-vertex matrix product.
         //   vid = decodeHeapIndex(headers[slot].idxRef, gl_VertexIndex) — the
         // index ELEMENT TYPE comes from the allocation header, not the bucket
         // key. Attribute reads become
@@ -2695,27 +3095,17 @@ module Heap =
             let vtxE : Expr<int> = Expr.Cast (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId))
             let idxRefE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint idxCell) ] @>
             let fieldOff (fi : int) : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint fi) ] @>
-            let rules = standardDerivedRules
             fun e ->
-                // 1) expand derived rules to a fixpoint (plain uniform reads only)
-                let hasDerived (eff : Effect) = eff.Uniforms |> Map.exists (fun n _ -> rules.ContainsKey n)
-                let mutable cur = e
-                let mutable i = 0
-                while hasDerived cur && i < 8 do
-                    cur <- cur |> Effect.substituteUniforms (fun name _ _ _ -> Map.tryFind name rules)
-                    i <- i + 1
-                // 2) one pass per shader
-                cur |> Effect.map (fun sh ->
+                // ONE pass per shader — derived composites are already materialized in
+                // their arena output region by the compute pass, so every uniform read
+                // (composite or plain) is a single field gather.
+                e |> Effect.map (fun sh ->
                     let isVertex = sh.shaderStage = ShaderStage.Vertex
                     let vidVar = Var("heapVid", typeof<int>)
                     let vidE : Expr<int> = Expr.Cast (Expr.Var vidVar)
                     let body =
                         sh.shaderBody.SubstituteReads (fun kind ityp name idx _ ->
                             match kind, idx with
-                            // chainMode: ModelTrafo is the GPU-folded per-slot value
-                            // in HeapModelChain (M44f[slot]); NOT an arena region.
-                            | ParameterKind.Uniform, None when chainMode && name = "ModelTrafo" ->
-                                Some (<@ uniform.HeapModelChain.[ %slotE ] @>.Raw)
                             | ParameterKind.Uniform, None ->
                                 match Map.tryFind name nameToField with
                                 | Some fi -> Some (gatherFor ityp (fieldOff fi))
@@ -2726,7 +3116,7 @@ module Heap =
                                     if useBindlessGeom then
                                         Some (bindlessGatherFlat handleE vidE.Raw ityp numAttrs ai strideF offF)
                                     else
-                                        let refE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint (fieldStride + ai)) ] @>
+                                        let refE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint (attrBase + ai)) ] @>
                                         match hostGather ityp refE vidE with
                                         | Some g -> Some g
                                         | None -> failwithf "Heap: cannot storage-decode shader input '%s' (%A — supported: float32/V2f/V3f/V4f and int/V2i/V3i/V4i)" name ityp
@@ -2788,9 +3178,12 @@ module Heap =
                         // HeapData + HeapDataI: the SAME arena buffer, bound as a
                         // float and as an int view (headers / indices / integral
                         // attributes decode the int view).
-                        if name = symData || name = symDataI || name = symDataD then ValueSome arenaU
+                        // HeapData/I/D bind `derivedU` (= the arena buffer AFTER the
+                        // per-slot fp64 compute has written every composite into it),
+                        // so demanding the render triggers the derive pass; identical
+                        // to arenaU when the bucket has no derived uniforms.
+                        if name = symData || name = symDataI || name = symDataD then ValueSome derivedU
                         elif name = symHeaders then ValueSome headersU
-                        elif chainMode && name = symModelChain then ValueSome chainOutU
                         else
                             match texLookup.TryGetValue name with
                             | true, v -> ValueSome v
@@ -2821,17 +3214,46 @@ module Heap =
         member private _.AddInternal(ro : RenderObject) =
             let slot = if freeSlots.Count > 0 then freeSlots.Pop() else let s = highWater in highWater <- s + 1; s
             ensureSlot slot
-            let keys = Array.zeroCreate<IAdaptiveValue> names.Length
+            let regionKeys = System.Collections.Generic.List<IAdaptiveValue>(names.Length)
+            let outBlocks = System.Collections.Generic.List<Management.Block<unit>>()
             for i in 0 .. names.Length - 1 do
-                let av =
-                    match ro.Uniforms.TryGetUniform(scope, nameSyms.[i]) with
-                    | ValueSome v -> v
-                    | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing per-draw uniform '%s'" names.[i]
-                keys.[i] <- av
-                headers.[slot * headerStride + nameToField.[names.[i]]] <- allocRegion av (fieldRequestedType names.[i])
+                if derivedCells.Contains i then
+                    // derived composite: a per-slot OUTPUT region the compute writes
+                    // (no aval, no RegionWriter); the rewritten shader gathers it.
+                    let (off, blk) = allocOutput (fieldRequestedType names.[i])
+                    outBlocks.Add blk
+                    headers.[slot * headerStride + i] <- off
+                else
+                    let av =
+                        match ro.Uniforms.TryGetUniform(scope, nameSyms.[i]) with
+                        | ValueSome v -> v
+                        | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing per-draw uniform '%s'" names.[i]
+                    regionKeys.Add av
+                    headers.[slot * headerStride + i] <- allocRegion av (fieldRequestedType names.[i])
+            // derived-uniform CONSTITUENT regions (Model/View/Proj fwd/bwd, M44d):
+            // Model in chainMode is the per-slot FOLD output (compute-written); every
+            // other constituent is uploaded from the RO's base trafo aval, ref-counted
+            // by aval (a shared camera → ONE region, mark re-packs once).
+            let constKeys = System.Collections.Generic.List<struct(IAdaptiveValue * bool)>(numConst)
+            let foldBlocks = System.Collections.Generic.List<Management.Block<unit>>()
+            for k in 0 .. numConst - 1 do
+                let c = neededConstituents.[k]
+                let off =
+                    if c.CBase = Derived.MBASE && chainMode then
+                        let (o, blk) = allocFoldConstituent ()
+                        foldBlocks.Add blk
+                        o
+                    else
+                        let bav =
+                            match ro.Uniforms.TryGetUniform(scope, Symbol.Create c.CBase) with
+                            | ValueSome v -> v
+                            | ValueNone -> failwithf "Heap.ofRenderObjects: derived uniform needs base trafo '%s' but the RO doesn't supply it" c.CBase
+                        constKeys.Add(struct(bav, c.CInv))
+                        allocConstituent bav c.CInv
+                headers.[slot * headerStride + (fieldStride + k)] <- off
             // GPU trafo-chain: route the slot's UNFOLDED model stack into the link
-            // arena (deduped) + a chIdx run; the GPU folds it to chainOut[slot].
-            // "ModelTrafo" is NOT a region in this mode.
+            // arena (deduped) + a chIdx run; the GPU folds it into the slot's Model
+            // forward (and, when consumed, backward) constituent region.
             if chainMode then
                 let stack =
                     match ro.Uniforms.TryGetUniform(scope, symModelStack) with
@@ -2860,7 +3282,7 @@ module Heap =
                 else
                     attrInfos |> Array.map (fun (ai, _, sym, _, _, _, _) ->
                         let (key, r) = attrFor ro sym
-                        headers.[slot * headerStride + fieldStride + ai] <- r
+                        headers.[slot * headerStride + attrBase + ai] <- r
                         key)
             // index allocation — or the -1 sentinel for NON-indexed members
             // (the shader's decodeHeapIndex passes gl_VertexIndex through);
@@ -2910,14 +3332,18 @@ module Heap =
             entries.[slot] <- DrawCallInfo(FaceVertexCount = vertexCount, FirstIndex = 0, BaseVertex = 0,
                                            FirstInstance = firstInstance, InstanceCount = instCount)
             dirtyDraws.Add slot |> ignore
-            slots.[ro] <- { Slot = slot; RegionKeys = keys; Active = active; Instances = k; InstOffset = firstInstance
-                            InstBlock = instBlock; AttrKeys = attrKeys; IdxKey = idxKey }
+            slots.[ro] <- { Slot = slot; RegionKeys = regionKeys.ToArray(); Active = active; Instances = k; InstOffset = firstInstance
+                            InstBlock = instBlock; AttrKeys = attrKeys; IdxKey = idxKey
+                            ConstKeys = constKeys.ToArray(); OutBlocks = outBlocks.ToArray(); FoldBlocks = foldBlocks.ToArray() }
 
         member private _.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with
             | true, s ->
                 if chainMode then removeChainSlot s.Slot
                 for k in s.RegionKeys do freeRegion k
+                for struct(av, inv) in s.ConstKeys do freeConstituent av inv
+                for b in s.OutBlocks do arenaAlloc.Free b
+                for b in s.FoldBlocks do arenaAlloc.Free b
                 for k in s.AttrKeys do
                     match k with
                     | AttrKey.Single av -> freeSingle av
@@ -3003,11 +3429,17 @@ module Heap =
                 pool.Dispose()
                 delDummy dummy
             | None -> ()
-            if chainMode then
-                if not (isNull (box chainOutBuf)) then chainOutBuf.Dispose()
+            if not (isNull (box recBuf)) then recBuf.Dispose()
+            // release the derived-uniform compute resources (else the runtime's
+            // resource cache keeps live references to the ComputeProgram).
+            let disp (o : obj) = match o with | :? System.IDisposable as d -> d.Dispose() | _ -> ()
+            if hasDerived then disp derivedInput; disp derivedShader
+            if chainActive then
+                disp chainInput; disp chainShader
                 if not (isNull (box chOffBuf)) then chOffBuf.Dispose()
                 if not (isNull (box chLenBuf)) then chLenBuf.Dispose()
                 if not (isNull (box chIdxBuf)) then chIdxBuf.Dispose()
+            if chainBwdActive then disp chainInvInput; disp chainInvShader
             slots.Clear()
 
     /// Collapse an adaptive set of N render objects into B bucket render objects
@@ -3134,29 +3566,54 @@ module Heap =
             match consumedCache.TryGetValue e.Id with
             | true, v -> v
             | _ ->
-                // expand derived rules to a fixpoint (same loop as `rewrite`)
-                let hasDerived (eff : Effect) = eff.Uniforms |> Map.exists (fun n _ -> standardDerivedRules.ContainsKey n)
-                let mutable cur = e
-                let mutable i = 0
-                while hasDerived cur && i < 8 do
-                    cur <- cur |> Effect.substituteUniforms (fun name _ _ _ -> Map.tryFind name standardDerivedRules)
-                    i <- i + 1
+                // the raw consumed non-sampler uniforms (NOT expanded): a derived
+                // composite stays as-is — it becomes a compute OUTPUT, not its inlined
+                // constituents. (Constituents are planned separately by the bucket.)
                 let v =
-                    cur.Uniforms |> Map.toArray            // sorted by name
+                    e.Uniforms |> Map.toArray            // sorted by name
                     |> Array.choose (fun (n, p) ->
                         if typeof<ISampler>.IsAssignableFrom p.uniformType then None else Some n)
                 consumedCache.[e.Id] <- v
                 v
+        // a derived composite is supported iff the RO supplies every base trafo its
+        // recipe consumes (Model/View/Proj — the heap derives the composite from them
+        // in fp64; the backward halves come from those same Trafo3d avals).
+        let isTrafoSupply (t : System.Type) = t = typeof<Trafo3d> || t = typeof<M44d> || t = typeof<M44f>
+        let baseSupplied (r : RenderObject) (b : string) =
+            (match r.Uniforms.TryGetUniform(scope, Symbol.Create b) with ValueSome v -> isTrafoSupply v.ContentType | ValueNone -> false)
+            || (b = Derived.MBASE &&
+                (match r.Uniforms.TryGetUniform(scope, Symbol.Create "ModelTrafoStack") with ValueSome _ -> true | ValueNone -> false))
         let detectFields (r : RenderObject) (e : Effect) =
             consumedNonSamplerNames e
             |> Array.filter (fun n ->
-                match r.Uniforms.TryGetUniform(scope, Symbol.Create n) with
-                | ValueSome v ->
-                    if packable.Contains v.ContentType then true
-                    else
-                        diag (sprintf "uniform '%s' is effect-consumed and RO-supplied but UNPACKABLE (ContentType = %s) — it stays a shared global resolved from ONE bucket member; if it genuinely varies per object, supply it in a packable type (M44f/Trafo3d/M44d/V4f/C4f/V3f/V2f/float32/float/int)." n v.ContentType.Name)
-                        false
-                | ValueNone -> false)
+                // a derived composite whose constituents are available (some recipe
+                // alternative is satisfiable) is a COMPUTE OUTPUT; otherwise the name
+                // must itself be RO-supplied + packable to be a (plain) field — covers
+                // ordinary uniforms AND a recipe name supplied as a combined value.
+                let derivable = Derived.pickRule (baseSupplied r) n |> Option.isSome
+                if derivable then true
+                else
+                    match r.Uniforms.TryGetUniform(scope, Symbol.Create n) with
+                    | ValueSome v ->
+                        if packable.Contains v.ContentType then true
+                        else
+                            diag (sprintf "uniform '%s' is effect-consumed and RO-supplied but UNPACKABLE (ContentType = %s) — it stays a shared global resolved from ONE bucket member; if it genuinely varies per object, supply it in a packable type (M44f/Trafo3d/M44d/V4f/C4f/V3f/V2f/float32/float/int)." n v.ContentType.Name)
+                            false
+                    | ValueNone ->
+                        // a derived composite that did NOT derive and is NOT supplied:
+                        // if a recipe constituent (Model/View/Proj/ViewProjTrafo) IS
+                        // supplied but in a non-trafo (UNPACKABLE) type, say so — else
+                        // a malformed Model silently disables derivation.
+                        match Derived.tryRules n with
+                        | Some alts ->
+                            alts |> List.iter (fun (_, op) ->
+                                Derived.constituentsOf op |> List.iter (fun c ->
+                                    match r.Uniforms.TryGetUniform(scope, Symbol.Create c.CBase) with
+                                    | ValueSome cv when not (isTrafoSupply cv.ContentType) ->
+                                        diag (sprintf "derived uniform '%s' cannot be derived: its constituent '%s' is supplied in an UNPACKABLE type (%s — need Trafo3d/M44d/M44f)." n c.CBase cv.ContentType.Name)
+                                    | _ -> ()))
+                        | None -> ()
+                        false)
         // device capability is constant — read it once, not per classified RO
         // (the Vulkan property re-walks extension/feature tables on every call)
         let supportsUnbounded = runtime.SupportsUnboundedSamplerArrays
@@ -3341,21 +3798,24 @@ module Heap =
                         let bindless = not hostGeom
                         let inst = instanceCountOf r > 1
                         let e = match r.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
-                        // GPU trafo-chain eligibility: the effect consumes ModelTrafo
+                        // GPU trafo-chain eligibility: the effect DEPENDS ON Model
+                        // (reads ModelTrafo, or a composite whose recipe consumes it)
                         // AND the RO exposes the UNFOLDED stack as aval<aval<Trafo3d>[]>.
-                        // Then ModelTrafo is GPU-folded (chainOut) — NOT an arena region.
+                        // Then the slot's Model constituent is GPU-folded into the
+                        // arena instead of uploaded.
+                        let dependsOnModel =
+                            consumedNonSamplerNames e |> Array.exists Derived.dependsOnModel
                         let chain =
-                            not disableChain &&
-                            (consumedNonSamplerNames e |> Array.contains "ModelTrafo") &&
+                            not disableChain && dependsOnModel &&
                             (match r.Uniforms.TryGetUniform(scope, Symbol.Create "ModelTrafoStack") with
                              | ValueSome (:? aval<aval<Trafo3d>[]>) -> true
                              | _ -> false)
-                        // per-draw field set: DETECTED (effect-consumed ∩
-                        // RO-supplied ∩ packable), interned. In chain mode drop
-                        // "ModelTrafo": it is GPU-folded, not a packed region.
+                        // per-draw field set: DETECTED (effect-consumed ∩ derivable/
+                        // RO-supplied ∩ packable), interned. Derived composites (incl.
+                        // ModelTrafo) stay as OUTPUT fields in BOTH modes — the chain
+                        // only changes how the Model CONSTITUENT is produced.
                         let (fields, fieldMap) =
                             let detected = detectFields r e
-                            let detected = if chain then detected |> Array.filter (fun n -> n <> "ModelTrafo") else detected
                             let fm = internFields detected
                             lastAutoFields <- fst fm
                             fm
