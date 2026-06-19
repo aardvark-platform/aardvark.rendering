@@ -85,6 +85,12 @@ and IRuntime =
     /// indexed by non-uniform expressions ('sampler2D X[]').
     abstract member SupportsUnboundedSamplerArrays : bool
 
+    /// Returns whether shaders on this runtime can use 64-bit floating point
+    /// (double / dmat / dvec — Vulkan's shaderFloat64). FALSE on backends with no
+    /// shader double type at all (notably MoltenVK/Metal); consumers that need
+    /// near-double precision there must emulate it (e.g. the heap's df32 path).
+    abstract member ShaderDouble : bool
+
     abstract member OnDispose : IEvent<unit>
 
     /// Compiles an effect for the given framebuffer signature and topology.

@@ -87,6 +87,24 @@ module HeapUniforms =
 
 module Heap =
 
+    /// Global override for the heap's derived-uniform precision path. When true the
+    /// heap uses its df32 (two-f32) compute kernels even on a backend that HAS
+    /// shaderFloat64 — for forcing / validating the MoltenVK path on the desktop.
+    /// When false (default) the path is chosen per bucket from `IRuntime.ShaderDouble`:
+    /// real fp64 (M44d) where the backend has shader doubles, df32 where it does not
+    /// (MoltenVK/Metal). Settable via the AARDVARK_HEAP_DF32 env var (1/true/on) or
+    /// directly at runtime before a bucket is built.
+    let mutable ForceDf32 =
+        match System.Environment.GetEnvironmentVariable "AARDVARK_HEAP_DF32" with
+        | null | "" -> false
+        | s -> let s = s.Trim().ToLowerInvariant() in s = "1" || s = "true" || s = "on"
+
+    /// The df32 (two-f32) derived-uniform path is used for a runtime when it is
+    /// forced, or when the backend genuinely lacks shader doubles. fp64 can never be
+    /// "forced on" a backend without shaderFloat64 — there `ShaderDouble` is false and
+    /// df32 is the only option regardless of the override.
+    let internal useDf32 (runtime : IRuntime) = ForceDf32 || not runtime.ShaderDouble
+
     /// One per-draw uniform binding: how big it is in the arena (in floats),
     /// its aval identity (for dedup), and how to pack its current value.
     type HeapInput =
@@ -577,11 +595,19 @@ module Heap =
     let private isDoubleUniform (t : System.Type) =
         t = typeof<V2d> || t = typeof<V3d> || t = typeof<V4d> || t = typeof<M33d> || t = typeof<M44d>
     // write one double as 2 consecutive arena words (bit-exact; netstandard2.0 has no
-    // Int32BitsToSingle, so reinterpret the 8 bytes as two float32 slots).
+    // Int32BitsToSingle, so reinterpret the 8 bytes as two float32 slots). fp64 path:
+    // the GPU's native double view reads these 2 words back as one IEEE double.
     let private wd (a : float32[]) (i : int) (d : float) =
         let b = System.BitConverter.GetBytes d
         a.[i]   <- System.BitConverter.ToSingle(b, 0)
         a.[i+1] <- System.BitConverter.ToSingle(b, 4)
+    // df32 path: write the double as a (hi, lo) two-f32 pair — hi = round-to-f32(d),
+    // lo = round-to-f32(d − hi) — so the df32 kernels read it as V2f(hi,lo). Same 2
+    // words / same 8-byte slot as `wd`; only the CONTENT differs.
+    let private wdDf (a : float32[]) (i : int) (d : float) =
+        let hi = float32 d
+        a.[i]   <- hi
+        a.[i+1] <- float32 (d - float hi)
     // coerce a PROVIDED boxed uniform value to the shader's REQUESTED double type — the
     // write converts to what the shader asked for, at full precision (upcast f32
     // siblings; extract Trafo3d.Forward). This is what lets the derived ModelView/MVP
@@ -592,8 +618,11 @@ module Heap =
     let private asM33d (o:obj) = match o with | :? M33d as m -> m | :? M33f as m -> M33d m | _ -> failwithf "Heap: cannot convert %s to M33d" (o.GetType().Name)
     let private asM44d (o:obj) = match o with | :? M44d as m -> m | :? M44f as m -> M44d m | :? Trafo3d as t -> t.Forward | _ -> failwithf "Heap: cannot convert %s to M44d" (o.GetType().Name)
     /// (words, pack) for a double-REQUESTED type — words = 2 * scalarCount. The pack
-    /// coerces whatever the provider gave to the requested double type.
-    let private doublePackerFor (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
+    /// coerces whatever the provider gave to the requested double type. `df32` picks
+    /// the (hi,lo) two-f32 encoding (MoltenVK, no shaderFloat64) over the IEEE double
+    /// bit pattern; the WORD layout (2 words/scalar) is identical either way.
+    let private doublePackerFor (df32 : bool) (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
+        let wd = if df32 then wdDf else wd
         if   t = typeof<V2d>  then 4,  (fun o a off -> let v = asV2d o in wd a off v.X; wd a (off+2) v.Y)
         elif t = typeof<V3d>  then 6,  (fun o a off -> let v = asV3d o in wd a off v.X; wd a (off+2) v.Y; wd a (off+4) v.Z)
         elif t = typeof<V4d>  then 8,  (fun o a off -> let v = asV4d o in wd a off v.X; wd a (off+2) v.Y; wd a (off+4) v.Z; wd a (off+6) v.W)
@@ -1585,6 +1614,19 @@ module Heap =
                     w.Dispose()
                     writers.[i] <- Unchecked.defaultof<_>
 
+    /// Pack an M44d as 16 df32 entries (row-major, V2f hi/lo) into `a` from float
+    /// offset `foff`: entry k=(r*4+c) → floats [foff+2k]=hi, [foff+2k+1]=lo. Matches
+    /// the df32 kernels' V2f-indexed reads of a link half (see composeModelDf32).
+    let private packM44Df (a : float32[]) (foff : int) (m : M44d) =
+        let put k (d : float) =
+            let hi = float32 d
+            a.[foff + 2 * k]     <- hi
+            a.[foff + 2 * k + 1] <- float32 (d - float hi)
+        put 0 m.M00;  put 1 m.M01;  put 2 m.M02;  put 3 m.M03
+        put 4 m.M10;  put 5 m.M11;  put 6 m.M12;  put 7 m.M13
+        put 8 m.M20;  put 9 m.M21;  put 10 m.M22; put 11 m.M23
+        put 12 m.M30; put 13 m.M31; put 14 m.M32; put 15 m.M33
+
     /// One distinct trafo link -> one fp64 slot in the LinkArena. Packs the
     /// link's Forward matrix; marked (via its source) only when that link changes.
     type internal LinkWriter(src : aval<Trafo3d>, slot : int) =
@@ -1604,6 +1646,14 @@ module Heap =
                 let t = src.GetValue token
                 staging.[2*slot]   <- t.Forward
                 staging.[2*slot+1] <- t.Backward)
+        /// df32 variant of PackBoth: slot s → forward at float offset 64s, backward at
+        /// 64s+32 (each half = 16 V2f = 32 floats; 64 floats = 256 bytes/slot, same
+        /// byte layout the fp64 staging has).
+        member x.PackBothDf(token : AdaptiveToken, staging : float32[]) =
+            x.EvaluateIfNeeded token () (fun token ->
+                let t = src.GetValue token
+                packM44Df staging (64 * slot)      t.Forward
+                packM44Df staging (64 * slot + 32) t.Backward)
         member x.Dispose() =
             if not disposed then
                 disposed <- true
@@ -1666,9 +1716,13 @@ module Heap =
     // [2s+1]=Backward (256 bytes/link) — so the SAME buffer feeds both the forward
     // Model fold (composeModel reads 2*idx) and the backward fold (composeModelInv
     // reads 2*idx+1), the backward half being the uploaded Trafo3d.Backward.
-    type internal GrowChainLinks(runtime : IBufferRuntime) =
+    type internal GrowChainLinks(runtime : IBufferRuntime, df32 : bool) =
         inherit AdaptiveBuffer(runtime, 256UL, BufferUsage.Storage, BufferStorage.Host)
-        let mutable staging = Array.zeroCreate<M44d> 2
+        // fp64: 2 M44d per slot (Forward, Backward). df32: 64 f32 per slot (two
+        // 16-entry V2f halves). Only the active array is grown; both layouts are
+        // 256 bytes/slot so the buffer byte size and slot offsets are identical.
+        let mutable staging = Array.zeroCreate<M44d> (if df32 then 0 else 2)
+        let mutable stagingDf = Array.zeroCreate<float32> (if df32 then 64 else 0)
         let mutable capacity = 1
         let byVal = System.Collections.Generic.Dictionary<Trafo3d, ChainLinkEntry>(HashIdentity.Structural)
         let byId  = System.Collections.Generic.Dictionary<IAdaptiveValue, ChainLinkEntry>(HashIdentity.Reference)
@@ -1684,9 +1738,14 @@ module Heap =
         let ensureCap (n : int) =
             if n > capacity then
                 let nf = Fun.NextPowerOfTwo n
-                let ns = Array.zeroCreate<M44d> (2 * nf)
-                System.Array.Copy(staging, ns, 2 * capacity)
-                staging <- ns
+                if df32 then
+                    let ns = Array.zeroCreate<float32> (64 * nf)
+                    System.Array.Copy(stagingDf, ns, 64 * capacity)
+                    stagingDf <- ns
+                else
+                    let ns = Array.zeroCreate<M44d> (2 * nf)
+                    System.Array.Copy(staging, ns, 2 * capacity)
+                    staging <- ns
                 capacity <- nf
 
         let allocSlot () =
@@ -1702,8 +1761,12 @@ module Heap =
                 | true, e -> e.RefCount <- e.RefCount + 1; e.Slot
                 | _ ->
                     let s = allocSlot ()
-                    staging.[2*s]   <- v.Forward
-                    staging.[2*s+1] <- v.Backward
+                    if df32 then
+                        packM44Df stagingDf (64 * s)      v.Forward
+                        packM44Df stagingDf (64 * s + 32) v.Backward
+                    else
+                        staging.[2*s]   <- v.Forward
+                        staging.[2*s+1] <- v.Backward
                     pendingOnce.Add s |> ignore
                     let e = { Slot = s; RefCount = 1; Writer = Unchecked.defaultof<LinkWriter> }
                     byVal.[v] <- e; entryBySlot.[s] <- e; s
@@ -1750,14 +1813,17 @@ module Heap =
             for s in pendingOnce do slots.Add s
             pendingOnce.Clear()
             for w in dirty do
-                if not w.IsDisposed then w.PackBoth(t, staging); slots.Add w.Slot
+                if not w.IsDisposed then (if df32 then w.PackBothDf(t, stagingDf) else w.PackBoth(t, staging)); slots.Add w.Slot
             if slots.Count > 0 then
                 generation <- generation + 1
                 lastChainLinkUploads <- slots.Count
                 slots.Sort()
-                // each link slot s = 2 interleaved M44d (Forward, Backward) → write
-                // M44d-element offset 2*lo, count 2*(run length).
-                let flush lo hi = x.Write(staging, uint64 (lo * 256), 2 * lo, 2 * (hi - lo + 1), false)
+                // each link slot s = 256 bytes (2 interleaved halves). fp64: write
+                // M44d-element offset 2*lo, count 2*(run). df32: f32-element offset
+                // 64*lo, count 64*(run). Byte offset lo*256 is the same for both.
+                let flush lo hi =
+                    if df32 then x.Write(stagingDf, uint64 (lo * 256), 64 * lo, 64 * (hi - lo + 1), false)
+                    else x.Write(staging, uint64 (lo * 256), 2 * lo, 2 * (hi - lo + 1), false)
                 let mutable lo = slots.[0]
                 let mutable hi = slots.[0]
                 for i in 1 .. slots.Count - 1 do
@@ -1801,6 +1867,114 @@ module Heap =
             uniform.HeapDataD.[o+4]<-m.M10;  uniform.HeapDataD.[o+5]<-m.M11;  uniform.HeapDataD.[o+6]<-m.M12;  uniform.HeapDataD.[o+7]<-m.M13
             uniform.HeapDataD.[o+8]<-m.M20;  uniform.HeapDataD.[o+9]<-m.M21;  uniform.HeapDataD.[o+10]<-m.M22; uniform.HeapDataD.[o+11]<-m.M23
             uniform.HeapDataD.[o+12]<-m.M30; uniform.HeapDataD.[o+13]<-m.M31; uniform.HeapDataD.[o+14]<-m.M32; uniform.HeapDataD.[o+15]<-m.M33
+
+    // ── df32 (double-float = two f32) — near-double precision WITHOUT ───────
+    // shaderFloat64, for MoltenVK/Metal where shaders have NO `double` at all
+    // (neither arithmetic nor storage). A df32 scalar is a V2f (hi=X, lo=Y) with
+    // value ≈ hi+lo. A df32 mat4 is an Arr<N<16>, V2f> (row-major). These kernels
+    // are selected over the M44d ones when the device lacks shaderFloat64. PORTED
+    // VERBATIM from wombat.rendering's proven WGSL df32 (derivedUniforms/codegen.ts:
+    // DF32_LIB) — including the Veltkamp-split TwoProduct, NOT an fma TwoProduct.
+    //
+    // WHY split, not fma: these error-free transforms only work if the compiler
+    // cannot algebraically simplify the error terms. An fma TwoProduct
+    // (p = a·b; err = fma(a,b,−p)) is catastrophic under a fast-math value-numbering
+    // pass: knowing p ≡ a·b, it folds err to EXACTLY 0 → pure f32, all precision
+    // gone. The split form routes `hi` through a floatBitsToUint/uintBitsToFloat
+    // round-trip; that bitcast is an OPTIMIZATION BARRIER — the compiler can't see
+    // `hi` as a function of `a`, so it can't reassociate `a − hi` or `A.x·B.x − p`.
+    // The rounding-critical SUMS still go through `fma(1.0, s, −a)` for the same
+    // reason. ⚠ Residual risk remains if the Metal backend applies fp CONTRACTION /
+    // fast-math reassociation around these (Metal defaults fast-math ON); that is a
+    // MoltenVK-config / NoContraction concern verified by inspecting the emitted MSL,
+    // not something a shader-source trick alone can guarantee. See the project memo.
+    //
+    // The arena WORD layout is identical to the fp64 double region: entry k of a
+    // df32 mat4 at word offset `woff` lives at words [woff+2k]=hi, [woff+2k+1]=lo
+    // (the fp64 path read these same 2 words as one IEEE double; df32 reads them as
+    // a (hi,lo) pair) — so the CPU constituent offsets are shared across both paths.
+    // ([<Inline>] is intentionally omitted: FShade ignores it for compute shaders.)
+    [<RequireQualifiedAccess>]
+    module internal Df32 =
+        // raw GLSL fused multiply-add, emitted verbatim.
+        [<GLSLIntrinsic("fma({0}, {1}, {2})")>]
+        let fma (a : float32) (b : float32) (c : float32) : float32 = onlyInShaderCode "fma"
+
+        /// Veltkamp split of an f32 into (hi, lo) with hi holding the top 11 mantissa
+        /// bits. The bitcast round-trip is an optimization barrier (see module note).
+        [<ReflectedDefinition>]
+        let split12 (a : float32) : V2f =
+            let hi = Bitwise.UIntBitsToFloat (Bitwise.FloatBitsToUInt a &&& 0xFFFFE000u)
+            V2f(hi, a - hi)
+
+        /// Knuth TwoSum: (s, err) with s = round(a+b) and a+b = s+err exactly.
+        [<ReflectedDefinition>]
+        let twoSum (a : float32) (b : float32) : V2f =
+            let s  = a + b
+            let bb = fma 1.0f s (-a)
+            let t1 = fma 1.0f s (-bb)
+            let t2 = fma 1.0f a (-t1)
+            let t3 = fma 1.0f b (-bb)
+            V2f(s, t2 + t3)
+
+        /// Dekker QuickTwoSum: valid when |a| ≥ |b| (the df_add carries guarantee it).
+        [<ReflectedDefinition>]
+        let quickTwoSum (a : float32) (b : float32) : V2f =
+            let s = a + b
+            let t = fma 1.0f s (-a)
+            V2f(s, fma 1.0f b (-t))
+
+        /// Dekker/Veltkamp TwoProduct via split (NOT fma — see module note):
+        /// (p, err) with p = round(a·b) and a·b = p+err exactly.
+        [<ReflectedDefinition>]
+        let twoProd (a : float32) (b : float32) : V2f =
+            let p = a * b
+            let aa = split12 a
+            let bb = split12 b
+            let err = ((aa.X * bb.X - p) + aa.X * bb.Y + aa.Y * bb.X) + aa.Y * bb.Y
+            V2f(p, err)
+
+        /// df32 add: a + b, both as V2f(hi,lo).
+        [<ReflectedDefinition>]
+        let add (a : V2f) (b : V2f) : V2f =
+            let s = twoSum a.X b.X
+            let t = twoSum a.Y b.Y
+            let s3 = quickTwoSum s.X (s.Y + t.X)
+            quickTwoSum s3.X (s3.Y + t.Y)
+
+        /// df32 multiply: a · b.
+        [<ReflectedDefinition>]
+        let mul (a : V2f) (b : V2f) : V2f =
+            let p = twoProd a.X b.X
+            let cross1 = fma a.X b.Y p.Y
+            let cross  = fma a.Y b.X cross1
+            quickTwoSum p.X cross
+
+        /// promote a plain f32 to df32 (lo = 0).
+        [<ReflectedDefinition>]
+        let ofF (x : float32) : V2f = V2f(x, 0.0f)
+
+        /// collapse a df32 back to the nearest f32 (the value the render shader gets).
+        [<ReflectedDefinition>]
+        let collapse (a : V2f) : float32 = a.X + a.Y
+
+        // ── arena access (df32 reinterpretation of the double region) ──────
+        // Read entry k=(r*4+c) of a df32 mat4 stored at WORD offset `woff` in the
+        // f32 arena: words [woff+2k]=hi, [woff+2k+1]=lo.
+        [<ReflectedDefinition>]
+        let ldEntry (woff : int) (k : int) : V2f =
+            let o = woff + 2 * k
+            V2f(uniform.HeapData.[o], uniform.HeapData.[o+1])
+
+        /// write entry k of a df32 mat4 back at WORD offset `woff`, KEEPING both
+        /// halves (full df32 precision) — for an intermediate constituent (e.g. the
+        /// chain-folded Model) a downstream df32 pass re-reads. Mirrors wombat's
+        /// write_constituent_entry.
+        [<ReflectedDefinition>]
+        let stEntry (woff : int) (k : int) (e : V2f) =
+            let o = woff + 2 * k
+            uniform.HeapData.[o]   <- e.X
+            uniform.HeapData.[o+1] <- e.Y
 
     // ── GPU transform propagation (wombat §7 "modelChain") ──────────────
     // Instead of CPU-composing each RO's ModelTrafo — a shared parent over N
@@ -1885,6 +2059,86 @@ module Heap =
                         for k in 1 .. len - 1 do
                             m <- m * links.[2 * linkIdx.[off + k] + 1]
                     HeapWrite.m44dInto uniform.HeapHeaders.[i * hstride + mCell] m
+            }
+
+        // ── df32 variants (no shaderFloat64) ──────────────────────────────
+        // Identical fold to the M44d kernels above, but the link arena is a FLAT
+        // df32 buffer: `links : V2f[]`, 16 V2f entries (row-major (hi,lo)) per mat4,
+        // link slot s → forward at element (2s)*16, backward at (2s+1)*16. The
+        // folded Model is written df32 (both halves) into the slot's Model
+        // FORWARD/BACKWARD constituent region so the df32 derived pass re-reads it
+        // at full precision (= the fp64 path's m44dInto, in df32). recStride / link
+        // dedup / chain ordering are shared with the fp64 kernels.
+        //
+        // The matmul is INLINED in each kernel: `links` is a storage buffer, and
+        // FShade can't resolve a storage buffer passed through a function parameter
+        // (it would emit an unsized local — see HeapWrite's note), so it must be
+        // indexed directly in the kernel body. Df32.add/mul take V2f SCALARS, which
+        // pass through fine. (FShade ignores [<Inline>] for compute; correctness
+        // does not depend on it.) The running product P and scratch Q are local
+        // df32 mat4s (Arr<N<16>, V2f>, row-major).
+        [<LocalSize(X = 64)>]
+        let composeModelDf32 (n : int) (hstride : int) (mCell : int)
+                             (chainOffset : int[]) (chainLen : int[]) (linkIdx : int[])
+                             (links : V2f[]) =
+            compute {
+                let i = getGlobalId().X
+                if i < n then
+                    let len = chainLen.[i]
+                    let p = Arr<N<16>, V2f>()
+                    if len > 0 then
+                        let off = chainOffset.[i]
+                        // P = first link (forward half, reversed order: off+len-1).
+                        let b0 = 2 * linkIdx.[off + len - 1] * 16
+                        for k in 0 .. 15 do p.[k] <- links.[b0 + k]
+                        for kk in 1 .. len - 1 do
+                            let b = 2 * linkIdx.[off + len - 1 - kk] * 16
+                            let q = Arr<N<16>, V2f>()
+                            for r in 0 .. 3 do
+                                for c in 0 .. 3 do
+                                    let mutable acc = V2f(0.0f, 0.0f)
+                                    for t in 0 .. 3 do
+                                        acc <- Df32.add acc (Df32.mul p.[r * 4 + t] links.[b + t * 4 + c])
+                                    q.[r * 4 + c] <- acc
+                            for k in 0 .. 15 do p.[k] <- q.[k]
+                    else
+                        for k in 0 .. 15 do p.[k] <- V2f(0.0f, 0.0f)
+                        p.[0] <- V2f(1.0f, 0.0f); p.[5] <- V2f(1.0f, 0.0f)
+                        p.[10] <- V2f(1.0f, 0.0f); p.[15] <- V2f(1.0f, 0.0f)
+                    let woff = uniform.HeapHeaders.[i * hstride + mCell]
+                    for k in 0 .. 15 do Df32.stEntry woff k p.[k]
+            }
+
+        [<LocalSize(X = 64)>]
+        let composeModelInvDf32 (n : int) (hstride : int) (mCell : int)
+                                (chainOffset : int[]) (chainLen : int[]) (linkIdx : int[])
+                                (links : V2f[]) =
+            compute {
+                let i = getGlobalId().X
+                if i < n then
+                    let len = chainLen.[i]
+                    let p = Arr<N<16>, V2f>()
+                    if len > 0 then
+                        let off = chainOffset.[i]
+                        // backward halves at (2*idx+1)*16, folded in ARRAY order.
+                        let b0 = (2 * linkIdx.[off] + 1) * 16
+                        for k in 0 .. 15 do p.[k] <- links.[b0 + k]
+                        for kk in 1 .. len - 1 do
+                            let b = (2 * linkIdx.[off + kk] + 1) * 16
+                            let q = Arr<N<16>, V2f>()
+                            for r in 0 .. 3 do
+                                for c in 0 .. 3 do
+                                    let mutable acc = V2f(0.0f, 0.0f)
+                                    for t in 0 .. 3 do
+                                        acc <- Df32.add acc (Df32.mul p.[r * 4 + t] links.[b + t * 4 + c])
+                                    q.[r * 4 + c] <- acc
+                            for k in 0 .. 15 do p.[k] <- q.[k]
+                    else
+                        for k in 0 .. 15 do p.[k] <- V2f(0.0f, 0.0f)
+                        p.[0] <- V2f(1.0f, 0.0f); p.[5] <- V2f(1.0f, 0.0f)
+                        p.[10] <- V2f(1.0f, 0.0f); p.[15] <- V2f(1.0f, 0.0f)
+                    let woff = uniform.HeapHeaders.[i * hstride + mCell]
+                    for k in 0 .. 15 do Df32.stEntry woff k p.[k]
             }
 
     // ── ofRenderObjects derived-uniform COMPUTE pass (wombat §7, real fp64) ─────
@@ -2024,6 +2278,67 @@ module Heap =
                                       float32 t.M20, float32 t.M21, float32 t.M22))
             }
 
+        // df32 variant of composeDerived (no shaderFloat64): identical record
+        // dispatch and arena layout, but constituents are read as df32 (V2f hi/lo)
+        // via Df32.ldEntry at the SAME per-slot word offsets, the products run in
+        // df32 (Df32.mul/add), and each result is collapsed to f32 (Df32.collapse)
+        // into the render-consumed output region — exactly the M44f the fp64 path
+        // wrote. Matmul is inlined (df32 mat4 = row-major, entry (r,c) at r*4+c);
+        // arm 3 holds the A·B intermediate in a local df32 mat4 so no precision is
+        // dropped before ·C. NormalMatrix writes out[i*3+j] = A[j,i] collapsed.
+        [<LocalSize(X = 64)>]
+        let composeDerivedDf32 (n : int) (nRec : int) (hstride : int) (records : int[]) =
+            compute {
+                let slot = getGlobalId().X
+                if slot < n then
+                    let hb = slot * hstride
+                    for r in 0 .. nRec - 1 do
+                        let rb = r * REC_STRIDE
+                        let outOff = uniform.HeapHeaders.[hb + records.[rb + 1]]
+                        let offA = uniform.HeapHeaders.[hb + records.[rb + 2]]
+                        // Reads/writes mirror the fp64 composeDerived EXACTLY (row-major
+                        // M(r,c) at arena word r*4+c): fp64 reads constituents via ldM44 as
+                        // logical row-major (FShade's matrix flip is internal to the M44d
+                        // value and doesn't alter the scalar buffer layout), multiplies
+                        // naively, and writes row-major — and the df32 constituents are
+                        // packed (wdDf) at the same layout. NormalMatrix = transpose(A)
+                        // upper-3x3: out[i*3+j] = A(j,i).
+                        match records.[rb] with
+                        | 1 ->
+                            for k in 0 .. 15 do
+                                uniform.HeapData.[outOff + k] <- Df32.collapse (Df32.ldEntry offA k)
+                        | 2 ->
+                            let offB = uniform.HeapHeaders.[hb + records.[rb + 3]]
+                            for rr in 0 .. 3 do
+                                for c in 0 .. 3 do
+                                    let mutable acc = V2f(0.0f, 0.0f)
+                                    for t in 0 .. 3 do
+                                        acc <- Df32.add acc (Df32.mul (Df32.ldEntry offA (rr * 4 + t)) (Df32.ldEntry offB (t * 4 + c)))
+                                    uniform.HeapData.[outOff + rr * 4 + c] <- Df32.collapse acc
+                        | 3 ->
+                            let offB = uniform.HeapHeaders.[hb + records.[rb + 3]]
+                            let offC = uniform.HeapHeaders.[hb + records.[rb + 4]]
+                            // P = A·B in df32 (local, row-major), then out = P·C.
+                            let p = Arr<N<16>, V2f>()
+                            for rr in 0 .. 3 do
+                                for c in 0 .. 3 do
+                                    let mutable acc = V2f(0.0f, 0.0f)
+                                    for t in 0 .. 3 do
+                                        acc <- Df32.add acc (Df32.mul (Df32.ldEntry offA (rr * 4 + t)) (Df32.ldEntry offB (t * 4 + c)))
+                                    p.[rr * 4 + c] <- acc
+                            for rr in 0 .. 3 do
+                                for c in 0 .. 3 do
+                                    let mutable acc = V2f(0.0f, 0.0f)
+                                    for t in 0 .. 3 do
+                                        acc <- Df32.add acc (Df32.mul p.[rr * 4 + t] (Df32.ldEntry offC (t * 4 + c)))
+                                    uniform.HeapData.[outOff + rr * 4 + c] <- Df32.collapse acc
+                        | _ ->
+                            // NormalMatrix = transpose(A) upper-3x3.  out[i*3+j] = A[j,i].
+                            for i in 0 .. 2 do
+                                for j in 0 .. 2 do
+                                    uniform.HeapData.[outOff + i * 3 + j] <- Df32.collapse (Df32.ldEntry offA (j * 4 + i))
+            }
+
     /// Persistent state of ONE bucket — host OR bindless (vertex-pull) geometry,
     /// untextured / bindless-textured / atlas-textured, instanced or not. The
     /// geometry class and instanced-ness are part of the bucket key, so each
@@ -2047,6 +2362,12 @@ module Heap =
                                     // an arena region. "ModelTrafo" is NOT in `names` in this mode.
                                     chainMode : bool) =
         let fieldStride = names.Length
+        // df32 (two-f32) precision path vs real fp64 — chosen ONCE for the whole
+        // bucket from the runtime (forced override OR no shaderFloat64). Threaded
+        // into the constituent packers (hi/lo split vs IEEE double bytes), the chain
+        // link arena (V2f layout vs M44d), and the compute-kernel selection so the
+        // CPU byte layout always matches the kernel that reads it.
+        let df32 = useDf32 runtime
         // ── derived-uniform compute plan (wombat §7, fp64) ───────────────
         // Shader-consumed names that are standard recipes are COMPUTE OUTPUTS:
         // produced once per slot in fp64 by `Derived.composeDerived` and gathered
@@ -2314,7 +2635,7 @@ module Heap =
         //   and re-used on remove. chOffset/chLen are per-draw-slot.
         // chainDirtyStruct: draw-slots whose chain STRUCTURE (offset/len/idx)
         //   changed and must re-upload before the next dispatch.
-        let chainLinks = if chainMode then GrowChainLinks(runtime) else Unchecked.defaultof<GrowChainLinks>
+        let chainLinks = if chainMode then GrowChainLinks(runtime, df32) else Unchecked.defaultof<GrowChainLinks>
         let mutable chOffset : int[] = if chainMode then Array.zeroCreate 16 else [||]
         let mutable chLen    : int[] = if chainMode then Array.zeroCreate 16 else [||]
         let mutable chIdx    : int[] = if chainMode then Array.zeroCreate 16 else [||]
@@ -2452,7 +2773,7 @@ module Heap =
             | true, e -> e.RefCount <- e.RefCount + 1; e.Offset
             | _ ->
                 let dbl = isDoubleUniform requested
-                let (sz, pk) = if dbl then doublePackerFor requested else packerFor av.ContentType
+                let (sz, pk) = if dbl then doublePackerFor df32 requested else packerFor av.ContentType
                 // double regions start at an EVEN word (8-byte) so HeapDataD addresses
                 // them; over-allocate one word and align the start up.
                 let b = arenaAlloc.Alloc (if dbl then sz + 1 else sz)
@@ -2489,7 +2810,10 @@ module Heap =
         // ViewTrafo/ProjTrafo/ModelTrafo aval. Ref-counted by (aval, inv) so a
         // camera shared across draws is ONE region (its mark re-packs once). The
         // backward half is the uploaded `Trafo3d.Backward` — never a `.Inverse`.
+        // df32 mode packs each scalar as a (hi,lo) two-f32 pair (wdDf), matching
+        // composeDerivedDf32's df32 reads; fp64 packs the IEEE double bytes (wd).
         let packM44dInto (m : M44d) (a : float32[]) (off : int) =
+            let wd = if df32 then wdDf else wd
             wd a (off+0)  m.M00; wd a (off+2)  m.M01; wd a (off+4)  m.M02; wd a (off+6)  m.M03
             wd a (off+8)  m.M10; wd a (off+10) m.M11; wd a (off+12) m.M12; wd a (off+14) m.M13
             wd a (off+16) m.M20; wd a (off+18) m.M21; wd a (off+20) m.M22; wd a (off+22) m.M23
@@ -2546,7 +2870,7 @@ module Heap =
         // the shader's requested type (f32 M44f = 16 words, M33f = 9, …).
         let allocOutput (requested : System.Type) : int * Management.Block<unit> =
             let dbl = isDoubleUniform requested
-            let (sz, _) = if dbl then doublePackerFor requested else packerFor requested
+            let (sz, _) = if dbl then doublePackerFor df32 requested else packerFor requested
             let b = arenaAlloc.Alloc (if dbl then sz + 1 else sz)
             let raw = int b.Offset
             let off = if dbl && (raw &&& 1) = 1 then raw + 1 else raw
@@ -2943,11 +3267,24 @@ module Heap =
         // backward fold: chainMode + a consumed recipe that needs Model⁻¹ (NormalMatrix
         // / *Inv). Folds the links' uploaded Backward halves in array order.
         let chainBwdActive = chainMode && modelBwdCell >= 0
-        let chainShader = if chainActive then runtime.CreateComputeShader Chain.composeModel else Unchecked.defaultof<_>
+        // `df32` is the bucket-wide path flag (hoisted to the top of IncrementalBucket).
+        // NB: the df32 / fp64 kernels have DIFFERENT signatures (links : V2f[] vs
+        // M44d[]), so each CreateComputeShader call must be its own branch — they
+        // unify at the IComputeShader result, not at the function value.
+        let chainShader =
+            if not chainActive then Unchecked.defaultof<_>
+            elif df32 then runtime.CreateComputeShader Chain.composeModelDf32
+            else runtime.CreateComputeShader Chain.composeModel
         let chainInput  = if chainActive then runtime.CreateInputBinding chainShader else Unchecked.defaultof<_>
-        let chainInvShader = if chainBwdActive then runtime.CreateComputeShader Chain.composeModelInv else Unchecked.defaultof<_>
+        let chainInvShader =
+            if not chainBwdActive then Unchecked.defaultof<_>
+            elif df32 then runtime.CreateComputeShader Chain.composeModelInvDf32
+            else runtime.CreateComputeShader Chain.composeModelInv
         let chainInvInput  = if chainBwdActive then runtime.CreateInputBinding chainInvShader else Unchecked.defaultof<_>
-        let derivedShader = if hasDerived then runtime.CreateComputeShader Derived.composeDerived else Unchecked.defaultof<_>
+        let derivedShader =
+            if not hasDerived then Unchecked.defaultof<_>
+            elif df32 then runtime.CreateComputeShader Derived.composeDerivedDf32
+            else runtime.CreateComputeShader Derived.composeDerived
         // the derive's records buffer is bucket-constant: upload it ONCE, eagerly, so the
         // pure-aval provider below can hand it out as a constant (no lazy init inside an eval).
         let recBuf : IBuffer<int> =
@@ -3059,7 +3396,10 @@ module Heap =
                             chainInput.["linkIdx"]     <- chIdxBuf
                             chainInput.["links"]       <- linkBuf
                             chainInput.["HeapHeaders"] <- hdrBuf
-                            chainInput.["HeapDataD"]   <- arenaBuf
+                            // df32 kernel writes the folded Model via the f32 arena view
+                            // (HeapData, hi/lo pairs); fp64 via the native double view.
+                            if df32 then chainInput.["HeapData"] <- arenaBuf
+                            else chainInput.["HeapDataD"] <- arenaBuf
                             chainInput.Flush()
                             if chainBwdActive then
                                 chainInvInput.["n"]           <- highWater
@@ -3070,7 +3410,8 @@ module Heap =
                                 chainInvInput.["linkIdx"]     <- chIdxBuf
                                 chainInvInput.["links"]       <- linkBuf
                                 chainInvInput.["HeapHeaders"] <- hdrBuf
-                                chainInvInput.["HeapDataD"]   <- arenaBuf
+                                if df32 then chainInvInput.["HeapData"] <- arenaBuf
+                                else chainInvInput.["HeapDataD"] <- arenaBuf
                                 chainInvInput.Flush()
                             if chainProgG <> g || isNull (box chainProg) then
                                 if not (isNull (box chainProg)) then chainProg.Dispose()

@@ -43,6 +43,9 @@ type Runtime(debug : IDebugConfig) =
     // (ARB_bindless_texture / NV_gpu_shader5) -> not supported here.
     member x.SupportsMultiDrawIndirectDrawId = ctx.Driver.glsl >= Version(4, 6, 0)
     member x.SupportsUnboundedSamplerArrays = false
+    // double / dmat / dvec are core since GLSL 4.00 (GL_ARB_gpu_shader_fp64) — true
+    // on any desktop GL the heap targets.
+    member x.ShaderDouble = ctx.Driver.glsl >= Version(4, 0, 0)
 
     member x.ShaderCachePath
         with get() = ctx.ShaderCachePath
@@ -110,6 +113,7 @@ type Runtime(debug : IDebugConfig) =
         member x.DebugLabelsEnabled = x.DebugLabelsEnabled
         member x.SupportsMultiDrawIndirectDrawId = x.SupportsMultiDrawIndirectDrawId
         member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
+        member x.ShaderDouble = x.ShaderDouble
         member x.ContextLock = x.ContextLock
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =

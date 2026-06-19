@@ -63,6 +63,11 @@ type Runtime(device : Device) as this =
         x.Device.EnabledFeatures.Descriptors.RuntimeDescriptorArray &&
         x.Device.EnabledFeatures.Shaders.SampledImageArrayNonUniformIndexing
 
+    // shaderFloat64: FALSE on MoltenVK/Metal (no shader double type). The heap's
+    // df32 path emulates near-double precision when this is unavailable.
+    member x.ShaderDouble =
+        x.Device.EnabledFeatures.Shaders.Float64
+
     member x.CreateStreamingTexture (mipMaps : bool) : IStreamingTexture =
         raise <| NotImplementedException()
 
@@ -593,6 +598,8 @@ type Runtime(device : Device) as this =
         member x.SupportsMultiDrawIndirectDrawId = x.SupportsMultiDrawIndirectDrawId
 
         member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
+
+        member x.ShaderDouble = x.ShaderDouble
 
         member x.DeviceCount = x.DeviceCount
 
