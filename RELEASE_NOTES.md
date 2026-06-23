@@ -3,3 +3,774 @@
 - [Vulkan] Bindless unbounded storage-buffer / sampler arrays degrade gracefully past their capacity: `StorageBuffers/CombinedImageSampler.GetDescriptors` bind `min(runtimeLen, capacity)` and warn once, instead of an IndexOutOfRange native abort when a bucket exceeds the array cap.
 - [Sg] Heap: per-FRAME resource-leak regression golden (`chainleak`) + lock-free live-handle counters (Resource/DescriptorSet LiveCount) — guards the per-frame accumulation the per-scene lifetime test cannot see. Verified flat over thousands of frames at n≤100000.
 
+### 5.7.0-prerelease0016
+- [Sg] Heap: GPU trafo-chain wired into the LIVE Heap.ofRenderObjects ingest. A bucket whose effect consumes ModelTrafo and whose ROs expose the UNFOLDED "ModelTrafoStack" uniform (aval<aval<Trafo3d>[]>) composes each slot's ModelTrafo ON THE GPU from a growable, deduped link arena (constant links value-deduped, dynamic links identity-deduped, free-listed) instead of packing a per-slot CPU-folded ModelTrafo region. Works for ARBITRARY chain depth; a shared/constant ancestor link collapses to ONE arena slot across all leaves and editing one link re-folds only on the GPU (O(1) over the subtree). ROs without a stack keep the single-ModelTrafo arena path (graceful). New livechain/livechaindeep/sgchain/domboxchain/hierchain golden tests; AARDVARK_HEAP_NOCHAIN=1 forces the folded path for A/B.
+- [Sg] Simple/render Sg exposes the unfolded "ModelTrafoStack" uniform alongside the folded ModelTrafo (TraversalStateUniformProvider) — the GPU trafo-chain consumer engages for ordinary render-Sg scenes (Sg.trafo chains) exactly as for the dom Sg.
+
+### 5.7.0-prerelease0015
+- [Sg] Heap: geometry dedup looks through CONSTANT buffer avals to the value level — fresh per-leaf BufferView/aval wrappers around the SAME underlying array now share packed geometry (ArrayBuffer.Equals = array ReferenceEquals); key widened to (array-or-buffer source, byte offset, format typeId). Naturally-written per-node Primitives.Box scenes dedup with no authoring discipline. New geomvalue golden test.
+- [Sg] Heap: NON-INDEXED draws are eligible — header index-cell sentinel (-1) makes the vertex fetch use gl_VertexIndex directly; indexed and non-indexed members ride the same bucket. Removes the old supply-Indices passthrough. New noindex golden test; makes Primitives.Box (and any non-indexed geometry) heap-eligible.
+
+### 5.7.0-prerelease0014
+- [Sg] Heap: structural-version floor attributed and compressed (131 -> ~105us per add+remove at n=20k; dense churn r=2000: ~70 -> ~60ms): updater consumes true set deltas (GetReader/GetChanges) instead of snapshot+computeDelta; constant uniform/singleton sources stage once without RegionWriter subscriptions; single-pass RO classification with cached sampler/size/feature lookups; hand-rolled comparers for geometry-dedup and mode-key interning replace generic structural hashing. Remainder is attributed (classification 16us, slot ops 15us, two sub-range uploads 12us, two resource-reader updates 15us, transact marking 29us) — further compression is backend surgery, documented.
+
+### 5.7.0-prerelease0013
+- [Sg] Heap: typeId-branching attribute decoder — the shader converts each allocation's source type (f32/i32/f64 x1-4, normalized C4b incl. BGRA layout fix, f64 bit-decoded without shaderFloat64) to the effect's input type at fetch (widen with (0,0,0,1), narrow, normalize, cast). Element types leave the host bucket key: mixed-format objects (C4b singletons, C4f buffers, V3d vs V4f positions) share ONE bucket. Unsupported pairs -> precise Heap.Diagnostics. GPU cost +2-3% on the gather, CPU slightly improved.
+
+### 5.7.0-prerelease0012
+- [Sg] Heap: storage-decoded geometry — the fixed-function vertex path is GONE. Attributes and INDICES decode from the storage arena via per-allocation headers (typeId/length/stride; wombat-style); draws are non-indexed; singletons (SingleValueBuffer, e.g. Primitives.Box colors) are length-1 allocations decoded by the same fetch and ride the same bucket as real buffers; u16/u32 indices mix per bucket. GPU-resident buffers stay zero-copy (bindless array). Measured: GPU time IMPROVES 25-28% despite the post-transform-cache loss; CPU churn improves (eligibility probing memoized).
+- [Sg] `Heap.Diagnostics` — opt-in, deduped, actionable log lines for every pass-through reason (+ `Heap.diagnosticMessages()`).
+
+### 5.7.0-prerelease0011
+- [Sg] `Sg.heap : ISg -> ISg` — collapse a subtree through the heap with one combinator (Ag + ISimpleSg dispatch paths; non-heapable objects pass through). Pixel-identity golden-tested on both paths.
+- [Sg] `HeapConfig.Enabled` removed — calling `Heap.ofRenderObjects`/`Sg.heap` IS the opt-in. Remaining knobs live in `module Heap`.
+
+### 5.7.0-prerelease0010
+- [Sg] `Heap.ofRenderObjects` takes no name set anymore — auto-detected per-draw fields are THE behavior (per-draw fields = the uniforms your objects supply; shared avals dedup to one arena region). The explicit-names variant and `ofRenderObjectsAuto` are removed.
+
+### 5.7.0-prerelease0009
+- [Sg] `Heap.ofRenderObjectsAuto` — per-draw heap fields are detected automatically: every effect-consumed (incl. derived-rule bases), packable uniform supplied by the RO's own provider becomes a field; scene-scope uniforms stay ordinary. Field sets are interned into the bucket key; shared avals dedup to one arena region. Explicit-names `ofRenderObjects` unchanged as the restricting variant. New `autofields` golden test: classic vs explicit vs auto pixel-identical.
+
+### 5.7.0-prerelease0008
+- [Sg] Heap: buffer lifetimes go through `IAdaptiveResource` — all heap buffer avals (arena, draw-record/header/instance mirrors, HeapScene data) use `AdaptiveResource.mapNonAdaptive` instead of interface-stripping `AVal.map`, so the render task's Acquire/Release refcounting destroys a disposed bucket's GPU buffers. New `lifetime` golden test (30 create/render/dispose cycles, VMA allocation stats): pre-fix +6 allocations/cycle, post-fix returns to a zero baseline every cycle. New `Device.MemoryStatistics` for the test.
+
+### 5.7.0-prerelease0007
+- [Sg] Heap: the last O(N)-per-structural-version effort is gone — draw records (indirect), headers and the MoltenVK instance buffer live in stable GPU-resident `MirrorBuffer`s (identity-stable backend buffers, dirty-sub-range uploads from the delta pass, gap-merged); `IsActive` toggles write single cells (O(toggled)). Both backends bind the buffers directly (indexed indirect record = `DrawCallInfo.ToggleIndexed`; no GL fallback needed). Measured per-version overhead vs population: ~2.8 ms -> ~0.2 ms at 200k objects, flat in N.
+- [Vulkan] DescriptorSetLayout: Debug assert updated for unbounded descriptor arrays (binding numbers must be strictly increasing; the prefix-sum-of-DescriptorCounts invariant predates descriptor arrays).
+
+### 5.7.0-prerelease0006
+- [Sg] Heap: the hand-rolled range allocator is gone — all four heap allocation sites (geometry vertex/index ranges, arena uniform regions, instance-attribute ranges) now use the existing generic `Management.MemoryManager` (size-sorted free list, O(log n) best-fit, both-neighbor coalescing) over a virtual `Memory` instance; a thin wrapper adds the live/extent counters the compaction trigger needs. Net code removal; behavior and `geomdrift`/`geomchurn` guarantees unchanged.
+
+### 5.7.0-prerelease0005
+- [Sg] Heap: proper space reclamation — one shared coalescing `RangeAllocator` (sorted free ranges, coalesce-on-free, best-fit with split, cursor retraction at the tail) replaces the exact-size free lists at all four sites: geometry vertex ranges, geometry index ranges, arena uniform regions, instance-attribute ranges. Ragged host geometries are zero-padded to the longest attribute so their ranges are reusable instead of leaked.
+- [Sg] Heap: automatic threshold-triggered compaction — after removals, a buffer whose live bytes < 1/2 cursor AND waste > `HeapConfig.compactionWasteFloorBytes` (default 4 MB) compacts in the same delta pass: staging memmove, header/draw-record/region-offset rewrite, GPU shrink. O(live) per fire, amortized like growth doubling. New `geomdrift` golden test (random-size, random-instance churn, 320 frames): buffers bounded by 2.5x live throughout, 0 pixel delta; `geomchurn` stays byte-flat with zero compactions (exact reuse short-circuits first).
+
+### 5.7.0-prerelease0004
+- [Sg] Heap: ALL bucket kinds are now incremental (`buildBucket` removed) — bindless vertex-pull geometry (growable HeapVertexData with slot reuse), bindless texture arrays (refcounted distinct-texture dedup with stable indices), atlas buckets (one AtlasPool per bucket lifetime, per-delta Acquire/Release), instanced ROs incl. the MoltenVK slot-attribute fallback (per-size instance-range freelist). Textured-bucket add+remove: ~337 ms -> ~1.2 ms; bindless-geometry: ~299 ms -> ~0.56 ms.
+- [Sg] Heap hygiene sweep: no transact/MarkOutdated during adaptive evaluation anywhere in heap code (deferred arena resize via `AdaptiveBuffer.ResizeInPlace`; pull-published atlas pages); buckets no longer retain their first RO after it leaves; packed geometry ranges are refcounted and reused (byte-flat under distinct-geometry churn, new `geomchurn` golden test); dynamic-mode buckets bake pipeline state from the bucket key (a member's mode change moves it between buckets instead of bending the bucket it leaves); `HeapScene` double-remove made idempotent and disposal added.
+- [Vulkan] `CreateStorageBufferArray` was non-adaptive (forced once) — slot rebinds under churn never reached the descriptor set; now fully adaptive with per-element versions and buffer-identity dedup.
+- [Vulkan] Unbounded-array descriptor ceiling (1024) documented at `DescriptorSetLayout` with what lifting it requires.
+
+### 5.7.0-prerelease0003
+- [Sg] `Heap.ofRenderObjects` is now INCREMENTAL for set-membership changes: simple buckets (all-host geometry, no samplers, non-instanced) keep a persistent per-bucket cache — slot freelist with InstanceCount=0 tombstones, refcounted per-aval arena regions, append-only packed geometry with reference-stable buffers, stable bucket-RO identity — and process set deltas instead of rebuilding from the snapshot. One add+remove in a 20k-object bucket: ~360 ms -> ~1.45 ms (~15 us per changed object, linear). Non-simple buckets (atlas / bindless / instanced) keep the rebuild path but now rebuild only when their own membership changes. Token-reactive mode-rule re-bucketing, reactive IsActive gating and all HeapSpike golden tests preserved.
+
+### 5.7.0-prerelease0002
+- [Sg] Heap runtime: bucketed indirect-multidraw of render objects sharing an effect, per-draw uniforms gathered from a shared SSBO arena. Opt-in via `HeapConfig.Enabled <- true` (default OFF). `Heap.ofRenderObjects` collapses an `aset<IRenderObject>` into a few bucket render objects with dirty-tracked sparse arena updates; `HeapScene` is an imperative growable single bucket with O(1) Add/Remove. Bindless geometry through `HeapVertexData`; bindless textures with a Vulkan-1.0 / MoltenVK atlas-page fallback (`HeapAtlas`, `HeapAtlasPool`, reactive multi-page with LRU and dedup). Currently Vulkan-only.
+- [Sg] `ISimpleSg` direct-construction render path: every `Sg.*` node implements an explicit `TraversalState` carrying the Ag-attribute set; ~7-8× faster SG resolution at 20k objects vs the legacy attribute-grammar entry. On by default (`SimpleConfig.Enabled = true`); set `AARDVARK_SIMPLE_SG=0` (and `SimpleConfig.Enabled <- false`) to fall back to the Ag path.
+- [Rendering] A-buffer order-independent transparency: exact per-pixel k-buffer via `GL_ARB_fragment_shader_interlock`, with per-sample mask resolve for MSAA. `TransparencyRenderTask.technique` toggles between the existing `WeightedBlended` and the new `ABuffer` path. Diagnostic via `AARDVARK_ABUFFER_DEBUG=1` (coverage) / `=2` (sample-id).
+- [Vulkan] MSAA: `MultisampleState` honours `ShaderProgram.SampleShading`; `minSampleShading=1.0` when sample-shading enabled. `gl_SampleID`/`gl_SamplePosition` detection fixed in `ShaderProgram.fragmentInfo`.
+- [Vulkan] Fragment-shader interlock + storage-write render-pass dependency wiring.
+- [Vulkan] Fix framebuffer copy on multisampled images (A-buffer OIT + MSAA).
+- [Vulkan] MoltenVK upload wedge fixed by pinning `VkBufferCopy` (F# tail-call escape, dotnet/fsharp#18689).
+- [Vulkan] `&&` (byref-of-temp) → `fixed &` sweep across Core sync/commands/device/queues, Memory allocator/external-memory, resources (image/sampler/pipeline/swapchain), raytracing (accel-struct/micromap/pipeline) — dotnet/fsharp#18689 compatibility.
+- [Vulkan] `ResourceLocationSet.Use`: reuse `invalidScratch` HashSet + skip `transact` when nothing invalid.
+- [Vulkan] Conservative-state `pNext` use-after-move fix (sub-struct stored in unmanaged memory).
+- [Application] `VulkanLoader.PreferMoltenVK` to load aardvark's bundled MoltenVK over a system Vulkan SDK on macOS.
+- [GL] Added `Context.GetDebugMessages`.
+- [GL] Added `Context.OnDispose`.
+- [GL] Represent `NullTexture` with a proper texture object instead of a texture with handle 0.
+- [deps] FShade `5.7.3 → 5.7.9`: GLSL binding-allocator clamps unbounded-array step to 1 (was decrementing the global counter); unbounded sampler / image / SSBO arrays via `count = -1`; `nonuniformEXT` for bindless storage-buffer / sampler array indexing; storage-buffer `ssbCount` reported in the interface.
+
+### 5.7.0-prerelease0001
+- [Vulkan] Reworked loading of Vulkan library
+- [Vulkan] Added support for MoltenVK
+- Added ComputeCommand.SetConstantCmd
+- Added ComputeCommand.DispatchIndirectCmd
+
+### 5.6.5
+- Fixed support for 64-bit attributes and uniforms
+- Fixed various issues with `GlobalBoundingBox` and `LocalBoundingBox`. Both attributes are now equivalent.
+- Fixed `PickObjects` attribute for render nodes with `TriangleStrip` and `TriangleAdjacencyList` topologies
+- Added `PickTree` intersection methods using `ValueOption` rather than `Option`
+- Made `IBuffer.ToArray` and `BufferView.download` robust to out-of-range arguments
+- [Sg] Fixed broken Ag rule for `FaceVertexCount`
+- [Sg] Added `rotation` and `rotation'`
+- Replaced `Marshal.Copy`/`Marshal.Set` calls in `UniformWriters.NewWriters` with managed `Buffer.MemoryCopy`/`Span<byte>.Clear` so wasm builds (which lack `msvcrt.dll`/`libc`) can write array uniforms
+
+### 5.6.4
+- [GL] Dispose MultimediaTimer in LodRenderer to avoid resource exhaustion
+- [GL] Fixed M22f, M23f, M33f geometry attributes in LodRenderer
+
+### 5.6.3
+- [Vulkan] Improved handling of unavailable or disabled features
+- [Vulkan] Added missing synchronization for buffer uploads
+- [Vulkan] Query format properties on demand
+- [Vulkan] Removed logging of shader interface
+- [Application] Dispose window when using `show` builder
+- [Application.OpenVR.GL] Fixed `samples` parameter of `OpenGlVRApplicationLayered` constructor being ignored
+- [Application.OpenVR.GL] Fixed copy for non-multisampled framebuffers
+- [Sg] Added `Sg.uniforms`
+
+### 5.6.2
+- Added support for enum types as vertex and instance attributes
+- Implemented download / upload for PixImage as 3D slices
+- Improved support for non-2D framebuffer outputs
+- [GL] Create debug context when debug output is enabled
+- [GL] Fixed issue with clearing textures with unsigned integer formats
+- [Vulkan] Fixed regression with swapchain creation
+
+### 5.6.1
+- [GeometryPool] culling shader workaround (FShade write bug)
+- [Vulkan] Fixed swapchain creation for Wayland
+- [GLFW] Avoid printing error due to unsupported window icon
+
+### 5.6.0
+- https://github.com/aardvark-platform/aardvark.rendering/wiki/Aardvark-Rendering-5.6-changelog
+
+### 5.6.0-prerelease0010
+- Changed `DrawCalls.Direct` from list to array
+- Reworked `BufferView` constructors
+- Reworked `TexureParams` as enum and improved documentation
+- Added size and format validation for `PixTexture2d` and `PixTextureCube`
+- Added offset parameter for indirect buffers
+- Added framebuffer clear extensions
+- Added support for dynamic viewport and scissor
+- Added `discardOnResize` parameter for AdaptiveBuffer
+- Added support for color-based vertex attributes
+- Added Aardvark.Rendering.ImGui
+- [Raytracing] Reworked `GeometryMode`
+- [Raytracing] Added comments and overloads for geometry-related types
+- [Sg] Fixed automatic computation of `FaceVertexCount`
+- [Sg] Added `Sg.indirectDraw'`
+- [Vulkan] Fixed interleaved attributes
+- [Vulkan] Improved detection of debug printf messages
+- [Vulkan] Disabled render task recompilation message for `DebugLevel.Normal`
+- [Vulkan] Fixed computation of shader file cache name
+- [GL] Deleted old render task implementation
+- [GL] Fixed handling of nested runtime commands
+- [GL] Fixed `AbstractRenderTask.HookRenderObject` with render commands
+
+### 5.6.0-prerelease0009
+- [Vulkan] Fixed memory leaks related to cstr
+- [Vulkan] Added micromap pipeline creation flag
+- [Application.Utilities] Removed preventDisposal parameter in ISimpleRenderWindow.Run
+
+### 5.6.0-prerelease0008
+- [Vulkan] Fixed case names of enums with a version suffix
+- [Vulkan] Added support for opacity micromaps
+- [Vulkan] Improved detection of debug printf messages
+- [Vulkan] Added AdaptiveBoundingBoxes.FromCenterAndRadius
+- [Vulkan] Added unmanaged constraints for TraceObject methods
+
+### 5.6.0-prerelease0007
+- [Vulkan] Added check if color attachment supports blending
+- [Vulkan] Added ValidationLayerConfig.RaytracingValidation
+- [Vulkan] Added support for custom sampler border colors
+- [Vulkan] Added support for acceleration structure compaction
+- [Vulkan] Renamed RaytracingSceneDescription to RaytracingScene
+- [Vulkan] Fixed compatibility check for acceleration structure updates
+
+### 5.6.0-prerelease0006
+- Added IRuntime.SupportsPositionFetch and SupportsInvocationReorder
+- [Vulkan] Added support for VK_NV_ray_tracing_invocation_reorder
+- [Vulkan] Added support for VK_NV_ray_tracing_validation
+- [GPGPU] Fixed FShade-related issue in Jpeg compressor
+
+### 5.6.0-prerelease0005
+- Updated FShade to 5.7.0-prerelease0003
+
+### 5.6.0-prerelease0004
+- Changed type of Handle property in resource interfaces to uint64
+- Removed obsolete code
+- Removed RenderTask.cache and RenderTask.postProcess
+- Changed return type of IUniformProvider.TryGetUniform and IAttributeProvider.TryGetAttribute to ValueOption
+- Changed return type of IGeometryPool.TryGetBufferView to ValueOption
+- Replaced CreateTextureAttachment() with GetOutputView()
+- Removed INativeBuffer Pin() and Unpin()
+- Optimized constant path in IManagedBuffer.Add
+- Added IBuffer.ToArray
+- [ManagedPool] Reworked handling of attribute dictionaries (PooledGeometry is removed)
+- [ManagedTracePool] Added uniform provider for storage buffers
+- [Raytracing] Various optimizations and API adjustments
+- [Raytracing] Added IndexType.Int16 and IndexType.Int32
+- [GL] Removed Type.GLSize
+
+### 5.6.0-prerelease0003
+- Added validation for framebuffer signatures of prepared render objects
+- Added debug labels for render tasks, textures, buffers, and render buffers
+- [Vulkan] Fixed reference counting in device token
+- [Vulkan] Fixed alignment and size issues with empty buffers
+- [Vulkan] Added debug config flag for generating shader debug info
+- [Vulkan] Replaced obsolete VK_EXT_validation_features with VK_EXT_layer_settings
+- [Vulkan] Fixed ImageSamplerArrayResource leaking deltas
+- [GL] Removed UnmanagedFunctions.wrap usage
+
+### 5.6.0-prerelease0002
+- Switched to Aardvark.Data.Assimp
+- [Vulkan] Fixed infinite recursion in external memory allocation
+- [Vulkan] Removed warning when allocating external memory fails
+- [Vulkan] Made ILogger and Logger internal
+- [Vulkan] Added device chooser API
+- [Vulkan] Fixed raytracing buffer alignment issues
+- [Sg] Fixed issue with multiple dynamic sampler states
+- [Sg] Simplified samplerState applicator
+
+### 5.6.0-prerelease0001
+- [Vulkan] Improved queue submission
+- [Vulkan] Integrated VMA for memory management
+
+### 5.5.17  
+- [GL] fixed quadbuffer stereo rendering
+- [GL] Fixed blend modes not being toggled properly per attachment
+- [Vulkan] Fixed VK_ERROR_OUT_OF_POOL_MEMORY error on some platforms when using raytracing
+- [Vulkan] Added check for format features when creating a render pass
+
+### 5.5.16
+- now using `glEnablei/glDisablei` for BlendModes.
+
+### 5.5.15
+- updated package FSharp.Data.Adaptive 1.2.19
+- Improved error reporting for buffer creation and updating
+- [Vulkan] Respect export flag for empty buffers
+- [Vulkan] Print detailed memory information when allocation fails (uses VK_EXT_memory_budget if available)
+- [Vulkan] Avoid passing VkExportMemoryAllocateInfo when not exporting memory
+- [Vulkan] Added Device.PrintMemoryUsage()
+
+### 5.5.14
+- updated dependency FSharp.Data.Adaptive 1.2.19
+- [Vulkan] Changed config location of device chooser to Aardvark cache directory
+- Added DownloadDepth() and DownloadStencil() overloads for IBackendTexture with an explicit target parameter
+- Fixed simpleLighting and stableLight shaders to use ambient term
+- Fixed race conditions with compact buffers and Vulkan image sampler arrays
+- Improved error reporting for null values as textures
+
+### 5.5.13
+- [OpenGL/WPF/ThreadedRenderControl] re-activate classic render control
+
+### 5.5.12
+- [OpenGL/WPF/ThreadedRenderControl] frame throttle
+
+### 5.5.11
+- [LodTreeNode] uniforms concurrent access fix
+
+### 5.5.10
+- [OpenGL/WPF/ThreadedRenderControl] fixed resize
+
+### 5.5.9
+- [OpenGL/WPF] Threaded rendering control
+
+### 5.5.8
+- MultiTreeNode: fixed picking
+
+### 5.5.7
+- LodTreeNode: added MultiTreeNode support
+
+### 5.5.6
+- [Assimp] Animations: fixed quaternion interpretation
+
+### 5.5.5
+- OpenGL/WPF control uses tasks for rendering (avoiding stack-inlining due to STAThread)
+
+### 5.5.4
+- OpenGL/WPF control uses `OnPainRender` again
+
+### 5.5.3
+- OpenGL/WPF control no longer uses `OnPainRender` by default
+
+### 5.5.2
+- added PoolGeometry as alternative to ManagedPool with SymbolDict (more efficient attribute lookups)
+- added reference equality check to BufferView Equals
+- using SortedSetExt value option methods
+- avoid exception in upload/download/write when count=0
+- marked MemoryManagementUtilities.FreeList as obsolete (duplicate of Aardvark.Base FreeList)
+- updated Aardvark.Base to 5.3.5
+- updated Aardvark.Build to 2.0.2
+- updated aardpack to 2.0.3
+
+### 5.5.1
+- Improved adaptive converter caching
+- Optimized GCHandle.Alloc usage
+- [Assimp] Fixed remap.xml for Linux
+- [GL] Optimized construction of attribute bindings
+- [Text] Use FramebufferLayout as surface cache key
+- [Text] Added type aliases
+
+### 5.5.0
+- https://github.com/aardvark-platform/aardvark.rendering/wiki/Aardvark-Rendering-5.5-changelog
+
+### 5.5.0-prerelease0002
+- Renamed `PixImageCube` to `PixCube`
+- Renamed `Aardvark.SceneGraph.IO` to `Aardvark.SceneGraph.Assimp`
+
+### 5.5.0-prerelease0001
+- Initial prerelease
+
+### 5.4.12
+- [GL] Fixed potential memory leak after ContextHandle is disposed
+- Optimized generic dispatch
+- Fixed potential leaks with ConcurrentDictionary.GetOrAdd
+
+### 5.4.11
+- [Application.WPF.GL] SharingRenderControl implementation now uses Silk.NET.Direct3D9 instead of SharpDX
+- Removed SharpDX dependency
+- Re-added dynamic shader caches
+- Fixed multi-threading issue in PrimitiveValueConverter
+- [Sg] Use single value attributes for IndexedGeometry
+- [IndexedGeometry] Fixed Union() and added ToIndexed() overload
+- [IndexedGeometry] Added overload Clone() for deep copy
+
+### 5.4.10
+- [OpenVR] changed GL texture submit to 2 textures (previously side by side, issue with Quest 3)
+- [GL] Improved querying of supported sample counts
+- [GL] Fixed double disposal of Context
+- [GLFW] Fixed OpenTK context interop
+- [Vulkan] Fixed conservative raster validation error
+
+### 5.4.10-prerelease0006
+- rebuild glvm for ARM64
+
+### 5.4.10-prerelease0005
+- [Text] added option to disable sample shading
+
+### 5.4.10-prerelease0004
+- [GL] added flag to disable multidraw (experimental)
+
+### 5.4.10-prerelease0003
+- [FontResolve] fixed null family name failure
+
+### 5.4.10-prerelease0002
+- [PathSegment] minor fixes
+
+### 5.4.10-prerelease0001
+- [Text] improved Font resolver for Windows and MacOS
+- [PathSegment] fixed several PathSegment tools and added a few new ones
+
+### 5.4.9
+- [LodRenderer] Handle exceptions in background threads
+- [GL] Implemented GLSL shader caches for platforms that do not support program binaries (e.g. MacOS)
+
+### 5.4.9-prerelease0001
+- [GL] experimental support for quad-buffer stereo(is back again?)
+
+### 5.4.8
+- [GL] Fixed locking order of GlobalResourceLock and context locks to avoid potential deadlocks
+- [GL] Added workaround for layered rendering and GLSL < 430
+- [GL] Made context creation and sharing more robust (see RuntimeConfig.RobustContextSharing)
+- [GL] Improved disposal of ContextHandle
+- [GLVM / VKVM] Updated ARM64 binaries
+- [GLFW] Fixed context resource leaks
+- [GLFW] Reset GetCurrentContext on disposal
+- [WinForms / WPF] Removed double dispose of context
+
+### 5.4.7
+- Fixed Frustum.withAspect and Frustum.withHorizontalFieldOfViewInDegrees
+- [GL] Fixed InvalidEnum error due to GL_POINT_SPRITE
+- [GL] Removed validation via proxy textures (resulted in errors on AMD with multisampled textures)
+- [GL] Removed swizzle for multisampled textures (not supported)
+- [GL] Added simple parameter device limit checks for textures and renderbuffers
+- [GL] Improved texture memory usage tracking
+- [GL] Made retrieval of program binaries more robust
+- [GL] Improved driver information and error formatting
+- [GL] Disabled Dispose() for Program
+- [GL] Fixed resource leaks in ContextHandleOpenTK.create
+- [GL] Fixed ComputeCommand.SetBufferCmd
+- [GL] Fixed issue with texture targets and multisampling
+- [Vulkan] Fixed swapchain creation if maxImages is zero
+- [Vulkan] Fixed issue with image format queries and external memory
+- [Vulkan] Improved error formatting
+- [GLFW] Use no error context only when indicated by debug config
+- Added IRenderTask.GetRuntime() and IRenderTask.GetFramebufferSignature()
+
+### 5.4.6
+- [ContextHandles] GL.Enable(EnableCap.PointSprite)
+- [ManagedPool] Avoid evaluating draw call set if not active
+- Fix BlendMode.Blend source alpha factor
+
+### 5.4.5
+- [GeometryPool] Fixed wrongly disposed shader caches
+
+### 5.4.4
+- Exceptions are caught and logged when updating shaders with the debugger
+- [GL] Fixed resource management issue with compute shaders and shader debugger, resulting in invalid operation errors
+- [GL] Fixed issue with preparing exported buffers
+- [GL] Print before debugger break in DebugCommandStream
+- [Vulkan] Fixed validation error related to memory export
+
+### 5.4.3
+- Updated to FShade 5.5
+- Added support for debugging raytracing effects and compute shaders with the FShade ShaderDebugger
+- Fixed issues with dirty sets in OrderedCommand (GL / Vulkan)
+- [GL] Increased verbosity level of outdated resource warning
+- [GL] Improved warning about missing internal format query support 
+
+### 5.4.2
+- [Vulkan] Fixed issue in SBT update
+- [Sg] Added C# Surface overload
+- Improved shade compile error reporting and code printing
+
+### 5.4.1
+- Fixed net6.0 target for WinForms and WPF
+
+### 5.4.0
+- https://github.com/aardvark-platform/aardvark.docs/wiki/Aardvark-Rendering-5.4-changelog
+
+### 5.4.0-prerelease0004
+- Renamed NewInputBinding to CreateInputBinding
+- Reverted renaming of provider ofDict methods
+- Restored IAttributeProvider.All
+- Added Signature property to ManagedPool and ManagedTracePool
+- Added obsolete extensions for renamed buffer copy methods
+- [GL] Removed duplicate context tracking
+- [Vulkan] Fixed aspect for depth / stencil samplers
+- [Vulkan] Fixed shader stage computation for dynamic effects
+
+### 5.4.0-prerelease0003
+- Restored IComputeRuntime.ContextLock
+
+### 5.4.0-prerelease0002
+- Added validation for sampler state translation
+- Added texture filter reduction
+- Added Blit, reworked Copy and ResolveMultisamples
+- [GL] Added RuntimeConfig.AllowConcurrentResourceAccess
+- [Vulkan] Fixed issue with concurrent eager destroy
+
+### 5.4.0-prerelease0001
+- Initial prerelease for 5.4
+
+### 5.3.8
+- [GL] Fixed update issues with OrderedCommand
+
+### 5.3.7
+- Various optimizations
+- Added RenderTask.renderTo variants with adaptive clear values
+- Fixed RenderPass.before to respect given order
+- [AbstractRenderTask] Make Dispose mutually exclusive with Update and Run
+- [GL] Fixed ObjectDisposedException related to invalid epilogue prev pointer
+- [GLFW] Fixed vsync initialization
+- [GLFW] Disabled unknown joystick axis warning
+- [Vulkan] Fixed issue with pipeline statistics being wrongfully selected
+
+### 5.3.6
+- Opc: more robust patchhierarchy caching: https://github.com/pro3d-space/PRo3D/issues/283
+
+### 5.3.5
+- OpcPaths now more robust (images vs Images, patches vs Patches) - https://github.com/pro3d-space/PRo3D/issues/280
+- Added support for loading mipmaps from file and stream textures
+- Added RenderTask.renderToWithAdaptiveClear
+- [Vulkan] Fixed synchronization issue with image and buffer uploads
+- [Vulkan] Implemented direct texture and framebuffer clear
+- [GL] Fixed issue with directly clearing depth-only textures
+
+### 5.3.4
+- Added default component swizzle that duplicates the red channel to the green and blue channels for grayscale formats
+- [Application.Slim.GL] Fixed context initialization 
+- [Vulkan] Fixed deadlock in concurrent descriptor set management
+
+### 5.3.3
+- Added union operation for IndexedGeometry
+- Added IndexedGeometry primitives for arrows and coordinate crosses
+- [Sg] Fixed and improved active flag cache
+- [Vulkan] Fixed issue with logging shader cache reads
+
+### 5.3.2
+- [GL] Fixed access violation and other issues related to internal format queries
+- [GL] Implemented shader caches for compute shaders
+- [Vulkan] Implemented shader caches for raytracing shaders
+- Improved error logging when shader cache access fails
+- Reworked shader caches to use FShade-based interface serialization instead of FsPickler
+- Made shader cache directory creation lazy
+
+### 5.3.1
+- Fixed export (sharing) bug on MacOS (pNext chain needs to be empty)
+- Added hardware support validation for mipmap generation
+- [GL] Fixed mipmap generation for compressed file and stream textures
+- [GL] Fixed issue with compressed texture download
+- [Vulkan] Implemented mipmap compressed PixTexture2d upload
+- [Vulkan] Fixed prepare of Stream- / FileTexture with compression
+
+### 5.3.0
+- https://github.com/aardvark-platform/aardvark.docs/wiki/Aardvark-Rendering-5.3-changelog
+
+### 5.3.0-prerelease0005
+- Implemented debug configurations for enabling backend-specific debug features
+- Added validation for color attachment formats when creating framebuffer signatures
+- Added proper support for unsigned integer color attachments
+
+### 5.3.0-prerelease0004
+- [Vulkan] Implemented RaytracingTask.Update
+- [Vulkan] Implemented CommandTask.PerformUpdate
+- [Vulkan] Reworked resource manager to prevent disposal of resources in use
+- [Vulkan] Use separate device tokens for graphics and compute families
+- [Vulkan] Lock pending set during update loop of ResourceLocationSet
+- [Vulkan] Added basic support for validation features
+- [Raytracing] Fixed issue with acceleration structure building and device tokens
+- [GL] Fixed memory usage tracking for imported resources
+- Added IRenderTask.Update overloads
+- Updated to FShade 5.3 prerelease
+
+### 5.3.0-prerelease0003
+- [Vulkan] Fixed issue with duplicate descriptor writes
+- [Vulkan] Trim excess elements from image sampler array
+- [Vulkan] Fixed extensions being wrongly reported as unavailable
+- [Vulkan] Lock pending set during update loop of DescriptorSetResource
+
+### 5.3.0-prerelease0002
+- [Vulkan] Fixed issue in DescriptorSetResource related to nested dependencies
+- [Vulkan] Reworked RaytracingTask to prevent unnecessary recompilation
+- [Vulkan] Implemented update-after-bind descriptors to prevent recompilation of render tasks
+- [Vulkan] Added RuntimeConfig.SuppressUpdateAfterBind
+- [Vulkan] Fixed issues with dynamic image sampler arrays
+- Implemented shrinking of AdaptiveCompactBuffer
+- Fixed issue with addition and removal order in AdaptiveCompactBuffer
+- Added IRaytracingTask.Update() overloads
+- Changed parameter order of Sg.pool
+
+### 5.3.0-prerelease0001
+- Initial prerelease for 5.3
+
+### 5.2.17
+- Improved error handling of DDS parser
+- [Sg] Added delay
+- [Sg] Added reference counting for onActivation
+- [Application.Slim] Fixed error code printing
+
+### 5.2.16
+- [Application.Slim.GL] Fix issue with sample count for non-multisampled windows
+
+### 5.2.15
+- Font constructor with System.IO.Stream
+
+### 5.2.14
+- Framebuffer Copy/ReadPixels 
+
+### 5.2.13
+- switched to aardvark.assembler
+
+### 5.2.12
+- reverted Vulkan queue creation
+- enabled sharing extensions by default (windows/linux)
+
+### 5.2.11
+- disabled useNoError (linux intel, steamdeck compat)
+
+### 5.2.10
+- text rendering workaround linux(nvidia)
+
+### 5.2.9
+- Arch/Fedora working
+- moved to Aardvark.Assembler
+
+### 5.2.9-prerelease0002
+- added missing FragmentProgram.Update
+
+### 5.2.9-prerelease0001
+- test release
+- moved to Aardvark.Assembler
+
+### 5.2.8
+- fixed GLFW init problem
+
+### 5.2.7
+- [Vulkan] requesting all queues for device
+
+### 5.2.6
+- [Vulkan] updated vk.xml to latest version (1.3)
+- [GL] improved error handling when retrieving uniforms
+- [Sg] Fixed runtime-dependent texture caching
+- [GL] Remove render task commands from dirty set
+
+### 5.2.5
+- [Text] Winding order of triangles is consistent, degenerated triangles get removed
+- [Vulkan] Added image limits checks for layers, levels and size
+- [GL] Added texture size limit checks
+- [GLFW] Fixed issues with MacOS and other platforms with poor GL support
+
+### 5.2.4
+- [Vulkan] Implemented host-side texture compression
+- Added RenderTo overloads with adaptive clear values
+- Added checks for maximum multisamples when creating framebuffer signatures and textures
+- Implemented PickObjects for RenderCommand
+- [GLFW] Fixed issue with non-positive window size
+- [GL] Fixed streaming texture issues
+- [GL] Use RGB internal format for BGR texture formats
+- [GLFW] Add hideCocoaMenuBar parameter
+
+### 5.2.3
+- [ManagedPool] Fixed memory leak
+- Improved block compression decoding and copying
+- [GL] Implemented host-side texture compression
+
+### 5.2.2
+- [GL] relaxed framebuffer signature compability requirements
+- [Vulkan] using any compatible QueueFamily for CopyEngine
+
+### 5.2.1
+- implemented ARM64 assembler
+- fixed issue with Retina displays
+- [Vulkan] fixed issue with platforms not supporting queries
+- [Vulkan] fixed issue with platforms not supporting geometry or tessellation shaders
+
+### 5.2.0
+https://github.com/aardvark-platform/aardvark.docs/wiki/Aardvark-5.2-changelog
+
+### 5.2.0-prerelease0002
+- improved C# interop for ClearValues
+- added setter for Call of ManagedDrawCall
+- made texture clear API consistent with framebuffer clearing
+
+### 5.2.0-prerelease0001
+- Initial prerelease for 5.2
+
+### 5.1.22
+- [ManagedPool] no removal of empty PoolNodes from set of RenderObjects: dependency on IndirectBuffer input was causing performance issues when marking/re-evaluating complete set of RenderObjects
+
+### 5.1.21
+- fixed ComputeShader problem in Vulkan
+
+### 5.1.20
+- deterministic Id for instanced-effects
+
+### 5.1.19
+- updated Base & FShade
+
+### 5.1.18
+
+- disabled multisampling for text outline - fix for https://github.com/aardvark-platform/aardvark.rendering/issues/86
+
+### 5.1.17
+- fixed package dependeny to FSharp.Data.Adaptive
+- [Vulkan] fixed package dependency to GLSLangSharp
+- [GL] implemented UploadBufferCmd and CopyImageCmd
+
+### 5.1.16
+- [GL] fixed IRuntime.Clear/ClearColor
+- [Sg] added C# ColorOutput overload
+
+### 5.1.15
+- fixed GL compute shader image bindings
+
+### 5.1.14
+- switched to official AssimpNet
+
+### 5.1.13
+- updated mac glfw lib & option to control cocoa menu bar
+
+### 5.1.12
+- fixed texture download in absense of bufferstorage
+
+### 5.1.11
+- fixed osx64 glvm build
+
+### 5.1.10
+- fix for segfaults on GL without direct state access
+
+### 5.1.9
+- updated FSharp.Core >= 4.7.0
+- updated to newest Base/FShade/Adaptive packages
+- removed System.Reactive
+
+### 5.1.8
+- added argument validation for texture copying
+- added argument validation for texture download and upload
+- [GL] changed Shader caches to depend on context / runtime
+- [GL] fixed copy of cubemaps
+- [GL] fixed RenderingLock
+
+### 5.1.7
+- added types to specify clear values more easily
+- added IRenderTask.RenderTo() overloads with clear values
+- added RenderTask.render* variants with clear values
+- added map and bind functions for IAdaptiveResource
+- DepthTest.None and DepthTest.Always are no longer aliases (revert to < 5.1.0 behavior)
+- fixed various bugs related to cube texture arrays
+- texture creation functions now validate parameters
+- [GL] fixed nop RenderingLock 
+- [GL] render control size is ensured to be valid now
+- [GL] fixed bug with draw buffers and prepared surfaces with signatures different from the render task
+### 5.1.6
+- reworked low-level texture API
+- added functions for creating (adaptive) 1D and 3D textures
+- removed IBackendTextureOutputView and BackendTextureOutputView
+- fixed management and disposal of renderTo tasks
+- proper out-of-date marking for adaptive resources
+- reworked TextureFilter and SamplerState regarding anisotropic filtering
+- [GL] fixed bug in Context.Blit()
+- [GL] fixed copy and download of texture array slices
+- [SgFSharp] removed unnecessary SRTP usage
+- [SgFSharp] added Sg.lines'
+- [Vulkan] implemented dynamic sampler states
+
+### 5.1.5
+- fixed Silk.NET.Core depenedency
+- fixed renderToColorCube 
+
+### 5.1.4
+- updated packages
+
+### 5.1.3
+- [Vulkan] CommandTask no longer disposes ResourceManager
+- [Sg] Added instancing utilities for IndexedGeometry 
+
+### 5.1.2
+- fixed thread abort exn on linux
+
+### 5.1.1
+- https://hackmd.io/58CqcVmnRoGq-X5gIrNThg
+
+### 5.0.17
+ - [GL] OpenVR support for GL
+ 
+### 5.0.15
+ - [GL] replaced EXT_direct_state_access with ARB_direct_state_access
+ - [GL] fixed crashes when using core profile
+ - [GL] RenderTask.Dispose no longer needs a transaction (https://github.com/aardvark-platform/aardvark.rendering/issues/60)
+
+### 5.0.14
+ - [GL] More robust parsing of GL and GLSL versions
+
+### 5.0.3
+ - [Text] fixed compatibility with render passes
+
+### 5.0.0
+ - [Base] updated aardvark to v5
+ - [Base] reworked Buffer API: added BufferUsage flags
+ - [Base] added indirect draw stride
+ - [Base] refactored RenderObject drawcalls
+ - [Base] removed IResizeBuffer, IMappedBuffer, IMappedIndirectBuffer
+ - [Sg] reworked ManagedPool
+
+### 4.12.4
+ - [GL] fixed mip level calculation in texture upload
+
+### 4.12.3
+ - [Base] updated base packages
+
+### 4.12.2
+ - [Base] fixed GLVM loading for all plattforms
+
+### 4.12.1
+ - [Base] updated GLVM for linux
+
+### 4.12.0
+ - [GL] removed warnings from LodRenderer
+ - [GL] added support for NormalUV texture (2-channel float images)
+
+### 4.11.15
+ - [GL] fixed BufferRuntime.Clear
+
+### 4.11.12
+ - [GL] added quad-buffered stereo support to GameWindow
+
+### 4.11.8
+ - [Base] fixed RenderTask.custom
+ - [GL] fixed size 0 UniformBuffer alloc
+
+### 4.11.7
+ - [Base] updated packages / fixed memory leak
+
+### 4.11.5
+ - [Base] reverted memory leak fix
+
+### 4.11.4
+ - [Base] rmeoved hooking mechanism of dynamic uniforms (no need anymore, allowed overwrite of view/proj trafo)
+ - [Base] moved Caches (UnaryCache, BinaryCache) to Base.FSharp
+ - [Sg] fixed memory leak when using derived attirbutes (e.g. ModelViewTrafo, ModelViewProjTrafo)
+ - [GL] fixed texture array uniforms 
+
+### 4.11.3
+ - LoD Render: removed debug ouput
+
+### 4.11.2
+ - [GL] fixed buffer resource stats
+ - [GL] fixed unmanaged memory leak of VAO
+ 
