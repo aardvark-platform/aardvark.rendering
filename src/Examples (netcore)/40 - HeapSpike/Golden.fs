@@ -320,11 +320,12 @@ module Golden =
                 mkRO us effectG)
         // Heap.lastBucketCount is the authoritative split metric (2 distinct field-sets ->
         // 2 buckets). The output RO set additionally carries one draw-less DERIVE pre-pass
-        // RO per derive-bucket; both buckets here derive ViewProjTrafo, so 2 draw + 2 derive
-        // = 4 output ROs. (The derive RO runs the fp64 composite compute as a render pass.)
+        // RO per derive-bucket; both buckets here derive ViewProjTrafo, plus the heap's
+        // single ActivationRenderObject (lifetime handle), so 2 draw + 2 derive + 1
+        // activation = 5 output ROs. (The derive RO runs the fp64 composite compute.)
         let splitCount = Heap.ofRenderObjects runtime (ASet.ofArray mixed) |> ASet.force |> HashSet.count
-        let splitOk = Heap.lastBucketCount = 2 && splitCount = 4
-        if not splitOk then Log.warn "autoFields: field-set bucket split: %d output RO(s) (expected 4 = 2 draw + 2 derive), %d bucket(s) (expected 2)" splitCount Heap.lastBucketCount
+        let splitOk = Heap.lastBucketCount = 2 && splitCount = 5
+        if not splitOk then Log.warn "autoFields: field-set bucket split: %d output RO(s) (expected 5 = 2 draw + 2 derive + 1 activation), %d bucket(s) (expected 2)" splitCount Heap.lastBucketCount
 
         let pass = fieldsOk && pixOk && splitOk
         if pass then Log.line "autoFields: PASS (auto-detected fields render == classic; NotConsumed ignored; field-set splits buckets)"
@@ -1000,7 +1001,14 @@ module Golden =
         let foldChainBuckets = Heap.lastChainBuckets        // expect 0 (no stack)
         let chainSet = cset (chainInputs :> seq<_>)
         let chainHeap = Heap.ofRenderObjects runtime (chainSet :> aset<_>)
-        let chainPix = imageOf chainHeap
+        // render chainHeap through ONE persistent task kept alive across the edit and
+        // churn — so the heap stays built and an edit is an incremental upload (a
+        // single-shot render would hit refcount 0 and rebuild the whole heap).
+        use chainTask = runtime.CompileRender(signature, chainHeap)
+        let chainOut = chainTask |> RenderTask.renderToColor size
+        chainOut.Acquire()
+        let renderChain () = chainOut.GetValue().Download().AsPixImage<uint8>()
+        let chainPix = renderChain ()
         let chainBuckets = Heap.lastChainBuckets            // expect 1
         let distinct = Heap.lastDistinctLinks               // expect ~ n+1
 
@@ -1010,7 +1018,7 @@ module Golden =
 
         // (d) edit ONE node link -> ONE arena slot uploaded
         transact (fun () -> nodeTrafos.[n/2].Value <- Trafo3d.Translation(99.0, 99.0, 5.0))
-        imageOf chainHeap |> ignore
+        renderChain () |> ignore
         let uploads = Heap.lastChainLinkUploads
 
         // (e) churn: remove 3, add 3 fresh -> chainMode preserved, image sane
@@ -1022,7 +1030,8 @@ module Golden =
         transact (fun () ->
             for j in 0 .. 2 do chainSet.Remove chainInputs.[j] |> ignore
             for ro in extra do chainSet.Add ro |> ignore)
-        imageOf chainHeap |> ignore
+        renderChain () |> ignore
+        chainOut.Release()
         let churnBuckets = Heap.lastChainBuckets
 
         let engaged  = foldChainBuckets = 0 && chainBuckets = 1
@@ -1467,7 +1476,13 @@ module Golden =
 
         let foldedPix = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray (Array.init n (mkRO false))))
         let chainHeap = Heap.ofRenderObjects runtime (ASet.ofArray (Array.init n (mkRO true)))
-        let chainPix = imageOf chainHeap
+        // persistent task: keep the heap built across the edit (a single-shot render
+        // would hit refcount 0 and rebuild, re-uploading every link).
+        use chainTask = runtime.CompileRender(signature, chainHeap)
+        let chainOut = chainTask |> RenderTask.renderToColor size
+        chainOut.Acquire()
+        let renderChain () = chainOut.GetValue().Download().AsPixImage<uint8>()
+        let chainPix = renderChain ()
         let chainBuckets = Heap.lastChainBuckets
         let distinct = Heap.lastDistinctLinks
         let maxD, nDiff, nbg, total = diff foldedPix chainPix
@@ -1476,7 +1491,8 @@ module Golden =
 
         // edit ONE shared group root -> ONE link upload (moves perGroup leaves).
         transact (fun () -> roots.[2].Value <- Trafo3d.Translation(0.0, 0.0, 6.0))
-        imageOf chainHeap |> ignore
+        renderChain () |> ignore
+        chainOut.Release()
         let uploads = Heap.lastChainLinkUploads
 
         // distinct links = groups roots + (sum of distinct mid links) + (<=3 leaf

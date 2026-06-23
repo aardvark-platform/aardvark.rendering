@@ -1257,10 +1257,24 @@ module PreparedObjectInfoAssembler =
             | ValueNone -> x.Render(s, me)
 
 type NopCommand(ctx : Context, pass : RenderPass) =
-    inherit PreparedCommand(ctx, pass) 
+    inherit PreparedCommand(ctx, pass)
 
     override x.GetResources() = Seq.empty
     override x.Release() = ()
+    override x.Compile(_,_,_) = NativeStats.Zero
+    override x.EntryState = ValueNone
+    override x.ExitState = ValueNone
+    override x.Signature = ValueNone
+
+/// Renders nothing — only holds the ActivationRenderObject's activation for the
+/// lifetime of this command (released when the object leaves the render task).
+type ActivationCommand(ctx : Context, pass : RenderPass, o : ActivationRenderObject) =
+    inherit PreparedCommand(ctx, pass)
+
+    let activation = o.Activate()
+
+    override x.GetResources() = Seq.empty
+    override x.Release() = activation.Dispose()
     override x.Compile(_,_,_) = NativeStats.Zero
     override x.EntryState = ValueNone
     override x.ExitState = ValueNone
@@ -1365,6 +1379,9 @@ module PreparedCommand =
                 with _ ->
                     for r in resources do r.Dispose()
                     reraise()
+
+            | :? ActivationRenderObject as o ->
+                new ActivationCommand(x.Context, pass, o) :> PreparedCommand
 
             | :? MultiRenderObject as o ->
                 match o.Children with

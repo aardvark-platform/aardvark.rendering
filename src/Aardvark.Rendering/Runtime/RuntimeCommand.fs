@@ -59,3 +59,27 @@ type CommandRenderObject(pass : RenderPass, scope : Ag.Scope, command : RuntimeC
         match o with
             | :? CommandRenderObject as o -> id = o.Id
             | _ -> false
+
+/// A render object that carries NOTHING to render — backends ignore it for
+/// drawing and only invoke its `Activate`, disposing the returned handle when
+/// the object leaves the render task. Lets a producer (e.g. the GPU heap) scope
+/// resource lifetime to the union of tasks rendering it: build on first activate,
+/// tear down when the last task drops it.
+type ActivationRenderObject(pass : RenderPass, scope : Ag.Scope, activate : unit -> System.IDisposable) =
+    let id = RenderObjectId.New()
+
+    member x.Id = id
+    member x.RenderPass = pass
+    member x.AttributeScope = scope
+    member x.Activate() = activate()
+
+    interface IRenderObject with
+        member x.Id = id
+        member x.RenderPass = pass
+        member x.AttributeScope = scope
+
+    override x.GetHashCode() = id.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? ActivationRenderObject as o -> id = o.Id
+            | _ -> false

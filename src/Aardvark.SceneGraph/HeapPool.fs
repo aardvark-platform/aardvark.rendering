@@ -3870,7 +3870,11 @@ module Heap =
     /// ordinary globals. Render objects that aren't heap-eligible (see
     /// `isHeapable` below) are passed through to the output set UNCHANGED — a
     /// mixed scene degrades gracefully.
-    let ofRenderObjects (runtime : IRuntime) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+    // Builds the heap's machinery (input reader + per-bucket CPU model + GPU
+    // buffers) and returns its bucket-RO set together with a teardown that frees
+    // EVERYTHING (every IncrementalBucket's GPU + object-count CPU, the reader).
+    // Called lazily on first activation; teardown runs when the last task drops it.
+    let private buildHeap (runtime : IRuntime) (objects : aset<IRenderObject>) : aset<IRenderObject> * (unit -> unit) =
         checkSupport false runtime
         let scope = Ag.Scope.Root
 
@@ -4391,6 +4395,15 @@ module Heap =
                 version.Value <- version.Value + 1
                 version.Value)
         updaterRef.Value <- updater
+        let teardown () =
+            // free every bucket (GPU buffers + object-count CPU) and drop the reader
+            for KeyValue(_, c) in caches do c.Dispose()
+            caches.Clear()
+            passSet.Clear()
+            roBucket.Clear()
+            match box objReader with
+            | :? System.IDisposable as d -> d.Dispose()
+            | _ -> ()
         let resultAval =
             updater |> AVal.map (fun _ ->
                 // each derive-bucket also contributes a draw-less derive RO (pre-pass dispatch)
@@ -4408,7 +4421,59 @@ module Heap =
                     out.[i] <- o
                     i <- i + 1
                 out)                                    // derive pre-passes ∪ collapsed buckets ∪ untouched passthrough
-        resultAval |> ASet.ofAVal
+        (resultAval |> ASet.ofAVal), teardown
+
+    /// Collapse an adaptive set of N render objects into bucket render objects.
+    /// Allocates NOTHING up front (ref-count zero): the heap's machinery — input
+    /// reader, per-bucket CPU model and ALL GPU buffers — is built lazily on the
+    /// FIRST activation (a render task picking up the heap) and torn down COMPLETELY
+    /// when the LAST task drops it (no GPU and no object-count-sized state held at
+    /// ref-count zero). Re-activation rebuilds from scratch; concurrent tasks share
+    /// one machinery via the ref-count. The drawing is carried by the bucket ROs;
+    /// the activation itself rides on an ActivationRenderObject that both backends
+    /// ignore for rendering and only activate/deactivate.
+    let ofRenderObjects (runtime : IRuntime) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        let gate = obj()
+        let mutable activeTasks = 0
+        let mutable shared : (aset<IRenderObject> * (unit -> unit)) voption = ValueNone
+        // bumped on teardown so the (shared) bucket reader re-evaluates and drops
+        // the stale buckets; the next task to pull then rebuilds from scratch.
+        let gen = cval 0
+
+        // Build lazily on pull; idempotent — rebuilds after a teardown set it to None.
+        let ensureBuilt () =
+            lock gate (fun () ->
+                match shared with
+                | ValueSome (s, _) -> s
+                | ValueNone -> let r = buildHeap runtime objects in shared <- ValueSome r; fst r)
+
+        // Deterministic teardown: each task holds the ActivationRenderObject's
+        // activation and disposes it when it drops the heap; the LAST drop frees
+        // everything (GPU + object-count CPU) and bumps `gen` so the bucket reader
+        // re-syncs to empty. A later task rebuilds from scratch on its first pull.
+        let activate () =
+            lock gate (fun () -> activeTasks <- activeTasks + 1)
+            { new System.IDisposable with
+                member _.Dispose() =
+                    let td =
+                        lock gate (fun () ->
+                            activeTasks <- max 0 (activeTasks - 1)
+                            if activeTasks = 0 then
+                                match shared with
+                                | ValueSome (_, td) -> shared <- ValueNone; ValueSome td
+                                | ValueNone -> ValueNone
+                            else ValueNone)
+                    match td with
+                    | ValueSome td -> td (); transact (fun () -> gen.Value <- gen.Value + 1)
+                    | ValueNone -> () }
+
+        let activationRO = ActivationRenderObject(RenderPass.main, Ag.Scope.Root, activate)
+        // `bind` owns the inner reader: it forwards the live machinery's incremental
+        // deltas, and on a teardown (gen bump → new machinery, or none) it drops the
+        // old reader and adopts the new one, emitting the switch itself. Building in
+        // the mapping makes the buckets surface in the first evaluation (no lag).
+        let buckets = gen |> ASet.bind (fun _ -> ensureBuilt())
+        ASet.union (ASet.single (activationRO :> IRenderObject)) buckets
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)
