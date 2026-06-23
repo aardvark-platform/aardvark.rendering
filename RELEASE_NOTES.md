@@ -1,3 +1,5 @@
+- [Vulkan] Fixed checking for enabled features for pipeline queries
+
 ### 5.7.0-prerelease0027
 - [Sg] Heap: eligibility respects effect DCE — a part is heapable if it supplies the inputs the effect's LIVE outputs need (read from the effect's dependency map vs the framebuffer signature), not every input the effect merely mentions; a read-but-dead attribute (e.g. `Flow` on non-water parts under a shared effect) no longer disqualifies a part and forces the whole scene to individual draws.
 

@@ -528,13 +528,9 @@ type Runtime(device : Device) as this =
             new PipelineQuery(device, statistics) :> IPipelineQuery
 
     member x.SupportedPipelineStatistics =
-        let features = &device.PhysicalDevice.Features.Queries
-
-        if features.InheritedQueries then
-            if features.PipelineStatistics then
-                PipelineStatistics.All
-            else
-                PipelineStatistics.None
+        let features = &device.EnabledFeatures.Queries
+        if features.InheritedQueries && features.PipelineStatistics then
+            PipelineStatistics.All
         else
             PipelineStatistics.None
 
