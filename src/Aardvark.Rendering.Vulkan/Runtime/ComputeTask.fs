@@ -590,11 +590,41 @@ module internal ComputeTaskInternals =
             interface IPreparedCommand with
                 member x.Run(dt, _, rt) = x.Run(dt, rt)
 
+        // Portability (MoltenVK) variant of DeviceCmd: instead of executing a recorded
+        // secondary command buffer (vkCmdExecuteCommands — crashes on MoltenVK), replay
+        // the VKVM command stream straight into the primary buffer each Run.
+        type private InlineDeviceCmd(vkvm : VKVM, stream : VKVM.CommandStream, queueFlags : QueueFlags, name : string) =
+            let hasGraphics = queueFlags.HasFlag QueueFlags.Graphics
+
+            member x.Run(deviceToken : DeviceToken, renderToken : RenderToken) =
+                let vulkanQueries = renderToken.GetVulkanQueries(onlyTimeQueries = not hasGraphics)
+
+                deviceToken.perform {
+                    do! Command.BeginLabel(name ||? "Compute Task", DebugColor.ComputeTask)
+
+                    for q in vulkanQueries do
+                        do! Command.Begin q
+
+                    do! { new Command() with
+                            member _.Compatible = QueueFlags.All
+                            member _.Enqueue (c : CommandBuffer) =
+                                c.AppendCommand()
+                                vkvm.Run(c.Handle, stream) }
+
+                    for q in vulkanQueries do
+                        do! Command.End q
+
+                    do! Command.EndLabel()
+                }
+
+            interface IPreparedCommand with
+                member x.Run(dt, _, rt) = x.Run(dt, rt)
+
         let private empty =
             { new IPreparedCommand with
                 member x.Run(_,_, _) = () }
 
-        let ofCompiled (vkvm : VKVM) (getSecondaryCommandBuffer : unit -> CommandBuffer) (taskName : string) = function
+        let ofCompiled (vkvm : VKVM) (getSecondaryCommandBuffer : unit -> CommandBuffer) (useInline : bool) (queueFlags : QueueFlags) (taskName : string) = function
             | CompiledCommand.Host (HostCommand.Upload (src, dst, dstOffset, size)) ->
                 UploadCmd(src, dst, dstOffset, uint64 size) :> IPreparedCommand
 
@@ -607,6 +637,9 @@ module internal ComputeTaskInternals =
             | CompiledCommand.Device stream ->
                 if stream.IsEmpty then
                     empty
+                elif useInline then
+                    // portability (MoltenVK): no secondary command buffer — replay inline.
+                    InlineDeviceCmd(vkvm, stream, queueFlags, taskName) :> IPreparedCommand
                 else
                     let inner = getSecondaryCommandBuffer()
                     inner.Begin(CommandBufferUsage.None, true)
@@ -630,6 +663,13 @@ module internal ComputeTaskInternals =
                 device.GraphicsFamily, fun () -> device.Token
             else
                 device.ComputeFamily, fun () -> device.ComputeToken
+
+        // MoltenVK (portability subset) crashes in vkCmdExecuteCommands when executing a
+        // secondary command buffer — replay compute command streams INLINE into the
+        // primary buffer instead (mirrors CommandTask's useInline render-pass path).
+        let useInline =
+            device.IsExtensionEnabled KHRPortabilitySubset.Name ||
+            System.Environment.GetEnvironmentVariable "AARDVARK_INLINE_RENDERPASS" = "1"
 
         let pool = family.CreateCommandPool(CommandPoolFlags.ResetBuffer)
         let secondary = System.Collections.Generic.List<CommandBuffer>()
@@ -671,7 +711,7 @@ module internal ComputeTaskInternals =
                         secondaryAvailable.Enqueue cmd
 
                     for c in compiler.State.Commands do
-                        let p = c |> PreparedCommand.ofCompiled device.VKVM getSecondaryCommandBuffer this.Name
+                        let p = c |> PreparedCommand.ofCompiled device.VKVM getSecondaryCommandBuffer useInline family.Flags this.Name
                         prepared.Add p
 
                 action()
