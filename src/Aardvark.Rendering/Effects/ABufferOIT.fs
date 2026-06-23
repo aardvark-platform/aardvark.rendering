@@ -14,8 +14,8 @@ open FSharp.Data.Adaptive
 /// the same descriptor set; the binding allocator allocates per resource-type
 /// in GL terms which collapses to one Vulkan namespace and silently collides
 /// when storage images, samplers and SSBOs all sit on the same set):
-///   ABufferCount : R32UI         — number of stored fragments (clamped to K)
-///   ABufferSlot  : RGBA32UI × K  — all per-slot data packed into one image:
+///   ABufferCount : R32UI                 — fragments stored (clamped to K)
+///   ABufferSlot  : RGBA32UI 2D array, K layers — per-slot data:
 ///                                    X = gl_FragCoord.z bit-cast to uint
 ///                                    Y = packUnorm4x8(premultiplied RGBA)
 ///                                    Z = gl_SampleMaskIn[0] coverage mask
@@ -25,6 +25,11 @@ open FSharp.Data.Adaptive
 ///                                  pick exactly the fragments that covered
 ///                                  this sample — the fix for the MSAA
 ///                                  triangle-edge double-insert seam.
+/// The slot store is a TEXTURE ARRAY (W × H, K layers) rather than a wide
+/// W·K × H 2D image: at wide windows (≥ 2048) the flat layout exceeds AMD's
+/// maxImageDimension2D = 16384 and image creation outright fails. The 2D-array
+/// layout is also the natural fit — one layer per slot — and lifts the width
+/// cap to per-axis limits (16k on AMD).
 ///
 /// Concurrency: same-pixel fragments serialize through
 /// begin/endInvocationInterlockARB. The required execution-mode layout
@@ -60,13 +65,12 @@ module ABufferOIT =
         [<GLSLIntrinsic("endInvocationInterlockARB()", "GL_ARB_fragment_shader_interlock")>]
         let endInterlock() : unit = failwith "only in shader code"
 
-    // Storage uses wide 2D images (Capacity slots laid out along X) rather
-    // than 2D-array images, because a plain image2D binds through the proven
-    // graphics image-binding path; array images would need layered binding.
-    // Slot s of pixel (x, y) lives at (x * Capacity + s, y).
+    // Slot s of pixel (x, y) lives at layer s of (x, y) in a uimage2DArray.
+    // The previous flat W·Capacity×H layout failed image creation on AMD as
+    // soon as window width ≥ 2048 (W·8 > maxImageDimension2D = 16384).
     type UniformScope with
-        member x.ABufferCount : UIntImage2d<Formats.r32ui>    = x?ABufferCount
-        member x.ABufferSlot  : UIntImage2d<Formats.rgba32ui> = x?ABufferSlot
+        member x.ABufferCount : UIntImage2d<Formats.r32ui>         = x?ABufferCount
+        member x.ABufferSlot  : UIntImage2dArray<Formats.rgba32ui> = x?ABufferSlot
         /// Diagnostic toggle. 0 = normal composite. 1 = visualize the stored
         /// gl_SampleMaskIn coverage of slot 0 as a red intensity (full coverage
         /// 0xFF → bright red; partial-coverage edge pixels → dark red). If this
@@ -120,19 +124,19 @@ module ABufferOIT =
             let count = int (uniform.ABufferCount.[px].X)
 
             if count < Capacity then
-                uniform.ABufferSlot.[V2i(px.X * Capacity + count, px.Y)] <- slot
+                uniform.ABufferSlot.[px, count] <- slot
                 uniform.ABufferCount.[px] <- V4ui(uint32 (count + 1), 0u, 0u, 0u)
             else
                 // full: replace the farthest slot if this fragment is nearer
                 let mutable maxSlot = 0
                 let mutable maxDepth = 0u
                 for i in 0 .. Capacity - 1 do
-                    let d = uniform.ABufferSlot.[V2i(px.X * Capacity + i, px.Y)].X
+                    let d = uniform.ABufferSlot.[px, i].X
                     if d > maxDepth then
                         maxDepth <- d
                         maxSlot <- i
                 if dz < maxDepth then
-                    uniform.ABufferSlot.[V2i(px.X * Capacity + maxSlot, px.Y)] <- slot
+                    uniform.ABufferSlot.[px, maxSlot] <- slot
 
             endInterlock()
 
@@ -185,7 +189,7 @@ module ABufferOIT =
                     // edge pixels -> proportionally less. If MoltenVK's
                     // gl_SampleMaskIn is broken this is uniform everywhere; if it
                     // works, triangle-interior edges read darker than interiors.
-                    let mutable m = uniform.ABufferSlot.[V2i(px.X * Capacity, px.Y)].Z &&& 0xFFu
+                    let mutable m = uniform.ABufferSlot.[px, 0].Z &&& 0xFFu
                     let mutable pc = 0u
                     for _i in 0 .. 7 do
                         pc <- pc + (m &&& 1u)
@@ -198,7 +202,7 @@ module ABufferOIT =
             let colors = Arr<N<8>, uint32>()
             let mutable n = 0
             for i in 0 .. count - 1 do
-                let s = uniform.ABufferSlot.[V2i(px.X * Capacity + i, px.Y)]
+                let s = uniform.ABufferSlot.[px, i]
                 if (s.Z &&& sampleBit) <> 0u then
                     depths.[n] <- s.X
                     colors.[n] <- s.Y

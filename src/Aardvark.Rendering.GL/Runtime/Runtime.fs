@@ -47,6 +47,11 @@ type Runtime(debug : IDebugConfig) =
     // on any desktop GL the heap targets.
     member x.ShaderDouble = ctx.Driver.glsl >= Version(4, 0, 0)
 
+    // GL_ARB_fragment_shader_interlock; absent on most mobile drivers and on
+    // AMD's Windows proprietary stack. The transparency wrapper picks
+    // Weighted-Blended over A-buffer when this is false.
+    member x.FragmentShaderInterlock = Set.contains "GL_ARB_fragment_shader_interlock" ctx.Driver.extensions
+
     member x.ShaderCachePath
         with get() = ctx.ShaderCachePath
         and set(value) = ctx.ShaderCachePath <- value
@@ -114,6 +119,7 @@ type Runtime(debug : IDebugConfig) =
         member x.SupportsMultiDrawIndirectDrawId = x.SupportsMultiDrawIndirectDrawId
         member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
         member x.ShaderDouble = x.ShaderDouble
+        member x.FragmentShaderInterlock = x.FragmentShaderInterlock
         member x.ContextLock = x.ContextLock
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =

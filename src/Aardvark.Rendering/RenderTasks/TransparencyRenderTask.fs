@@ -21,13 +21,24 @@ module TransparencyRenderTask =
 
     /// Transparent rendering technique. WeightedBlended is the cheap,
     /// approximate default; ABuffer is the exact (interlocked per-pixel
-    /// k-buffer) alternative. Switch the whole pipeline by editing the single
-    /// `technique` binding below.
+    /// k-buffer) alternative that requires fragment-shader interlock.
     type Technique =
         | WeightedBlended
         | ABuffer
 
-    let technique = Technique.ABuffer
+    /// Picks the technique a runtime can actually run. ABuffer requires the
+    /// interlock extension; without it the wrapper silently uses
+    /// Weighted-Blended OIT — visually approximate but works everywhere.
+    /// Set `AARDVARK_OIT=wb` to force Weighted-Blended even where ABuffer is
+    /// supported (useful for A/B comparison or for backends where the ABuffer
+    /// path is known to be slow).
+    let chooseTechnique (runtime : IRuntime) : Technique =
+        match System.Environment.GetEnvironmentVariable "AARDVARK_OIT" with
+        | s when not (isNull s) && s.ToLowerInvariant() = "wb"     -> WeightedBlended
+        | s when not (isNull s) && s.ToLowerInvariant() = "abuffer" -> ABuffer
+        | _ ->
+            if runtime.FragmentShaderInterlock then ABuffer
+            else WeightedBlended
 
     /// True if the given render object should be routed through the OIT pass.
     let isTransparent (o : IRenderObject) =
@@ -221,6 +232,12 @@ module TransparencyRenderTask =
                              objects   : aset<IRenderObject>,
                              compileRaw: IFramebufferSignature * aset<IRenderObject> -> IRenderTask) =
         inherit AbstractRenderTask()
+
+        // Technique is chosen once per task from the runtime's reported
+        // capabilities. Logged the first time we see it so the choice is
+        // visible in driver/setup logs.
+        let technique = chooseTechnique runtime
+        do Log.line "[OIT] technique = %A (interlock=%b)" technique runtime.FragmentShaderInterlock
 
         let depthFormat =
             userSig.DepthStencilAttachment
@@ -469,16 +486,19 @@ module TransparencyRenderTask =
                     DefaultSemantic.DepthStencil, dt.GetOutputView()
                 ]
 
-            // A-buffer storage: count (W×H, R32UI) + slot (W*Capacity×H, RGBA32UI).
-            // Slot packs depth, color, and gl_SampleMaskIn into one image
-            // (X=depth, Y=color, Z=mask) — see ABufferOIT.fs for the
-            // binding-count rationale. Only when technique uses it.
+            // A-buffer storage: count (W×H, R32UI) + slot (W×H × Capacity layers,
+            // RGBA32UI). Slot packs depth, color, and gl_SampleMaskIn into one
+            // image (X=depth, Y=color, Z=mask) — see ABufferOIT.fs for the
+            // binding-count rationale. The slot store is a 2D ARRAY so wide
+            // windows don't blow past AMD's 16384 maxImageDimension2D (the
+            // earlier W·Capacity×H flat layout failed at W ≥ 2048). Only when
+            // technique uses it.
             let abCount, abSlot =
                 match technique with
                 | ABuffer ->
                     let k = ABufferOIT.Capacity
                     let cnt = runtime.CreateTexture2D(size, TextureFormat.R32ui)
-                    let sl  = runtime.CreateTexture2D(V2i(size.X * k, size.Y), TextureFormat.Rgba32ui)
+                    let sl  = runtime.CreateTexture2DArray(size, TextureFormat.Rgba32ui, count = k)
                     ValueSome cnt, ValueSome sl
                 | WeightedBlended ->
                     ValueNone, ValueNone

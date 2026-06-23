@@ -68,6 +68,12 @@ type Runtime(device : Device) as this =
     member x.ShaderDouble =
         x.Device.EnabledFeatures.Shaders.Float64
 
+    // VK_EXT_fragment_shader_interlock. False on AMD's Windows proprietary
+    // driver and most mobile / iGPU drivers; the transparency wrapper falls
+    // back to Weighted-Blended OIT when this is false.
+    member x.FragmentShaderInterlock =
+        x.Device.EnabledFeatures.Shaders.FragmentShaderPixelInterlock
+
     member x.CreateStreamingTexture (mipMaps : bool) : IStreamingTexture =
         raise <| NotImplementedException()
 
@@ -600,6 +606,8 @@ type Runtime(device : Device) as this =
         member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
 
         member x.ShaderDouble = x.ShaderDouble
+
+        member x.FragmentShaderInterlock = x.FragmentShaderInterlock
 
         member x.DeviceCount = x.DeviceCount
 

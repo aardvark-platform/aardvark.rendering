@@ -91,6 +91,13 @@ and IRuntime =
     /// near-double precision there must emulate it (e.g. the heap's df32 path).
     abstract member ShaderDouble : bool
 
+    /// Returns whether fragment-shader pixel interlock is supported (ordered,
+    /// per-pixel critical sections — `VK_EXT_fragment_shader_interlock` on
+    /// Vulkan, `GL_ARB_fragment_shader_interlock` on desktop GL). The exact
+    /// A-buffer OIT path needs this; without it the transparency wrapper falls
+    /// back to Weighted-Blended OIT.
+    abstract member FragmentShaderInterlock : bool
+
     abstract member OnDispose : IEvent<unit>
 
     /// Compiles an effect for the given framebuffer signature and topology.
