@@ -677,6 +677,7 @@ module internal ComputeTaskInternals =
 
         let compiler = new CommandCompiler(this, family.Flags, manager, resources, input)
         let prepared = System.Collections.Generic.List<IPreparedCommand>()
+        let mutable isDisposed = false
 
         let getSecondaryCommandBuffer() =
             if secondaryAvailable.Count > 0 then
@@ -720,12 +721,21 @@ module internal ComputeTaskInternals =
         member val Name : string = null with get, set
 
         member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
-            x.EvaluateIfNeeded token () (fun token ->
-                updateCommandsAndResources token renderToken ignore
+            x.EvaluateAlways token (fun token ->
+                if isDisposed then
+                    let name = if isNull x.Name then "" else $" (Name = {x.Name})"
+                    raise <| ObjectDisposedException(null, $"Cannot update disposed compute task{name}.")
+
+                if x.OutOfDate then
+                    updateCommandsAndResources token renderToken ignore
             )
 
         member x.Run(token : AdaptiveToken, renderToken : RenderToken) =
             x.EvaluateAlways token (fun token ->
+                if isDisposed then
+                    let name = if isNull x.Name then "" else $" (Name = {x.Name})"
+                    raise <| ObjectDisposedException(null, $"Cannot run disposed compute task{name}.")
+
                 use dt = getDeviceToken()
                 updateCommandsAndResources token renderToken (fun _ ->
                     for p in prepared do
@@ -735,9 +745,11 @@ module internal ComputeTaskInternals =
 
         member x.Dispose() =
             lock x (fun _ ->
-                prepared.Clear()
-                compiler.Dispose()
-                pool.Dispose()
+                if not isDisposed then
+                    isDisposed <- true
+                    prepared.Clear()
+                    compiler.Dispose()
+                    pool.Dispose()
             )
 
         interface IComputeTask with

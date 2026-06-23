@@ -67,7 +67,8 @@ type AbstractRenderTask() =
     member x.Run(token : AdaptiveToken, renderToken : RenderToken, output : OutputDescription) =
         x.EvaluateAlways token (fun token ->
             if isDisposed then
-                raise <| ObjectDisposedException(null, "Cannot run a disposed render task.")
+                let name = if isNull x.Name then "" else $" (Name = {x.Name})"
+                raise <| ObjectDisposedException(null, $"Cannot run disposed render task{name}.")
 
             use __ = renderToken.Use()
 
@@ -87,7 +88,8 @@ type AbstractRenderTask() =
     member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
         x.EvaluateAlways token (fun token ->
             if isDisposed then
-                raise <| ObjectDisposedException(null, "Cannot update a disposed render task.")
+                let name = if isNull x.Name then "" else $" (Name = {x.Name})"
+                raise <| ObjectDisposedException(null, $"Cannot update disposed render task{name}.")
 
             use __ = renderToken.Use()
 

@@ -15,6 +15,7 @@ module ``Compute Tests`` =
         MutableInputBinding.tests
         PushConstants.tests
         DispatchIndirect.tests
+        ComputeTasks.tests
     ]
 
     [<Tests>]

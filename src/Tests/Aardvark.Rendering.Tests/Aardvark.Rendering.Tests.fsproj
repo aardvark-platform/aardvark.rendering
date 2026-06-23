@@ -80,6 +80,7 @@
     <Compile Include="Tests\Compute\MutableInputBinding.fs" />
     <Compile Include="Tests\Compute\PushConstants.fs" />
     <Compile Include="Tests\Compute\DispatchIndirect.fs" />
+    <Compile Include="Tests\Compute\Task.fs" />
     <Compile Include="Tests\Compute\ComputeTests.fs" />
     <Compile Include="Tests\Other\Camera.fs" />
     <Compile Include="Tests\Other\IndexedGeometryTests.fs" />
