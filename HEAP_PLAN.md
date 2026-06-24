@@ -136,3 +136,45 @@ texheap atlasheap. Perf gate: the orbit baseline above (must stay ~0.16 / ~0.47 
 - The heap already falls back to a texture ATLAS on MoltenVK (no bindless samplers) — consistent signal
   that MoltenVK descriptor-indexing is too limited to rely on for the arena.
 - pageSize default 1 GiB (2²⁸ words): int32-safe `off*4`, <2 GB .NET array, <4 GB SSBO, bounds resize.
+
+## STEP 2 — implementation map (the core; do with a fresh budget)
+DONE: step 1 (commit 6110fac8) — `HeapStorage` holds arena/arenaAlloc/regions/singleRegions/
+constituentsF/B; bucket fetches them; one private storage per bucket; golden 20/20. Gather unchanged.
+
+Step 2 makes the storage PAGED and splits the draw. Key code (clean 0023 line numbers, +~18 from step1):
+- **`allocRegion` (2791)** + **`freeRegion` (2817)**: the per-uniform dedup/alloc. Pattern: `regions.
+  TryGetValue av` → refcount++/Offset, else `arenaAlloc.Alloc(sz)` → `int b.Offset` → `arena.
+  EnsureFloats`/`StageOnce`|`Add` → `regions.[av] = {Offset;Size;Writer;RefCount;Block;HeaderWords}`.
+  Same shape for single-value attrs (`singleRegions`, ~2858+), geometry (`arenaAlloc.Alloc` at
+  2884/2894/3048), and derived constituents (`constituentsF/B`, packM44dInto ~2835).
+- **`RegionEntry` (1063):** `{mutable Offset; Size; Writer; mutable RefCount; mutable Block; HeaderWords}`.
+- **Draw/header (3109+):** `entries : DrawCallInfo[]` (per-slot multidraw), `headers : int[]` (slot→
+  field offsets), `drawBuf`/`headersBuf` (MirrorBuffers), one RenderObject with `DrawCalls.Indirect`
+  + `HeapData`=arena binding.
+
+RESTRUCTURE:
+1. **HeapStorage → pages.** `pages : ResizeArray<Page>`, `Page = { Arena:HeapArena; Alloc:HeapSpace }`.
+   Dedup maps become `aval → ResizeArray<RegionEntry>` (one per page-copy) or `aval → Dictionary<int,
+   RegionEntry>` (page→entry). `RegionEntry` gains `Page:int`; `Offset` is page-LOCAL.
+2. **`Place(group)` replaces per-field `allocRegion`.** Restructure `AddInternal` to COLLECT a slot's
+   regions (uniforms+geometry+constituents) first, then place the GROUP atomically: per-region dedup →
+   set of pages its existing copies are on; all on one page (or none) → target=that/current-fill page;
+   spread → pick target page that fits the remainder (heuristic: most-bytes-already-there) and duplicate
+   stragglers; no fit → new page. Returns each region's (page,localOffset); slot.Page = target. Refcount
+   per (region,page).
+3. **Slot → page.** Each slot records its Page. The per-slot header stores PAGE-LOCAL offsets.
+4. **Draw split.** The bucket emits ONE RenderObject PER PAGE: page P's RO binds page P's Arena as
+   HeapData/I/D + page P's header sub-table + an indirect buffer of page P's slots. `ofRenderObjects`
+   already returns an aset<IRenderObject> — emit N. The derive/chain compute also runs PER PAGE (reads/
+   writes that page's copies; its input binding = that page's buffer).
+5. **Flush/update** is already per-page once each page is its own HeapArena with its own Compute,
+   pulled by that page's RO (the demand-pull model — no extra work).
+6. Byte math: page-local off ≤ pageSize (1 GiB) ⇒ `off*4` int32-safe (no change needed).
+
+TEST: `HEAP_PAGE_WORDS` env knob (default 2^28) to force tiny pages on golden scenes → golden 20/20
+multi-page; assert 2-page render == 1-page. Then orbit at baseline (gather unchanged ⇒ must match
+~0.16/~0.47 ms). Then Vienna on airtop + Mac.
+
+RISK: the AddInternal collect-then-Place restructure + the per-page RO/derive split are the hard parts;
+everything else (per-page HeapArena/Compute, the gather) is unchanged. Single-page path must stay
+byte-identical (golden gate).
