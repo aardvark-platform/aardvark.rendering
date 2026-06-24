@@ -2348,7 +2348,27 @@ module Heap =
     /// RenderObject is created ONCE so its identity is stable across changes (the
     /// render task never recompiles it; only its indirect / header / geometry /
     /// texture resources update).
-    type internal IncrementalBucket(runtime : IRuntime, names : string[], nameToField : Map<string, int>,
+    /// Shader-AGNOSTIC data store: the arena buffer + word allocator + the per-source
+    /// dedup maps (per-draw uniform regions, single-value attributes, derived constituents).
+    /// Extracted from IncrementalBucket so it can (later) be PAGED (>4 GB ⇒ multiple page
+    /// buffers, each its own sub-draw) and SHARED across heaps (render one scene twice with
+    /// different shaders, geometry/uniforms stored once). For now it holds ONE page and is
+    /// created per-bucket ⇒ behaviour-identical to the inline fields it replaces.
+    type internal HeapStorage(runtime : IRuntime) =
+        let arena = HeapArena(runtime, 1024)
+        let arenaAlloc = HeapSpace()
+        let regions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        let singleRegions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        let constituentsF = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        let constituentsB = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        member _.Arena = arena
+        member _.ArenaAlloc = arenaAlloc
+        member _.Regions = regions
+        member _.SingleRegions = singleRegions
+        member _.ConstituentsF = constituentsF
+        member _.ConstituentsB = constituentsB
+
+    type internal IncrementalBucket(runtime : IRuntime, storage : HeapStorage, names : string[], nameToField : Map<string, int>,
                                     effect : Effect, ro0 : RenderObject, updater : aval<int>,
                                     useBindlessGeom : bool, instanced : bool,
                                     // the bucket KEY's resolved pipeline-state values
@@ -2534,11 +2554,11 @@ module Heap =
         let idxCell = attrBase + attrCells
 
         // ── arena: deduped per-draw uniform regions, refcounted, placed by a
-        //    coalescing range allocator (float units) ──
-        let arena = HeapArena(runtime, 1024)
+        //    coalescing range allocator (float units) — now held by the (per-bucket) storage ──
+        let arena = storage.Arena
         do arena.ExtraDependency <- Some (updater :> IAdaptiveValue)
-        let regions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
-        let arenaAlloc = HeapSpace()
+        let regions = storage.Regions
+        let arenaAlloc = storage.ArenaAlloc
 
         // ── geometry. EVERYTHING host-readable lives as ALLOCATIONS in the
         //    bucket's storage arena (the same HeapData buffer the per-draw
@@ -2572,7 +2592,7 @@ module Heap =
         // deduped by the inner value aval — DISTINCT from `regions` (a uniform
         // field and a singleton attribute sharing an aval would need different
         // layouts).
-        let singleRegions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        let singleRegions = storage.SingleRegions
         // bindless: per-(slot, attribute) source buffer avals + the last buffer
         // each position yielded. Tombstoned slots null their aval but KEEP the
         // last buffer — never read (their draw record is InstanceCount = 0), but
@@ -2827,8 +2847,8 @@ module Heap =
                     | :? M44f as m -> if inv then failwith "Heap: derived inverse needs a Trafo3d constituent (no .Inverse); got M44f" else M44d m
                     | _ -> failwithf "Heap: derived constituent must be Trafo3d/M44d/M44f, got %s" (o.GetType().Name)
                 packM44dInto m a off
-        let constituentsF = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
-        let constituentsB = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        let constituentsF = storage.ConstituentsF
+        let constituentsB = storage.ConstituentsB
         let allocConstituent (av : IAdaptiveValue) (inv : bool) : int =
             let d = if inv then constituentsB else constituentsF
             match d.TryGetValue av with
@@ -4292,7 +4312,10 @@ module Heap =
             let (_, _, _, cull, ff, fill, blend, dtest, dwrite, _) = keyValues.[key]
             // field names/layout come from the FACTS (per-bucket: the field set is
             // part of the bucket key, so every member shares f0's interned set)
-            let c = IncrementalBucket(runtime, f0.Fields, f0.FieldMap, effect, r0, updaterRef.Value, f0.Bindless, f0.Instanced,
+            // step 1: one private storage per bucket ⇒ behaviour-identical. (Sharing across
+            // buckets/heaps comes later by passing the SAME storage to several buckets.)
+            let storage = HeapStorage(runtime)
+            let c = IncrementalBucket(runtime, storage, f0.Fields, f0.FieldMap, effect, r0, updaterRef.Value, f0.Bindless, f0.Instanced,
                                       (cull, ff, fill, blend, dtest, dwrite), f0.Chain)
             caches.[key] <- c
             c
