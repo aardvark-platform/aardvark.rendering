@@ -1,4 +1,5 @@
 - [Vulkan] Fixed checking for enabled features for pipeline queries
+- [Vulkan] Fixed issue causing descriptor set not being updated after `Release()` and `Acquire()`
 - Added disposed checks for compute and raytracing tasks
 
 ### 5.7.0-prerelease0027

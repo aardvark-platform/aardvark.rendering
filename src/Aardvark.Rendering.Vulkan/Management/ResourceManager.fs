@@ -145,7 +145,7 @@ type AbstractResourceLocation<'T>(owner : IResourceCache, key : list<obj>) =
 
     member x.Update(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
         x.EvaluateAlways token (fun token ->
-            if refCount <= 0 then failwithf "[Resource] no ref count"
+            if refCount <= 0 then raise <| InvalidOperationException($"[Vulkan] Resource has no references ({refCount})")
 
             user.Release x
             let info = x.GetHandle(user, token, renderToken)
@@ -415,7 +415,8 @@ module Resources =
             type AdaptiveDescriptor<'T>(slot : int, count : int, resource : IResourceLocation<'T>) =
                 inherit AdaptiveObject()
 
-                let cache = Array.replicate count { Version = -1; Descriptor = Unchecked.defaultof<_> }
+                let mutable refCount = 0
+                let mutable cache = null
 
                 let device = resource.Owner.Device
                 let updateAfterBindEnabled = device.UpdateDescriptorsAfterBind
@@ -431,12 +432,43 @@ module Resources =
                     updateAfterBindEnabled &&
                     x.GetUpdateAfterBindFeature &device.EnabledFeatures.Descriptors
 
-                member x.Acquire() = resource.Acquire()
-                member x.Release() = resource.Release()
-                member x.ReleaseAll() = resource.ReleaseAll()
+                member _.Create() =
+                    resource.Acquire()
+                    cache <- Array.replicate count { Version = -1; Descriptor = Unchecked.defaultof<_> }
+
+                member _.Destroy() =
+                    resource.Release()
+                    cache <- null
+
+                member x.Acquire() =
+                    lock x (fun () ->
+                        inc &refCount
+                        if refCount = 1 then
+                            x.Create()
+                    )
+
+                member x.Release() =
+                    lock x (fun () ->
+                        dec &refCount
+                        if refCount = 0 then
+                            x.Destroy()
+                            x.Outputs.Clear()
+                            x.OutOfDate <- true
+                    )
+
+                member x.ReleaseAll() =
+                    lock x (fun () ->
+                        if refCount > 0 then
+                            refCount <- 0
+                            x.Destroy()
+                            x.Outputs.Clear()
+                            x.OutOfDate <- true
+                    )
 
                 member x.GetValue(user, t, rt) =
                     x.EvaluateAlways t (fun t ->
+                        if refCount <= 0 then raise <| InvalidOperationException($"[Vulkan] AdaptiveDescriptor has no references ({refCount})")
+
                         if x.OutOfDate then
                             let info = resource.Update(user, t, rt)
                             x.GetDescriptors(info, cache)
@@ -1326,29 +1358,27 @@ module Resources =
 
         let mutable handle = Unchecked.defaultof<DescriptorSet>
         let mutable version = 0
+        let mutable versions = null
 
         // Use a pending set and InputChangedObject() to
         // avoid iterating over all descriptors in GetHandle()
-        let pending = LockedSet<_>(bindings)
+        let pending = LockedSet<IAdaptiveDescriptor>()
 
         // Save the array index of each descriptor
         // Note: Index might be different from binding
         do assert (bindings = Array.distinct bindings)
         let indices = bindings |> Array.indexed |> Array.map (fun (i, d) -> d, i) |> HashMap.ofArray
 
-        // Dictionary to collect all descriptor writes in GetHandle()
-        let writes = Dictionary<struct (int * int), Descriptor>()
+        override x.Create() =
+            // Acquire bindings and mark them as pending (initially we have to write all descriptors)
+            for b in bindings do b.Acquire()
+            pending.Add bindings
 
-        // We save the last seen version for each descriptor element.
-        // If the version didn't change, we won't bother updating the set.
-        let versions =
-            Array.init bindings.Length (fun i ->
+            // We save the last seen version for each descriptor element.
+            // If the version didn't change, we won't bother updating the set.
+            versions <- Array.init bindings.Length (fun i ->
                 Array.replicate bindings.[i].Count -1
             )
-
-        override x.Create() =
-            for b in bindings do
-                b.Acquire()
 
             // for a layout with a VARIABLE_DESCRIPTOR_COUNT binding, allocate the
             // set at the actual element count of the matching descriptor (an
@@ -1358,11 +1388,14 @@ module Resources =
                 | Some bnd -> bindings |> Array.tryPick (fun d -> if d.Slot = bnd then Some d.Count else None)
                 | None -> None
 
+            // Create handle and increase version to signal the handle has changed
             handle <- layout.Device.CreateDescriptorSet(layout, ?variableCount = variableCount)
+            inc &version
 
         override x.Destroy() =
-            for b in bindings do
-                b.Release()
+            for b in bindings do b.Release()
+            pending.Clear()
+            versions <- null
 
             if notNull handle then
                 handle.Dispose()
@@ -1370,9 +1403,8 @@ module Resources =
 
         override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
-
-                writes.Clear()
                 let mutable recompile = false
+                let writes = Dictionary<struct (int * int), Descriptor>()
 
                 // Get pending resources.
                 // May contain nested dependencies so we loop until there are no more pending inputs.
