@@ -1,0 +1,138 @@
+# Heap: paged, shared `HeapStorage` — design & plan
+
+Branch **v57** (= published `5.7.0-prerelease0023`; the clean base is commit `1474e663`).
+File: `src/Aardvark.SceneGraph/HeapPool.fs`. The earlier **chunked-arena attempt is a dead end**
+(reverted; kept as tag `chunking-attempt` = 3dedeb39 for reference). This document is the source of
+truth — read it to resume.
+
+## The two goals (one mechanism)
+1. **>4 GB scenes.** Full Vienna's arena is ~3.5 GB (764 397 parts, 67.8 M verts, 22.6 M tris). The
+   original failure was an int32 **byte** overflow (`off*4`) at 2 GB — not a GPU limit.
+2. **Shared geometry/uniforms across heaps.** Render one scene twice with different shaders without
+   storing the shared data twice (a coworker's ask).
+
+They collapse into ONE abstraction: a **paged, deduped, refcounted store** (`HeapStorage`) plus
+**per-(heap × page) sub-draws**. Goal (1) = a store with >1 page. Goal (2) = >1 heap on one store.
+
+## Why NOT chunk-switch, why NOT bindless (settled with data — do not revisit)
+The chunked-arena attempt split ONE arena into ≤8 SSBOs and did a per-read 8-way switch
+(`c=off>>>28; if c==0 HeapData0[l] elif…`) in the shader. It was **correct** (golden 20/20 single +
+multi-chunk, full Vienna rendered) but:
+- **It ~2× the GPU render cost EVEN single-chunk.** Measured on the orbit benchmark (heap-editor-
+  benchmark, RTX 5060, gpuMs): geforce 0.16→0.35 ms (2.2×), geforce-parts 0.47→0.96 ms (2.06×). The
+  per-read shift+mask+branch + 8 SSBOs in the descriptor set (register/occupancy) sit on the hot
+  per-vertex gather path and penalize EVERY heap user, not just >4 GB.
+- **Bindless (`HeapData[c][l]`, descriptor-indexed array) is killed by MoltenVK.** M1 Max /
+  MoltenVK (VulkanSDK 1.3.231) reports `shaderStorageBufferArrayNonUniformIndexing = false`
+  (and `…Native = false`). The heap's multidraw puts different objects (→ chunks) in one warp, so the
+  chunk index is NON-uniform → bindless would be invalid exactly in the multi-chunk case we need on
+  the Mac. Only `shaderStorageBufferArrayDynamicIndexing=true` (uniform index) is available there.
+- **MoltenVK also caps `maxPerStageDescriptorStorageBuffers = 31`** → 3 views × 8 = 24 SSBOs strains it.
+- **`maxStorageBufferRange ≤ 4 GB` on EVERY Vulkan target** (uint32 cap) — confirms a single buffer
+  can't exceed 4 GB, so paging is needed >4 GB regardless; but it ALSO means ≤4 GB needs no split.
+
+GPU limits captured: airtop RTX 5060 = nonUniform true+Native, 1 048 576 SSBOs, 4 GB range. hekla =
+1 M–4 G / 4 GB. M1/MoltenVK = nonUniform FALSE, 31 SSBOs, 4 GB range.
+
+**Conclusion:** keep the ORIGINAL single-buffer gather (`HeapData[off]`, direct, no switch, no
+bindless) and never put chunk logic in the shader. A draw binds ONE page buffer. Multi-page = multiple
+draws. This is portable (MoltenVK/GL), ≤31 buffers, and **baseline perf by construction**.
+
+## CLEAN BASELINE to match (orbit, RTX 5060, gpuMs median)
+geforce (2 497 parts) ≈ **0.16 ms**; geforce-parts (68 452) ≈ **0.47 ms** steady-state (run-to-run
+GPU-clock variance ±2×, take the low/steady value). The paged build must land here for ≤1-page scenes.
+Run: `cd ~/projects/heap-editor-benchmark/heap; dotnet bin/Release/net8.0/Bench.dll --heap --model
+../assets/geforce-parts --orbit --frames 60 --warmup 20 --out /tmp/x.csv`; gpuMs = CSV col 5.
+
+## THE DESIGN
+
+### `HeapStorage` (shader-agnostic data placement + lifetime)
+Owns: **pages** (each a storage buffer ≤ pageSize; default **1 GiB / 2²⁸ words** — keeps `off*4`
+int32-safe, the .NET staging `float32[]` under 2 GB, the SSBO under the 4 GB range), a **per-region
+dedup map**, a **per-page allocator**, and **per-page dirty-tracking** (each page IS a today-style
+`HeapArena`: `pending` writers + `pendingStatic`, coalesced sub-range upload on `Compute`).
+
+- **Dedup is per-REGION (per attribute / per uniform), keyed by aval/value identity.** A region may be
+  **duplicated across pages** → the map is `regionIdentity → { pageIndex → offset }`.
+- **Refcount is per (region, page) copy.** Free a copy when its page's refs hit 0; free a page when empty.
+- **`Place(group)`** — a *group* = one object's regions; it MUST land wholly on one page (its draw reads
+  one buffer):
+  1. per-region dedup lookup → which page(s) each existing region is on;
+  2. all existing regions on one page (or none) → target = that page (or the current fill page);
+     allocate new regions there. (happy: max sharing)
+  3. spread across ≥2 pages → pick a target page (heuristic: the one already holding the most of this
+     group's bytes AND that can fit the remainder) and **duplicate** the stragglers into it; if no
+     single page fits the whole group, **open a new page** and place the whole group there.
+  returns `(pageIndex, offsets[])`; bumps the per-(region,page) refcount.
+- Region size must be ≤ pageSize (no single attribute/uniform bigger than a page — fine at 1 GiB).
+
+### Heap (one effect/shader; owns the draws)
+References a `HeapStorage`. Per page it touches: **one indirect/multidraw buffer** (the sub-draw) +
+the **per-slot header table** (slot → field offsets into that page; shader-schema-specific) + the
+effect/pipeline + the **per-page derive dispatch** (fp64/df32/chain compose, reading & writing that
+page's copies). Maps each of its objects to `(page, slot)` via `storage.Place`. Renders **one sub-draw
+per page**, binding that page as `HeapData`/`HeapDataI`/`HeapDataD` and using the **unchanged gather**.
+
+### Updates — demand-pulled per-page flush (answers "who updates?")
+NOT eager-from-storage (would write copies no live draw needs), NOT per-draw-tracked (bookkeeping
+nightmare). Instead, the **today model replicated per page**:
+- each region copy = a `RegionWriter` **on its page**, subscribed to the source aval (`Place` creates it);
+- source changes → the aval marks EVERY copy's writer → each lands in **its own page's** dirty set
+  (`InputChangedObject`), no central bookkeeping;
+- a heap's **draw pulls the page buffers it renders** → each pulled page's `Compute` packs+uploads
+  **only its dirty copies** (and runs its derive dispatch). A page no live draw pulls never evaluates
+  (no wasted upload). A page two heaps share flushes **once** per change (Aardvark adaptive caching).
+- Flush granularity is the PAGE (all-dirty), same as today's single arena — **no worse than status quo**;
+  **pageSize is the dial** (smaller = finer flush + more draws; bigger = coarser + fewer draws).
+
+### Concurrency — forbidden by convention
+One render task evaluates/updates a given `HeapStorage` at a time (page resize reallocates a buffer a
+concurrent draw is reading; dedup map / allocator / dirty sets are mutated unlocked; per-page `Compute`
+isn't re-entrant). Aardvark's per-transaction single-threaded eval already gives this. Relaxable later
+(mutation lock + double-buffer-on-resize) without an API change.
+
+### API
+```fsharp
+let storage = HeapStorage.create runtime
+let heapA = Heap.ofRenderObjects storage runtime objsA   // shader A
+let heapB = Heap.ofRenderObjects storage runtime objsB   // shader B, shares with A via `storage`
+```
+The existing `Heap.ofRenderObjects runtime objs` overload makes a private storage (source-compatible).
+`storage` is the lifetime owner.
+
+## IMPLEMENTATION ORDER (golden-gated, build sandbox-OFF)
+Golden suite (must stay 20/20): `cd ~/projects/aardvark.rendering-heap`,
+`dotnet "bin/Debug/net8.0/40 - HeapSpike.dll" <name>` for: plain sgheap sgchain livechain chain buckets
+vis modes fp64 passthru nativebuf geomvalue noindex msaa livechaindeep geomchurn autofields gpugeom
+texheap atlasheap. Perf gate: the orbit baseline above (must stay ~0.16 / ~0.47 ms).
+1. **Single-page storage refactor (no behavior change).** Extract today's per-bucket arena + dedup +
+   allocator into a `HeapStorage` holding ONE page; bucket `Place`s through it; gather unchanged.
+   Golden 20/20 + orbit at baseline. (This is the safe scaffold — one page = today.)
+2. **Multi-page `Place`** (per-region dedup → {page→offset}, per-object co-location, new-page roll) +
+   **per-page sub-draws** (split the bucket's indirect buffer + header table + derive per page). Fix the
+   int32 `off*4` byte math to be page-LOCAL (≤1 GiB → already int32-safe). Test: a synthetic >1-page
+   scene (a `HEAP_PAGE_WORDS` env knob to force tiny pages on golden scenes, like the old CHUNK_SHIFT
+   trick) → golden 20/20 with multiple pages; assert a 2-page render == 1-page render.
+3. **Cross-heap sharing (B).** Public `HeapStorage` + the `ofRenderObjects storage` overload; two heaps
+   over one storage; per-(region,page) refcount across heaps; lifetime/dispose. Test: two heaps, shared
+   geometry, different shaders → one storage, both correct, shared regions placed once.
+4. **Mac + Vienna.** Full-Vienna load on MoltenVK (multi-page) + desktop; confirm baseline-ish perf.
+
+## VALIDATION RIG (already set up)
+- **Benchmark:** `~/projects/heap-editor-benchmark/heap` (pure offscreen, `gpuMs` via ITimeQuery).
+  `Bench.fsproj` was bumped 0015→0023 for the A/B. orbit = `--orbit`. Models: `assets/geforce` (2.5k),
+  `assets/geforce-parts` (68k). To A/B a local heap: build the heap Release, `cp bin/Release/
+  netstandard2.0/Aardvark.SceneGraph.dll` over the bench's `bin/Release/net8.0/`, run.
+- **Demo override (airtop):** `~/projects/CadSceneDemo` compiles against published 0023 and a post-build
+  `OverrideHeapDll` target drops the local heap Release DLL into its output (toggle `/p:HeapOverride=
+  false`; path via `HEAP_DLL`). Aardium set fullscreen. Run full Vienna:
+  `DISPLAY=:0 dotnet src/CadSceneDemo/bin/Debug/net8.0/CadSceneDemo.dll ~/vienna_full`.
+- **Full Vienna model:** `~/vienna_full` (downloaded: positions/normals/colors/flow/indices .bin +
+  manifest, ~3.7 GB, 764 397 parts). Built by `CadSceneDemo/tools/build_vienna.py <out> --full`.
+
+## Confirmed facts (don't re-investigate)
+- maxStorageBufferRange ≤ 4 GB (uint32) everywhere. MoltenVK: nonUniform SSBO indexing FALSE, 31 SSBOs.
+  Desktop NVIDIA/AMD: nonUniform true+Native, ≥1 M SSBOs. → single-buffer-per-draw is the portable floor.
+- The heap already falls back to a texture ATLAS on MoltenVK (no bindless samplers) — consistent signal
+  that MoltenVK descriptor-indexing is too limited to rely on for the arena.
+- pageSize default 1 GiB (2²⁸ words): int32-safe `off*4`, <2 GB .NET array, <4 GB SSBO, bounds resize.
