@@ -874,6 +874,62 @@ module private RuntimeCommands =
 
             prepared <- ValueSome o
 
+    /// Records a HeapRenderObject as ONE command-buffer unit: each derive becomes a
+    /// pre-pass DispatchCommand (registered in compiler.dispatches → replayed before
+    /// BeginRenderPass, each ending with a compute→vertex barrier) and each page draw is
+    /// recorded in-pass. The derives and the draws share this task's submission, so every
+    /// draw reads its page's freshly-derived arena and no render-task split can separate them.
+    and HeapRenderObjectCommand(compiler : Compiler, o : HeapRenderObject) =
+        inherit PreparedCommand()
+
+        let mutable prepared : list<PreparedMultiRenderObject> = []
+        let mutable dispatches : list<DispatchCommand> = []
+
+        override x.GroupKey =
+            match prepared with
+            | p :: _ -> [ p.First.Pipeline :> obj; p.Id :> obj ]
+            | [] -> [ o.Id :> obj ]
+
+        override x.Free() =
+            for d in dispatches do d.Free()      // removes from compiler.dispatches, frees its descriptor + stream
+            dispatches <- []
+            for p in prepared do
+                for c in p.Children do
+                    for r in c.Resources do compiler.resources.Remove r
+                p.Dispose()
+            prepared <- []
+
+        override x.Compile(token, stream) =
+            // 1) DERIVES → pre-pass compute dispatches. Each writes its page's arena and its
+            //    stream ends with a compute→vertex barrier; replayed before the render pass.
+            dispatches <-
+                o.Derives |> List.map (fun (shader, groups, args) ->
+                    let d = new DispatchCommand(compiler, shader, groups, args)
+                    compiler.dispatches.Add d
+                    d.Record token
+                    d
+                )
+            // 2) DRAWS → in-pass; read the freshly-derived arenas (same submission as the derives).
+            prepared <-
+                o.Draws |> List.map (fun draw ->
+                    let hooked : IRenderObject =
+                        match draw with
+                        | :? RenderObject as ro -> compiler.task.HookRenderObject ro :> IRenderObject
+                        | other -> other
+                    let p = compiler.manager.PrepareRenderObject(compiler.renderPass, hooked)
+                    for c in p.Children do
+                        for r in c.Resources do compiler.resources.Add r
+                        stream.IndirectBindPipeline(VkPipelineBindPoint.Graphics, c.Pipeline.Pointer) |> ignore
+                        stream.IndirectBindDescriptorSets(c.DescriptorSets.Pointer) |> ignore
+                        match c.Viewport with ValueSome vp -> stream.SetViewport(0u, 1u, vp.Pointer) |> ignore | _ -> ()
+                        match c.Scissor with ValueSome sc -> stream.SetScissor(0u, 1u, sc.Pointer) |> ignore | _ -> ()
+                        match c.PushConstants with ValueSome pc -> stream.PushConstants(c.PipelineLayout.Handle, pc.Handle) |> ignore | _ -> ()
+                        match c.IndexBuffer with ValueSome ib -> stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore | _ -> ()
+                        stream.IndirectBindVertexBuffers(c.VertexBuffers.Pointer) |> ignore
+                        stream.IndirectDraw(compiler.stats, c.IsActive.Pointer, c.DrawCalls.Pointer) |> ignore
+                    p
+                )
+
     and [<AbstractClass>] CommandBucket() =
         inherit AdaptiveObject()
 
@@ -1137,6 +1193,7 @@ module private RuntimeCommands =
         let compile (o : IRenderObject) =
             match o with
             | :? CommandRenderObject as o -> compiler.Compile o.Command
+            | :? HeapRenderObject as o -> new HeapRenderObjectCommand(compiler, o) :> PreparedCommand
             | :? ActivationRenderObject as o -> new ActivationCommand(o) :> PreparedCommand
             | _ -> new RenderObjectCommand(compiler, o) :> PreparedCommand
 

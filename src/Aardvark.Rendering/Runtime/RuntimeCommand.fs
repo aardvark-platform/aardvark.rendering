@@ -60,6 +60,40 @@ type CommandRenderObject(pass : RenderPass, scope : Ag.Scope, command : RuntimeC
             | :? CommandRenderObject as o -> id = o.Id
             | _ -> false
 
+/// A GPU-heap render unit the backend records ATOMICALLY into one command buffer:
+/// every DERIVE dispatch (a compute pre-pass, lifted before BeginRenderPass) → one
+/// compute→vertex memory barrier → every DRAW (inside the render pass). Each derive
+/// writes its page's arena and the single barrier covers all the draws, so a page is
+/// always drawn against its OWN fresh derive (no page>0 staleness) and no render-task
+/// split (e.g. Aardvark.Dom's pickable/non-pickable tasks) can separate the derive from
+/// the draws it feeds. The whole unit is one submission — the compute and the graphics
+/// share a command buffer instead of a synchronous compute submit.
+/// Vulkan-only; other backends fall back to rendering `Draws` (the derive must then be
+/// produced some other way).
+type HeapRenderObject(pass : RenderPass, scope : Ag.Scope,
+                      derives : list<IComputeShader * aval<V3i> * Map<string, obj>>,
+                      draws : list<IRenderObject>) =
+    let id = RenderObjectId.New()
+
+    member x.Id = id
+    member x.RenderPass = pass
+    member x.AttributeScope = scope
+    /// per-page derive dispatches (shader, group count, prepared input binding via "__input")
+    member x.Derives = derives
+    /// the page draws that read the derive outputs (recorded after the barrier)
+    member x.Draws = draws
+
+    interface IRenderObject with
+        member x.Id = id
+        member x.RenderPass = pass
+        member x.AttributeScope = scope
+
+    override x.GetHashCode() = id.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? HeapRenderObject as o -> id = o.Id
+            | _ -> false
+
 /// A render object that carries NOTHING to render — backends ignore it for
 /// drawing and only invoke its `Activate`, disposing the returned handle when
 /// the object leaves the render task. Lets a producer (e.g. the GPU heap) scope

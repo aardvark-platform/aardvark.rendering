@@ -373,6 +373,72 @@ module Golden =
                 return { v with c = v.c * 0.5f + extra * 0.5f }
             }
 
+    // Two side-by-side high-subdiv spheres, sized so each fills its OWN heap page
+    // (sphere0 -> page 0 / bucketRO, sphere1 -> page 1 / clone). Renders classic vs
+    // heap[ts], saves both, and reports per-half (left=sphere0, right=sphere1) diff so
+    // we can see exactly which page's draw is broken.
+    let sgSphereTest () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let envI (k : string) (d : int) = match System.Environment.GetEnvironmentVariable k with null | "" -> d | s -> int s
+        let level = envI "SPH_LEVEL" 6
+
+        let ig = IndexedGeometryPrimitives.Sphere.solidSubdivisionSphere (Sphere3d(V3d.Zero, 0.8)) level C4b.White
+        let nv = (ig.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>).Length
+        // size a page so ONE sphere fits but TWO do not -> exactly 2 pages
+        let pageWords = nv * 12
+        System.Environment.SetEnvironmentVariable("HEAP_PAGE_WORDS", string pageWords)
+        Log.line "[sphere] level=%d verts=%d -> HEAP_PAGE_WORDS=%d (1 sphere/page)" level nv pageWords
+
+        let sphereSg () = Sg.ofIndexedGeometry ig
+        let view = CameraView.lookAt (V3d(0.0, -6.0, 2.2)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 60.0 0.1 100.0 1.0 |> Frustum.projTrafo
+
+        let leaves =
+            [| sphereSg () |> Sg.trafo' (Trafo3d.Translation(V3d(-1.2, 0.0, 0.0))) |> Sg.uniform' "HeapColor" (C4f.Red.ToV4f())
+               sphereSg () |> Sg.trafo' (Trafo3d.Translation(V3d( 1.2, 0.0, 0.0))) |> Sg.uniform' "HeapColor" (C4f.DodgerBlue.ToV4f()) |]
+
+        let scene (wrap : ISg -> ISg) =
+            leaves |> Sg.ofArray |> wrap
+            |> Sg.effect [ Effect.ofFunction SGH.vert; Effect.ofFunction Shaders.shadeFrag ]
+            |> Sg.viewTrafo (AVal.constant view)
+            |> Sg.projTrafo (AVal.constant proj)
+
+        let renderToPix (sg : ISg) =
+            use task = runtime.CompileRender(signature, sg)
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>()
+            finally out.Release()
+
+        let classicPix = renderToPix (scene id)
+        let heapPix = renderToPix (scene Sg.heap)
+        (try classicPix.SaveAsPng "/tmp/sph_classic.png"; heapPix.SaveAsPng "/tmp/sph_heap.png" with _ -> Log.warn "[sphere] png save unavailable")
+
+        let cm = classicPix.GetMatrix<C4b>()
+        let hm = heapPix.GetMatrix<C4b>()
+        let w = int classicPix.Size.X
+        let h = int classicPix.Size.Y
+        let mutable lCov, lDiff, rCov, rDiff = 0, 0, 0, 0
+        for y in 0 .. h - 1 do
+            for x in 0 .. w - 1 do
+                let c = cm.[int64 x, int64 y]
+                let hp = hm.[int64 x, int64 y]
+                let cov = int c.R + int c.G + int c.B > 40        // classic non-background
+                let d = abs (int c.R - int hp.R) + abs (int c.G - int hp.G) + abs (int c.B - int hp.B)
+                if x < w / 2 then (if cov then lCov <- lCov + 1); (if d > 24 then lDiff <- lDiff + 1)
+                else               (if cov then rCov <- rCov + 1); (if d > 24 then rDiff <- rDiff + 1)
+        Log.line "[sphere] buckets=%d" Heap.lastBucketCount
+        Log.line "[sphere] LEFT  (sphere0/page0): coverage=%d diffPixels=%d  %s" lCov lDiff (if lDiff > lCov / 20 then "*** BROKEN ***" else "ok")
+        Log.line "[sphere] RIGHT (sphere1/page1): coverage=%d diffPixels=%d  %s" rCov rDiff (if rDiff > rCov / 20 then "*** BROKEN ***" else "ok")
+        lDiff <= lCov / 20 && rDiff <= rCov / 20
+
     let sgHeapTest () =
         Aardvark.Init()
         use app = new Aardvark.Application.Slim.VulkanApplication(false)

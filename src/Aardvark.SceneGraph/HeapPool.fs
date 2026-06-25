@@ -55,12 +55,12 @@ module HeapUniforms =
         // never f32-widened. (shaderFloat64; the heap already uses double storage
         // buffers in its fp64 compose path.)
         member x.HeapDataD   : float[]   = uniform?StorageBuffer?HeapDataD
-        // UNPAGED derive store: the per-slot derived-uniform OUTPUTS (ViewProjTrafo, …) and their
-        // input CONSTITUENTS (View/Proj/Model fwd/bwd) live in ONE buffer (not the paged geometry
-        // arena), written by ONE compute dispatch and read by every page's draw. f32 + double views.
-        member x.HeapDeriveData  : float32[] = uniform?StorageBuffer?HeapDeriveData
-        member x.HeapDeriveDataD : float[]   = uniform?StorageBuffer?HeapDeriveDataD
         member x.HeapHeaders : int[]     = uniform?StorageBuffer?HeapHeaders
+        // PAGED derive: slot->page map + the page the per-page derive dispatch is computing.
+        // A page's derive binds its own arena, so it must skip slots on other pages (whose
+        // header offsets are page-local to a different page — writing them here corrupts).
+        member x.HeapSlotPage : int[] = uniform?StorageBuffer?HeapSlotPage
+        member x.HeapPageId : int = uniform?HeapPageId
         // GPU trafo-chain: per-slot GPU-folded ModelTrafo (M44f), written by the
         // composeModel compute pass and gathered by gl_InstanceIndex / gl_DrawID.
         member x.HeapModelChain : M44f[] = uniform?StorageBuffer?HeapModelChain
@@ -201,42 +201,6 @@ module Heap =
                     uniform.HeapData.[o+8],  uniform.HeapData.[o+9],  uniform.HeapData.[o+10], uniform.HeapData.[o+11],
                     uniform.HeapData.[o+12], uniform.HeapData.[o+13], uniform.HeapData.[o+14], uniform.HeapData.[o+15]) @>.Raw
         else failwithf "Heap: unsupported per-draw uniform type %A" typ
-
-    /// Twin of `gatherFor` reading the UNPAGED derive store (HeapDeriveData / HeapDeriveDataD)
-    /// instead of the paged geometry arena — used for DERIVED-uniform field cells, whose offsets
-    /// address `deriveArena`. Byte-identical reconstruction, different storage buffer.
-    let private gatherForDerive (typ : System.Type) (off : Expr<int>) : Expr =
-        if   typ = typeof<int>     then <@ int (uniform.HeapDeriveData.[%off]) @>.Raw
-        elif typ = typeof<float32> then <@ uniform.HeapDeriveData.[%off] @>.Raw
-        elif typ = typeof<V2f> then <@ let o = %off in V2f(uniform.HeapDeriveData.[o], uniform.HeapDeriveData.[o+1]) @>.Raw
-        elif typ = typeof<V3f> then <@ let o = %off in V3f(uniform.HeapDeriveData.[o], uniform.HeapDeriveData.[o+1], uniform.HeapDeriveData.[o+2]) @>.Raw
-        elif typ = typeof<V4f> then <@ let o = %off in V4f(uniform.HeapDeriveData.[o], uniform.HeapDeriveData.[o+1], uniform.HeapDeriveData.[o+2], uniform.HeapDeriveData.[o+3]) @>.Raw
-        elif typ = typeof<M33f> then
-            <@ let o = %off in
-               M33f(uniform.HeapDeriveData.[o+0], uniform.HeapDeriveData.[o+1], uniform.HeapDeriveData.[o+2],
-                    uniform.HeapDeriveData.[o+3], uniform.HeapDeriveData.[o+4], uniform.HeapDeriveData.[o+5],
-                    uniform.HeapDeriveData.[o+6], uniform.HeapDeriveData.[o+7], uniform.HeapDeriveData.[o+8]) @>.Raw
-        elif typ = typeof<V2d> then <@ let d = %off >>> 1 in V2d(uniform.HeapDeriveDataD.[d], uniform.HeapDeriveDataD.[d+1]) @>.Raw
-        elif typ = typeof<V3d> then <@ let d = %off >>> 1 in V3d(uniform.HeapDeriveDataD.[d], uniform.HeapDeriveDataD.[d+1], uniform.HeapDeriveDataD.[d+2]) @>.Raw
-        elif typ = typeof<V4d> then <@ let d = %off >>> 1 in V4d(uniform.HeapDeriveDataD.[d], uniform.HeapDeriveDataD.[d+1], uniform.HeapDeriveDataD.[d+2], uniform.HeapDeriveDataD.[d+3]) @>.Raw
-        elif typ = typeof<M33d> then
-            <@ let d = %off >>> 1 in
-               M33d(uniform.HeapDeriveDataD.[d+0], uniform.HeapDeriveDataD.[d+1], uniform.HeapDeriveDataD.[d+2],
-                    uniform.HeapDeriveDataD.[d+3], uniform.HeapDeriveDataD.[d+4], uniform.HeapDeriveDataD.[d+5],
-                    uniform.HeapDeriveDataD.[d+6], uniform.HeapDeriveDataD.[d+7], uniform.HeapDeriveDataD.[d+8]) @>.Raw
-        elif typ = typeof<M44d> then
-            <@ let d = %off >>> 1 in
-               M44d(uniform.HeapDeriveDataD.[d+0],  uniform.HeapDeriveDataD.[d+1],  uniform.HeapDeriveDataD.[d+2],  uniform.HeapDeriveDataD.[d+3],
-                    uniform.HeapDeriveDataD.[d+4],  uniform.HeapDeriveDataD.[d+5],  uniform.HeapDeriveDataD.[d+6],  uniform.HeapDeriveDataD.[d+7],
-                    uniform.HeapDeriveDataD.[d+8],  uniform.HeapDeriveDataD.[d+9],  uniform.HeapDeriveDataD.[d+10], uniform.HeapDeriveDataD.[d+11],
-                    uniform.HeapDeriveDataD.[d+12], uniform.HeapDeriveDataD.[d+13], uniform.HeapDeriveDataD.[d+14], uniform.HeapDeriveDataD.[d+15]) @>.Raw
-        elif typ = typeof<M44f> then
-            <@ let o = %off in
-               M44f(uniform.HeapDeriveData.[o+0],  uniform.HeapDeriveData.[o+1],  uniform.HeapDeriveData.[o+2],  uniform.HeapDeriveData.[o+3],
-                    uniform.HeapDeriveData.[o+4],  uniform.HeapDeriveData.[o+5],  uniform.HeapDeriveData.[o+6],  uniform.HeapDeriveData.[o+7],
-                    uniform.HeapDeriveData.[o+8],  uniform.HeapDeriveData.[o+9],  uniform.HeapDeriveData.[o+10], uniform.HeapDeriveData.[o+11],
-                    uniform.HeapDeriveData.[o+12], uniform.HeapDeriveData.[o+13], uniform.HeapDeriveData.[o+14], uniform.HeapDeriveData.[o+15]) @>.Raw
-        else failwithf "Heap: unsupported derived uniform type %A" typ
 
     // ── Derived-uniform system (general, à la wombat §7) ─────────────────
     // A derived uniform is a pure function of OTHER uniforms, written as an
@@ -2068,7 +2032,7 @@ module Heap =
                          (links : M44d[]) =
             compute {
                 let i = getGlobalId().X
-                if i < n then
+                if i < n && uniform.HeapSlotPage.[i] = uniform.HeapPageId then
                     let len = chainLen.[i]
                     let mutable m = M44d.Identity
                     if len > 0 then
@@ -2092,7 +2056,7 @@ module Heap =
                             (links : M44d[]) =
             compute {
                 let i = getGlobalId().X
-                if i < n then
+                if i < n && uniform.HeapSlotPage.[i] = uniform.HeapPageId then
                     let len = chainLen.[i]
                     let mutable m = M44d.Identity
                     if len > 0 then
@@ -2300,7 +2264,7 @@ module Heap =
         let composeDerived (n : int) (nRec : int) (hstride : int) (records : int[]) =
             compute {
                 let slot = getGlobalId().X
-                if slot < n then
+                if slot < n && uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
                     let hb = slot * hstride
                     for r in 0 .. nRec - 1 do
                         let rb = r * REC_STRIDE
@@ -2334,7 +2298,7 @@ module Heap =
         let composeDerivedDf32 (n : int) (nRec : int) (hstride : int) (records : int[]) =
             compute {
                 let slot = getGlobalId().X
-                if slot < n then
+                if slot < n && uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
                     let hb = slot * hstride
                     for r in 0 .. nRec - 1 do
                         let rb = r * REC_STRIDE
@@ -2403,8 +2367,8 @@ module Heap =
         let arenaAlloc = HeapSpace()
         let regions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
         let singleRegions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
-        // NOTE: derived-uniform CONSTITUENTS are NO LONGER per-page — they live in the bucket's
-        // single unpaged `deriveArena` (constituentsF/B moved to the bucket, global dedup).
+        let constituentsF = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        let constituentsB = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
         // geometry static-attribute + index dedup (by value-level source identity, byte offset,
         // typeId) — MUST be per-page: a shared mesh's attrs live in THIS page's arena, so a slot on
         // another page can't reference them (it binds its own arena). Cross-page = duplicated.
@@ -2420,6 +2384,8 @@ module Heap =
         member _.ArenaAlloc = arenaAlloc
         member _.Regions = regions
         member _.SingleRegions = singleRegions
+        member _.ConstituentsF = constituentsF
+        member _.ConstituentsB = constituentsB
         member _.AttrStatic = attrStatic
         member _.IdxStatic = idxStatic
 
@@ -2525,8 +2491,6 @@ module Heap =
         let symData = Symbol.Create "HeapData"
         let symDataI = Symbol.Create "HeapDataI"
         let symDataD = Symbol.Create "HeapDataD"   // native double view of the arena (fp64-requested uniforms)
-        let symDeriveData = Symbol.Create "HeapDeriveData"    // unpaged derive buffer (f32 view)
-        let symDeriveDataD = Symbol.Create "HeapDeriveDataD"  // unpaged derive buffer (double view)
         let symHeaders = Symbol.Create "HeapHeaders"
         let symModelChain = Symbol.Create "HeapModelChain"
         let symModelStack = Symbol.Create "ModelTrafoStack"
@@ -2935,16 +2899,8 @@ module Heap =
                     | :? M44f as m -> if inv then failwith "Heap: derived inverse needs a Trafo3d constituent (no .Inverse); got M44f" else M44d m
                     | _ -> failwithf "Heap: derived constituent must be Trafo3d/M44d/M44f, got %s" (o.GetType().Name)
                 packM44dInto m a off
-        // ── UNPAGED derive store (bucket-single) ──────────────────────────────────────────────
-        // The derived-uniform OUTPUTS and their input CONSTITUENTS live here, NOT in the paged
-        // geometry arena. ONE buffer, written by ONE compute dispatch (no page guard), read by
-        // every page's draw — so the per-page compute→draw hazard that corrupted page>0 on the
-        // Simple traversal cannot arise. Dedup is global (View/Proj shared across all slots).
-        let deriveArena = HeapArena(runtime, 1024)
-        do deriveArena.ExtraDependency <- Some (updater :> IAdaptiveValue)
-        let deriveAlloc = HeapSpace()
-        let deriveConstF = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
-        let deriveConstB = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        let mutable constituentsF = storage.Page(0).ConstituentsF
+        let mutable constituentsB = storage.Page(0).ConstituentsB
         // current fill page: the slot's allocs (uniforms/geometry/constituents) all route to
         // this page; set per-slot in Add/RemoveInternal. PlacePage rolls when the page fills.
         let mutable curPage = 0
@@ -2952,7 +2908,7 @@ module Heap =
             curPage <- i
             let pg = storage.Page i
             arena <- pg.Arena; arenaAlloc <- pg.ArenaAlloc; regions <- pg.Regions
-            singleRegions <- pg.SingleRegions
+            singleRegions <- pg.SingleRegions; constituentsF <- pg.ConstituentsF; constituentsB <- pg.ConstituentsB
             attrStatic <- pg.AttrStatic; idxStatic <- pg.IdxStatic
             if arena.ExtraDependency.IsNone then arena.ExtraDependency <- Some (updater :> IAdaptiveValue)
         // conservative worst-case word footprint of a slot's group (geometry + per-draw uniforms +
@@ -2960,55 +2916,52 @@ module Heap =
         let estimateSlotWords (ro : RenderObject) : int =
             let vc = faceVertexCountOf ro
             vc * (max 4 (numAttrs * 4)) + (names.Length + numConst + 8) * 32
-        // Constituents/outputs go to the UNPAGED `deriveArena`/`deriveAlloc` (NOT the page arena),
-        // so the single derive dispatch reads/writes them in one buffer and every page's draw reads
-        // the SAME buffer. Dedup dicts are bucket-single (global), independent of the fill page.
         let allocConstituent (av : IAdaptiveValue) (inv : bool) : int =
-            let d = if inv then deriveConstB else deriveConstF
+            let d = if inv then constituentsB else constituentsF
             match d.TryGetValue av with
             | true, e -> e.RefCount <- e.RefCount + 1; e.Offset
             | _ ->
                 let sz = 32
-                let b = deriveAlloc.Alloc (sz + 1)
+                let b = arenaAlloc.Alloc (sz + 1)
                 let raw = int b.Offset
                 let off = if (raw &&& 1) = 1 then raw + 1 else raw
-                deriveArena.EnsureFloats deriveAlloc.Extent
+                arena.EnsureFloats arenaAlloc.Extent
                 let pk = constituentPack inv
                 let w =
                     if av.IsConstant then
-                        deriveArena.StageOnce(off, sz, fun st -> pk (av.GetValueUntyped AdaptiveToken.Top) st off)
+                        arena.StageOnce(off, sz, fun st -> pk (av.GetValueUntyped AdaptiveToken.Top) st off)
                         Unchecked.defaultof<RegionWriter>
-                    else deriveArena.Add(av, off, sz, pk)
+                    else arena.Add(av, off, sz, pk)
                 d.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b; HeaderWords = 0 }
                 off
         let freeConstituent (av : IAdaptiveValue) (inv : bool) =
-            let d = if inv then deriveConstB else deriveConstF
+            let d = if inv then constituentsB else constituentsF
             match d.TryGetValue av with
             | true, e ->
                 e.RefCount <- e.RefCount - 1
                 if e.RefCount = 0 then
-                    if not (isNull e.Writer) then deriveArena.Remove e.Writer
+                    if not (isNull e.Writer) then arena.Remove e.Writer
                     d.Remove av |> ignore
-                    deriveAlloc.Free e.Block
+                    arenaAlloc.Free e.Block
             | _ -> ()
         // an 8-byte-aligned M44d slot the CHAIN fold writes (no aval / writer) — the
-        // per-slot Model forward/backward constituent in chainMode (in `deriveArena`).
+        // per-slot Model forward/backward constituent in chainMode.
         let allocFoldConstituent () : int * Management.Block<unit> =
             let sz = 32
-            let b = deriveAlloc.Alloc (sz + 1)
+            let b = arenaAlloc.Alloc (sz + 1)
             let raw = int b.Offset
             let off = if (raw &&& 1) = 1 then raw + 1 else raw
-            deriveArena.EnsureFloats deriveAlloc.Extent
+            arena.EnsureFloats arenaAlloc.Extent
             off, b
         // OUTPUT: a per-slot region the compute writes (no aval / writer), stored as
-        // the shader's requested type (f32 M44f = 16 words, M33f = 9, …) in `deriveArena`.
+        // the shader's requested type (f32 M44f = 16 words, M33f = 9, …).
         let allocOutput (requested : System.Type) : int * Management.Block<unit> =
             let dbl = isDoubleUniform requested
             let (sz, _) = if dbl then doublePackerFor df32 requested else packerFor requested
-            let b = deriveAlloc.Alloc (if dbl then sz + 1 else sz)
+            let b = arenaAlloc.Alloc (if dbl then sz + 1 else sz)
             let raw = int b.Offset
             let off = if dbl && (raw &&& 1) = 1 then raw + 1 else raw
-            deriveArena.EnsureFloats deriveAlloc.Extent
+            arena.EnsureFloats arenaAlloc.Extent
             off, b
 
         /// SINGLETON attribute (SingleValueBuffer): a header + an adaptive
@@ -3168,16 +3121,10 @@ module Heap =
             // re-uploads once this pass (headersAllDirty).
             for KeyValue(_, slt) in slots do
                 let hb = slt.Slot * headerStride
-                // RegionKeys holds only NON-derived fields (compacted, field order). Derived-output
-                // cells live in the UNPAGED deriveArena and are NOT re-seated by page-arena compaction,
-                // so skip them and advance the region-key index only for plain fields.
-                let mutable rk = 0
                 for i in 0 .. names.Length - 1 do
-                    if not (derivedCells.Contains i) then
-                        match regions.TryGetValue slt.RegionKeys.[rk] with
-                        | true, e -> headers.[hb + nameToField.[names.[i]]] <- e.Offset
-                        | _ -> ()
-                        rk <- rk + 1
+                    match regions.TryGetValue slt.RegionKeys.[i] with
+                    | true, e -> headers.[hb + nameToField.[names.[i]]] <- e.Offset
+                    | _ -> ()
                 slt.AttrKeys |> Array.iteri (fun ai k ->
                     headers.[hb + attrBase + ai] <-
                         match k with
@@ -3233,6 +3180,11 @@ module Heap =
         let drawBuf    = MirrorBuffer(runtime, entries.Length * sizeof<DrawCallInfo>, BufferUsage.Indirect)
         let headersBuf = MirrorBuffer(runtime, headers.Length * 4, BufferUsage.Storage)
         let instBuf    = MirrorBuffer(runtime, instData.Length * 4, BufferUsage.Vertex)
+        // slot->page SSBO (for the per-page derive guard). Small; full-rewrite on pull.
+        let slotPageBuf = MirrorBuffer(runtime, max 16 slotPage.Length * 4, BufferUsage.Storage)
+        let flushSlotPage (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
+            slotPageBuf.ResizeInPlace(uint64 (max 16 slotPage.Length * 4))
+            if highWater > 0 then slotPageBuf.Write(slotPage, 0UL, 0, highWater)
         // CPU staging of the draw records in INDEXED layout (uploaded ranges
         // must be contiguous; entries itself stays in DrawCallInfo layout)
         let mutable drawStaging : DrawCallInfo[] = Array.zeroCreate entries.Length
@@ -3335,6 +3287,9 @@ module Heap =
             instBuf.Dependency <- dep
             instBuf.Flush <- flushInst
             instBuf.Name <- "HeapSlotAttr"
+            slotPageBuf.Dependency <- dep
+            slotPageBuf.Flush <- flushSlotPage
+            slotPageBuf.Name <- "HeapSlotPage"
 
         // ACQUISITION-PROPAGATING views over the bucket-owned AdaptiveBuffers:
         // AdaptiveResource.mapNonAdaptive keeps the IAdaptiveResource interface
@@ -3351,6 +3306,7 @@ module Heap =
             |> AdaptiveResource.mapNonAdaptive (fun b ->
                 IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> highWater (b :> IBuffer))
         let instAval = (instBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
+        let slotPageU = ((slotPageBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
         // re-reads only the live slots' avals (cheap when unchanged); a fresh
@@ -3392,9 +3348,6 @@ module Heap =
         // add path re-points at the current fill page). pages >0 bind their own arena in ensurePageROs.
         let arenaU = ((storage.Page(0).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         let headersU = headersAval :> IAdaptiveValue
-        // the single unpaged derive buffer, bound as HeapDeriveData/HeapDeriveDataD in EVERY draw and
-        // as HeapData/HeapDataD in the single derive dispatch (and the chain fold). One buffer, shared.
-        let deriveDataU = ((deriveArena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
 
         // ── derived-uniform COMPUTE dispatch (fp64, once per slot) ────────
         // Two compute passes write straight into the arena the render gathers (no
@@ -3447,27 +3400,28 @@ module Heap =
         // a deferred transact would race. (The chain folds keep Flush + an IMMEDIATE Run, so
         // their values are consumed synchronously in the same eval — no hazard there.)
         let nAvalDerive = if hasDerived then AVal.custom (fun t -> updater.GetValue t |> ignore; highWater) else AVal.constant 0
-        // UNPAGED: ONE derive input binding — reads constituents from + writes outputs to the single
-        // deriveArena (HeapData/HeapDataD), header offsets from headersU. No page guard (one dispatch
-        // over all slots). This is exactly the single-buffer single-dispatch shape the Simple traversal
-        // handles correctly (the 1-page case), regardless of how many GEOMETRY pages exist.
-        let derivedInput : IComputeInputBinding =
-            if not hasDerived then Unchecked.defaultof<_>
-            else
-                let provider =
-                    { new IUniformProvider with
-                        member _.TryGetUniform(_, name) =
-                            match string name with
-                            | "n"            -> ValueSome (nAvalDerive :> IAdaptiveValue)
-                            | "nRec"         -> ValueSome (AVal.constant numDerivedRecords :> IAdaptiveValue)
-                            | "hstride"      -> ValueSome (AVal.constant headerStride :> IAdaptiveValue)
-                            | "records"      -> ValueSome (AVal.constant (recBuf :> IBuffer) :> IAdaptiveValue)
-                            | "HeapHeaders"  -> ValueSome headersU
-                            | "HeapDataD"    -> ValueSome deriveDataU
-                            | "HeapData"     -> ValueSome deriveDataU
-                            | _              -> ValueNone
-                        member _.Dispose() = () }
-                runtime.CreateInputBinding(derivedShader, provider)
+        // PAGED: one derive input binding per page — binds THAT page's arena + HeapPageId so the
+        // guarded shader writes only page-i slots into page i's arena.
+        let pageDeriveInputs = System.Collections.Generic.List<IComputeInputBinding>()
+        let mkDerivedInput (pageArenaU : IAdaptiveValue) (pid : int) : IComputeInputBinding =
+            let provider =
+                { new IUniformProvider with
+                    member _.TryGetUniform(_, name) =
+                        match string name with
+                        | "n"            -> ValueSome (nAvalDerive :> IAdaptiveValue)
+                        | "nRec"         -> ValueSome (AVal.constant numDerivedRecords :> IAdaptiveValue)
+                        | "hstride"      -> ValueSome (AVal.constant headerStride :> IAdaptiveValue)
+                        | "records"      -> ValueSome (AVal.constant (recBuf :> IBuffer) :> IAdaptiveValue)
+                        | "HeapHeaders"  -> ValueSome headersU
+                        | "HeapSlotPage" -> ValueSome slotPageU
+                        | "HeapPageId"   -> ValueSome (AVal.constant pid :> IAdaptiveValue)
+                        | "HeapDataD"    -> ValueSome pageArenaU
+                        | "HeapData"     -> ValueSome pageArenaU
+                        | _              -> ValueNone
+                    member _.Dispose() = () }
+            let inp = runtime.CreateInputBinding(derivedShader, provider)
+            pageDeriveInputs.Add inp
+            inp
         let mutable chOffBuf : IBuffer<int> = Unchecked.defaultof<_>
         let mutable chLenBuf : IBuffer<int> = Unchecked.defaultof<_>
         let mutable chIdxBuf : IBuffer<int> = Unchecked.defaultof<_>
@@ -3506,8 +3460,6 @@ module Heap =
                     // arena buffer with constituents staged (View/Proj uploaded;
                     // Model space allocated) + the per-slot header offsets, current.
                     let arenaBuf = (storage.Page(0).Arena :> aval<IBackendBuffer>).GetValue t
-                    // the chain fold's Model constituents now live in the UNPAGED derive buffer.
-                    let deriveBuf = (deriveArena :> aval<IBackendBuffer>).GetValue t
                     let hdrBuf   = (headersBuf :> aval<IBackendBuffer>).GetValue t
                     // (1) chain fold → Model fwd/bwd constituents — re-dispatched ONLY
                     // when the chain structure or a link value changed (the fold output
@@ -3540,6 +3492,7 @@ module Heap =
                         if chainFoldStale then
                             chainFoldStale <- false
                             let g = (highWater + chainShader.LocalSize.X - 1) / chainShader.LocalSize.X
+                            let slotPageVal = (slotPageBuf :> aval<IBackendBuffer>).GetValue t
                             chainInput.["n"]           <- highWater
                             chainInput.["hstride"]     <- headerStride
                             chainInput.["mCell"]       <- modelFwdCell
@@ -3548,10 +3501,12 @@ module Heap =
                             chainInput.["linkIdx"]     <- chIdxBuf
                             chainInput.["links"]       <- linkBuf
                             chainInput.["HeapHeaders"] <- hdrBuf
+                            chainInput.["HeapSlotPage"] <- slotPageVal
+                            chainInput.["HeapPageId"]  <- 0
                             // df32 kernel writes the folded Model via the f32 arena view
                             // (HeapData, hi/lo pairs); fp64 via the native double view.
-                            if df32 then chainInput.["HeapData"] <- deriveBuf
-                            else chainInput.["HeapDataD"] <- deriveBuf
+                            if df32 then chainInput.["HeapData"] <- arenaBuf
+                            else chainInput.["HeapDataD"] <- arenaBuf
                             chainInput.Flush()
                             if chainBwdActive then
                                 chainInvInput.["n"]           <- highWater
@@ -3562,8 +3517,10 @@ module Heap =
                                 chainInvInput.["linkIdx"]     <- chIdxBuf
                                 chainInvInput.["links"]       <- linkBuf
                                 chainInvInput.["HeapHeaders"] <- hdrBuf
-                                if df32 then chainInvInput.["HeapData"] <- deriveBuf
-                                else chainInvInput.["HeapDataD"] <- deriveBuf
+                                chainInvInput.["HeapSlotPage"] <- slotPageVal
+                                chainInvInput.["HeapPageId"]  <- 0
+                                if df32 then chainInvInput.["HeapData"] <- arenaBuf
+                                else chainInvInput.["HeapDataD"] <- arenaBuf
                                 chainInvInput.Flush()
                             if chainProgG <> g || isNull (box chainProg) then
                                 if not (isNull (box chainProg)) then chainProg.Dispose()
@@ -3572,8 +3529,20 @@ module Heap =
                                     if not (isNull (box chainInvProg)) then chainInvProg.Dispose()
                                     chainInvProg <- runtime.CompileCompute [ ComputeCommand.Bind chainInvShader; ComputeCommand.SetInput chainInvInput; ComputeCommand.Dispatch (max 1 g) ]
                                 chainProgG <- g
-                            chainProg.Run()
-                            if chainBwdActive then chainInvProg.Run()
+                            // PER-PAGE fold: each page's slots fold into THAT page's arena (kernel
+                            // guards HeapSlotPage = HeapPageId), so page>0 slots no longer clobber
+                            // page 0. Mirrors composeDerived's per-page dispatch.
+                            for pg in 0 .. storage.Count - 1 do
+                                let pArena = (storage.Page(pg).Arena :> aval<IBackendBuffer>).GetValue t
+                                chainInput.["HeapPageId"] <- pg
+                                if df32 then chainInput.["HeapData"] <- pArena else chainInput.["HeapDataD"] <- pArena
+                                chainInput.Flush()
+                                chainProg.Run()
+                                if chainBwdActive then
+                                    chainInvInput.["HeapPageId"] <- pg
+                                    if df32 then chainInvInput.["HeapData"] <- pArena else chainInvInput.["HeapDataD"] <- pArena
+                                    chainInvInput.Flush()
+                                    chainInvProg.Run()
                     // the Model chain is now folded into the arena; the render-integrated
                     // derive pre-pass reads it. HeapData = the arena buffer.
                     arenaBuf :> IBuffer) :> IAdaptiveValue
@@ -3662,10 +3631,7 @@ module Heap =
                             match kind, idx with
                             | ParameterKind.Uniform, None ->
                                 match Map.tryFind name nameToField with
-                                // DERIVED uniforms (their field cell ∈ derivedCells) are produced by the
-                                // compute pass into the UNPAGED deriveArena — gather them from HeapDeriveData;
-                                // regular per-draw uniforms stay on the page arena (HeapData). Same header cell.
-                                | Some fi -> Some ((if derivedCells.Contains fi then gatherForDerive else gatherFor) ityp (fieldOff fi))
+                                | Some fi -> Some (gatherFor ityp (fieldOff fi))
                                 | None -> None
                             | ParameterKind.Input, None when isVertex ->
                                 match attrInfos |> Array.tryFind (fun (_, n, _, _, _, _, _) -> n = name) with
@@ -3740,10 +3706,6 @@ module Heap =
                         // so demanding the render triggers the derive pass; identical
                         // to arenaU when the bucket has no derived uniforms.
                         if name = symData || name = symDataI || name = symDataD then ValueSome derivedU
-                        // derived uniforms gather from the single unpaged derive buffer; pulling it (and
-                        // derivedU above, which runs the chain fold into deriveArena for chain buckets)
-                        // makes the derive dispatch's inputs current before the render reads its outputs.
-                        elif name = symDeriveData || name = symDeriveDataD then ValueSome deriveDataU
                         elif name = symHeaders then ValueSome headersU
                         else
                             match texLookup.TryGetValue name with
@@ -3765,12 +3727,24 @@ module Heap =
         // breaks membership churn (the inner render command does not track the bucket's
         // dynamic draw count → GPU hang). Both ROs come from the same Heap.ofRenderObjects
         // aset → same render task → same submission, so the pre-pass ordering holds.
-        // UNPAGED derive: ONE DispatchCmd over all slots, writing the single deriveArena. No per-page
-        // fan-out (the derive store is unpaged), so a single pre-pass dispatch per bucket — the shape
-        // BOTH the Simple (ISimpleSg) and legacy traversals already render correctly at 1 page.
-        let deriveRO : IRenderObject =
-            if not hasDerived then Unchecked.defaultof<_>
-            else CommandRenderObject(RenderPass.main, scope, RuntimeCommand.Dispatch(derivedShader, derivedGroups, Map.ofList [ "__input", box derivedInput ])) :> IRenderObject
+        // PAGED derive: one DispatchCmd per page (binds page i's arena + HeapPageId=i; the guarded
+        // shader writes ONLY page-i slots into page i's arena). They are bundled into ONE
+        // CommandRenderObject per bucket (an OrderedCmd over all pages) — the Vulkan backend lifts
+        // every nested DispatchCmd to a pre-pass, and a SINGLE pre-pass RO per bucket is what BOTH
+        // the Simple (ISimpleSg) and legacy traversals handle correctly (N separate pre-pass ROs
+        // per bucket are dropped by the Simple path).
+        // PER-PAGE derive specs: one (shader, groups, prepared input) per live page. The page-i input
+        // binds page i's arena; the guarded shader writes ONLY page-i slots into page i's arena. These
+        // are carried by the bucket's HeapRenderObject; the Vulkan backend records each as a compute
+        // pre-pass (ending in a compute→vertex barrier) in the SAME submission as the bucket's draws,
+        // so page i is always drawn against its own freshly-derived arena (kills the [ts] page>0 stale).
+        let deriveSpecs = System.Collections.Generic.List<IComputeShader * aval<V3i> * Map<string, obj>>()
+        let ensureDeriveROs () =
+            if hasDerived then
+                while deriveSpecs.Count < storage.Count do
+                    let i = deriveSpecs.Count
+                    let pageArenaU = ((storage.Page(i).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
+                    deriveSpecs.Add(derivedShader, derivedGroups, Map.ofList [ "__input", box (mkDerivedInput pageArenaU i) ])
 
         // PAGED draw fan-out. page 0 = `bucketRO` (the incremental machinery above, now zeroing
         // non-page-0 slots). pages >0 each get a fresh indirect (its slots only, full-rewrite flush)
@@ -3809,15 +3783,29 @@ module Heap =
                         member _.Dispose() = () }
                 pageROs.Add(ro :> IRenderObject)
 
+        // ONE HeapRenderObject per bucket, bundling the per-page derives + page draws so the backend
+        // records derive(page i)→barrier→draw(page i) as one submission. Rebuilt only when the page
+        // count grows (stable Id while unchanged ⇒ no per-frame re-prepare; new Id on growth ⇒ the
+        // new page's derive+draw get prepared). SyncPages (membership updater) materialises the page
+        // lists FIRST, so the snapshot here always sees every live page.
+        let mutable heapROCache : IRenderObject = Unchecked.defaultof<_>
+        let mutable heapROPageCount = -1
+        let buildHeapRO () =
+            if heapROPageCount <> storage.Count then
+                heapROPageCount <- storage.Count
+                let derives = if hasDerived then List.ofSeq deriveSpecs else []
+                let draws = List.ofSeq pageROs
+                heapROCache <- HeapRenderObject(RenderPass.main, scope, derives, draws) :> IRenderObject
+            heapROCache
+
         // PAGED: one render object per live storage page (each binds that page's arena +
         // its slots' indirect). ensurePageROs lazily creates them; resultAval (rebuilt per
-        // membership version) picks up new pages. Page 0 keeps the derive/fold (`derivedU`);
-        // pages >0 bind their plain arena (per-page derive is the documented follow-up).
-        // built deterministically by SyncPages (called from the membership updater); the
-        // members just hand back the current set.
-        member x.SyncPages() = ensurePageROs ()
+        // membership version) picks up new pages. built deterministically by SyncPages
+        // (called from the membership updater); the members just hand back the current set.
+        member x.SyncPages() = ensurePageROs (); ensureDeriveROs ()
+        member x.HeapRO : IRenderObject = buildHeapRO ()
         member x.RenderObjects : IRenderObject[] = pageROs.ToArray()
-        member x.DeriveROs : IRenderObject[] = if hasDerived then [| deriveRO |] else [||]
+        member x.DeriveROs : IRenderObject[] = [||]
         member _.Count = slots.Count
         member _.IsChain = chainMode
         member _.ChainDistinct = if chainMode then chainLinks.DistinctCount else 0
@@ -3971,9 +3959,8 @@ module Heap =
                 if chainMode then removeChainSlot s.Slot
                 for k in s.RegionKeys do freeRegion k
                 for struct(av, inv) in s.ConstKeys do freeConstituent av inv
-                // OUTPUT + chain-FOLD constituent blocks live in the unpaged deriveArena.
-                for b in s.OutBlocks do deriveAlloc.Free b
-                for b in s.FoldBlocks do deriveAlloc.Free b
+                for b in s.OutBlocks do arenaAlloc.Free b
+                for b in s.FoldBlocks do arenaAlloc.Free b
                 for k in s.AttrKeys do
                     match k with
                     | AttrKey.Single av -> freeSingle av
@@ -4063,7 +4050,7 @@ module Heap =
             // release the derived-uniform compute resources (else the runtime's
             // resource cache keeps live references to the ComputeProgram).
             let disp (o : obj) = match o with | :? System.IDisposable as d -> d.Dispose() | _ -> ()
-            if hasDerived then disp derivedInput; disp derivedShader; disp recBuf
+            if hasDerived then (for inp in pageDeriveInputs do disp inp); disp derivedShader; disp recBuf
             if chainActive then
                 disp chainProg; disp chainInput; disp chainShader
                 if not (isNull (box chOffBuf)) then chOffBuf.Dispose()
@@ -4625,12 +4612,12 @@ module Heap =
         let resultAval =
             updater |> AVal.map (fun _ ->
                 // derive pre-passes ∪ per-page bucket sub-draws ∪ untouched passthrough.
-                // a bucket now contributes ONE RO per live storage page (RenderObjects) plus its
-                // derive pre-passes (DeriveROs); both arrays grow as the bucket rolls new pages.
-                let out = System.Collections.Generic.List<IRenderObject>(caches.Count * 2 + passSet.Count)
+                // a bucket now contributes ONE HeapRenderObject bundling its per-page derives + page
+                // draws — the backend records derive(page i)→barrier→draw(page i) as one submission,
+                // so no render-task split can separate them and no page>0 derive goes stale.
+                let out = System.Collections.Generic.List<IRenderObject>(caches.Count + passSet.Count)
                 for KeyValue(_, c) in caches do
-                    out.AddRange c.DeriveROs
-                    out.AddRange c.RenderObjects
+                    out.Add c.HeapRO
                 for o in passSet do out.Add o
                 out.ToArray())
         (resultAval |> ASet.ofAVal), teardown

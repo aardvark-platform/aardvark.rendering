@@ -104,6 +104,8 @@ let main argv =
         if Golden.autoFieldsTest () then 0 else 1
     elif argv |> Array.contains "sgheap" then
         if Golden.sgHeapTest () then 0 else 1
+    elif argv |> Array.contains "sgsphere" then
+        if Golden.sgSphereTest () then 0 else 1
     elif argv |> Array.contains "vis" then
         if Golden.visibilityTest () then 0 else 1
     elif argv |> Array.contains "buckets" then
