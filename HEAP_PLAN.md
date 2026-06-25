@@ -225,3 +225,66 @@ MULTI-PAGE 17/20 PASS incl plain/buckets/geom/textures/gpugeom/fp64/CHAIN/geomch
   + slots). This is the remaining big follow-up (Vienna fp64 will need it too).
 KNOWN COARSENESS (acceptable for now): pages>0 use a full-rewrite indirect flush (not incremental);
 PublishStats/compaction iterate only the current page's dicts.
+
+## STEP 2b — STATE OF PLAY (branch heap-step2b; v57 clean at the 2a base)
+The per-page render+derive layer is built and CLEAN (deterministic, no patches left). Commit chain:
+9563d9e0 per-page draw fan-out → 2b17e69b page-0 binds Page(0).Arena → fbbd7f49 per-page geometry
+dedup (attrStatic/idxStatic→PageArena) → 02b21fd9 per-page DERIVE (HeapSlotPage/HeapPageId guard) →
+f9946b68 deterministic SyncPages (kill lazy/eager) + diagnostics removed → 5c81d660 merge per-page
+derive dispatches into ONE OrderedCmd CommandRenderObject/bucket.
+
+### Architecture (the clean form, as built)
+- `HeapStorage` = `pages:List<PageArena>` + `pageWords` (env HEAP_PAGE_WORDS, default 2^28) + `PlacePage`.
+- `PageArena` = one page's arena + allocator + ALL dedup dicts (regions/single/constituentsF·B/
+  attrStatic/idxStatic). Dedup is per-page; cross-page = duplicated (accepted).
+- bucket: mutable `arena`/`regions`/… are the CURRENT FILL PAGE, set by `setPage` ONLY in the alloc
+  path (AddInternal/RemoveInternal). `HeapSlot.Page` + `slotPage:int[]` record each slot's page.
+- RENDER: one RenderObject per page (page 0 = `bucketRO`, pages>0 = `RenderObject.Clone bucketRO` with
+  DrawCalls=page-i indirect, Uniforms: symData/I/D→Page(i).Arena else delegate). Page-0 binding is
+  `arenaU=Page(0).Arena` explicitly (NOT the mutable). Header table is GLOBAL (page-LOCAL offsets); each
+  page's flush zeroes non-page-i slots' draw records.
+- DERIVE: `composeDerived`/`Df32` guarded `if slot<n && HeapSlotPage[slot]=HeapPageId`; one DispatchCmd
+  per page (binds Page(i).Arena + HeapPageId=i + slotPageBuf), all bundled into ONE
+  `CommandRenderObject(OrderedCmd(AList.ofAVal updater→deriveCmds))` per bucket.
+- DETERMINISTIC creation: `member SyncPages()` (= ensurePageROs+ensureDeriveROs) called from the
+  membership updater AFTER the delta, BEFORE version bump ⇒ pages are in `resultAval` before render.
+
+### Validation
+- 1-page golden 20/20 at EVERY commit.
+- multi-page (HEAP_PAGE_WORDS=16384): 17/20. `[ag]` (legacy Ag traversal) renders multi-page CORRECTLY
+  incl sgheap/fp64/chain/textures/geomchurn. Fixed bugs en route: shared-mesh cross-page corruption
+  (geometry dedup was global) and page-0 binding the mutable current; derive page-correctness.
+
+### THE TWO REMAINING FAILURES + what we PROVED about them
+1. **`sgheap[ts]` / `[mixed]` (and any multi-page on the ISimpleSg "Simple" path = the DEFAULT, which
+   Aardvark.Dom/Vienna uses).** A clean rectangular HOLE = page>0's ~32 boxes (geometry correct,
+   coverage matches; they're absent/off-screen). `[ag]` (same heap, legacy traversal) is perfect.
+   RULED OUT (verified in source, not guessed):
+   - NOT ordering: DispatchCmds hoisted before BeginRenderPass (CommandTask.fs:2234, OrderedCmd 2212
+     recurses) ⇒ every page's derive precedes every draw; draws are UnorderedRenderObjectCommand
+     (z-buffered, order-independent).
+   - NOT backend dedup: UnorderedRenderObjectCommand.cache = Dict<IRenderObject,_> keyed by Id;
+     RenderObject.Clone (RenderObject.fs:134) assigns a FRESH Id ⇒ page clones are distinct.
+   - NOT lazy/first-frame timing alone: deterministic SyncPages didn't fix it; merging N derive ROs
+     into one OrderedCmd didn't fix it.
+   LEAD (next step, ~1 file): the two Sg integration points both pipe child→Heap.ofRenderObjects
+   (HeapPool.fs ~5185 ISimpleSg.GetRenderObjects vs ~5215 Ag RenderObjects), so the heap OUTPUT is
+   identical. The divergence is in how `runtime.CompileRender` (Simple) vs the Ag task FORCE/snapshot
+   the heap result-aset (`resultAval |> ASet.ofAVal`). Hypothesis: CompileRender builds its command
+   from the aset reader BEFORE the first force of `updater` (so before SyncPages has rolled page>0 into
+   the set) and doesn't re-pull; the Ag path forces scope/runtime eval first. TEST: does the Simple
+   render-task pick up an aset element ADDED during the first force? If not, the heap must guarantee all
+   pages are present on the FIRST read (e.g. force `updater` when the result aset reader is created, or
+   make page materialization not depend on a reactive read at all). Find: `runtime.CompileRender` entry
+   + how it reads the sg's ISimpleSg.GetRenderObjects aset.
+2. **`livechain` / `livechaindeep`.** The CHAIN FOLD (composeModel, in `derivedU`/chainProg) is still
+   page-0-scoped (binds arenaBuf=Page(0)). Needs the SAME per-page treatment as composeDerived: a
+   HeapSlotPage/HeapPageId guard in `composeModel`/`composeModelDf32` + per-page chainInput binding
+   Page(i).Arena, run per page (or folded into the per-page derive OrderedCmd). Static `chain` passes
+   multi-page (its folds land on page 0); only the live/churn variants surface it.
+
+### KNOWN-GOOD invariants to preserve
+- Draws MUST stay raw per-page ROs (NOT wrapped in OrderedCmd/RenderCmd — HeapPool.fs:~3624 warns
+  wrapping the dynamic-indirect bucket breaks membership churn → GPU hang). Derives CAN be wrapped.
+- pages>0 currently use a FULL-REWRITE indirect flush (re-stage all slots each pull). Fine for >4 GB;
+  for orbit-perf parity make it incremental (per-page dirty sets) — but only matters under churn/orbit.
