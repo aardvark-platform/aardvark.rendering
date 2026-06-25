@@ -1093,6 +1093,9 @@ module Heap =
     /// compaction; InstBlock is the backing HeapSpace block).
     type internal HeapSlot =
         { Slot : int; RegionKeys : IAdaptiveValue[]; Active : aval<bool>
+          /// which storage page this slot's group lives on (all its regions are on it);
+          /// the slot renders in that page's sub-draw and frees from that page on remove.
+          mutable Page : int
           Instances : int; mutable InstOffset : int
           mutable InstBlock : Management.Block<unit>
           /// per consumed attribute (host buckets; empty for bindless)
@@ -2348,13 +2351,13 @@ module Heap =
     /// RenderObject is created ONCE so its identity is stable across changes (the
     /// render task never recompiles it; only its indirect / header / geometry /
     /// texture resources update).
-    /// Shader-AGNOSTIC data store: the arena buffer + word allocator + the per-source
-    /// dedup maps (per-draw uniform regions, single-value attributes, derived constituents).
-    /// Extracted from IncrementalBucket so it can (later) be PAGED (>4 GB ⇒ multiple page
-    /// buffers, each its own sub-draw) and SHARED across heaps (render one scene twice with
-    /// different shaders, geometry/uniforms stored once). For now it holds ONE page and is
-    /// created per-bucket ⇒ behaviour-identical to the inline fields it replaces.
-    type internal HeapStorage(runtime : IRuntime) =
+    /// ONE PAGE of the store: a self-contained mini-arena (the data buffer + word allocator +
+    /// the per-source dedup maps for per-draw uniforms / single-value attributes / derived
+    /// constituents). A region NEVER spans pages, and a slot's whole group lives on one page,
+    /// so a page's draw binds exactly this `Arena` and gathers page-LOCAL offsets — the
+    /// original single-buffer gather, unchanged (no switch, no bindless). Dedup is WITHIN a
+    /// page (a uniform shared across pages is duplicated — cheap; co-location refinement later).
+    type internal PageArena(runtime : IRuntime) =
         let arena = HeapArena(runtime, 1024)
         let arenaAlloc = HeapSpace()
         let regions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
@@ -2367,6 +2370,34 @@ module Heap =
         member _.SingleRegions = singleRegions
         member _.ConstituentsF = constituentsF
         member _.ConstituentsB = constituentsB
+
+    /// Shader-AGNOSTIC, PAGED, (later) shareable data store: ≤ a handful of `PageArena`s, each
+    /// a ≤ pageWords storage buffer. A slot is placed wholly on one page; when the current fill
+    /// page would exceed pageWords the store rolls to a new page. `pageWords` (default 2²⁸ = 1 GiB,
+    /// keeps off*4 int32-safe + the staging <2 GB + the SSBO <4 GB) is lowerable via
+    /// HEAP_PAGE_WORDS for testing the multi-page path on small scenes.
+    type internal HeapStorage(runtime : IRuntime) =
+        let pageWords =
+            match System.Environment.GetEnvironmentVariable "HEAP_PAGE_WORDS" with
+            | null | "" -> 1 <<< 28
+            | s -> match System.Int32.TryParse s with
+                   | true, v when v >= 1024 -> v
+                   | _ -> 1 <<< 28
+        let pages = System.Collections.Generic.List<PageArena>()
+        do pages.Add(PageArena(runtime))
+        member _.PageWords = pageWords
+        member _.Pages = pages
+        member _.Count = pages.Count
+        member _.Page(i : int) = pages.[i]
+        /// index of the current fill page (the last one)
+        member _.CurrentPage = pages.Count - 1
+        /// the page index a slot needing ~`words` MORE words should use: the current fill page,
+        /// or a fresh page if adding `words` would push it past pageWords. (≥1 page always.)
+        member _.PlacePage(words : int) : int =
+            let cur = pages.Count - 1
+            if pages.[cur].ArenaAlloc.Extent + (max 0 words) > pageWords && pages.[cur].ArenaAlloc.Extent > 0 then
+                pages.Add(PageArena(runtime)); pages.Count - 1
+            else cur
 
     type internal IncrementalBucket(runtime : IRuntime, storage : HeapStorage, names : string[], nameToField : Map<string, int>,
                                     effect : Effect, ro0 : RenderObject, updater : aval<int>,
@@ -2555,10 +2586,10 @@ module Heap =
 
         // ── arena: deduped per-draw uniform regions, refcounted, placed by a
         //    coalescing range allocator (float units) — now held by the (per-bucket) storage ──
-        let arena = storage.Arena
+        let mutable arena = storage.Page(0).Arena
         do arena.ExtraDependency <- Some (updater :> IAdaptiveValue)
-        let regions = storage.Regions
-        let arenaAlloc = storage.ArenaAlloc
+        let mutable regions = storage.Page(0).Regions
+        let mutable arenaAlloc = storage.Page(0).ArenaAlloc
 
         // ── geometry. EVERYTHING host-readable lives as ALLOCATIONS in the
         //    bucket's storage arena (the same HeapData buffer the per-draw
@@ -2592,7 +2623,7 @@ module Heap =
         // deduped by the inner value aval — DISTINCT from `regions` (a uniform
         // field and a singleton attribute sharing an aval would need different
         // layouts).
-        let singleRegions = storage.SingleRegions
+        let mutable singleRegions = storage.Page(0).SingleRegions
         // bindless: per-(slot, attribute) source buffer avals + the last buffer
         // each position yielded. Tombstoned slots null their aval but KEEP the
         // last buffer — never read (their draw record is InstanceCount = 0), but
@@ -2847,8 +2878,17 @@ module Heap =
                     | :? M44f as m -> if inv then failwith "Heap: derived inverse needs a Trafo3d constituent (no .Inverse); got M44f" else M44d m
                     | _ -> failwithf "Heap: derived constituent must be Trafo3d/M44d/M44f, got %s" (o.GetType().Name)
                 packM44dInto m a off
-        let constituentsF = storage.ConstituentsF
-        let constituentsB = storage.ConstituentsB
+        let mutable constituentsF = storage.Page(0).ConstituentsF
+        let mutable constituentsB = storage.Page(0).ConstituentsB
+        // current fill page: the slot's allocs (uniforms/geometry/constituents) all route to
+        // this page; set per-slot in Add/RemoveInternal. PlacePage rolls when the page fills.
+        let mutable curPage = 0
+        let setPage (i : int) =
+            curPage <- i
+            let pg = storage.Page i
+            arena <- pg.Arena; arenaAlloc <- pg.ArenaAlloc; regions <- pg.Regions
+            singleRegions <- pg.SingleRegions; constituentsF <- pg.ConstituentsF; constituentsB <- pg.ConstituentsB
+            if arena.ExtraDependency.IsNone then arena.ExtraDependency <- Some (updater :> IAdaptiveValue)
         let allocConstituent (av : IAdaptiveValue) (inv : bool) : int =
             let d = if inv then constituentsB else constituentsF
             match d.TryGetValue av with
@@ -3653,6 +3693,9 @@ module Heap =
         member private _.AddInternal(ro : RenderObject) =
             let slot = if freeSlots.Count > 0 then freeSlots.Pop() else let s = highWater in highWater <- s + 1; s
             ensureSlot slot
+            // route this slot's whole group to one page (rolling to a fresh page if the current
+            // one is full). Phase A: estimate 0 ⇒ always the current page (golden = 1 page).
+            setPage (storage.PlacePage 0)
             let regionKeys = System.Collections.Generic.List<IAdaptiveValue>(names.Length)
             let outBlocks = System.Collections.Generic.List<Management.Block<unit>>()
             for i in 0 .. names.Length - 1 do
@@ -3771,13 +3814,15 @@ module Heap =
             entries.[slot] <- DrawCallInfo(FaceVertexCount = vertexCount, FirstIndex = 0, BaseVertex = 0,
                                            FirstInstance = firstInstance, InstanceCount = instCount)
             dirtyDraws.Add slot |> ignore
-            slots.[ro] <- { Slot = slot; RegionKeys = regionKeys.ToArray(); Active = active; Instances = k; InstOffset = firstInstance
+            slots.[ro] <- { Slot = slot; Page = curPage; RegionKeys = regionKeys.ToArray(); Active = active; Instances = k; InstOffset = firstInstance
                             InstBlock = instBlock; AttrKeys = attrKeys; IdxKey = idxKey
                             ConstKeys = constKeys.ToArray(); OutBlocks = outBlocks.ToArray(); FoldBlocks = foldBlocks.ToArray() }
 
         member private _.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with
             | true, s ->
+                // free from the page the slot's group lives on
+                setPage s.Page
                 if chainMode then removeChainSlot s.Slot
                 for k in s.RegionKeys do freeRegion k
                 for struct(av, inv) in s.ConstKeys do freeConstituent av inv
