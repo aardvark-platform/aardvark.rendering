@@ -178,3 +178,32 @@ multi-page; assert 2-page render == 1-page. Then orbit at baseline (gather uncha
 RISK: the AddInternal collect-then-Place restructure + the per-page RO/derive split are the hard parts;
 everything else (per-page HeapArena/Compute, the gather) is unchanged. Single-page path must stay
 byte-identical (golden gate).
+
+## STEP 2 PROGRESS
+- **2a DONE (commit ade438fc), golden 20/20.** `HeapStorage` (step-1 type) → renamed **`PageArena`**;
+  new **`HeapStorage`** holds `pages : List<PageArena>` + `pageWords` (env HEAP_PAGE_WORDS, default 2²⁸)
+  + `Page(i)`/`CurrentPage`/`PlacePage(words)` (rolls when current page's Extent+words>pageWords). The
+  bucket's `arena`/`arenaAlloc`/`regions`/`singleRegions`/`constituentsF·B` are now **mutable currents**
+  set by `setPage i` (rebinds them to page i's structures + sets that page's arena.ExtraDependency).
+  `HeapSlot` gained `mutable Page`. `AddInternal` calls `setPage (storage.PlacePage 0)` [est 0 ⇒ page 0
+  for now] + records `Page=curPage`; `RemoveInternal` calls `setPage s.Page` before freeing. ⇒ the data
+  side is fully page-routed; with est 0 + small scenes it stays 1 page = behaviour-identical.
+
+- **2b TODO — enable rolling + per-page RO fan-out (the draw layer).**
+  1. **Real estimate** in AddInternal: replace `PlacePage 0` with the slot's worst-case word size
+     (`faceVertexCountOf ro × Σ attr strides + names.Length×~32 + numConst×64`), conservative/over-est so
+     the slot always fits the chosen page (a region/slot must be ≤ pageWords).
+  2. **Per-page draw.** Keep `headers`/`headersBuf` GLOBAL (slot→PAGE-LOCAL offsets; the draw record's
+     FirstInstance already carries the global slot, so a global header table works). Maintain
+     `pageSlots : ResizeArray<int>[]` (slots per page). Per page: an indirect buffer = compacted
+     `entries[s]` for `s ∈ pageSlots[P]` (its own MirrorBuffer + dirty flush), a `derivedU_P` binding
+     page P's `Arena` (HeapData/I/D) + triggering page P's derive, and a `deriveRO_P`. Build N `bucketRO`s
+     (one per page) — `member RenderObject` → `member RenderObjects : IRenderObject[]`; same for DeriveRO.
+  3. **ofRenderObjects** (collects `.RenderObject`/`.DeriveRO` from buckets) → collect the arrays.
+  4. The current single-RO build is at 3554 (`bucketRO`), derive at ~3629 (`deriveRO`), `derivedU`
+     ~3460, indirect/drawBuf ~3113. Each becomes per-page; the gather/headers are UNCHANGED.
+  5. TEST: `HEAP_PAGE_WORDS=<small>` forces multi-page on golden → golden 20/20 multi-page; orbit at
+     baseline (gather unchanged); then Vienna airtop+Mac.
+  RISK: the per-page indirect + dynamic pageSlots management + N-RO emission is the bulk; headers/gather
+  unchanged. No green intermediate inside 2b (single-RO → N-RO is atomic) — single page must stay
+  byte-identical (golden gate).
