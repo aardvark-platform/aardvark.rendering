@@ -2364,12 +2364,25 @@ module Heap =
         let singleRegions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
         let constituentsF = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
         let constituentsB = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        // geometry static-attribute + index dedup (by value-level source identity, byte offset,
+        // typeId) — MUST be per-page: a shared mesh's attrs live in THIS page's arena, so a slot on
+        // another page can't reference them (it binds its own arena). Cross-page = duplicated.
+        let geomKeyComparer =
+            { new System.Collections.Generic.IEqualityComparer<struct(obj * int * int)> with
+                member _.GetHashCode(struct(o, i, t)) =
+                    System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode o ^^^ (i * 0x9E3779B1) ^^^ (t * 0x85EBCA6B)
+                member _.Equals(struct(a, ai, at), struct(b, bi, bt)) =
+                    System.Object.ReferenceEquals(a, b) && ai = bi && at = bt }
+        let attrStatic = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(geomKeyComparer)
+        let idxStatic  = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(geomKeyComparer)
         member _.Arena = arena
         member _.ArenaAlloc = arenaAlloc
         member _.Regions = regions
         member _.SingleRegions = singleRegions
         member _.ConstituentsF = constituentsF
         member _.ConstituentsB = constituentsB
+        member _.AttrStatic = attrStatic
+        member _.IdxStatic = idxStatic
 
     /// Shader-AGNOSTIC, PAGED, (later) shareable data store: ≤ a handful of `PageArena`s, each
     /// a ≤ pageWords storage buffer. A slot is placed wholly on one page; when the current fill
@@ -2611,14 +2624,10 @@ module Heap =
         // shared array dedup), the buffer aval otherwise. A hand-rolled comparer
         // (reference hash + ints) avoids the generic structural-hashing path that
         // showed up in the per-add/remove cost of churn profiles.
-        let geomKeyComparer =
-            { new System.Collections.Generic.IEqualityComparer<struct(obj * int * int)> with
-                member _.GetHashCode(struct(o, i, t)) =
-                    System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode o ^^^ (i * 0x9E3779B1) ^^^ (t * 0x85EBCA6B)
-                member _.Equals(struct(a, ai, at), struct(b, bi, bt)) =
-                    System.Object.ReferenceEquals(a, b) && ai = bi && at = bt }
-        let attrStatic = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(geomKeyComparer)
-        let idxStatic  = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(geomKeyComparer)
+        // PER-PAGE now (held by PageArena): geometry attrs/indices dedup WITHIN a page so a
+        // slot's mesh is in the page its draw binds. Mutable currents, set by setPage.
+        let mutable attrStatic = storage.Page(0).AttrStatic
+        let mutable idxStatic  = storage.Page(0).IdxStatic
         // singleton-attribute regions (adaptive, header + RegionWriter at ref+4),
         // deduped by the inner value aval — DISTINCT from `regions` (a uniform
         // field and a singleton attribute sharing an aval would need different
@@ -2895,6 +2904,7 @@ module Heap =
             let pg = storage.Page i
             arena <- pg.Arena; arenaAlloc <- pg.ArenaAlloc; regions <- pg.Regions
             singleRegions <- pg.SingleRegions; constituentsF <- pg.ConstituentsF; constituentsB <- pg.ConstituentsB
+            attrStatic <- pg.AttrStatic; idxStatic <- pg.IdxStatic
             if arena.ExtraDependency.IsNone then arena.ExtraDependency <- Some (updater :> IAdaptiveValue)
         // conservative worst-case word footprint of a slot's group (geometry + per-draw uniforms +
         // constituents), so PlacePage rolls BEFORE a slot that wouldn't fit ⇒ a group never spans pages.
