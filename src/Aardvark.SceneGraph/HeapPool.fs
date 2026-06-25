@@ -3710,16 +3710,22 @@ module Heap =
         // breaks membership churn (the inner render command does not track the bucket's
         // dynamic draw count → GPU hang). Both ROs come from the same Heap.ofRenderObjects
         // aset → same render task → same submission, so the pre-pass ordering holds.
-        // PAGED derive: one dispatch RO per page (binds page i's arena + HeapPageId=i; the
-        // guarded shader writes ONLY page-i slots into page i's arena). Grown like the draw ROs.
-        let pageDeriveROs = System.Collections.Generic.List<IRenderObject>()
+        // PAGED derive: one DispatchCmd per page (binds page i's arena + HeapPageId=i; the guarded
+        // shader writes ONLY page-i slots into page i's arena). They are bundled into ONE
+        // CommandRenderObject per bucket (an OrderedCmd over all pages) — the Vulkan backend lifts
+        // every nested DispatchCmd to a pre-pass, and a SINGLE pre-pass RO per bucket is what BOTH
+        // the Simple (ISimpleSg) and legacy traversals handle correctly (N separate pre-pass ROs
+        // per bucket are dropped by the Simple path).
+        let deriveCmds = System.Collections.Generic.List<RuntimeCommand>()
         let ensureDeriveROs () =
             if hasDerived then
-                while pageDeriveROs.Count < storage.Count do
-                    let i = pageDeriveROs.Count
+                while deriveCmds.Count < storage.Count do
+                    let i = deriveCmds.Count
                     let pageArenaU = ((storage.Page(i).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
-                    let dispatch = RuntimeCommand.Dispatch(derivedShader, derivedGroups, Map.ofList [ "__input", box (mkDerivedInput pageArenaU i) ])
-                    pageDeriveROs.Add(CommandRenderObject(RenderPass.main, scope, dispatch) :> IRenderObject)
+                    deriveCmds.Add(RuntimeCommand.Dispatch(derivedShader, derivedGroups, Map.ofList [ "__input", box (mkDerivedInput pageArenaU i) ]))
+        let deriveRO : IRenderObject =
+            if not hasDerived then Unchecked.defaultof<_>
+            else CommandRenderObject(RenderPass.main, scope, RuntimeCommand.Ordered (AList.ofAVal (updater |> AVal.map (fun _ -> deriveCmds :> seq<RuntimeCommand>)))) :> IRenderObject
 
         // PAGED draw fan-out. page 0 = `bucketRO` (the incremental machinery above, now zeroing
         // non-page-0 slots). pages >0 each get a fresh indirect (its slots only, full-rewrite flush)
@@ -3766,7 +3772,7 @@ module Heap =
         // members just hand back the current set.
         member x.SyncPages() = ensurePageROs (); ensureDeriveROs ()
         member x.RenderObjects : IRenderObject[] = pageROs.ToArray()
-        member x.DeriveROs : IRenderObject[] = pageDeriveROs.ToArray()
+        member x.DeriveROs : IRenderObject[] = if hasDerived then [| deriveRO |] else [||]
         member _.Count = slots.Count
         member _.IsChain = chainMode
         member _.ChainDistinct = if chainMode then chainLinks.DistinctCount else 0
