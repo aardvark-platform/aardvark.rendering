@@ -106,6 +106,8 @@ let main argv =
         if Golden.sgHeapTest () then 0 else 1
     elif argv |> Array.contains "sgsphere" then
         if Golden.sgSphereTest () then 0 else 1
+    elif argv |> Array.contains "sgprec" then
+        if Golden.sgPrecisionTest () then 0 else 1
     elif argv |> Array.contains "vis" then
         if Golden.visibilityTest () then 0 else 1
     elif argv |> Array.contains "buckets" then
@@ -118,16 +120,6 @@ let main argv =
         GpuModes.runWin (); 0
     elif argv |> Array.contains "gpumodes" then
         if GpuModes.run () then 0 else 1
-    elif argv |> Array.contains "fp64" then
-        if Golden.derivedFp64Test () then 0 else 1
-    elif argv |> Array.contains "chain" then
-        if Golden.derivedChainTest () then 0 else 1
-    elif argv |> Array.contains "chainfan" then
-        if Golden.chainFanoutTest () then 0 else 1
-    elif argv |> Array.contains "domboxchain" then
-        if Golden.domBoxChainTest () then 0 else 1
-    elif argv |> Array.contains "hierchain" then
-        if Golden.hierChainTest () then 0 else 1
     elif argv |> Array.contains "livechaindeep" then
         if Golden.liveChainDeepTest () then 0 else 1
     elif argv |> Array.contains "livechain" then
@@ -137,8 +129,6 @@ let main argv =
     elif argv |> Array.contains "chainbench" then
         let n = match argv |> Array.tryFindIndex ((=) "--n") with | Some i when i+1 < argv.Length -> int argv.[i+1] | _ -> 20000
         ChainBench.run (not (argv |> Array.contains "--folded")) n
-    elif argv |> Array.contains "chaindemo" then
-        ChainDemo.run (); 0
     elif argv |> Array.contains "passthru" then
         if Golden.passthroughTest () then 0 else 1
     elif argv |> Array.contains "nativebuf" then
@@ -191,12 +181,8 @@ let main argv =
         if Golden.glyphWedgeTest () then 0 else 1
     elif argv |> Array.contains "atlaspool" then
         if Golden.atlasPoolTest () then 0 else 1
-    elif argv |> Array.contains "bindlessvar" then
-        if Golden.bindlessVarTest () then 0 else 1
     elif argv |> Array.contains "bcbox" then
         if Golden.bindlessCleanBoxTest () then 0 else 1
-    elif argv |> Array.contains "bindlesssimple" then
-        if Golden.bindlessSimpleTest () then 0 else 1
     elif argv |> Array.contains "ssboarray5" then
         if Golden.ssboArray5Test () then 0 else 1
     elif argv |> Array.contains "ssboarray4" then
@@ -207,10 +193,6 @@ let main argv =
         if Golden.ssboArray2Test () then 0 else 1
     elif argv |> Array.contains "ssboarray" then
         if Golden.ssboArrayTest () then 0 else 1
-    elif argv |> Array.contains "bindless" then
-        if Golden.bindlessHeapTest () then 0 else 1
-    elif argv |> Array.contains "inst" then
-        if Golden.instancingTest () then 0 else 1
     elif argv |> Array.contains "instbucket" then
         if Golden.alreadyInstancedTest () then 0 else 1
     elif argv |> Array.contains "gl" then

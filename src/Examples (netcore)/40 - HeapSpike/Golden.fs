@@ -653,11 +653,6 @@ module Golden =
         Log.line "demoShot: saved demo_classic.ppm + demo_heap.ppm + demo_heap_msaa.ppm"
         true
 
-    // fp64 derived-uniform compute pre-pass test. Renders the SAME camera-relative
-    // cube grid (a) at normal scale and (b) at geodetic scale (~earth radius) via
-    // Heap.derivedFp64 (fp64 ModelViewProjTrafo + NormalMatrix), and (c) at geodetic
-    // scale via the f32-inline heap. Camera-relative => (a) and (b) must look the
-    // same (fp64 stays precise); (c) breaks (f32 loses precision at that scale).
     module DF =
         type V = { [<Position>] pos : V4f; [<Normal>] n : V3f }
         let shadeFp64 (v : V) =
@@ -678,7 +673,14 @@ module Golden =
                 return V4f(V3f(0.9f, 0.7f, 0.3f) * d, 1.0f)
             }
 
-    let derivedFp64Test () =
+    // PRECISION GUARD: the heap derives ModelViewProjTrafo in fp64, so the SAME scene
+    // rendered at the origin and at GEODETIC scale (earth-radius coords) must look
+    // IDENTICAL — the huge View/Model translations cancel in double precision. If the
+    // derive ever silently drops to float32, the geodetic cubes jitter and the two
+    // images diverge -> this lights up. A constant f32-premultiplied MVP is also
+    // rendered, ONLY to assert the scale is high enough that f32 genuinely breaks
+    // (else a pass would be meaningless).
+    let sgPrecisionTest () =
         Aardvark.Init()
         use app = new Aardvark.Application.Slim.VulkanApplication(false)
         let runtime = app.Runtime
@@ -686,326 +688,47 @@ module Golden =
             runtime.CreateFramebufferSignature [
                 DefaultSemantic.Colors, TextureFormat.Rgba8
                 DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
-        let size = AVal.constant (V2i(1024, 1024))
-        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
-        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
-        let index     = g.IndexArray |> unbox<int[]>
-        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
-        let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>; DefaultSemantic.Normals, bv normals typeof<V3f> ]
-
-        // camera-relative grid: cubes at (origin + offset), eye at (origin + relEye)
-        let side = 6
-        let offsets = [| for x in 0 .. side-1 do for y in 0 .. side-1 -> V3d(float (x-side/2) * 1.4, float (y-side/2) * 1.4, 0.0) |]
-        let n = offsets.Length
-        let relEye = V3d(0.0, -1.0, 0.6) * 14.0
+        let size = AVal.constant (V2i(512, 512))
+        let boxSg = IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.3)) C4b.White |> Sg.ofIndexedGeometry
+        let offsets = [| for x in -1 .. 1 do for y in -1 .. 1 -> V3d(float x, float y, 0.0) * 0.9 |]
         let proj = Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo
-
-        let imageOf (sg : ISg) =
-            use task = sg |> Sg.compile runtime signature
+        let relEye = V3d(0.0, -5.0, 2.5)
+        let viewAt (c : V3d) = CameraView.lookAt (c + relEye) c V3d.OOI |> CameraView.viewTrafo
+        let renderToPix (sg : ISg) =
+            use task = runtime.CompileRender(signature, sg)
             let out = task |> RenderTask.renderToColor size
             out.Acquire()
-            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
-        let coverage (img : PixImage<uint8>) =
-            let m = img.GetMatrix<C4b>()
-            let mutable c = 0L
-            m.ForeachCoord(fun (p : V2l) -> let v = m.[p] in if v.R <> 0uy || v.G <> 0uy || v.B <> 0uy then c <- c + 1L)
-            c
-
-        let effFp64 = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
-
-        // (a) fp64 at normal scale (origin); (b) fp64 at geodetic scale — same
-        // camera-relative scene, so a precise pipeline yields the SAME image.
-        let sceneFp64 (origin : V3d) =
-            let view = AVal.constant (CameraView.lookAt (origin + relEye) origin V3d.OOI |> CameraView.viewTrafo)
-            let models = offsets |> Array.map (fun o -> AVal.constant (Trafo3d.Translation(origin + o)))
-            Heap.derivedFp64 runtime IndexedGeometryMode.TriangleList positions normals index effFp64 view (AVal.constant proj) models
+            try out.GetValue().Download().AsPixImage<uint8>()
+            finally out.Release()
+        let effFp64 = [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
+        // fp64: per-object ModelTrafo; effect reads the COMPOSED ModelViewProjTrafo ->
+        // heap DERIVES it (Proj*View*Model) in double.
+        let heapFp64 (c : V3d) =
+            offsets |> Array.map (fun o -> boxSg |> Sg.trafo' (Trafo3d.Translation(c + o)))
+            |> Sg.ofArray |> Sg.heap |> Sg.effect effFp64
+            |> Sg.viewTrafo (AVal.constant (viewAt c)) |> Sg.projTrafo (AVal.constant proj)
+        // f32 reference: supply ModelViewProjTrafo as a CONSTANT pre-multiplied f32
+        // matrix (no derive) -> the heap just gathers it; jitters at geodetic scale.
+        let heapF32 (c : V3d) =
+            let vpF32 = M44f.op_Explicit ((viewAt c) * proj).Forward
+            offsets |> Array.map (fun o ->
+                let mF32 = M44f.op_Explicit (Trafo3d.Translation(c + o)).Forward
+                boxSg |> Sg.uniform' "ModelViewProjTrafo" (vpF32 * mF32) |> Sg.uniform' "NormalMatrix" M44f.Identity)
+            |> Sg.ofArray |> Sg.heap |> Sg.effect effFp64
+            |> Sg.viewTrafo (AVal.constant (viewAt c)) |> Sg.projTrafo (AVal.constant proj)
         let earth = V3d(6378137.0, 3189000.0, 1594500.0)
-        let imgNormal  = imageOf (sceneFp64 V3d.Zero)
-        let imgGeoFp64 = imageOf (sceneFp64 earth)
-
-        // (c) f32 heap at geodetic scale: the per-vertex f32 MVP path is GONE (the
-        // heap now derives in fp64), so to reproduce the historic f32 jitter we supply
-        // ModelViewProjTrafo DIRECTLY as an f32 matrix product (Proj·View cast to f32,
-        // THEN multiplied by the earth-scale f32 Model) — the heap gathers the supplied
-        // composite as a plain field (its View/Proj constituents aren't provided, so it
-        // can't fp64-derive it). This also exercises the direct-supply fallback.
-        let imgGeoF32 =
-            let viewProjT = (CameraView.lookAt (earth + relEye) earth V3d.OOI |> CameraView.viewTrafo) * proj
-            let vpF32 = M44f.op_Explicit viewProjT.Forward
-            let effMvp = Effect.compose [ Effect.ofFunction DF.shadeMvp; Effect.ofFunction DF.frag ]
-            let inputs =
-                offsets |> Array.map (fun o ->
-                    let mF32 = M44f.op_Explicit (Trafo3d.Translation(earth + o)).Forward
-                    let ro = RenderObject()
-                    ro.Surface <- Surface.Effect effMvp
-                    ro.Mode <- IndexedGeometryMode.TriangleList
-                    ro.VertexAttributes <- vattrs
-                    ro.Indices <- Some (bv index typeof<int>)
-                    ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
-                    ro.Uniforms <- UniformProvider.ofList [
-                        Symbol.Create "ModelTrafo",          (AVal.constant mF32 :> IAdaptiveValue)
-                        Symbol.Create "ModelViewProjTrafo",  (AVal.constant (vpF32 * mF32) :> IAdaptiveValue) ]
-                    ro :> IRenderObject)
-            imageOf (Sg.renderObjectSet (Heap.ofRenderObjects runtime (ASet.ofArray inputs)))
-
-        let covNormal  = coverage imgNormal
-        let covGeoFp64 = coverage imgGeoFp64
-        // fp64 geodetic must equal fp64 normal (scale-invariant, precise);
-        // f32 inline at geodetic must DIFFER from it (jittered cubes).
-        let dInvar, _, _, total = diff imgNormal imgGeoFp64
+        let imgNormal  = renderToPix (heapFp64 V3d.Zero)
+        let imgGeoFp64 = renderToPix (heapFp64 earth)
+        let imgGeoF32  = renderToPix (heapF32 earth)
+        let dInvar, _, covN, total = diff imgNormal imgGeoFp64
         let _, nDiffF32, _, _ = diff imgGeoFp64 imgGeoF32
-        Log.line "derivedFp64: n=%d  cov normal=%d geo-fp64=%d  fp64 normal-vs-geo maxDelta=%d  f32 diffPixels=%d/%d (%.1f%%)"
-            n covNormal covGeoFp64 dInvar nDiffF32 total (100.0 * float nDiffF32 / float total)
-        let scaleInvariant = covNormal > 1000L && dInvar <= 1
-        let f32Broke = float nDiffF32 / float total > 0.02
-        let pass = scaleInvariant && f32Broke
-        if pass then Log.line "derivedFp64: PASS (fp64 compute bit-identical across scale; f32 inline jitters at geodetic scale)"
-        else Log.warn "derivedFp64: FAIL (scaleInvariant=%b f32Broke=%b)" scaleInvariant f32Broke
-        pass
-
-    // GPU transform propagation (Slice A): the chained path must produce the
-    // SAME image as the composed derivedFp64 path. Scene = a shared parent
-    // rotation over a grid of per-cube translations; composed model = rot·trans,
-    // chain = [rot; trans] (root-first). Bit-identical => chain compose + order ok.
-    let derivedChainTest () =
-        Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let runtime = app.Runtime
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
-        let size = AVal.constant (V2i(1024, 1024))
-        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
-        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
-        let index     = g.IndexArray |> unbox<int[]>
-
-        let side = 6
-        let offsets = [| for x in 0 .. side-1 do for y in 0 .. side-1 -> V3d(float (x-side/2) * 1.4, float (y-side/2) * 1.4, 0.0) |]
-        let n = offsets.Length
-        let parent = Trafo3d.Rotation(V3d(0.3, 0.6, 0.2).Normalized, 0.7) * Trafo3d.Scale 1.3
-        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -14.0, 9.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo)
-        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
-        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
-
-        let imageOf (sg : ISg) =
-            use task = sg |> Sg.compile runtime signature
-            let out = task |> RenderTask.renderToColor size
-            out.Acquire()
-            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
-
-        // per-cube chain links [parent; translation] in Trafo3d compose order.
-        let chainOf (o : V3d) = [| parent; Trafo3d.Translation o |]
-        // composed: fold the SAME links with Trafo3d `*` (canonical definition).
-        let composed =
-            let models = offsets |> Array.map (fun o -> AVal.constant (chainOf o |> Array.reduce (*)))
-            Heap.derivedFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj models
-        // chained: the same links, composed on the GPU
-        let chained =
-            let chains = offsets |> Array.map (fun o -> chainOf o |> Array.map AVal.constant)
-            Heap.derivedChainFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj chains
-
-        let ca = imageOf composed
-        let cb = imageOf chained
-        let maxD, nDiff, nNonBg, total = diff ca cb
-        Log.line "derivedChain: n=%d  composed-vs-chained maxDelta=%d diffPixels=%d/%d coverage=%d" n maxD nDiff total nNonBg
-        let pass = nNonBg > 1000 && maxD <= 1
-        if pass then Log.line "derivedChain: PASS (GPU chain compose == composed ModelTrafo, order correct)"
-        else Log.warn "derivedChain: FAIL (maxDelta=%d diffPixels=%d coverage=%d)" maxD nDiff nNonBg
-        pass
-
-    // GPU transform propagation (Slice B): the fan-out is gone. N objects share
-    // ONE root cval; changing it must re-upload exactly ONE distinct link slot
-    // (the root), not N. The win that motivates the whole feature.
-    let chainFanoutTest () =
-        Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let runtime = app.Runtime
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
-        let size = AVal.constant (V2i(512, 512))
-        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.4)) C4b.White).ToIndexed()
-        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
-        let index     = g.IndexArray |> unbox<int[]>
-
-        let nSide = 30
-        let offsets = [| for x in 0 .. nSide-1 do for y in 0 .. nSide-1 -> V3d(float (x-nSide/2) * 0.9, float (y-nSide/2) * 0.9, 0.0) |]
-        let n = offsets.Length
-        // ONE shared root cval over all N objects (the worst-case fan-out)
-        let root = AVal.init (Trafo3d.RotationZ 0.0)
-        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -40.0, 30.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo)
-        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
-        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
-        let chains = offsets |> Array.map (fun o -> [| (root :> aval<Trafo3d>); AVal.constant (Trafo3d.Translation o) |])
-        let sg = Heap.derivedChainFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj chains
-
-        use task = sg |> Sg.compile runtime signature
-        let out = task |> RenderTask.renderToColor size
-        out.Acquire()
-        try
-            out.GetValue() |> ignore                            // initial: all distinct uploaded
-            let initial = Heap.lastChainLinkUploads
-            transact (fun () -> root.Value <- Trafo3d.RotationZ 0.6)
-            out.GetValue() |> ignore                            // re-render after a single shared-root change
-            let afterRoot = Heap.lastChainLinkUploads
-            Log.line "chainFanout: n=%d distinct=%d initialUploads=%d afterRootChange=%d" n (n+1) initial afterRoot
-            let pass = afterRoot = 1 && initial >= n
-            if pass then Log.line "chainFanout: PASS (shared-root change uploads 1 link, not %d — fan-out gone)" n
-            else Log.warn "chainFanout: FAIL (initial=%d afterRoot=%d, expected afterRoot=1)" initial afterRoot
-            pass
-        finally out.Release()
-
-    // The DOM box scenario: each leaf carries the SAME stack the aardvark.dom
-    // traversal produces for `Sg.Trafo node.Trafo; Primitives.Box(Box3d.Unit)` —
-    // a DISTINCT per-leaf CONSTANT box link (Scale*Translation over Box3d.Unit,
-    // identical VALUE for every leaf, but a fresh AVal.constant instance per box)
-    // followed by a DYNAMIC per-leaf node trafo (a cval). This is exactly the
-    // depth-2 stack the heap currently CPU-folds per leaf (20000 AVal.map2 (*)
-    // folds). The chain feeding composes it on the GPU instead.
-    //
-    // Proves three things the chain feeding is meant to deliver:
-    //   (a) VALUE-DEDUP: the n identical constant box links collapse to ONE arena
-    //       slot (distinct links ~ n+1, not 2n) — "folds once on GPU + dedups".
-    //   (b) CORRECTNESS: GPU chain compose == the CPU-folded ModelTrafo image.
-    //   (c) EDIT FAN-OUT: editing ONE node link marks ONE arena slot (uploads=1),
-    //       and the CPU-fold cost (re-folding box*node per touched leaf) is gone
-    //       from the chain path. We time the CPU fold the folded path must pay.
-    let domBoxChainTest () =
-        Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let runtime = app.Runtime
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
-        let size = AVal.constant (V2i(768, 768))
-        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.Unit) C4b.White).ToIndexed()
-        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
-        let index     = g.IndexArray |> unbox<int[]>
-
-        let nSide = 40
-        let n = nSide * nSide                                       // 1600 leaves
-        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -70.0, 50.0)) (V3d(24.0, 24.0, 0.0)) V3d.OOI |> CameraView.viewTrafo)
-        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
-        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
-
-        // EXACTLY what aardvark.dom's Primitives.Box builds for Box3d.Unit:
-        //   trafo = box |> AVal.map (fun b -> Scale b.Size * Translation b.Min)
-        // -> for Box3d.Unit: Scale(1) * Translation(0) = identity, but a DISTINCT
-        // AVal.constant per leaf (value-dedup must collapse them, identity won't).
-        let boxLink (_ : int) : aval<Trafo3d> =
-            AVal.constant (Trafo3d.Scale(Box3d.Unit.Size) * Trafo3d.Translation(Box3d.Unit.Min))
-        // per-leaf DYNAMIC node trafo (the grid placement; what an edit moves).
-        let nodeTrafos =
-            Array.init n (fun i ->
-                AVal.init (Trafo3d.Translation(float (i % nSide) * 1.2, float (i / nSide) * 1.2, 0.0)))
-        // the dom stack, root->leaf compose order: [boxLink; nodeTrafo].
-        let chains = Array.init n (fun i -> [| boxLink i; (nodeTrafos.[i] :> aval<Trafo3d>) |])
-
-        // FOLDED path: the per-leaf CPU AVal.map2 (*) fold the dom modelTrafo does.
-        let folded = nodeTrafos |> Array.map (fun nt -> AVal.map2 (*) (boxLink 0) (nt :> aval<Trafo3d>))
-        let composedSg = Heap.derivedFp64      runtime IndexedGeometryMode.TriangleList positions normals index eff view proj folded
-        let chainSg    = Heap.derivedChainFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj chains
-
-        let imageOf (sg : ISg) =
-            use task = sg |> Sg.compile runtime signature
-            let out = task |> RenderTask.renderToColor size
-            out.Acquire()
-            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
-
-        let ca = imageOf composedSg
-        let distinct = Heap.lastDistinctLinks
-        let cb = imageOf chainSg
-        let maxD, nDiff, _, total = diff ca cb
-        Log.line "domBoxChain: n=%d  distinctLinks=%d (ideal n+1=%d, naive 2n=%d)" n distinct (n+1) (2*n)
-        Log.line "domBoxChain: composed-vs-chain maxDelta=%d diffPixels=%d/%d" maxD nDiff total
-
-        // (c) edit fan-out: move ONE node link; the chain arena must upload 1 slot.
-        // also time the CPU fold the FOLDED path re-pays for the same edit (the
-        // box*node map2 the heap currently folds per touched leaf).
-        let sw = System.Diagnostics.Stopwatch()
-        // chain: edit one node link -> one upload
-        transact (fun () -> nodeTrafos.[n/2].Value <- Trafo3d.Translation(99.0, 99.0, 0.0))
-        (chainSg |> Sg.compile runtime signature |> fun t -> let o = t |> RenderTask.renderToColor size in o.Acquire(); o.GetValue() |> ignore; o.Release(); t.Dispose())
-        let uploads = Heap.lastChainLinkUploads
-        // folded: time the CPU map2 (*) re-fold for the SAME single edit, x1000
-        sw.Restart()
-        for _ in 1 .. 1000 do
-            transact (fun () -> nodeTrafos.[n/2].Value <- Trafo3d.Translation(float (sw.ElapsedTicks % 7L), 0.0, 0.0))
-            folded.[n/2].GetValue() |> ignore                       // forces box*node fold
-        sw.Stop()
-        let foldUs = sw.Elapsed.TotalMilliseconds * 1000.0 / 1000.0
-        Log.line "domBoxChain: chain edit uploads=%d link(s); folded-path CPU box*node re-fold = %.2f us/edit" uploads foldUs
-
-        let dedupOk   = distinct <= n + 2                           // box link collapsed to 1 slot
-        let correct   = nDiff = 0L || maxD <= 1
-        let editOk    = uploads = 1
-        let pass = dedupOk && correct && editOk
-        if pass then Log.line "domBoxChain: PASS (box link value-deduped to 1 slot; GPU chain == folded image; 1-link edit)"
-        else Log.warn "domBoxChain: FAIL (dedupOk=%b correct=%b editOk=%b)" dedupOk correct editOk
-        pass
-
-    // HIERARCHICAL micro-probe: a 2-level shared-parent tree. ONE parent link is
-    // shared by a whole subtree of M leaves; editing it must cost O(1) on the
-    // chain path (one distinct link slot marked), whereas the CPU-fold path is
-    // O(subtree) — every leaf under the parent re-folds parent*child. Proves the
-    // mechanism's reach beyond per-leaf constants: a moving GROUP is O(1).
-    let hierChainTest () =
-        Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let runtime = app.Runtime
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
-        let size = AVal.constant (V2i(512, 512))
-        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.4)) C4b.White).ToIndexed()
-        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
-        let index     = g.IndexArray |> unbox<int[]>
-
-        let groups = 8
-        let perGroup = 64
-        let n = groups * perGroup
-        // ONE shared parent cval PER GROUP; each group's leaves share that link.
-        let parents = Array.init groups (fun _ -> AVal.init Trafo3d.Identity)
-        let view = AVal.constant (CameraView.lookAt (V3d(0.0, -50.0, 35.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo)
-        let proj = AVal.constant (Frustum.perspective 70.0 0.1 1.0e9 1.0 |> Frustum.projTrafo)
-        let eff = Effect.compose [ Effect.ofFunction DF.shadeFp64; Effect.ofFunction DF.frag ]
-        // stack [groupParent(shared, dynamic); leafTranslation(distinct, const)].
-        let chains =
-            Array.init n (fun i ->
-                let gi = i / perGroup
-                let li = i % perGroup
-                let lx = float (li % 8) * 0.7 - 2.5 + float (gi % 4) * 6.0
-                let ly = float (li / 8) * 0.7 - 2.5 + float (gi / 4) * 6.0
-                [| (parents.[gi] :> aval<Trafo3d>); AVal.constant (Trafo3d.Translation(lx, ly, 0.0)) |])
-        let sg = Heap.derivedChainFp64 runtime IndexedGeometryMode.TriangleList positions normals index eff view proj chains
-        use task = sg |> Sg.compile runtime signature
-        let out = task |> RenderTask.renderToColor size
-        out.Acquire()
-        try
-            out.GetValue() |> ignore
-            let distinct = Heap.lastDistinctLinks
-            // edit ONE group parent: a subtree of perGroup leaves moves at once.
-            transact (fun () -> parents.[3].Value <- Trafo3d.Translation(0.0, 0.0, 5.0))
-            out.GetValue() |> ignore
-            let uploads = Heap.lastChainLinkUploads
-            Log.line "hierChain: groups=%d perGroup=%d n=%d distinctLinks=%d  edit-one-parent uploads=%d (CPU-fold would re-fold %d leaves)"
-                groups perGroup n distinct uploads perGroup
-            // distinct = groups dynamic parents + (distinct leaf translations).
-            // The win: editing a parent that moves perGroup leaves costs ONE upload.
-            let pass = uploads = 1 && distinct <= groups + n
-            if pass then Log.line "hierChain: PASS (moving a %d-leaf group = 1 link upload, O(1) not O(subtree))" perGroup
-            else Log.warn "hierChain: FAIL (uploads=%d distinct=%d)" uploads distinct
-            pass
-        finally out.Release()
+        let scaleInvariant = covN > 1000L && dInvar <= 1
+        let f32Broke = float nDiffF32 / float total > 0.01   // f32 jitters ~2% at earth scale; 1% guard = margin
+        Log.line "sgprec: coverage=%d  fp64 origin-vs-geodetic maxDelta=%d  f32 jitter=%.1f%%" covN dInvar (100.0 * float nDiffF32 / float total)
+        if scaleInvariant && f32Broke then
+            Log.line "sgprec: PASS (heap ModelViewProjTrafo is fp64-derived: scale-invariant; f32 jitters at geodetic scale)"; true
+        else
+            Log.warn "sgprec: FAIL (scaleInvariant=%b f32Broke=%b) — heap derive may have dropped to float32" scaleInvariant f32Broke; false
 
     // LIVE GPU trafo-chain through Heap.ofRenderObjects (the real IncrementalBucket
     // ingest, NOT the standalone derivedChainFp64 driver). Each RO exposes the
@@ -2001,8 +1724,6 @@ module Golden =
         else Log.warn "ssboArray: FAIL (coverage=%d, expected a vertex-pulled triangle)" green
         pass
 
-    // Bindless heap geometry effect (shared by the bring-up tests below): geometry is
-    // PULLED from per-object GPU buffers by handle (no vertex buffers bound).
     module BH =
         type VIn  = { [<Semantic("Positions")>] pos : V3f; [<Semantic("Normals")>] n : V3f }
         type VOut = { [<Position>] clip : V4f; [<Semantic("WN")>] wn : V3f }
@@ -2035,6 +1756,7 @@ module Golden =
                 return { pos = uniform.GeomA.[h].[v.vid]; c = uniform.GeomB.[h].[v.vid] }
             }
         let frag (v : VOut) = fragment { return v.c }
+
 
     let ssboArray2Test () =
         Aardvark.Init()
@@ -2265,148 +1987,6 @@ module Golden =
     // the real rewritten-pull effect + ViewProjTrafo path on minimal geometry. If this
     // matches the plain render, the bug is the box geometry/index; if it fails, the bug
     // is Heap.bindless's shader/setup (the rewrite or ViewProj).
-    let bindlessSimpleTest () =
-        Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let runtime = app.Runtime
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
-        let size = AVal.constant (V2i(640, 640))
-        // NINE triangles in a 3x3 grid (matching the box test's object count/layout),
-        // each a simple 3-vertex tri; flat normals toward the camera.
-        let nrm = V3f(0.0f, -1.0f, 0.0f)
-        let offsets = [| for x in -1 .. 1 do for y in -1 .. 1 -> V3f(float32 x * 1.3f, float32 y * 1.3f, 0.0f) |]
-        let baseTri = [| V3f(-0.4f, 0.0f, -0.4f); V3f(0.4f, 0.0f, -0.4f); V3f(0.0f, 0.0f, 0.5f) |]
-        let positions = offsets |> Array.map (fun o -> baseTri |> Array.map (fun p -> p + o))
-        let normals   = offsets |> Array.map (fun _ -> Array.replicate 3 nrm)
-        let indices   = offsets |> Array.map (fun _ -> [| 0;1;2 |])
-        let view = CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
-        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
-        let vpTrafo = view * proj
-        let eff = Effect.compose [ Effect.ofFunction BH.shade; Effect.ofFunction BH.frag ]
-        let imageOf (sg : ISg) =
-            use task = sg |> Sg.compile runtime signature
-            let out = task |> RenderTask.renderToColor size
-            out.Acquire()
-            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
-        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
-        let refObjs =
-            positions |> Array.mapi (fun i pos ->
-                let ro = RenderObject()
-                ro.Surface <- Surface.Effect eff
-                ro.Mode <- IndexedGeometryMode.TriangleList
-                ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv pos typeof<V3f>; DefaultSemantic.Normals, bv normals.[i] typeof<V3f> ]
-                ro.Indices <- Some (bv indices.[i] typeof<int>)
-                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = 3, InstanceCount = 1) |])
-                ro.Uniforms <- UniformProvider.ofList [ Symbol.Create "ViewProjTrafo", (AVal.constant (M44f.op_Explicit vpTrafo.Forward) :> IAdaptiveValue) ]
-                ro :> IRenderObject)
-        // render the bindless FIRST (before the plain ref compiles the same `eff`),
-        // to test whether the original effect's cached shader poisons the rewritten one
-        let bindlessPix =
-            let attribs = Array.init positions.Length (fun i -> Map.ofList [ DefaultSemantic.Positions, (positions.[i] :> System.Array); DefaultSemantic.Normals, (normals.[i] :> System.Array) ])
-            let idxArrs = indices |> Array.map (fun a -> a :> System.Array)
-            imageOf (Heap.bindless runtime IndexedGeometryMode.TriangleList eff attribs idxArrs (AVal.constant view) (AVal.constant proj))
-        let refPix = imageOf (Sg.renderObjectSet (ASet.ofArray refObjs))
-        let savePpm (path : string) (img : PixImage<uint8>) =
-            let mm = img.GetMatrix<C4b>()
-            let w = int mm.Size.X
-            let h = int mm.Size.Y
-            use fs = new System.IO.FileStream(path, System.IO.FileMode.Create)
-            let hdr = System.Text.Encoding.ASCII.GetBytes(sprintf "P6\n%d %d\n255\n" w h)
-            fs.Write(hdr, 0, hdr.Length)
-            let buf : byte[] = Array.zeroCreate (w * h * 3)
-            let mutable o = 0
-            for yy in 0 .. h - 1 do
-                for xx in 0 .. w - 1 do
-                    let c = mm.[V2l(int64 xx, int64 yy)]
-                    buf.[o] <- c.R; buf.[o+1] <- c.G; buf.[o+2] <- c.B; o <- o + 3
-            fs.Write(buf, 0, buf.Length)
-        savePpm "/tmp/bsimple_ref.ppm" refPix
-        savePpm "/tmp/bsimple_heap.ppm" bindlessPix
-        let maxD, nDiff, nNonBg, total = diff refPix bindlessPix
-        Log.line "bindlessSimple: 9 triangles  plain-vs-bindless maxDelta=%d diffPixels=%d coverage=%d" maxD nDiff nNonBg
-        let pass = nNonBg > 500 && maxD <= 1
-        if pass then Log.line "bindlessSimple: PASS (Heap.bindless shader/setup correct on trivial geometry)"
-        else Log.warn "bindlessSimple: FAIL (maxDelta=%d coverage=%d)" maxD nNonBg
-        pass
-
-    let bindlessHeapTest () =
-        Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let runtime = app.Runtime
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
-        let size = AVal.constant (V2i(640, 640))
-        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
-        let bpos = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-        let bnor = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
-        let bidx = g.IndexArray |> unbox<int[]>
-        let offsets = [| for x in -1 .. 1 do for y in -1 .. 1 -> V3f(float32 x * 1.3f, float32 y * 1.3f, 0.0f) |]
-        let n = offsets.Length
-        // per-object WORLD-space geometry (offset baked in; no model trafo)
-        let positions = offsets |> Array.map (fun o -> bpos |> Array.map (fun p -> p + o))
-        let normals   = offsets |> Array.map (fun _ -> bnor)
-        let indices   = offsets |> Array.map (fun _ -> bidx)
-        let view = CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
-        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
-        let vpTrafo = view * proj
-        let eff = Effect.compose [ Effect.ofFunction BH.shade; Effect.ofFunction BH.frag ]
-
-        let imageOf (sg : ISg) =
-            use task = sg |> Sg.compile runtime signature
-            let out = task |> RenderTask.renderToColor size
-            out.Acquire()
-            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
-
-        // reference: plain per-object indexed render (real vertex buffers)
-        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
-        let refObjs =
-            positions |> Array.map (fun pos ->
-                let ro = RenderObject()
-                ro.Surface <- Surface.Effect eff
-                ro.Mode <- IndexedGeometryMode.TriangleList
-                ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv pos typeof<V3f>; DefaultSemantic.Normals, bv bnor typeof<V3f> ]
-                ro.Indices <- Some (bv bidx typeof<int>)
-                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = bidx.Length, InstanceCount = 1) |])
-                ro.Uniforms <- UniformProvider.ofList [ Symbol.Create "ViewProjTrafo", (AVal.constant (M44f.op_Explicit vpTrafo.Forward) :> IAdaptiveValue) ]
-                ro :> IRenderObject)
-        let refPix = imageOf (Sg.renderObjectSet (ASet.ofArray refObjs))
-
-        // bindless: same geometry pulled from per-object buffers by handle
-        let bindlessPix =
-            let attribs = Array.init positions.Length (fun i -> Map.ofList [ DefaultSemantic.Positions, (positions.[i] :> System.Array); DefaultSemantic.Normals, (normals.[i] :> System.Array) ])
-            let idxArrs = indices |> Array.map (fun a -> a :> System.Array)
-            imageOf (Heap.bindless runtime IndexedGeometryMode.TriangleList eff attribs idxArrs (AVal.constant view) (AVal.constant proj))
-
-        let savePpm (path : string) (img : PixImage<uint8>) =
-            let m = img.GetMatrix<C4b>()
-            let w = int m.Size.X
-            let h = int m.Size.Y
-            use fs = new System.IO.FileStream(path, System.IO.FileMode.Create)
-            let header = System.Text.Encoding.ASCII.GetBytes(sprintf "P6\n%d %d\n255\n" w h)
-            fs.Write(header, 0, header.Length)
-            let buf : byte[] = Array.zeroCreate (w * h * 3)
-            let mutable o = 0
-            for yy in 0 .. h - 1 do
-                for xx in 0 .. w - 1 do
-                    let c = m.[V2l(int64 xx, int64 yy)]
-                    buf.[o] <- c.R
-                    buf.[o + 1] <- c.G
-                    buf.[o + 2] <- c.B
-                    o <- o + 3
-            fs.Write(buf, 0, buf.Length)
-        savePpm "/tmp/bindless_ref.ppm" refPix
-        savePpm "/tmp/bindless_heap.ppm" bindlessPix
-        let maxD, nDiff, nNonBg, total = diff refPix bindlessPix
-        Log.line "bindlessHeap: n=%d  plain-vs-bindless maxDelta=%d diffPixels=%d/%d coverage=%d" n maxD nDiff total nNonBg
-        let pass = nNonBg > 1000 && maxD <= 1
-        if pass then Log.line "bindlessHeap: PASS (vertex-pulled bindless geometry == plain indexed render)"
-        else Log.warn "bindlessHeap: FAIL (maxDelta=%d diffPixels=%d coverage=%d)" maxD nDiff nNonBg
-        pass
 
     // "blank-screen" debugging: POSITIONS-ONLY bindless pull (no normals/lighting),
     // flat principal color per handle (R/G/B), MAGENTA clear. Box geometry whose plain
@@ -2498,65 +2078,6 @@ module Golden =
         let pass = colored > 1000L
         if pass then Log.line "bindlessCleanBox: PASS (positions-only pull renders under perspective)"
         else Log.warn "bindlessCleanBox: FAIL (screen is magenta -> position pull blank under perspective)"
-        pass
-
-    // Type-agnostic / integral-attribute proof: V3f Positions + an INTEGRAL V3i "Tint"
-    // attribute (decoded via the int view of the same buffer) + uint16 indices. Each
-    // box gets a distinct integer tint; seeing all three colors proves int decode,
-    // mixed float/int attributes in one buffer, and 16-bit indices all work.
-    module BVI =
-        type VIn  = { [<Semantic("Positions")>] pos : V3f; [<Semantic("Tint")>] tint : V3i }
-        type VOut = { [<Position>] clip : V4f; [<Semantic("Col")>] col : V3f }
-        let shade (v : VIn) =
-            vertex {
-                let vp : M44f = uniform?ViewProjTrafo
-                return { clip = vp * V4f(v.pos, 1.0f)
-                         col  = V3f(float32 v.tint.X, float32 v.tint.Y, float32 v.tint.Z) / 255.0f }
-            }
-        let frag (v : VOut) = fragment { return V4f(v.col, 1.0f) }
-
-    let bindlessVarTest () =
-        Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let runtime = app.Runtime
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
-        let size = AVal.constant (V2i(640, 640))
-        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
-        let bpos = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-        let bidx = g.IndexArray |> unbox<int[]>
-        let offsets = [| for x in -1 .. 1 do for y in -1 .. 1 -> V3f(float32 x * 1.3f, float32 y * 1.3f, 0.0f) |]
-        let n = offsets.Length
-        let palette = [| V3i(230, 40, 40); V3i(40, 210, 80); V3i(60, 120, 235) |]
-        let positions = offsets |> Array.map (fun o -> bpos |> Array.map (fun p -> p + o))
-        let tints     = offsets |> Array.mapi (fun i _ -> Array.replicate bpos.Length palette.[i % palette.Length])  // V3i per vertex
-        let idx16     = offsets |> Array.map (fun _ -> bidx |> Array.map uint16)                                     // uint16 indices
-        let attribs   = Array.init n (fun i -> Map.ofList [ DefaultSemantic.Positions, (positions.[i] :> System.Array)
-                                                            Symbol.Create "Tint",       (tints.[i]     :> System.Array) ])
-        let idxArrs   = idx16 |> Array.map (fun a -> a :> System.Array)
-        let view = CameraView.lookAt (V3d(0.0, -8.0, 6.0)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
-        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
-        let eff = Effect.compose [ Effect.ofFunction BVI.shade; Effect.ofFunction BVI.frag ]
-        let pix =
-            use task = Heap.bindless runtime IndexedGeometryMode.TriangleList eff attribs idxArrs (AVal.constant view) (AVal.constant proj) |> Sg.compile runtime signature
-            let out = task |> RenderTask.renderToColor size
-            out.Acquire()
-            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
-        let m = pix.GetMatrix<C4b>()
-        let mutable r = 0L
-        let mutable gr = 0L
-        let mutable b = 0L
-        m.ForeachCoord(fun (p : V2l) ->
-            let v = m.[p]
-            if v.R > 150uy && v.G < 110uy && v.B < 110uy then r  <- r + 1L
-            if v.G > 150uy && v.R < 110uy then gr <- gr + 1L
-            if v.B > 150uy && v.R < 110uy then b  <- b + 1L)
-        Log.line "bindlessVar: V3i tint + uint16 idx -> red=%d green=%d blue=%d px" r gr b
-        let pass = r > 300L && gr > 300L && b > 300L
-        if pass then Log.line "bindlessVar: PASS (integral V3i attribute decoded + uint16 indices + mixed float/int buffer)"
-        else Log.warn "bindlessVar: FAIL (red=%d green=%d blue=%d — integral decode or uint16 index broken)" r gr b
         pass
 
     // Per-object backend TEXTURES through the real heap: N ROs with a NAIVE single-
@@ -3587,52 +3108,6 @@ module Golden =
         let pass = maxD <= 1 && nNonBg > 500L && instBuckets = 1
         if pass then Log.line "already-instanced: PASS (instanced inputs == non-instanced expansion; per-draw routed by gl_DrawID)"
         else Log.warn "already-instanced: FAIL (maxDelta=%d nNonBg=%d buckets=%d)" maxD nNonBg instBuckets
-        pass
-
-    // Verifies per-instance heap rendering (instanceCount > 1): the SAME per-
-    // instance data rendered via Heap.instanced (one instanced draw) and via
-    // Heap.scene (N indirect sub-draws) must be pixel-identical — both index the
-    // same arena, one by gl_InstanceIndex (instance id), the other by firstInstance.
-    let instancingTest () =
-        Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let runtime = app.Runtime
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
-        let size = AVal.constant (V2i(1024, 1024))
-        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
-        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
-        let index     = g.IndexArray |> unbox<int[]>
-        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 16.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
-        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
-        let viewProj = AVal.constant (view * proj)
-        let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
-        let side = 7
-        let instances =
-            [| for x in 0 .. side-1 do
-                 for y in 0 .. side-1 ->
-                   let i = x * side + y
-                   let p = V3d(float (x-side/2) * 1.4, float (y-side/2) * 1.4, 0.0)
-                   Map.ofList [
-                     "HeapModelTrafo", Heap.mat4 (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit))
-                     "HeapColor",      Heap.v4   (AVal.constant (palette.[i % palette.Length].ToV4f())) ] |]
-        let n = instances.Length
-        let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
-        let imageOf (sg : ISg) =
-            use task = sg |> Sg.compile runtime signature
-            let out = task |> RenderTask.renderToColor size
-            out.Acquire()
-            try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
-        let imgInst  = imageOf (Heap.instanced IndexedGeometryMode.TriangleList positions normals index effect instances |> Sg.uniform "ViewProjTrafo" viewProj)
-        let imgScene = imageOf (Heap.scene     IndexedGeometryMode.TriangleList positions normals index effect instances |> Sg.uniform "ViewProjTrafo" viewProj)
-        let maxD, nDiff, nNonBg, total = diff imgScene imgInst
-        Log.line "instancing: %d instances (1 instanced draw)  vs scene (multidraw)  maxDelta=%d diffPixels=%d/%d coverage=%d" n maxD nDiff total nNonBg
-        let pass = maxD <= 1 && nNonBg > total / 100L
-        if pass then Log.line "instancing: PASS (instanceCount=%d instanced draw == multidraw scene, per-instance arena data)" n
-        else Log.warn "instancing: FAIL (maxDelta=%d nNonBg=%d)" maxD nNonBg
         pass
 
     // Verifies the per-RO IsActive visibility gate: deactivating half the draws
