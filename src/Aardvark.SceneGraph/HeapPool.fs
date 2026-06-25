@@ -3320,7 +3320,9 @@ module Heap =
                 // the SSBO binding indexes [0,n): hand back the persistent array
                 // when it is exactly sized, else a snapshot (ref-copy, no aval reads).
                 if vtxOut.Length = n then vtxOut else Array.sub vtxOut 0 (max 1 n))
-        let arenaU = ((arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
+        // page 0's HeapData binding: PAGE 0's arena explicitly (NOT the mutable `arena`, which the
+        // add path re-points at the current fill page). pages >0 bind their own arena in ensurePageROs.
+        let arenaU = ((storage.Page(0).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         let headersU = headersAval :> IAdaptiveValue
 
         // ── derived-uniform COMPUTE dispatch (fp64, once per slot) ────────
@@ -3428,7 +3430,7 @@ module Heap =
                     updater.GetValue t |> ignore
                     // arena buffer with constituents staged (View/Proj uploaded;
                     // Model space allocated) + the per-slot header offsets, current.
-                    let arenaBuf = (arena :> aval<IBackendBuffer>).GetValue t
+                    let arenaBuf = (storage.Page(0).Arena :> aval<IBackendBuffer>).GetValue t
                     let hdrBuf   = (headersBuf :> aval<IBackendBuffer>).GetValue t
                     // (1) chain fold → Model fwd/bwd constituents — re-dispatched ONLY
                     // when the chain structure or a link value changed (the fold output
