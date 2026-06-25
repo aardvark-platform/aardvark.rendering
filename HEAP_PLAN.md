@@ -324,3 +324,21 @@ camera-freshness for free and how derivedU already re-evaluates per camera move.
 per page per changed frame (the perf the pre-pass avoided) — acceptable; optimize later if the orbit
 benchmark regresses. This ALSO fixes livechain (the chain fold is already Run-based; only its page-0
 scoping remains — give composeModel the same HeapSlotPage/HeapPageId guard + per-page Run).
+
+### Run-based derive ATTEMPT (branch heap-step2b-runderive-wip @ 28fe75da) — partial, NOT merged
+Implemented the planned fix: non-chain derive via per-page CompileCompute+Run, pulled from each page's
+draw HeapData binding (`pageDeriveU`), chain buckets keep the pre-pass. Result:
+  - sgheap[ag] (Ag path) renders multi-page PIXEL-EXACT via the Run — confirms the Run mechanism is
+    correct and the per-page wiring is right.
+  - sgheap[ts]/[mixed] (Simple path) STILL fail, but the failure mode CHANGED: diff now VARIES across
+    runs (15694 / 29609 / 11041 px) = a RACE, not the old deterministic miss. Two open causes:
+    (1) missing compute→GRAPHICS barrier — the chain fold's Run output reaches draws via the downstream
+        derive pre-pass's compute→vertex barrier; a STANDALONE derive Run has none. Fix: append
+        `ComputeCommand.SyncBuffer(arenaBuf, ShaderWrite, ShaderRead)` to the per-page derive program
+        (recompile when the arena buffer reallocs, not just on group-count change).
+    (2) instrumentation hinted the Simple path may not PULL the per-page draw's custom HeapData binding
+        at all (runPageDerive logged only for the Ag heap) — but page-0 still renders correct on [ts]
+        without a logged Run, which is unresolved. Re-instrument with a per-heap-tagged counter to settle
+        whether [ts] pulls pageDeriveU 0 / 1.
+  - 1-page 20/20 preserved. heap-step2b stays at the clean checkpoint (1a779f3c, pre-pass derive); the
+    Run attempt is parked on the wip branch to resume from.
