@@ -363,6 +363,16 @@ module Golden =
                 return { v with pos = vp * (m * v.pos); n = m.TransformDir v.n }
             }
 
+        // FRAGMENT shader that reads a PER-DRAW uniform (HeapColor) — mirrors the demo, whose
+        // simpleLighting/water read LightLocation/WaterTime per-draw in the fragment. This forces
+        // the heap to pass the slot to the fragment + a fragment HeapData gather, ALONGSIDE the
+        // vertex HeapDeriveData gather (derived ModelTrafo/ViewProjTrafo).
+        let fragUni (v : Shaders.Vertex) =
+            fragment {
+                let extra : V4f = uniform?HeapColor
+                return { v with c = v.c * 0.5f + extra * 0.5f }
+            }
+
     let sgHeapTest () =
         Aardvark.Init()
         use app = new Aardvark.Application.Slim.VulkanApplication(false)
@@ -373,31 +383,47 @@ module Golden =
                 DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
         let size = AVal.constant (V2i(1024, 1024))
 
-        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 18.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
-        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        // SCALE knobs (default = original 16×16, unit coords → golden unchanged). Set SG_S (grid side)
+        // and SG_SCALE (coord/camera multiplier) to reproduce the demo's many-parts + large-CAD-coords
+        // case that golden otherwise misses (e.g. SG_S=64 SG_SCALE=200 → 4096 parts, ±7.7k coords).
+        let envI (k : string) (d : int) = match System.Environment.GetEnvironmentVariable k with null | "" -> d | s -> int s
+        let envF (k : string) (d : float) = match System.Environment.GetEnvironmentVariable k with null | "" -> d | s -> float s
+        let s = envI "SG_S" 16
+        let sc = envF "SG_SCALE" 1.0
+        let spacing = 1.2 * sc
+        let ext = float s * spacing
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * (ext * 1.2)) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 (max 0.1 (ext * 0.002)) (ext * 100.0) 1.0 |> Frustum.projTrafo
 
         let boxSg =
-            IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White
+            IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6 * sc)) C4b.White
             |> Sg.ofIndexedGeometry
 
         let palette = [| C4f.Red; C4f.LawnGreen; C4f.DodgerBlue; C4f.Gold; C4f.Magenta; C4f.Cyan |]
-        let s = 16
         let leaves =
             Array.init (s * s) (fun i ->
-                let p = V3d(float (i % s - s/2) * 1.2, float (i / s - s/2) * 1.2, 0.0)
+                let p = V3d(float (i % s - s/2) * spacing, float (i / s - s/2) * spacing, 0.0)
                 boxSg
                 |> Sg.trafo' (Trafo3d.Translation p)
                 |> Sg.uniform' "HeapColor" (palette.[i % palette.Length].ToV4f()))
 
         // effect + camera ABOVE the (optional) heap node — attributes flow to the
         // leaves through the scope either way.
+        // SG_DYN=1 → DYNAMIC (non-constant) view/proj avals, exercising the dynamic-constituent
+        // path (arena.Add/RegionWriter into deriveArena) the demo's free-fly camera uses — vs the
+        // constant StageOnce path. The demo's View/Proj are dynamic; golden's are constant.
+        let dyn = (System.Environment.GetEnvironmentVariable "SG_DYN" = "1")
+        let viewA : aval<Trafo3d> = if dyn then AVal.custom (fun _ -> view) else AVal.constant view
+        let projA : aval<Trafo3d> = if dyn then AVal.custom (fun _ -> proj) else AVal.constant proj
         let scene (wrap : ISg -> ISg) =
             leaves
             |> Sg.ofArray
             |> wrap
-            |> Sg.effect [ Effect.ofFunction SGH.vert; Effect.ofFunction Shaders.shadeFrag ]
-            |> Sg.viewTrafo (AVal.constant view)
-            |> Sg.projTrafo (AVal.constant proj)
+            |> Sg.effect (if System.Environment.GetEnvironmentVariable "SG_FRAGUNI" = "1"
+                          then [ Effect.ofFunction SGH.vert; Effect.ofFunction SGH.fragUni; Effect.ofFunction Shaders.shadeFrag ]
+                          else [ Effect.ofFunction SGH.vert; Effect.ofFunction Shaders.shadeFrag ])
+            |> Sg.viewTrafo viewA
+            |> Sg.projTrafo projA
 
         let renderToPix (sg : ISg) =
             use task = runtime.CompileRender(signature, sg)
