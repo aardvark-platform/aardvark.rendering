@@ -2699,6 +2699,10 @@ module Heap =
         // ── draw records + headers: slot-indexed, growable, free-listed ──
         let mutable entries : DrawCallInfo[] = Array.zeroCreate 16
         let mutable headers : int[] = Array.zeroCreate (16 * headerStride)
+        // PAGED: which storage page each slot's group lives on (parallel to `entries`); a
+        // page's sub-draw renders only its slots (others get a 0-instance record).
+        let mutable slotPage : int[] = Array.zeroCreate 16
+        let zeroDraw = DrawCallInfo(FaceVertexCount = 0, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 0)
         let freeSlots = System.Collections.Generic.Stack<int>()
         let mutable highWater = 0
         let slots = System.Collections.Generic.Dictionary<RenderObject, HeapSlot>(HashIdentity.Reference)
@@ -2744,6 +2748,9 @@ module Heap =
                 let ne = Array.zeroCreate<DrawCallInfo> n
                 System.Array.Copy(entries, ne, entries.Length)
                 entries <- ne
+                let np = Array.zeroCreate<int> n
+                System.Array.Copy(slotPage, np, slotPage.Length)
+                slotPage <- np
                 let nh = Array.zeroCreate<int> (n * headerStride)
                 System.Array.Copy(headers, nh, headers.Length)
                 headers <- nh
@@ -2889,6 +2896,11 @@ module Heap =
             arena <- pg.Arena; arenaAlloc <- pg.ArenaAlloc; regions <- pg.Regions
             singleRegions <- pg.SingleRegions; constituentsF <- pg.ConstituentsF; constituentsB <- pg.ConstituentsB
             if arena.ExtraDependency.IsNone then arena.ExtraDependency <- Some (updater :> IAdaptiveValue)
+        // conservative worst-case word footprint of a slot's group (geometry + per-draw uniforms +
+        // constituents), so PlacePage rolls BEFORE a slot that wouldn't fit ⇒ a group never spans pages.
+        let estimateSlotWords (ro : RenderObject) : int =
+            let vc = faceVertexCountOf ro
+            vc * (max 4 (numAttrs * 4)) + (names.Length + numConst + 8) * 32
         let allocConstituent (av : IAdaptiveValue) (inv : bool) : int =
             let d = if inv then constituentsB else constituentsF
             match d.TryGetValue av with
@@ -3174,8 +3186,9 @@ module Heap =
             // draws are NON-indexed (the shader storage-decodes the indices), so
             // the DrawCallInfo layout IS the native VkDrawIndirectCommand /
             // GL DrawArraysIndirectCommand layout — staged verbatim.
+            // page 0's sub-draw: only its slots draw; slots on other pages get a 0-instance record.
             let inline stage (s : int) =
-                drawStaging.[s] <- entries.[s]
+                drawStaging.[s] <- if slotPage.[s] = 0 then entries.[s] else zeroDraw
             if drawsAllDirty then
                 drawsAllDirty <- false
                 dirtyDraws.Clear()
@@ -3672,8 +3685,48 @@ module Heap =
                 let dispatch = RuntimeCommand.Dispatch(derivedShader, derivedGroups, Map.ofList [ "__input", box derivedInput ])
                 CommandRenderObject(RenderPass.main, scope, dispatch) :> IRenderObject
 
-        member _.RenderObject = bucketRO :> IRenderObject
-        member _.DeriveRO = if hasDerived then ValueSome deriveRO else ValueNone
+        // PAGED draw fan-out. page 0 = `bucketRO` (the incremental machinery above, now zeroing
+        // non-page-0 slots). pages >0 each get a fresh indirect (its slots only, full-rewrite flush)
+        // + a clone of `bucketRO` binding page i's arena. `resultAval` is rebuilt per membership
+        // version, so newly-rolled pages appear. FOLLOW-UP: per-page derive — pages >0 bind their
+        // plain arena, so any derived/fp64/chain uniform there is page-0-stale until that lands.
+        let pageROs = System.Collections.Generic.List<IRenderObject>()
+        do pageROs.Add(bucketRO :> IRenderObject)
+        let pageDrawBufs = System.Collections.Generic.List<MirrorBuffer>()
+        let ensurePageROs () =
+            while pageROs.Count < storage.Count do
+                let pageIdx = pageROs.Count
+                let mutable pstaging = Array.zeroCreate<DrawCallInfo> (max 16 entries.Length)
+                let db = MirrorBuffer(runtime, pstaging.Length * sizeof<DrawCallInfo>, BufferUsage.Indirect)
+                let flush (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
+                    if pstaging.Length < entries.Length then pstaging <- Array.zeroCreate entries.Length
+                    db.ResizeInPlace(uint64 (pstaging.Length * sizeof<DrawCallInfo>))
+                    for s in 0 .. highWater - 1 do pstaging.[s] <- (if slotPage.[s] = pageIdx then entries.[s] else zeroDraw)
+                    if highWater > 0 then db.Write(pstaging, 0UL, 0, highWater)
+                db.Dependency <- Some (updater :> IAdaptiveValue)
+                db.Flush <- flush
+                db.Name <- "HeapIndirectPage"
+                pageDrawBufs.Add db
+                let indirectP =
+                    (db :> aval<IBackendBuffer>)
+                    |> AdaptiveResource.mapNonAdaptive (fun b -> IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> highWater (b :> IBuffer))
+                let pageArenaU = ((storage.Page(pageIdx).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
+                let ro = RenderObject.Clone bucketRO
+                ro.DrawCalls <- DrawCalls.Indirect indirectP
+                ro.Uniforms <-
+                    { new IUniformProvider with
+                        member _.TryGetUniform(s, name) =
+                            if name = symData || name = symDataI || name = symDataD then ValueSome pageArenaU
+                            else bucketRO.Uniforms.TryGetUniform(s, name)
+                        member _.Dispose() = () }
+                pageROs.Add(ro :> IRenderObject)
+
+        // PAGED: one render object per live storage page (each binds that page's arena +
+        // its slots' indirect). ensurePageROs lazily creates them; resultAval (rebuilt per
+        // membership version) picks up new pages. Page 0 keeps the derive/fold (`derivedU`);
+        // pages >0 bind their plain arena (per-page derive is the documented follow-up).
+        member x.RenderObjects : IRenderObject[] = ensurePageROs (); pageROs.ToArray()
+        member x.DeriveROs : IRenderObject[] = if hasDerived then [| deriveRO |] else [||]
         member _.Count = slots.Count
         member _.IsChain = chainMode
         member _.ChainDistinct = if chainMode then chainLinks.DistinctCount else 0
@@ -3694,8 +3747,9 @@ module Heap =
             let slot = if freeSlots.Count > 0 then freeSlots.Pop() else let s = highWater in highWater <- s + 1; s
             ensureSlot slot
             // route this slot's whole group to one page (rolling to a fresh page if the current
-            // one is full). Phase A: estimate 0 ⇒ always the current page (golden = 1 page).
-            setPage (storage.PlacePage 0)
+            // one is full). Estimate the slot's worst-case words so it always fits the chosen page.
+            setPage (storage.PlacePage (estimateSlotWords ro))
+            slotPage.[slot] <- curPage
             let regionKeys = System.Collections.Generic.List<IAdaptiveValue>(names.Length)
             let outBlocks = System.Collections.Generic.List<Management.Block<unit>>()
             for i in 0 .. names.Length - 1 do
@@ -4474,21 +4528,15 @@ module Heap =
             | _ -> ()
         let resultAval =
             updater |> AVal.map (fun _ ->
-                // each derive-bucket also contributes a draw-less derive RO (pre-pass dispatch)
-                let mutable nDerive = 0
-                for KeyValue(_, c) in caches do (match c.DeriveRO with ValueSome _ -> nDerive <- nDerive + 1 | ValueNone -> ())
-                let out = Array.zeroCreate<IRenderObject> (caches.Count + nDerive + passSet.Count)
-                let mutable i = 0
+                // derive pre-passes ∪ per-page bucket sub-draws ∪ untouched passthrough.
+                // a bucket now contributes ONE RO per live storage page (RenderObjects) plus its
+                // derive pre-passes (DeriveROs); both arrays grow as the bucket rolls new pages.
+                let out = System.Collections.Generic.List<IRenderObject>(caches.Count * 2 + passSet.Count)
                 for KeyValue(_, c) in caches do
-                    match c.DeriveRO with
-                    | ValueSome d -> out.[i] <- d; i <- i + 1
-                    | ValueNone -> ()
-                    out.[i] <- c.RenderObject
-                    i <- i + 1
-                for o in passSet do
-                    out.[i] <- o
-                    i <- i + 1
-                out)                                    // derive pre-passes ∪ collapsed buckets ∪ untouched passthrough
+                    out.AddRange c.DeriveROs
+                    out.AddRange c.RenderObjects
+                for o in passSet do out.Add o
+                out.ToArray())
         (resultAval |> ASet.ofAVal), teardown
 
     /// Collapse an adaptive set of N render objects into bucket render objects.
