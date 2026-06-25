@@ -207,3 +207,21 @@ byte-identical (golden gate).
   RISK: the per-page indirect + dynamic pageSlots management + N-RO emission is the bulk; headers/gather
   unchanged. No green intermediate inside 2b (single-RO → N-RO is atomic) — single page must stay
   byte-identical (golden gate).
+
+## STEP 2b PROGRESS (branch heap-step2b)
+DONE & golden 20/20 (1-page) at every commit; multi-page (HEAP_PAGE_WORDS=16384) = 17/20:
+- 9563d9e0 per-page draw fan-out: slotPage routing, per-page indirect buffer + cloned per-page RO
+  (binds Page(i).Arena), reactive RenderObjects/DeriveROs arrays in resultAval, rolling estimate.
+- 2b17e69b page-0 RO binds Page(0).Arena (not the mutable current that the add-path re-points).
+- fbbd7f49 per-page geometry dedup: attrStatic/idxStatic moved into PageArena (shared-mesh cross-page
+  corruption: sgheap 134k→19k wrong px).
+MULTI-PAGE 17/20 PASS incl plain/buckets/geom/textures/gpugeom/fp64/CHAIN/geomchurn. 3 fail:
+- sgheap: ~14% px still wrong (maxDelta 217) at multi-page — a residual per-page leak in the
+  singleton/single-value or gate path (geometry now correct; bulk fixed). TODO: find the last
+  global-offset holder (candidates: gates not re-run in pages>0 flush; allocOutput/fold; or a
+  single-value subtlety). Static fp64+chain PASS multi-page, so the derive isn't fundamentally broken.
+- livechain/livechaindeep: LIVE chain + churn + multi-page (static chain passes). The per-page chain
+  FOLD / derive dispatch is page-0-scoped; needs per-page derive (one dispatch per page, page-i arena
+  + slots). This is the remaining big follow-up (Vienna fp64 will need it too).
+KNOWN COARSENESS (acceptable for now): pages>0 use a full-rewrite indirect flush (not incremental);
+PublishStats/compaction iterate only the current page's dicts.
