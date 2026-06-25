@@ -56,6 +56,11 @@ module HeapUniforms =
         // buffers in its fp64 compose path.)
         member x.HeapDataD   : float[]   = uniform?StorageBuffer?HeapDataD
         member x.HeapHeaders : int[]     = uniform?StorageBuffer?HeapHeaders
+        // PAGED derive: slot->page map + the page the per-page derive dispatch is computing.
+        // A page's derive binds its own arena, so it must skip slots on other pages (whose
+        // header offsets are page-local to a different page — writing them here corrupts).
+        member x.HeapSlotPage : int[] = uniform?StorageBuffer?HeapSlotPage
+        member x.HeapPageId : int = uniform?HeapPageId
         // GPU trafo-chain: per-slot GPU-folded ModelTrafo (M44f), written by the
         // composeModel compute pass and gathered by gl_InstanceIndex / gl_DrawID.
         member x.HeapModelChain : M44f[] = uniform?StorageBuffer?HeapModelChain
@@ -2259,7 +2264,7 @@ module Heap =
         let composeDerived (n : int) (nRec : int) (hstride : int) (records : int[]) =
             compute {
                 let slot = getGlobalId().X
-                if slot < n then
+                if slot < n && uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
                     let hb = slot * hstride
                     for r in 0 .. nRec - 1 do
                         let rb = r * REC_STRIDE
@@ -2293,7 +2298,7 @@ module Heap =
         let composeDerivedDf32 (n : int) (nRec : int) (hstride : int) (records : int[]) =
             compute {
                 let slot = getGlobalId().X
-                if slot < n then
+                if slot < n && uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
                     let hb = slot * hstride
                     for r in 0 .. nRec - 1 do
                         let rb = r * REC_STRIDE
@@ -3175,6 +3180,11 @@ module Heap =
         let drawBuf    = MirrorBuffer(runtime, entries.Length * sizeof<DrawCallInfo>, BufferUsage.Indirect)
         let headersBuf = MirrorBuffer(runtime, headers.Length * 4, BufferUsage.Storage)
         let instBuf    = MirrorBuffer(runtime, instData.Length * 4, BufferUsage.Vertex)
+        // slot->page SSBO (for the per-page derive guard). Small; full-rewrite on pull.
+        let slotPageBuf = MirrorBuffer(runtime, max 16 slotPage.Length * 4, BufferUsage.Storage)
+        let flushSlotPage (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
+            slotPageBuf.ResizeInPlace(uint64 (max 16 slotPage.Length * 4))
+            if highWater > 0 then slotPageBuf.Write(slotPage, 0UL, 0, highWater)
         // CPU staging of the draw records in INDEXED layout (uploaded ranges
         // must be contiguous; entries itself stays in DrawCallInfo layout)
         let mutable drawStaging : DrawCallInfo[] = Array.zeroCreate entries.Length
@@ -3277,6 +3287,9 @@ module Heap =
             instBuf.Dependency <- dep
             instBuf.Flush <- flushInst
             instBuf.Name <- "HeapSlotAttr"
+            slotPageBuf.Dependency <- dep
+            slotPageBuf.Flush <- flushSlotPage
+            slotPageBuf.Name <- "HeapSlotPage"
 
         // ACQUISITION-PROPAGATING views over the bucket-owned AdaptiveBuffers:
         // AdaptiveResource.mapNonAdaptive keeps the IAdaptiveResource interface
@@ -3293,6 +3306,7 @@ module Heap =
             |> AdaptiveResource.mapNonAdaptive (fun b ->
                 IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> highWater (b :> IBuffer))
         let instAval = (instBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
+        let slotPageU = ((slotPageBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
         // re-reads only the live slots' avals (cheap when unchanged); a fresh
@@ -3385,24 +3399,29 @@ module Heap =
         // SEPARATE resource update (the pre-pass), reading the descriptor asynchronously, so
         // a deferred transact would race. (The chain folds keep Flush + an IMMEDIATE Run, so
         // their values are consumed synchronously in the same eval — no hazard there.)
-        let derivedInput : IComputeInputBinding =
-            if not hasDerived then Unchecked.defaultof<_>
-            else
-                let nAval = AVal.custom (fun t -> updater.GetValue t |> ignore; highWater)
-                let provider =
-                    { new IUniformProvider with
-                        member _.TryGetUniform(_, name) =
-                            match string name with
-                            | "n"           -> ValueSome (nAval :> IAdaptiveValue)
-                            | "nRec"        -> ValueSome (AVal.constant numDerivedRecords :> IAdaptiveValue)
-                            | "hstride"     -> ValueSome (AVal.constant headerStride :> IAdaptiveValue)
-                            | "records"     -> ValueSome (AVal.constant (recBuf :> IBuffer) :> IAdaptiveValue)
-                            | "HeapHeaders" -> ValueSome headersU
-                            | "HeapDataD"   -> ValueSome arenaU
-                            | "HeapData"    -> ValueSome arenaU
-                            | _             -> ValueNone
-                        member _.Dispose() = () }
-                runtime.CreateInputBinding(derivedShader, provider)
+        let nAvalDerive = if hasDerived then AVal.custom (fun t -> updater.GetValue t |> ignore; highWater) else AVal.constant 0
+        // PAGED: one derive input binding per page — binds THAT page's arena + HeapPageId so the
+        // guarded shader writes only page-i slots into page i's arena.
+        let pageDeriveInputs = System.Collections.Generic.List<IComputeInputBinding>()
+        let mkDerivedInput (pageArenaU : IAdaptiveValue) (pid : int) : IComputeInputBinding =
+            let provider =
+                { new IUniformProvider with
+                    member _.TryGetUniform(_, name) =
+                        match string name with
+                        | "n"            -> ValueSome (nAvalDerive :> IAdaptiveValue)
+                        | "nRec"         -> ValueSome (AVal.constant numDerivedRecords :> IAdaptiveValue)
+                        | "hstride"      -> ValueSome (AVal.constant headerStride :> IAdaptiveValue)
+                        | "records"      -> ValueSome (AVal.constant (recBuf :> IBuffer) :> IAdaptiveValue)
+                        | "HeapHeaders"  -> ValueSome headersU
+                        | "HeapSlotPage" -> ValueSome slotPageU
+                        | "HeapPageId"   -> ValueSome (AVal.constant pid :> IAdaptiveValue)
+                        | "HeapDataD"    -> ValueSome pageArenaU
+                        | "HeapData"     -> ValueSome pageArenaU
+                        | _              -> ValueNone
+                    member _.Dispose() = () }
+            let inp = runtime.CreateInputBinding(derivedShader, provider)
+            pageDeriveInputs.Add inp
+            inp
         let mutable chOffBuf : IBuffer<int> = Unchecked.defaultof<_>
         let mutable chLenBuf : IBuffer<int> = Unchecked.defaultof<_>
         let mutable chIdxBuf : IBuffer<int> = Unchecked.defaultof<_>
@@ -3691,11 +3710,16 @@ module Heap =
         // breaks membership churn (the inner render command does not track the bucket's
         // dynamic draw count → GPU hang). Both ROs come from the same Heap.ofRenderObjects
         // aset → same render task → same submission, so the pre-pass ordering holds.
-        let deriveRO : IRenderObject =
-            if not hasDerived then Unchecked.defaultof<_>
-            else
-                let dispatch = RuntimeCommand.Dispatch(derivedShader, derivedGroups, Map.ofList [ "__input", box derivedInput ])
-                CommandRenderObject(RenderPass.main, scope, dispatch) :> IRenderObject
+        // PAGED derive: one dispatch RO per page (binds page i's arena + HeapPageId=i; the
+        // guarded shader writes ONLY page-i slots into page i's arena). Grown like the draw ROs.
+        let pageDeriveROs = System.Collections.Generic.List<IRenderObject>()
+        let ensureDeriveROs () =
+            if hasDerived then
+                while pageDeriveROs.Count < storage.Count do
+                    let i = pageDeriveROs.Count
+                    let pageArenaU = ((storage.Page(i).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
+                    let dispatch = RuntimeCommand.Dispatch(derivedShader, derivedGroups, Map.ofList [ "__input", box (mkDerivedInput pageArenaU i) ])
+                    pageDeriveROs.Add(CommandRenderObject(RenderPass.main, scope, dispatch) :> IRenderObject)
 
         // PAGED draw fan-out. page 0 = `bucketRO` (the incremental machinery above, now zeroing
         // non-page-0 slots). pages >0 each get a fresh indirect (its slots only, full-rewrite flush)
@@ -3713,7 +3737,13 @@ module Heap =
                 let flush (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
                     if pstaging.Length < entries.Length then pstaging <- Array.zeroCreate entries.Length
                     db.ResizeInPlace(uint64 (pstaging.Length * sizeof<DrawCallInfo>))
-                    for s in 0 .. highWater - 1 do pstaging.[s] <- (if slotPage.[s] = pageIdx then entries.[s] else zeroDraw)
+                    let mutable drawn = 0
+                    for s in 0 .. highWater - 1 do
+                        let r = if slotPage.[s] = pageIdx then entries.[s] else zeroDraw
+                        if r.InstanceCount > 0 then drawn <- drawn + 1
+                        pstaging.[s] <- r
+                    if System.Environment.GetEnvironmentVariable "HEAP_PAGE_LOG" = "1" then
+                        Log.warn "[Heap] page %d/%d flush: draws %d of %d slots" pageIdx storage.Count drawn highWater
                     if highWater > 0 then db.Write(pstaging, 0UL, 0, highWater)
                 db.Dependency <- Some (updater :> IAdaptiveValue)
                 db.Flush <- flush
@@ -3738,7 +3768,7 @@ module Heap =
         // membership version) picks up new pages. Page 0 keeps the derive/fold (`derivedU`);
         // pages >0 bind their plain arena (per-page derive is the documented follow-up).
         member x.RenderObjects : IRenderObject[] = ensurePageROs (); pageROs.ToArray()
-        member x.DeriveROs : IRenderObject[] = if hasDerived then [| deriveRO |] else [||]
+        member x.DeriveROs : IRenderObject[] = ensureDeriveROs (); pageDeriveROs.ToArray()
         member _.Count = slots.Count
         member _.IsChain = chainMode
         member _.ChainDistinct = if chainMode then chainLinks.DistinctCount else 0
@@ -3883,6 +3913,11 @@ module Heap =
             slots.[ro] <- { Slot = slot; Page = curPage; RegionKeys = regionKeys.ToArray(); Active = active; Instances = k; InstOffset = firstInstance
                             InstBlock = instBlock; AttrKeys = attrKeys; IdxKey = idxKey
                             ConstKeys = constKeys.ToArray(); OutBlocks = outBlocks.ToArray(); FoldBlocks = foldBlocks.ToArray() }
+            // EAGERLY materialize the per-page draw + derive ROs the moment a slot lands on a new
+            // page (during membership update), so they're in `resultAval` BEFORE the first render
+            // builds its command buffer — otherwise the first frame after a roll misses them.
+            ensurePageROs ()
+            ensureDeriveROs ()
 
         member private _.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with
@@ -3983,7 +4018,7 @@ module Heap =
             // release the derived-uniform compute resources (else the runtime's
             // resource cache keeps live references to the ComputeProgram).
             let disp (o : obj) = match o with | :? System.IDisposable as d -> d.Dispose() | _ -> ()
-            if hasDerived then disp derivedInput; disp derivedShader; disp recBuf
+            if hasDerived then (for inp in pageDeriveInputs do disp inp); disp derivedShader; disp recBuf
             if chainActive then
                 disp chainProg; disp chainInput; disp chainShader
                 if not (isNull (box chOffBuf)) then chOffBuf.Dispose()
