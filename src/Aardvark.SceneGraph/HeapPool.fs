@@ -3730,7 +3730,15 @@ module Heap =
             // detection short-circuits ("unchanged") and AList.ofAVal never sees dispatches appended
             // after its first force — on the Simple/ISimpleSg path that force happens while only page 0
             // exists, so page>0 would never derive. A fresh array is reference-distinct ⇒ propagates.
-            else CommandRenderObject(RenderPass.main, scope, RuntimeCommand.Ordered (AList.ofAVal (updater |> AVal.map (fun _ -> Seq.toArray deriveCmds :> seq<RuntimeCommand>)))) :> IRenderObject
+            else
+                // STABLE snapshot: hand AList.ofAVal a NEW array only when the page count actually grew.
+                // A fresh array every eval makes AList re-diff each updater bump, churning the
+                // OrderedCommand's child DispatchCommands (destroy+recreate) — on the Simple path's
+                // multi-eval render that races descriptor prep and page>0's derive silently corrupts.
+                // Same ref while stable ⇒ no churn; new ref on growth ⇒ the appended dispatch is picked up.
+                let mutable snap : RuntimeCommand[] = [||]
+                let snapAval = updater |> AVal.map (fun _ -> (if snap.Length <> deriveCmds.Count then snap <- Seq.toArray deriveCmds); snap :> seq<RuntimeCommand>)
+                CommandRenderObject(RenderPass.main, scope, RuntimeCommand.Ordered (AList.ofAVal snapAval)) :> IRenderObject
 
         // PAGED draw fan-out. page 0 = `bucketRO` (the incremental machinery above, now zeroing
         // non-page-0 slots). pages >0 each get a fresh indirect (its slots only, full-rewrite flush)
