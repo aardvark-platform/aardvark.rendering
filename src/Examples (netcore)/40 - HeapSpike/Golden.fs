@@ -731,7 +731,7 @@ module Golden =
             Log.warn "sgprec: FAIL (scaleInvariant=%b f32Broke=%b) — heap derive may have dropped to float32" scaleInvariant f32Broke; false
 
     // LIVE GPU trafo-chain through Heap.ofRenderObjects (the real IncrementalBucket
-    // ingest, NOT the standalone derivedChainFp64 driver). Each RO exposes the
+    // ingest). Each RO exposes the
     // dom-shaped depth-2 model stack [boxLink; nodeTrafo] as the well-known
     // "ModelTrafoStack" uniform AND the CPU-folded "ModelTrafo" — so the SAME
     // input set renders two ways:
@@ -1939,8 +1939,7 @@ module Golden =
                 DefaultSemantic.Colors, TextureFormat.Rgba8
                 DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
         let size = AVal.constant (V2i(256, 256))
-        // WORLD-space triangles + a REAL camera (matches bindlessSimple) — the only
-        // thing now differing from Heap.bindless is clean effect vs substituteReads rewrite.
+        // WORLD-space triangles + a REAL camera; clean SSBO-array pull effect.
         let tri  = [| V4f(-1.5f, 0.0f, -0.5f, 1.0f); V4f(-0.2f, 0.0f, -0.5f, 1.0f); V4f(-0.85f, 0.0f, 0.7f, 1.0f) |]
         let quad = [| V4f(0.2f, 0.0f, -0.5f, 1.0f);  V4f(1.5f, 0.0f, -0.5f, 1.0f);  V4f(0.85f, 0.0f, 0.7f, 1.0f) |]
         let grn  = Array.replicate 3 (V4f(0.2f, 0.9f, 0.3f, 1.0f))
@@ -1981,12 +1980,6 @@ module Golden =
         if pass then Log.line "ssboArray5: PASS (2-array pull + real perspective camera renders both objects)"
         else Log.warn "ssboArray5: FAIL (green=%d red=%d)" green redc
         pass
-
-    // STEP 4: the ACTUAL Heap.bindless, but with trivial 2-triangle geometry instead
-    // of boxes. Steps 1-3 proved every mechanism works with a clean shader; this runs
-    // the real rewritten-pull effect + ViewProjTrafo path on minimal geometry. If this
-    // matches the plain render, the bug is the box geometry/index; if it fails, the bug
-    // is Heap.bindless's shader/setup (the rewrite or ViewProj).
 
     // "blank-screen" debugging: POSITIONS-ONLY bindless pull (no normals/lighting),
     // flat principal color per handle (R/G/B), MAGENTA clear. Box geometry whose plain

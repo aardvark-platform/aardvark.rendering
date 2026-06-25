@@ -5,6 +5,35 @@ File: `src/Aardvark.SceneGraph/HeapPool.fs`. The earlier **chunked-arena attempt
 (reverted; kept as tag `chunking-attempt` = 3dedeb39 for reference). This document is the source of
 truth — read it to resume.
 
+## ✅ RESOLVED (2026-06-26) — multi-page works end-to-end
+
+Paged/multi-page rendering is fixed on ALL paths (Simple/ISimpleSg + legacy Ag); the CadSceneDemo
+renders full Vienna multi-page. Everything below (STEP 2b, the `[ts]` hunt, the parked Run-derive
+wip) is HISTORICAL — superseded by this. Two real bugs, both fixed:
+
+1. **Derive↔draw ordering.** The per-page derive dispatches + the per-page draws are now one
+   **`HeapRenderObject`** (a backend-understood RO): the Vulkan backend records every derive as a
+   compute pre-pass → compute→vertex barrier → all draws, in ONE command buffer/submission. So each
+   page draws against its OWN fresh derive, and no render-task split (e.g. Dom's pickable /
+   non-pickable tasks) can separate a derive from the draws it feeds. Replaced the OrderedCmd /
+   DispatchCmd pre-pass and the parked Run attempt.
+2. **The real page-0 corruptor (the actual `[ts]` root cause).** `composeModel` (the Model chain
+   fold) was the one derive kernel never made page-aware: it dispatched over ALL slots but wrote
+   every slot's folded Model into **page-0's arena** at page-relative offsets — so page>0 slots
+   clobbered page 0. Now guarded by `HeapSlotPage = HeapPageId` and dispatched once per page binding
+   that page's arena, exactly like `composeDerived`.
+
+**Cleanup + coverage.** Removed the obsolete standalone prototypes (`Heap.scene/instanced/bindless/
+derivedFp64/derivedChainFp64/flattenChains`) + their prototype-only golden tests — all superseded by
+`ofRenderObjects` (`HeapPool.fs` 5254→4697). New production-path golden tests: **`sgsphere`** (two
+spheres, one per page — the decisive page-0-vs-clone repro) and **`sgprec`** (same scene at origin
+vs earth-radius scale, asserts pixel-identity — lights up if the `ModelViewProjTrafo` derive ever
+drops to float32).
+
+**Status.** `sgheap` (1-page + `HEAP_PAGE_WORDS=2048` 16-page), `sgsphere`, `sgprec` all PASS; orbit
+perf (1-page) unchanged (GPU identical, CPU within noise). MoltenVK + GL paths intentionally kept.
+Commits `73be44cb` (fix) + `9d9f2426` (cleanup + precision) on **v57**.
+
 ## The two goals (one mechanism)
 1. **>4 GB scenes.** Full Vienna's arena is ~3.5 GB (764 397 parts, 67.8 M verts, 22.6 M tris). The
    original failure was an int32 **byte** overflow (`off*4`) at 2 GB — not a GPU limit.

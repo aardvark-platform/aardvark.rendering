@@ -3241,9 +3241,9 @@ module Heap =
         // command buffer every call, which on a camera orbit (composeDerived re-runs
         // each frame) dominated the frame time. CompileCompute amortizes the build;
         // the input bindings are mutable, so updating values + Run re-executes.
-        // the per-slot derive runs as a render-integrated pre-pass (a DispatchCmd in
-        // the bucket's CommandRenderObject), so no IComputeTask/Run for it — just the
-        // dispatch group count, reactive on membership (highWater).
+        // the per-slot derive runs as a render-integrated pre-pass inside the bucket's
+        // HeapRenderObject (no IComputeTask/Run) — this is just its dispatch group
+        // count, reactive on membership (highWater).
         let derivedGroups =
             if not hasDerived then AVal.constant V3i.III
             else AVal.custom (fun t -> updater.GetValue t |> ignore; V3i(max 1 ((highWater + 63) / 64), 1, 1))
@@ -3257,11 +3257,9 @@ module Heap =
         let mutable chainFoldStale = chainActive
         let mutable lastLinkGen = -1
         let derivedU =
-            // No derive work happens here anymore — the per-slot derive is a
-            // render-integrated pre-pass (DispatchCmd in the bucket CommandRenderObject).
-            // derivedU only survives for CHAIN buckets, which must fold the Model chain into
-            // the arena (camera-independent, edit-gated) BEFORE the derive reads it; for a
-            // non-chain bucket HeapData is simply the arena buffer.
+            // derivedU survives only for CHAIN buckets: it folds the Model chain into
+            // EACH page's arena (camera-independent, edit-gated, guarded per page) before
+            // the derive reads it. Non-chain: HeapData is simply the arena buffer.
             if not hasDerived || not chainActive then arenaU
             else
                 AVal.custom (fun t ->
@@ -3526,22 +3524,15 @@ module Heap =
                     member _.Dispose() = () }
             ro
 
-        // The per-slot fp64 derive runs as a render-integrated PRE-PASS: a SEPARATE,
-        // draw-less CommandRenderObject carrying ONLY the DispatchCmd. The Vulkan
-        // CommandTask lifts every DispatchCommand out of the command tree and replays it
-        // (with a compute→vertex barrier) BEFORE the render pass, in the SAME submission as
-        // the draws — so there is no separate synchronous compute submission / fence-wait.
-        // CRUCIALLY the bucket draw RO is still exposed DIRECTLY (not wrapped in a
-        // CommandRenderObject): wrapping the dynamic indirect bucket in OrderedCmd+RenderCmd
-        // breaks membership churn (the inner render command does not track the bucket's
-        // dynamic draw count → GPU hang). Both ROs come from the same Heap.ofRenderObjects
-        // aset → same render task → same submission, so the pre-pass ordering holds.
-        // PAGED derive: one DispatchCmd per page (binds page i's arena + HeapPageId=i; the guarded
-        // shader writes ONLY page-i slots into page i's arena). They are bundled into ONE
-        // CommandRenderObject per bucket (an OrderedCmd over all pages) — the Vulkan backend lifts
-        // every nested DispatchCmd to a pre-pass, and a SINGLE pre-pass RO per bucket is what BOTH
-        // the Simple (ISimpleSg) and legacy traversals handle correctly (N separate pre-pass ROs
-        // per bucket are dropped by the Simple path).
+        // The bucket is ONE HeapRenderObject carrying its per-page derive dispatches +
+        // per-page draws. The Vulkan backend records all derives as a compute pre-pass →
+        // compute→vertex barrier → all draws, in ONE command buffer/submission: so each
+        // page draws against its OWN fresh derive (no page>0 staleness) and no render-task
+        // split (e.g. Dom's pickable/non-pickable) can separate a derive from its draws.
+        // The draws are recorded directly — NOT wrapped in OrderedCmd+RenderCmd, which
+        // would break the dynamic indirect bucket's membership churn (GPU hang).
+        // PAGED: one derive dispatch per page binds page i's arena + HeapPageId=i; the
+        // guarded shader writes ONLY page-i slots into page i's arena.
         // PER-PAGE derive specs: one (shader, groups, prepared input) per live page. The page-i input
         // binds page i's arena; the guarded shader writes ONLY page-i slots into page i's arena. These
         // are carried by the bucket's HeapRenderObject; the Vulkan backend records each as a compute
