@@ -3725,7 +3725,12 @@ module Heap =
                     deriveCmds.Add(RuntimeCommand.Dispatch(derivedShader, derivedGroups, Map.ofList [ "__input", box (mkDerivedInput pageArenaU i) ]))
         let deriveRO : IRenderObject =
             if not hasDerived then Unchecked.defaultof<_>
-            else CommandRenderObject(RenderPass.main, scope, RuntimeCommand.Ordered (AList.ofAVal (updater |> AVal.map (fun _ -> deriveCmds :> seq<RuntimeCommand>)))) :> IRenderObject
+            // NB: snapshot deriveCmds to a FRESH array each eval. Returning the mutable list itself
+            // (`deriveCmds :> seq`) hands AVal.map the SAME reference every time, so its change
+            // detection short-circuits ("unchanged") and AList.ofAVal never sees dispatches appended
+            // after its first force — on the Simple/ISimpleSg path that force happens while only page 0
+            // exists, so page>0 would never derive. A fresh array is reference-distinct ⇒ propagates.
+            else CommandRenderObject(RenderPass.main, scope, RuntimeCommand.Ordered (AList.ofAVal (updater |> AVal.map (fun _ -> Seq.toArray deriveCmds :> seq<RuntimeCommand>)))) :> IRenderObject
 
         // PAGED draw fan-out. page 0 = `bucketRO` (the incremental machinery above, now zeroing
         // non-page-0 slots). pages >0 each get a fresh indirect (its slots only, full-rewrite flush)

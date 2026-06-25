@@ -288,3 +288,39 @@ derive dispatches into ONE OrderedCmd CommandRenderObject/bucket.
   wrapping the dynamic-indirect bucket breaks membership churn → GPU hang). Derives CAN be wrapped.
 - pages>0 currently use a FULL-REWRITE indirect flush (re-stage all slots each pull). Fine for >4 GB;
   for orbit-perf parity make it incremental (per-page dirty sets) — but only matters under churn/orbit.
+
+## STEP 2b — [ts] ROOT CAUSE NAILED (2026-06-25)
+Exhaustive instrumentation PROVED the heap output is BYTE-IDENTICAL and correct on both the Simple
+([ts]) and Ag ([ag]) traversals at multi-page — same page count, same per-page draw ROs, same single
+merged derive RO, both flush the page-1 indirect (32 slots) identically, both upload slotPageBuf with
+the correct page map (32 page>0 slots), both replay 2 derive DispatchCommands in the final frame, and
+descriptors are prepared (updateCommands precedes updateResources in CommandTask.Perform). Despite all
+that, [ts] renders page>0 boxes off-screen (stale derived ViewProjTrafo) — DETERMINISTICALLY (29968 px
+@16384, stable across runs), scaling with page count (~99% wrong @2048/16pp). [ag] is pixel-exact.
+
+CONCLUSION: the bug is NOT in HeapPool — it is the Aardvark **Simple/ISimpleSg render path mis-executing
+≥2 compute pre-passes**. 1 DispatchCommand pre-pass works on [ts] (1-page passes); 2+ fail. Raw-aset
+CompileRender (uniform/textured, NO derive) passes multi-page on the same Simple compile path, so it is
+specifically the multi-DispatchCommand pre-pass interaction. Root cause likely lives in CommandTask's
+compute pre-pass replay vs the Simple-path task/eval ordering (the [ts] task does 4 Perform evals
+0,0,0,2 vs [ag]'s 0,2). Verified ruled out: dropped ROs, RO dedup (Clone→fresh Id), AVal.map same-ref
+short-circuit (fixed anyway: deriveCmds snapshot via Seq.toArray), slotPageBuf upload, descriptor prep.
+
+### THE FIX (next session — tractable, proven pattern)
+Convert the per-page derive from a render-integrated pre-pass (DispatchCmd in the OrderedCmd
+CommandRenderObject) to a **binding-triggered synchronous Run**, EXACTLY like the chain fold (`derivedU`
+at HeapPool.fs ~3454, `chainProg.Run()` ~3531) — which uses CompileCompute+Run and DOES work multi-page
+on the Simple path (static `chain` passes). Per page i:
+  - persistent `deriveProg_i = runtime.CompileCompute [Bind derivedShader; SetInput (mkDerivedInput
+    Page(i).Arena i); Dispatch g]` (recompile only when g changes, cf. chainProgG).
+  - trigger `pageDeriveU_i = AVal.custom (fun t -> updater.GetValue t|>ignore; let buf =
+    Page(i).Arena.GetValue t; deriveInput_i.Flush(); deriveProg_i.Run(); buf)`.
+  - the page-i DRAW RO binds `pageDeriveU_i` for symData/I/D (instead of the plain page arena).
+  - DELETE deriveRO / deriveCmds / the OrderedCmd derive entirely.
+CAMERA CORRECTNESS (the concern): the trigger depends on `Page(i).Arena`, which is ALREADY marked
+outdated on a camera move (the View/Proj constituents re-stage → arena aval dirties → the draw
+re-renders → re-pulls the trigger → re-runs the derive). This is exactly how the pre-pass got
+camera-freshness for free and how derivedU already re-evaluates per camera move. Cost: a Run() submit
+per page per changed frame (the perf the pre-pass avoided) — acceptable; optimize later if the orbit
+benchmark regresses. This ALSO fixes livechain (the chain fold is already Run-based; only its page-0
+scoping remains — give composeModel the same HeapSlotPage/HeapPageId guard + per-page Run).
