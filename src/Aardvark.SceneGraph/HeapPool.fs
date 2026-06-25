@@ -3737,13 +3737,8 @@ module Heap =
                 let flush (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
                     if pstaging.Length < entries.Length then pstaging <- Array.zeroCreate entries.Length
                     db.ResizeInPlace(uint64 (pstaging.Length * sizeof<DrawCallInfo>))
-                    let mutable drawn = 0
                     for s in 0 .. highWater - 1 do
-                        let r = if slotPage.[s] = pageIdx then entries.[s] else zeroDraw
-                        if r.InstanceCount > 0 then drawn <- drawn + 1
-                        pstaging.[s] <- r
-                    if System.Environment.GetEnvironmentVariable "HEAP_PAGE_LOG" = "1" then
-                        Log.warn "[Heap] page %d/%d flush: draws %d of %d slots" pageIdx storage.Count drawn highWater
+                        pstaging.[s] <- (if slotPage.[s] = pageIdx then entries.[s] else zeroDraw)
                     if highWater > 0 then db.Write(pstaging, 0UL, 0, highWater)
                 db.Dependency <- Some (updater :> IAdaptiveValue)
                 db.Flush <- flush
@@ -3767,8 +3762,11 @@ module Heap =
         // its slots' indirect). ensurePageROs lazily creates them; resultAval (rebuilt per
         // membership version) picks up new pages. Page 0 keeps the derive/fold (`derivedU`);
         // pages >0 bind their plain arena (per-page derive is the documented follow-up).
-        member x.RenderObjects : IRenderObject[] = ensurePageROs (); pageROs.ToArray()
-        member x.DeriveROs : IRenderObject[] = ensureDeriveROs (); pageDeriveROs.ToArray()
+        // built deterministically by SyncPages (called from the membership updater); the
+        // members just hand back the current set.
+        member x.SyncPages() = ensurePageROs (); ensureDeriveROs ()
+        member x.RenderObjects : IRenderObject[] = pageROs.ToArray()
+        member x.DeriveROs : IRenderObject[] = pageDeriveROs.ToArray()
         member _.Count = slots.Count
         member _.IsChain = chainMode
         member _.ChainDistinct = if chainMode then chainLinks.DistinctCount else 0
@@ -3913,11 +3911,6 @@ module Heap =
             slots.[ro] <- { Slot = slot; Page = curPage; RegionKeys = regionKeys.ToArray(); Active = active; Instances = k; InstOffset = firstInstance
                             InstBlock = instBlock; AttrKeys = attrKeys; IdxKey = idxKey
                             ConstKeys = constKeys.ToArray(); OutBlocks = outBlocks.ToArray(); FoldBlocks = foldBlocks.ToArray() }
-            // EAGERLY materialize the per-page draw + derive ROs the moment a slot lands on a new
-            // page (during membership update), so they're in `resultAval` BEFORE the first render
-            // builds its command buffer — otherwise the first frame after a roll misses them.
-            ensurePageROs ()
-            ensureDeriveROs ()
 
         member private _.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with
@@ -4558,6 +4551,10 @@ module Heap =
                 let mutable chainB = 0
                 let mutable chainD = 0
                 for KeyValue(_, c) in caches do
+                    // materialize each bucket's per-page render/derive ROs to match its storage,
+                    // DETERMINISTICALLY here in the membership update — so they're present in
+                    // `resultAval` before any render builds its command buffer (no lazy/first-frame gap).
+                    c.SyncPages()
                     if c.IsChain then chainB <- chainB + 1; chainD <- chainD + c.ChainDistinct
                 lastChainBuckets <- chainB
                 if chainB > 0 then lastDistinctLinks <- chainD

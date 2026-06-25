@@ -408,12 +408,6 @@ module Golden =
 
         let report (label : string) (classicPix : PixImage<uint8>) (heapPix : PixImage<uint8>) (buckets : int) =
             let maxDelta, nDiff, nNonBg, total = diff classicPix heapPix
-            (if System.Environment.GetEnvironmentVariable "HEAP_DUMP" = "1" then
-                try
-                    System.IO.File.WriteAllBytes(sprintf "/tmp/sgheap_%s_classic.bin" label, classicPix.Volume.Data)
-                    System.IO.File.WriteAllBytes(sprintf "/tmp/sgheap_%s_heap.bin" label, heapPix.Volume.Data)
-                    Log.warn "dumped /tmp/sgheap_%s_{classic,heap}.bin (%dx%d ch=%d, %d bytes)" label classicPix.Size.X classicPix.Size.Y classicPix.ChannelCount classicPix.Volume.Data.Length
-                with e -> Log.warn "dump failed: %s" e.Message)
             Log.line "sgheap[%s]: -> %d bucket(s)  maxChannelDelta=%d  diffPixels=%d/%d  coverage=%d px"
                 label buckets maxDelta nDiff total nNonBg
             let pass = maxDelta <= 1 && nNonBg > total / 100L && buckets = 1
