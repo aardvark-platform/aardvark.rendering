@@ -574,6 +574,14 @@ module Heap =
     /// (diagnostic / for logging).
     let mutable lastBucketCount = 0
 
+    // STARTUP instrumentation: CPU ingest (AddInternal: geometry copy + per-slot setup)
+    // vs GPU upload (arena Compute). One-shot logged once the first big upload lands.
+    let mutable internal stIngestMs = 0.0
+    let mutable internal stIngestN = 0
+    let mutable internal stUploadMs = 0.0
+    let mutable internal stUploadBytes = 0L
+    let mutable internal stLogged = false
+
     /// The per-draw heap-field names detected for the most recently classified
     /// heapable RO (diagnostic / for tests). Sorted.
     let mutable lastAutoFields : string[] = [||]
@@ -793,6 +801,8 @@ module Heap =
             match x.ExtraDependency with
             | Some d -> d.GetValueUntyped t |> ignore
             | None -> ()
+            let __uplT0 = System.Diagnostics.Stopwatch.GetTimestamp()
+            let mutable __flushed = 0
             // apply any deferred growth (EnsureFloats) or shrink (ShrinkFloats) —
             // content-preserving resize, performed HERE so no transact ever
             // happens during evaluation.
@@ -816,7 +826,7 @@ module Heap =
                 let flush lo hi =
                     let lo = min lo capacity
                     let hi = min hi capacity
-                    if hi > lo then x.Write(staging, uint64 (lo * 4), lo, hi - lo, false)
+                    if hi > lo then (__flushed <- __flushed + (hi - lo); x.Write(staging, uint64 (lo * 4), lo, hi - lo, false))
                 let mutable lo = let (struct(l, _)) = ranges.[0] in l
                 let mutable hi = let (struct(_, h)) = ranges.[0] in h
                 for i in 1 .. ranges.Count - 1 do
@@ -824,6 +834,12 @@ module Heap =
                     if o <= hi then hi <- max hi e          // contiguous / overlapping -> extend run
                     else flush lo hi; lo <- o; hi <- e      // gap -> emit run, start new
                 flush lo hi
+            // log per BIG upload (each page arena) with running totals; small camera-move
+            // re-stages (< 3 MB) are skipped so the totals reflect the geometry upload.
+            if __flushed * 4 > 3_000_000 then
+                stUploadMs <- stUploadMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __uplT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
+                stUploadBytes <- stUploadBytes + int64 __flushed * 4L
+                Log.line "[startup] ingest %d parts: %.0f ms | GPU upload (cum) %.1f MB: %.0f ms" stIngestN stIngestMs (float stUploadBytes / 1e6) stUploadMs
             base.Compute(t, rt)
         override x.InputChangedObject(_, o) =
             match o with
@@ -2463,6 +2479,16 @@ module Heap =
         // buffers; the loop was iterations-O(N) even when each cell was cheap).
         let vtxStructDirty = if useBindlessGeom then System.Collections.Generic.HashSet<int>() else null
         let vtxDynPos = if useBindlessGeom then System.Collections.Generic.HashSet<int>() else null
+        // value-dirty gather positions: a dynamic source buffer's handle changed.
+        // RECORDED by vtxGatherAval.InputChangedObject — which runs OUTSIDE the object
+        // lock (rule: InputChanged is unsynchronised) — so this set carries its OWN
+        // monitor (`lock vtxValDirty …`). vtxPosOf maps a tracked (non-constant) buffer
+        // aval → its gather position (1:1; bindless buckets are distinct-per-slot, decl
+        // above). The pull then drains vtxValDirty O(changed) instead of re-reading all
+        // of vtxDynPos every pull — only the buffers that actually marked us are re-pulled
+        // (re-establishing their consumed edges); the rest keep their edges untouched.
+        let vtxValDirty = if useBindlessGeom then System.Collections.Generic.HashSet<int>() else null
+        let vtxPosOf = if useBindlessGeom then System.Collections.Generic.Dictionary<IAdaptiveObject, int>(HashIdentity.Reference) else null
         let mutable vtxOut : IBuffer[] = if useBindlessGeom then Array.zeroCreate (max 1 (16 * max 1 numAttrs)) else [||]
         let mutable vtxOutHighWater = -1
 
@@ -3126,33 +3152,46 @@ module Heap =
             if System.Object.ReferenceEquals(av, null) then vtxOut.[pos] <- vtxLast.[pos]
             else let b = av.GetValue t in vtxLast.[pos] <- b; vtxOut.[pos] <- b
         let vtxGatherAval =
-            AVal.custom (fun t ->
-                updater.GetValue t |> ignore
-                let n = highWater * numAttrs
-                // grow the persistent output (rare; pow2-amortized by the vtxAvals
-                // doubling). A grow forces a one-time full restamp of live cells.
-                if vtxOut.Length < max 1 n then
-                    let no = Array.zeroCreate<IBuffer> (Fun.NextPowerOfTwo (max 1 n))
-                    System.Array.Copy(vtxOut, no, vtxOut.Length)
-                    vtxOut <- no
-                    vtxOutHighWater <- -1
-                // structural refresh: highWater only changes on grow/shrink (churn
-                // reuses freed slots, so highWater is stable) — then a full restamp
-                // is needed once; otherwise restamp exactly the slots added/removed
-                // since the last pull (O(touched)).
-                if vtxOutHighWater <> highWater then
-                    vtxOutHighWater <- highWater
-                    for pos in 0 .. n - 1 do vtxStamp t pos
-                    vtxStructDirty.Clear()
-                else
-                    for pos in vtxStructDirty do if pos < n then vtxStamp t pos
-                    vtxStructDirty.Clear()
-                // non-constant source buffers: their backend handle can change
-                // without a membership change, so re-read them every pull (few).
-                for pos in vtxDynPos do if pos < n then vtxStamp t pos
-                // the SSBO binding indexes [0,n): hand back the persistent array
-                // when it is exactly sized, else a snapshot (ref-copy, no aval reads).
-                if vtxOut.Length = n then vtxOut else Array.sub vtxOut 0 (max 1 n))
+            { new AVal.AbstractVal<IBuffer[]>() with
+                // a dynamic source buffer marked us → record WHICH position changed.
+                // runs OUTSIDE x's lock, so vtxValDirty has its own monitor. inputs we
+                // don't track (e.g. `updater`) aren't in vtxPosOf and are ignored here —
+                // the structural path drives membership via vtxStructDirty.
+                override _.InputChangedObject(_, o) =
+                    match vtxPosOf.TryGetValue o with
+                    | true, pos -> lock vtxValDirty (fun () -> vtxValDirty.Add pos |> ignore)
+                    | _ -> ()
+                override _.Compute(t) =
+                    updater.GetValue t |> ignore
+                    let n = highWater * numAttrs
+                    // grow the persistent output (rare; pow2-amortized by the vtxAvals
+                    // doubling). A grow forces a one-time full restamp of live cells.
+                    if vtxOut.Length < max 1 n then
+                        let no = Array.zeroCreate<IBuffer> (Fun.NextPowerOfTwo (max 1 n))
+                        System.Array.Copy(vtxOut, no, vtxOut.Length)
+                        vtxOut <- no
+                        vtxOutHighWater <- -1
+                    // structural refresh: highWater only changes on grow/shrink (churn
+                    // reuses freed slots, so highWater is stable) — then a full restamp
+                    // is needed once; otherwise restamp exactly the slots added/removed
+                    // since the last pull (O(touched)).
+                    if vtxOutHighWater <> highWater then
+                        vtxOutHighWater <- highWater
+                        for pos in 0 .. n - 1 do vtxStamp t pos
+                        vtxStructDirty.Clear()
+                        lock vtxValDirty (fun () -> vtxValDirty.Clear())   // full restamp subsumes value-dirty
+                    else
+                        for pos in vtxStructDirty do if pos < n then vtxStamp t pos
+                        vtxStructDirty.Clear()
+                        // re-stamp ONLY the dynamic buffers that actually marked us
+                        // (recorded in InputChangedObject) — re-pulling re-establishes
+                        // their consumed edges. Unchanged buffers never marked us, so
+                        // their edges persist untouched. O(changed), not O(dynamic).
+                        let dirty = lock vtxValDirty (fun () -> let d = Seq.toArray vtxValDirty in vtxValDirty.Clear(); d)
+                        for pos in dirty do if pos < n then vtxStamp t pos
+                    // the SSBO binding indexes [0,n): hand back the persistent array
+                    // when it is exactly sized, else a snapshot (ref-copy, no aval reads).
+                    if vtxOut.Length = n then vtxOut else Array.sub vtxOut 0 (max 1 n) } :> aval<IBuffer[]>
         // page 0's HeapData binding: PAGE 0's arena explicitly (NOT the mutable `arena`, which the
         // add path re-points at the current fill page). pages >0 bind their own arena in ensurePageROs.
         let arenaU = ((storage.Page(0).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
@@ -3623,6 +3662,7 @@ module Heap =
             lastInstLiveBytes <- instAlloc.Live * 4
 
         member private _.AddInternal(ro : RenderObject) =
+            let __ingT0 = System.Diagnostics.Stopwatch.GetTimestamp()
             let slot = if freeSlots.Count > 0 then freeSlots.Pop() else let s = highWater in highWater <- s + 1; s
             ensureSlot slot
             // route this slot's whole group to one page (rolling to a fresh page if the current
@@ -3692,7 +3732,9 @@ module Heap =
                         // a non-constant source buffer aval must be re-read on every
                         // gather pull (handle can change without a membership change);
                         // constant ones are stamped once here / on structural refresh.
-                        if not bv.Buffer.IsConstant then vtxDynPos.Add pos |> ignore
+                        if not bv.Buffer.IsConstant then
+                            vtxDynPos.Add pos |> ignore
+                            vtxPosOf.[bv.Buffer :> IAdaptiveObject] <- pos
                     [||]
                 else
                     attrInfos |> Array.map (fun (ai, _, sym, _, _, _, _) ->
@@ -3750,6 +3792,9 @@ module Heap =
             slots.[ro] <- { Slot = slot; Page = curPage; RegionKeys = regionKeys.ToArray(); Active = active; Instances = k; InstOffset = firstInstance
                             InstBlock = instBlock; AttrKeys = attrKeys; IdxKey = idxKey
                             ConstKeys = constKeys.ToArray(); OutBlocks = outBlocks.ToArray(); FoldBlocks = foldBlocks.ToArray() }
+            stIngestN <- stIngestN + 1
+            stIngestMs <- stIngestMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __ingT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
+            if stIngestN % 100000 = 0 then Log.line "[startup] ingest %d parts so far: %.0f ms" stIngestN stIngestMs
 
         member private _.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with
@@ -3769,6 +3814,10 @@ module Heap =
                 if useBindlessGeom then
                     for ai in 0 .. numAttrs - 1 do
                         let pos = s.Slot * numAttrs + ai
+                        // drop the aval→pos entry so a late mark on the (now dead) source
+                        // can't dirty a recycled position; the tombstoned cell is never read.
+                        let oldAv = vtxAvals.[pos]
+                        if not (System.Object.ReferenceEquals(oldAv, null)) then vtxPosOf.Remove (oldAv :> IAdaptiveObject) |> ignore
                         vtxAvals.[pos] <- Unchecked.defaultof<_>
                         // tombstone: cell keeps its last live buffer (draw record is
                         // InstanceCount=0 so the SSBO cell is never read) — restamp it
@@ -4409,6 +4458,8 @@ module Heap =
             match box objReader with
             | :? System.IDisposable as d -> d.Dispose()
             | _ -> ()
+        let mutable __resultN = 0
+        let mutable __lastHash = 0
         let resultAval =
             updater |> AVal.map (fun _ ->
                 // derive pre-passes ∪ per-page bucket sub-draws ∪ untouched passthrough.
@@ -4419,7 +4470,12 @@ module Heap =
                 for KeyValue(_, c) in caches do
                     out.Add c.HeapRO
                 for o in passSet do out.Add o
-                out.ToArray())
+                let arr = out.ToArray()
+                __resultN <- __resultN + 1
+                let h = if arr.Length > 0 then LanguagePrimitives.PhysicalHash arr.[0] else 0
+                if __resultN % 10 = 0 || h <> __lastHash then Log.line "[result] #%d: %d ROs, firstHash=%d changed=%b" __resultN arr.Length h (h <> __lastHash)
+                __lastHash <- h
+                arr)
         (resultAval |> ASet.ofAVal), teardown
 
     /// Collapse an adaptive set of N render objects into bucket render objects.
