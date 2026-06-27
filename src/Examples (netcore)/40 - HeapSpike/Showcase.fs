@@ -229,7 +229,7 @@ module Showcase =
         let stdRos = extract scene
         // heap: the SAME scene wrapped in Sg.heap — its render objects collapse
         // into buckets / indirect draws inside the graph (Heap.ofRenderObjects)
-        let heapRos = extract (Sg.heap scene)
+        let heapRos = extract (Sg.heap win.FramebufferSignature scene)
         heapRos |> ASet.toAVal |> AVal.force |> ignore
 
         let heapMode = AVal.init true

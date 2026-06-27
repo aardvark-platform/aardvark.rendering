@@ -102,7 +102,7 @@ module ChainBench =
         let nodes  = leaves |> Array.map (fun (struct(nd, _)) -> nd)
         let ros    = leaves |> Array.map (fun (struct(_, ro)) -> ro)
         let liveSet = cset (ros :> seq<_>)
-        let objects = Heap.ofRenderObjects runtime (liveSet :> aset<_>)
+        let objects = Heap.ofRenderObjects signature (liveSet :> aset<_>)
 
         let colorTex = runtime.CreateTexture2D(size, TextureFormat.Rgba8)
         let depthTex = runtime.CreateTexture2D(size, TextureFormat.Depth24Stencil8)

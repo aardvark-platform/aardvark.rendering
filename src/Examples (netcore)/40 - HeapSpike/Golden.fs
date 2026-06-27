@@ -180,7 +180,7 @@ module Golden =
                        Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
                        Symbol.Create "ViewProjTrafo",  viewProj ] effectU)
         let classicU = renderToPix (ASet.ofArray inputsU)
-        let heapU = Heap.ofRenderObjects runtime (ASet.ofArray inputsU)
+        let heapU = Heap.ofRenderObjects signature (ASet.ofArray inputsU)
         let passU = report "uniform" classicU (renderToPix heapU)
 
         // ── scene 2: textured (conventional per-object vs bindless heap) ───
@@ -203,7 +203,7 @@ module Golden =
                        Symbol.Create "HeapTexIndex",   (AVal.constant (i % TexCount) :> IAdaptiveValue)
                        Symbol.Create "Textures",       texArrayU ] effectHeap)
         let classicTpix = renderToPix (ASet.ofArray classicT)
-        let heapTobjs = Heap.ofRenderObjects runtime (ASet.ofArray heapT)
+        let heapTobjs = Heap.ofRenderObjects signature (ASet.ofArray heapT)
         let passT = report "textured" classicTpix (renderToPix heapTobjs)
 
         let pass = passU && passT
@@ -287,7 +287,7 @@ module Golden =
                        Symbol.Create "NotConsumed",    (AVal.constant i :> IAdaptiveValue) ] effect)
 
         let classicPix  = renderToPix (ASet.ofArray inputs)
-        let heapPix     = renderToPix (Heap.ofRenderObjects runtime (ASet.ofArray inputs))
+        let heapPix     = renderToPix (Heap.ofRenderObjects signature (ASet.ofArray inputs))
         let autoBuckets = Heap.lastBucketCount
         let detected    = Heap.lastAutoFields
 
@@ -323,7 +323,7 @@ module Golden =
         // RO per derive-bucket; both buckets here derive ViewProjTrafo, plus the heap's
         // single ActivationRenderObject (lifetime handle), so 2 draw + 2 derive + 1
         // activation = 5 output ROs. (The derive RO runs the fp64 composite compute.)
-        let splitCount = Heap.ofRenderObjects runtime (ASet.ofArray mixed) |> ASet.force |> HashSet.count
+        let splitCount = Heap.ofRenderObjects signature (ASet.ofArray mixed) |> ASet.force |> HashSet.count
         let splitOk = Heap.lastBucketCount = 2 && splitCount = 5
         if not splitOk then Log.warn "autoFields: field-set bucket split: %d output RO(s) (expected 5 = 2 draw + 2 derive + 1 activation), %d bucket(s) (expected 2)" splitCount Heap.lastBucketCount
 
@@ -418,7 +418,7 @@ module Golden =
             finally out.Release()
 
         let classicPix = renderToPix (scene id)
-        let heapPix = renderToPix (scene Sg.heap)
+        let heapPix = renderToPix (scene (Sg.heap signature))
         (try classicPix.SaveAsPng "/tmp/sph_classic.png"; heapPix.SaveAsPng "/tmp/sph_heap.png" with _ -> Log.warn "[sphere] png save unavailable")
 
         let cm = classicPix.GetMatrix<C4b>()
@@ -510,14 +510,14 @@ module Golden =
         let classicPix = renderToPix (scene id)
 
         // ISimpleSg/TraversalState dispatch (the default CompileRender entry)
-        let heapTsPix = renderToPix (scene Sg.heap)
+        let heapTsPix = renderToPix (scene (Sg.heap signature))
         let bucketsTs = Heap.lastBucketCount
         let passTs = report "ts" classicPix heapTsPix bucketsTs
 
         // legacy Ag dispatch (app?Runtime <- runtime; RenderObjects(Ag.Scope.Root))
         Aardvark.SceneGraph.Simple.SimpleConfig.Enabled <- false
         let heapAgPix =
-            try renderToPix (scene Sg.heap)
+            try renderToPix (scene (Sg.heap signature))
             finally Aardvark.SceneGraph.Simple.SimpleConfig.Enabled <- true
         let bucketsAg = Heap.lastBucketCount
         let passAg = report "ag" classicPix heapAgPix bucketsAg
@@ -552,7 +552,7 @@ module Golden =
             |> Sg.viewTrafo (AVal.constant view)
             |> Sg.projTrafo (AVal.constant proj)
         let classic2 = renderToPix (scene2 id)
-        let heap2 = renderToPix (scene2 Sg.heap)
+        let heap2 = renderToPix (scene2 (Sg.heap signature))
         let passMixed = report "mixed-types" classic2 heap2 Heap.lastBucketCount
 
         let pass = passTs && passAg && passMixed
@@ -637,7 +637,8 @@ module Golden =
                     buf.[o + 2] <- c.B
                     o <- o + 3
             fs.Write(buf, 0, buf.Length)
-        let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray inputs)
+        let signature = runtime.CreateFramebufferSignature [DefaultSemantic.Colors, TextureFormat.Rgba8]
+        let heapObjs = Heap.ofRenderObjects signature (ASet.ofArray inputs)
         let classic = renderAt 1 (ASet.ofArray inputs)
         let heap1   = renderAt 1 heapObjs
         let heap8   = renderAt 8 heapObjs        // <-- the windowed demo uses samples=8
@@ -705,7 +706,7 @@ module Golden =
         // heap DERIVES it (Proj*View*Model) in double.
         let heapFp64 (c : V3d) =
             offsets |> Array.map (fun o -> boxSg |> Sg.trafo' (Trafo3d.Translation(c + o)))
-            |> Sg.ofArray |> Sg.heap |> Sg.effect effFp64
+            |> Sg.ofArray |> Sg.heap signature |> Sg.effect effFp64
             |> Sg.viewTrafo (AVal.constant (viewAt c)) |> Sg.projTrafo (AVal.constant proj)
         // f32 reference: supply ModelViewProjTrafo as a CONSTANT pre-multiplied f32
         // matrix (no derive) -> the heap just gathers it; jitters at geodetic scale.
@@ -714,7 +715,7 @@ module Golden =
             offsets |> Array.map (fun o ->
                 let mF32 = M44f.op_Explicit (Trafo3d.Translation(c + o)).Forward
                 boxSg |> Sg.uniform' "ModelViewProjTrafo" (vpF32 * mF32) |> Sg.uniform' "NormalMatrix" M44f.Identity)
-            |> Sg.ofArray |> Sg.heap |> Sg.effect effFp64
+            |> Sg.ofArray |> Sg.heap signature |> Sg.effect effFp64
             |> Sg.viewTrafo (AVal.constant (viewAt c)) |> Sg.projTrafo (AVal.constant proj)
         let earth = V3d(6378137.0, 3189000.0, 1594500.0)
         let imgNormal  = renderToPix (heapFp64 V3d.Zero)
@@ -812,10 +813,10 @@ module Golden =
 
         let foldedInputs = Array.init n (mkRO false)
         let chainInputs  = Array.init n (mkRO true)
-        let foldedPix = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray foldedInputs))
+        let foldedPix = imageOf (Heap.ofRenderObjects signature (ASet.ofArray foldedInputs))
         let foldChainBuckets = Heap.lastChainBuckets        // expect 0 (no stack)
         let chainSet = cset (chainInputs :> seq<_>)
-        let chainHeap = Heap.ofRenderObjects runtime (chainSet :> aset<_>)
+        let chainHeap = Heap.ofRenderObjects signature (chainSet :> aset<_>)
         // render chainHeap through ONE persistent task kept alive across the edit and
         // churn — so the heap stays built and an edit is an incremental upload (a
         // single-shot render would hit refcount 0 and rebuild the whole heap).
@@ -974,7 +975,7 @@ module Golden =
         let ros = Array.init n mkRO
         let memberSet = cset (ros :> seq<_>)
         let churnMirror = System.Collections.Generic.List<IRenderObject>(ros)
-        let heap = Heap.ofRenderObjects runtime (memberSet :> aset<_>)
+        let heap = Heap.ofRenderObjects signature (memberSet :> aset<_>)
         use task = runtime.CompileRender(signature, heap)
         let out = task |> RenderTask.renderToColor size
         out.Acquire()
@@ -1087,7 +1088,7 @@ module Golden =
                 Symbol.Create "ViewProjTrafo",  viewProjU ]
             ro :> IRenderObject
         let ros = Array.init n mkRO
-        let heap = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        let heap = Heap.ofRenderObjects signature (ASet.ofArray ros)
         use task = runtime.CompileRender(signature, heap)
         let out = task |> RenderTask.renderToColor size
         out.Acquire()
@@ -1178,7 +1179,7 @@ module Golden =
                 Symbol.Create "ViewProjTrafo",  viewProjU ]
             ro :> IRenderObject
         let ros = Array.init n mkRO
-        let heap = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        let heap = Heap.ofRenderObjects signature (ASet.ofArray ros)
         use task = runtime.CompileRender(signature, heap)
         let out = task |> RenderTask.renderToColor size
         out.Acquire()
@@ -1289,8 +1290,8 @@ module Golden =
             out.Acquire()
             try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
 
-        let foldedPix = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray (Array.init n (mkRO false))))
-        let chainHeap = Heap.ofRenderObjects runtime (ASet.ofArray (Array.init n (mkRO true)))
+        let foldedPix = imageOf (Heap.ofRenderObjects signature (ASet.ofArray (Array.init n (mkRO false))))
+        let chainHeap = Heap.ofRenderObjects signature (ASet.ofArray (Array.init n (mkRO true)))
         // persistent task: keep the heap built across the edit (a single-shot render
         // would hit refcount 0 and rebuild, re-uploading every link).
         use chainTask = runtime.CompileRender(signature, chainHeap)
@@ -1373,12 +1374,12 @@ module Golden =
         // chain heap (default) vs FOLDED heap (same MVP shader, only the ModelTrafo
         // SOURCE differs: GPU chain compose vs CPU-folded arena region) — isolates
         // the fold from the rasterization path, so this must be ~bit-identical.
-        let heapChainPix = renderToPix (scene Sg.heap)
+        let heapChainPix = renderToPix (scene (Sg.heap signature))
         let chainBuckets = Heap.lastChainBuckets
         let distinct = Heap.lastDistinctLinks
         Heap.disableChain <- true
         let heapFoldPix =
-            try renderToPix (scene Sg.heap)
+            try renderToPix (scene (Sg.heap signature))
             finally Heap.disableChain <- false
         let foldChainBuckets = Heap.lastChainBuckets
         // and a loose sanity check against the classic per-RO (non-heap) render.
@@ -1478,7 +1479,8 @@ module Golden =
 
         Heap.Diagnostics <- true
         let input = ASet.ofArray (Array.concat [ heapable; [| odd; odd2; oddUniform |] ])
-        let outSet = Heap.ofRenderObjects runtime input
+        let signature = runtime.CreateFramebufferSignature [DefaultSemantic.Colors, TextureFormat.Rgba8]
+        let outSet = Heap.ofRenderObjects signature input
         let out = outSet |> ASet.toAVal |> AVal.force |> HashSet.toArray
         Heap.Diagnostics <- false
         let buckets = Heap.lastBucketCount
@@ -1558,7 +1560,7 @@ module Golden =
                 ro :> IRenderObject)
 
         let imageOf (objs : IRenderObject[]) =
-            let heap = Heap.ofRenderObjects runtime (ASet.ofArray objs)
+            let heap = Heap.ofRenderObjects signature (ASet.ofArray objs)
             use task = Sg.renderObjectSet heap |> Sg.compile runtime signature
             let out = task |> RenderTask.renderToColor size
             out.Acquire()
@@ -1632,7 +1634,7 @@ module Golden =
             out.Acquire()
             try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
         let classicPix = imageOf (ASet.ofArray objs)
-        let heapPix = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray objs))
+        let heapPix = imageOf (Heap.ofRenderObjects signature (ASet.ofArray objs))
         let buckets = Heap.lastBucketCount
         let maxD, nDiff, nNonBg, total = diff classicPix heapPix
         Log.line "varType: V4f pos + uint16 idx  buckets=%d classic-vs-heap maxDelta=%d diffPixels=%d/%d coverage=%d" buckets maxD nDiff total nNonBg
@@ -1659,7 +1661,7 @@ module Golden =
                 Symbol.Create "ViewProjTrafo", vp ]
             ro :> IRenderObject
         let mixed = [| for x in -2 .. 2 do for y in -2 .. 2 -> mkWith (if (x + y) % 2 = 0 then vattrsD else vattrs) x y |]
-        let heapMixedPix = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray mixed))
+        let heapMixedPix = imageOf (Heap.ofRenderObjects signature (ASet.ofArray mixed))
         let bucketsM = Heap.lastBucketCount
         let maxDM, nDiffM, _, totalM = diff classicPix heapMixedPix
         Log.line "varType: mixed V3d/V4f pos  buckets=%d vs-classic maxDelta=%d diffPixels=%d/%d" bucketsM maxDM nDiffM totalM
@@ -2190,7 +2192,7 @@ module Golden =
             out.Acquire()
             try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
         let classicPix = renderToPix (ASet.ofArray ros)
-        let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        let heapObjs = Heap.ofRenderObjects signature (ASet.ofArray ros)
         let heapPix = renderToPix heapObjs
         let maxD, nDiff, nNonBg, total = diff classicPix heapPix
         Log.line "texHeap: %d ROs (per-object texture) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
@@ -2260,7 +2262,7 @@ module Golden =
             out.Acquire()
             task, out
         let classicTask, classicOut = mkOut (ASet.ofArray classicROs)
-        let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray heapInputROs)
+        let heapObjs = Heap.ofRenderObjects signature (ASet.ofArray heapInputROs)
         let heapTask, heapOut = mkOut heapObjs
         let dl (out : IAdaptiveResource<IBackendTexture>) = out.GetValue().Download().AsPixImage<uint8>()
         // ── state 0 ──
@@ -2333,7 +2335,7 @@ module Golden =
             out.Acquire()
             try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
         let classicPix = renderToPix (ASet.ofArray ros)
-        let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        let heapObjs = Heap.ofRenderObjects signature (ASet.ofArray ros)
         let heapPix = renderToPix heapObjs
         let maxD, nDiff, nNonBg, total = diff classicPix heapPix
         Log.line "texState: %d ROs (POINT filter) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
@@ -2398,7 +2400,7 @@ module Golden =
             out.Acquire()
             try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
         let classicPix = renderToPix (ASet.ofArray ros)
-        let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        let heapObjs = Heap.ofRenderObjects signature (ASet.ofArray ros)
         let heapPix = renderToPix heapObjs
         let maxD, nDiff, nNonBg, total = diff classicPix heapPix
         Log.line "texCube: %d ROs (per-object samplerCube) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
@@ -2476,7 +2478,7 @@ module Golden =
             out.Acquire()
             try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
         let classicPix = renderToPix (ASet.ofArray ros)   // GPU buffers, fixed-function input
-        let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        let heapObjs = Heap.ofRenderObjects signature (ASet.ofArray ros)
         let heapPix = renderToPix heapObjs                 // GPU buffers, bindless vertex-pull
         let maxD, nDiff, nNonBg, total = diff classicPix heapPix
         Log.line "%s: %d ROs (GPU-resident geometry) -> %d bucket(s)  classic-vs-heap maxDelta=%d diffPixels=%d coverage=%d"
@@ -2596,7 +2598,7 @@ module Golden =
             try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
         let classicPix = renderToPix (ASet.ofArray ros)
         Heap.forceAtlas <- true
-        let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        let heapObjs = Heap.ofRenderObjects signature (ASet.ofArray ros)
         let heapPix = renderToPix heapObjs
         let buckets = Heap.lastBucketCount
         Heap.forceAtlas <- false
@@ -2663,7 +2665,7 @@ module Golden =
             ro :> IRenderObject
         let ros = Array.init n mkRO
         Heap.forceAtlas <- true
-        let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        let heapObjs = Heap.ofRenderObjects signature (ASet.ofArray ros)
         Log.line "msaaTest: rendering n=%d samples=%d (atlas, offscreen) ..." n samples
         use task = runtime.CompileRender(signature, heapObjs)
         let out = task |> RenderTask.renderToColor size
@@ -2743,7 +2745,7 @@ module Golden =
             ro :> IRenderObject
         let ros = Array.init n mkRO
         Heap.forceAtlas <- true
-        let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray ros)
+        let heapObjs = Heap.ofRenderObjects signature (ASet.ofArray ros)
         Log.line "glyphWedge: build + render heap n=%d (x%d) offscreen ..." n iters
         use task = runtime.CompileRender(signature, heapObjs)
         let out = task |> RenderTask.renderToColor size
@@ -2911,7 +2913,8 @@ module Golden =
                     Symbol.Create "ViewProjTrafo",  viewProj ]
             ro :> IRenderObject
         let inputs = Array.init 16 mk
-        let heap = Heap.ofRenderObjects runtime (ASet.ofArray inputs)
+        let signature = runtime.CreateFramebufferSignature [DefaultSemantic.Colors, TextureFormat.Rgba8]
+        let heap = Heap.ofRenderObjects signature (ASet.ofArray inputs)
         heap |> ASet.toAVal |> AVal.force |> ignore
         Log.line "bucketing: 16 ROs (8 default + 8 cull-back) -> %d bucket(s)" Heap.lastBucketCount
         let pass = Heap.lastBucketCount = 2
@@ -2950,7 +2953,8 @@ module Golden =
                     Symbol.Create "HeapColor",      (AVal.constant V4f.IIII :> IAdaptiveValue)
                     Symbol.Create "ViewProjTrafo",  viewProj ]
                 ro :> IRenderObject)
-        let heap = Heap.ofRenderObjects runtime (ASet.ofArray inputs)
+        let signature = runtime.CreateFramebufferSignature [DefaultSemantic.Colors, TextureFormat.Rgba8]
+        let heap = Heap.ofRenderObjects signature (ASet.ofArray inputs)
         let force () = heap |> ASet.toAVal |> AVal.force |> ignore; Heap.lastBucketCount
         let b0 = force ()
         transact (fun () -> for i in 0 .. n-1 do if i % 2 = 0 then culls.[i].Value <- CullMode.Back)
@@ -3009,7 +3013,7 @@ module Golden =
             out.Acquire()
             try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
         let classicPix = imageOf (ASet.ofArray inputs)
-        let heapPix = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray inputs))
+        let heapPix = imageOf (Heap.ofRenderObjects signature (ASet.ofArray inputs))
         let maxD, nDiff, nNonBg, total = diff classicPix heapPix
         Log.line "gl-heap: %d ROs -> %d bucket(s)  classic vs heap maxDelta=%d diffPixels=%d/%d coverage=%d" inputs.Length Heap.lastBucketCount maxD nDiff total nNonBg
         let pass = maxD <= 1 && nNonBg > total / 100L
@@ -3083,7 +3087,7 @@ module Golden =
                 mkRO effInst [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
                                Symbol.Create "HeapColor",      (AVal.constant (c.ToV4f()) :> IAdaptiveValue)
                                Symbol.Create "ViewProjTrafo",  viewProj ] k)
-        let imgInst = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray instancedInputs))
+        let imgInst = imageOf (Heap.ofRenderObjects signature (ASet.ofArray instancedInputs))
         let instBuckets = Heap.lastBucketCount
 
         // reference: 8 plain ROs (offset baked into the trafo), instanceCount=1
@@ -3094,7 +3098,7 @@ module Golden =
                    mkRO effPlain [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p * Trafo3d.Translation(float i * 1.5, 0.0, 0.0)).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
                                    Symbol.Create "HeapColor",      (AVal.constant (c.ToV4f()) :> IAdaptiveValue)
                                    Symbol.Create "ViewProjTrafo",  viewProj ] 1 |]
-        let imgPlain = imageOf (Heap.ofRenderObjects runtime (ASet.ofArray plainInputs))
+        let imgPlain = imageOf (Heap.ofRenderObjects signature (ASet.ofArray plainInputs))
 
         let maxD, nDiff, nNonBg, total = diff imgPlain imgInst
         Log.line "already-instanced: 2 ROs x %d instances (%d bucket, gl_DrawID routing) vs 8 plain ROs  maxDelta=%d diffPixels=%d coverage=%d" k instBuckets maxD nDiff nNonBg
@@ -3145,7 +3149,7 @@ module Golden =
                         Symbol.Create "HeapColor",      (AVal.constant (V4f(1.0f, 0.7f, 0.3f, 1.0f)) :> IAdaptiveValue)
                         Symbol.Create "ViewProjTrafo",  viewProj ]
                 ro :> IRenderObject)
-        let heap = Heap.ofRenderObjects runtime (ASet.ofArray inputs)
+        let heap = Heap.ofRenderObjects signature (ASet.ofArray inputs)
         use task = runtime.CompileRender(signature, heap)
         let out = task |> RenderTask.renderToColor size
         out.Acquire()
@@ -3195,7 +3199,7 @@ module Golden =
         let run (label : string) (n : int) (mkRO : int -> IRenderObject) =
             let all = Array.init (n + warmup + frames) mkRO
             let ros = cset (Array.sub all 0 n)
-            let heapObjs = Heap.ofRenderObjects runtime (ros :> aset<_>)
+            let heapObjs = Heap.ofRenderObjects signature (ros :> aset<_>)
             use task = runtime.CompileRender(signature, heapObjs)
             let out = task |> RenderTask.renderToColor size
             out.Acquire()
@@ -3324,7 +3328,7 @@ module Golden =
         let runPhase (label : string) (mk : int -> IRenderObject) =
             let all = Array.init (n + frames) mk
             let ros = cset (Array.sub all 0 n)
-            let heapObjs = Heap.ofRenderObjects runtime (ros :> aset<_>)
+            let heapObjs = Heap.ofRenderObjects signature (ros :> aset<_>)
             use task = runtime.CompileRender(signature, heapObjs)
             let out = task |> RenderTask.renderToColor size
             out.Acquire()
@@ -3342,7 +3346,7 @@ module Golden =
             out.Release()
             // reference: the SAME final membership (all.[frames .. frames+n-1]) built fresh
             let refRos = cset (Array.sub all frames n)
-            let refObjs = Heap.ofRenderObjects runtime (refRos :> aset<_>)
+            let refObjs = Heap.ofRenderObjects signature (refRos :> aset<_>)
             use refTask = runtime.CompileRender(signature, refObjs)
             let refOut = refTask |> RenderTask.renderToColor size
             refOut.Acquire()
@@ -3410,7 +3414,7 @@ module Golden =
 
         let render (mk : int -> IRenderObject) =
             let ros = ASet.ofArray [| mk 0; mk 1 |]
-            let heapObjs = Heap.ofRenderObjects runtime ros
+            let heapObjs = Heap.ofRenderObjects signature ros
             use task = runtime.CompileRender(signature, heapObjs)
             let out = task |> RenderTask.renderToColor size
             out.Acquire()
@@ -3487,7 +3491,7 @@ module Golden =
             ro :> IRenderObject
 
         let render (mk : int -> IRenderObject) =
-            let heapObjs = Heap.ofRenderObjects runtime (ASet.ofArray [| mk 0; mk 1 |])
+            let heapObjs = Heap.ofRenderObjects signature (ASet.ofArray [| mk 0; mk 1 |])
             use task = runtime.CompileRender(signature, heapObjs)
             let out = task |> RenderTask.renderToColor size
             out.Acquire()
@@ -3585,7 +3589,7 @@ module Golden =
             let ros = cset (Array.sub all 0 n)
             let live = System.Collections.Generic.List<IRenderObject>(Array.sub all 0 n)
             let mutable next = n
-            let heapObjs = Heap.ofRenderObjects runtime (ros :> aset<_>)
+            let heapObjs = Heap.ofRenderObjects signature (ros :> aset<_>)
             use task = runtime.CompileRender(signature, heapObjs)
             let out = task |> RenderTask.renderToColor size
             out.Acquire()
@@ -3621,7 +3625,7 @@ module Golden =
 
             // reference: the SAME final membership built fresh
             let refRos = cset (live.ToArray())
-            let refObjs = Heap.ofRenderObjects runtime (refRos :> aset<_>)
+            let refObjs = Heap.ofRenderObjects signature (refRos :> aset<_>)
             use refTask = runtime.CompileRender(signature, refObjs)
             let refOut = refTask |> RenderTask.renderToColor size
             refOut.Acquire()
@@ -3701,7 +3705,7 @@ module Golden =
             // identities would defeat pipeline caching, so geometry is shared;
             // the heap's packed buffers are per-bucket and rebuilt anyway).
             let ros = cset (Array.init 64 (fun i -> if i % 2 = 0 then mkRO i effPlain false else mkRO i effTex true))
-            let heapObjs = Heap.ofRenderObjects runtime (ros :> aset<_>)
+            let heapObjs = Heap.ofRenderObjects signature (ros :> aset<_>)
             use task = runtime.CompileRender(signature, heapObjs)
             let out = task |> RenderTask.renderToColor size
             out.Acquire()

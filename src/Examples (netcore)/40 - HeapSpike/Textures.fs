@@ -103,7 +103,7 @@ module Textures =
 
         // per-object texture index lives in the arena; the texture array is a
         // shared global (delegated). N objects -> one bucket / one indirect draw.
-        let heap = Heap.ofRenderObjects win.Runtime (ASet.ofArray inputs)
+        let heap = Heap.ofRenderObjects win.Control.FramebufferSignature (ASet.ofArray inputs)
         heap |> ASet.toAVal |> AVal.force |> ignore
         Log.warn "phase-3 textures: %d objects, %d textures via array index in the arena -> %d bucket(s)" inputs.Length TexCount Heap.lastBucketCount
 

@@ -713,7 +713,10 @@ module Heap =
     /// upload (regions are arena-contiguous); sparse -> a few small uploads.
     /// Supports dynamic add/remove of regions and pow2 growth (for HeapScene).
     type internal HeapArena(runtime : IBufferRuntime, initialFloats : int) =
-        inherit AdaptiveBuffer(runtime, uint64 (max 1 initialFloats * 4), BufferUsage.Storage, BufferStorage.Host)
+        // DEVICE-LOCAL: the arena is read per-vertex every frame; host-visible put it across PCIe
+        // (~1 GB/s) and cost 33x on the render (968 -> 29 ms full Vienna). Writes stage through the
+        // managed `staging` mirror + Compute upload, so editability is unaffected.
+        inherit AdaptiveBuffer(runtime, uint64 (max 1 initialFloats * 4), BufferUsage.Storage, BufferStorage.Device)
         let mutable capacity = max 1 initialFloats
         let mutable staging = Array.zeroCreate<float32> capacity
         let pending = LockedSet<RegionWriter>()
@@ -3921,7 +3924,41 @@ module Heap =
     // buffers) and returns its bucket-RO set together with a teardown that frees
     // EVERYTHING (every IncrementalBucket's GPU + object-count CPU, the reader).
     // Called lazily on first activation; teardown runs when the last task drops it.
-    let private buildHeap (runtime : IRuntime) (objects : aset<IRenderObject>) : aset<IRenderObject> * (unit -> unit) =
+    let private buildHeap (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> * (unit -> unit) =
+        let runtime = signature.Runtime :?> IRuntime
+        // DCE the effect BEFORE heapification: heapification turns every consumed attribute into an
+        // SSBO gather (the heap VS has zero vertex inputs regardless), so a read-but-dead attribute
+        // — consumed by the VS but feeding no live framebuffer output — would be INGESTED into the
+        // arena and gathered per vertex for nothing. Linking against the (tight) signature here
+        // shrinks `consumedNonSamplerNames`, so the field set the heap actually STORES stays lean.
+        // Memoised by effect id; the same DCE'd effect drives field detection AND the gather rewrite.
+        let linkDCE (effect : Effect) : Effect =
+            let outputs =
+                signature.ColorAttachments |> Map.toList
+                |> List.map (fun (_, att) -> string att.Name, att.Type) |> Map.ofList
+            let rec linkShaders (needed : Map<string, System.Type>) = function
+                | [] -> []
+                | cur :: before ->
+                    let cur' = Shader.withOutputs (Map.union needed (Shader.systemOutputs cur)) cur
+                    cur' :: linkShaders (Shader.neededInputs cur') before
+            let dceShaders =
+                effect
+                |> Effect.addIfNotPresent ShaderStage.Fragment (Shader.passing outputs)
+                |> Effect.addIfNotPresent ShaderStage.Vertex   (Shader.passing Map.empty)
+                |> Effect.toList |> List.rev |> linkShaders outputs
+            // Effect.ofList would stamp Effect.NewId() = a fresh GUID; the backend caches compiled
+            // programs by effect Id, so a per-call id defeats reuse (recompiles every heap/run) and
+            // could even alias the INPUT effect's id. Build a DETERMINISTIC id keyed on the input
+            // effect + the signature outputs, namespaced with "heap".
+            let sigKey = outputs |> Map.toList |> List.map (fun (n, t) -> n + ":" + t.Name) |> String.concat ","
+            let map = dceShaders |> List.map (fun s -> s.shaderStage, s) |> Map.ofList
+            Effect(sprintf "%s_heap_%s" effect.Id sigKey, Lazy<_>.CreateFromValue map, [])
+        let linkCache = System.Collections.Generic.Dictionary<string, Effect>()
+        let linkedEffect (e : Effect) =
+            lock linkCache (fun () ->
+                match linkCache.TryGetValue e.Id with
+                | true, le -> le
+                | _ -> let le = linkDCE e in linkCache.[e.Id] <- le; le)
         checkSupport false runtime
         let scope = Ag.Scope.Root
 
@@ -4267,7 +4304,7 @@ module Heap =
                         // bindless-eligible) -> vertex-pull.
                         let bindless = not hostGeom
                         let inst = instanceCountOf r > 1
-                        let e = match r.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
+                        let e = linkedEffect (match r.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect")
                         // GPU trafo-chain eligibility: the effect DEPENDS ON Model
                         // (reads ModelTrafo, or a composite whose recipe consumes it)
                         // AND the RO exposes the UNFOLDED stack as aval<aval<Trafo3d>[]>.
@@ -4335,7 +4372,7 @@ module Heap =
         let version = ref 0
 
         let mkBucket (key : obj) (r0 : RenderObject) (f0 : RoFacts) =
-            let effect = match r0.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
+            let effect = linkedEffect (match r0.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect")
             let (_, _, _, cull, ff, fill, blend, dtest, dwrite, _) = keyValues.[key]
             // field names/layout come from the FACTS (per-bucket: the field set is
             // part of the bucket key, so every member shares f0's interned set)
@@ -4487,7 +4524,7 @@ module Heap =
     /// one machinery via the ref-count. The drawing is carried by the bucket ROs;
     /// the activation itself rides on an ActivationRenderObject that both backends
     /// ignore for rendering and only activate/deactivate.
-    let ofRenderObjects (runtime : IRuntime) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+    let ofRenderObjects (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         let gate = obj()
         let mutable activeTasks = 0
         let mutable shared : (aset<IRenderObject> * (unit -> unit)) voption = ValueNone
@@ -4500,7 +4537,7 @@ module Heap =
             lock gate (fun () ->
                 match shared with
                 | ValueSome (s, _) -> s
-                | ValueNone -> let r = buildHeap runtime objects in shared <- ValueSome r; fst r)
+                | ValueNone -> let r = buildHeap signature objects in shared <- ValueSome r; fst r)
 
         // Deterministic teardown: each task holds the ActivationRenderObject's
         // activation and disposes it when it drops the heap; the LAST drop frees
@@ -4699,23 +4736,27 @@ module HeapSgExtensions =
     open Aardvark.SceneGraph.Simple
 
     module Sg =
-        type HeapApplicator(child : aval<ISg>) =
+        type HeapApplicator(signature : IFramebufferSignature, child : aval<ISg>) =
             inherit Sg.AbstractApplicator(child)
 
-            // TS-direct — child ROs gathered with the unchanged TraversalState,
-            // then collapsed with the TS's runtime.
+            /// the framebuffer signature the heap effects are DCE-linked against. No ambient Sg
+            /// attribute carries it, so the caller supplies it (like other signature-taking nodes).
+            member _.Signature = signature
+
+            // TS-direct — child ROs gathered with the unchanged TraversalState, then collapsed.
             interface ISimpleSg with
                 member _.GetRenderObjects ts =
                     child
                     |> ASet.bind (fun c -> SimpleDispatch.Get(c, ts))
-                    |> Heap.ofRenderObjects ts.Runtime
+                    |> Heap.ofRenderObjects signature
 
-            new(child : ISg) = HeapApplicator(AVal.constant child)
+            new(signature : IFramebufferSignature, child : ISg) = HeapApplicator(signature, AVal.constant child)
 
         /// Collapses the subtree's render objects through `Heap.ofRenderObjects`
         /// (N per-object draws -> one indirect multidraw per bucket). Non-heapable
-        /// render objects pass through unchanged.
-        let heap (sg : ISg) : ISg = HeapApplicator(sg) :> ISg
+        /// render objects pass through unchanged. Pass the framebuffer signature the
+        /// scene renders to — it's used to DCE the heap effects (drop dead attributes).
+        let heap (signature : IFramebufferSignature) (sg : ISg) : ISg = HeapApplicator(signature, AVal.constant sg) :> ISg
 
 
 namespace Aardvark.SceneGraph.Semantics
@@ -4736,9 +4777,8 @@ module HeapApplicatorSemantics =
         // collapse with the scope's ambient runtime. This concrete-type rule wins
         // over the IApplicator rule (most-specific dispatch — cf. NaiveLod.LodSem).
         member x.RenderObjects(h : Sg.HeapApplicator, scope : Ag.Scope) : aset<IRenderObject> =
-            let runtime = scope.Runtime
             aset {
                 let! c = h.Child
                 yield! c.RenderObjects(scope)
             }
-            |> Heap.ofRenderObjects runtime
+            |> Heap.ofRenderObjects h.Signature
