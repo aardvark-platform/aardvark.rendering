@@ -1,3 +1,7 @@
+### 5.7.0-prerelease0025
+- [Sg] Heap: device-local arena — was host-visible (PCIe); 33x faster full-scene render, byte-identical.
+- [Sg] Heap: DCE effects against the framebuffer signature before heapification so read-but-dead fields aren't stored/gathered; `ofRenderObjects`/`Sg.heap` now take the signature.
+
 ### 5.7.0-prerelease0024
 - [Sg] Heap: multi-page (paged-arena) scenes now render correctly — the per-page derive dispatches + draws are bundled into one `HeapRenderObject` (the backend records the derive as a compute pre-pass → compute→vertex barrier → draws in one submission, so each page draws against its own fresh derive), and the Model chain fold (`composeModel`) is now per-page (guarded by `HeapSlotPage = HeapPageId`, one dispatch per page binding that page's arena) instead of writing every slot's folded Model into page-0's arena. Fixes the multi-page smear/corruption on any heap spanning >1 page (>2 GB scenes, or a small `HEAP_PAGE_WORDS`); 1-page and orbit perf unchanged.
 - [Sg] Heap: removed the obsolete standalone prototype entry points (`Heap.scene` / `instanced` / `bindless` / `derivedFp64` / `derivedChainFp64` / `flattenChains`) — early stepping-stones fully superseded by `ofRenderObjects`.
