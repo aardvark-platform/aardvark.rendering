@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0026
+- [Sg/Rendering] Heap: transparent geometry renders transparent again — the multi-page `HeapRenderObject` bundle (0024) hid each draw's `IsTransparent` from the OIT router (`TransparencyRenderTask` type-tests `RenderObject`), so heapified transparent buckets fell into the opaque pass; `HeapRenderObject` now exposes `IsTransparent` and the wrapper routes the bundle through all three OIT passes (transforming each inner draw, re-bundling with the same derives). Regression since 0024.
+
 ### 5.7.0-prerelease0025
 - [Sg] Heap: device-local arena — was host-visible (PCIe); 33x faster full-scene render, byte-identical.
 - [Sg] Heap: DCE effects against the framebuffer signature before heapification so read-but-dead fields aren't stored/gathered; `ofRenderObjects`/`Sg.heap` now take the signature.

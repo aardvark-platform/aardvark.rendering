@@ -83,6 +83,16 @@ type HeapRenderObject(pass : RenderPass, scope : Ag.Scope,
     /// the page draws that read the derive outputs (recorded after the barrier)
     member x.Draws = draws
 
+    /// True when this bucket's geometry is transparent. The page draws are clones
+    /// of the bucket's representative RenderObject (RenderObject.Clone copies
+    /// IsTransparent), so the flag survives on every draw — this surfaces it on the
+    /// bundle so the OIT router (TransparencyRenderTask) can see through the wrapper
+    /// and route the whole heap unit through the transparency pipeline.
+    member x.IsTransparent =
+        match draws with
+        | (:? RenderObject as r) :: _ -> r.IsTransparent
+        | _ -> false
+
     interface IRenderObject with
         member x.Id = id
         member x.RenderPass = pass
