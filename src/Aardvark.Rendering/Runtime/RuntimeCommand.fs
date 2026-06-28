@@ -93,6 +93,11 @@ type HeapRenderObject(pass : RenderPass, scope : Ag.Scope,
         | (:? RenderObject as r) :: _ -> r.IsTransparent
         | _ -> false
 
+    /// True when this bucket carries the per-slot pick write (set by the heap's picking
+    /// path). dom's SceneHandler routes a pickable bundle into the PickId-attachment pass
+    /// so the composed per-slot pick write actually reaches the pick buffer.
+    member val IsPickable = false with get, set
+
     interface IRenderObject with
         member x.Id = id
         member x.RenderPass = pass

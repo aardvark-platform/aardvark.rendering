@@ -2265,7 +2265,10 @@ module Heap =
                                     // capture, the pickIdBuf flush + exposure). Only true when the heap
                                     // is entered via `ofRenderObjectsPicking` (the dom heap node) — a
                                     // non-dom / non-picking heap pays nothing.
-                                    picking : bool) =
+                                    picking : bool,
+                                    // PICKING: invoked with a slot's pick id when that slot is freed,
+                                    // so the dom side releases the id (ref-counted). No-op off picking.
+                                    deregister : int -> unit) =
         let fieldStride = names.Length
         // df32 (two-f32) precision path vs real fp64 — chosen ONCE for the whole
         // bucket from the runtime (forced override OR no shaderFloat64). Threaded
@@ -3674,7 +3677,9 @@ module Heap =
                 heapROPageCount <- storage.Count
                 let derives = if hasDerived then List.ofSeq deriveSpecs else []
                 let draws = List.ofSeq pageROs
-                heapROCache <- HeapRenderObject(RenderPass.main, scope, derives, draws) :> IRenderObject
+                let hro = HeapRenderObject(RenderPass.main, scope, derives, draws)
+                hro.IsPickable <- picking   // dom routes a pickable bundle into the PickId pass
+                heapROCache <- hro :> IRenderObject
             heapROCache
 
         // PAGED: one render object per live storage page (each binds that page's arena +
@@ -3880,6 +3885,8 @@ module Heap =
                 match gateWriters.TryGetValue s.Slot with
                 | true, w -> w.Dispose(); gateWriters.Remove s.Slot |> ignore
                 | _ -> ()
+                // PICKING: release the dom pick id for this slot before it's recycled
+                if picking && pickIds.[s.Slot] >= 0 then deregister pickIds.[s.Slot]
                 freeSlots.Push s.Slot
                 slots.Remove ro |> ignore
             | _ -> ()
@@ -3967,7 +3974,7 @@ module Heap =
     // buffers) and returns its bucket-RO set together with a teardown that frees
     // EVERYTHING (every IncrementalBucket's GPU + object-count CPU, the reader).
     // Called lazily on first activation; teardown runs when the last task drops it.
-    let private buildHeap (picking : bool) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> * (unit -> unit) =
+    let private buildHeap (picking : bool) (deregister : int -> unit) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> * (unit -> unit) =
         let runtime = signature.Runtime :?> IRuntime
         // DCE the effect BEFORE heapification: heapification turns every consumed attribute into an
         // SSBO gather (the heap VS has zero vertex inputs regardless), so a read-but-dead attribute
@@ -4423,7 +4430,7 @@ module Heap =
             // buckets/heaps comes later by passing the SAME storage to several buckets.)
             let storage = HeapStorage(runtime)
             let c = IncrementalBucket(runtime, storage, f0.Fields, f0.FieldMap, effect, r0, updaterRef.Value, f0.Bindless, f0.Instanced,
-                                      (cull, ff, fill, blend, dtest, dwrite), f0.Chain, picking)
+                                      (cull, ff, fill, blend, dtest, dwrite), f0.Chain, picking, deregister)
             caches.[key] <- c
             c
 
@@ -4567,7 +4574,7 @@ module Heap =
     /// one machinery via the ref-count. The drawing is carried by the bucket ROs;
     /// the activation itself rides on an ActivationRenderObject that both backends
     /// ignore for rendering and only activate/deactivate.
-    let ofRenderObjectsCore (picking : bool) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+    let ofRenderObjectsCore (picking : bool) (deregister : int -> unit) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         let gate = obj()
         let mutable activeTasks = 0
         let mutable shared : (aset<IRenderObject> * (unit -> unit)) voption = ValueNone
@@ -4580,7 +4587,7 @@ module Heap =
             lock gate (fun () ->
                 match shared with
                 | ValueSome (s, _) -> s
-                | ValueNone -> let r = buildHeap picking signature objects in shared <- ValueSome r; fst r)
+                | ValueNone -> let r = buildHeap picking deregister signature objects in shared <- ValueSome r; fst r)
 
         // Deterministic teardown: each task holds the ActivationRenderObject's
         // activation and disposes it when it drops the heap; the LAST drop frees
@@ -4613,13 +4620,14 @@ module Heap =
     /// Collapse render objects into bucket render objects — NO picking machinery
     /// (zero per-slot pick overhead; for non-dom / non-picking use).
     let ofRenderObjects (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
-        ofRenderObjectsCore false signature objects
+        ofRenderObjectsCore false ignore signature objects
 
     /// Picking-enabled collapse (entered via the dom heap node). Each input RO's
     /// "HeapPickId" uniform is captured per-slot into the "HeapPickIds" SSBO that the
-    /// dom heap pick-shader writes into the pick buffer.
-    let ofRenderObjectsPicking (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
-        ofRenderObjectsCore true signature objects
+    /// dom heap pick-shader writes into the pick buffer; `deregister` is called with a
+    /// slot's pick id when that slot is freed (so the dom side releases it).
+    let ofRenderObjectsPicking (deregister : int -> unit) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        ofRenderObjectsCore true deregister signature objects
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)
