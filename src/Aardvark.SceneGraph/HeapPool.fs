@@ -4009,6 +4009,30 @@ module Heap =
                 match linkCache.TryGetValue e.Id with
                 | true, le -> le
                 | _ -> let le = linkDCE e in linkCache.[e.Id] <- le; le)
+
+        // ── heap eligibility tests only NECESSARY inputs ─────────────────────
+        // The framebuffer-signature output semantics. An effect input is "necessary" only if it
+        // feeds one of these. We read that straight off the effect's dependency map (free — no
+        // DCE / no link): resolveTop gives output -> inputs, so the needed set is the union of
+        // the inputs of the signature's outputs. A dead `{ v with … }` passthrough (e.g. Flow)
+        // feeds no output, so it never appears here and can't reject an otherwise-heapable RO.
+        let sigOutNames =
+            signature.ColorAttachments |> Map.toSeq |> Seq.map (fun (_, att) -> string att.Name) |> Set.ofSeq
+        let neededCache = System.Collections.Generic.Dictionary<_, Set<string>>()
+        let neededInputsOf (e : Effect) : Set<string> =
+            match neededCache.TryGetValue e.Id with
+            | true, s -> s
+            | _ ->
+                let resolved = FShade.EffectDeps.resolveTop e.Dependencies
+                let s =
+                    sigOutNames
+                    |> Seq.collect (fun out ->
+                        match Map.tryFind out resolved with
+                        | Some (d : FShade.OutputDeps) -> d.Inputs |> Map.toSeq |> Seq.map fst
+                        | None -> Seq.empty)
+                    |> Set.ofSeq
+                neededCache.[e.Id] <- s
+                s
         checkSupport false runtime
         let scope = Ag.Scope.Root
 
@@ -4222,6 +4246,13 @@ module Heap =
             | :? RenderObject as ro ->
                 match ro.Surface with
                 | Surface.Effect e ->
+                    // Eligibility tests only the inputs the effect ACTUALLY NEEDS — those feeding a
+                    // framebuffer-signature output — read from the effect's FREE dependency map
+                    // (e.Dependencies; no DCE / no link). A dead input, e.g. a `{ v with … }` Flow
+                    // passthrough the fragment never reads, feeds no signature output, so it isn't
+                    // required and must NOT gate heap eligibility (else the whole scene falls through
+                    // to individual draws for an attribute the shader doesn't consume). Cached/effect.
+                    let needed = neededInputsOf e
                     // ── indices: OPTIONAL. Indexed draws need a 2-/4-byte
                     //    readable index buffer (host INativeBuffer or
                     //    downloadable backend buffer); NON-indexed draws ride
@@ -4253,7 +4284,7 @@ module Heap =
                     | None ->
                         // ── attributes: HOST storage decode OR bindless vertex-pull ──
                         let hostIssue =
-                            e.Inputs |> Map.toSeq |> Seq.tryPick (fun (name, inputT) ->
+                            e.Inputs |> Map.toSeq |> Seq.filter (fun (name, _) -> needed.Contains name) |> Seq.tryPick (fun (name, inputT) ->
                                 match ro.VertexAttributes.TryGetAttribute (Symbol.Create name) with
                                 | ValueNone -> Some (sprintf "effect input '%s' has no vertex attribute on the RO" name)
                                 | ValueSome bv ->
@@ -4271,7 +4302,7 @@ module Heap =
                             elif instanceCountOf ro <> 1 then
                                 Some "vertex-pull does not support pre-instanced draws (per-draw FirstInstance routes the handle)"
                             else
-                                e.Inputs |> Map.toSeq |> Seq.tryPick (fun (name, _) ->
+                                e.Inputs |> Map.toSeq |> Seq.filter (fun (name, _) -> needed.Contains name) |> Seq.tryPick (fun (name, _) ->
                                     match ro.VertexAttributes.TryGetAttribute (Symbol.Create name) with
                                     | ValueNone -> Some (sprintf "effect input '%s' has no vertex attribute on the RO" name)
                                     | ValueSome bv ->

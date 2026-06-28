@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0027
+- [Sg] Heap: eligibility respects effect DCE — a part is heapable if it supplies the inputs the effect's LIVE outputs need (read from the effect's dependency map vs the framebuffer signature), not every input the effect merely mentions; a read-but-dead attribute (e.g. `Flow` on non-water parts under a shared effect) no longer disqualifies a part and forces the whole scene to individual draws.
+
 ### 5.7.0-prerelease0026
 - [Sg/Rendering] Heap: transparent geometry renders transparent again — the multi-page `HeapRenderObject` bundle (0024) hid each draw's `IsTransparent` from the OIT router (`TransparencyRenderTask` type-tests `RenderObject`), so heapified transparent buckets fell into the opaque pass; `HeapRenderObject` now exposes `IsTransparent` and the wrapper routes the bundle through all three OIT passes (transforming each inner draw, re-bundling with the same derives). Regression since 0024.
 
