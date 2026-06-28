@@ -61,6 +61,9 @@ module HeapUniforms =
         // header offsets are page-local to a different page — writing them here corrupts).
         member x.HeapSlotPage : int[] = uniform?StorageBuffer?HeapSlotPage
         member x.HeapPageId : int = uniform?HeapPageId
+        // PICKING: dom-sourced per-slot pick id, gathered by gl_InstanceIndex; the dom
+        // heap pick-shader writes this into the pick buffer. Only bound when picking.
+        member x.HeapPickIds : int[] = uniform?StorageBuffer?HeapPickIds
         // GPU trafo-chain: per-slot GPU-folded ModelTrafo (M44f), written by the
         // composeModel compute pass and gathered by gl_InstanceIndex / gl_DrawID.
         member x.HeapModelChain : M44f[] = uniform?StorageBuffer?HeapModelChain
@@ -2257,7 +2260,12 @@ module Heap =
                                     // link arena (constants by value, dynamics by identity) and the
                                     // ModelTrafo gather reads the per-slot chainOut buffer instead of
                                     // an arena region. "ModelTrafo" is NOT in `names` in this mode.
-                                    chainMode : bool) =
+                                    chainMode : bool,
+                                    // PICKING: gates ALL per-slot pick-id machinery (the AddInternal
+                                    // capture, the pickIdBuf flush + exposure). Only true when the heap
+                                    // is entered via `ofRenderObjectsPicking` (the dom heap node) — a
+                                    // non-dom / non-picking heap pays nothing.
+                                    picking : bool) =
         let fieldStride = names.Length
         // df32 (two-f32) precision path vs real fp64 — chosen ONCE for the whole
         // bucket from the runtime (forced override OR no shaderFloat64). Threaded
@@ -2317,6 +2325,7 @@ module Heap =
         let derivedCells = derivedPlan |> Array.map (fun (c, _, _) -> c) |> Set.ofArray
         let scope = Ag.Scope.Root
         let symData = Symbol.Create "HeapData"
+        let symPickIds = Symbol.Create "HeapPickIds"
         let symDataI = Symbol.Create "HeapDataI"
         let symDataD = Symbol.Create "HeapDataD"   // native double view of the arena (fp64-requested uniforms)
         let symHeaders = Symbol.Create "HeapHeaders"
@@ -2554,6 +2563,11 @@ module Heap =
         // PAGED: which storage page each slot's group lives on (parallel to `entries`); a
         // page's sub-draw renders only its slots (others get a 0-instance record).
         let mutable slotPage : int[] = Array.zeroCreate 16
+        // PICKING: dom-sourced per-slot pick id (parallel to slotPage); set in AddInternal
+        // from the RO's "HeapPickId" uniform (-1 = unpickable), flushed to pickIdBuf, exposed
+        // as the "HeapPickIds" SSBO read by the dom heap pick-shader via gl_InstanceIndex.
+        let mutable pickIds : int[] = Array.zeroCreate 16
+        let symPickId = Symbol.Create "HeapPickId"
         let zeroDraw = DrawCallInfo(FaceVertexCount = 0, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 0)
         let freeSlots = System.Collections.Generic.Stack<int>()
         let mutable highWater = 0
@@ -2603,6 +2617,9 @@ module Heap =
                 let np = Array.zeroCreate<int> n
                 System.Array.Copy(slotPage, np, slotPage.Length)
                 slotPage <- np
+                let npk = Array.zeroCreate<int> n
+                System.Array.Copy(pickIds, npk, pickIds.Length)
+                pickIds <- npk
                 let nh = Array.zeroCreate<int> (n * headerStride)
                 System.Array.Copy(headers, nh, headers.Length)
                 headers <- nh
@@ -3023,6 +3040,11 @@ module Heap =
         let flushSlotPage (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
             slotPageBuf.ResizeInPlace(uint64 (max 16 slotPage.Length * 4))
             if highWater > 0 then slotPageBuf.Write(slotPage, 0UL, 0, highWater)
+        // PICKING: per-slot pick-id SSBO (parallel to slotPageBuf; full-rewrite on pull).
+        let pickIdBuf = MirrorBuffer(runtime, max 16 pickIds.Length * 4, BufferUsage.Storage)
+        let flushPickIds (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
+            pickIdBuf.ResizeInPlace(uint64 (max 16 pickIds.Length * 4))
+            if highWater > 0 then pickIdBuf.Write(pickIds, 0UL, 0, highWater)
         // CPU staging of the draw records in INDEXED layout (uploaded ranges
         // must be contiguous; entries itself stays in DrawCallInfo layout)
         let mutable drawStaging : DrawCallInfo[] = Array.zeroCreate entries.Length
@@ -3128,6 +3150,10 @@ module Heap =
             slotPageBuf.Dependency <- dep
             slotPageBuf.Flush <- flushSlotPage
             slotPageBuf.Name <- "HeapSlotPage"
+            if picking then
+                pickIdBuf.Dependency <- dep
+                pickIdBuf.Flush <- flushPickIds
+                pickIdBuf.Name <- "HeapPickIds"
 
         // ACQUISITION-PROPAGATING views over the bucket-owned AdaptiveBuffers:
         // AdaptiveResource.mapNonAdaptive keeps the IAdaptiveResource interface
@@ -3145,6 +3171,7 @@ module Heap =
                 IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> highWater (b :> IBuffer))
         let instAval = (instBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
         let slotPageU = ((slotPageBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
+        let pickIdU = ((pickIdBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
         // re-reads only the live slots' avals (cheap when unchanged); a fresh
@@ -3468,6 +3495,15 @@ module Heap =
             let idxRefE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint idxCell) ] @>
             let fieldOff (fi : int) : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint fi) ] @>
             fun e ->
+                // PICKING: rewrite a `uniform.HeapPickId` read (from the dom heap pick-fragment)
+                // into the per-slot HeapPickIds SSBO gather — BY NAME, using the same slotE the heap
+                // uses for every other uniform (FShade assigns the actual in/out locations). So the
+                // pick fragment stays handle-agnostic; the rewrite owns the slot.
+                let e =
+                    if picking then
+                        e |> Effect.substituteUniforms (fun name _ _ _ ->
+                            if name = "HeapPickId" then Some (<@@ (uniform.HeapPickIds : int[]).[ %slotE ] @@>) else None)
+                    else e
                 // ONE pass per shader — derived composites are already materialized in
                 // their arena output region by the compute pass, so every uniform read
                 // (composite or plain) is a single field gather.
@@ -3556,6 +3592,7 @@ module Heap =
                         // to arenaU when the bucket has no derived uniforms.
                         if name = symData || name = symDataI || name = symDataD then ValueSome derivedU
                         elif name = symHeaders then ValueSome headersU
+                        elif picking && name = symPickIds then ValueSome pickIdU
                         else
                             match texLookup.TryGetValue name with
                             | true, v -> ValueSome v
@@ -3672,6 +3709,12 @@ module Heap =
             // one is full). Estimate the slot's worst-case words so it always fits the chosen page.
             setPage (storage.PlacePage (estimateSlotWords ro))
             slotPage.[slot] <- curPage
+            // PICKING: capture the dom-sourced pick id (constant per slot; -1 = unpickable)
+            if picking then
+                pickIds.[slot] <-
+                    match ro.Uniforms.TryGetUniform(scope, symPickId) with
+                    | ValueSome v -> (try v.GetValueUntyped(AdaptiveToken.Top) :?> int with _ -> -1)
+                    | ValueNone -> -1
             let regionKeys = System.Collections.Generic.List<IAdaptiveValue>(names.Length)
             let outBlocks = System.Collections.Generic.List<Management.Block<unit>>()
             for i in 0 .. names.Length - 1 do
@@ -3924,7 +3967,7 @@ module Heap =
     // buffers) and returns its bucket-RO set together with a teardown that frees
     // EVERYTHING (every IncrementalBucket's GPU + object-count CPU, the reader).
     // Called lazily on first activation; teardown runs when the last task drops it.
-    let private buildHeap (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> * (unit -> unit) =
+    let private buildHeap (picking : bool) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> * (unit -> unit) =
         let runtime = signature.Runtime :?> IRuntime
         // DCE the effect BEFORE heapification: heapification turns every consumed attribute into an
         // SSBO gather (the heap VS has zero vertex inputs regardless), so a read-but-dead attribute
@@ -4380,7 +4423,7 @@ module Heap =
             // buckets/heaps comes later by passing the SAME storage to several buckets.)
             let storage = HeapStorage(runtime)
             let c = IncrementalBucket(runtime, storage, f0.Fields, f0.FieldMap, effect, r0, updaterRef.Value, f0.Bindless, f0.Instanced,
-                                      (cull, ff, fill, blend, dtest, dwrite), f0.Chain)
+                                      (cull, ff, fill, blend, dtest, dwrite), f0.Chain, picking)
             caches.[key] <- c
             c
 
@@ -4524,7 +4567,7 @@ module Heap =
     /// one machinery via the ref-count. The drawing is carried by the bucket ROs;
     /// the activation itself rides on an ActivationRenderObject that both backends
     /// ignore for rendering and only activate/deactivate.
-    let ofRenderObjects (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+    let ofRenderObjectsCore (picking : bool) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         let gate = obj()
         let mutable activeTasks = 0
         let mutable shared : (aset<IRenderObject> * (unit -> unit)) voption = ValueNone
@@ -4537,7 +4580,7 @@ module Heap =
             lock gate (fun () ->
                 match shared with
                 | ValueSome (s, _) -> s
-                | ValueNone -> let r = buildHeap signature objects in shared <- ValueSome r; fst r)
+                | ValueNone -> let r = buildHeap picking signature objects in shared <- ValueSome r; fst r)
 
         // Deterministic teardown: each task holds the ActivationRenderObject's
         // activation and disposes it when it drops the heap; the LAST drop frees
@@ -4566,6 +4609,17 @@ module Heap =
         // the mapping makes the buckets surface in the first evaluation (no lag).
         let buckets = gen |> ASet.bind (fun _ -> ensureBuilt())
         ASet.union (ASet.single (activationRO :> IRenderObject)) buckets
+
+    /// Collapse render objects into bucket render objects — NO picking machinery
+    /// (zero per-slot pick overhead; for non-dom / non-picking use).
+    let ofRenderObjects (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        ofRenderObjectsCore false signature objects
+
+    /// Picking-enabled collapse (entered via the dom heap node). Each input RO's
+    /// "HeapPickId" uniform is captured per-slot into the "HeapPickIds" SSBO that the
+    /// dom heap pick-shader writes into the pick buffer.
+    let ofRenderObjectsPicking (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        ofRenderObjectsCore true signature objects
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)
