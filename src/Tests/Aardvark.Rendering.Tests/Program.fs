@@ -29,9 +29,10 @@ let main argv =
             ``IDictionary StructuralComparer Tests``.tests
         ]
 
-    let runManuallyInMain = true
-
-    if runManuallyInMain then
+    // run everything synchronously when invoked with no args (the default / CI path);
+    // when args ARE given, honour Expecto's CLI so e.g. `--filter-test-list "Heap uniforms"`
+    // runs just that subtree (otherwise argv was silently ignored).
+    if Array.isEmpty argv then
         runTestsSynchronously true allTests
     else
         runTestsWithCLIArgs [ CLIArguments.No_Spinner ] argv allTests

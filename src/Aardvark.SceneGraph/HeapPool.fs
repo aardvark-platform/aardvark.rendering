@@ -16,16 +16,16 @@ namespace Aardvark.SceneGraph
 // (ARB_shader_draw_parameters); texture bindless additionally needs GL
 // extensions (ARB_bindless_texture / NV_gpu_shader5).
 //
-// Two entry points:
+// Entry point:
 //   * Heap.ofRenderObjects — adaptive aset<IRenderObject> -> aset<IRenderObject>
 //     transform; buckets by effect, stores host geometry (attributes AND
 //     indices, incl. SingleValueBuffer singletons) as per-allocation-headed
 //     ranges in the bucket's storage arena — NO fixed-function vertex input;
 //     draws are non-indexed and the rewritten vertex shader storage-decodes
 //     everything (wombat-style). Dirty-tracks the arena (sparse per-frame
-//     mutation uploads only changed sub-ranges).
-//   * Heap.HeapScene       — imperative, growable single bucket with O(1)
-//     Add/Remove (free-list slots); for streaming workloads.
+//     mutation uploads only changed sub-ranges). Streaming/churn is just a
+//     changeable aset (cset) — membership deltas re-pack incrementally.
+//     `Sg.heap signature` wraps it as a scene-graph node.
 
 open Aardvark.Base
 open Aardvark.Rendering
@@ -146,11 +146,66 @@ module Heap =
         if textures && not runtime.SupportsUnboundedSamplerArrays then
             failwith "Heap: runtime does not support unbounded (bindless) sampler arrays (descriptor indexing); per-object textures via the heap are unavailable on this device (e.g. the GL backend)."
 
-    /// Type-driven gather: given the base element offset in HeapData, build
-    /// the expression that reconstructs a value of `typ`.
-    let private gatherFor (typ : System.Type) (off : Expr<int>) : Expr =
-        if   typ = typeof<int>     then <@ int (uniform.HeapData.[%off]) @>.Raw
+    // include non-public so PRIVATE record uniforms are walked too.
+    let private recordFlags = System.Reflection.BindingFlags.Public ||| System.Reflection.BindingFlags.NonPublic
+
+    /// arena word footprint of a packable LEAF type — MUST match packerFor's sizes.
+    let private leafWords (t : System.Type) : int =
+        if   t = typeof<M44f> || t = typeof<Trafo3d> || t = typeof<M44d> then 16
+        elif t = typeof<M33f> || t = typeof<M33d> then 9
+        elif t = typeof<V4f>  || t = typeof<C4f>  || t = typeof<V4d> || t = typeof<V4i> then 4
+        elif t = typeof<V3f>  || t = typeof<V3d>  || t = typeof<V3i> then 3
+        elif t = typeof<V2f>  || t = typeof<V2d>  || t = typeof<V2i> then 2
+        else 1
+
+    /// FShade fixed array `Arr<N<len>, elem>` -> (len, elem), else None. (Same length
+    /// extraction FShade itself uses, via Peano.)
+    let private tryArr (t : System.Type) : (int * System.Type) option =
+        if t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Arr<_, _>> then
+            let ga = t.GetGenericArguments()
+            Some (Peano.getSize ga.[0], ga.[1])
+        else None
+
+    /// A per-object uniform whose SHADER-requested type is an F# RECORD (struct or
+    /// class) or a fixed array `Arr<N,'T>` is packed/gathered element-by-element by
+    /// the composite walker rather than the leaf table — generalising the heap over
+    /// arbitrary uniform shapes. The arena layout is PRIVATE to pack+gather (tight,
+    /// no std140 padding); FShade's own member/index access resolves on the
+    /// reconstructed value. (DU follows.)
+    let private isCompositeType (t : System.Type) : bool =
+        Microsoft.FSharp.Reflection.FSharpType.IsRecord(t, recordFlags)
+        || Microsoft.FSharp.Reflection.FSharpType.IsUnion(t, recordFlags)
+        || (tryArr t).IsSome
+
+    /// tight arena word footprint of a (leaf or composite) requested type.
+    let rec private wordsOfType (t : System.Type) : int =
+        match tryArr t with
+        | Some (len, elem) -> len * wordsOfType elem
+        | None ->
+            if Microsoft.FSharp.Reflection.FSharpType.IsUnion(t, recordFlags) then
+                // tag word + every case's fields concatenated
+                1 + (Microsoft.FSharp.Reflection.FSharpType.GetUnionCases(t, recordFlags)
+                     |> Array.sumBy (fun ci -> ci.GetFields() |> Array.sumBy (fun f -> wordsOfType f.PropertyType)))
+            elif Microsoft.FSharp.Reflection.FSharpType.IsRecord(t, recordFlags) then
+                Microsoft.FSharp.Reflection.FSharpType.GetRecordFields(t, recordFlags)
+                |> Array.sumBy (fun f -> wordsOfType f.PropertyType)
+            else leafWords t
+
+    /// Type-driven LEAF gather: given the base element offset, build the expression
+    /// that reconstructs a value of leaf `typ`. (Composites go through gatherFor.)
+    let private gatherLeaf (typ : System.Type) (off : Expr<int>) : Expr =
+        // int/uint/bool/int-vectors are stored BIT-EXACT in the int arena view
+        // (HeapDataI), not float-widened — no 2^24-mantissa loss. uint reads the
+        // same int word and reinterprets (GLSL `uint(int)` is mod-2^32 = bitcast);
+        // bool is a 0/1 word. (packerFor writes the matching bit pattern via `wi`.)
+        if   typ = typeof<int>     then <@ uniform.HeapDataI.[%off] @>.Raw
+        elif typ = typeof<uint32>  then <@ uint (uniform.HeapDataI.[%off]) @>.Raw
+        elif typ = typeof<bool>    then <@ uniform.HeapDataI.[%off] <> 0 @>.Raw
+        elif typ = typeof<V2i> then <@ let o = %off in V2i(uniform.HeapDataI.[o], uniform.HeapDataI.[o+1]) @>.Raw
+        elif typ = typeof<V3i> then <@ let o = %off in V3i(uniform.HeapDataI.[o], uniform.HeapDataI.[o+1], uniform.HeapDataI.[o+2]) @>.Raw
+        elif typ = typeof<V4i> then <@ let o = %off in V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o+1], uniform.HeapDataI.[o+2], uniform.HeapDataI.[o+3]) @>.Raw
         elif typ = typeof<float32> then <@ uniform.HeapData.[%off] @>.Raw
+        elif typ = typeof<C4f> then <@ let o = %off in C4f(uniform.HeapData.[o], uniform.HeapData.[o+1], uniform.HeapData.[o+2], uniform.HeapData.[o+3]) @>.Raw
         elif typ = typeof<V2f> then <@ let o = %off in V2f(uniform.HeapData.[o], uniform.HeapData.[o+1]) @>.Raw
         elif typ = typeof<V3f> then <@ let o = %off in V3f(uniform.HeapData.[o], uniform.HeapData.[o+1], uniform.HeapData.[o+2]) @>.Raw
         elif typ = typeof<V4f> then <@ let o = %off in V4f(uniform.HeapData.[o], uniform.HeapData.[o+1], uniform.HeapData.[o+2], uniform.HeapData.[o+3]) @>.Raw
@@ -183,6 +238,61 @@ module Heap =
                     uniform.HeapData.[o+8],  uniform.HeapData.[o+9],  uniform.HeapData.[o+10], uniform.HeapData.[o+11],
                     uniform.HeapData.[o+12], uniform.HeapData.[o+13], uniform.HeapData.[o+14], uniform.HeapData.[o+15]) @>.Raw
         else failwithf "Heap: unsupported per-draw uniform type %A" typ
+
+    /// gather a value of `typ` (leaf OR composite) from the arena at word `off`.
+    let rec private gatherFor (typ : System.Type) (off : Expr<int>) : Expr =
+        if isCompositeType typ then compositeGather typ off
+        else gatherLeaf typ off
+    /// reconstruct a RECORD value: gather each field at its tight word offset, then
+    /// build the record. A surrounding `uniform.Rec.Field` access simplifies to that
+    /// field's gather; the whole-record materialisation is optimised away by FShade.
+    and private compositeGather (typ : System.Type) (off : Expr<int>) : Expr =
+        match tryArr typ with
+        | Some (len, elem) ->
+            // gather each element at its tight offset; build an FShade fixed array so a
+            // surrounding `uniform.Arr.[i]` (constant OR runtime index) resolves on it.
+            let ew = wordsOfType elem
+            let elems =
+                [ for i in 0 .. len - 1 ->
+                    let o = i * ew
+                    gatherFor elem (<@ %off + o @>) ]
+            Expr.NewFixedArray(elem, elems)
+        | None ->
+        if Microsoft.FSharp.Reflection.FSharpType.IsUnion(typ, recordFlags) then
+            // DU layout: tag word at `off`, then every case's fields concatenated
+            // (case order, field order). Read the tag and rebuild the ACTIVE case as a
+            // nested `if tag = k then CaseK(...) else …`; FShade lowers the union.
+            let tagE : Expr<int> = <@ uniform.HeapDataI.[%off] @>
+            let mutable c = 1
+            let built =
+                Microsoft.FSharp.Reflection.FSharpType.GetUnionCases(typ, recordFlags)
+                |> Array.map (fun ci ->
+                    let args =
+                        ci.GetFields()
+                        |> Array.map (fun f ->
+                            let co = c
+                            let g = gatherFor f.PropertyType (<@ %off + co @>)
+                            c <- c + wordsOfType f.PropertyType
+                            g)
+                        |> Array.toList
+                    ci.Tag, Expr.NewUnionCase(ci, args))
+            let mutable e = snd built.[built.Length - 1]
+            for k in built.Length - 2 .. -1 .. 0 do
+                let (tg, ce) = built.[k]
+                e <- Expr.IfThenElse((<@ %tagE = tg @>).Raw, ce, e)
+            e
+        else
+        let fields = Microsoft.FSharp.Reflection.FSharpType.GetRecordFields(typ, recordFlags)
+        let mutable c = 0
+        let args =
+            fields
+            |> Array.map (fun f ->
+                let co = c                                   // fix the offset for this field
+                let g = gatherFor f.PropertyType (<@ %off + co @>)
+                c <- c + wordsOfType f.PropertyType
+                g)
+            |> Array.toList
+        Expr.NewRecord(typ, args)
 
     // ── Derived-uniform system (general, à la wombat §7) ─────────────────
     // A derived uniform is a pure function of OTHER uniforms, written as an
@@ -457,6 +567,12 @@ module Heap =
     // O(changed) diffs); per-draw value marks flow through the reactive arena
     // with offsets/headers held constant.
 
+    /// write an int's BIT PATTERN into a float32 staging slot (netstandard2.0 has no
+    /// Int32BitsToSingle, so reinterpret the 4 bytes). The int arena view (HeapDataI)
+    /// reads it back exactly — used for int/uint/bool/int-vector per-draw fields.
+    let private wi (a : float32[]) (i : int) (n : int) =
+        a.[i] <- System.BitConverter.ToSingle(System.BitConverter.GetBytes n, 0)
+
     let private packerFor (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
         if   t = typeof<M44f>    then 16, (fun o a off -> packM44 (o :?> M44f) a off)
         elif t = typeof<Trafo3d> then 16, (fun o a off -> packM44 (M44f.op_Explicit (o :?> Trafo3d).Forward) a off)
@@ -472,7 +588,13 @@ module Heap =
         elif t = typeof<M33f>    then 9,  (fun o a off -> let m = o :?> M33f in a.[off]<-m.M00; a.[off+1]<-m.M01; a.[off+2]<-m.M02; a.[off+3]<-m.M10; a.[off+4]<-m.M11; a.[off+5]<-m.M12; a.[off+6]<-m.M20; a.[off+7]<-m.M21; a.[off+8]<-m.M22)
         elif t = typeof<float32> then 1,  (fun o a off -> a.[off] <- (o :?> float32))
         elif t = typeof<float>   then 1,  (fun o a off -> a.[off] <- float32 (o :?> float))
-        elif t = typeof<int>     then 1,  (fun o a off -> a.[off] <- float32 (o :?> int))
+        // BIT-EXACT integral fields -> the int arena view (no float32 mantissa loss)
+        elif t = typeof<int>     then 1,  (fun o a off -> wi a off (o :?> int))
+        elif t = typeof<uint32>  then 1,  (fun o a off -> wi a off (int (o :?> uint32)))
+        elif t = typeof<bool>    then 1,  (fun o a off -> wi a off (if (o :?> bool) then 1 else 0))
+        elif t = typeof<V2i>     then 2,  (fun o a off -> let v = o :?> V2i in wi a off v.X; wi a (off+1) v.Y)
+        elif t = typeof<V3i>     then 3,  (fun o a off -> let v = o :?> V3i in wi a off v.X; wi a (off+1) v.Y; wi a (off+2) v.Z)
+        elif t = typeof<V4i>     then 4,  (fun o a off -> let v = o :?> V4i in wi a off v.X; wi a (off+1) v.Y; wi a (off+2) v.Z; wi a (off+3) v.W)
         else failwithf "Heap: unsupported per-draw uniform content type %A" t
 
     /// A uniform the SHADER requests at double precision is stored as REAL doubles:
@@ -515,6 +637,62 @@ module Heap =
         elif t = typeof<M33d> then 18, (fun o a off -> let m = asM33d o in wd a off m.M00; wd a (off+2) m.M01; wd a (off+4) m.M02; wd a (off+6) m.M10; wd a (off+8) m.M11; wd a (off+10) m.M12; wd a (off+12) m.M20; wd a (off+14) m.M21; wd a (off+16) m.M22)
         elif t = typeof<M44d> then 32, (fun o a off -> let m = asM44d o in wd a (off+0) m.M00; wd a (off+2) m.M01; wd a (off+4) m.M02; wd a (off+6) m.M03; wd a (off+8) m.M10; wd a (off+10) m.M11; wd a (off+12) m.M12; wd a (off+14) m.M13; wd a (off+16) m.M20; wd a (off+18) m.M21; wd a (off+20) m.M22; wd a (off+22) m.M23; wd a (off+24) m.M30; wd a (off+26) m.M31; wd a (off+28) m.M32; wd a (off+30) m.M33)
         else failwithf "Heap: unsupported double per-draw uniform type %A" t
+
+    /// pack a (leaf OR composite) value into staging at word `off`, keyed on the
+    /// shader-REQUESTED type so the layout matches `gatherFor`. RECORDS recurse
+    /// field-by-field (tight, same order as the gather); leaves use packerFor. The
+    /// supplied value must structurally match the requested record type.
+    let rec private compositePacker (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
+        match tryArr t with
+        | Some (len, elem) ->
+            // supplied value is a .NET array (T[]) or an Arr<N,T> — read `len` elements
+            // and pack each at its element offset, matching compositeGather's layout.
+            let (ew, epk) = compositePacker elem
+            let itemProp = t.GetProperty("Item")
+            len * ew, (fun o a off ->
+                let get : int -> obj =
+                    match o with
+                    | :? System.Array as arr -> fun i -> arr.GetValue i
+                    | _ -> fun i -> itemProp.GetValue(o, [| box i |])
+                for i in 0 .. len - 1 do epk (get i) a (off + i * ew))
+        | None ->
+        if Microsoft.FSharp.Reflection.FSharpType.IsUnion(t, recordFlags) then
+            // write the tag at word 0, then the ACTIVE case's fields at their reserved
+            // offsets (matching compositeGather); inactive cases' slots stay zero.
+            let tagReader = Microsoft.FSharp.Reflection.FSharpValue.PreComputeUnionTagReader(t, recordFlags)
+            let mutable c = 1
+            let cases =
+                Microsoft.FSharp.Reflection.FSharpType.GetUnionCases(t, recordFlags)
+                |> Array.map (fun ci ->
+                    let reader = Microsoft.FSharp.Reflection.FSharpValue.PreComputeUnionReader(ci, recordFlags)
+                    let parts =
+                        ci.GetFields()
+                        |> Array.map (fun f ->
+                            let o = c
+                            let (w, pk) = compositePacker f.PropertyType
+                            c <- c + w
+                            o, pk)
+                    ci.Tag, reader, parts)
+            c, (fun o a off ->
+                let tag = tagReader o
+                wi a off tag
+                let (_, reader, parts) = cases |> Array.find (fun (tg, _, _) -> tg = tag)
+                let vals = reader o
+                parts |> Array.iteri (fun j (rel, pk) -> pk vals.[j] a (off + rel)))
+        elif Microsoft.FSharp.Reflection.FSharpType.IsRecord(t, recordFlags) then
+            let reader = Microsoft.FSharp.Reflection.FSharpValue.PreComputeRecordReader(t, recordFlags)
+            let parts =
+                Microsoft.FSharp.Reflection.FSharpType.GetRecordFields(t, recordFlags)
+                |> Array.map (fun f -> compositePacker f.PropertyType)
+            let total = parts |> Array.sumBy fst
+            total, (fun o a off ->
+                let vals = reader o
+                let mutable c = off
+                for i in 0 .. parts.Length - 1 do
+                    let (w, pk) = parts.[i]
+                    pk vals.[i] a c
+                    c <- c + w)
+        else packerFor t
 
     /// Size in bytes of a blittable attribute/index element type (-1 if it isn't
     /// blittable — such an RO is then treated as un-heapable and passed through).
@@ -714,7 +892,7 @@ module Heap =
     /// only those into a shared staging mirror, COALESCES adjacent dirty
     /// regions into runs, and uploads one sub-range per run. All-dirty -> one
     /// upload (regions are arena-contiguous); sparse -> a few small uploads.
-    /// Supports dynamic add/remove of regions and pow2 growth (for HeapScene).
+    /// Supports dynamic add/remove of regions and pow2 growth (incremental bucket).
     type internal HeapArena(runtime : IBufferRuntime, initialFloats : int) =
         // DEVICE-LOCAL: the arena is read per-vertex every frame; host-visible put it across PCIe
         // (~1 GB/s) and cost 33x on the render (968 -> 29 ms full Vienna). Writes stage through the
@@ -734,7 +912,7 @@ module Heap =
         /// so this is rule-clean inside adaptive evaluation: no transact/MarkOutdated
         /// happens here. Both call sites guarantee a subsequent re-evaluation: the
         /// incremental updater is itself the arena's ExtraDependency (already
-        /// evaluating), and HeapScene.Add runs in a transact and calls Touch().
+        /// evaluating), and the incremental bucket's Add runs in transact + Touch().
         member x.EnsureFloats(n : int) =
             if n > capacity then
                 let nf = Fun.NextPowerOfTwo n
@@ -2703,7 +2881,13 @@ module Heap =
             | true, e -> e.RefCount <- e.RefCount + 1; e.Offset
             | _ ->
                 let dbl = isDoubleUniform requested
-                let (sz, pk) = if dbl then doublePackerFor df32 requested else packerFor av.ContentType
+                // f32/double leaves key on the SUPPLIED type (so Trafo3d/M44d coerce to
+                // the requested M44f); composites key on the REQUESTED record type so the
+                // tight field layout matches gatherFor exactly.
+                let (sz, pk) =
+                    if dbl then doublePackerFor df32 requested
+                    elif isCompositeType requested then compositePacker requested
+                    else packerFor av.ContentType
                 // double regions start at an EVEN word (8-byte) so HeapDataD addresses
                 // them; over-allocate one word and align the start up.
                 let b = arenaAlloc.Alloc (if dbl then sz + 1 else sz)
@@ -3270,7 +3454,7 @@ module Heap =
         let recBuf : IBuffer<int> =
             if not hasDerived then Unchecked.defaultof<_>
             else
-                let b = runtime.CreateBuffer<int>(max 1 derivedRecords.Length, BufferUsage.Storage)
+                let b = runtime.CreateBuffer<int>(max 1 derivedRecords.Length, BufferUsage.Write ||| BufferUsage.Storage)
                 if derivedRecords.Length > 0 then b.Upload(derivedRecords, 0, 0, derivedRecords.Length)
                 b
         // The derive's input binding is a PURE aval-based provider (NOT a
@@ -3350,15 +3534,15 @@ module Heap =
                         if n > chainCap then
                             let cap = Fun.NextPowerOfTwo n
                             if not (isNull (box chOffBuf)) then chOffBuf.Dispose(); chLenBuf.Dispose()
-                            chOffBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Storage)
-                            chLenBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Storage)
+                            chOffBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Write ||| BufferUsage.Storage)
+                            chLenBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Write ||| BufferUsage.Storage)
                             chainCap <- cap
                             chainStructAllDirty <- true
                         let idxExtent = max 1 chIdxAlloc.Extent
                         if idxExtent > chIdxBufCap then
                             let cap = Fun.NextPowerOfTwo idxExtent
                             if not (isNull (box chIdxBuf)) then chIdxBuf.Dispose()
-                            chIdxBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Storage)
+                            chIdxBuf <- runtime.CreateBuffer<int>(cap, BufferUsage.Write ||| BufferUsage.Storage)
                             chIdxBufCap <- cap
                             chainStructAllDirty <- true
                         if chainStructAllDirty || chainDirtyStruct.Count > 0 then
@@ -4123,7 +4307,8 @@ module Heap =
             System.Collections.Generic.HashSet<System.Type>(
                 [ typeof<M44f>; typeof<Trafo3d>; typeof<M44d>; typeof<V4f>; typeof<C4f>
                   typeof<V3f>; typeof<V2f>; typeof<float32>; typeof<float>; typeof<int>
-                  typeof<V3d>; typeof<V2d>; typeof<V4d>; typeof<M33d> ])
+                  typeof<V3d>; typeof<V2d>; typeof<V4d>; typeof<M33d>
+                  typeof<uint32>; typeof<bool>; typeof<V2i>; typeof<V3i>; typeof<V4i> ])
 
         // ── per-draw field auto-detection ────────────────────────────────
         // Classification rule (deterministic per RO, memoized in RoFacts like
@@ -4176,7 +4361,10 @@ module Heap =
                 else
                     match r.Uniforms.TryGetUniform(scope, Symbol.Create n) with
                     | ValueSome v ->
-                        if packable.Contains v.ContentType then true
+                        // requested type (what the shader declares) drives composite
+                        // eligibility; the supplied ContentType drives leaf eligibility.
+                        let requested = match e.Uniforms.TryFind n with | Some p -> p.uniformType | None -> v.ContentType
+                        if packable.Contains v.ContentType || isCompositeType requested then true
                         else
                             diag (sprintf "uniform '%s' is effect-consumed and RO-supplied but UNPACKABLE (ContentType = %s) — it stays a shared global resolved from ONE bucket member; if it genuinely varies per object, supply it in a packable type (M44f/Trafo3d/M44d/V4f/C4f/V3f/V2f/float32/float/int)." n v.ContentType.Name)
                             false
@@ -4669,146 +4857,6 @@ module Heap =
     // relative math (View * Model) stays precise at geodetic scale where an f32
     // inline ModelViewProj would jitter. Reactive: the arena re-runs the compute
     // whenever any model or the camera changes (AVal.custom over the inputs).
-
-    // ── Incremental scene (imperative Add/Remove) ───────────────────────
-    // The streaming path: ONE bucket, shared geometry, fixed-size per-draw
-    // slots in a growable dirty-tracked arena. Add/Remove are O(1) (free-list
-    // + dead indirect entry), no header buffer (offset = slot*stride + field).
-    // Call Add/Remove inside `transact` (the framework marks buffers there —
-    // same convention as ManagedBuffer; can't mark inside an adaptive eval).
-
-    /// An incrementally-mutable single-bucket heap scene: Add/Remove draws at
-    /// runtime (O(1), free-list slots in a growable arena). Call Add/Remove
-    /// inside `transact`.
-    type HeapScene(runtime : IRuntime, effect : Effect, mode : IndexedGeometryMode,
-                   positions : V3f[], normals : V3f[], index : int[],
-                   schema : (string * System.Type)[], globals : IUniformProvider) =
-
-        do checkSupport false runtime
-
-        // fixed layout from the schema
-        let fieldOffset = System.Collections.Generic.Dictionary<string, int>()
-        let packerOf = System.Collections.Generic.Dictionary<string, int * (obj -> float32[] -> int -> unit)>()
-        let dataStride =
-            let mutable o = 0
-            for (n, t) in schema do
-                let (sz, pk) = packerFor t
-                fieldOffset.[n] <- o
-                packerOf.[n] <- (sz, pk)
-                o <- o + sz
-            o
-
-        // header-less rewrite: uniform -> HeapData[ slot*stride + fieldOffset ],
-        // slot routed by either:
-        //   * gl_DrawID (= sub-draw position = slot) — GL 4.6+ and real Vulkan;
-        //     each DrawCallInfo keeps FirstInstance=0.
-        //   * gl_InstanceIndex + per-draw FirstInstance=slot — MoltenVK fallback
-        //     (MSL has no DrawIndex). Each sub-draw still has InstanceCount=1, so
-        //     Metal's [[base_instance]] simply offsets the vertex fetch and the
-        //     shader reads slot from gl_InstanceIndex.
-        let useDrawId = runtime.SupportsMultiDrawIndirectDrawId
-        let effect' =
-            let slotE : Expr<int> =
-                if useDrawId then <@ getDrawId() @>
-                else Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
-            effect |> Effect.substituteUniforms (fun name typ _ _ ->
-                match fieldOffset.TryGetValue name with
-                | true, fo -> Some (gatherFor typ <@ %slotE * %(cint dataStride) + %(cint fo) @>)
-                | _ -> None)
-
-        let initialSlots = 64
-        let arena = HeapArena(runtime, dataStride * initialSlots)
-        let freeList = System.Collections.Generic.Stack<int>()
-        let mutable highWater = 0
-        let slotWriters = System.Collections.Generic.Dictionary<int, RegionWriter[]>()
-        let mutable entries : DrawCallInfo[] = Array.zeroCreate initialSlots
-        let version = AVal.init 0
-
-        // `entries` / `highWater` are read on the render thread (indirectAval)
-        // and mutated by the caller's thread (Add/Remove) -> guard with a gate.
-        let gate = obj()
-        let bv (arr : System.Array) t = BufferView(AVal.constant (ArrayBuffer(arr) :> IBuffer), t)
-        let indirectAval = version |> AVal.map (fun _ -> lock gate (fun () -> IndirectBuffer.ofArray (Array.sub entries 0 highWater)))
-        // acquisition-propagating (see IncrementalBucket): the render task's
-        // Release of the HeapData binding destroys the arena's backend buffer.
-        let heapDataU = ((arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
-        let symHeap = Symbol.Create "HeapData"
-
-        let ro = RenderObject()
-        do
-            ro.Surface          <- Surface.Effect effect'
-            ro.Mode             <- mode
-            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>
-                                                              DefaultSemantic.Normals,   bv normals   typeof<V3f> ]
-            ro.Indices          <- Some (bv index typeof<int>)
-            ro.DrawCalls        <- DrawCalls.Indirect indirectAval
-            ro.Uniforms <-
-                { new IUniformProvider with
-                    member _.TryGetUniform(s, name) =
-                        if name = symHeap then ValueSome heapDataU else globals.TryGetUniform(s, name)
-                    member _.Dispose() = () }
-
-        let ensure (slot : int) =
-            if slot >= entries.Length then
-                let n = Fun.NextPowerOfTwo (slot + 1)
-                let ne = Array.zeroCreate n
-                System.Array.Copy(entries, ne, entries.Length)
-                entries <- ne
-            arena.EnsureFloats ((slot + 1) * dataStride)
-
-        /// Add a draw with the given per-draw uniform values. Call in transact.
-        member _.Add(uniforms : Map<string, IAdaptiveValue>) : int =
-            lock gate (fun () ->
-                let slot = if freeList.Count > 0 then freeList.Pop() else let s = highWater in highWater <- highWater + 1; s
-                ensure slot
-                let ws =
-                    schema |> Array.map (fun (n, _) ->
-                        let (sz, pk) = packerOf.[n]
-                        arena.Add(uniforms.[n], slot * dataStride + fieldOffset.[n], sz, pk))
-                slotWriters.[slot] <- ws
-                // FirstInstance: 0 on the gl_DrawID path; = slot on the MoltenVK
-                // gl_InstanceIndex fallback (so [[base_instance]] offsets the slot).
-                let firstInstance = if useDrawId then 0 else slot
-                entries.[slot] <- DrawCallInfo(FaceVertexCount = index.Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = firstInstance, InstanceCount = 1)
-                arena.Touch()
-                version.Value <- version.Value + 1
-                slot)
-
-        /// Remove a previously added draw. Call in transact. Idempotent: removing
-        /// an unknown / already-removed slot is a no-op (it must NOT be pushed onto
-        /// the free list again, or two later Adds would share one slot).
-        member _.Remove(slot : int) =
-            lock gate (fun () ->
-                match slotWriters.TryGetValue slot with
-                | true, ws ->
-                    for w in ws do arena.Remove w
-                    slotWriters.Remove slot |> ignore
-                    if slot < entries.Length then
-                        entries.[slot] <- DrawCallInfo(FaceVertexCount = 0, FirstInstance = 0, InstanceCount = 0)
-                    freeList.Push slot
-                    version.Value <- version.Value + 1
-                | _ -> ())
-
-        member _.Count = slotWriters.Count
-        member _.RenderObject = ro :> IRenderObject
-        member x.Sg = Sg.renderObjectSet (ASet.single x.RenderObject)
-
-        /// Release every slot's region writers (and with them their Acquire on the
-        /// per-draw source avals). Call in transact, after (or while) removing the
-        /// scene from rendering — the indirect buffer collapses to zero draws. The
-        /// arena's GPU buffer itself is freed by the render task that acquired it
-        /// (AdaptiveResource refcounting) once the scene's RenderObject is dropped.
-        member _.Dispose() =
-            lock gate (fun () ->
-                for KeyValue(_, ws) in slotWriters do
-                    for w in ws do arena.Remove w
-                slotWriters.Clear()
-                freeList.Clear()
-                highWater <- 0
-                version.Value <- version.Value + 1)
-
-        interface System.IDisposable with
-            member x.Dispose() = x.Dispose()
 
 
 // ── Sg.heap — scene-graph node for Heap.ofRenderObjects ─────────────────────

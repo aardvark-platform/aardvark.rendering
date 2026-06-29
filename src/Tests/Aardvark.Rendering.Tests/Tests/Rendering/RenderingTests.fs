@@ -15,6 +15,7 @@ module ``Rendering Tests`` =
         IntegerAttachments.tests
         Samplers.tests
         Uniforms.tests
+        HeapUniforms.tests
         Surfaces.tests
         DrawCalls.tests
         Viewport.tests

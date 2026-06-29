@@ -20,7 +20,11 @@ open Aardvark.Application
 open FShade
 open HeapSpike
 
-// Incremental streaming demo: HeapScene with background add/remove churn.
+// Incremental streaming demo: a CHANGEABLE RenderObject set (cset) run through
+// Heap.ofRenderObjects, with background add/remove churn. The heap collapses the
+// live cubes into ONE bucket / ONE indirect draw and incrementally re-packs only
+// the membership delta — same effect as the old hand-rolled HeapScene, but on the
+// general reactive path.
 let runDynamic () =
     Aardvark.Init()
     let win = window { backend Backend.Vulkan; display Display.Mono; debug false; samples 8 }
@@ -29,25 +33,35 @@ let runDynamic () =
     let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
     let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
     let index     = g.IndexArray |> unbox<int[]>
+    let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+    let vattrs = AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>
+                                            DefaultSemantic.Normals,   bv normals   typeof<V3f> ]
 
+    // ONE shared camera trafo aval -> dedups to a single arena region (re-packed
+    // once per camera move, regardless of how many cubes are live).
     let viewProj : aval<Trafo3d> = AVal.map2 (fun (v : Trafo3d[]) (p : Trafo3d[]) -> v.[0] * p.[0]) win.View win.Proj
-    let symVP = Symbol.Create "ViewProjTrafo"
-    let globals =
-        { new IUniformProvider with
-            member _.TryGetUniform(s, name) = if name = symVP then ValueSome (viewProj :> IAdaptiveValue) else ValueNone
-            member _.Dispose() = () }
 
     let effect = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction Shaders.shadeFrag ]
-    let scene =
-        new Heap.HeapScene(win.Runtime, effect, IndexedGeometryMode.TriangleList, positions, normals, index,
-                       [| "HeapModelTrafo", typeof<M44f>; "HeapColor", typeof<V4f> |], globals)
 
-    let live = System.Collections.Generic.List<int>()
-    let spawn (rnd : RandomSystem) =
+    // one cube = one ordinary RenderObject (per-draw model trafo & color in its
+    // uniforms); Heap.ofRenderObjects auto-detects them as per-draw arena fields.
+    let mkCube (rnd : RandomSystem) : IRenderObject =
         let p = V3d(rnd.UniformDouble() * 12.0 - 6.0, rnd.UniformDouble() * 12.0 - 6.0, rnd.UniformDouble() * 12.0 - 6.0)
-        let m = AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue
-        let c = AVal.constant (V4f(rnd.UniformV3f(), 1.0f)) :> IAdaptiveValue
-        live.Add (scene.Add(Map.ofList [ "HeapModelTrafo", m; "HeapColor", c ]))
+        let ro = RenderObject()
+        ro.Surface          <- Surface.Effect effect
+        ro.Mode             <- IndexedGeometryMode.TriangleList
+        ro.VertexAttributes <- vattrs
+        ro.Indices          <- Some (bv index typeof<int>)
+        ro.DrawCalls        <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+        ro.Uniforms         <- UniformProvider.ofList [
+            Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+            Symbol.Create "HeapColor",      (AVal.constant (V4f(rnd.UniformV3f(), 1.0f)) :> IAdaptiveValue)
+            Symbol.Create "ViewProjTrafo",  (viewProj :> IAdaptiveValue) ]
+        ro :> IRenderObject
+
+    let cubes = cset<IRenderObject>()
+    let live  = System.Collections.Generic.List<IRenderObject>()
+    let spawn (rnd : RandomSystem) = let ro = mkCube rnd in cubes.Add ro |> ignore; live.Add ro
 
     let rnd0 = RandomSystem()
     transact (fun () -> for _ in 1 .. 40 do spawn rnd0)
@@ -62,14 +76,14 @@ let runDynamic () =
                     let removeN = if live.Count > 80 then 12 elif live.Count > 30 then 6 else 0
                     for _ in 1 .. removeN do
                         let i = rnd.UniformInt(live.Count)
-                        scene.Remove(live.[i]); live.RemoveAt i
+                        cubes.Remove live.[i] |> ignore; live.RemoveAt i
                     let addN = if live.Count < 100 then 1 + rnd.UniformInt(7) else 0
                     for _ in 1 .. addN do spawn rnd)))
     thread.IsBackground <- true
     thread.Start()
 
-    Log.warn "HeapScene dynamic: incremental add/remove churn in background (one bucket, one indirect draw)"
-    win.Scene <- scene.Sg
+    Log.warn "heap dynamic: incremental add/remove churn via Heap.ofRenderObjects (one bucket, one indirect draw)"
+    win.Scene <- Sg.renderObjectSet (Heap.ofRenderObjects win.Control.FramebufferSignature (cubes :> aset<IRenderObject>))
     win.Run()
 
 [<EntryPoint>]

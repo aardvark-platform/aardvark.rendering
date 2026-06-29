@@ -64,6 +64,7 @@
     <Compile Include="Tests\Rendering\Samplers.fs" />
     <Compile Include="Tests\Rendering\IntegerAttachments.fs" />
     <Compile Include="Tests\Rendering\Uniforms.fs" />
+    <Compile Include="Tests\Rendering\HeapUniforms.fs" />
     <Compile Include="Tests\Rendering\Surfaces.fs" />
     <Compile Include="Tests\Rendering\DrawCalls.fs" />
     <Compile Include="Tests\Rendering\Viewport.fs" />
