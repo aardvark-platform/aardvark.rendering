@@ -405,6 +405,8 @@ module Resources =
         inherit IManagedResource<DescriptorInfo[]>
         abstract member Slot : int
         abstract member Count : int
+        /// live element count currently held (grows on demand, <= Count). See AdaptiveDescriptor.ActualCount.
+        abstract member ActualCount : int
         abstract member UpdateAfterBind : bool
 
     module AdaptiveDescriptor =
@@ -416,25 +418,38 @@ module Resources =
                 inherit AdaptiveObject()
 
                 let mutable refCount = 0
-                let mutable cache = null
+                let mutable cache : DescriptorInfo[] = null
 
                 let device = resource.Owner.Device
                 let updateAfterBindEnabled = device.UpdateDescriptorsAfterBind
 
                 member x.Slot = slot
                 member x.Count = count
+
+                // Live element count `cache` currently holds. `count` is only the LAYOUT
+                // ceiling (an unbounded array reserves the device limit); the cache — and
+                // the owning set / versions — are sized to ActualCount, which grows on
+                // demand (GetValue) so memory tracks the elements actually in use.
+                member x.ActualCount = if isNull cache then 0 else cache.Length
                 member x.Resource = resource
 
                 abstract member GetDescriptors : ResourceInfo<'T> * DescriptorInfo[] -> unit
                 abstract member GetUpdateAfterBindFeature : inref<DescriptorFeatures> -> bool
+                /// Number of descriptor elements the resource currently resolves to
+                /// (array length for unbounded arrays; `count` for singles/fixed). Drives
+                /// cache growth.
+                abstract member LiveCount : ResourceInfo<'T> -> int
+                default _.LiveCount(_) = count
 
                 member x.UpdateAfterBind =
                     updateAfterBindEnabled &&
                     x.GetUpdateAfterBindFeature &device.EnabledFeatures.Descriptors
 
+                // start small (pow2); GetValue grows the cache as the resolved array gets
+                // longer, capped at the layout ceiling `count`.
                 member _.Create() =
                     resource.Acquire()
-                    cache <- Array.replicate count { Version = -1; Descriptor = Unchecked.defaultof<_> }
+                    cache <- Array.replicate (min count 8) { Version = -1; Descriptor = Unchecked.defaultof<_> }
 
                 member _.Destroy() =
                     resource.Release()
@@ -471,6 +486,14 @@ module Resources =
 
                         if x.OutOfDate then
                             let info = resource.Update(user, t, rt)
+                            // grow the cache to fit the live element count (pow2, capped at
+                            // the layout ceiling). The owning DescriptorSetResource observes
+                            // ActualCount and re-allocates its set to match.
+                            let need = min count (x.LiveCount info)
+                            if cache.Length < need then
+                                let nc = Array.replicate (min count (Fun.NextPowerOfTwo need)) { Version = -1; Descriptor = Unchecked.defaultof<_> }
+                                System.Array.Copy(cache, nc, cache.Length)
+                                cache <- nc
                             x.GetDescriptors(info, cache)
 
                         cache
@@ -513,6 +536,7 @@ module Resources =
                 interface IAdaptiveDescriptor with
                     member x.Slot = x.Slot
                     member x.Count = x.Count
+                    member x.ActualCount = x.ActualCount
                     member x.UpdateAfterBind = x.UpdateAfterBind
 
             [<AbstractClass>]
@@ -568,6 +592,8 @@ module Resources =
             override x.GetUpdateAfterBindFeature(features) =
                 features.BindingSampledImageUpdateAfterBind
 
+            override x.LiveCount(images) = images.handle.Length
+
             override x.GetDescriptors(images, cache) =
                 let images = images.handle
 
@@ -595,6 +621,8 @@ module Resources =
 
             override x.GetUpdateAfterBindFeature(features) =
                 features.BindingStorageBufferUpdateAfterBind
+
+            override x.LiveCount(buffers) = buffers.handle.Length
 
             override x.GetDescriptors(buffers, cache) =
                 let buffers = buffers.handle
@@ -794,9 +822,11 @@ module Resources =
         // avoid iterating over all image samplers in GetHandle()
         let pending = LockedSet<_>()
 
-        // Maps resources to a binding slot
-        // There must be a resource in a slot at all times, initially the image sampler is set for a slots.
-        let images = Array.zeroCreate<IResourceLocation<_>> count
+        // Maps resources to a binding slot. There must be a resource in every slot of the
+        // LIVE range at all times (backed by `empty`). images/versionOffsets/handle are
+        // sized to that live range (max used index + 1, pow2) and grow on demand (`ensure`)
+        // — NOT to the binding capacity `count`, which is the device limit when unbounded.
+        let mutable images : IResourceLocation<ImageSampler>[] = Array.empty
         let indices = MultiDict<IResourceLocation<_>, int>()
 
         // For each bound slot store the last seen version
@@ -805,10 +835,10 @@ module Resources =
 
         // Stores version increments to signal changes even when the resource's version did not change.
         // E.g. when two different image samplers with the same version swap position.
-        let versionOffsets = Array.replicate count zeroHandle.version
+        let mutable versionOffsets : int[] = Array.empty
 
         // The map with evaluated image samplers
-        let handle = Array.replicate count zeroHandle
+        let mutable handle : ImageSamplerArray = Array.empty
 
         // Removes a resource from the given index
         let remove (i : int) (r : IResourceLocation<_>) =
@@ -831,9 +861,19 @@ module Resources =
             pending.Add r |> ignore
             images.[i] <- r
 
-        // Set every slot to empty initially
-        do for i = 0 to count - 1 do
-            set i empty
+        // Grow the live arrays to at least n slots (pow2, capped at the layout `count`),
+        // backing each new slot with the empty (1x1 dummy) sampler so every slot in the
+        // live range always holds a resource. The array length is the live range, not the
+        // capacity, so memory tracks the elements actually used.
+        let ensure (n : int) =
+            if n > handle.Length then
+                let m = min count (Fun.NextPowerOfTwo n)
+                let old = handle.Length
+                let grow (def : 'a) (o : 'a[]) = Array.init m (fun i -> if i < o.Length then o.[i] else def)
+                images <- grow Unchecked.defaultof<_> images
+                versionOffsets <- grow zeroHandle.version versionOffsets
+                handle <- grow zeroHandle handle
+                for k = old to m - 1 do set k empty
 
         override x.Create() =
             for KeyValue(i, _) in indices do
@@ -858,6 +898,7 @@ module Resources =
 
                 let deltas = reader.GetChanges token
                 for i, op in deltas do
+                    ensure (i + 1)   // make slot i exist (new slots are backed by empty)
                     let r =
                         match op with
                         | Set r -> r
@@ -1359,6 +1400,11 @@ module Resources =
         let mutable handle = Unchecked.defaultof<DescriptorSet>
         let mutable version = 0
         let mutable versions = null
+        // variableCount the current `handle` was allocated with, and sets retired by a
+        // grow (a grown set is a NEW handle; the old one may still be in flight, so it is
+        // kept here and disposed in Destroy rather than freed mid-frame).
+        let mutable allocated = 0
+        let mutable superseded : DescriptorSet list = []
 
         // Use a pending set and InputChangedObject() to
         // avoid iterating over all descriptors in GetHandle()
@@ -1374,19 +1420,22 @@ module Resources =
             for b in bindings do b.Acquire()
             pending.Add bindings
 
-            // We save the last seen version for each descriptor element.
-            // If the version didn't change, we won't bother updating the set.
+            // We save the last seen version for each descriptor element. If the version
+            // didn't change, we won't bother updating the set. Sized to ActualCount (the
+            // live count) — grown in lockstep with the caches in GetHandle.
             versions <- Array.init bindings.Length (fun i ->
-                Array.replicate bindings.[i].Count -1
+                Array.replicate bindings.[i].ActualCount -1
             )
 
-            // for a layout with a VARIABLE_DESCRIPTOR_COUNT binding, allocate the
-            // set at the actual element count of the matching descriptor (an
-            // unbounded sampler array sized to the textures it actually uses).
+            // for a layout with a VARIABLE_DESCRIPTOR_COUNT binding, allocate the set at
+            // the ACTUAL element count of the matching descriptor (an unbounded sampler
+            // array sized to the textures it actually uses); it grows on demand later.
             let variableCount =
                 match layout.VariableCountBinding with
-                | Some bnd -> bindings |> Array.tryPick (fun d -> if d.Slot = bnd then Some d.Count else None)
+                | Some bnd -> bindings |> Array.tryPick (fun d -> if d.Slot = bnd then Some d.ActualCount else None)
                 | None -> None
+
+            allocated <- variableCount |> Option.defaultValue 0
 
             // Create handle and increase version to signal the handle has changed
             handle <- layout.Device.CreateDescriptorSet(layout, ?variableCount = variableCount)
@@ -1397,6 +1446,10 @@ module Resources =
             pending.Clear()
             versions <- null
 
+            for s in superseded do s.Dispose()
+            superseded <- []
+            allocated <- 0
+
             if notNull handle then
                 handle.Dispose()
                 handle <- Unchecked.defaultof<_>
@@ -1406,8 +1459,9 @@ module Resources =
                 let mutable recompile = false
                 let writes = Dictionary<struct (int * int), Descriptor>()
 
-                // Get pending resources.
-                // May contain nested dependencies so we loop until there are no more pending inputs.
+                // Get pending resources. May contain nested dependencies so we loop until
+                // there are no more pending inputs. d.GetValue may GROW d's cache, so keep
+                // versions.[i] in lockstep with the (possibly longer) descriptor array.
                 pending |> LockedSet.lock (fun _ ->
                     while pending.Count > 0 do
                         let dirty = pending.GetAndClear()
@@ -1416,6 +1470,11 @@ module Resources =
                             let i = indices.[d]
                             let infos = d.GetValue(user, token, renderToken)
 
+                            if versions.[i].Length < infos.Length then
+                                let nv = Array.replicate infos.Length -1
+                                System.Array.Copy(versions.[i], nv, versions.[i].Length)
+                                versions.[i] <- nv
+
                             for j = 0 to infos.Length - 1 do
                                 if versions.[i].[j] <> infos.[j].Version then
                                     versions.[i].[j] <- infos.[j].Version
@@ -1423,11 +1482,34 @@ module Resources =
                                     recompile <- recompile || not d.UpdateAfterBind
                 )
 
+                // If the variable-count binding outgrew the set, allocate a bigger one.
+                // The old set may still be in flight -> retire it (disposed in Destroy),
+                // don't free now. The fresh set is empty, so rewrite every LIVE descriptor.
+                let needed =
+                    match layout.VariableCountBinding with
+                    | Some bnd -> bindings |> Array.tryPick (fun d -> if d.Slot = bnd then Some d.ActualCount else None) |> Option.defaultValue allocated
+                    | None -> allocated
+
+                if needed > allocated then
+                    superseded <- handle :: superseded
+                    handle <- layout.Device.CreateDescriptorSet(layout, variableCount = needed)
+                    allocated <- needed
+                    recompile <- true
+                    writes.Clear()
+                    for d in bindings do
+                        let i = indices.[d]
+                        let infos = d.GetValue(user, token, renderToken)
+                        for j = 0 to infos.Length - 1 do
+                            // only LIVE elements carry a real descriptor; the unused tail of
+                            // a grown (pow2) cache is still the -1 default — skip it.
+                            if infos.[j].Version <> -1 then
+                                writes.[struct (i, j)] <- infos.[j].Descriptor
+
                 if writes.Count > 0 then
                     handle.Update(writes.Values.ToArray writes.Count)
 
-                    // If we update a descriptor which does not
-                    // support update-after-bind, we have to rerecord the command buffer.
+                    // A non-update-after-bind write, or a grown (re-allocated) set, means
+                    // the command buffer must be re-recorded.
                     if recompile then
                         inc &version
 

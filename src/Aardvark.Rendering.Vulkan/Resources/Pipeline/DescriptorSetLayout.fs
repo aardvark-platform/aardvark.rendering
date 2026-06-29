@@ -53,13 +53,24 @@ module DescriptorSetLayoutBinding =
     [<Literal>]
     let UnboundedSamplerArrayCeiling = 1024u
 
+    // With VARIABLE_DESCRIPTOR_COUNT + dynamically-grown resources (DescriptorSetResource,
+    // ImageSamplerArrayResource and the AdaptiveDescriptor cache all size to the LIVE count
+    // and grow pow2), the layout ceiling is free — lift it to the device limit so textures /
+    // buffers stop being a binding wall (page memory is hit first). Without variable count
+    // every set reserves the full ceiling up front, so keep the modest 1024 there.
+    let private dynamicallyGrown (device : Device) =
+        let f = device.EnabledFeatures.Descriptors
+        device.UpdateDescriptorsAfterBind && f.BindingVariableDescriptorCount && f.BindingPartiallyBound
+
     /// Device-clamped capacity for an unbounded sampler-array binding.
     let unboundedSamplerArrayCapacity (device : Device) =
-        int (min UnboundedSamplerArrayCeiling device.PhysicalDevice.Limits.Descriptor.MaxPerStageSampledImages)
+        let lim = device.PhysicalDevice.Limits.Descriptor.MaxPerStageSampledImages
+        int (if dynamicallyGrown device then lim else min UnboundedSamplerArrayCeiling lim)
 
     /// Device-clamped capacity for an unbounded storage-buffer-array binding.
     let unboundedStorageBufferArrayCapacity (device : Device) =
-        int (min UnboundedSamplerArrayCeiling device.PhysicalDevice.Limits.Descriptor.MaxPerStageStorageBuffers)
+        let lim = device.PhysicalDevice.Limits.Descriptor.MaxPerStageStorageBuffers
+        int (if dynamicallyGrown device then lim else min UnboundedSamplerArrayCeiling lim)
 
     let create (descriptorType : VkDescriptorType) (stages : VkShaderStageFlags) (parameter : ShaderUniformParameter) (device : Device) =
         let count =

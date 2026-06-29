@@ -158,7 +158,13 @@ No path scans all N objects.
 - Update-after-bind re-allocation on growth must re-point the render object's descriptor binding;
   ensure that doesn't tear a frame.
 
-## Phase 1 — implementation finding (Martin-confirmed)
+## Phase 1 — DONE (dynamic-grow landed)
+
+All three growables below are implemented and validated: heap suite 17/17 and the full GL+Vulkan
+Rendering suite 324/324 (no regression in the core descriptor path). The layout cap is now the device
+limit; memory tracks the elements actually in use.
+
+### implementation finding (Martin-confirmed)
 
 Lifting the layout cap is NOT free: three places in the Vulkan resource path pre-size to the
 binding `count` (the unbounded ceiling), so a lifted cap makes them allocate ~millions and
