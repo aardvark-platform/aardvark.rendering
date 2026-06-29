@@ -1400,11 +1400,8 @@ module Resources =
         let mutable handle = Unchecked.defaultof<DescriptorSet>
         let mutable version = 0
         let mutable versions = null
-        // variableCount the current `handle` was allocated with, and sets retired by a
-        // grow (a grown set is a NEW handle; the old one may still be in flight, so it is
-        // kept here and disposed in Destroy rather than freed mid-frame).
+        // variableCount the current `handle` was allocated with (the set grows on demand).
         let mutable allocated = 0
-        let mutable superseded : DescriptorSet list = []
 
         // Use a pending set and InputChangedObject() to
         // avoid iterating over all descriptors in GetHandle()
@@ -1446,8 +1443,6 @@ module Resources =
             pending.Clear()
             versions <- null
 
-            for s in superseded do s.Dispose()
-            superseded <- []
             allocated <- 0
 
             if notNull handle then
@@ -1491,9 +1486,13 @@ module Resources =
                     | None -> allocated
 
                 if needed > allocated then
-                    superseded <- handle :: superseded
+                    // grow: a bigger variable-count set is a NEW handle. The render task
+                    // serializes a descriptor's update against its rendering (they never run
+                    // concurrently), so the old set is NOT in flight here — free it now.
+                    let old = handle
                     handle <- layout.Device.CreateDescriptorSet(layout, variableCount = needed)
                     allocated <- needed
+                    if notNull old then old.Dispose()
                     recompile <- true
                     writes.Clear()
                     for d in bindings do
