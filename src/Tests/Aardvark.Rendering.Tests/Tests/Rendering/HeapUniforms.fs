@@ -203,6 +203,26 @@ module HeapUniforms =
         let fHeap (v : TexVertex) =
             fragment { return V4f(textures.[v.ti].Sample(v.tc).XYZ * litTex v.n, 1.0f) }
 
+    // AUTO-bindless Sampler2dArray: a single per-object sampler2dArray (supplied as
+    // aval<ITexture>); the heap rewrites it into its per-type heapTex2dArray. Same
+    // effect drives classic and heap — the heap collapses + auto-manages the array.
+    module private ArrSh =
+        // (HeapModelTrafo / ViewProjTrafo UniformScope members come from TexSh, file-wide)
+        let private arr =
+            sampler2dArray { texture uniform?DiffuseArray; filter Filter.MinMagMipLinear; addressU WrapMode.Wrap; addressV WrapMode.Wrap }
+        [<ReflectedDefinition>]
+        let private litA (n : V3f) =
+            let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
+            0.35f + 0.65f * max 0.0f (Vec.dot (Vec.normalize n) l)
+        let vert (v : TexVertex) =
+            vertex {
+                let m : M44f = uniform?HeapModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                return { v with pos = vp * (m * v.pos); n = m.TransformDir v.n; tc = v.pos.XY + V2f(0.5f, 0.5f) }
+            }
+        let frag (v : TexVertex) =
+            fragment { return V4f(arr.Sample(v.tc, 0).XYZ * litA v.n, 1.0f) }
+
     // a vertex carrying a per-vertex INT attribute (ITag, flat) and a per-vertex
     // MATRIX attribute (MX) — both storage-decoded by the heap.
     type AttrV =
@@ -546,6 +566,46 @@ module HeapUniforms =
             Expect.isLessThanOrEqual maxDelta 1 (sprintf "bindless heap textures vs classic per-object sampler (%d buckets)" Heap.lastBucketCount)
             Expect.isGreaterThan nNonBg 100L "textured scene rendered blank"
 
+        // a distinct single-layer 2d-ARRAY texture per index (checker, colour i).
+        // Returns a backend texture the CALLER owns and must delete.
+        let private mkArrayTexture (runtime : IRuntime) (i : int) : IBackendTexture =
+            let cols = [| C3b(230, 60, 60); C3b(60, 200, 60); C3b(60, 120, 230); C3b(230, 200, 40)
+                          C3b(210, 60, 210); C3b(40, 210, 210); C3b(230, 140, 40); C3b(180, 180, 180) |]
+            let col = cols.[i % cols.Length]
+            let img = PixImage<byte>(Col.Format.RGBA, V2i(64, 64))
+            img.GetMatrix<C4b>().SetByIndex(fun (idx : int64) ->
+                let x = int idx % 64
+                let y = int idx / 64
+                if ((x / 8) + (y / 8)) % 2 = 0 then C4b(col) else C4b.White) |> ignore
+            let t = runtime.CreateTexture2DArray(V2i(64, 64), TextureFormat.Rgba8, levels = 1, samples = 1, count = 1)
+            t.Upload(img, slice = 0)
+            t
+
+        /// AUTO-bindless Sampler2dArray: a per-object single sampler2dArray, same effect
+        /// classic vs heap — the heap must collapse the ROs and rewrite the sampler into
+        /// its heapTex2dArray (descriptor-indexed), pixel-identical to a classic render.
+        let textureArray (runtime : IRuntime) =
+            skipUnlessHeapVulkan runtime
+            if not runtime.SupportsUnboundedSamplerArrays then
+                skiptest "bindless sampler arrays unsupported (descriptor indexing)"
+            use signature = sig256 runtime
+            let texCount = 8
+            let texArray : IBackendTexture[] = Array.init texCount (mkArrayTexture runtime)
+            try
+                let eff = Effect.compose [ Effect.ofFunction ArrSh.vert; Effect.ofFunction ArrSh.frag ]
+                let common (p : V3d) =
+                    [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                      Symbol.Create "ViewProjTrafo",  viewProj ]
+                let objs = grid 16 |> Array.map (fun (i, p) -> mkRO (common p @ [ Symbol.Create "DiffuseArray", (AVal.constant (texArray.[i % texCount] :> ITexture) :> IAdaptiveValue) ]) eff)
+                let classic = renderPix runtime signature (ASet.ofArray objs)
+                let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+                Expect.equal Heap.lastBucketCount 1 "Sampler2dArray ROs must collapse to one heap bucket (auto-bindless)"
+                let maxDelta, nNonBg, _ = compare classic heap
+                Expect.isLessThanOrEqual maxDelta 1 "Sampler2dArray bindless heap vs classic"
+                Expect.isGreaterThan nNonBg 100L "array-textured scene rendered blank"
+            finally
+                texArray |> Array.iter runtime.DeleteTexture
+
         /// HETEROGENEOUS geometry: distinct meshes (different vertex/index counts) in
         /// ONE bucket -> per-allocation-headed arena ranges, decoded per object. Must
         /// match a classic render of the same per-object meshes.
@@ -705,6 +765,7 @@ module HeapUniforms =
           "Derived ModelViewProjTrafo",     Harness.derived
           "Resource reclamation",           Harness.resourceReclaim
           "Bindless textures",              Harness.textures
+          "Bindless Sampler2dArray",        Harness.textureArray
           "Heterogeneous geometry",         Harness.heterogeneousGeometry
           "Texture atlas fallback",         Harness.texturesAtlas
           "Int + matrix attributes",        Harness.attributes ]

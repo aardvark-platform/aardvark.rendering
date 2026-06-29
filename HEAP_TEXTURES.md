@@ -158,6 +158,32 @@ No path scans all N objects.
 - Update-after-bind re-allocation on growth must re-point the render object's descriptor binding;
   ensure that doesn't tear a frame.
 
+## Phase 1 — implementation finding (Martin-confirmed)
+
+Lifting the layout cap is NOT free: three places in the Vulkan resource path pre-size to the
+binding `count` (the unbounded ceiling), so a lifted cap makes them allocate ~millions and
+`DescriptorSet.update`'s `NativePtr.stackalloc` overflows the stack. To lift the cap, all three must
+scale with the LIVE element count, not `count`:
+
+1. **`DescriptorSetResource`** (ResourceManager) — `versions` mirrors + the set itself. Fix: size to
+   a live `ActualCount`, grow pow2, re-allocate the set on overflow and retire the old set to a
+   `superseded` list disposed at `Destroy` (a grown set is a new handle; the old one may still be in
+   flight). The `AdaptiveDescriptor` cache grows the same way (`LiveCount`/`ActualCount`). *(prototyped
+   and working; reverted pending the other two.)*
+2. **`ImageSamplerArrayResource`** (ResourceManager) — `Array.zeroCreate count` + `Array.replicate
+   count` + `for i = 0 to count-1 do set i empty`. Fix: grow `images`/`versionOffsets`/`handle` to the
+   live range (max index + 1, pow2), fill new slots with `empty` on grow. **`StorageBufferArrayResource`,
+   right below it, is already exactly this** ("resize keeping the prefix; the heap only grows") — use it
+   as the template.
+3. **`DescriptorSet.update`** — stackallocs to the write-batch size; once (1)+(2) return live-sized
+   arrays the batch is small, so no separate fix is needed.
+
+Bonus (Martin): enable `PARTIALLY_BOUND` for normal *bounded* arrays too, so sparse arrays don't need
+a descriptor in every slot. Out of scope for the first cut.
+
+Martin confirmed this (DescriptorSetResource + ImageSamplerArrayResource "shouldn't scale linearly
+with the descriptor count"). It's his freshly-refactored resource code.
+
 ## Phases
 1. Backend: dynamic-grown unbounded sampler array (maxCount = hw limit, pow2 actual) + the new
    `IRuntime` cap. Validate with the existing 2d/cube heap path (no behaviour change, just bigger/
