@@ -1,12 +1,13 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System.Runtime.CompilerServices
 open Aardvark.Base
-
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.Raytracing
-open KHRAccelerationStructure
 open Microsoft.FSharp.NativeInterop
+open System.Runtime.InteropServices
+open System.Runtime.CompilerServices
+open KHRAccelerationStructure
+open Vulkan11
 
 #nowarn "9"
 
@@ -17,121 +18,54 @@ type Descriptor =
     | StorageImage          of slot: int * view: ImageView
     | AccelerationStructure of slot: int * accel: AccelerationStructure
 
-// Instrumentation backing store for DescriptorSet.LiveCount. A plain module-level
-// mutable so we can take its address for Interlocked from the DescriptorSet ctor/dtor.
-module internal DescriptorSetInstrumentation =
-    let mutable liveCountRef = 0
-
-type internal DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool : int) =
-    inherit CachedResource(device)
-
-    let pools = System.Collections.Generic.HashSet<DescriptorPool>()
-    let partialSet = System.Collections.Generic.HashSet<DescriptorPool>()
-    let mutable partial = []
-
-    let createNew() =
-        let pool = device.CreateDescriptorPool(perPool, resourcesPerPool)
-        pools.Add pool |> ignore
-        partialSet.Add pool |> ignore
-        partial <- pool :: partial
-        Log.line "[Vulkan] using %d descriptor pools" pools.Count
-
-    member x.CreateSet(layout : DescriptorSetLayout, tryAllocSet : DescriptorSetLayout -> DescriptorPool -> DescriptorSet option) =
-        lock pools (fun () ->
-            match partial with
-            | [] ->
-                createNew()
-                x.CreateSet(layout, tryAllocSet)
-            | h :: t ->
-                match h |> tryAllocSet layout with
-                | Some set ->
-                    set.SetPoolBag(x)
-                    set
-                | None ->
-                    partialSet.Remove h |> ignore
-                    partial <- t
-                    x.CreateSet(layout, tryAllocSet)
-        )
-
-    member x.RemoveSet (set : DescriptorSet) =
-        lock pools (fun () ->
-            let pool = set.Pool
-
-            lock pool (fun _ ->
-                if pools.Contains pool then
-                    if pool.Capacity = perPool then
-                        if partialSet.Remove pool then partial <- List.filter (fun p -> p <> pool) partial
-                        pool.Dispose()
-                        pools.Remove pool |> ignore
-                        Log.line "[Vulkan] using %d descriptor pools" pools.Count
-                    else
-                        if partialSet.Add pool then
-                            partial <- pool :: partial
-                else
-                    failf "cannot free non-pooled DescriptorSet using pool"
-            )
-         )
-
-    override x.Destroy() =
-        for p in pools do p.Dispose()
-        pools.Clear()
-        partial <- []
-
-and DescriptorSet =
+type DescriptorSet =
     class
+        static let mutable liveCount = 0
+
         inherit Resource<VkDescriptorSet>
         val public Pool : DescriptorPool
         val public Layout : DescriptorSetLayout
-
-        val mutable private poolBag : Option<DescriptorPoolBag>
+        val private onDestroyed : Event<unit>
 
         // Instrumentation: net count of live (allocated but not yet freed) descriptor
         // sets across the whole device (see DescriptorSetInstrumentation below). Used
         // by leak-detection probes to confirm the per-frame compute/render path does
         // not accumulate descriptor sets.
-        static member LiveCount = DescriptorSetInstrumentation.liveCountRef
+        static member LiveCount = liveCount
 
-        member internal x.SetPoolBag(bag : DescriptorPoolBag) =
-            x.poolBag <- Some bag
+        [<CLIEvent>]
+        member x.OnDestroyed = x.onDestroyed.Publish
 
         override x.Destroy() =
             if x.Handle.IsValid then
                 lock x.Pool (fun _ ->
-                    native {
-                        let! pHandle = x.Handle
-                        VkRaw.vkFreeDescriptorSets(x.Device.Handle, x.Pool.Handle, 1u, pHandle)
-                            |> check "could not free DescriptorSet"
-                    }
-
                     x.Handle <- VkDescriptorSet.Null
                     x.Pool.FreeSet()
                 )
-                System.Threading.Interlocked.Decrement(&DescriptorSetInstrumentation.liveCountRef) |> ignore
-
-                x.poolBag |> Option.iter (fun b -> b.RemoveSet(x))
+                System.Threading.Interlocked.Decrement &liveCount |> ignore
+                x.onDestroyed.Trigger()
 
         new(device : Device, pool : DescriptorPool, layout : DescriptorSetLayout, handle : VkDescriptorSet) =
-            System.Threading.Interlocked.Increment(&DescriptorSetInstrumentation.liveCountRef) |> ignore
-            { inherit Resource<_>(device, handle); Pool = pool; Layout = layout; poolBag = None }
+            System.Threading.Interlocked.Increment &liveCount |> ignore
+            { inherit Resource<_>(device, handle); Pool = pool; Layout = layout; onDestroyed = Event<unit>() }
     end
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSet =
 
-    let tryAlloc (variableCount : int option) (layout : DescriptorSetLayout) (pool : DescriptorPool) =
+    let tryAlloc (layout : DescriptorSetLayout) (variableCount : int) (pool : DescriptorPool) =
         lock pool (fun () ->
-            if pool.TryAllocateSet() then
+            if pool.TryAllocateSet <| layout.GetDescriptorCounts variableCount then
                 native {
                     let! pLayoutHandle = layout.Handle
 
                     // VARIABLE_DESCRIPTOR_COUNT: allocate only the per-set count for
                     // the layout's variable binding (an unbounded sampler array)
                     // instead of its full (capped) capacity.
-                    let useVariable = layout.VariableCountBinding.IsSome && Option.isSome variableCount
-                    let! pCounts = [| uint32 (defaultArg variableCount 0) |]
+                    let! pCounts = [| uint32 variableCount |]
                     let! pVarInfo = Vulkan12.VkDescriptorSetVariableDescriptorCountAllocateInfo(1u, pCounts)
-                    let pNext = if useVariable then NativePtr.toNativeInt pVarInfo else 0n
+                    let pNext = if layout.VariableCountBinding.IsSome then NativePtr.toNativeInt pVarInfo else 0n
 
                     let! pInfo =
                         VkDescriptorSetAllocateInfo(
@@ -144,7 +78,8 @@ module DescriptorSet =
                     let! pHandle = VkDescriptorSet.Null
                     let res = VkRaw.vkAllocateDescriptorSets(pool.Device.Handle, pInfo, pHandle)
 
-                    if res = VkResult.ErrorFragmentedPool then
+                    if res = VkResult.ErrorFragmentedPool || res = VkResult.ErrorOutOfPoolMemory then
+                        pool.FreeSet()
                         return None
                     else
                         res |> check "could not allocate DescriptorSet"
@@ -154,8 +89,8 @@ module DescriptorSet =
                 None
         )
 
-    let alloc (variableCount : int option) (layout : DescriptorSetLayout) (pool : DescriptorPool) =
-        match tryAlloc variableCount layout pool with
+    let alloc (layout : DescriptorSetLayout) (variableCount : int) (pool : DescriptorPool) =
+        match tryAlloc layout variableCount pool with
             | Some d -> d
             | None -> failf "cannot allocate DescriptorSet (out of slots)"
 
@@ -304,23 +239,120 @@ module DescriptorSet =
             VkRaw.vkUpdateDescriptorSets(device.Handle, uint32 writes.Length, pWrites, 0u, NativePtr.zero)
         }
 
+type internal DescriptorPoolBag(device : Device) =
+    inherit CachedResource(device)
+
+    /// Maximum number of sets per pool.
+    static let [<Literal>] MaxSetsPerPool = 1024
+
+    /// By default, every pool has MinDescriptorCount descriptors of each type.
+    static let [<Literal>] MinDescriptorCount = 512
+
+    /// When allocating a set fails, we use the requested descriptor counts as base values for the new pool.
+    /// The requested descriptor count is multiplied by TargetCountMultiplier to compute the minimum descriptor count for the pool.
+    static let [<Literal>] TargetCountMultiplier = 4
+
+    /// Empty pools get reset instead of destroyed as long as the number of pools in the bag does not exceed TargetPoolCount.
+    static let [<Literal>] TargetPoolCount = 8
+
+    /// Minimum descriptor counts for the initial pool.
+    static let getInitialPoolDescriptorCounts (device: Device) =
+        Map.ofList [
+            VkDescriptorType.UniformBuffer,                1024
+            VkDescriptorType.StorageBuffer,                4096
+            VkDescriptorType.CombinedImageSampler,         4096
+            VkDescriptorType.StorageImage,                 1024
+            if device.IsExtensionEnabled KHRAccelerationStructure.Name then
+                VkDescriptorType.AccelerationStructureKhr, 1024
+        ]
+
+    let pools = System.Collections.Generic.HashSet<DescriptorPool>()
+
+    let createPool (layout: DescriptorSetLayout) (variableCount: int) =
+        let counts =
+            let minCounts =
+                if pools.Count = 0 then
+                    getInitialPoolDescriptorCounts device
+                else
+                    [
+                        VkDescriptorType.UniformBuffer
+                        VkDescriptorType.StorageBuffer
+                        VkDescriptorType.CombinedImageSampler
+                        VkDescriptorType.StorageImage
+                        if device.IsExtensionEnabled KHRAccelerationStructure.Name then
+                            VkDescriptorType.AccelerationStructureKhr
+                    ]
+                    |> List.map (fun t -> t, MinDescriptorCount)
+                    |> Map.ofList
+
+            let targetCounts =
+                layout.GetDescriptorCounts variableCount
+                |> Map.map (fun _ count ->
+                    let count = if count < 0 then variableCount else count
+                    count * TargetCountMultiplier
+                )
+
+            (minCounts, targetCounts) ||> Map.fold (fun result typ count ->
+                let min = result |> Map.tryFindV typ |> ValueOption.defaultValue 0
+                result |> Map.add typ (max min count)
+            )
+
+        let pool = device |> DescriptorPool.create MaxSetsPerPool counts
+        pools.Add pool |> ignore
+        Log.line "[Vulkan] using %d descriptor pools" pools.Count
+        pool
+
+    member this.CreateSet(layout : DescriptorSetLayout, variableCount: int) =
+        let tryAllocSet pool =
+            match pool |> DescriptorSet.tryAlloc layout variableCount with
+            | Some set ->
+                set.OnDestroyed.Add(fun _ -> this.RemoveSet set)
+                Some set
+            | _ ->
+                None
+
+        lock pools (fun () ->
+            pools
+            |> Seq.tryPick tryAllocSet
+            |> Option.defaultWith (fun _ ->
+                let pool = createPool layout variableCount
+                match tryAllocSet pool with
+                | Some set -> set
+                | _ -> failf "Failed to allocate descriptor set"
+            )
+        )
+
+    member x.RemoveSet (set : DescriptorSet) =
+        lock pools (fun () ->
+            let pool = set.Pool
+
+            lock pool (fun _ ->
+                if pools.Contains pool then
+                    if pool.IsEmpty && pools.Count > TargetPoolCount then
+                        pool.Dispose()
+                        pools.Remove pool |> ignore
+                        Log.line "[Vulkan] using %d descriptor pools" pools.Count
+                else
+                    failf "cannot free non-pooled descriptor set using pool"
+            )
+         )
+
+    override x.Destroy() =
+        for p in pools do p.Dispose()
+        pools.Clear()
+
 [<AbstractClass; Sealed; Extension>]
 type ContextDescriptorSetExtensions private() =
     static let DescriptorPoolBag = Symbol.Create "DescriptorPoolBag"
 
     [<Extension>]
-    static member inline Alloc(this : DescriptorPool, layout : DescriptorSetLayout) =
-        this |> DescriptorSet.alloc None layout
-
-    [<Extension>]
     static member inline Update(this : DescriptorPool, set : DescriptorSet, values : array<Descriptor>) =
         this |> DescriptorSet.update values set
 
-
     [<Extension>]
-    static member CreateDescriptorSet(this : Device, layout : DescriptorSetLayout, ?variableCount : int) =
-        use bag = this.GetCached(DescriptorPoolBag, 0, fun _ -> new DescriptorPoolBag(this, 1024, 1024))
-        bag.CreateSet(layout, DescriptorSet.tryAlloc variableCount)
+    static member CreateDescriptorSet(this : Device, layout : DescriptorSetLayout, [<Optional; DefaultParameterValue(0)>] variableCount : int) =
+        use bag = this.GetCached(DescriptorPoolBag, 0, fun _ -> new DescriptorPoolBag(this))
+        bag.CreateSet(layout, variableCount)
 
     [<Extension>]
     static member Update(set : DescriptorSet, values : array<Descriptor>) =

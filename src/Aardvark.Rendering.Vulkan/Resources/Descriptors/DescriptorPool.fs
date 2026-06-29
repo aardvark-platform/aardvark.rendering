@@ -1,36 +1,47 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open Aardvark.Base
-open System.Runtime.CompilerServices
 open EXTDescriptorIndexing
-open KHRAccelerationStructure
 
 type DescriptorPool =
     class
         inherit Resource<VkDescriptorPool>
-        val public Counts : int[]
-        val mutable private capacity : int
+        val public MaxSets : int
+        val public Counts  : Map<VkDescriptorType, int>
+        val mutable private activeSets : int
 
-        member x.Capacity =
-            x.capacity
+        member this.IsEmpty = this.activeSets = 0
 
-        member x.FreeSet() =
-            inc &x.capacity
+        member this.FreeSet() =
+            dec &this.activeSets
+            if this.activeSets = 0 then
+                VkRaw.vkResetDescriptorPool(this.Device.Handle, this.Handle, VkDescriptorPoolResetFlags.None)
+                |> check "could not reset descriptor pool"
 
-        member x.TryAllocateSet() =
-            if x.capacity <= 0 then false
+        member this.TryAllocateSet(counts: Map<VkDescriptorType, int>) =
+            if this.activeSets < this.MaxSets then
+                // Trying to allocate more descriptors than the pool's total descriptor count will not reliably return
+                // VK_ERROR_OUT_OF_POOL_MEMORY_KHR -> check it manually
+                let exceedsTotal =
+                    counts |> Map.exists (fun typ count ->
+                        let total = this.Counts |> Map.tryFindV typ |> ValueOption.defaultValue 0
+                        count > total
+                    )
+                if not exceedsTotal then
+                    inc &this.activeSets
+                    true
+                else
+                    false
             else
-                dec &x.capacity
-                true
+                false
 
         override x.Destroy() =
             if x.Handle.IsValid then
                 VkRaw.vkDestroyDescriptorPool(x.Device.Handle, x.Handle, NativePtr.zero)
                 x.Handle <- VkDescriptorPool.Null
 
-        new(device : Device, handle : VkDescriptorPool, total : int, counts : Map<VkDescriptorType, int>) = 
-            let arr = Array.init 11 (fun i -> match Map.tryFind (unbox i) counts with | Some v -> v | None -> 0)
-            { inherit Resource<_>(device, handle); capacity = total; Counts = arr }
+        new(device: Device, handle: VkDescriptorPool, maxSets: int, counts: Map<VkDescriptorType, int>) =
+            { inherit Resource<_>(device, handle); MaxSets = maxSets; Counts = counts; activeSets = 0 }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -44,10 +55,9 @@ module DescriptorPool =
 
         let flags =
             if device.UpdateDescriptorsAfterBind then
-                VkDescriptorPoolCreateFlags.FreeDescriptorSetBit |||
                 VkDescriptorPoolCreateFlags.UpdateAfterBindBitExt
             else
-                VkDescriptorPoolCreateFlags.FreeDescriptorSetBit
+                VkDescriptorPoolCreateFlags.None
 
         native {
             let! pDescriptorCounts = descriptorCounts
@@ -66,27 +76,3 @@ module DescriptorPool =
             return new DescriptorPool(device, !!pHandle, setCount, counts)
 
         }
-
-[<AbstractClass; Sealed; Extension>]
-type ContextDescriptorPoolExtensions private() =
-    [<Extension>]
-    static member inline CreateDescriptorPool(this : Device, setCount : int, perTypeCount) =
-        // Unbounded (bindless) arrays each RESERVE their full capacity (up to ~1024)
-        // at set allocation, and a single set may hold several of them (e.g. the
-        // heap's HeapPositions + HeapNormals + HeapIndex = 3 storage-buffer arrays).
-        // A set cannot span pools, so the per-type budget for the only two types that
-        // can host unbounded arrays — StorageBuffer and CombinedImageSampler — must
-        // cover several full unbounded arrays, not just `perTypeCount`. Other types
-        // never form unbounded arrays and keep the base budget.
-        let arrayCapableBudget = max perTypeCount (perTypeCount * 8)
-        let counts =
-            Map.ofList [
-                VkDescriptorType.UniformBuffer, perTypeCount
-                VkDescriptorType.StorageBuffer, arrayCapableBudget
-                VkDescriptorType.CombinedImageSampler, arrayCapableBudget
-                VkDescriptorType.StorageImage, perTypeCount
-                if this.IsExtensionEnabled KHRAccelerationStructure.Name then
-                    VkDescriptorType.AccelerationStructureKhr, perTypeCount
-            ]
-
-        this |> DescriptorPool.create setCount counts

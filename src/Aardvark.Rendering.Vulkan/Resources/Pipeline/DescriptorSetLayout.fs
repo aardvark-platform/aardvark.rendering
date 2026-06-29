@@ -19,14 +19,11 @@ type DescriptorSetLayoutBinding =
         member x.Name = x.Parameter.Name
         member x.Binding = int x.Handle.binding
         member x.DescriptorType = x.Handle.descriptorType
-        /// True for an unbounded ('sampler2D X[]', samplerCount = -1) sampler array.
-        member x.IsUnboundedSamplerArray =
+        /// True for an unbounded ('sampler2D X[]', samplerCount = -1) sampler array or
+        /// for an unbounded ('buffer {..} X[]', ssbCount = -1) storage-buffer array.
+        member x.IsUnboundedArray =
             match x.Parameter with
             | SamplerParameter p -> p.samplerCount < 0
-            | _ -> false
-        /// True for an unbounded ('buffer {..} X[]', ssbCount = -1) storage-buffer array.
-        member x.IsUnboundedStorageBufferArray =
-            match x.Parameter with
             | StorageBufferParameter p -> p.ssbCount < 0
             | _ -> false
 
@@ -48,10 +45,6 @@ module DescriptorSetLayoutBinding =
     ///     DescriptorSetResource version mirrors are allocated at this capacity PER
     ///     SET (PreparedRenderObject falls back to b.DescriptorCount when the array
     ///     aval isn't constant), so the CPU cost scales linearly with it;
-    ///   * descriptor POOLS budget `perTypeCount * 8` for the array-capable types
-    ///     (ContextDescriptorPoolExtensions.CreateDescriptorPool) — a set holding
-    ///     several full-capacity unbounded arrays must still fit one pool, so raising
-    ///     the ceiling requires scaling that budget in lockstep;
     ///   * without variable descriptor count / update-after-bind every set allocates
     ///     the FULL capacity up front.
     /// Consequence for the heap's vertex-pull path: at most 1024 (slots × attributes)
@@ -111,26 +104,44 @@ module DescriptorSetLayoutBinding =
 type DescriptorSetLayout =
     class
         inherit Resource<VkDescriptorSetLayout>
-        val public Bindings : array<DescriptorSetLayoutBinding>
+        val public Bindings : DescriptorSetLayoutBinding[]
+
         /// Binding number of the binding declared with VARIABLE_DESCRIPTOR_COUNT
         /// (an unbounded sampler array, highest binding number), if any. Sets
         /// allocated from this layout may then specify a per-set count up to that
         /// binding's (capped) descriptorCount.
-        val public VariableCountBinding : Option<int>
+        member this.VariableCountBinding =
+            match Array.tryLast this.Bindings with
+            | Some b when b.IsUnboundedArray -> Some b.Binding
+            | _ -> None
 
-        override x.Destroy() =
-            if x.Handle.IsValid then
-                VkRaw.vkDestroyDescriptorSetLayout(x.Device.Handle, x.Handle, NativePtr.zero)
-                x.Handle <- VkDescriptorSetLayout.Null
+        member this.GetDescriptorCounts(variableCount: int) =
+            let variableCountBinding = this.VariableCountBinding |> Option.defaultValue -1
 
-        new(device : Device, handle : VkDescriptorSetLayout, bindings, variableCountBinding) =
-            { inherit Resource<_>(device, handle); Bindings = bindings; VariableCountBinding = variableCountBinding }
+            (Map.empty, this.Bindings) ||> Array.fold (fun result binding ->
+                let sum = result |> Map.tryFindV binding.DescriptorType |> ValueOption.defaultValue 0
+                let count =
+                    if binding.Binding = variableCountBinding then
+                        variableCount
+                    else
+                        binding.DescriptorCount
+
+                result |> Map.add binding.DescriptorType (sum + count)
+            )
+
+        override this.Destroy() =
+            if this.Handle.IsValid then
+                VkRaw.vkDestroyDescriptorSetLayout(this.Device.Handle, this.Handle, NativePtr.zero)
+                this.Handle <- VkDescriptorSetLayout.Null
+
+        new(device : Device, handle : VkDescriptorSetLayout, bindings : DescriptorSetLayoutBinding[]) =
+            { inherit Resource<_>(device, handle); Bindings = bindings }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSetLayout =
 
-    let empty (d : Device) = new DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty, None)
+    let empty (d : Device) = new DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty)
 
     let create (bindings : array<DescriptorSetLayoutBinding>) (device : Device) =
         // Binding numbers must be strictly increasing (the variable-count
@@ -153,16 +164,13 @@ module DescriptorSetLayout =
         // variable-count binding must have the largest binding number in the set.
         let variableCountBinding =
             if device.UpdateDescriptorsAfterBind && features.BindingVariableDescriptorCount && features.BindingPartiallyBound then
-                let unbounded = bindings |> Array.filter (fun b -> b.IsUnboundedSamplerArray || b.IsUnboundedStorageBufferArray)
-                if unbounded.Length > 0 then
-                    let maxBinding = bindings |> Array.map (fun b -> b.Binding) |> Array.max
-                    let candidate = unbounded |> Array.maxBy (fun b -> b.Binding)
-                    if candidate.Binding = maxBinding then Some candidate.Binding else None
-                else None
+                match Array.tryLast bindings with
+                | Some b when b.IsUnboundedArray -> Some b.Binding
+                | _ -> None
             else None
 
         native {
-            let! pBindings = bindings |> Array.map (fun b -> b.Handle)
+            let! pBindings = bindings |> Array.map _.Handle
 
             let! pBindingFlags =
                 bindings |> Array.map (fun b ->
@@ -188,7 +196,7 @@ module DescriptorSetLayout =
                     // only ONE binding per set (the highest). Earlier only the variable-
                     // count binding got PartiallyBound, so a second/third unbounded array
                     // (e.g. HeapPositions + HeapNormals + HeapIndex) mis-bound.
-                    if (b.IsUnboundedSamplerArray || b.IsUnboundedStorageBufferArray) && features.BindingPartiallyBound then
+                    if b.IsUnboundedArray && features.BindingPartiallyBound then
                         flags <- flags ||| VkDescriptorBindingFlagsEXT.PartiallyBoundBit
 
                     if variableCountBinding = Some b.Binding then
@@ -223,5 +231,5 @@ module DescriptorSetLayout =
                 |> check "could not create DescriptorSetLayout"
 
             let handle = NativePtr.read pHandle
-            return new DescriptorSetLayout(device, handle, bindings, variableCountBinding)
+            return new DescriptorSetLayout(device, handle, bindings)
         }

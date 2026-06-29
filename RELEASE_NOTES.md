@@ -1,3 +1,4 @@
+- [Vulkan] Fixed and improved descriptor pool and set management
 - [Vulkan] Fixed checking for enabled features for pipeline queries
 - [Vulkan] Fixed issue causing descriptor set not being updated after `Release()` and `Acquire()`
 - Added disposed checks for compute and raytracing tasks
