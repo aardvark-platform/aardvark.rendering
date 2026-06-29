@@ -1266,6 +1266,10 @@ module Heap =
         elif t = typeof<V3d> || t = typeof<C3d> then ValueSome 33
         elif t = typeof<V4d> || t = typeof<C4d> then ValueSome 34
         elif t = typeof<C4b>     then ValueSome 40
+        // f32 matrix attributes — tight row-major floats, decoded row-wise.
+        elif t = typeof<M22f>    then ValueSome 50
+        elif t = typeof<M33f>    then ValueSome 52
+        elif t = typeof<M44f>    then ValueSome 54
         else ValueNone
 
     /// decode the vertex index for `gl_VertexIndex = v` from the index
@@ -1394,6 +1398,28 @@ module Heap =
             V4i(int (decodeHeapF64 (r + 4 + e * 2)), 0, 0, 1)
         else V4i(0, 0, 0, 1)
 
+    // f32 matrix attribute decoders: the matrix is stored tight (rows*cols floats
+    // per element, row-major), so a row-wise read reconstructs it. Source==target
+    // matrix shape (a matrix attribute isn't widened/cast across sizes).
+    [<ReflectedDefinition>]
+    let private decodeHeapM22f (r : int) (v : int) : M22f =
+        let o = r + 4 + (v % uniform.HeapDataI.[r + 1]) * 4
+        M22f(uniform.HeapData.[o+0], uniform.HeapData.[o+1],
+             uniform.HeapData.[o+2], uniform.HeapData.[o+3])
+    [<ReflectedDefinition>]
+    let private decodeHeapM33f (r : int) (v : int) : M33f =
+        let o = r + 4 + (v % uniform.HeapDataI.[r + 1]) * 9
+        M33f(uniform.HeapData.[o+0], uniform.HeapData.[o+1], uniform.HeapData.[o+2],
+             uniform.HeapData.[o+3], uniform.HeapData.[o+4], uniform.HeapData.[o+5],
+             uniform.HeapData.[o+6], uniform.HeapData.[o+7], uniform.HeapData.[o+8])
+    [<ReflectedDefinition>]
+    let private decodeHeapM44f (r : int) (v : int) : M44f =
+        let o = r + 4 + (v % uniform.HeapDataI.[r + 1]) * 16
+        M44f(uniform.HeapData.[o+0],  uniform.HeapData.[o+1],  uniform.HeapData.[o+2],  uniform.HeapData.[o+3],
+             uniform.HeapData.[o+4],  uniform.HeapData.[o+5],  uniform.HeapData.[o+6],  uniform.HeapData.[o+7],
+             uniform.HeapData.[o+8],  uniform.HeapData.[o+9],  uniform.HeapData.[o+10], uniform.HeapData.[o+11],
+             uniform.HeapData.[o+12], uniform.HeapData.[o+13], uniform.HeapData.[o+14], uniform.HeapData.[o+15])
+
     /// per-input attribute gather: ONE call into the typeId-branching decoder,
     /// swizzled down to the shader's input type (the conversion handles widen /
     /// narrow / normalize / casts per SOURCE typeId at fetch time — the input
@@ -1409,6 +1435,9 @@ module Heap =
         elif inputT = typeof<V3i>     then f1 <@ (decodeHeapV4i %refE %vidE).XYZ @>
         elif inputT = typeof<V2i>     then f1 <@ (decodeHeapV4i %refE %vidE).XY @>
         elif inputT = typeof<int>     then f1 <@ (decodeHeapV4i %refE %vidE).X @>
+        elif inputT = typeof<M22f>    then f1 <@ decodeHeapM22f %refE %vidE @>
+        elif inputT = typeof<M33f>    then f1 <@ decodeHeapM33f %refE %vidE @>
+        elif inputT = typeof<M44f>    then f1 <@ decodeHeapM44f %refE %vidE @>
         else None
 
     /// supported shader INPUT types of the storage decode (the decoder pair
@@ -1416,7 +1445,8 @@ module Heap =
     let private hostTargetTypes =
         System.Collections.Generic.HashSet<System.Type>(
             [ typeof<float32>; typeof<V2f>; typeof<V3f>; typeof<V4f>
-              typeof<int>; typeof<V2i>; typeof<V3i>; typeof<V4i> ])
+              typeof<int>; typeof<V2i>; typeof<V3i>; typeof<V4i>
+              typeof<M22f>; typeof<M33f>; typeof<M44f> ])
 
     /// can host element type `hostT` be storage-decoded into shader input type
     /// `inputT`? Decoding branches per allocation, so the answer FACTORS: the
@@ -2405,11 +2435,17 @@ module Heap =
     /// HEAP_PAGE_WORDS for testing the multi-page path on small scenes.
     type internal HeapStorage(runtime : IRuntime) =
         let pageWords =
-            match System.Environment.GetEnvironmentVariable "HEAP_PAGE_WORDS" with
-            | null | "" -> 1 <<< 28
-            | s -> match System.Int32.TryParse s with
-                   | true, v when v >= 1024 -> v
-                   | _ -> 1 <<< 28
+            let want =
+                match System.Environment.GetEnvironmentVariable "HEAP_PAGE_WORDS" with
+                | null | "" -> 1 <<< 28
+                | s -> match System.Int32.TryParse s with
+                       | true, v when v >= 1024 -> v
+                       | _ -> 1 <<< 28
+            // CLAMP to what a storage-buffer binding can address on THIS device: a page
+            // is bound as one SSBO, so pageWords*4 must fit maxStorageBufferRange. On
+            // MoltenVK/Metal and mobile that can be far below the 1 GiB desktop default.
+            let deviceWords = runtime.MaxStorageBufferBytes / 4L
+            max 1024 (int (min (int64 want) deviceWords))
         let pages = System.Collections.Generic.List<PageArena>()
         do pages.Add(PageArena(runtime))
         member _.PageWords = pageWords

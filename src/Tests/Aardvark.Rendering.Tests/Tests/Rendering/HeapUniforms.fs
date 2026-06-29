@@ -203,6 +203,38 @@ module HeapUniforms =
         let fHeap (v : TexVertex) =
             fragment { return V4f(textures.[v.ti].Sample(v.tc).XYZ * litTex v.n, 1.0f) }
 
+    // a vertex carrying a per-vertex INT attribute (ITag, flat) and a per-vertex
+    // MATRIX attribute (MX) — both storage-decoded by the heap.
+    type AttrV =
+        { [<Position>]                                                pos : V4f
+          [<Normal>]                                                  n   : V3f
+          [<Color>]                                                   c   : V4f
+          [<Semantic("ITag"); Interpolation(InterpolationMode.Flat)>] tag : int
+          [<Semantic("MX")>]                                          mx  : M44f }
+
+    module private AttrSh =
+        type UniformScope with
+            member x.HeapModelTrafo : M44f = x?HeapModelTrafo
+            member x.ViewProjTrafo  : M44f = x?ViewProjTrafo
+
+        let vtx (v : AttrV) =
+            vertex {
+                let m  = uniform.HeapModelTrafo
+                let vp = uniform.ViewProjTrafo
+                // colour DERIVED from the int + matrix attributes, so a decode error shows
+                let fromMat = (v.mx * V4f(0.3f, 0.4f, 0.5f, 1.0f)).XYZ
+                let fromTag = float32 (((v.tag % 11) + 11) % 11) / 10.0f
+                let col = V3f(fromTag, 0.45f, 0.3f) + fromMat * 0.3f
+                return { v with pos = vp * (m * v.pos); n = m.TransformDir v.n; c = V4f(col, 1.0f) }
+            }
+
+        let frag (v : AttrV) =
+            fragment {
+                let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
+                let d = 0.25f + 0.75f * max 0.0f (Vec.dot (Vec.normalize v.n) l)
+                return V4f(v.c.XYZ * d, 1.0f)
+            }
+
     module private Harness =
         let private g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
         let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
@@ -576,6 +608,41 @@ module HeapUniforms =
             finally
                 Heap.forceAtlas <- prev
 
+        /// INT + MATRIX vertex attributes: storage-decoded by the heap (int via the
+        /// int arena view, M44f row-wise) must match a classic per-vertex-attribute
+        /// render. Colour is derived from both, so a decode error is visible.
+        let attributes (runtime : IRuntime) =
+            skipUnlessHeapVulkan runtime
+            use signature = sig256 runtime
+            let nv = positions.Length
+            let itag = Array.init nv (fun i -> (i * 7) % 13)
+            let mx =
+                Array.init nv (fun i ->
+                    let s = 0.5f + 0.05f * float32 (i % 5)
+                    M44f(s, 0.1f, 0.0f, 0.0f,  0.0f, s, 0.0f, 0.0f,  0.0f, 0.0f, s, 0.0f,  0.2f, 0.3f, 0.1f, 1.0f))
+            let mk (p : V3d) =
+                let ro = RenderObject()
+                ro.Surface          <- Surface.Effect (Effect.compose [ Effect.ofFunction AttrSh.vtx; Effect.ofFunction AttrSh.frag ])
+                ro.Mode             <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>
+                                                                  DefaultSemantic.Normals,   bv normals   typeof<V3f>
+                                                                  Symbol.Create "ITag",      bv itag typeof<int>
+                                                                  Symbol.Create "MX",        bv mx   typeof<M44f> ]
+                ro.Indices          <- Some (bv index typeof<int>)
+                ro.DrawCalls        <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+                ro.Uniforms         <- UniformProvider.ofList [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                                                                Symbol.Create "ViewProjTrafo",  viewProj ]
+                ro :> IRenderObject
+            let objs = grid 12 |> Array.map (fun (_, p) -> mk p)
+            let classic = renderPix runtime signature (ASet.ofArray objs)
+            let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+            // must actually COLLAPSE (else a pass-through would pass without exercising
+            // the int/matrix attribute decode at all)
+            Expect.equal Heap.lastBucketCount 1 "int+matrix-attr ROs must collapse to one heap bucket (not pass through)"
+            let maxDelta, nNonBg, _ = compare classic heap
+            Expect.isLessThanOrEqual maxDelta 1 "int + matrix vertex attributes heap vs classic"
+            Expect.isGreaterThan nNonBg 100L "attribute scene rendered blank"
+
     module Cases =
         let leaves : IRuntime -> unit =
             Harness.equivalence Sh.leafFrag (fun i ->
@@ -639,5 +706,6 @@ module HeapUniforms =
           "Resource reclamation",           Harness.resourceReclaim
           "Bindless textures",              Harness.textures
           "Heterogeneous geometry",         Harness.heterogeneousGeometry
-          "Texture atlas fallback",         Harness.texturesAtlas ]
+          "Texture atlas fallback",         Harness.texturesAtlas
+          "Int + matrix attributes",        Harness.attributes ]
         |> prepareCases backend "Heap uniforms"

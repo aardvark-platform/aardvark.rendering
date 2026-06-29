@@ -46,6 +46,9 @@ type Runtime(debug : IDebugConfig) =
     // double / dmat / dvec are core since GLSL 4.00 (GL_ARB_gpu_shader_fp64) — true
     // on any desktop GL the heap targets.
     member x.ShaderDouble = ctx.Driver.glsl >= Version(4, 0, 0)
+    // GL_MAX_SHADER_STORAGE_BLOCK_SIZE is ≥16 MiB by spec and GBs on desktop; the heap
+    // render path is Vulkan-only anyway, so a 1 GiB constant keeps the page clamp a no-op.
+    member x.MaxStorageBufferBytes : int64 = 1L <<< 30
 
     // GL_ARB_fragment_shader_interlock; absent on most mobile drivers and on
     // AMD's Windows proprietary stack. The transparency wrapper picks
@@ -119,6 +122,7 @@ type Runtime(debug : IDebugConfig) =
         member x.SupportsMultiDrawIndirectDrawId = x.SupportsMultiDrawIndirectDrawId
         member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
         member x.ShaderDouble = x.ShaderDouble
+        member x.MaxStorageBufferBytes = x.MaxStorageBufferBytes
         member x.FragmentShaderInterlock = x.FragmentShaderInterlock
         member x.ContextLock = x.ContextLock
 

@@ -68,6 +68,10 @@ type Runtime(device : Device) as this =
     member x.ShaderDouble =
         x.Device.EnabledFeatures.Shaders.Float64
 
+    // maxStorageBufferRange — the addressable byte range of a storage-buffer binding.
+    member x.MaxStorageBufferBytes : int64 =
+        x.Device.PhysicalDevice.Limits.Uniform.MaxStorageViewRange.Bytes
+
     // VK_EXT_fragment_shader_interlock. False on AMD's Windows proprietary
     // driver and most mobile / iGPU drivers; the transparency wrapper falls
     // back to Weighted-Blended OIT when this is false.
@@ -602,6 +606,8 @@ type Runtime(device : Device) as this =
         member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
 
         member x.ShaderDouble = x.ShaderDouble
+
+        member x.MaxStorageBufferBytes = x.MaxStorageBufferBytes
 
         member x.FragmentShaderInterlock = x.FragmentShaderInterlock
 

@@ -91,6 +91,13 @@ and IRuntime =
     /// near-double precision there must emulate it (e.g. the heap's df32 path).
     abstract member ShaderDouble : bool
 
+    /// The maximum byte range a single storage-buffer binding can address in a
+    /// shader (Vulkan `maxStorageBufferRange`; GL `GL_MAX_SHADER_STORAGE_BLOCK_SIZE`).
+    /// The heap clamps its arena PAGE size to this so a page never exceeds what a
+    /// shader can index — important on MoltenVK/Metal and mobile where the range can
+    /// be well below the desktop 1 GiB default.
+    abstract member MaxStorageBufferBytes : int64
+
     /// Returns whether fragment-shader pixel interlock is supported (ordered,
     /// per-pixel critical sections — `VK_EXT_fragment_shader_interlock` on
     /// Vulkan, `GL_ARB_fragment_shader_interlock` on desktop GL). The exact
