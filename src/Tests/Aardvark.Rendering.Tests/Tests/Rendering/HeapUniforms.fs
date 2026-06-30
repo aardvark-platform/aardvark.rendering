@@ -266,6 +266,19 @@ module HeapUniforms =
                 return V4f((nq + lq) * 0.5f, 1.0f)
             }
 
+    // a NEW dimension (Sampler3d / volume) — proves the per-sampler rewrite is fully generic
+    // over sampler type now that parking (the only per-type code) is gone.
+    module private Vol3dSh =
+        let private vol = sampler3d { texture uniform?Vol3d; filter Filter.MinMagLinear; addressU WrapMode.Clamp; addressV WrapMode.Clamp; addressW WrapMode.Clamp }
+        let vert (v : TexVertex) =
+            vertex {
+                let m : M44f = uniform?HeapModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                return { v with pos = vp * (m * v.pos); n = m.TransformDir v.n; tc = v.pos.XY + V2f(0.5f, 0.5f) }
+            }
+        let frag (v : TexVertex) =
+            fragment { let c = vol.Sample(V3f(v.tc, 0.5f)).XYZ in return V4f(c, 1.0f) }
+
     // a vertex carrying a per-vertex INT attribute (ITag, flat) and a per-vertex
     // MATRIX attribute (MX) — both storage-decoded by the heap.
     type AttrV =
@@ -682,6 +695,44 @@ module HeapUniforms =
             finally
                 texArray |> Array.iter runtime.DeleteTexture
 
+        // a small solid-ish 3d volume (checker across all 3 axes), distinct per index
+        let private mkVolTexture (runtime : IRuntime) (i : int) : IBackendTexture =
+            let cols = [| C3b(230,60,60); C3b(60,200,60); C3b(60,120,230); C3b(230,200,40)
+                          C3b(210,60,210); C3b(40,210,210); C3b(230,140,40); C3b(180,180,180) |]
+            let col = cols.[i % cols.Length]
+            let s = 4
+            let vol = PixVolume<byte>(Col.Format.RGBA, V3i(s, s, s))
+            vol.GetVolume<C4b>().SetByCoord(fun (c : V3l) ->
+                if ((int c.X / 2) + (int c.Y / 2) + (int c.Z / 2)) % 2 = 0 then C4b(col) else C4b.White) |> ignore
+            let t = runtime.CreateTexture3D(V3i(s, s, s), TextureFormat.Rgba8, levels = 1)
+            t.Upload vol
+            t
+
+        /// AUTO-bindless Sampler3d (a NEW sampler dimension) — same effect classic vs heap.
+        /// With parking gone the rewrite is type-generic, so a 3d sampler needs zero per-type
+        /// code; this just confirms it renders pixel-equal.
+        let texture3d (runtime : IRuntime) =
+            skipUnlessHeapVulkan runtime
+            if not runtime.SupportsUnboundedSamplerArrays then
+                skiptest "bindless sampler arrays unsupported (descriptor indexing)"
+            use signature = sig256 runtime
+            let texCount = 8
+            let texArray : IBackendTexture[] = Array.init texCount (mkVolTexture runtime)
+            try
+                let eff = Effect.compose [ Effect.ofFunction Vol3dSh.vert; Effect.ofFunction Vol3dSh.frag ]
+                let common (p : V3d) =
+                    [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                      Symbol.Create "ViewProjTrafo",  viewProj ]
+                let objs = grid 16 |> Array.map (fun (i, p) -> mkRO (common p @ [ Symbol.Create "Vol3d", (AVal.constant (texArray.[i % texCount] :> ITexture) :> IAdaptiveValue) ]) eff)
+                let classic = renderPix runtime signature (ASet.ofArray objs)
+                let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+                Expect.equal Heap.lastBucketCount 1 "Sampler3d ROs must collapse to one heap bucket (auto-bindless)"
+                let maxDelta, nNonBg, _ = compare classic heap
+                Expect.isLessThanOrEqual maxDelta 1 "Sampler3d bindless heap vs classic"
+                Expect.isGreaterThan nNonBg 100L "3d-textured scene rendered blank"
+            finally
+                texArray |> Array.iter runtime.DeleteTexture
+
         // a tiny 4x4 high-contrast texture so nearest vs linear visibly diverge when magnified
         let private mkSmallTex (runtime : IRuntime) (i : int) : IBackendTexture =
             let cols = [| C3b(230,60,60); C3b(60,200,60); C3b(60,120,230); C3b(230,200,40)
@@ -884,6 +935,7 @@ module HeapUniforms =
           "Bindless Sampler2dArray",        Harness.textureArray
           "Bindless Sampler2dShadow",       Harness.textureShadow
           "Two sampler states",             Harness.twoSamplerStates
+          "Bindless Sampler3d",             Harness.texture3d
           "Heterogeneous geometry",         Harness.heterogeneousGeometry
           "Texture atlas fallback",         Harness.texturesAtlas
           "Int + matrix attributes",        Harness.attributes ]

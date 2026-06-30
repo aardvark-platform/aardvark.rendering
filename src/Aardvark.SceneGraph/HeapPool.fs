@@ -371,9 +371,18 @@ module Heap =
     // indexed by its own "HeapTexIdx<si>" storage buffer. The array carries that sampler's
     // OWN state (set in effect.Uniforms by overrideSamplerStates). No pool, no limit, and
     // same-type samplers with different filter/wrap/compare are all correct.
+    let private samplerStatic (ty : System.Type) (name : string) : obj =
+        match ty.GetProperty(name, System.Reflection.BindingFlags.Public ||| System.Reflection.BindingFlags.Static) with
+        | null -> null
+        | p -> p.GetValue(null)
+    /// any FShade sampler EXCEPT multisampled and 1d — the rewrite + per-sampler arrays are
+    /// generic over the rest (2d/3d/cube, array, shadow, int/uint), so all just work.
     let private isBindlessSamplerType (ty : System.Type) =
-        ty = typeof<Sampler2d> || ty = typeof<Sampler2dArray> || ty = typeof<SamplerCube>
-        || ty = typeof<Sampler2dShadow> || ty = typeof<SamplerCubeShadow>
+        typeof<ISampler>.IsAssignableFrom ty &&
+        (match samplerStatic ty "IsMultisampled" with :? bool as ms -> not ms | _ -> false) &&
+        (match samplerStatic ty "Dimension" with
+         | :? SamplerDimension as d -> d = SamplerDimension.Sampler2d || d = SamplerDimension.Sampler3d || d = SamplerDimension.SamplerCube
+         | _ -> false)
     let private heapTexArrName (si : int) = sprintf "HeapTexArr%d" si
     let private heapTexIdxName (si : int) = sprintf "HeapTexIdx%d" si
 
@@ -1560,19 +1569,18 @@ module Heap =
     /// with the slot table. Recomputed when membership changed (read through
     /// `updater`, whose evaluation calls Add/RemoveSlot first) or when a member's
     /// texture aval changed (its writer marks this table) — O(changed) either way.
-    type internal BindlessTexTable(updater : aval<int>, k : int, mkDummy : unit -> ITexture, delDummy : ITexture -> unit) as this =
+    type internal BindlessTexTable(updater : aval<int>, k : int) as this =
         inherit AVal.AbstractVal<HashMapDelta<int, ITexture>>()
         let kk = max 1 k
         let pending = LockedSet<SlotTexWriter>()
         let refCounts = System.Collections.Generic.List<int>()
         let idxOf = System.Collections.Generic.Dictionary<ITexture, int>(HashIdentity.Reference)
         let freeIdx = System.Collections.Generic.Stack<int>()
-        // index -> texture changes since the last Compute = the textures amap's delta (O(changed)).
-        let pendingDelta = System.Collections.Generic.Dictionary<int, ITexture>()
-        let mutable dummy : ITexture = null
-        let getDummy () =
-            if isNull dummy then dummy <- mkDummy ()
-            dummy
+        // index -> op since the last Compute = the textures amap's delta (O(changed)). A freed
+        // cell emits Remove; the backend backs the now-unbound slot with its null sampler and no
+        // live draw ever indexes it — so there is no dummy and every sampler type works with no
+        // per-type cell.
+        let pendingDelta = System.Collections.Generic.Dictionary<int, ElementOperation<ITexture>>()
         let acquire (tex : ITexture) : int =
             match idxOf.TryGetValue tex with
             | true, i -> refCounts.[i] <- refCounts.[i] + 1; i
@@ -1582,7 +1590,7 @@ module Heap =
                     else (refCounts.Add 0; refCounts.Count - 1)
                 refCounts.[i] <- 1
                 idxOf.[tex] <- i
-                pendingDelta.[i] <- tex
+                pendingDelta.[i] <- ElementOperation.Set tex
                 i
         let release (tex : ITexture) =
             if not (isNull tex) then
@@ -1591,7 +1599,7 @@ module Heap =
                     refCounts.[i] <- refCounts.[i] - 1
                     if refCounts.[i] = 0 then
                         idxOf.Remove tex |> ignore
-                        pendingDelta.[i] <- getDummy ()   // park the freed cell on a LIVE dummy
+                        pendingDelta.[i] <- ElementOperation.Remove   // free the cell (backend nulls it)
                         freeIdx.Push i
                 | _ -> ()
         let mutable writers : SlotTexWriter[] = Array.zeroCreate (16 * kk)
@@ -1646,7 +1654,7 @@ module Heap =
                     w.Update(t, fun old tex ->
                         release old
                         indices.[w.Pos] <- acquire tex)
-            let d = HashMap.ofSeq (pendingDelta |> Seq.map (fun kv -> kv.Key, ElementOperation.Set kv.Value))
+            let d = HashMap.ofSeq (pendingDelta |> Seq.map (fun kv -> kv.Key, kv.Value))
             pendingDelta.Clear()
             HashMapDelta d
         member x.Dispose() =
@@ -1656,9 +1664,6 @@ module Heap =
                     w.Dispose()
                     writers.[i] <- Unchecked.defaultof<_>
             refCounts.Clear(); idxOf.Clear(); freeIdx.Clear(); pendingDelta.Clear()
-            if not (isNull dummy) then
-                delDummy dummy
-                dummy <- null
 
     /// Persistent per-slot atlas placement for an atlas bucket: ONE AtlasPool per
     /// bucket (lifetime = bucket); slot adds Acquire, slot removes Release (the
@@ -2820,26 +2825,16 @@ module Heap =
         // changes; the draw mirror re-stages exactly the toggled slots.
         let gateWriters = System.Collections.Generic.Dictionary<int, GateWriter>()
 
-        // ── texture tables (one per bindless sampler TYPE, or one atlas) ──
+        // ── texture tables: ONE per input sampler (si). A freed cell emits a Remove and the
+        // backend nulls the unbound slot, so there is no per-type dummy — any sampler type works.
+        // (the atlas FALLBACK still needs a real 2d dummy to pad its fixed-size page array.)
         let mkDummy2d () = runtime.CreateTexture2D(V2i.II, TextureFormat.Rgba8, levels = 1, samples = 1) :> ITexture
-        let mkDummy2dArray () = runtime.CreateTexture2DArray(V2i.II, TextureFormat.Rgba8, levels = 1, samples = 1, count = 1) :> ITexture
-        let mkDummyCube () = runtime.CreateTextureCube(1, TextureFormat.Rgba8, levels = 1) :> ITexture
-        // shadow samplers bind DEPTH textures (compared, not sampled as colour)
-        let mkDummy2dShadow () = runtime.CreateTexture2D(V2i.II, TextureFormat.DepthComponent32f, levels = 1, samples = 1) :> ITexture
-        let mkDummyCubeShadow () = runtime.CreateTextureCube(1, TextureFormat.DepthComponent32f, levels = 1) :> ITexture
-        let delDummy (t : ITexture) = match t with | :? IBackendTexture as bt -> runtime.DeleteTexture bt | _ -> ()
-        // (arrayName, idxName, texture symbol, table) — ONE per input sampler (si)
+        let delDummy (t : ITexture) = match t with :? IBackendTexture as bt -> runtime.DeleteTexture bt | _ -> ()
         let bindlessTexTables =
             if useAtlas then [||]
             else
-                samplersIndexed |> Array.map (fun (si, _sn, tn, ty, _st) ->
-                    let mk =
-                        if   ty = typeof<SamplerCube>       then mkDummyCube
-                        elif ty = typeof<Sampler2dArray>    then mkDummy2dArray
-                        elif ty = typeof<Sampler2dShadow>   then mkDummy2dShadow
-                        elif ty = typeof<SamplerCubeShadow> then mkDummyCubeShadow
-                        else mkDummy2d
-                    heapTexArrName si, heapTexIdxName si, [| Symbol.Create tn |], BindlessTexTable(updater, 1, mk, delDummy))
+                samplersIndexed |> Array.map (fun (si, _sn, tn, _ty, _st) ->
+                    heapTexArrName si, heapTexIdxName si, [| Symbol.Create tn |], BindlessTexTable(updater, 1))
         // ONE AtlasPool per bucket (lifetime = bucket). The dummy backs the unused
         // slots of the padded 8-page sampler array.
         let atlasState =
