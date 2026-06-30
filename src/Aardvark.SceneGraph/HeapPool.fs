@@ -79,9 +79,11 @@ module HeapUniforms =
         // per-(object,sampler) index into the DEDUPED per-type HeapTextures<T> array,
         // at slot*Kt + kt (Kt = that type's sampler count in the effect). One index
         // buffer per supported sampler type.
-        member x.HeapTexIndices2d      : int[] = uniform?StorageBuffer?HeapTexIndices2d
-        member x.HeapTexIndices2dArray : int[] = uniform?StorageBuffer?HeapTexIndices2dArray
-        member x.HeapTexIndicesCube    : int[] = uniform?StorageBuffer?HeapTexIndicesCube
+        member x.HeapTexIndices2d         : int[] = uniform?StorageBuffer?HeapTexIndices2d
+        member x.HeapTexIndices2dArray    : int[] = uniform?StorageBuffer?HeapTexIndices2dArray
+        member x.HeapTexIndicesCube       : int[] = uniform?StorageBuffer?HeapTexIndicesCube
+        member x.HeapTexIndices2dShadow   : int[] = uniform?StorageBuffer?HeapTexIndices2dShadow
+        member x.HeapTexIndicesCubeShadow : int[] = uniform?StorageBuffer?HeapTexIndicesCubeShadow
         // ── texture-atlas fallback (Vulkan-1.0 / GL / MoltenVK: ONE sampler) ──
         // Per-object atlas placement (indexed by slot*K + k): mip-0 interior origin and
         // size in atlas PIXELS, and packed format bits (numMips<<1 | addrU<<4 | addrV<<6).
@@ -364,9 +366,11 @@ module Heap =
     // dedups, so the array holds only the bucket's distinct textures (≤ array cap).
     // The arrays are module-level (built ONCE) so the sampler CE never sits inside a
     // spliced per-call quotation (which makes the F# Release optimizer grind).
-    let private heapTex2d      : Sampler2d[]      = sampler2d      { textureArray uniform?HeapTextures2d      -1 }
-    let private heapTex2dArray : Sampler2dArray[] = sampler2dArray { textureArray uniform?HeapTextures2dArray -1 }
-    let private heapTexCube    : SamplerCube[]    = samplerCube    { textureArray uniform?HeapTexturesCube    -1 }
+    let private heapTex2d         : Sampler2d[]         = sampler2d         { textureArray uniform?HeapTextures2d         -1 }
+    let private heapTex2dArray    : Sampler2dArray[]    = sampler2dArray    { textureArray uniform?HeapTextures2dArray    -1 }
+    let private heapTexCube       : SamplerCube[]       = samplerCube       { textureArray uniform?HeapTexturesCube       -1 }
+    let private heapTex2dShadow   : Sampler2dShadow[]   = sampler2dShadow   { textureArray uniform?HeapTextures2dShadow   -1 }
+    let private heapTexCubeShadow : SamplerCubeShadow[] = samplerCubeShadow { textureArray uniform?HeapTexturesCubeShadow -1 }
 
     /// supported bindless sampler types: F# type ->
     ///   (array texture-semantic, index buffer semantic, FShade uniform KEY).
@@ -374,17 +378,21 @@ module Heap =
     /// sampler array appears in shaderUniforms — it MUST equal the `let` name below; the
     /// texture semantic (e.g. "HeapTextures2d") is the `uniform?…` name the provider binds.
     let private bindlessTypeInfo (ty : System.Type) : (string * string * string) option =
-        if   ty = typeof<Sampler2d>      then Some ("HeapTextures2d",      "HeapTexIndices2d",      "heapTex2d")
-        elif ty = typeof<Sampler2dArray> then Some ("HeapTextures2dArray", "HeapTexIndices2dArray", "heapTex2dArray")
-        elif ty = typeof<SamplerCube>    then Some ("HeapTexturesCube",    "HeapTexIndicesCube",    "heapTexCube")
+        if   ty = typeof<Sampler2d>         then Some ("HeapTextures2d",         "HeapTexIndices2d",         "heapTex2d")
+        elif ty = typeof<Sampler2dArray>    then Some ("HeapTextures2dArray",    "HeapTexIndices2dArray",    "heapTex2dArray")
+        elif ty = typeof<SamplerCube>       then Some ("HeapTexturesCube",       "HeapTexIndicesCube",       "heapTexCube")
+        elif ty = typeof<Sampler2dShadow>   then Some ("HeapTextures2dShadow",   "HeapTexIndices2dShadow",   "heapTex2dShadow")
+        elif ty = typeof<SamplerCubeShadow> then Some ("HeapTexturesCubeShadow", "HeapTexIndicesCubeShadow", "heapTexCubeShadow")
         else None
     let private isBindlessSamplerType (ty : System.Type) = (bindlessTypeInfo ty).IsSome
 
     /// read object `slot`'s kt-th sampler of type `ty` from its per-type bindless array
     let private samplerReadFor (ty : System.Type) (slot : Expr<int>) (kCountT : int) (kt : int) : Expr =
-        if   ty = typeof<Sampler2d>      then <@ heapTex2d.[      uniform.HeapTexIndices2d.[      (%slot) * kCountT + kt ] ] @>.Raw
-        elif ty = typeof<Sampler2dArray> then <@ heapTex2dArray.[ uniform.HeapTexIndices2dArray.[ (%slot) * kCountT + kt ] ] @>.Raw
-        elif ty = typeof<SamplerCube>    then <@ heapTexCube.[    uniform.HeapTexIndicesCube.[    (%slot) * kCountT + kt ] ] @>.Raw
+        if   ty = typeof<Sampler2d>         then <@ heapTex2d.[         uniform.HeapTexIndices2d.[         (%slot) * kCountT + kt ] ] @>.Raw
+        elif ty = typeof<Sampler2dArray>    then <@ heapTex2dArray.[    uniform.HeapTexIndices2dArray.[    (%slot) * kCountT + kt ] ] @>.Raw
+        elif ty = typeof<SamplerCube>       then <@ heapTexCube.[       uniform.HeapTexIndicesCube.[       (%slot) * kCountT + kt ] ] @>.Raw
+        elif ty = typeof<Sampler2dShadow>   then <@ heapTex2dShadow.[   uniform.HeapTexIndices2dShadow.[   (%slot) * kCountT + kt ] ] @>.Raw
+        elif ty = typeof<SamplerCubeShadow> then <@ heapTexCubeShadow.[ uniform.HeapTexIndicesCubeShadow.[ (%slot) * kCountT + kt ] ] @>.Raw
         else failwithf "Heap: unsupported bindless sampler type %A" ty
 
     // ── texture-atlas sampling (single-page, ONE sampler) ──────────────────
@@ -2808,6 +2816,9 @@ module Heap =
         let mkDummy2d () = runtime.CreateTexture2D(V2i.II, TextureFormat.Rgba8, levels = 1, samples = 1) :> ITexture
         let mkDummy2dArray () = runtime.CreateTexture2DArray(V2i.II, TextureFormat.Rgba8, levels = 1, samples = 1, count = 1) :> ITexture
         let mkDummyCube () = runtime.CreateTextureCube(1, TextureFormat.Rgba8, levels = 1) :> ITexture
+        // shadow samplers bind DEPTH textures (compared, not sampled as colour)
+        let mkDummy2dShadow () = runtime.CreateTexture2D(V2i.II, TextureFormat.DepthComponent32f, levels = 1, samples = 1) :> ITexture
+        let mkDummyCubeShadow () = runtime.CreateTextureCube(1, TextureFormat.DepthComponent32f, levels = 1) :> ITexture
         let delDummy (t : ITexture) = match t with | :? IBackendTexture as bt -> runtime.DeleteTexture bt | _ -> ()
         // (arrayName, idxName, per-kt texture symbols, table) per sampler TYPE
         let bindlessTexTables =
@@ -2818,8 +2829,10 @@ module Heap =
                     | Some (arrName, idxName, _) ->
                         let texSyms = grp |> Array.map (fun (_, tn, _, _) -> Symbol.Create tn)
                         let mk =
-                            if   ty = typeof<SamplerCube>    then mkDummyCube
-                            elif ty = typeof<Sampler2dArray> then mkDummy2dArray
+                            if   ty = typeof<SamplerCube>       then mkDummyCube
+                            elif ty = typeof<Sampler2dArray>    then mkDummy2dArray
+                            elif ty = typeof<Sampler2dShadow>   then mkDummy2dShadow
+                            elif ty = typeof<SamplerCubeShadow> then mkDummyCubeShadow
                             else mkDummy2d
                         Some (arrName, idxName, texSyms, BindlessTexTable(updater, grp.Length, mk, delDummy))
                     | None -> None)
@@ -4442,7 +4455,7 @@ module Heap =
                     let samps = e.Uniforms |> Map.toArray |> Array.filter (fun (_, p) -> typeof<ISampler>.IsAssignableFrom p.uniformType)
                     let badType = samps |> Array.tryFind (fun (_, p) -> not (isBindlessSamplerType p.uniformType))
                     match badType with
-                    | Some (n, p) -> Some (sprintf "sampler '%s' has unsupported type %s (supported: Sampler2d, Sampler2dArray, SamplerCube)" n p.uniformType.Name)
+                    | Some (n, p) -> Some (sprintf "sampler '%s' has unsupported type %s (supported: Sampler2d, Sampler2dArray, SamplerCube, Sampler2dShadow, SamplerCubeShadow)" n p.uniformType.Name)
                     | None ->
                         if samps.Length > 0
                            && not supportsUnbounded

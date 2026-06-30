@@ -223,6 +223,28 @@ module HeapUniforms =
         let frag (v : TexVertex) =
             fragment { return V4f(arr.Sample(v.tc, 0).XYZ * litA v.n, 1.0f) }
 
+    // AUTO-bindless Sampler2dShadow: a per-object shadow sampler (depth texture + compare),
+    // rewritten by the heap into heapTex2dShadow. The compare op rides the sampler state
+    // (overrideSamplerStates), so it works like the other kinds.
+    module private ShadowSh =
+        let private shadow =
+            sampler2dShadow {
+                texture uniform?ShadowMap
+                filter Filter.MinMagLinear
+                addressU WrapMode.Clamp
+                addressV WrapMode.Clamp
+                comparison ComparisonFunction.LessOrEqual
+            }
+        let vert (v : TexVertex) =
+            vertex {
+                let m : M44f = uniform?HeapModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                return { v with pos = vp * (m * v.pos); n = m.TransformDir v.n; tc = v.pos.XY + V2f(0.5f, 0.5f) }
+            }
+        let frag (v : TexVertex) =
+            // compare result in [0,1]; bias to 0.3..0.9 so even a 0 is non-background
+            fragment { let s = shadow.Sample(v.tc, 0.5f) in return V4f(V3f(0.3f + 0.6f * s), 1.0f) }
+
     // a vertex carrying a per-vertex INT attribute (ITag, flat) and a per-vertex
     // MATRIX attribute (MX) — both storage-decoded by the heap.
     type AttrV =
@@ -606,6 +628,39 @@ module HeapUniforms =
             finally
                 texArray |> Array.iter runtime.DeleteTexture
 
+        // a distinct depth texture per index (the shadow compare source). Content is fixed
+        // at creation and shared by classic + heap, so the compare result matches.
+        let private mkDepthTexture (runtime : IRuntime) (_ : int) : IBackendTexture =
+            let img = PixImage.random32f' Col.Format.Gray (V2i(64, 64))
+            let t = runtime.CreateTexture2D(V2i(64, 64), TextureFormat.DepthComponent32f, levels = 1, samples = 1)
+            t.Upload img
+            t
+
+        /// AUTO-bindless Sampler2dShadow: a per-object depth texture + compare, same effect
+        /// classic vs heap — the heap must collapse the ROs and rewrite the shadow sampler
+        /// into heapTex2dShadow (compare op threaded through the sampler state), pixel-equal.
+        let textureShadow (runtime : IRuntime) =
+            skipUnlessHeapVulkan runtime
+            if not runtime.SupportsUnboundedSamplerArrays then
+                skiptest "bindless sampler arrays unsupported (descriptor indexing)"
+            use signature = sig256 runtime
+            let texCount = 8
+            let texArray : IBackendTexture[] = Array.init texCount (mkDepthTexture runtime)
+            try
+                let eff = Effect.compose [ Effect.ofFunction ShadowSh.vert; Effect.ofFunction ShadowSh.frag ]
+                let common (p : V3d) =
+                    [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                      Symbol.Create "ViewProjTrafo",  viewProj ]
+                let objs = grid 16 |> Array.map (fun (i, p) -> mkRO (common p @ [ Symbol.Create "ShadowMap", (AVal.constant (texArray.[i % texCount] :> ITexture) :> IAdaptiveValue) ]) eff)
+                let classic = renderPix runtime signature (ASet.ofArray objs)
+                let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+                Expect.equal Heap.lastBucketCount 1 "Sampler2dShadow ROs must collapse to one heap bucket (auto-bindless)"
+                let maxDelta, nNonBg, _ = compare classic heap
+                Expect.isLessThanOrEqual maxDelta 1 "Sampler2dShadow bindless heap vs classic"
+                Expect.isGreaterThan nNonBg 100L "shadow scene rendered blank"
+            finally
+                texArray |> Array.iter runtime.DeleteTexture
+
         /// HETEROGENEOUS geometry: distinct meshes (different vertex/index counts) in
         /// ONE bucket -> per-allocation-headed arena ranges, decoded per object. Must
         /// match a classic render of the same per-object meshes.
@@ -766,6 +821,7 @@ module HeapUniforms =
           "Resource reclamation",           Harness.resourceReclaim
           "Bindless textures",              Harness.textures
           "Bindless Sampler2dArray",        Harness.textureArray
+          "Bindless Sampler2dShadow",       Harness.textureShadow
           "Heterogeneous geometry",         Harness.heterogeneousGeometry
           "Texture atlas fallback",         Harness.texturesAtlas
           "Int + matrix attributes",        Harness.attributes ]
