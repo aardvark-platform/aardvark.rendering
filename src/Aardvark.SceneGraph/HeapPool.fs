@@ -1551,14 +1551,15 @@ module Heap =
     /// with the slot table. Recomputed when membership changed (read through
     /// `updater`, whose evaluation calls Add/RemoveSlot first) or when a member's
     /// texture aval changed (its writer marks this table) — O(changed) either way.
-    type internal BindlessTexTable(updater : aval<int>, k : int, mkDummy : unit -> ITexture, delDummy : ITexture -> unit) =
-        inherit AVal.AbstractVal<ITexture[] * int[]>()
+    type internal BindlessTexTable(updater : aval<int>, k : int, mkDummy : unit -> ITexture, delDummy : ITexture -> unit) as this =
+        inherit AVal.AbstractVal<HashMapDelta<int, ITexture>>()
         let kk = max 1 k
         let pending = LockedSet<SlotTexWriter>()
-        let texArr = System.Collections.Generic.List<ITexture>()
         let refCounts = System.Collections.Generic.List<int>()
         let idxOf = System.Collections.Generic.Dictionary<ITexture, int>(HashIdentity.Reference)
         let freeIdx = System.Collections.Generic.Stack<int>()
+        // index -> texture changes since the last Compute = the textures amap's delta (O(changed)).
+        let pendingDelta = System.Collections.Generic.Dictionary<int, ITexture>()
         let mutable dummy : ITexture = null
         let getDummy () =
             if isNull dummy then dummy <- mkDummy ()
@@ -1569,13 +1570,10 @@ module Heap =
             | _ ->
                 let i =
                     if freeIdx.Count > 0 then freeIdx.Pop()
-                    else
-                        texArr.Add tex
-                        refCounts.Add 0
-                        texArr.Count - 1
-                texArr.[i] <- tex
+                    else (refCounts.Add 0; refCounts.Count - 1)
                 refCounts.[i] <- 1
                 idxOf.[tex] <- i
+                pendingDelta.[i] <- tex
                 i
         let release (tex : ITexture) =
             if not (isNull tex) then
@@ -1584,7 +1582,7 @@ module Heap =
                     refCounts.[i] <- refCounts.[i] - 1
                     if refCounts.[i] = 0 then
                         idxOf.Remove tex |> ignore
-                        texArr.[i] <- getDummy ()       // keep the array cell on a LIVE texture
+                        pendingDelta.[i] <- getDummy ()   // park the freed cell on a LIVE dummy
                         freeIdx.Push i
                 | _ -> ()
         let mutable writers : SlotTexWriter[] = Array.zeroCreate (16 * kk)
@@ -1599,6 +1597,11 @@ module Heap =
                 let ni = Array.zeroCreate<int> c
                 System.Array.Copy(indices, ni, indices.Length)
                 indices <- ni
+        // textures as an incremental MAP (index -> texture): Compute returns its delta so
+        // updates are O(changed), not a full-array rebuild. The index buffer rides the same
+        // Compute (AVal.map forces it, then reads the freshly-updated array).
+        let textures : amap<int, ITexture> = AMap.custom (fun token _ -> this.GetValue token)
+        let indicesAval : aval<int[]> = (this :> aval<_>) |> AVal.map (fun _ -> Array.sub indices 0 (max 1 highPos))
         /// register slot's K texture avals (called from the updater's evaluation)
         member _.AddSlot(slot : int, srcs : IAdaptiveValue[]) =
             let basePos = slot * kk
@@ -1623,6 +1626,10 @@ module Heap =
             match o with
             | :? SlotTexWriter as w -> pending.Add w |> ignore
             | _ -> ()
+        /// distinct-texture array as an incremental amap (index -> texture)
+        member _.Textures = textures
+        /// per-(slot, sampler) indices at slot*K + kt (rides the textures Compute)
+        member _.Indices = indicesAval
         override x.Compute(t) =
             updater.GetValue t |> ignore        // apply membership mutations FIRST
             for w in pending.GetAndClear() do
@@ -1630,15 +1637,16 @@ module Heap =
                     w.Update(t, fun old tex ->
                         release old
                         indices.[w.Pos] <- acquire tex)
-            let texs = if texArr.Count = 0 then [| getDummy () |] else texArr.ToArray()
-            texs, Array.sub indices 0 (max 1 highPos)
+            let d = HashMap.ofSeq (pendingDelta |> Seq.map (fun kv -> kv.Key, ElementOperation.Set kv.Value))
+            pendingDelta.Clear()
+            HashMapDelta d
         member x.Dispose() =
             for i in 0 .. writers.Length - 1 do
                 let w = writers.[i]
                 if not (System.Object.ReferenceEquals(w, null)) then
                     w.Dispose()
                     writers.[i] <- Unchecked.defaultof<_>
-            texArr.Clear(); refCounts.Clear(); idxOf.Clear(); freeIdx.Clear()
+            refCounts.Clear(); idxOf.Clear(); freeIdx.Clear(); pendingDelta.Clear()
             if not (isNull dummy) then
                 delDummy dummy
                 dummy <- null
@@ -3697,9 +3705,10 @@ module Heap =
                 texLookup.[Symbol.Create "HeapAtlasPageId"] <- (t |> AVal.map (fun (_, _, _, p) -> p)) :> IAdaptiveValue
             | None -> ()
             for (arrName, idxName, _, table) in bindlessTexTables do
-                let t = table :> aval<ITexture[] * int[]>
-                texLookup.[Symbol.Create arrName] <- (t |> AVal.map fst) :> IAdaptiveValue
-                texLookup.[Symbol.Create idxName] <- (t |> AVal.map snd) :> IAdaptiveValue
+                // textures as an amap (incremental, O(changed)); the backend's prepare path
+                // detects the aval<amap<…>> and skips AMap.ofAVal. Indices stay an aval<int[]>.
+                texLookup.[Symbol.Create arrName] <- AVal.constant table.Textures :> IAdaptiveValue
+                texLookup.[Symbol.Create idxName] <- table.Indices :> IAdaptiveValue
             if useBindlessGeom then
                 // the SAME per-slot buffers bound as both a float and an int view
                 let u = vtxGatherAval :> IAdaptiveValue

@@ -201,6 +201,18 @@ type DevicePreparedRenderObjectExtensions private() =
                                     let is = this.CreateImageSamplerArray(textureName, int b.DescriptorCount, sam.samplerType, tex, s)
                                     Some (int b.DescriptorCount, is)
 
+                                // textures already an incremental amap (the heap's bindless table,
+                                // wrapped in a constant aval): map to samplers directly so updates
+                                // stay O(changed) — no AMap.ofAVal whole-array diff.
+                                | ValueSome (:? aval<amap<int, ITexture>> as texMap) ->
+                                    let s = createSamplerState this textureName uniforms samplerState
+                                    let empty = this.CreateNullImageSampler(sam.samplerType)
+                                    let map =
+                                        AVal.force texMap
+                                        |> AMap.map (fun _ tex -> this.CreateImageSampler(textureName, sam.samplerType, AVal.constant tex, s))
+                                    let is = this.CreateImageSamplerArray(int b.DescriptorCount, empty, map)
+                                    Some (int b.DescriptorCount, is)
+
                                 | ValueSome t ->
                                     failf "invalid type '%A' for texture array '%A' (expected ITexture[] or (int * aval<ITexture>)[])" t.ContentType textureName
 
