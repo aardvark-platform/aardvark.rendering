@@ -366,34 +366,41 @@ module Heap =
     // dedups, so the array holds only the bucket's distinct textures (≤ array cap).
     // The arrays are module-level (built ONCE) so the sampler CE never sits inside a
     // spliced per-call quotation (which makes the F# Release optimizer grind).
-    let private heapTex2d         : Sampler2d[]         = sampler2d         { textureArray uniform?HeapTextures2d         -1 }
-    let private heapTex2dArray    : Sampler2dArray[]    = sampler2dArray    { textureArray uniform?HeapTextures2dArray    -1 }
-    let private heapTexCube       : SamplerCube[]       = samplerCube       { textureArray uniform?HeapTexturesCube       -1 }
-    let private heapTex2dShadow   : Sampler2dShadow[]   = sampler2dShadow   { textureArray uniform?HeapTextures2dShadow   -1 }
-    let private heapTexCubeShadow : SamplerCubeShadow[] = samplerCubeShadow { textureArray uniform?HeapTexturesCubeShadow -1 }
+    // NO static sampler arrays. Each input sampler is rewritten to read its OWN generated
+    // bindless array uniform "HeapTexArr<si>" (si = the sampler's index in the effect),
+    // indexed by its own "HeapTexIdx<si>" storage buffer. The array carries that sampler's
+    // OWN state (set in effect.Uniforms by overrideSamplerStates). No pool, no limit, and
+    // same-type samplers with different filter/wrap/compare are all correct.
+    let private isBindlessSamplerType (ty : System.Type) =
+        ty = typeof<Sampler2d> || ty = typeof<Sampler2dArray> || ty = typeof<SamplerCube>
+        || ty = typeof<Sampler2dShadow> || ty = typeof<SamplerCubeShadow>
+    let private heapTexArrName (si : int) = sprintf "HeapTexArr%d" si
+    let private heapTexIdxName (si : int) = sprintf "HeapTexIdx%d" si
 
-    /// supported bindless sampler types: F# type ->
-    ///   (array texture-semantic, index buffer semantic, FShade uniform KEY).
-    /// The FShade key is the module-level VALUE name (e.g. "heapTex2d") under which the
-    /// sampler array appears in shaderUniforms — it MUST equal the `let` name below; the
-    /// texture semantic (e.g. "HeapTextures2d") is the `uniform?…` name the provider binds.
-    let private bindlessTypeInfo (ty : System.Type) : (string * string * string) option =
-        if   ty = typeof<Sampler2d>         then Some ("HeapTextures2d",         "HeapTexIndices2d",         "heapTex2d")
-        elif ty = typeof<Sampler2dArray>    then Some ("HeapTextures2dArray",    "HeapTexIndices2dArray",    "heapTex2dArray")
-        elif ty = typeof<SamplerCube>       then Some ("HeapTexturesCube",       "HeapTexIndicesCube",       "heapTexCube")
-        elif ty = typeof<Sampler2dShadow>   then Some ("HeapTextures2dShadow",   "HeapTexIndices2dShadow",   "heapTex2dShadow")
-        elif ty = typeof<SamplerCubeShadow> then Some ("HeapTexturesCubeShadow", "HeapTexIndicesCubeShadow", "heapTexCubeShadow")
-        else None
-    let private isBindlessSamplerType (ty : System.Type) = (bindlessTypeInfo ty).IsSome
+    // op_Dynamic (the `uniform?…` operator) + GetArray, lifted from probe quotations, so
+    // the rewrite can build dynamic-NAME uniform / storage-buffer reads.
+    let private uniformProbe, opDynDef =
+        match <@@ (uniform?HeapProbe : int[]) @@> with
+        | Patterns.Call(None, mi, [u; _]) -> u, mi.GetGenericMethodDefinition()
+        | _ -> failwith "Heap: could not lift op_Dynamic"
+    let private getArrDef =
+        match <@@ ([| 0 |]).[0] @@> with
+        | Patterns.Call(None, mi, _) -> mi.GetGenericMethodDefinition()
+        | _ -> failwith "Heap: could not lift GetArray"
+    let private opDyn (ret : System.Type) (scope : Expr) (name : string) =
+        Expr.Call(opDynDef.MakeGenericMethod ret, [ scope; Expr.Value name ])
 
-    /// read object `slot`'s kt-th sampler of type `ty` from its per-type bindless array
-    let private samplerReadFor (ty : System.Type) (slot : Expr<int>) (kCountT : int) (kt : int) : Expr =
-        if   ty = typeof<Sampler2d>         then <@ heapTex2d.[         uniform.HeapTexIndices2d.[         (%slot) * kCountT + kt ] ] @>.Raw
-        elif ty = typeof<Sampler2dArray>    then <@ heapTex2dArray.[    uniform.HeapTexIndices2dArray.[    (%slot) * kCountT + kt ] ] @>.Raw
-        elif ty = typeof<SamplerCube>       then <@ heapTexCube.[       uniform.HeapTexIndicesCube.[       (%slot) * kCountT + kt ] ] @>.Raw
-        elif ty = typeof<Sampler2dShadow>   then <@ heapTex2dShadow.[   uniform.HeapTexIndices2dShadow.[   (%slot) * kCountT + kt ] ] @>.Raw
-        elif ty = typeof<SamplerCubeShadow> then <@ heapTexCubeShadow.[ uniform.HeapTexIndicesCubeShadow.[ (%slot) * kCountT + kt ] ] @>.Raw
-        else failwithf "Heap: unsupported bindless sampler type %A" ty
+    /// read object `slot`'s si-th sampler (type `ty`) from ITS OWN generated array HeapTexArr<si>
+    let private samplerReadFor (ty : System.Type) (slot : Expr<int>) (si : int) : Expr =
+        // index: (uniform?StorageBuffer?HeapTexIdx<si> : int[]).[slot]
+        let sbScope = opDyn typeof<UniformScope> uniformProbe "StorageBuffer"
+        let idxArr  = Expr.Cast<int[]>(opDyn typeof<int[]> sbScope (heapTexIdxName si))
+        let idxE    = <@ (%idxArr).[%slot] @>
+        // (uniform?HeapTexArr<si> : ty[]).[ idxE ] — op_Dynamic emits the right `sampler[]`,
+        // but as a UBO member (Attribute); overrideSamplerStates re-tags it as a SamplerArray
+        // uniform so it becomes a top-level sampler binding with its own state.
+        let arrRead = opDyn (ty.MakeArrayType()) uniformProbe (heapTexArrName si)
+        Expr.Call(getArrDef.MakeGenericMethod ty, [ arrRead; idxE.Raw ])
 
     // ── texture-atlas sampling (single-page, ONE sampler) ──────────────────
     // The Vulkan-1.0 / GL / MoltenVK texture path: one bound sampler over a packed
@@ -532,14 +539,14 @@ module Heap =
                 Some (n, tn, p.uniformType, st)
             else None)
 
-    /// rewrite each sampler read into its per-type bindless array read.
-    /// `byName` : samplerName -> (samplerType, kt, Kt-for-that-type)
-    let private rewriteSamplers (slot : Expr<int>) (byName : Map<string, System.Type * int * int>) (e : Effect) =
+    /// rewrite each sampler read into ITS OWN generated bindless array read.
+    /// `byName` : samplerName -> (samplerType, si)
+    let private rewriteSamplers (slot : Expr<int>) (byName : Map<string, System.Type * int>) (e : Effect) =
         if Map.isEmpty byName then e
         else
             e |> Effect.substituteUniforms (fun name _ _ _ ->
                 match Map.tryFind name byName with
-                | Some (ty, kt, kCountT) -> Some (samplerReadFor ty slot kCountT kt)
+                | Some (ty, si) -> Some (samplerReadFor ty slot si)
                 | None -> None)
 
     /// re-apply the original sampler STATE to the generated per-type array uniforms.
@@ -558,7 +565,9 @@ module Heap =
                                 match p.uniformValue with
                                 | UniformValue.SamplerArray arr -> UniformValue.SamplerArray (arr |> Array.map (fun (tn, _) -> tn, st))
                                 | UniformValue.Sampler(tn, _)   -> UniformValue.Sampler(tn, st)
-                                | v -> v
+                                // op_Dynamic gave a generic Attribute uniform — re-tag it as an
+                                // (unbounded) sampler array so FShade binds it top-level, not in a UBO.
+                                | _ -> UniformValue.SamplerArray [| (n, st) |]
                             { p with uniformValue = nv }
                         | None -> p)
                 { shader with shaderUniforms = us })
@@ -2592,24 +2601,15 @@ module Heap =
                 | UniformValue.SamplerArray arr when arr.Length > 0 && not (samplerNameSet.Contains n) -> Some (fst arr.[0])
                 | _ -> None)
             |> Array.distinct
-        let samplersByType =
-            samplers
-            |> Array.groupBy (fun (_, _, ty, _) -> ty)
-            |> Array.map (fun (ty, grp) -> ty, grp |> Array.mapi (fun kt (sn, tn, _, st) -> sn, tn, kt, st))
-        // samplerName -> (type, kt, Kt-for-that-type), for the read rewrite
+        // Each input sampler gets a GLOBAL index si (its position) and its OWN generated
+        // array "HeapTexArr<si>" + index "HeapTexIdx<si>" carrying its own state.
+        let samplersIndexed = samplers |> Array.mapi (fun si (sn, tn, ty, st) -> si, sn, tn, ty, st)
+        // samplerName -> (type, si), for the read rewrite
         let samplerByName =
-            samplersByType
-            |> Array.collect (fun (ty, grp) -> let kCountT = grp.Length in grp |> Array.map (fun (sn, _, kt, _) -> sn, (ty, kt, kCountT)))
-            |> Map.ofArray
-        // FShade sampler-array KEY -> state (one per type; isHeapable enforces same
-        // state per type). Keyed by the FShade uniform key (the module value name).
+            samplersIndexed |> Array.map (fun (si, sn, _, ty, _) -> sn, (ty, si)) |> Map.ofArray
+        // generated array uniform name -> its sampler's state (applied by overrideSamplerStates)
         let samplerStateOverrides =
-            samplersByType
-            |> Array.choose (fun (ty, grp) ->
-                match bindlessTypeInfo ty with
-                | Some (_, _, fkey) when grp.Length > 0 -> let (_, _, _, st) = grp.[0] in Some (fkey, st)
-                | _ -> None)
-            |> Map.ofArray
+            samplersIndexed |> Array.map (fun (si, _, _, _, st) -> heapTexArrName si, st) |> Map.ofArray
         // the bucket provider must pass through neither the sampler binding names
         // nor the texture uniform names — both are folded into the per-type arrays.
         let samplerSyms = System.Collections.Generic.HashSet<Symbol>(samplers |> Array.collect (fun (sn, tn, _, _) -> [| Symbol.Create sn; Symbol.Create tn |]))
@@ -2828,22 +2828,18 @@ module Heap =
         let mkDummy2dShadow () = runtime.CreateTexture2D(V2i.II, TextureFormat.DepthComponent32f, levels = 1, samples = 1) :> ITexture
         let mkDummyCubeShadow () = runtime.CreateTextureCube(1, TextureFormat.DepthComponent32f, levels = 1) :> ITexture
         let delDummy (t : ITexture) = match t with | :? IBackendTexture as bt -> runtime.DeleteTexture bt | _ -> ()
-        // (arrayName, idxName, per-kt texture symbols, table) per sampler TYPE
+        // (arrayName, idxName, texture symbol, table) — ONE per input sampler (si)
         let bindlessTexTables =
             if useAtlas then [||]
             else
-                samplersByType |> Array.choose (fun (ty, grp) ->
-                    match bindlessTypeInfo ty with
-                    | Some (arrName, idxName, _) ->
-                        let texSyms = grp |> Array.map (fun (_, tn, _, _) -> Symbol.Create tn)
-                        let mk =
-                            if   ty = typeof<SamplerCube>       then mkDummyCube
-                            elif ty = typeof<Sampler2dArray>    then mkDummy2dArray
-                            elif ty = typeof<Sampler2dShadow>   then mkDummy2dShadow
-                            elif ty = typeof<SamplerCubeShadow> then mkDummyCubeShadow
-                            else mkDummy2d
-                        Some (arrName, idxName, texSyms, BindlessTexTable(updater, grp.Length, mk, delDummy))
-                    | None -> None)
+                samplersIndexed |> Array.map (fun (si, _sn, tn, ty, _st) ->
+                    let mk =
+                        if   ty = typeof<SamplerCube>       then mkDummyCube
+                        elif ty = typeof<Sampler2dArray>    then mkDummy2dArray
+                        elif ty = typeof<Sampler2dShadow>   then mkDummy2dShadow
+                        elif ty = typeof<SamplerCubeShadow> then mkDummyCubeShadow
+                        else mkDummy2d
+                    heapTexArrName si, heapTexIdxName si, [| Symbol.Create tn |], BindlessTexTable(updater, 1, mk, delDummy))
         // ONE AtlasPool per bucket (lifetime = bucket). The dummy backs the unused
         // slots of the padded 8-page sampler array.
         let atlasState =
@@ -4471,19 +4467,9 @@ module Heap =
                            && not (samps |> Array.forall (fun (_, p) -> p.uniformType = typeof<Sampler2d>)) then
                             Some "per-object textures need descriptor indexing for non-2d samplers (the atlas fallback handles Sampler2d only)"
                         else
-                            let mismatch =
-                                samps
-                                |> Array.choose (fun (n, p) ->
-                                    match p.uniformValue with
-                                    | UniformValue.Sampler(_, st) -> Some (p.uniformType, (n, st))
-                                    | UniformValue.SamplerArray a when a.Length > 0 -> Some (p.uniformType, (n, snd a.[0]))
-                                    | _ -> None)
-                                |> Array.groupBy fst
-                                |> Array.tryPick (fun (ty, g) ->
-                                    let (_, (_, st0)) = g.[0]
-                                    if g |> Array.forall (fun (_, (_, st)) -> st = st0) then None
-                                    else Some (sprintf "samplers of type %s use DIFFERING sampler states (one bindless array per type carries ONE state): %s" ty.Name (g |> Array.map (fst << snd) |> String.concat ", ")))
-                            mismatch
+                            // each input sampler gets its OWN generated array carrying its OWN
+                            // state, so differing states / compare ops are fine — no rejection.
+                            None
                 samplerIssueCache.[e.Id] <- v
                 v
         // eligible iff: an Effect surface, an INDEXED draw with a 2-/4-byte

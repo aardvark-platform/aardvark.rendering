@@ -245,6 +245,27 @@ module HeapUniforms =
             // compare result in [0,1]; bias to 0.3..0.9 so even a 0 is non-background
             fragment { let s = shadow.Sample(v.tc, 0.5f) in return V4f(V3f(0.3f + 0.6f * s), 1.0f) }
 
+    // TWO Sampler2d with DIFFERENT states (nearest vs linear) in ONE shader. The heap must
+    // give each its own generated array carrying its own state — if it collapsed them to one
+    // state, the nearest/linear average below would diverge from classic.
+    module private TwoStateSh =
+        let private sampNear = sampler2d { texture uniform?TexN; filter Filter.MinMagPoint;  addressU WrapMode.Wrap; addressV WrapMode.Wrap }
+        let private sampLin  = sampler2d { texture uniform?TexL; filter Filter.MinMagLinear; addressU WrapMode.Wrap; addressV WrapMode.Wrap }
+        let vert (v : TexVertex) =
+            vertex {
+                let m : M44f = uniform?HeapModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                return { v with pos = vp * (m * v.pos); n = m.TransformDir v.n; tc = (v.pos.XY + V2f(0.5f, 0.5f)) * 4.0f }
+            }
+        let frag (v : TexVertex) =
+            // nearest and linear over the SAME magnified 4x4 texture differ at texel edges;
+            // averaging them depends on BOTH states being applied to the right array.
+            fragment {
+                let nq = sampNear.Sample(v.tc).XYZ
+                let lq = sampLin.Sample(v.tc).XYZ
+                return V4f((nq + lq) * 0.5f, 1.0f)
+            }
+
     // a vertex carrying a per-vertex INT attribute (ITag, flat) and a per-vertex
     // MATRIX attribute (MX) — both storage-decoded by the heap.
     type AttrV =
@@ -661,6 +682,46 @@ module HeapUniforms =
             finally
                 texArray |> Array.iter runtime.DeleteTexture
 
+        // a tiny 4x4 high-contrast texture so nearest vs linear visibly diverge when magnified
+        let private mkSmallTex (runtime : IRuntime) (i : int) : IBackendTexture =
+            let cols = [| C3b(230,60,60); C3b(60,200,60); C3b(60,120,230); C3b(230,200,40)
+                          C3b(210,60,210); C3b(40,210,210); C3b(230,140,40); C3b(180,180,180)
+                          C3b(20,20,20); C3b(250,250,250); C3b(120,20,20); C3b(20,120,20)
+                          C3b(20,20,120); C3b(120,120,20); C3b(120,20,120); C3b(20,120,120) |]
+            let img = PixImage<byte>(Col.Format.RGBA, V2i(4, 4))
+            img.GetMatrix<C4b>().SetByIndex(fun (idx : int64) -> C4b(cols.[(int idx + i) % cols.Length])) |> ignore
+            let t = runtime.CreateTexture2D(V2i(4, 4), TextureFormat.Rgba8, levels = 1, samples = 1)
+            t.Upload img
+            t
+
+        /// TWO Sampler2d at DIFFERENT states (nearest + linear) in ONE shader, 16 objects,
+        /// auto-bindless. Each sampler must get its own array with its own state — a single
+        /// shared state would make the heap's nearest/linear average diverge from classic.
+        let twoSamplerStates (runtime : IRuntime) =
+            skipUnlessHeapVulkan runtime
+            if not runtime.SupportsUnboundedSamplerArrays then
+                skiptest "bindless sampler arrays unsupported (descriptor indexing)"
+            use signature = sig256 runtime
+            let texCount = 8
+            let texArray : IBackendTexture[] = Array.init texCount (mkSmallTex runtime)
+            try
+                let eff = Effect.compose [ Effect.ofFunction TwoStateSh.vert; Effect.ofFunction TwoStateSh.frag ]
+                let common (p : V3d) =
+                    [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                      Symbol.Create "ViewProjTrafo",  viewProj ]
+                let objs = grid 16 |> Array.map (fun (i, p) ->
+                    let t = (texArray.[i % texCount] :> ITexture)
+                    mkRO (common p @ [ Symbol.Create "TexN", (AVal.constant t :> IAdaptiveValue)
+                                       Symbol.Create "TexL", (AVal.constant t :> IAdaptiveValue) ]) eff)
+                let classic = renderPix runtime signature (ASet.ofArray objs)
+                let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+                Expect.equal Heap.lastBucketCount 1 "two-state ROs must collapse to one heap bucket"
+                let maxDelta, nNonBg, _ = compare classic heap
+                Expect.isLessThanOrEqual maxDelta 1 "two sampler states (nearest + linear) heap vs classic"
+                Expect.isGreaterThan nNonBg 100L "two-state scene rendered blank"
+            finally
+                texArray |> Array.iter runtime.DeleteTexture
+
         /// HETEROGENEOUS geometry: distinct meshes (different vertex/index counts) in
         /// ONE bucket -> per-allocation-headed arena ranges, decoded per object. Must
         /// match a classic render of the same per-object meshes.
@@ -822,6 +883,7 @@ module HeapUniforms =
           "Bindless textures",              Harness.textures
           "Bindless Sampler2dArray",        Harness.textureArray
           "Bindless Sampler2dShadow",       Harness.textureShadow
+          "Two sampler states",             Harness.twoSamplerStates
           "Heterogeneous geometry",         Harness.heterogeneousGeometry
           "Texture atlas fallback",         Harness.texturesAtlas
           "Int + matrix attributes",        Harness.attributes ]

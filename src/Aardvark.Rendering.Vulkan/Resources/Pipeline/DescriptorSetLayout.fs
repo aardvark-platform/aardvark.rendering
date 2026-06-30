@@ -55,9 +55,14 @@ module DescriptorSetLayoutBinding =
 
     // With VARIABLE_DESCRIPTOR_COUNT + dynamically-grown resources (DescriptorSetResource,
     // ImageSamplerArrayResource and the AdaptiveDescriptor cache all size to the LIVE count
-    // and grow pow2), the layout ceiling is free — lift it to the device limit so textures /
-    // buffers stop being a binding wall (page memory is hit first). Without variable count
-    // every set reserves the full ceiling up front, so keep the modest 1024 there.
+    // and grow pow2), the layout ceiling is nearly free — lift it toward the device limit so
+    // textures / buffers stop being a binding wall (page memory is hit first). The pipeline
+    // layout SUMS the ceilings of all unbounded arrays of a kind across its sets (a shader
+    // can declare one per sampler), and that sum must fit the per-stage limit — so divide by
+    // a generous max-arrays bound. Without variable count every set reserves the full ceiling
+    // up front, so keep the modest 1024 there.
+    [<Literal>]
+    let private MaxUnboundedArraysPerStage = 32u
     let private dynamicallyGrown (device : Device) =
         let f = device.EnabledFeatures.Descriptors
         device.UpdateDescriptorsAfterBind && f.BindingVariableDescriptorCount && f.BindingPartiallyBound
@@ -65,12 +70,12 @@ module DescriptorSetLayoutBinding =
     /// Device-clamped capacity for an unbounded sampler-array binding.
     let unboundedSamplerArrayCapacity (device : Device) =
         let lim = device.PhysicalDevice.Limits.Descriptor.MaxPerStageSampledImages
-        int (if dynamicallyGrown device then lim else min UnboundedSamplerArrayCeiling lim)
+        int (if dynamicallyGrown device then max UnboundedSamplerArrayCeiling (lim / MaxUnboundedArraysPerStage) else min UnboundedSamplerArrayCeiling lim)
 
     /// Device-clamped capacity for an unbounded storage-buffer-array binding.
     let unboundedStorageBufferArrayCapacity (device : Device) =
         let lim = device.PhysicalDevice.Limits.Descriptor.MaxPerStageStorageBuffers
-        int (if dynamicallyGrown device then lim else min UnboundedSamplerArrayCeiling lim)
+        int (if dynamicallyGrown device then max UnboundedSamplerArrayCeiling (lim / MaxUnboundedArraysPerStage) else min UnboundedSamplerArrayCeiling lim)
 
     let create (descriptorType : VkDescriptorType) (stages : VkShaderStageFlags) (parameter : ShaderUniformParameter) (device : Device) =
         let count =
