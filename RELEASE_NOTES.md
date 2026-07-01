@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0030
+- [Sg] Heap: `HeapRenderObject.IsPickable` is per-bucket, known by construction (the bucket's ROs carry HeapNode's `HeapPickId` marker) instead of the whole heap. A non-pick bucket (e.g. a `Sg.NoEvents` sub-scene) no longer advertises pickability, so the dom stops routing it into the `PickId` pass where the backend forced a phantom `PickId` vertex input → `could not get attribute 'PickId'`. Fixes mixed pickable/non-pickable heaps.
+
 ### 5.7.0-prerelease0029
 - [Sg] Heap: `linkDCE` is bucket-aware — each bucket links only against the framebuffer attachments its effect actually writes, so a non-pick-writing bucket in a pickable heap isn't forced to output `PickId` (which was synthesised as a phantom vertex input → `RO missing shader input attribute PickId`). This is the real fix for that crash; 0028's claim was premature.
 

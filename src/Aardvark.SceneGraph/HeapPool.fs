@@ -2514,6 +2514,14 @@ module Heap =
                                     // is entered via `ofRenderObjectsPicking` (the dom heap node) — a
                                     // non-dom / non-picking heap pays nothing.
                                     picking : bool,
+                                    // PICKING: is THIS bucket a pick bucket, known BY CONSTRUCTION (its ROs
+                                    // carry HeapNode's `HeapPickId` marker uniform)? Only a pick bucket may
+                                    // advertise IsPickable — the dom routes those into the PickId pass. A
+                                    // non-pick bucket (e.g. a `Sg.NoEvents` sub-scene that never got the
+                                    // pick chain) routed there would trip the backend into forcing a
+                                    // `PickId` passthrough (phantom vertex input) → "could not get
+                                    // attribute 'PickId'"; it goes to the plain pass instead.
+                                    pickable : bool,
                                     // PICKING: invoked with a slot's pick id when that slot is freed,
                                     // so the dom side releases the id (ref-counted). No-op off picking.
                                     deregister : int -> unit) =
@@ -3919,7 +3927,9 @@ module Heap =
                 let derives = if hasDerived then List.ofSeq deriveSpecs else []
                 let draws = List.ofSeq pageROs
                 let hro = HeapRenderObject(RenderPass.main, scope, derives, draws)
-                hro.IsPickable <- picking   // dom routes a pickable bundle into the PickId pass
+                // pickability is a construction-time property of the bucket (its ROs carry the
+                // `HeapPickId` marker); only a real pick bucket is routed into the dom's PickId pass.
+                hro.IsPickable <- picking && pickable
                 heapROCache <- hro :> IRenderObject
             heapROCache
 
@@ -4703,8 +4713,15 @@ module Heap =
             // step 1: one private storage per bucket ⇒ behaviour-identical. (Sharing across
             // buckets/heaps comes later by passing the SAME storage to several buckets.)
             let storage = HeapStorage(runtime)
+            // Pickability is known BY CONSTRUCTION: HeapNode attaches the `HeapPickId` uniform to
+            // exactly the ROs it pick-composed. A bucket carrying that marker is a pick bucket (route
+            // it into the dom's PickId pass); one without it (e.g. a `Sg.NoEvents` sub-scene) is not.
+            let pickable =
+                match r0.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "HeapPickId") with
+                | ValueSome _ -> true
+                | _ -> false
             let c = IncrementalBucket(runtime, storage, f0.Fields, f0.FieldMap, effect, r0, updaterRef.Value, f0.Bindless, f0.Instanced,
-                                      (cull, ff, fill, blend, dtest, dwrite), f0.Chain, picking, deregister)
+                                      (cull, ff, fill, blend, dtest, dwrite), f0.Chain, picking, pickable, deregister)
             caches.[key] <- c
             c
 
