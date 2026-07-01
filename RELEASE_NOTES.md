@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0029
+- [Sg] Heap: `linkDCE` is bucket-aware — each bucket links only against the framebuffer attachments its effect actually writes, so a non-pick-writing bucket in a pickable heap isn't forced to output `PickId` (which was synthesised as a phantom vertex input → `RO missing shader input attribute PickId`). This is the real fix for that crash; 0028's claim was premature.
+
 ### 5.7.0-prerelease0028
 - [Sg] Heap: dom O(1) picking composes cleanly offscreen (`RenderToPickable`) — `PickId` links as a shader output, not a spurious vertex input (0027's build threw `RO missing shader input attribute PickId`).
 - [Vulkan] Fixed and improved descriptor pool and set management

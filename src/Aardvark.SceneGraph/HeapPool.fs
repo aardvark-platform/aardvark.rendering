@@ -4224,9 +4224,17 @@ module Heap =
         // shrinks `consumedNonSamplerNames`, so the field set the heap actually STORES stays lean.
         // Memoised by effect id; the same DCE'd effect drives field detection AND the gather rewrite.
         let linkDCE (effect : Effect) : Effect =
+            // BUCKET-AWARE: link only against the signature attachments THIS effect actually writes.
+            // A bucket whose effect doesn't produce e.g. `PickId` must not be forced to output it —
+            // that synthesises a read-modify-write passthrough (a phantom `PickId` vertex input, which
+            // then fails the attribute gather). The unwritten attachment just keeps its cleared value
+            // for that bucket's pixels (normal multi-attachment rendering).
             let outputs =
                 signature.ColorAttachments |> Map.toList
-                |> List.map (fun (_, att) -> string att.Name, att.Type) |> Map.ofList
+                |> List.choose (fun (_, att) ->
+                    let n = string att.Name
+                    if Map.containsKey n effect.Outputs then Some (n, att.Type) else None)
+                |> Map.ofList
             let rec linkShaders (needed : Map<string, System.Type>) = function
                 | [] -> []
                 | cur :: before ->
