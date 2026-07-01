@@ -1,3 +1,5 @@
+### 5.7.0-prerelease0028
+- [Sg] Heap: dom O(1) picking composes cleanly offscreen (`RenderToPickable`) — `PickId` links as a shader output, not a spurious vertex input (0027's build threw `RO missing shader input attribute PickId`).
 - [Vulkan] Fixed and improved descriptor pool and set management
 - [Vulkan] Fixed checking for enabled features for pipeline queries
 - [Vulkan] Fixed issue causing descriptor set not being updated after `Release()` and `Acquire()`
