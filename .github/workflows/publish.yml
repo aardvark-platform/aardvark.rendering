@@ -19,13 +19,16 @@ jobs:
       latest_release_version: ${{ steps.compare.outputs.latest_release_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
       - name: Install Dotnet
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
+
       - name: Restore Tools
         run: dotnet tool restore
+
       - name: Compare release versions
         id: compare
         shell: pwsh
@@ -94,33 +97,48 @@ jobs:
     runs-on: windows-latest
     needs: release-check
     if: needs.release-check.outputs.should_publish == 'true'
+    permissions:
+      id-token: write # enable GitHub OIDC token issuance for this job
+      contents: write
+      packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
       - name: Install Dotnet
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
+
       - name: Restore Tools
         run: dotnet tool restore
+
       - name: Restore
         run: dotnet paket restore
+
       - name: Pack
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: dotnet aardpack src\Aardvark.Rendering.sln --notag
+
       - name: Upload Packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: packages
           path: bin\pack
+
       - name: GitHub Packages
         env:
           NUGET_KEY: ${{ secrets.GITHUB_TOKEN }}
         shell: cmd
         run: dotnet nuget push "bin\pack\*.nupkg" -k %NUGET_KEY% -s "https://nuget.pkg.github.com/aardvark-platform/index.json" --skip-duplicate
+
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: NuGet
-        env:
-          NUGET_KEY: ${{ secrets.NUGET_KEY }}
         shell: cmd
-        run: dotnet nuget push "bin\pack\*.nupkg" -k %NUGET_KEY% -s "https://api.nuget.org/v3/index.json" --skip-duplicate
+        run: dotnet nuget push "bin\pack\*.nupkg" -k ${{steps.login.outputs.NUGET_API_KEY}} -s "https://api.nuget.org/v3/index.json" --skip-duplicate
