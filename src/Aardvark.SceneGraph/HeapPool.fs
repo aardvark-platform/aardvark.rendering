@@ -785,6 +785,11 @@ module Heap =
     /// (diagnostic / for logging).
     let mutable lastBucketCount = 0
 
+    /// Count of `buildHeap` invocations = distinct GPU arenas built (diagnostic /
+    /// for the deferred-path test: the shared-PerSig memo must collapse the opaque
+    /// (intermediate sig) + transparent (user sig) expands to ONE build, not two).
+    let mutable buildInvocations = 0
+
     // STARTUP instrumentation: CPU ingest (AddInternal: geometry copy + per-slot setup)
     // vs GPU upload (arena Compute). One-shot logged once the first big upload lands.
     let mutable internal stIngestMs = 0.0
@@ -4878,7 +4883,7 @@ module Heap =
             lock gate (fun () ->
                 match shared with
                 | ValueSome (s, _) -> s
-                | ValueNone -> let r = buildHeap picking deregister signature objects in shared <- ValueSome r; fst r)
+                | ValueNone -> buildInvocations <- buildInvocations + 1; let r = buildHeap picking deregister signature objects in shared <- ValueSome r; fst r)
 
         // Deterministic teardown: each task holds the ActivationRenderObject's
         // activation and disposes it when it drops the heap; the LAST drop frees
@@ -4919,6 +4924,71 @@ module Heap =
     /// slot's pick id when that slot is freed (so the dom side releases it).
     let ofRenderObjectsPicking (deregister : int -> unit) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         ofRenderObjectsCore true deregister signature objects
+
+    /// DEFERRED collapse — the render (non-pick) path. Instead of baking a framebuffer
+    /// signature NOW (which the caller often can't know — e.g. a Normals G-buffer added by
+    /// a post-processing pass), return `SignatureDependentRenderObject`s that build the heap
+    /// LAZILY at compile time against the REAL signature. The heap's attribute-DCE then
+    /// matches the backend's shader-output-DCE exactly (an extra attachment survives instead
+    /// of SIGABRTing on a signature mismatch).
+    ///
+    /// Emits an OPAQUE + a TRANSPARENT variant (both always present, reactive): the OIT split
+    /// in `TransparencyRenderTask` runs on the UN-expanded set, so the heap's transparent
+    /// buckets must be reachable through a `SignatureDependentRenderObject` flagged
+    /// `IsTransparent = true`, or they'd route to the opaque pass (transparency regression).
+    /// When there are no transparent buckets the transparent variant's `Expand` yields an
+    /// empty set → the WrappedTask's direct-opaque fast path kicks in (no OIT cost).
+    ///
+    /// The per-signature build is MEMOIZED by ATTACHMENT SEMANTICS (sorted color
+    /// (slot,name,format)), NOT by signature identity: the opaque pass compiles against the
+    /// intermediate FBO signature and the transparent pass against the user signature, but
+    /// those carry IDENTICAL color attachments — so both collapse to ONE `ofRenderObjectsCore`
+    /// build = ONE GPU arena + ONE ref-counted activation lifecycle (the shared
+    /// `ActivationRenderObject` rides BOTH variants' Expand, so `activeTasks` counts every
+    /// task and teardown fires only when the last one drops). A pick signature (carrying a
+    /// `PickId` attachment) keys to its own build — but the pick path stays EAGER dom-side,
+    /// so in practice this deferred path only ever sees non-pick signatures.
+    let ofRenderObjectsDeferred (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        let gate = obj()
+        let memo = System.Collections.Generic.Dictionary<string, aset<IRenderObject>>()
+        let build (signature : IFramebufferSignature) : aset<IRenderObject> =
+            // attachment-semantics key: the ONLY signature aspect the heap build depends on is
+            // the set of color attachment (NAME, format) — linkDCE (HeapPool linkDCE) and
+            // heap-eligibility route by att.Name and IGNORE the slot. So key by sorted
+            // (name, format), NOT slot: the intermediate FBO signature may reassign slots vs the
+            // user signature (CreateFramebufferSignature packs contiguously) yet carries the same
+            // named attachments → same key → ONE shared build. Depth/samples don't affect the
+            // heapified ROs either, so they're excluded too.
+            let key =
+                signature.ColorAttachments
+                |> Map.toList
+                |> List.map (fun (_, att) -> sprintf "%s:%A" (string att.Name) att.Format)
+                |> List.sort
+                |> String.concat ","
+            lock gate (fun () ->
+                match memo.TryGetValue key with
+                | true, s -> s
+                | _ ->
+                    let s = ofRenderObjectsCore false ignore signature objects
+                    memo.[key] <- s
+                    s)
+        // route buckets/passthrough by transparency; the ActivationRenderObject rides BOTH
+        // variants so every compiling task ref-counts the shared build.
+        let isActivation (ro : IRenderObject) = ro :? ActivationRenderObject
+        let bucketTransparent (ro : IRenderObject) =
+            match ro with
+            | :? HeapRenderObject as h -> h.IsTransparent
+            | :? RenderObject as r -> r.IsTransparent
+            | _ -> false
+        let opaque =
+            SignatureDependentRenderObject(
+                RenderPass.main, Ag.Scope.Root, false,
+                fun signature -> build signature |> ASet.filter (fun ro -> isActivation ro || not (bucketTransparent ro)))
+        let transparent =
+            SignatureDependentRenderObject(
+                RenderPass.main, Ag.Scope.Root, true,
+                fun signature -> build signature |> ASet.filter (fun ro -> isActivation ro || bucketTransparent ro))
+        ASet.ofList [ opaque :> IRenderObject; transparent :> IRenderObject ]
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)

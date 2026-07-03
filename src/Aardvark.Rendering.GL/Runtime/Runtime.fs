@@ -458,6 +458,9 @@ type Runtime(debug : IDebugConfig) =
     member x.ResourceManager = manager
 
     member private x.CompileRenderRaw (signature : IFramebufferSignature, set : aset<IRenderObject>) : IRenderTask =
+        // Expand signature-dependent render objects (e.g. the deferred GPU heap) now that the real
+        // framebuffer signature is known. Idempotent for sets without one.
+        let set = set |> ASet.collect (fun ro -> match ro with | :? SignatureDependentRenderObject as s -> s.Expand signature | _ -> ASet.single ro)
         let set = ShaderDebugger.hookRenderObjects set
         new RenderTasks.RenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
 

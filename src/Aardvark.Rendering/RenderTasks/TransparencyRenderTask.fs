@@ -45,6 +45,7 @@ module TransparencyRenderTask =
         match o with
         | :? RenderObject as r -> r.IsTransparent
         | :? HeapRenderObject as h -> h.IsTransparent
+        | :? SignatureDependentRenderObject as s -> s.IsTransparent   // deferred heap: split before expand
         | _ -> false
 
     /// Returns true if a render task built over the given object set could ever
@@ -264,8 +265,23 @@ module TransparencyRenderTask =
             |> List.map (fun (_, att) -> att.Name, att.Format)
 
         let opaqueSet = objects |> ASet.filter (not << isTransparent)
+
+        // A `SignatureDependentRenderObject` (the deferred GPU heap) carries no `Surface.Effect`,
+        // so the transparent transforms below would drop it via `| _ -> None` and its transparent
+        // buckets would silently vanish from the OIT pass. Expand those into their concrete
+        // HeapRenderObjects FIRST — against `userSig` (whose color attachments the intermediate
+        // FBO mirrors), matching the eager path where heap buckets are built against the render
+        // signature and THEN OIT-composed. The opaque variant here expands to opaque buckets that
+        // the `isTransparent` guard drops (harmless — it hits the same memoized build). The opaque
+        // pass itself expands separately inside `compileRaw` with the intermediate signature.
+        let objectsT =
+            objects |> ASet.collect (fun o ->
+                match o with
+                | :? SignatureDependentRenderObject as s -> s.Expand userSig
+                | _ -> ASet.single o)
+
         let transparentSet =
-            objects |> ASet.choose (fun o ->
+            objectsT |> ASet.choose (fun o ->
                 if isTransparent o then
                     match o with
                     | :? RenderObject as r -> Some (transformTransparent r)
@@ -278,7 +294,7 @@ module TransparencyRenderTask =
         // "as-if-depth-test" pass that updates extras + depth based purely on
         // depth ordering.
         let transparentPickSet =
-            objects |> ASet.choose (fun o ->
+            objectsT |> ASet.choose (fun o ->
                 if isTransparent o then
                     match o with
                     | :? RenderObject as r -> Some (transformTransparentPick r)
@@ -301,7 +317,7 @@ module TransparencyRenderTask =
         // A-buffer build/resolve object sets (transparent objects with the
         // interlocked insert composed; a fullscreen resolve quad).
         let aBufferBuildSet =
-            objects |> ASet.choose (fun o ->
+            objectsT |> ASet.choose (fun o ->
                 if isTransparent o then
                     match o with
                     | :? RenderObject as r ->

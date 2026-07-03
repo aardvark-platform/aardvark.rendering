@@ -132,3 +132,30 @@ type ActivationRenderObject(pass : RenderPass, scope : Ag.Scope, activate : unit
         match o with
             | :? ActivationRenderObject as o -> id = o.Id
             | _ -> false
+
+/// A render object whose REAL render objects depend on the framebuffer signature it is compiled
+/// into. `CompileRender` expands it — `ASet.collect Expand renderPass` — BEFORE the normal per-RO
+/// prepare, so the command task never sees it (unlike ActivationRenderObject, no backend command
+/// handling is needed). Lets signature-dependent nodes (e.g. the GPU heap) defer their
+/// signature-bound construction (attribute-DCE, arena layout, gather) to compile time instead of
+/// guessing a signature up front. `IsTransparent` is known eagerly so the OIT split (which runs on
+/// the UN-expanded set, `TransparencyRenderTask.isTransparent`) routes each variant correctly.
+type SignatureDependentRenderObject(pass : RenderPass, scope : Ag.Scope, isTransparent : bool, expand : IFramebufferSignature -> aset<IRenderObject>) =
+    let id = RenderObjectId.New()
+
+    member x.Id = id
+    member x.RenderPass = pass
+    member x.AttributeScope = scope
+    member x.IsTransparent = isTransparent
+    member x.Expand (signature : IFramebufferSignature) : aset<IRenderObject> = expand signature
+
+    interface IRenderObject with
+        member x.Id = id
+        member x.RenderPass = pass
+        member x.AttributeScope = scope
+
+    override x.GetHashCode() = id.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? SignatureDependentRenderObject as o -> id = o.Id
+            | _ -> false

@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0031
+- [Sg] Heap defers its signature-dependent build to compile time via `SignatureDependentRenderObject` (`Heap.ofRenderObjectsDeferred`) — renders into targets with extra attachments (e.g. a Normals G-buffer) without SIGABRT; opaque/transparent split preserves OIT, memoized per attachment-semantics so one arena is shared.
+
 ### 5.7.0-prerelease0030
 - [Sg] Heap: `HeapRenderObject.IsPickable` is per-bucket, known by construction (the bucket's ROs carry HeapNode's `HeapPickId` marker) instead of the whole heap. A non-pick bucket (e.g. a `Sg.NoEvents` sub-scene) no longer advertises pickability, so the dom stops routing it into the `PickId` pass where the backend forced a phantom `PickId` vertex input → `could not get attribute 'PickId'`. Fixes mixed pickable/non-pickable heaps.
 

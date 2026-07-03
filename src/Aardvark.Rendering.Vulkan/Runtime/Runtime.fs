@@ -124,6 +124,10 @@ type Runtime(device : Device) as this =
         new CommandTask(manager, unbox renderPass, cmd)
 
     member private x.CompileRenderRaw (renderPass : IFramebufferSignature, set : aset<IRenderObject>) : IRenderTask =
+        // Expand signature-dependent render objects (e.g. the deferred GPU heap) now that the real
+        // framebuffer signature is known — before the command task prepares/DCEs them. Idempotent:
+        // a set with no SignatureDependentRenderObject passes through unchanged.
+        let set = set |> ASet.collect (fun ro -> match ro with | :? SignatureDependentRenderObject as s -> s.Expand renderPass | _ -> ASet.single ro)
         let set = ShaderDebugger.hookRenderObjects set
         new CommandTask(manager, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
 
