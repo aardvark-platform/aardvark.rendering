@@ -4948,7 +4948,7 @@ module Heap =
     /// task and teardown fires only when the last one drops). A pick signature (carrying a
     /// `PickId` attachment) keys to its own build — but the pick path stays EAGER dom-side,
     /// so in practice this deferred path only ever sees non-pick signatures.
-    let ofRenderObjectsDeferred (objects : aset<IRenderObject>) : aset<IRenderObject> =
+    let ofRenderObjectsDeferredCore (picking : bool) (deregister : int -> unit) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         let gate = obj()
         let memo = System.Collections.Generic.Dictionary<string, aset<IRenderObject>>()
         let build (signature : IFramebufferSignature) : aset<IRenderObject> =
@@ -4969,7 +4969,7 @@ module Heap =
                 match memo.TryGetValue key with
                 | true, s -> s
                 | _ ->
-                    let s = ofRenderObjectsCore false ignore signature objects
+                    let s = ofRenderObjectsCore picking deregister signature objects
                     memo.[key] <- s
                     s)
         // route buckets/passthrough by transparency; the ActivationRenderObject rides BOTH
@@ -4988,7 +4988,24 @@ module Heap =
             SignatureDependentRenderObject(
                 RenderPass.main, Ag.Scope.Root, true,
                 fun signature -> build signature |> ASet.filter (fun ro -> isActivation ro || bucketTransparent ro))
+        // pickable is decided here (before expansion) so PickProducer routes these into the
+        // PickId-attachment compile; the signature (user semantics + PickId) reaches Expand.
+        opaque.IsPickable <- picking
+        transparent.IsPickable <- picking
         ASet.ofList [ opaque :> IRenderObject; transparent :> IRenderObject ]
+
+    /// DEFERRED collapse — the RENDER (non-pick) path. See `ofRenderObjectsDeferredCore`.
+    let ofRenderObjectsDeferred (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        ofRenderObjectsDeferredCore false ignore objects
+
+    /// DEFERRED collapse — the PICKING path (entered via the dom heap node). Like
+    /// `ofRenderObjectsPicking` but signature-deferred: instead of baking a hardcoded pick
+    /// signature (which discards whatever extra attachments — e.g. a Normals G-buffer — the
+    /// pickable target actually carries), the heap links LAZILY at compile time against the REAL
+    /// pick signature (`user semantics + PickId`). The shaders output everything (per-slot pick
+    /// write + the scene's color/normal); `linkDCE` keeps exactly what that signature declares.
+    let ofRenderObjectsPickingDeferred (deregister : int -> unit) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        ofRenderObjectsDeferredCore true deregister objects
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)

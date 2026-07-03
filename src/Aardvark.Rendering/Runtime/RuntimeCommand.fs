@@ -147,6 +147,12 @@ type SignatureDependentRenderObject(pass : RenderPass, scope : Ag.Scope, isTrans
     member x.RenderPass = pass
     member x.AttributeScope = scope
     member x.IsTransparent = isTransparent
+    /// True when this deferred bundle carries the per-slot pick write (set by the heap's
+    /// picking-deferred path). dom's PickProducer routes a pickable SDR into the PickId-attachment
+    /// compile (signature = user semantics + PickId) so the composed pick write reaches the pick
+    /// buffer; a non-pickable SDR compiles against the base user signature. Mirrors
+    /// `HeapRenderObject.IsPickable`, but decided BEFORE the signature-dependent expansion.
+    member val IsPickable = false with get, set
     member x.Expand (signature : IFramebufferSignature) : aset<IRenderObject> = expand signature
 
     interface IRenderObject with

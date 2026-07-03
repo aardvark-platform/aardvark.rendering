@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0032
+- [Sg] Heap: pick path defers its DCE-link to compile time (`ofRenderObjectsPickingDeferred` + `SignatureDependentRenderObject.IsPickable`) — links against the real pick signature (user semantics + PickId), so extra target attachments like a Normals G-buffer survive picking.
+
 ### 5.7.0-prerelease0031
 - [Sg] Heap defers its signature-dependent build to compile time via `SignatureDependentRenderObject` (`Heap.ofRenderObjectsDeferred`) — renders into targets with extra attachments (e.g. a Normals G-buffer) without SIGABRT; opaque/transparent split preserves OIT, memoized per attachment-semantics so one arena is shared.
 
