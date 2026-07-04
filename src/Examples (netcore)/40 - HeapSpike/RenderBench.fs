@@ -58,21 +58,34 @@ module RenderBench =
                 return V4f(v.c.XYZ * d, 1.0f)
             }
 
-    /// avg GPU ms/frame (time query) + avg task.Run CPU ms over `frames` runs after one warm-up.
+    /// GPU ms/frame (time query) + task.Run CPU ms. Bandwidth-bound passes are very
+    /// sensitive to the GPU's memory-clock power state, so: (1) a 30-frame WARMUP
+    /// ramps the clocks before anything is timed, (2) `frames` timed frames are
+    /// collected in 3 ROUNDS, (3) the MEDIAN round is reported (min in parens shows
+    /// the full-clock floor). Heap-vs-baseline ratios use the medians.
     let private measure (runtime : IRuntime) (task : IRenderTask) (fbo : IFramebuffer) (frames : int) =
         let gpuQuery = runtime.CreateTimeQuery()
         let token = { RenderToken.Empty with Queries = [ gpuQuery ] }
         let output = OutputDescription.ofFramebuffer fbo
         task.Run(AdaptiveToken.Top, token, output)
-        gpuQuery.GetResult((), reset = true) |> ignore                       // warm (build + first submit)
-        let sw = Stopwatch()
-        let mutable gpu = 0.0
-        for _ in 1 .. frames do
-            sw.Start()
+        gpuQuery.GetResult((), reset = true) |> ignore                       // build + first submit
+        for _ in 1 .. 30 do                                                  // clock ramp-up
             task.Run(AdaptiveToken.Top, token, output)
-            sw.Stop()
-            gpu <- gpu + (gpuQuery.GetResult((), reset = true)).TotalMilliseconds
-        gpu / float frames, sw.Elapsed.TotalMilliseconds / float frames
+            gpuQuery.GetResult((), reset = true) |> ignore
+        let round () =
+            let sw = Stopwatch()
+            let mutable gpu = 0.0
+            for _ in 1 .. frames do
+                sw.Start()
+                task.Run(AdaptiveToken.Top, token, output)
+                sw.Stop()
+                gpu <- gpu + (gpuQuery.GetResult((), reset = true)).TotalMilliseconds
+            gpu / float frames, sw.Elapsed.TotalMilliseconds / float frames
+        let rounds = Array.init 3 (fun _ -> round ())
+        let byGpu = rounds |> Array.sortBy fst
+        let (medGpu, medCpu) = byGpu.[1]
+        let (minGpu, _) = byGpu.[0]
+        medGpu, medCpu, minGpu
 
     let run (argv : string[]) =
         let arg (name : string) (dflt : int) =
@@ -151,8 +164,8 @@ module RenderBench =
                 RenderTask.ofList [
                     runtime.CompileClear(signature, clearVals)
                     runtime.CompileRender(signature, objects) ]
-            let gpu, cpu = measure runtime task fbo frames
-            Log.line "renderbench[%s]: GPU %.2f ms/frame   task.Run CPU %.2f ms/frame" label gpu cpu
+            let gpu, cpu, minGpu = measure runtime task fbo frames
+            Log.line "renderbench[%s]: GPU %.2f ms/frame (min %.2f)   task.Run CPU %.2f ms/frame" label gpu minGpu cpu
             gpu
 
         // ── heap: n objects -> bucket indirect draws ──

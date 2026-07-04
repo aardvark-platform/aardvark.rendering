@@ -1113,7 +1113,14 @@ module Heap =
     /// per-slot IsActive) mark this buffer directly and are collected like
     /// HeapArena's region writers — no transact during evaluation anywhere.
     type internal MirrorBuffer(runtime : IBufferRuntime, initialBytes : int, usage : BufferUsage) =
-        inherit AdaptiveBuffer(runtime, uint64 (max 1 initialBytes), usage, BufferStorage.Host)
+        // DEVICE-local like the arena: the headers mirror is read PER VERTEX and the
+        // draw records by the command processor. BufferStorage.Host would land in
+        // BAR memory only where VMA finds device-local|host-visible space — on GPUs
+        // without (enough) BAR it silently falls back to system memory and every
+        // shader read crosses PCIe (the prerelease0025 arena bug). Device is
+        // predictable everywhere; the dirty-sub-range Write path stages uploads
+        // exactly like HeapArena already does.
+        inherit AdaptiveBuffer(runtime, uint64 (max 1 initialBytes), usage, BufferStorage.Device)
         let dirtyGates = LockedSet<GateWriter>()
         member val Dependency : IAdaptiveValue option = None with get, set
         member val Flush : AdaptiveToken -> System.Collections.Generic.HashSet<GateWriter> -> unit = (fun _ _ -> ()) with get, set
@@ -1932,7 +1939,9 @@ module Heap =
     // Model fold (composeModel reads 2*idx) and the backward fold (composeModelInv
     // reads 2*idx+1), the backward half being the uploaded Trafo3d.Backward.
     type internal GrowChainLinks(runtime : IBufferRuntime, df32 : bool) =
-        inherit AdaptiveBuffer(runtime, 256UL, BufferUsage.Storage, BufferStorage.Host)
+        // DEVICE-local (see MirrorBuffer): the chain fold reads every link per
+        // compute thread; Host storage is only fast where BAR memory happens to fit.
+        inherit AdaptiveBuffer(runtime, 256UL, BufferUsage.Storage, BufferStorage.Device)
         // fp64: 2 M44d per slot (Forward, Backward). df32: 64 f32 per slot (two
         // 16-entry V2f halves). Only the active array is grown; both layouts are
         // 256 bytes/slot so the buffer byte size and slot offsets are identical.
