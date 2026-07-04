@@ -8,17 +8,15 @@ namespace HeapSpike
 // (ModelTrafo is a real DERIVED field — fp64 compute collapse — like production),
 // and N indirect draw records instead of 1 draw.
 //
-//   renderbench [--n 100000] [--size 1024] [--frames 60] [--distinct 64] [--classic]
+//   renderbench [--n 100000] [--size 1024] [--frames 60] [--min-tris 10] [--max-tris 100] [--classic]
 //
 // Measures REAL GPU time per frame via time queries (RenderToken.Queries — same
 // method as CadSceneDemo's Offscreen.run), plus task.Run CPU time. Variants run
 // SEQUENTIALLY (each torn down before the next) so peak memory doesn't stack.
 //
-// Caveat for reading the numbers: the heap DEDUPS geometry by source identity
-// (`--distinct` controls how many distinct meshes the objects cycle through), so
-// its vertex-data footprint is tiny while the baked baseline streams the full
-// soup buffer — the benchmark isolates per-vertex PIPELINE cost, not bandwidth
-// for unique-geometry scenes.
+// Vienna-shaped data: every object carries its OWN unique geometry (the heap
+// dedups nothing) with a random triangle count in [--min-tris, --max-tris] —
+// like a CAD scene of many small distinct parts.
 
 module RenderBench =
 
@@ -28,6 +26,7 @@ module RenderBench =
     open Aardvark.Rendering
     open Aardvark.SceneGraph
     open FSharp.Data.Adaptive
+    open Aardvark.Application
     open FShade
 
     [<AutoOpen>]
@@ -42,6 +41,15 @@ module RenderBench =
         let heapVert (v : V) =
             vertex {
                 let wp = uniform.ModelTrafo * v.pos
+                return { v with pos = uniform.ViewProjTrafo * wp; n = uniform.ModelTrafo.TransformDir v.n }
+            }
+
+        /// like heapVert plus a SECOND per-object matrix gather (`--second-matrix`):
+        /// measures the marginal cost of one more per-vertex M44f field read.
+        let heapVert2 (v : V) =
+            vertex {
+                let m2 : M44f = uniform?SecondTrafo
+                let wp = uniform.ModelTrafo * (m2 * v.pos)
                 return { v with pos = uniform.ViewProjTrafo * wp; n = uniform.ModelTrafo.TransformDir v.n }
             }
 
@@ -95,46 +103,52 @@ module RenderBench =
         let n        = arg "--n" 100000
         let sizePx   = arg "--size" 1024
         let frames   = arg "--frames" 60
-        let distinct = max 1 (arg "--distinct" 64)
+        let minTris  = max 1 (arg "--min-tris" 10)
+        let maxTris  = max minTris (arg "--max-tris" 100)
         let classic  = argv |> Array.contains "--classic"
+        let secondMatrix = argv |> Array.contains "--second-matrix"
 
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
-        let runtime = app.Runtime :> IRuntime
-        let size = V2i(sizePx, sizePx)
-        use signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
 
-        // ── synthetic scene: n small boxes in a grid, `distinct` distinct meshes ──
+        // ── synthetic scene (Vienna-shaped): n objects in a grid, EVERY object its
+        //    own UNIQUE geometry (fresh arrays — the heap dedups nothing) with a
+        //    random triangle count in [minTris, maxTris]. Each mesh is a cone fan:
+        //    apex + ring, T triangles, indexed. ──
         let s = int (ceil (sqrt (float n)))
         let extent = float s * 1.2
         let posOf (i : int) = V3d(float (i % s - s/2) * 1.2, float (i / s - s/2) * 1.2, 0.0)
         let palette = [| C4b(230,60,60); C4b(60,200,60); C4b(60,120,230); C4b(230,200,40); C4b(210,60,210); C4b(40,210,210) |]
-        // distinct meshes = cloned arrays (distinct source identity -> no heap dedup across them)
-        let meshes =
-            Array.init distinct (fun _ ->
-                let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.8)) C4b.White).ToIndexed()
-                (g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]> |> Array.copy),
-                (g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]> |> Array.copy),
-                (g.IndexArray |> unbox<int[]> |> Array.copy))
-        let (p0, _, i0) = meshes.[0]
-        let vertsPerObj = i0.Length
-        Log.line "renderbench: n=%d  %d verts/obj  %.1f M verts total  %d distinct meshes  %dx%d px  %d frames"
-            n vertsPerObj (float n * float vertsPerObj / 1e6) distinct sizePx sizePx frames
-        ignore p0
-
-        let view = CameraView.lookAt (V3d(0.0, -0.9, 0.75) * extent) V3d.Zero V3d.OOI |> CameraView.viewTrafo
-        let proj = Frustum.perspective 70.0 0.1 (extent * 10.0) 1.0 |> Frustum.projTrafo
-        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let rnd = RandomSystem 42
+        let mkMesh () =
+            let t = minTris + rnd.UniformInt (maxTris - minTris + 1)
+            let ps = Array.zeroCreate<V3f> (t + 1)
+            let ns = Array.zeroCreate<V3f> (t + 1)
+            ps.[0] <- V3f(0.0f, 0.0f, 0.45f)
+            ns.[0] <- V3f.OOI
+            for k in 0 .. t - 1 do
+                let a = float32 k / float32 t * float32 Constant.PiTimesTwo
+                ps.[k + 1] <- V3f(0.4f * cos a, 0.4f * sin a, 0.0f)
+                ns.[k + 1] <- Vec.normalize (V3f(cos a, sin a, 0.7f))
+            let idx = Array.zeroCreate<int> (t * 3)
+            for k in 0 .. t - 1 do
+                idx.[k * 3]     <- 0
+                idx.[k * 3 + 1] <- 1 + k
+                idx.[k * 3 + 2] <- 1 + ((k + 1) % t)
+            ps, ns, idx
+        let meshes = Array.init n (fun _ -> mkMesh ())
+        let totalDrawnVerts = meshes |> Array.sumBy (fun (_, _, idx) -> int64 idx.Length)
+        Log.line "renderbench: n=%d  tris/obj in [%d, %d] (unique geometry each)  %.1f M drawn verts total  %dx%d px  %d frames"
+            n minTris maxTris (float totalDrawnVerts / 1e6) sizePx sizePx frames
 
         let bv (a : Array) (t : Type) = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
-        let heapEffect  = Effect.compose [ Effect.ofFunction Sh.heapVert;  Effect.ofFunction Sh.lit ]
+        let heapEffect  =
+            Effect.compose [
+                (if secondMatrix then Effect.ofFunction Sh.heapVert2 else Effect.ofFunction Sh.heapVert)
+                Effect.ofFunction Sh.lit ]
         let bakedEffect = Effect.compose [ Effect.ofFunction Sh.bakedVert; Effect.ofFunction Sh.lit ]
 
-        let mkHeapRO (i : int) =
-            let (ps, ns, idx) = meshes.[i % distinct]
+        let mkHeapRO (viewProj : IAdaptiveValue) (i : int) =
+            let (ps, ns, idx) = meshes.[i]
             let ro = RenderObject()
             ro.Surface <- Surface.Effect heapEffect
             ro.Mode    <- IndexedGeometryMode.TriangleList
@@ -148,9 +162,45 @@ module RenderBench =
             ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = idx.Length, InstanceCount = 1) |])
             ro.Uniforms  <-
                 UniformProvider.ofList [
-                    Symbol.Create "ModelTrafo",    (AVal.constant (Trafo3d.Translation (posOf i)) :> IAdaptiveValue)
-                    Symbol.Create "ViewProjTrafo", viewProj ]
+                    yield Symbol.Create "ModelTrafo",    (AVal.constant (Trafo3d.Translation (posOf i)) :> IAdaptiveValue)
+                    yield Symbol.Create "ViewProjTrafo", viewProj
+                    // fresh aval per RO: DISTINCT region per slot (dedup is by aval
+                    // identity), so the gather reads per-object offsets like a real
+                    // per-part matrix would
+                    if secondMatrix then
+                        yield Symbol.Create "SecondTrafo", (AVal.constant M44f.Identity :> IAdaptiveValue) ]
             ro :> IRenderObject
+
+        if argv |> Array.contains "--window" then
+            // ── `--window`: the heap scene in a REAL GameWindow with a turntable
+            //    camera — for Nsight GPU Trace (present-based frame delimiters,
+            //    F11 hotkey) and eyeballing. Runs until the window closes. ──
+            let win = window { backend Backend.Vulkan; display Display.Mono; debug false; samples 1 }
+            let sw = Stopwatch.StartNew()
+            let viewProj =
+                (win.Sizes, win.Time) ||> AVal.map2 (fun szw _ ->
+                    let a = sw.Elapsed.TotalSeconds * 0.25
+                    let eye = V3d(cos a, sin a, 0.55) * extent
+                    let view = CameraView.lookAt eye V3d.Zero V3d.OOI |> CameraView.viewTrafo
+                    let proj = Frustum.perspective 70.0 0.1 (extent * 10.0) (float szw.X / float szw.Y) |> Frustum.projTrafo
+                    view * proj)
+            let objs = Array.init n (mkHeapRO (viewProj :> IAdaptiveValue))
+            win.Scene <- Sg.renderObjectSet (Heap.ofRenderObjectsAuto (ASet.ofArray objs))
+            win.Run()
+            0
+        else
+
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime :> IRuntime
+        let size = V2i(sizePx, sizePx)
+        use signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+
+        let view = CameraView.lookAt (V3d(0.0, -0.9, 0.75) * extent) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 (extent * 10.0) 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
 
         let clearVals = clear { color (C4f(0.1f, 0.1f, 0.15f, 1.0f)); depth 1.0 }
         let renderWith (label : string) (objects : aset<IRenderObject>) =
@@ -169,18 +219,18 @@ module RenderBench =
             gpu
 
         // ── heap: n objects -> bucket indirect draws ──
-        let heapObjs = Array.init n mkHeapRO
+        let heapObjs = Array.init n (mkHeapRO viewProj)
         let heapGpu = renderWith "heap" (Heap.ofRenderObjectsAuto (ASet.ofArray heapObjs))
         Log.line "renderbench[heap]: %d bucket(s)" Heap.lastBucketCount
 
         // ── baseline: ONE baked world-space soup mesh, single draw (lower bound) ──
-        let totalV = n * vertsPerObj
+        let totalV = int totalDrawnVerts
         let bp = Array.zeroCreate<V3f> totalV
         let bn = Array.zeroCreate<V3f> totalV
         let bc = Array.zeroCreate<C4b> totalV
         let mutable o = 0
         for i in 0 .. n - 1 do
-            let (ps, ns, idx) = meshes.[i % distinct]
+            let (ps, ns, idx) = meshes.[i]
             let t = V3f (posOf i)
             let col = palette.[i % palette.Length]
             for k in 0 .. idx.Length - 1 do
@@ -204,7 +254,7 @@ module RenderBench =
 
         // ── optional: classic N individual draws (slow to prepare at large n) ──
         if classic then
-            renderWith "classic-n-draws" (ASet.ofArray (Array.init n mkHeapRO)) |> ignore
+            renderWith "classic-n-draws" (ASet.ofArray (Array.init n (mkHeapRO viewProj))) |> ignore
 
         Log.line "renderbench: heap/baseline = %.2fx   (target < 2x)" (heapGpu / baseGpu)
         0
