@@ -64,7 +64,67 @@ module RenderBench =
             [<Normal>]     n   : V3f
             [<Color>]      c   : V4f
             [<InstanceId>] iid : int
+            [<VertexId>]   vtx : int
         }
+
+        /// `--pack-probe` variant A — SCATTERED (mimics the heap today): a per-slot
+        /// header hop yields OFFSETS, then the matrix/color come as SCALAR gathers
+        /// from a separate region and geometry is pulled via header-provided bases.
+        let scatVert (v : PV) =
+            vertex {
+                let hdr : int[]     = uniform?StorageBuffer?Hdr
+                let mf  : float32[] = uniform?StorageBuffer?MatF
+                let af  : float32[] = uniform?StorageBuffer?ArenaF
+                let ii  : int[]     = uniform?StorageBuffer?IdxI
+                let s = v.iid
+                let matOff = hdr.[s * 8 + 0]
+                let colOff = hdr.[s * 8 + 1]
+                let idxB   = hdr.[s * 8 + 2]
+                let vB     = hdr.[s * 8 + 3]
+                let m =
+                    M44f(mf.[matOff+0],  mf.[matOff+1],  mf.[matOff+2],  mf.[matOff+3],
+                         mf.[matOff+4],  mf.[matOff+5],  mf.[matOff+6],  mf.[matOff+7],
+                         mf.[matOff+8],  mf.[matOff+9],  mf.[matOff+10], mf.[matOff+11],
+                         mf.[matOff+12], mf.[matOff+13], mf.[matOff+14], mf.[matOff+15])
+                let col = V4f(mf.[colOff+0], mf.[colOff+1], mf.[colOff+2], mf.[colOff+3])
+                let vid = ii.[idxB + v.vtx]
+                let o = (vB + vid) * 6
+                let p   = V4f(af.[o], af.[o+1], af.[o+2], 1.0f)
+                let nrm = V3f(af.[o+3], af.[o+4], af.[o+5])
+                let wp = m * p
+                return { v with pos = uniform.ViewProjTrafo * wp; n = m.TransformDir nrm; c = col }
+            }
+
+        /// `--pack-probe` variant B — PACKED: everything per-draw (matrix rows, color,
+        /// geometry bases) sits in ONE contiguous record at preparedUniforms[drawId] —
+        /// vec4 loads, no header hop. Geometry pulls are IDENTICAL to variant A, so
+        /// the delta is purely the uniform/header access pattern.
+        let packVert (v : PV) =
+            vertex {
+                let pv : V4f[]      = uniform?StorageBuffer?PrepV
+                let pi : int[]      = uniform?StorageBuffer?PrepI
+                let af : float32[]  = uniform?StorageBuffer?ArenaF
+                let ii : int[]      = uniform?StorageBuffer?IdxI
+                let s = v.iid
+                let r0 = pv.[s * 6 + 0]
+                let r1 = pv.[s * 6 + 1]
+                let r2 = pv.[s * 6 + 2]
+                let r3 = pv.[s * 6 + 3]
+                let col = pv.[s * 6 + 4]
+                let idxB = pi.[s * 4 + 0]
+                let vB   = pi.[s * 4 + 1]
+                let m =
+                    M44f(r0.X, r0.Y, r0.Z, r0.W,
+                         r1.X, r1.Y, r1.Z, r1.W,
+                         r2.X, r2.Y, r2.Z, r2.W,
+                         r3.X, r3.Y, r3.Z, r3.W)
+                let vid = ii.[idxB + v.vtx]
+                let o = (vB + vid) * 6
+                let p   = V4f(af.[o], af.[o+1], af.[o+2], 1.0f)
+                let nrm = V3f(af.[o+3], af.[o+4], af.[o+5])
+                let wp = m * p
+                return { v with pos = uniform.ViewProjTrafo * wp; n = m.TransformDir nrm; c = col }
+            }
 
         /// probe: per-object translation via gl_InstanceIndex -> SSBO. The SAME shader
         /// serves BOTH probe variants: n records with FirstInstance = i (gl_InstanceIndex
@@ -82,6 +142,113 @@ module RenderBench =
                 let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
                 let d = 0.25f + 0.75f * max 0.0f (Vec.dot (Vec.normalize v.n) l)
                 return V4f(v.c.XYZ * d, 1.0f)
+            }
+
+        // ── faithful heap-decode mimics for `--pack-probe` variants C/D ──
+        // C reproduces the real chain: header cell -> 4-word ALLOCATION header
+        // (typeId/length) -> data, with HeapPool's decode branch ladder.
+        // D keeps the SAME ladder (full runtime flexibility) but reads
+        // (typeId, length, dataOffset) DIRECTLY from the draw header — 1 indirection.
+        type UniformScope with
+            member x.PArenaF : float32[] = uniform?StorageBuffer?PArenaF
+            member x.PArenaI : int[]     = uniform?StorageBuffer?PArenaI
+            member x.PHdr    : int[]     = uniform?StorageBuffer?PHdr
+
+        [<ReflectedDefinition>]
+        let pF64 (p : int) : float32 =
+            let lo = uniform.PArenaI.[p]
+            let hi = uniform.PArenaI.[p + 1]
+            let e = ((hi >>> 20) &&& 0x7FF) - 896
+            let s = (hi >>> 31) <<< 31
+            if e >= 255 then Fun.FloatFromBits(s ||| 0x7F800000)
+            elif e <= 0 then 0.0f
+            else
+                let m = ((hi &&& 0xFFFFF) <<< 3) ||| ((lo >>> 29) &&& 0x7)
+                Fun.FloatFromBits((s ||| (e <<< 23) ||| m) + ((lo >>> 28) &&& 1))
+
+        /// the decode ladder over EXPLICIT (tid, len, dataOff) — shared by C (which
+        /// loads them from the allocation header) and D (from the draw header).
+        [<ReflectedDefinition>]
+        let pDecodeV4f (tid : int) (len : int) (d : int) (v : int) : V4f =
+            let e = v % len
+            if tid = 13 then
+                let o = d + e * 3
+                V4f(uniform.PArenaF.[o], uniform.PArenaF.[o + 1], uniform.PArenaF.[o + 2], 1.0f)
+            elif tid = 14 then
+                let o = d + e * 4
+                V4f(uniform.PArenaF.[o], uniform.PArenaF.[o + 1], uniform.PArenaF.[o + 2], uniform.PArenaF.[o + 3])
+            elif tid = 40 then
+                let w = uniform.PArenaI.[d + e]
+                V4f(float32 ((w >>> 16) &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 (w &&& 0xFF), float32 ((w >>> 24) &&& 0xFF)) / 255.0f
+            elif tid = 12 then
+                let o = d + e * 2
+                V4f(uniform.PArenaF.[o], uniform.PArenaF.[o + 1], 0.0f, 1.0f)
+            elif tid = 11 then
+                V4f(uniform.PArenaF.[d + e], 0.0f, 0.0f, 1.0f)
+            elif tid = 33 then
+                let o = d + e * 6
+                V4f(pF64 o, pF64 (o + 2), pF64 (o + 4), 1.0f)
+            elif tid = 34 then
+                let o = d + e * 8
+                V4f(pF64 o, pF64 (o + 2), pF64 (o + 4), pF64 (o + 6))
+            elif tid = 23 then
+                let o = d + e * 3
+                V4f(float32 uniform.PArenaI.[o], float32 uniform.PArenaI.[o + 1], float32 uniform.PArenaI.[o + 2], 1.0f)
+            else V4f(0.0f, 0.0f, 0.0f, 1.0f)
+
+        [<ReflectedDefinition>]
+        let pDecodeIdx (tid : int) (d : int) (v : int) : int =
+            if tid < 0 then v
+            elif tid = 2 then (uniform.PArenaI.[d + (v >>> 1)] >>> ((v &&& 1) <<< 4)) &&& 0xFFFF
+            else uniform.PArenaI.[d + v]
+
+        [<ReflectedDefinition>]
+        let pMat (o : int) : M44f =
+            M44f(uniform.PArenaF.[o+0],  uniform.PArenaF.[o+1],  uniform.PArenaF.[o+2],  uniform.PArenaF.[o+3],
+                 uniform.PArenaF.[o+4],  uniform.PArenaF.[o+5],  uniform.PArenaF.[o+6],  uniform.PArenaF.[o+7],
+                 uniform.PArenaF.[o+8],  uniform.PArenaF.[o+9],  uniform.PArenaF.[o+10], uniform.PArenaF.[o+11],
+                 uniform.PArenaF.[o+12], uniform.PArenaF.[o+13], uniform.PArenaF.[o+14], uniform.PArenaF.[o+15])
+
+        /// variant C — 3-deep faithful: header cell -> allocation header (tid/len) -> data.
+        /// hdr stride 8: matOff, vptOff, colRef, posRef, nrmRef, idxRef
+        let deepVert (v : PV) =
+            vertex {
+                let s = v.iid
+                let matOff = uniform.PHdr.[s * 8 + 0]
+                let vptOff = uniform.PHdr.[s * 8 + 1]
+                let colRef = uniform.PHdr.[s * 8 + 2]
+                let posRef = uniform.PHdr.[s * 8 + 3]
+                let nrmRef = uniform.PHdr.[s * 8 + 4]
+                let idxRef = uniform.PHdr.[s * 8 + 5]
+                let vid =
+                    if idxRef < 0 then v.vtx
+                    else pDecodeIdx uniform.PArenaI.[idxRef] (idxRef + 4) v.vtx
+                let p   = pDecodeV4f uniform.PArenaI.[posRef] uniform.PArenaI.[posRef + 1] (posRef + 4) vid
+                let nrm = pDecodeV4f uniform.PArenaI.[nrmRef] uniform.PArenaI.[nrmRef + 1] (nrmRef + 4) vid
+                let col = pDecodeV4f uniform.PArenaI.[colRef] uniform.PArenaI.[colRef + 1] (colRef + 4) vid
+                let m  = pMat matOff
+                let vp = pMat vptOff
+                let wp = m * V4f(p.XYZ, 1.0f)
+                return { v with pos = vp * wp; n = m.TransformDir nrm.XYZ; c = col }
+            }
+
+        /// variant D — FLAT header, same runtime flexibility: (tid, len, dataOff) per
+        /// attribute directly in the draw header (ONE indirection to data).
+        /// hdr stride 20: matOff, vptOff, col(tid,len,off), pos(...), nrm(...), idx(tid,off)
+        let flatVert (v : PV) =
+            vertex {
+                let s = v.iid
+                let b = s * 20
+                let matOff = uniform.PHdr.[b + 0]
+                let vptOff = uniform.PHdr.[b + 1]
+                let vid = pDecodeIdx uniform.PHdr.[b + 11] uniform.PHdr.[b + 12] v.vtx
+                let p   = pDecodeV4f uniform.PHdr.[b + 5] uniform.PHdr.[b + 6] uniform.PHdr.[b + 7] vid
+                let nrm = pDecodeV4f uniform.PHdr.[b + 8] uniform.PHdr.[b + 9] uniform.PHdr.[b + 10] vid
+                let col = pDecodeV4f uniform.PHdr.[b + 2] uniform.PHdr.[b + 3] uniform.PHdr.[b + 4] vid
+                let m  = pMat matOff
+                let vp = pMat vptOff
+                let wp = m * V4f(p.XYZ, 1.0f)
+                return { v with pos = vp * wp; n = m.TransformDir nrm.XYZ; c = col }
             }
 
     /// GPU ms/frame (time query) + task.Run CPU ms. Bandwidth-bound passes are very
@@ -236,7 +403,148 @@ module RenderBench =
             Log.line "renderbench[%s]: GPU %.2f ms/frame (min %.2f)   task.Run CPU %.2f ms/frame" label gpu minGpu cpu
             gpu
 
-        if argv |> Array.contains "--probe" then
+        if argv |> Array.contains "--pack-probe" then
+            // ── does CPU-PRE-PACKED per-draw data beat the heap's scattered
+            //    header-hop + scalar gathers? Same unique meshes, same records,
+            //    IDENTICAL geometry pulls — only the uniform/header access differs. ──
+            let totalIdx = int totalDrawnVerts
+            let totalUnique = meshes |> Array.sumBy (fun (ps, _, _) -> ps.Length)
+            let arenaF = Array.zeroCreate<float32> (totalUnique * 6)
+            let idxI   = Array.zeroCreate<int> totalIdx
+            let hdr    = Array.zeroCreate<int> (n * 8)
+            let matF   = Array.zeroCreate<float32> (n * 20)
+            let prepV  = Array.zeroCreate<V4f> (n * 6)
+            let prepI  = Array.zeroCreate<int> (n * 4)
+            let recs   = Array.zeroCreate<DrawCallInfo> n
+            let mutable ib = 0
+            let mutable vb = 0
+            for i in 0 .. n - 1 do
+                let (ps, ns, idx) = meshes.[i]
+                let t = V3f (posOf i)
+                let col = palette.[i % palette.Length].ToC4f()
+                // row-major translation matrix + color, scalar region (variant A)
+                let mo = i * 20
+                matF.[mo+0] <- 1.0f;  matF.[mo+5] <- 1.0f;  matF.[mo+10] <- 1.0f;  matF.[mo+15] <- 1.0f
+                matF.[mo+3] <- t.X;   matF.[mo+7] <- t.Y;   matF.[mo+11] <- t.Z
+                matF.[mo+16] <- col.R; matF.[mo+17] <- col.G; matF.[mo+18] <- col.B; matF.[mo+19] <- col.A
+                hdr.[i*8+0] <- mo; hdr.[i*8+1] <- mo + 16; hdr.[i*8+2] <- ib; hdr.[i*8+3] <- vb
+                // packed record (variant B): 4 matrix rows + color + geometry bases
+                prepV.[i*6+0] <- V4f(1.0f, 0.0f, 0.0f, t.X)
+                prepV.[i*6+1] <- V4f(0.0f, 1.0f, 0.0f, t.Y)
+                prepV.[i*6+2] <- V4f(0.0f, 0.0f, 1.0f, t.Z)
+                prepV.[i*6+3] <- V4f(0.0f, 0.0f, 0.0f, 1.0f)
+                prepV.[i*6+4] <- V4f(col.R, col.G, col.B, col.A)
+                prepI.[i*4+0] <- ib; prepI.[i*4+1] <- vb
+                for k in 0 .. idx.Length - 1 do idxI.[ib + k] <- idx.[k]
+                for j in 0 .. ps.Length - 1 do
+                    let o = (vb + j) * 6
+                    arenaF.[o]   <- ps.[j].X; arenaF.[o+1] <- ps.[j].Y; arenaF.[o+2] <- ps.[j].Z
+                    arenaF.[o+3] <- ns.[j].X; arenaF.[o+4] <- ns.[j].Y; arenaF.[o+5] <- ns.[j].Z
+                recs.[i] <- DrawCallInfo(FaceVertexCount = idx.Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = i, InstanceCount = 1)
+                ib <- ib + idx.Length
+                vb <- vb + ps.Length
+            let mkVariant (label : string) (eff : Effect) (uniforms : (string * IAdaptiveValue) list) =
+                let ro = RenderObject()
+                ro.Surface <- Surface.Effect eff
+                ro.Mode    <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- AttributeProvider.ofList ([] : (Symbol * BufferView) list)
+                ro.DrawCalls <- DrawCalls.Indirect (AVal.constant (IndirectBuffer.ofArray recs))
+                ro.Uniforms  <- UniformProvider.ofList [ for (nm, v) in uniforms -> Symbol.Create nm, v ]
+                renderWith label (ASet.single (ro :> IRenderObject))
+            let cAF = AVal.constant arenaF :> IAdaptiveValue
+            let cII = AVal.constant idxI :> IAdaptiveValue
+            Log.line "pack-probe: %d objects, %.1f M drawn verts, identical geometry pulls" n (float totalIdx / 1e6)
+            let scat =
+                mkVariant "scattered (heap-like)"
+                    (Effect.compose [ Effect.ofFunction Sh.scatVert; Effect.ofFunction Sh.lit ])
+                    [ "ViewProjTrafo", viewProj
+                      "Hdr", (AVal.constant hdr :> IAdaptiveValue); "MatF", (AVal.constant matF :> IAdaptiveValue)
+                      "ArenaF", cAF; "IdxI", cII ]
+            let packed =
+                mkVariant "packed (preparedUniforms[drawId])"
+                    (Effect.compose [ Effect.ofFunction Sh.packVert; Effect.ofFunction Sh.lit ])
+                    [ "ViewProjTrafo", viewProj
+                      "PrepV", (AVal.constant prepV :> IAdaptiveValue); "PrepI", (AVal.constant prepI :> IAdaptiveValue)
+                      "ArenaF", cAF; "IdxI", cII ]
+            Log.line "pack-probe: scattered / packed = %.2fx" (scat / packed)
+
+            // ── variants C (3-deep faithful: header cell -> allocation header -> data,
+            //    real decode ladder, VPT gathered from the arena like the heap) and
+            //    D (SAME ladder + flexibility, but tid/len/dataOff sit DIRECTLY in the
+            //    draw header — one indirection). C validates the mimic against the
+            //    real heap; D answers: how much do the extra indirections cost? ──
+            let vCounts = meshes |> Array.map (fun (ps, _, _) -> ps.Length)
+            let words =
+                16 + (Array.init n (fun i ->
+                    let (ps, _, idx) = meshes.[i]
+                    16 + 2 * (4 + ps.Length * 3) + 5 + 4 + idx.Length) |> Array.sum)
+            let aF = Array.zeroCreate<float32> words
+            let aI = Array.zeroCreate<int> words
+            let inline wf (w : int) (f : float32) = aF.[w] <- f; aI.[w] <- BitConverter.SingleToInt32Bits f
+            let inline wi (w : int) (x : int) = aI.[w] <- x; aF.[w] <- BitConverter.Int32BitsToSingle x
+            let hdrC = Array.zeroCreate<int> (n * 8)
+            let hdrD = Array.zeroCreate<int> (n * 20)
+            // shared ViewProjTrafo region at word 0 (dedup like the heap's shared aval)
+            let vpM = M44f.op_Explicit (view * proj).Forward
+            let packMat (w : int) (m : M44f) =
+                wf (w+0)  m.M00; wf (w+1)  m.M01; wf (w+2)  m.M02; wf (w+3)  m.M03
+                wf (w+4)  m.M10; wf (w+5)  m.M11; wf (w+6)  m.M12; wf (w+7)  m.M13
+                wf (w+8)  m.M20; wf (w+9)  m.M21; wf (w+10) m.M22; wf (w+11) m.M23
+                wf (w+12) m.M30; wf (w+13) m.M31; wf (w+14) m.M32; wf (w+15) m.M33
+            packMat 0 vpM
+            let mutable w = 16
+            for i in 0 .. n - 1 do
+                let (ps, ns, idx) = meshes.[i]
+                let t = V3f (posOf i)
+                let c = palette.[i % palette.Length]
+                let colorBits = (int c.B) ||| (int c.G <<< 8) ||| (int c.R <<< 16) ||| (int c.A <<< 24)
+                let matOff = w
+                packMat w (M44f(1.0f, 0.0f, 0.0f, t.X,
+                                0.0f, 1.0f, 0.0f, t.Y,
+                                0.0f, 0.0f, 1.0f, t.Z,
+                                0.0f, 0.0f, 0.0f, 1.0f))
+                w <- w + 16
+                let posRef = w
+                wi w 13; wi (w+1) ps.Length; wi (w+2) 12; wi (w+3) 0
+                w <- w + 4
+                for j in 0 .. ps.Length - 1 do wf (w+j*3) ps.[j].X; wf (w+j*3+1) ps.[j].Y; wf (w+j*3+2) ps.[j].Z
+                w <- w + ps.Length * 3
+                let nrmRef = w
+                wi w 13; wi (w+1) ns.Length; wi (w+2) 12; wi (w+3) 0
+                w <- w + 4
+                for j in 0 .. ns.Length - 1 do wf (w+j*3) ns.[j].X; wf (w+j*3+1) ns.[j].Y; wf (w+j*3+2) ns.[j].Z
+                w <- w + ns.Length * 3
+                let colRef = w
+                wi w 40; wi (w+1) 1; wi (w+2) 4; wi (w+3) 0; wi (w+4) colorBits
+                w <- w + 5
+                let idxRef = w
+                wi w 1; wi (w+1) idx.Length; wi (w+2) 4; wi (w+3) 0
+                w <- w + 4
+                for j in 0 .. idx.Length - 1 do wi (w+j) idx.[j]
+                w <- w + idx.Length
+                // C: refs to allocation headers
+                hdrC.[i*8+0] <- matOff; hdrC.[i*8+1] <- 0
+                hdrC.[i*8+2] <- colRef; hdrC.[i*8+3] <- posRef; hdrC.[i*8+4] <- nrmRef; hdrC.[i*8+5] <- idxRef
+                // D: tid/len/dataOff directly in the draw header
+                let b = i * 20
+                hdrD.[b+0] <- matOff; hdrD.[b+1] <- 0
+                hdrD.[b+2] <- 40; hdrD.[b+3] <- 1;         hdrD.[b+4] <- colRef + 4
+                hdrD.[b+5] <- 13; hdrD.[b+6] <- ps.Length; hdrD.[b+7] <- posRef + 4
+                hdrD.[b+8] <- 13; hdrD.[b+9] <- ns.Length; hdrD.[b+10] <- nrmRef + 4
+                hdrD.[b+11] <- 1; hdrD.[b+12] <- idxRef + 4
+            let cF = AVal.constant aF :> IAdaptiveValue
+            let cI = AVal.constant aI :> IAdaptiveValue
+            let deep =
+                mkVariant "3-deep faithful (heap chain)"
+                    (Effect.compose [ Effect.ofFunction Sh.deepVert; Effect.ofFunction Sh.lit ])
+                    [ "PArenaF", cF; "PArenaI", cI; "PHdr", (AVal.constant hdrC :> IAdaptiveValue) ]
+            let flat =
+                mkVariant "flat header (tid/len/off in draw header)"
+                    (Effect.compose [ Effect.ofFunction Sh.flatVert; Effect.ofFunction Sh.lit ])
+                    [ "PArenaF", cF; "PArenaI", cI; "PHdr", (AVal.constant hdrD :> IAdaptiveValue) ]
+            Log.line "pack-probe: 3-deep / flat-header = %.2fx   (flat keeps the full decode ladder)" (deep / flat)
+            0
+        elif argv |> Array.contains "--probe" then
             // ── FE probe: IDENTICAL vertex work, identical shader — n indirect records
             //    (FirstInstance = i, InstanceCount = 1) vs ONE instanced record
             //    (InstanceCount = n). Isolates the GPU front-end's per-record cost
