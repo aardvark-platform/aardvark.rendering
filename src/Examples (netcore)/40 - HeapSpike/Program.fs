@@ -103,6 +103,8 @@ let main argv =
     if argv |> Array.contains "bench" then
         Bench.run ()
         0
+    elif argv |> Array.contains "renderbench" then
+        RenderBench.run argv
     elif argv |> Array.contains "startup-bench" then
         StartupBench.run ()
         0

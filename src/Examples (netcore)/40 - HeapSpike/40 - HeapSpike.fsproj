@@ -26,6 +26,7 @@
     <Compile Include="GLBindless.fs" />
     <Compile Include="GlslDump.fs" />
     <Compile Include="Showcase.fs" />
+    <Compile Include="RenderBench.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
