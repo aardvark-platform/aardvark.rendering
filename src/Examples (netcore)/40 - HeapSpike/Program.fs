@@ -83,7 +83,7 @@ let runDynamic () =
     thread.Start()
 
     Log.warn "heap dynamic: incremental add/remove churn via Heap.ofRenderObjects (one bucket, one indirect draw)"
-    win.Scene <- Sg.renderObjectSet (Heap.ofRenderObjects win.Control.FramebufferSignature (cubes :> aset<IRenderObject>))
+    win.Scene <- Sg.renderObjectSet (Heap.ofRenderObjects (win.Runtime.CreateHeapStorage()) (cubes :> aset<IRenderObject>))
     win.Run()
 
 [<EntryPoint>]
@@ -310,7 +310,7 @@ let main argv =
     let inputSet = ASet.ofArray inputs
 
     // THE INTEGRATION: N independent ROs -> B bucket ROs (one indirect draw each)
-    let heapObjects = Heap.ofRenderObjects win.Control.FramebufferSignature inputSet
+    let heapObjects = Heap.ofRenderObjects (win.Runtime.CreateHeapStorage()) inputSet
 
     win.Keyboard.DownWithRepeats.Values.Add (fun k ->
         if k = Keys.Space then

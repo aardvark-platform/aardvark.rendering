@@ -64,9 +64,8 @@ module HeapUniforms =
         // PICKING: dom-sourced per-slot pick id, gathered by gl_InstanceIndex; the dom
         // heap pick-shader writes this into the pick buffer. Only bound when picking.
         member x.HeapPickIds : int[] = uniform?StorageBuffer?HeapPickIds
-        // GPU trafo-chain: per-slot GPU-folded ModelTrafo (M44f), written by the
-        // composeModel compute pass and gathered by gl_InstanceIndex / gl_DrawID.
-        member x.HeapModelChain : M44f[] = uniform?StorageBuffer?HeapModelChain
+        // (the GPU trafo-chain folds each slot's ModelTrafo directly into the
+        // arena — HeapData/HeapDataD — so there is no separate chain buffer.)
         // Bindless geometry: ONE flat float32 SSBO array indexed by handle
         // (gl_InstanceIndex). Element [h] is object h's interleaved vertex floats;
         // each attribute is decoded by component count at a fixed offset (like the
@@ -76,14 +75,9 @@ module HeapUniforms =
         // the SAME per-object buffers bound a second time as an int view, so integral
         // attributes decode their 4-byte slots as ints (bit pattern is identical).
         member x.HeapVertexDataI : int[][]     = uniform?StorageBuffer?HeapVertexDataI
-        // per-(object,sampler) index into the DEDUPED per-type HeapTextures<T> array,
-        // at slot*Kt + kt (Kt = that type's sampler count in the effect). One index
-        // buffer per supported sampler type.
-        member x.HeapTexIndices2d         : int[] = uniform?StorageBuffer?HeapTexIndices2d
-        member x.HeapTexIndices2dArray    : int[] = uniform?StorageBuffer?HeapTexIndices2dArray
-        member x.HeapTexIndicesCube       : int[] = uniform?StorageBuffer?HeapTexIndicesCube
-        member x.HeapTexIndices2dShadow   : int[] = uniform?StorageBuffer?HeapTexIndices2dShadow
-        member x.HeapTexIndicesCubeShadow : int[] = uniform?StorageBuffer?HeapTexIndicesCubeShadow
+        // (per-object texture indices are GENERATED per input sampler —
+        // "HeapTexArr<si>" / "HeapTexIdx<si>", built dynamically by the rewrite —
+        // so they have no UniformScope members here.)
         // ── texture-atlas fallback (Vulkan-1.0 / GL / MoltenVK: ONE sampler) ──
         // Per-object atlas placement (indexed by slot*K + k): mip-0 interior origin and
         // size in atlas PIXELS, and packed format bits (numMips<<1 | addrU<<4 | addrV<<6).
@@ -141,13 +135,13 @@ module Heap =
         let isGL = runtime.GetType().FullName.Contains("Aardvark.Rendering.GL")
         if isGL then runtime.SupportsMultiDrawIndirectDrawId else true
 
-    /// Throw a clear error if `runtime` cannot run the heap path. Pass
-    /// `textures = true` to also require unbounded (bindless) sampler arrays.
-    let checkSupport (textures : bool) (runtime : IRuntime) =
+    /// Throw a clear error if `runtime` cannot run the heap path. (Per-object
+    /// textures degrade per effect — bindless where supported, atlas fallback
+    /// otherwise, isHeapable rejection as the last resort — so they are not a
+    /// hard requirement here.)
+    let checkSupport (runtime : IRuntime) =
         if not (isSupported runtime) then
             failwith "Heap: GL backend requires GL 4.6+ with GL_ARB_shader_draw_parameters (gl_DrawID). Vulkan/MoltenVK do not require it (per-instance slot attribute fallback)."
-        if textures && not runtime.SupportsUnboundedSamplerArrays then
-            failwith "Heap: runtime does not support unbounded (bindless) sampler arrays (descriptor indexing); per-object textures via the heap are unavailable on this device (e.g. the GL backend)."
 
     // include non-public so PRIVATE record uniforms are walked too.
     let private recordFlags = System.Reflection.BindingFlags.Public ||| System.Reflection.BindingFlags.NonPublic
@@ -358,14 +352,7 @@ module Heap =
             | Some fi -> Some (gatherFor typ (off fi))
             | None -> None)
 
-    // ── per-object textures via per-TYPE bindless sampler arrays ───────────
-    // Each sampler uniform the effect declares becomes an indexed read of the
-    // unbounded array for its sampler TYPE (HeapTextures2d : sampler2d[],
-    // HeapTexturesCube : samplerCube[], …). Within a type, object i's kt-th sampler
-    // reads HeapTextures<T>.[ HeapTexIndices<T>[slot*Kt + kt] ] — the index buffer
-    // dedups, so the array holds only the bucket's distinct textures (≤ array cap).
-    // The arrays are module-level (built ONCE) so the sampler CE never sits inside a
-    // spliced per-call quotation (which makes the F# Release optimizer grind).
+    // ── per-object textures via per-SAMPLER bindless arrays ────────────────
     // NO static sampler arrays. Each input sampler is rewritten to read its OWN generated
     // bindless array uniform "HeapTexArr<si>" (si = the sampler's index in the effect),
     // indexed by its own "HeapTexIdx<si>" storage buffer. The array carries that sampler's
@@ -591,9 +578,11 @@ module Heap =
     // Assumptions: inputs are `RenderObject`s sharing geometry layout within a
     // bucket; the per-draw heap fields (auto-detected, part of the bucket key)
     // are present on every member with a consistent type by construction.
-    // Globals (camera etc.) are delegated
-    // to a LIVE member's uniform provider (bucket-homogeneous; re-seated when
-    // that member leaves). Membership changes are incremental (per-bucket
+    // There is NO global/per-object uniform distinction: every effect-consumed,
+    // RO-supplied uniform is a ref-counted arena region (a scene-wide value is one
+    // region with refcount = member count); anything the RO does not supply stays a
+    // plain uniform read resolved by the backend/task scope, never by a member.
+    // Membership changes are incremental (per-bucket
     // O(changed) diffs); per-draw value marks flow through the reactive arena
     // with offsets/headers held constant.
 
@@ -1008,18 +997,20 @@ module Heap =
             w.Dispose()
         /// Mark outdated so the next eval flushes pending writes (call in transact).
         member x.Touch() = x.MarkOutdated()
-        /// Optional dependency evaluated at the TOP of Compute. The incremental
-        /// ofRenderObjects path sets this to its membership updater so that slot /
-        /// region mutations (incl. newly added writers in `pending`) are applied
-        /// BEFORE the flush below — regardless of which bucket aval the render
-        /// task happens to pull first. Reading it through the token also makes
-        /// the arena re-flush whenever membership changes (no MarkOutdated /
-        /// transact during evaluation needed).
-        member val ExtraDependency : IAdaptiveValue option = None with get, set
+        /// Dependencies evaluated at the TOP of Compute. Every heap allocating from
+        /// this (shared) arena adds its membership updater so that slot / region
+        /// mutations (incl. newly added writers in `pending`) are applied BEFORE the
+        /// flush below — regardless of which bucket aval the render task happens to
+        /// pull first. Reading them through the token also makes the arena re-flush
+        /// whenever any of the heaps' memberships change (no MarkOutdated / transact
+        /// during evaluation needed).
+        member val private Dependencies : System.Collections.Generic.List<IAdaptiveValue> = System.Collections.Generic.List() with get
+        /// add a membership updater (idempotent by reference)
+        member x.AddDependency(d : IAdaptiveValue) =
+            if not (x.Dependencies.Contains d) then x.Dependencies.Add d
         override x.Compute(t, rt) =
-            match x.ExtraDependency with
-            | Some d -> d.GetValueUntyped t |> ignore
-            | None -> ()
+            for i in 0 .. x.Dependencies.Count - 1 do
+                x.Dependencies.[i].GetValueUntyped t |> ignore
             let __uplT0 = System.Diagnostics.Stopwatch.GetTimestamp()
             let mutable __flushed = 0
             // apply any deferred growth (EnsureFloats) or shrink (ShrinkFloats) —
@@ -1084,6 +1075,29 @@ module Heap =
             disposed <- true
             (src :> IAdaptiveValue).Release()
             (src :> IAdaptiveValue).Outputs.Remove x |> ignore
+            x.Outputs.Clear()
+
+    /// Per-RO watcher over exactly the avals its bucket key reads (created ONLY for
+    /// ROs whose key is not all-constant — constant keys are interned once and never
+    /// re-evaluated). The updater evaluates it through its own token, making the
+    /// watcher an input of the updater: when a watched state aval flips, the
+    /// updater's InputChangedObject collects the watcher into a dirty set and ONLY
+    /// the affected ROs (all sharing that aval) are re-keyed and moved between
+    /// buckets — the rest of the heap is untouched, there is NO global regroup.
+    /// Same idiom as GateWriter/SlotTexWriter, one level up.
+    type internal KeyWatcher(ro : RenderObject) =
+        inherit AdaptiveObject()
+        let mutable current : obj = null    // the interned key token (valid after the first Update)
+        member _.Ro = ro
+        member val IsDisposed = false with get, set
+        /// (re)compute the RO's interned key token iff outdated; `compute` reads the
+        /// key's state avals through the WATCHER's token, (re)subscribing it.
+        member x.Update(token : AdaptiveToken, compute : AdaptiveToken -> obj) : obj =
+            x.EvaluateIfNeeded token current (fun tok ->
+                current <- compute tok
+                current)
+        member x.Dispose() =
+            x.IsDisposed <- true
             x.Outputs.Clear()
 
     /// Stable-identity GPU mirror of one of a bucket's per-slot tables (draw
@@ -1253,6 +1267,100 @@ module Heap =
           /// rewritten shader bakes the field layout, so ROs with different field
           /// sets must land in different buckets.
           Fields : string[]; FieldMap : Map<string, int> }
+
+    /// does this blend mode consume the constant blend color? (decides whether
+    /// BlendState.ConstantColor participates in the bucket key at all)
+    let private usesBlendConstant (m : BlendMode) =
+        let isConst (f : BlendFactor) =
+            f = BlendFactor.ConstantColor || f = BlendFactor.InvConstantColor ||
+            f = BlendFactor.ConstantAlpha || f = BlendFactor.InvConstantAlpha
+        m.Enabled &&
+        (isConst m.SourceColorFactor || isConst m.SourceAlphaFactor ||
+         isConst m.DestinationColorFactor || isConst m.DestinationAlphaFactor)
+
+    /// The COMPLETE bucket key: effect + geometry layout + topology + render pass +
+    /// the resolved VALUES of every piece of per-RO pipeline state that can affect
+    /// the render (read token-reactively in `modeKey`, so a value change MOVES the
+    /// RO to the right bucket — no state ever merges on an arbitrary member).
+    ///
+    /// State that CANNOT affect the framebuffer signature is structurally ABSENT:
+    ///   * blend state is projected onto the color attachments the effect actually
+    ///     writes (signature ∩ effect outputs), resolved to the EFFECTIVE per-
+    ///     attachment (mode, write mask) — per-attachment override or global
+    ///     fallback, so equivalent expressions collapse to the same bucket,
+    ///   * the blend constant is keyed only when an effective mode consumes it,
+    ///   * depth / stencil state vanish when the signature has no such attachment.
+    ///
+    /// Equality/hash are hand-written: the generic structural comparer on a record
+    /// this size costs µs per intern lookup (same reason the previous tuple key
+    /// carried a hand-rolled comparer).
+    [<CustomEquality; NoComparison>]
+    type internal BucketKey =
+        { EffectId : string
+          Topology : IndexedGeometryMode
+          /// geometry strategy + instanced-ness + chain + per-draw field set (factsOf)
+          Layout : string
+          Pass : RenderPass
+          Cull : CullMode
+          FrontFacing : WindingOrder
+          Fill : FillMode
+          Multisample : bool
+          ConservativeRaster : bool
+          IsTransparent : bool
+          /// effective (mode, write mask) per written signature color attachment, sorted by name
+          Blend : (string * BlendMode * ColorMask)[]
+          /// Some iff a mode in Blend consumes the constant color/alpha
+          BlendConstant : C4f option
+          /// (test, bias, writeMask, clamp); None when the signature has no depth
+          Depth : (DepthTest * DepthBias * bool * bool) option
+          /// (modeFront, maskFront, modeBack, maskBack); None when the signature has no stencil
+          Stencil : (StencilMode * StencilMask * StencilMode * StencilMask) option
+          /// per-RO viewport/scissor overrides, resolved (None = task-provided)
+          Viewport : Box2i option
+          Scissor : Box2i option }
+
+        override x.GetHashCode() =
+            let mutable h = x.EffectId.GetHashCode()
+            h <- h * 31 + x.Layout.GetHashCode()
+            h <- h * 31 + int x.Topology
+            h <- h * 31 + x.Pass.GetHashCode()
+            h <- h * 31 + int x.Cull
+            h <- h * 31 + int x.FrontFacing
+            h <- h * 31 + int x.Fill
+            for (n, m, mask) in x.Blend do
+                h <- h * 31 + n.GetHashCode()
+                h <- h * 31 + m.GetHashCode()
+                h <- h * 31 + int mask
+            h <- h * 31 + (match x.BlendConstant with Some c -> c.GetHashCode() | None -> -1)
+            h <- h * 31 + (match x.Depth with
+                           | Some (t, b, w, c) ->
+                               (int t) ^^^ b.GetHashCode() ^^^ (if w then 0x10000 else 0) ^^^ (if c then 0x20000 else 0)
+                           | None -> -1)
+            h <- h * 31 + (match x.Stencil with Some s -> s.GetHashCode() | None -> -1)
+            h <- h * 31 + (match x.Viewport with Some b -> b.GetHashCode() | None -> -1)
+            h <- h * 31 + (match x.Scissor with Some b -> b.GetHashCode() | None -> -1)
+            h * 8 + ((if x.Multisample then 1 else 0)
+                     ||| (if x.ConservativeRaster then 2 else 0)
+                     ||| (if x.IsTransparent then 4 else 0))
+
+        override x.Equals(o : obj) =
+            match o with
+            | :? BucketKey as y ->
+                x.Topology = y.Topology
+                && x.Cull = y.Cull && x.FrontFacing = y.FrontFacing && x.Fill = y.Fill
+                && x.Multisample = y.Multisample && x.ConservativeRaster = y.ConservativeRaster
+                && x.IsTransparent = y.IsTransparent
+                && x.Pass = y.Pass
+                && x.EffectId = y.EffectId && x.Layout = y.Layout
+                && x.Blend.Length = y.Blend.Length
+                && Array.forall2
+                    (fun (n1 : string, m1 : BlendMode, k1 : ColorMask) (n2, m2, k2) ->
+                        n1 = n2 && m1.Equals m2 && k1 = k2)
+                    x.Blend y.Blend
+                && x.BlendConstant = y.BlendConstant
+                && x.Depth = y.Depth && x.Stencil = y.Stencil
+                && x.Viewport = y.Viewport && x.Scissor = y.Scissor
+            | _ -> false
 
     /// an input RO may ALREADY be instanced (instanceCount > 1); preserved per-slot.
     /// STRUCTURAL read (forced once, cached in RoFacts): an RO whose Direct call list
@@ -1566,8 +1674,8 @@ module Heap =
             src.Outputs.Remove x |> ignore
             x.Outputs.Clear()
 
-    /// Persistent dedup table of one bucket's distinct textures for ONE bindless
-    /// sampler type. Value = (HeapTextures&lt;T&gt;, HeapTexIndices&lt;T&gt;): the distinct-
+    /// Persistent dedup table of one bucket's distinct textures for ONE input
+    /// sampler. Value = (HeapTexArr&lt;si&gt;, HeapTexIdx&lt;si&gt;): the distinct-
     /// texture array (refcounted by texture identity; freed indices are reused and
     /// their cells parked on a 1×1 dummy so the descriptor array never references
     /// a dead texture) and the per-(slot, sampler) indices at slot*K + kt, growing
@@ -2440,6 +2548,27 @@ module Heap =
     /// so a page's draw binds exactly this `Arena` and gathers page-LOCAL offsets — the
     /// original single-buffer gather, unchanged (no switch, no bindless). Dedup is WITHIN a
     /// page (a uniform shared across pages is duplicated — cheap; co-location refinement later).
+    /// One arena resident to re-seat during page compaction: its current offset (the
+    /// sort key — residents re-alloc front-to-back so moves never overlap), the words
+    /// to re-allocate (the original BLOCK size, preserving any 8-byte-alignment
+    /// slack), whether the content starts 8-byte-aligned within the block, and the
+    /// reseat callback receiving (alignedNewOffset, newBlock).
+    type internal Resident = (struct (int * int * bool * (int -> Management.Block<unit> -> unit)))
+
+    /// One bucket's stake in a page (shared storage: several buckets — possibly from
+    /// several heaps — allocate from the same page). Compaction must move EVERY
+    /// resident and fix EVERY consumer, so each participating bucket contributes:
+    ///   * its per-slot arena blocks that live outside the page dicts (derived-uniform
+    ///     OUTPUT regions, chain-fold Model constituents), and
+    ///   * a header rewrite that re-bakes all of its slots' header cells from the
+    ///     (now re-seated) dict entries and marks its header mirror dirty.
+    type internal IPageParticipant =
+        /// append the bucket's per-slot residents living on page `page`
+        abstract CollectResidents : page : int * residents : System.Collections.Generic.List<Resident> -> unit
+        /// re-bake every slot's header cells (regions/attrs/index/constituents) and
+        /// mark the bucket's header mirror fully dirty
+        abstract RewriteHeaders : unit -> unit
+
     type internal PageArena(runtime : IRuntime) =
         let arena = HeapArena(runtime, 1024)
         let arenaAlloc = HeapSpace()
@@ -2458,6 +2587,8 @@ module Heap =
                     System.Object.ReferenceEquals(a, b) && ai = bi && at = bt }
         let attrStatic = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(geomKeyComparer)
         let idxStatic  = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(geomKeyComparer)
+        // the buckets currently allocating from / rendering this page
+        let participants = System.Collections.Generic.HashSet<IPageParticipant>(HashIdentity.Reference)
         member _.Arena = arena
         member _.ArenaAlloc = arenaAlloc
         member _.Regions = regions
@@ -2466,47 +2597,115 @@ module Heap =
         member _.ConstituentsB = constituentsB
         member _.AttrStatic = attrStatic
         member _.IdxStatic = idxStatic
+        member _.Register(p : IPageParticipant) = participants.Add p |> ignore
+        member _.Unregister(p : IPageParticipant) = participants.Remove p |> ignore
 
-    /// Shader-AGNOSTIC, PAGED, (later) shareable data store: ≤ a handful of `PageArena`s, each
-    /// a ≤ pageWords storage buffer. A slot is placed wholly on one page; when the current fill
-    /// page would exceed pageWords the store rolls to a new page. `pageWords` (default 2²⁸ = 1 GiB,
-    /// keeps off*4 int32-safe + the staging <2 GB + the SSBO <4 GB) is lowerable via
-    /// HEAP_PAGE_WORDS for testing the multi-page path on small scenes.
-    type internal HeapStorage(runtime : IRuntime) =
+        /// Threshold-triggered arena compaction of THIS page. Collects EVERY resident —
+        /// the page dicts (uniform-field regions, singleton attributes, derived
+        /// CONSTITUENTS, static attribute/index allocations) plus every participant's
+        /// per-slot blocks (derived outputs, chain folds) — re-allocates them tightly
+        /// in ascending old-offset order (front-to-back memmove, no overlap), preserves
+        /// 8-byte alignment of double content, then has every participant re-bake its
+        /// header cells. One full [0, live) re-upload on the arena's next Compute.
+        member _.Compact(pageIdx : int) =
+            let res = System.Collections.Generic.List<Resident>()
+            let inline entryAligned (e : RegionEntry) = int e.Block.Size > e.Size   // over-allocated ⇔ 8-byte-aligned content
+            let addRegion (e : RegionEntry) =
+                let ee = e
+                res.Add(struct(ee.Offset, int ee.Block.Size, entryAligned ee, fun off b ->
+                    ee.Offset <- off; ee.Block <- b
+                    if not (isNull ee.Writer) then ee.Writer.Off <- off + ee.HeaderWords))
+            for KeyValue(_, e) in regions do addRegion e
+            for KeyValue(_, e) in singleRegions do addRegion e
+            for KeyValue(_, e) in constituentsF do addRegion e
+            for KeyValue(_, e) in constituentsB do addRegion e
+            for KeyValue(_, e) in attrStatic do
+                let ee = e
+                res.Add(struct(ee.Ref, ee.SizeF, false, fun off b -> ee.Ref <- off; ee.Block <- b))
+            for KeyValue(_, e) in idxStatic do
+                let ee = e
+                res.Add(struct(ee.Ref, ee.SizeF, false, fun off b -> ee.Ref <- off; ee.Block <- b))
+            for p in participants do p.CollectResidents(pageIdx, res)
+            res.Sort(fun (struct(a, _, _, _)) (struct(b, _, _, _)) -> compare a b)
+            arenaAlloc.Reset()
+            for (struct(oldOff, words, align8, reseat)) in res do
+                let b = arenaAlloc.Alloc words
+                let raw = int b.Offset
+                let off = if align8 && (raw &&& 1) = 1 then raw + 1 else raw
+                let contentWords = words - (if align8 then 1 else 0)
+                if off <> oldOff then arena.MoveStaging(oldOff, off, contentWords)
+                reseat off b
+            for p in participants do p.RewriteHeaders()
+            arena.RequestFullUpload arenaAlloc.Extent
+            arena.ShrinkFloats arenaAlloc.Extent
+            compactionCount <- compactionCount + 1
+
+        /// trigger check (cheap integer compares); run after removals.
+        member x.MaybeCompact(pageIdx : int) =
+            if arenaAlloc.Live * 2 < arenaAlloc.Extent
+               && int64 arenaAlloc.Waste * 4L > int64 compactionWasteFloorBytes then
+                x.Compact pageIdx
+
+    /// Shader-AGNOSTIC, PAGED, SHAREABLE data store: ≤ a handful of page arenas, each
+    /// one ≤ pageWords storage buffer. A slot group is placed wholly on one page; when
+    /// the current fill page would exceed pageWords the store rolls to a new page.
+    ///
+    /// ONE storage serves MANY buckets and MANY heaps (`Heap.ofRenderObjects storage …`
+    /// called once per pass — e.g. the main render and a shadow pass — over the same or
+    /// different objects): all their allocations dedup by aval / value-level source in
+    /// the shared pages, so shared geometry and uniforms live in GPU memory ONCE.
+    /// Lifetime: the storage belongs to the CALLER; a heap teardown releases exactly
+    /// its own ref-counts and never clears the store.
+    ///
+    /// `pageSizeInBytes` (default 2³⁰ = 1 GiB: keeps off*4 int32-safe, the staging
+    /// < 2 GB and the SSBO < 4 GB) is clamped to the device's storage-buffer range and
+    /// overridable via HEAP_PAGE_WORDS (words) for testing the multi-page path.
+    type HeapStorage(runtime : IRuntime, pageSizeInBytes : int64) =
         let pageWords =
             let want =
                 match System.Environment.GetEnvironmentVariable "HEAP_PAGE_WORDS" with
-                | null | "" -> 1 <<< 28
-                | s -> match System.Int32.TryParse s with
-                       | true, v when v >= 1024 -> v
-                       | _ -> 1 <<< 28
+                | null | "" -> int64 (max 4096L pageSizeInBytes / 4L)
+                | s -> match System.Int64.TryParse s with
+                       | true, v when v >= 1024L -> v
+                       | _ -> int64 (max 4096L pageSizeInBytes / 4L)
             // CLAMP to what a storage-buffer binding can address on THIS device: a page
             // is bound as one SSBO, so pageWords*4 must fit maxStorageBufferRange. On
             // MoltenVK/Metal and mobile that can be far below the 1 GiB desktop default.
             let deviceWords = runtime.MaxStorageBufferBytes / 4L
-            max 1024 (int (min (int64 want) deviceWords))
+            max 1024 (int (min want deviceWords))
         let pages = System.Collections.Generic.List<PageArena>()
         do pages.Add(PageArena(runtime))
-        member _.PageWords = pageWords
-        member _.Pages = pages
-        member _.Count = pages.Count
-        member _.Page(i : int) = pages.[i]
+        new (runtime : IRuntime) = HeapStorage(runtime, 1L <<< 30)
+        member _.Runtime = runtime
+        member internal _.PageWords = pageWords
+        member internal _.Count = pages.Count
+        member internal _.Page(i : int) = pages.[i]
         /// index of the current fill page (the last one)
-        member _.CurrentPage = pages.Count - 1
+        member internal _.CurrentPage = pages.Count - 1
         /// the page index a slot needing ~`words` MORE words should use: the current fill page,
         /// or a fresh page if adding `words` would push it past pageWords. (≥1 page always.)
-        member _.PlacePage(words : int) : int =
+        member internal _.PlacePage(words : int) : int =
             let cur = pages.Count - 1
             if pages.[cur].ArenaAlloc.Extent + (max 0 words) > pageWords && pages.[cur].ArenaAlloc.Extent > 0 then
                 pages.Add(PageArena(runtime)); pages.Count - 1
             else cur
+        /// compaction trigger over all pages; run by buckets after removals.
+        member internal _.MaybeCompact() =
+            for i in 0 .. pages.Count - 1 do pages.[i].MaybeCompact i
+        /// drop a participant from every page (bucket disposal)
+        member internal _.Unregister(p : IPageParticipant) =
+            for i in 0 .. pages.Count - 1 do pages.[i].Unregister p
 
     type internal IncrementalBucket(runtime : IRuntime, storage : HeapStorage, names : string[], nameToField : Map<string, int>,
                                     effect : Effect, ro0 : RenderObject, updater : aval<int>,
                                     useBindlessGeom : bool, instanced : bool,
-                                    // the bucket KEY's resolved pipeline-state values
-                                    // (cull, frontFacing, fill, blend, depthTest, depthWrite)
-                                    pipeKey : CullMode * WindingOrder * FillMode * BlendMode * DepthTest * bool,
+                                    // the bucket KEY: ALL keyed pipeline state resolved to VALUES —
+                                    // baked constant onto the bucket RO, so nothing pipeline-related
+                                    // is ever inherited from a member
+                                    pipeKey : BucketKey,
+                                    // signature color attachments the bucket's effect does NOT write:
+                                    // explicitly write-masked off on the bucket RO
+                                    maskedAttachments : Symbol[],
                                     // GPU trafo-chain mode: the members expose a "ModelTrafoStack"
                                     // uniform (the UNFOLDED root->leaf link array). Each slot's
                                     // ModelTrafo is composed on the GPU from a GROWABLE, deduped
@@ -2593,7 +2792,6 @@ module Heap =
         let symDataI = Symbol.Create "HeapDataI"
         let symDataD = Symbol.Create "HeapDataD"   // native double view of the arena (fp64-requested uniforms)
         let symHeaders = Symbol.Create "HeapHeaders"
-        let symModelChain = Symbol.Create "HeapModelChain"
         let symModelStack = Symbol.Create "ModelTrafoStack"
         let nameSyms = names |> Array.map Symbol.Create
         let heapSyms = System.Collections.Generic.HashSet<Symbol>(nameSyms)
@@ -2697,7 +2895,7 @@ module Heap =
         // ── arena: deduped per-draw uniform regions, refcounted, placed by a
         //    coalescing range allocator (float units) — now held by the (per-bucket) storage ──
         let mutable arena = storage.Page(0).Arena
-        do arena.ExtraDependency <- Some (updater :> IAdaptiveValue)
+        do arena.AddDependency (updater :> IAdaptiveValue)
         let mutable regions = storage.Page(0).Regions
         let mutable arenaAlloc = storage.Page(0).ArenaAlloc
 
@@ -3021,7 +3219,7 @@ module Heap =
             arena <- pg.Arena; arenaAlloc <- pg.ArenaAlloc; regions <- pg.Regions
             singleRegions <- pg.SingleRegions; constituentsF <- pg.ConstituentsF; constituentsB <- pg.ConstituentsB
             attrStatic <- pg.AttrStatic; idxStatic <- pg.IdxStatic
-            if arena.ExtraDependency.IsNone then arena.ExtraDependency <- Some (updater :> IAdaptiveValue)
+            arena.AddDependency (updater :> IAdaptiveValue)
         // conservative worst-case word footprint of a slot's group (geometry + per-draw uniforms +
         // constituents), so PlacePage rolls BEFORE a slot that wouldn't fit ⇒ a group never spans pages.
         let estimateSlotWords (ro : RenderObject) : int =
@@ -3187,70 +3385,25 @@ module Heap =
                     let e = allocStatic attrStatic key bytes tid (bytes.Length / es) es
                     AttrKey.Static key, e.Ref
 
-        // ── threshold-triggered compaction. After removals, a buffer whose live
-        //    bytes dropped below 50% of its high-water (waste > live) AND whose
-        //    waste exceeds compactionWasteFloorBytes is rewritten tightly within
-        //    the SAME delta pass: live ranges are re-seated, every consumer
-        //    offset (draw records' FirstIndex/BaseVertex/FirstInstance, dedup
-        //    table entries, arena region offsets + their RegionWriters + the
-        //    baked header cells) is rewritten, and the fresh buffer replaces the
-        //    old one (ONE full re-upload). All bucket outputs re-derive from the
-        //    updater version, so the rewrites are safe within the pass; cost is
-        //    O(live) per fire and amortizes like growth doubling (between fires
-        //    at least max(live, floor) bytes must be freed). ──
-        let compactArena () =
-            // collect EVERY arena resident — uniform-field regions, singleton-
-            // attribute regions, static attribute/index allocations — and re-seat
-            // them in ascending old offset so the staging memmove is front-to-back
-            // (new offset <= old offset, no overlap hazard) …
-            let res = System.Collections.Generic.List<struct(int * int * (int -> Management.Block<unit> -> unit))>()
-            for KeyValue(_, e) in regions do
-                let ee = e
-                res.Add(struct(ee.Offset, ee.Size, fun off b ->
-                    ee.Offset <- off; ee.Block <- b
-                    if not (isNull ee.Writer) then ee.Writer.Off <- off))
-            for KeyValue(_, e) in singleRegions do
-                let ee = e
-                res.Add(struct(ee.Offset, ee.Size, fun off b ->
-                    ee.Offset <- off; ee.Block <- b
-                    if not (isNull ee.Writer) then ee.Writer.Off <- off + AllocHeaderWords))
-            for KeyValue(_, e) in attrStatic do
-                let ee = e
-                res.Add(struct(ee.Ref, ee.SizeF, fun off b -> ee.Ref <- off; ee.Block <- b))
-            for KeyValue(_, e) in idxStatic do
-                let ee = e
-                res.Add(struct(ee.Ref, ee.SizeF, fun off b -> ee.Ref <- off; ee.Block <- b))
-            res.Sort(fun (struct(a, _, _)) (struct(b, _, _)) -> compare a b)
-            arenaAlloc.Reset()
-            for (struct(oldOff, size, reseat)) in res do
-                let b = arenaAlloc.Alloc size
-                let off = int b.Offset
-                if off <> oldOff then arena.MoveStaging(oldOff, off, size)
-                reseat off b
-            // … then rewrite every live slot's baked header cells (field region
-            // offsets, attribute refs, index ref); the whole header table
-            // re-uploads once this pass (headersAllDirty).
-            for KeyValue(_, slt) in slots do
-                let hb = slt.Slot * headerStride
-                for i in 0 .. names.Length - 1 do
-                    match regions.TryGetValue slt.RegionKeys.[i] with
-                    | true, e -> headers.[hb + nameToField.[names.[i]]] <- e.Offset
-                    | _ -> ()
-                slt.AttrKeys |> Array.iteri (fun ai k ->
-                    headers.[hb + attrBase + ai] <-
-                        match k with
-                        | AttrKey.Single av -> singleRegions.[av].Offset
-                        | AttrKey.Static key -> attrStatic.[key].Ref)
-                match idxStatic.TryGetValue slt.IdxKey with
-                | true, e -> headers.[hb + idxCell] <- e.Ref
-                | _ -> ()
-            headersAllDirty <- true
-            // one full [0, live) re-upload of the moved floats on the arena's next
-            // Compute (rule-clean — the arena depends on the updater) + shrink the
-            // staging mirror/GPU buffer back toward the live size.
-            arena.RequestFullUpload arenaAlloc.Extent
-            arena.ShrinkFloats arenaAlloc.Extent
-            compactionCount <- compactionCount + 1
+        // ── threshold-triggered compaction is PAGE-level now (PageArena.Compact):
+        //    a page's dicts hold entries from EVERY bucket sharing the storage, so
+        //    the page collects all dict residents itself and asks each registered
+        //    participant (bucket) for its per-slot blocks + a header re-bake — see
+        //    the IPageParticipant implementation at the end of this type. Here we
+        //    only keep the per-slot-block bookkeeping the participant needs. ──
+        // AddInternal fills OutBlocks in ascending derived-cell order and FoldBlocks
+        // in ascending constituent order, so the j-th block maps to the j-th cell:
+        let derivedCellOrder = Set.toArray derivedCells             // sorted ascending
+        let plainCells =                                            // RegionKeys.[j] <-> plainCells.[j]
+            Array.init names.Length id |> Array.filter (fun i -> not (Set.contains i derivedCells))
+        let foldConstIdx =                                          // FoldBlocks.[j] <-> constituent cell fieldStride + foldConstIdx.[j]
+            [| for k in 0 .. numConst - 1 do
+                 if neededConstituents.[k].CBase = Derived.MBASE && chainMode then yield k |]
+        let plainConstIdx =                                         // ConstKeys.[j] <-> constituent cell fieldStride + plainConstIdx.[j]
+            [| for k in 0 .. numConst - 1 do
+                 if not (neededConstituents.[k].CBase = Derived.MBASE && chainMode) then yield k |]
+        // derived OUTPUT regions of a double-requested type are 8-byte-aligned
+        let outAligned = derivedCellOrder |> Array.map (fun c -> isDoubleUniform (fieldRequestedType names.[c]))
 
         let compactInst () =
             let nd = Array.zeroCreate<int> (max 16 (Fun.NextPowerOfTwo (max 1 instAlloc.Live)))
@@ -3268,12 +3421,14 @@ module Heap =
             compactionCount <- compactionCount + 1
 
         /// trigger check, run after removals (cheap: a few integer compares).
+        /// Arena compaction is storage-level (every page checks its own waste and
+        /// compacts with ALL participating buckets); the per-instance slot-attribute
+        /// buffer is bucket-owned and compacts locally.
         let maybeCompact () =
-            let inline need (a : HeapSpace) (unitBytes : int) =
-                a.Live * 2 < a.Extent &&
-                int64 a.Waste * int64 unitBytes > int64 compactionWasteFloorBytes
-            if need arenaAlloc 4 then compactArena ()
-            if useSlotAttr && need instAlloc 4 then compactInst ()
+            storage.MaybeCompact()
+            if useSlotAttr
+               && instAlloc.Live * 2 < instAlloc.Extent
+               && int64 instAlloc.Waste * 4L > int64 compactionWasteFloorBytes then compactInst ()
 
         // ── stable mirror buffers + reactive views over the mutable state. All
         //    are driven by `updater` (via MirrorBuffer.Dependency), so they
@@ -3791,31 +3946,58 @@ module Heap =
                     Shader.withBody body sh)
 
         // the bucket's render object — created ONCE; identity is stable across
-        // membership changes. Rewritten surface, indirect draws, HeapData /
-        // HeapHeaders / texture providers falling through to ro0's globals
-        // minus the heap + sampler names.
+        // membership changes. Rewritten surface, indirect draws, and a uniform
+        // provider answering ONLY heap-internal names (arena/headers/textures/
+        // atlas/user sampler arrays) — user uniforms are gathered regions, never
+        // resolved from a member.
         let bucketRO =
             let ro = RenderObject.Clone ro0
             ro.IsActive <- AVal.constant true      // per-draw gating lives in the indirect buffer
-            // The KEYED pipeline state comes from the bucket KEY's resolved VALUES,
-            // never from a member's live avals: a member whose dynamic mode aval
-            // changes MOVES buckets (regroup pass) and must not be able to bend the
-            // bucket it leaves. Non-keyed state (stencil, color/attachment masks,
-            // blend constant, multisample, depth bias/clamp, …) still comes from
-            // ro0's clone — the mode key assumes heapable ROs only vary in the keyed
-            // subset; ROs differing in non-keyed state merge on ro0's values (same
-            // pre-existing limitation as the bucket key itself).
-            let (cull, frontFacing, fill, blend, depthTest, depthWrite) = pipeKey
+            // ALL pipeline state comes from the bucket KEY's resolved VALUES, baked
+            // as constants — never from a member's live avals: a member whose
+            // dynamic state aval changes MOVES buckets (regroup pass) and must not
+            // be able to bend the bucket it leaves. Blend state is per-attachment:
+            // the key carries the effective (mode, mask) for every signature color
+            // attachment the effect writes; unwritten signature attachments are
+            // explicitly write-masked off, so their pixels keep the cleared value
+            // by construction (not by unwritten-shader-output undefinedness). The
+            // globals (Mode/ColorWriteMask) are then never consulted — every
+            // signature attachment has an explicit entry — and are set to defaults.
+            ro.RenderPass <- pipeKey.Pass
             ro.RasterizerState <-
-                { ro.RasterizerState with
-                    CullMode = AVal.constant cull
-                    FrontFacing = AVal.constant frontFacing
-                    FillMode = AVal.constant fill }
-            ro.BlendState <- { ro.BlendState with Mode = AVal.constant blend }
+                { CullMode = AVal.constant pipeKey.Cull
+                  FrontFacing = AVal.constant pipeKey.FrontFacing
+                  FillMode = AVal.constant pipeKey.Fill
+                  Multisample = AVal.constant pipeKey.Multisample
+                  ConservativeRaster = AVal.constant pipeKey.ConservativeRaster }
+            ro.BlendState <-
+                let modes = pipeKey.Blend |> Array.map (fun (n, m, _) -> Symbol.Create n, m) |> Map.ofArray
+                let masks = pipeKey.Blend |> Array.map (fun (n, _, mask) -> Symbol.Create n, mask) |> Map.ofArray
+                let masks = maskedAttachments |> Array.fold (fun m s -> Map.add s ColorMask.None m) masks
+                { Mode                = AVal.constant BlendMode.None
+                  ColorWriteMask      = AVal.constant ColorMask.All
+                  ConstantColor       = AVal.constant (defaultArg pipeKey.BlendConstant C4f.Black)
+                  AttachmentMode      = AVal.constant modes
+                  AttachmentWriteMask = AVal.constant masks }
             ro.DepthState <-
-                { ro.DepthState with
-                    Test = AVal.constant depthTest
-                    WriteMask = AVal.constant depthWrite }
+                match pipeKey.Depth with
+                | Some (test, bias, write, clamp) ->
+                    { Test = AVal.constant test
+                      Bias = AVal.constant bias
+                      WriteMask = AVal.constant write
+                      Clamp = AVal.constant clamp }
+                | None -> DepthState.Default    // signature has no depth attachment
+            ro.StencilState <-
+                match pipeKey.Stencil with
+                | Some (modeF, maskF, modeB, maskB) ->
+                    { ModeFront = AVal.constant modeF
+                      WriteMaskFront = AVal.constant maskF
+                      ModeBack = AVal.constant modeB
+                      WriteMaskBack = AVal.constant maskB }
+                | None -> StencilState.Default  // signature has no stencil attachment
+            ro.ViewportState <-
+                { Viewport = pipeKey.Viewport |> Option.map AVal.constant
+                  Scissor  = pipeKey.Scissor  |> Option.map AVal.constant }
             ro.Surface <-
                 let baseE = heapRewrite effect
                 if useAtlas then Surface.Effect (baseE |> rewriteAtlasSamples slotE atlasByName)
@@ -3962,13 +4144,16 @@ module Heap =
             lastInstBytes <- instAlloc.Extent * 4
             lastInstLiveBytes <- instAlloc.Live * 4
 
-        member private _.AddInternal(ro : RenderObject) =
+        member private x.AddInternal(ro : RenderObject) =
             let __ingT0 = System.Diagnostics.Stopwatch.GetTimestamp()
             let slot = if freeSlots.Count > 0 then freeSlots.Pop() else let s = highWater in highWater <- s + 1; s
             ensureSlot slot
             // route this slot's whole group to one page (rolling to a fresh page if the current
             // one is full). Estimate the slot's worst-case words so it always fits the chosen page.
             setPage (storage.PlacePage (estimateSlotWords ro))
+            // participate in the (shared) page's compaction: contribute this bucket's
+            // per-slot blocks and re-bake headers when the page moves things
+            storage.Page(curPage).Register (x :> IPageParticipant)
             slotPage.[slot] <- curPage
             // PICKING: capture the dom-sourced pick id (constant per slot; -1 = unpickable)
             if picking then
@@ -4185,16 +4370,13 @@ module Heap =
             x.PublishStats()
 
         /// Release all adaptive references (region writers, texture writers) and
-        /// the bucket-owned GPU resources (atlas pages, dummy textures).
-        member _.Dispose() =
-            for KeyValue(_, e) in regions do
-                if not (isNull e.Writer) then arena.Remove e.Writer
-            regions.Clear()
-            for KeyValue(_, e) in singleRegions do
-                if not (isNull e.Writer) then arena.Remove e.Writer
-            singleRegions.Clear()
-            attrStatic.Clear()
-            idxStatic.Clear()
+        /// the bucket-owned GPU resources (atlas pages, dummy textures). The storage
+        /// is SHARED: this releases exactly this bucket's ref-counts (per-slot
+        /// removal, freeing regions/constituents/statics whose count hits zero) and
+        /// NEVER clears the page dicts — other buckets'/heaps' entries live on.
+        member x.Dispose() =
+            for ro in slots.Keys |> Seq.toArray do x.RemoveInternal ro
+            storage.Unregister (x :> IPageParticipant)
             for KeyValue(_, w) in gateWriters do w.Dispose()
             gateWriters.Clear()
             for (_, _, _, table) in bindlessTexTables do table.Dispose()
@@ -4217,6 +4399,54 @@ module Heap =
             if chainBwdActive then disp chainInvProg; disp chainInvInput; disp chainInvShader
             slots.Clear()
 
+        // shared-page compaction stake: contribute this bucket's per-slot arena
+        // blocks (derived outputs, chain folds — they live in slots, not in the
+        // page dicts) and re-bake every slot's header cells after a move.
+        interface IPageParticipant with
+            member _.CollectResidents(page, res) =
+                for KeyValue(_, s) in slots do
+                    if s.Page = page then
+                        let hb = s.Slot * headerStride
+                        for j in 0 .. s.OutBlocks.Length - 1 do
+                            let cell = derivedCellOrder.[j]
+                            let sj, jj = s, j
+                            res.Add(struct(headers.[hb + cell], int s.OutBlocks.[j].Size, outAligned.[j], fun off b ->
+                                headers.[hb + cell] <- off
+                                sj.OutBlocks.[jj] <- b))
+                        for j in 0 .. s.FoldBlocks.Length - 1 do
+                            let cell = fieldStride + foldConstIdx.[j]
+                            let sj, jj = s, j
+                            res.Add(struct(headers.[hb + cell], int s.FoldBlocks.[j].Size, true, fun off b ->
+                                headers.[hb + cell] <- off
+                                sj.FoldBlocks.[jj] <- b))
+            member _.RewriteHeaders() =
+                // re-bake from the slot's OWN page's dicts (never the current fill
+                // page): plain field cells from RegionKeys, non-fold constituent
+                // cells from ConstKeys, attribute/index cells from the dedup tables.
+                // Derived-output and fold cells were re-seated inline above.
+                for KeyValue(_, s) in slots do
+                    let pg = storage.Page s.Page
+                    let hb = s.Slot * headerStride
+                    for j in 0 .. s.RegionKeys.Length - 1 do
+                        match pg.Regions.TryGetValue s.RegionKeys.[j] with
+                        | true, e -> headers.[hb + plainCells.[j]] <- e.Offset
+                        | _ -> ()
+                    for j in 0 .. s.ConstKeys.Length - 1 do
+                        let struct(av, inv) = s.ConstKeys.[j]
+                        let d = if inv then pg.ConstituentsB else pg.ConstituentsF
+                        match d.TryGetValue av with
+                        | true, e -> headers.[hb + fieldStride + plainConstIdx.[j]] <- e.Offset
+                        | _ -> ()
+                    s.AttrKeys |> Array.iteri (fun ai k ->
+                        headers.[hb + attrBase + ai] <-
+                            match k with
+                            | AttrKey.Single av -> pg.SingleRegions.[av].Offset
+                            | AttrKey.Static key -> pg.AttrStatic.[key].Ref)
+                    match pg.IdxStatic.TryGetValue s.IdxKey with
+                    | true, e -> headers.[hb + idxCell] <- e.Ref
+                    | _ -> ()
+                headersAllDirty <- true
+
     /// Collapse an adaptive set of N render objects into B bucket render objects
     /// (one per effect + pipeline state + geometry layout + field set), each
     /// drawn as ONE indirect multidraw against a shared dirty-tracked arena.
@@ -4230,7 +4460,7 @@ module Heap =
     // buffers) and returns its bucket-RO set together with a teardown that frees
     // EVERYTHING (every IncrementalBucket's GPU + object-count CPU, the reader).
     // Called lazily on first activation; teardown runs when the last task drops it.
-    let private buildHeap (picking : bool) (deregister : int -> unit) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> * (unit -> unit) =
+    let private buildHeap (storage : HeapStorage) (picking : bool) (deregister : int -> unit) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> * (unit -> unit) =
         let runtime = signature.Runtime :?> IRuntime
         // DCE the effect BEFORE heapification: heapification turns every consumed attribute into an
         // SSBO gather (the heap VS has zero vertex inputs regardless), so a read-but-dead attribute
@@ -4297,7 +4527,7 @@ module Heap =
                     |> Set.ofSeq
                 neededCache.[e.Id] <- s
                 s
-        checkSupport false runtime
+        checkSupport runtime
         let scope = Ag.Scope.Root
 
         // ── per-draw field sets ──────────────────────────────────────────
@@ -4314,14 +4544,41 @@ module Heap =
                 fieldSetInterner.[k] <- v
                 v
 
-        // Bucket key = effect + topology + the VALUES of the per-RO pipeline state
-        // (cull / front-face / fill / blend / depth test+write). Reading the state
-        // avals through the token makes bucketing REACTIVE: a rule-driven mode value
-        // change re-partitions the heap into the right buckets (one indirect draw =
-        // one pipeline). This is wombat's per-RO dynamic "mode rules" — the rule is
-        // simply each RO's state aval (often derived from its data); constant state
-        // never re-partitions. Only mode changes rebuild buckets; per-draw value
-        // changes still flow through the arena with no rebuild.
+        // Bucket key = effect + topology + render pass + the VALUES of ALL per-RO
+        // pipeline state (raster / blend / depth / stencil / viewport), PROJECTED
+        // onto the framebuffer signature — see BucketKey: state that cannot affect
+        // the render (blend modes of unwritten attachments, depth/stencil without
+        // such an attachment, an unconsumed blend constant) never partitions.
+        // Bucketing is REACTIVE and per-RO dirty-tracked: each dynamic-key RO gets a
+        // KeyWatcher over exactly the avals its key reads; a state value change
+        // re-keys ONLY the affected ROs (all sharing the flipped aval) and moves
+        // them to the right bucket (one indirect draw = one pipeline) — the rest of
+        // the heap is untouched, there is no global regroup. This is wombat's per-RO
+        // dynamic "mode rules" — the rule is simply each RO's state aval (often
+        // derived from its data); constant state is interned once and never
+        // re-evaluated. Per-draw value changes still flow through the arena with no
+        // bucket change at all.
+        // ── signature facts for the key projection ──
+        // sorted signature color attachment names (Set.toArray is sorted)
+        let sigColorNames = Set.toArray sigOutNames
+        let hasDepth, hasStencil =
+            match signature.DepthStencilAttachment with
+            | Some fmt -> fmt.HasDepth, fmt.HasStencil
+            | None -> false, false
+        // the signature color attachments an effect actually writes ((name, symbol),
+        // sorted; cached per effect id) — the only attachments whose blend state can
+        // matter for that effect's buckets. Same projection linkDCE links against.
+        let writtenAttachmentsCache = System.Collections.Generic.Dictionary<string, (string * Symbol)[]>()
+        let writtenAttachments (e : Effect) =
+            match writtenAttachmentsCache.TryGetValue e.Id with
+            | true, v -> v
+            | _ ->
+                let v =
+                    sigColorNames
+                    |> Array.filter (fun n -> Map.containsKey n e.Outputs)
+                    |> Array.map (fun n -> n, Symbol.Create n)
+                writtenAttachmentsCache.[e.Id] <- v
+                v
         // geometry layout signature: HOST buckets carry NO per-attribute
         // element types at all — the shader decode branches on each
         // allocation's header typeId at fetch time and auto-converts the
@@ -4341,20 +4598,53 @@ module Heap =
                     | ValueSome bv -> sprintf "%s:%s:%d:%d" name bv.ElementType.FullName bv.Offset bv.Stride
                     | ValueNone -> name + ":?") |> String.concat ";"
             | _ -> ""
-        let modeKey (layout : string) (t : AdaptiveToken) (r : RenderObject) =
+        let modeKey (layout : string) (t : AdaptiveToken) (r : RenderObject) : BucketKey =
+            // classify guarantees Surface.Effect for every RO that reaches the key
+            let e = match r.Surface with | Surface.Effect e -> e | _ -> failwith "Heap: modeKey requires Surface.Effect"
             let ra = r.RasterizerState
-            let eid = match r.Surface with | Surface.Effect e -> e.Id | _ -> "?"
+            let bs = r.BlendState
+            let ds = r.DepthState
+            let ss = r.StencilState
+            // effective per-attachment blend state: per-attachment override, else the
+            // global fallback — the same resolution the backends apply, so two ROs
+            // expressing the same state differently land in the same bucket.
+            let attModes = bs.AttachmentMode.GetValue t
+            let attMasks = bs.AttachmentWriteMask.GetValue t
+            let globalMode = bs.Mode.GetValue t
+            let globalMask = bs.ColorWriteMask.GetValue t
+            let blend =
+                writtenAttachments e |> Array.map (fun (n, sym) ->
+                    let mode = match Map.tryFind sym attModes with Some m -> m | None -> globalMode
+                    let mask = match Map.tryFind sym attMasks with Some m -> m | None -> globalMask
+                    n, mode, mask)
             // IsTransparent partitions buckets so transparent and opaque ROs that otherwise
             // share effect+pipeline state still emit SEPARATE grouped ROs — TransparencyRenderTask
             // routes by RenderObject.IsTransparent (see TransparencyRenderTask.isTransparent),
             // so each bucket's combined output must carry the same flag as its inputs.
             // RenderObject.Clone copies IsTransparent (Pipeline/RenderObject.fs:120) so the
             // bucket's output inherits it automatically from any input in the partition.
-            (eid, r.Mode, layout,
-             ra.CullMode.GetValue t, ra.FrontFacing.GetValue t, ra.FillMode.GetValue t,
-             r.BlendState.Mode.GetValue t,
-             r.DepthState.Test.GetValue t, r.DepthState.WriteMask.GetValue t,
-             r.IsTransparent)
+            { EffectId = e.Id
+              Topology = r.Mode
+              Layout = layout
+              Pass = r.RenderPass
+              Cull = ra.CullMode.GetValue t
+              FrontFacing = ra.FrontFacing.GetValue t
+              Fill = ra.FillMode.GetValue t
+              Multisample = ra.Multisample.GetValue t
+              ConservativeRaster = ra.ConservativeRaster.GetValue t
+              IsTransparent = r.IsTransparent
+              Blend = blend
+              BlendConstant =
+                if blend |> Array.exists (fun (_, m, _) -> usesBlendConstant m) then Some (bs.ConstantColor.GetValue t)
+                else None
+              Depth =
+                if hasDepth then Some (ds.Test.GetValue t, ds.Bias.GetValue t, ds.WriteMask.GetValue t, ds.Clamp.GetValue t)
+                else None
+              Stencil =
+                if hasStencil then Some (ss.ModeFront.GetValue t, ss.WriteMaskFront.GetValue t, ss.ModeBack.GetValue t, ss.WriteMaskBack.GetValue t)
+                else None
+              Viewport = r.ViewportState.Viewport |> Option.map (fun v -> v.GetValue t)
+              Scissor  = r.ViewportState.Scissor  |> Option.map (fun v -> v.GetValue t) }
 
         // Eligibility: only a concrete indexed Effect RenderObject with host-array
         // (positions/normals/index) geometry and ALL heap uniforms present in a
@@ -4399,14 +4689,13 @@ module Heap =
         //   * it is not a sampler (textures keep the bindless/atlas path), and
         //   * the RO's OWN uniform provider supplies it (TryGetUniform succeeds)
         //     in a packable ContentType.
-        // Everything else — names falling through to scene/global scope (camera,
-        // lights), RO-supplied names the effect never reads, consumed+supplied
-        // names of unpackable type — stays an ordinary uniform: NOT a field, the
-        // RO stays heapable, and the read resolves through the bucket's globals
-        // fall-through.
-        // NOTE the fall-through answers from ONE live member: a consumed+supplied
-        // UNPACKABLE uniform that genuinely varies per RO therefore merges on
-        // that member's value — use a packable type if that matters.
+        // Everything else — names the RO does not supply (RO-supplied names the
+        // effect never reads simply don't matter) — stays an ordinary uniform:
+        // NOT a field, the RO stays heapable, and the read resolves through the
+        // backend/task scope (the bucket provider answers ValueNone for it).
+        // NOTE a consumed+supplied UNPACKABLE uniform is NOT gathered either: its
+        // RO-supplied value is effectively IGNORED (the plain read must resolve
+        // from task scope or fails to bind) — supply a packable type instead.
         let consumedCache = System.Collections.Generic.Dictionary<string, string[]>()
         let consumedNonSamplerNames (e : Effect) =
             match consumedCache.TryGetValue e.Id with
@@ -4446,7 +4735,7 @@ module Heap =
                         let requested = match e.Uniforms.TryFind n with | Some p -> p.uniformType | None -> v.ContentType
                         if packable.Contains v.ContentType || isCompositeType requested then true
                         else
-                            diag (sprintf "uniform '%s' is effect-consumed and RO-supplied but UNPACKABLE (ContentType = %s) — it stays a shared global resolved from ONE bucket member; if it genuinely varies per object, supply it in a packable type (M44f/Trafo3d/M44d/V4f/C4f/V3f/V2f/float32/float/int)." n v.ContentType.Name)
+                            diag (sprintf "uniform '%s' is effect-consumed and RO-supplied but UNPACKABLE (ContentType = %s) — the RO-supplied value is IGNORED (the read must resolve from task/backend scope or fails to bind); supply a packable type (M44f/Trafo3d/M44d/V4f/C4f/V3f/V2f/float32/float/int) to make it a per-draw field." n v.ContentType.Name)
                             false
                     | ValueNone ->
                         // a derived composite that did NOT derive and is NOT supplied:
@@ -4584,40 +4873,23 @@ module Heap =
 
         // ── incremental driver ───────────────────────────────────────────
         // ONE updater aval per call: it consumes the object-set reader's
-        // CHANGES (a true delta — no snapshot read, no HashSet.computeDelta),
-        // groups by (token-reactive) mode key and feeds each bucket's
-        // persistent IncrementalBucket — an add/remove is O(changed) instead
-        // of O(bucket), for EVERY bucket kind (host or bindless geometry,
-        // bindless-textured, atlas, instanced). Every bucket-internal aval
-        // (indirect, headers, geometry, textures, arena flush) hangs off the
-        // updater, so evaluation order doesn't matter.
+        // CHANGES (a true delta — no snapshot read, no HashSet.computeDelta)
+        // plus the drained dirty-key set (per-RO KeyWatchers) and feeds each
+        // bucket's persistent IncrementalBucket — an add/remove/key-flip is
+        // O(changed) instead of O(bucket), for EVERY bucket kind (host or
+        // bindless geometry, bindless-textured, atlas, instanced). Every
+        // bucket-internal aval (indirect, headers, geometry, textures, arena
+        // flush) hangs off the updater, so evaluation order doesn't matter.
         let objReader = objects.GetReader()
 
-        // intern mode keys to unique tokens, so the per-change grouping hashes
-        // object references instead of 10-tuples-with-strings (20k ROs/change).
-        // keyValues is the reverse map: token -> the RESOLVED mode-key tuple, so a
-        // bucket can bake its pipeline state from the KEY's values (a member's
-        // dynamic mode aval can then never bend the bucket it leaves — it moves).
-        // hand-rolled comparer: the F# generic structural comparer on this
-        // 10-tuple (two strings + BlendMode + enums) costs µs per intern lookup
-        let modeKeyComparer =
-            { new System.Collections.Generic.IEqualityComparer<string * IndexedGeometryMode * string * CullMode * WindingOrder * FillMode * BlendMode * DepthTest * bool * bool> with
-                member _.GetHashCode((eid, m, layout, cull, ff, fill, blend, dt, dw, tr)) =
-                    let mutable h = eid.GetHashCode()
-                    h <- h * 31 + layout.GetHashCode()
-                    h <- h * 31 + int m
-                    h <- h * 31 + int cull
-                    h <- h * 31 + int ff
-                    h <- h * 31 + int fill
-                    h <- h * 31 + blend.GetHashCode()
-                    h <- h * 31 + int dt
-                    h <- h * 31 + (if dw then 1 else 0)
-                    h * 2 + (if tr then 1 else 0)
-                member _.Equals((e1, m1, l1, c1, f1, fl1, b1, d1, w1, t1), (e2, m2, l2, c2, f2, fl2, b2, d2, w2, t2)) =
-                    m1 = m2 && c1 = c2 && f1 = f2 && fl1 = fl2 && d1 = d2 && w1 = w2 && t1 = t2
-                    && b1.Equals b2 && e1 = e2 && l1 = l2 }
-        let keyInterner = System.Collections.Generic.Dictionary<_, obj>(modeKeyComparer)
-        let keyValues = System.Collections.Generic.Dictionary<obj, string * IndexedGeometryMode * string * CullMode * WindingOrder * FillMode * BlendMode * DepthTest * bool * bool>(HashIdentity.Reference)
+        // intern bucket keys to unique tokens, so the per-change grouping hashes
+        // object references instead of full BucketKey records (20k ROs/change).
+        // keyValues is the reverse map: token -> the RESOLVED key, so a bucket can
+        // bake its pipeline state from the KEY's values (a member's dynamic state
+        // aval can then never bend the bucket it leaves — it moves). BucketKey
+        // carries its own hand-written equality/hash.
+        let keyInterner = System.Collections.Generic.Dictionary<BucketKey, obj>()
+        let keyValues = System.Collections.Generic.Dictionary<obj, BucketKey>(HashIdentity.Reference)
         let internKey k =
             match keyInterner.TryGetValue k with
             | true, tok -> tok
@@ -4674,13 +4946,35 @@ module Heap =
                             + (if inst then "|inst" else "")
                             + (if chain then "|chain" else "")
                             + "|f:" + String.concat ";" fields
-                        let ra = r.RasterizerState
+                        // the key is CONSTANT iff every aval it reads is — where depth /
+                        // stencil / blend-constant avals only participate when the
+                        // signature (or a constant blend mode) makes them relevant, so
+                        // an irrelevant dynamic aval never forces the token-reactive
+                        // full-regroup path.
                         let allConst =
-                            ra.CullMode.IsConstant && ra.FrontFacing.IsConstant && ra.FillMode.IsConstant &&
-                            r.BlendState.Mode.IsConstant && r.DepthState.Test.IsConstant && r.DepthState.WriteMask.IsConstant
+                            let ra = r.RasterizerState
+                            let bs = r.BlendState
+                            let ds = r.DepthState
+                            let ss = r.StencilState
+                            ra.CullMode.IsConstant && ra.FrontFacing.IsConstant && ra.FillMode.IsConstant
+                            && ra.Multisample.IsConstant && ra.ConservativeRaster.IsConstant
+                            && bs.Mode.IsConstant && bs.ColorWriteMask.IsConstant
+                            && bs.AttachmentMode.IsConstant && bs.AttachmentWriteMask.IsConstant
+                            && (not hasDepth || (ds.Test.IsConstant && ds.Bias.IsConstant && ds.WriteMask.IsConstant && ds.Clamp.IsConstant))
+                            && (not hasStencil || (ss.ModeFront.IsConstant && ss.WriteMaskFront.IsConstant && ss.ModeBack.IsConstant && ss.WriteMaskBack.IsConstant))
+                            && (match r.ViewportState.Viewport with Some v -> v.IsConstant | None -> true)
+                            && (match r.ViewportState.Scissor with Some v -> v.IsConstant | None -> true)
+                        let constToken =
+                            if not allConst then null
+                            else
+                                let k = modeKey layout t r
+                                // the blend constant is keyed only when a (now-constant)
+                                // effective mode consumes it — then IT must be constant too
+                                if k.BlendConstant.IsSome && not r.BlendState.ConstantColor.IsConstant then null
+                                else internKey k
                         { Heapable = true
                           Layout = layout
-                          ConstToken = if allConst then internKey (modeKey layout t r) else null
+                          ConstToken = constToken
                           Bindless = bindless
                           Instanced = inst
                           Chain = chain
@@ -4696,28 +4990,32 @@ module Heap =
         // persistent driver state (mutated only inside the updater's evaluation)
         let caches = System.Collections.Generic.Dictionary<obj, IncrementalBucket>(HashIdentity.Reference)
         let passSet = System.Collections.Generic.HashSet<IRenderObject>(HashIdentity.Reference)
-        // RO -> its bucket key (only valid while running incrementally, i.e. no
-        // dynamic-mode ROs in the set)
+        // RO -> its (interned) bucket key token
         let roBucket = System.Collections.Generic.Dictionary<RenderObject, obj>(HashIdentity.Reference)
+        // dynamic-key ROs -> their KeyWatcher (constant-key ROs have none); a
+        // watcher marked by one of its state avals lands in dirtyKeys via the
+        // updater's InputChangedObject, and the updater re-keys ONLY those ROs.
+        let keyWatchers = System.Collections.Generic.Dictionary<RenderObject, KeyWatcher>(HashIdentity.Reference)
+        let dirtyKeys = LockedSet<KeyWatcher>()
         let updaterRef = ref (Unchecked.defaultof<aval<int>>)
-        // number of heapable ROs in the set whose mode key is DYNAMIC (any
-        // non-constant pipeline-state aval). While > 0 the grouping must be
-        // recomputed every evaluation (token-reactive re-partitioning).
-        let dynCount = ref 0
-        // a full regroup ran (or nothing ran yet): the incremental bookkeeping
-        // (roBucket / passSet) must be resynced by one more full pass before
-        // delta processing may resume.
-        let needFullSync = ref true
         let version = ref 0
 
         let mkBucket (key : obj) (r0 : RenderObject) (f0 : RoFacts) =
-            let effect = linkedEffect (match r0.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect")
-            let (_, _, _, cull, ff, fill, blend, dtest, dwrite, _) = keyValues.[key]
+            let e0 = match r0.Surface with | Surface.Effect e -> e | _ -> failwith "Heap.ofRenderObjects: expected Surface.Effect"
+            let effect = linkedEffect e0
+            let k = keyValues.[key]
+            // signature color attachments this bucket's effect does NOT write: the
+            // bucket RO write-masks them off explicitly (their pixels keep the
+            // cleared value by construction, see the BlendState bake in bucketRO)
+            let masked =
+                let written = writtenAttachments e0
+                sigColorNames
+                |> Array.filter (fun n -> written |> Array.forall (fun (wn, _) -> wn <> n))
+                |> Array.map Symbol.Create
             // field names/layout come from the FACTS (per-bucket: the field set is
-            // part of the bucket key, so every member shares f0's interned set)
-            // step 1: one private storage per bucket ⇒ behaviour-identical. (Sharing across
-            // buckets/heaps comes later by passing the SAME storage to several buckets.)
-            let storage = HeapStorage(runtime)
+            // part of the bucket key, so every member shares f0's interned set).
+            // Every bucket allocates from the CALLER's shared storage — cross-bucket
+            // and cross-heap dedup of geometry, uniforms and constituents.
             // Pickability is known BY CONSTRUCTION: HeapNode attaches the `HeapPickId` uniform to
             // exactly the ROs it pick-composed. A bucket carrying that marker is a pick bucket (route
             // it into the dom's PickId pass); one without it (e.g. a `Sg.NoEvents` sub-scene) is not.
@@ -4726,79 +5024,69 @@ module Heap =
                 | ValueSome _ -> true
                 | _ -> false
             let c = IncrementalBucket(runtime, storage, f0.Fields, f0.FieldMap, effect, r0, updaterRef.Value, f0.Bindless, f0.Instanced,
-                                      (cull, ff, fill, blend, dtest, dwrite), f0.Chain, picking, pickable, deregister)
+                                      k, masked, f0.Chain, picking, pickable, deregister)
             caches.[key] <- c
             c
 
         let updater =
-            AVal.custom (fun t ->
-                let delta = objReader.GetChanges t
+            { new AVal.AbstractVal<int>() with
+                // a KeyWatcher marked by one of its state avals lands in the dirty
+                // set; everything else (objReader, region writers, …) marks normally
+                override x.InputChangedObject(_, o) =
+                    match o with
+                    | :? KeyWatcher as w -> dirtyKeys.Add w |> ignore
+                    | _ -> ()
+                override x.Compute(t) =
+                    let delta = objReader.GetChanges t
 
-                // facts + dynamic-RO census from the delta (cheap: O(changed))
-                for op in delta do
-                    match op with
-                    | Add(_, o) ->
-                        let f = factsOf t o
-                        if f.Heapable && isNull f.ConstToken then dynCount.Value <- dynCount.Value + 1
-                    | Rem(_, o) ->
-                        match roFacts.TryGetValue o with
-                        | true, f when f.Heapable && isNull f.ConstToken -> dynCount.Value <- dynCount.Value - 1
-                        | _ -> ()
-
-                if dynCount.Value > 0 || needFullSync.Value then
-                    // ── full regroup (dynamic mode keys present, or resync after
-                    //    one): same semantics as before, but every group hits its
-                    //    persistent cache (the cache diffs the membership itself).
-                    needFullSync.Value <- dynCount.Value > 0
-                    roBucket.Clear()
-                    passSet.Clear()
-                    let groups = System.Collections.Generic.Dictionary<obj, System.Collections.Generic.List<struct(RenderObject * RoFacts)>>(HashIdentity.Reference)
-                    for o in objReader.State do
-                        let f = factsOf t o
-                        if f.Heapable then
-                            let r = o :?> RenderObject
-                            let key = if isNull f.ConstToken then internKey (modeKey f.Layout t r) else f.ConstToken
-                            let lst =
-                                match groups.TryGetValue key with
-                                | true, l -> l
-                                | _ -> let l = System.Collections.Generic.List() in groups.[key] <- l; l
-                            lst.Add(struct(r, f))
+                    // the RO's interned key token: constant keys were interned once in
+                    // factsOf; a dynamic key evaluates through the RO's KeyWatcher
+                    // (created here on first add), whose token read (re)subscribes it.
+                    let keyTokenOf (r : RenderObject) (f : RoFacts) =
+                        if not (isNull f.ConstToken) then f.ConstToken
                         else
-                            passSet.Add o |> ignore
-                    for KeyValue(key, lst) in groups do
-                        let (struct(r0, f0)) = lst.[0]
-                        let cache =
+                            let w =
+                                match keyWatchers.TryGetValue r with
+                                | true, w -> w
+                                | _ ->
+                                    let w = KeyWatcher r
+                                    keyWatchers.[r] <- w
+                                    w
+                            w.Update(t, fun tok -> internKey (modeKey f.Layout tok r))
+                    let addTo (key : obj) (r : RenderObject) (f : RoFacts) =
+                        roBucket.[r] <- key
+                        let c =
                             match caches.TryGetValue key with
                             | true, c -> c
-                            | _ -> mkBucket key r0 f0
-                        cache.Update (Array.init lst.Count (fun i -> let (struct(r, _)) = lst.[i] in r))
-                        for struct(r, _) in lst do roBucket.[r] <- key
-                    // dispose caches whose bucket key vanished
-                    let dead = caches.Keys |> Seq.filter (fun k -> not (groups.ContainsKey k)) |> Seq.toArray
-                    for k in dead do
-                        caches.[k].Dispose()
-                        caches.Remove k |> ignore
-                else
-                    // ── incremental: process ONLY the membership delta. Removals
-                    //    FIRST so their slots / arena offsets / texture indices are
-                    //    reusable by this very update (paired add+remove churn then
-                    //    keeps the slot high-water at the live count). ──
+                            | _ -> mkBucket key r f
+                        c.AddOne r
+                    let removeFrom (key : obj) (r : RenderObject) =
+                        roBucket.Remove r |> ignore
+                        match caches.TryGetValue key with
+                        | true, c ->
+                            c.RemoveOne r
+                            if c.Count = 0 then
+                                c.Dispose()
+                                caches.Remove key |> ignore
+                        | _ -> ()
+
+                    // ── membership delta: removals FIRST so their slots / arena
+                    //    offsets / texture indices are reusable by this very update
+                    //    (paired add+remove churn then keeps the slot high-water at
+                    //    the live count). ──
                     for op in delta do
                         match op with
                         | Rem(_, o) ->
                             match roFacts.TryGetValue o with
                             | true, f when f.Heapable ->
                                 let r = o :?> RenderObject
+                                (match keyWatchers.TryGetValue r with
+                                 | true, w ->
+                                     w.Dispose()
+                                     keyWatchers.Remove r |> ignore
+                                 | _ -> ())
                                 match roBucket.TryGetValue r with
-                                | true, key ->
-                                    roBucket.Remove r |> ignore
-                                    match caches.TryGetValue key with
-                                    | true, c ->
-                                        c.RemoveOne r
-                                        if c.Count = 0 then
-                                            c.Dispose()
-                                            caches.Remove key |> ignore
-                                    | _ -> ()
+                                | true, key -> removeFrom key r
                                 | _ -> ()
                             | _ -> passSet.Remove o |> ignore
                         | Add _ -> ()
@@ -4810,27 +5098,36 @@ module Heap =
                             if not f.Heapable then passSet.Add o |> ignore
                             else
                                 let r = o :?> RenderObject
-                                let key = f.ConstToken          // non-null: dynCount = 0
-                                roBucket.[r] <- key
-                                let c =
-                                    match caches.TryGetValue key with
-                                    | true, c -> c
-                                    | _ -> mkBucket key r f
-                                c.AddOne r
+                                addTo (keyTokenOf r f) r f
 
-                lastBucketCount <- caches.Count
-                let mutable chainB = 0
-                let mutable chainD = 0
-                for KeyValue(_, c) in caches do
-                    // materialize each bucket's per-page render/derive ROs to match its storage,
-                    // DETERMINISTICALLY here in the membership update — so they're present in
-                    // `resultAval` before any render builds its command buffer (no lazy/first-frame gap).
-                    c.SyncPages()
-                    if c.IsChain then chainB <- chainB + 1; chainD <- chainD + c.ChainDistinct
-                lastChainBuckets <- chainB
-                if chainB > 0 then lastDistinctLinks <- chainD
-                version.Value <- version.Value + 1
-                version.Value)
+                    // ── dirty keys: re-key ONLY the ROs whose watched state avals
+                    //    flipped (all ROs sharing a flipped aval are collected); an
+                    //    RO whose key actually changed MOVES buckets, the rest of
+                    //    the heap is untouched. There is no full-regroup path. ──
+                    for w in dirtyKeys.GetAndClear() do
+                        if not w.IsDisposed then       // removed by this very delta
+                            let r = w.Ro
+                            match roBucket.TryGetValue r, roFacts.TryGetValue r with
+                            | (true, oldKey), (true, f) ->
+                                let newKey = w.Update(t, fun tok -> internKey (modeKey f.Layout tok r))
+                                if not (System.Object.ReferenceEquals(newKey, oldKey)) then
+                                    removeFrom oldKey r
+                                    addTo newKey r f
+                            | _ -> ()
+
+                    lastBucketCount <- caches.Count
+                    let mutable chainB = 0
+                    let mutable chainD = 0
+                    for KeyValue(_, c) in caches do
+                        // materialize each bucket's per-page render/derive ROs to match its storage,
+                        // DETERMINISTICALLY here in the membership update — so they're present in
+                        // `resultAval` before any render builds its command buffer (no lazy/first-frame gap).
+                        c.SyncPages()
+                        if c.IsChain then chainB <- chainB + 1; chainD <- chainD + c.ChainDistinct
+                    lastChainBuckets <- chainB
+                    if chainB > 0 then lastDistinctLinks <- chainD
+                    version.Value <- version.Value + 1
+                    version.Value } :> aval<int>
         updaterRef.Value <- updater
         let teardown () =
             // free every bucket (GPU buffers + object-count CPU) and drop the reader
@@ -4838,6 +5135,9 @@ module Heap =
             caches.Clear()
             passSet.Clear()
             roBucket.Clear()
+            for KeyValue(_, w) in keyWatchers do w.Dispose()
+            keyWatchers.Clear()
+            dirtyKeys.GetAndClear() |> ignore
             match box objReader with
             | :? System.IDisposable as d -> d.Dispose()
             | _ -> ()
@@ -4865,12 +5165,12 @@ module Heap =
     /// Allocates NOTHING up front (ref-count zero): the heap's machinery — input
     /// reader, per-bucket CPU model and ALL GPU buffers — is built lazily on the
     /// FIRST activation (a render task picking up the heap) and torn down COMPLETELY
-    /// when the LAST task drops it (no GPU and no object-count-sized state held at
-    /// ref-count zero). Re-activation rebuilds from scratch; concurrent tasks share
+    /// when the LAST task drops it (releasing exactly its own ref-counts in the
+    /// shared storage). Re-activation rebuilds from scratch; concurrent tasks share
     /// one machinery via the ref-count. The drawing is carried by the bucket ROs;
     /// the activation itself rides on an ActivationRenderObject that both backends
     /// ignore for rendering and only activate/deactivate.
-    let ofRenderObjectsCore (picking : bool) (deregister : int -> unit) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+    let private ofRenderObjectsCore (getStorage : IRuntime -> HeapStorage) (releaseStorage : unit -> unit) (picking : bool) (deregister : int -> unit) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         let gate = obj()
         let mutable activeTasks = 0
         let mutable shared : (aset<IRenderObject> * (unit -> unit)) voption = ValueNone
@@ -4883,7 +5183,11 @@ module Heap =
             lock gate (fun () ->
                 match shared with
                 | ValueSome (s, _) -> s
-                | ValueNone -> buildInvocations <- buildInvocations + 1; let r = buildHeap picking deregister signature objects in shared <- ValueSome r; fst r)
+                | ValueNone ->
+                    buildInvocations <- buildInvocations + 1
+                    let r = buildHeap (getStorage (signature.Runtime :?> IRuntime)) picking deregister signature objects
+                    shared <- ValueSome r
+                    fst r)
 
         // Deterministic teardown: each task holds the ActivationRenderObject's
         // activation and disposes it when it drops the heap; the LAST drop frees
@@ -4902,7 +5206,10 @@ module Heap =
                                 | ValueNone -> ValueNone
                             else ValueNone)
                     match td with
-                    | ValueSome td -> td (); transact (fun () -> gen.Value <- gen.Value + 1)
+                    | ValueSome td ->
+                        td ()
+                        releaseStorage ()      // auto-storage bookkeeping (no-op for caller-owned)
+                        transact (fun () -> gen.Value <- gen.Value + 1)
                     | ValueNone -> () }
 
         let activationRO = ActivationRenderObject(RenderPass.main, Ag.Scope.Root, activate)
@@ -4913,24 +5220,12 @@ module Heap =
         let buckets = gen |> ASet.bind (fun _ -> ensureBuilt())
         ASet.union (ASet.single (activationRO :> IRenderObject)) buckets
 
-    /// Collapse render objects into bucket render objects — NO picking machinery
-    /// (zero per-slot pick overhead; for non-dom / non-picking use).
-    let ofRenderObjects (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
-        ofRenderObjectsCore false ignore signature objects
-
-    /// Picking-enabled collapse (entered via the dom heap node). Each input RO's
-    /// "HeapPickId" uniform is captured per-slot into the "HeapPickIds" SSBO that the
-    /// dom heap pick-shader writes into the pick buffer; `deregister` is called with a
-    /// slot's pick id when that slot is freed (so the dom side releases it).
-    let ofRenderObjectsPicking (deregister : int -> unit) (signature : IFramebufferSignature) (objects : aset<IRenderObject>) : aset<IRenderObject> =
-        ofRenderObjectsCore true deregister signature objects
-
-    /// DEFERRED collapse — the render (non-pick) path. Instead of baking a framebuffer
-    /// signature NOW (which the caller often can't know — e.g. a Normals G-buffer added by
-    /// a post-processing pass), return `SignatureDependentRenderObject`s that build the heap
-    /// LAZILY at compile time against the REAL signature. The heap's attribute-DCE then
-    /// matches the backend's shader-output-DCE exactly (an extra attachment survives instead
-    /// of SIGABRTing on a signature mismatch).
+    /// SIGNATURE-DEFERRED collapse. The caller cannot (and must not) bake a framebuffer
+    /// signature — the real render target may carry attachments it can't know (e.g. a
+    /// Normals G-buffer added by a post-processing pass). So the heap returns
+    /// `SignatureDependentRenderObject`s that build LAZILY at compile time against the
+    /// REAL signature; the heap's attribute-DCE then matches the backend's
+    /// shader-output-DCE exactly.
     ///
     /// Emits an OPAQUE + a TRANSPARENT variant (both always present, reactive): the OIT split
     /// in `TransparencyRenderTask` runs on the UN-expanded set, so the heap's transparent
@@ -4940,15 +5235,15 @@ module Heap =
     /// empty set → the WrappedTask's direct-opaque fast path kicks in (no OIT cost).
     ///
     /// The per-signature build is MEMOIZED by ATTACHMENT SEMANTICS (sorted color
-    /// (slot,name,format)), NOT by signature identity: the opaque pass compiles against the
+    /// (name,format)), NOT by signature identity: the opaque pass compiles against the
     /// intermediate FBO signature and the transparent pass against the user signature, but
     /// those carry IDENTICAL color attachments — so both collapse to ONE `ofRenderObjectsCore`
-    /// build = ONE GPU arena + ONE ref-counted activation lifecycle (the shared
-    /// `ActivationRenderObject` rides BOTH variants' Expand, so `activeTasks` counts every
-    /// task and teardown fires only when the last one drops). A pick signature (carrying a
-    /// `PickId` attachment) keys to its own build — but the pick path stays EAGER dom-side,
-    /// so in practice this deferred path only ever sees non-pick signatures.
-    let ofRenderObjectsDeferredCore (picking : bool) (deregister : int -> unit) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+    /// build = ONE ref-counted activation lifecycle (the shared `ActivationRenderObject`
+    /// rides BOTH variants' Expand, so `activeTasks` counts every task and teardown fires
+    /// only when the last one drops). The dom pick path uses this core too: its pick
+    /// signature (user semantics + `PickId` attachment) keys to its own build. ALL builds
+    /// allocate from the caller's shared `HeapStorage`.
+    let private deferredCore (getStorage : IRuntime -> HeapStorage) (releaseStorage : unit -> unit) (picking : bool) (deregister : int -> unit) (objects : aset<IRenderObject>) : aset<IRenderObject> =
         let gate = obj()
         let memo = System.Collections.Generic.Dictionary<string, aset<IRenderObject>>()
         let build (signature : IFramebufferSignature) : aset<IRenderObject> =
@@ -4969,7 +5264,7 @@ module Heap =
                 match memo.TryGetValue key with
                 | true, s -> s
                 | _ ->
-                    let s = ofRenderObjectsCore picking deregister signature objects
+                    let s = ofRenderObjectsCore getStorage releaseStorage picking deregister signature objects
                     memo.[key] <- s
                     s)
         // route buckets/passthrough by transparency; the ActivationRenderObject rides BOTH
@@ -4994,18 +5289,45 @@ module Heap =
         transparent.IsPickable <- picking
         ASet.ofList [ opaque :> IRenderObject; transparent :> IRenderObject ]
 
-    /// DEFERRED collapse — the RENDER (non-pick) path. See `ofRenderObjectsDeferredCore`.
-    let ofRenderObjectsDeferred (objects : aset<IRenderObject>) : aset<IRenderObject> =
-        ofRenderObjectsDeferredCore false ignore objects
+    /// THE heap entry point: collapse render objects into bucket render objects
+    /// (N per-object draws → one indirect multidraw per bucket), allocating from
+    /// the caller's `storage` (create one via `runtime.CreateHeapStorage()`). The
+    /// SAME storage may back any number of heaps — e.g. the main render and a
+    /// shadow pass — so shared geometry/uniforms live in GPU memory once. The
+    /// framebuffer signature is resolved at COMPILE time (signature-deferred);
+    /// non-heapable render objects pass through unchanged.
+    let ofRenderObjects (storage : HeapStorage) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        deferredCore (fun _ -> storage) ignore false ignore objects
 
-    /// DEFERRED collapse — the PICKING path (entered via the dom heap node). Like
-    /// `ofRenderObjectsPicking` but signature-deferred: instead of baking a hardcoded pick
-    /// signature (which discards whatever extra attachments — e.g. a Normals G-buffer — the
-    /// pickable target actually carries), the heap links LAZILY at compile time against the REAL
-    /// pick signature (`user semantics + PickId`). The shaders output everything (per-slot pick
-    /// write + the scene's color/normal); `linkDCE` keeps exactly what that signature declares.
-    let ofRenderObjectsPickingDeferred (deregister : int -> unit) (objects : aset<IRenderObject>) : aset<IRenderObject> =
-        ofRenderObjectsDeferredCore true deregister objects
+    /// Like `ofRenderObjects`, but with a PRIVATE auto-managed storage: created
+    /// lazily at the first build (the runtime comes off the compile-time signature)
+    /// and dropped when the last render task releases the heap — the storage lives
+    /// and dies with the heap. Use the explicit `ofRenderObjects storage` form to
+    /// share one storage across several heaps/passes (e.g. shadow mapping).
+    let ofRenderObjectsAuto (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        let gate = obj()
+        let mutable store : HeapStorage voption = ValueNone
+        let mutable refs = 0
+        let get (runtime : IRuntime) =
+            lock gate (fun () ->
+                refs <- refs + 1
+                match store with
+                | ValueSome s -> s
+                | ValueNone -> let s = HeapStorage(runtime) in store <- ValueSome s; s)
+        let release () =
+            lock gate (fun () ->
+                refs <- max 0 (refs - 1)
+                if refs = 0 then store <- ValueNone)
+        deferredCore get release false ignore objects
+
+    /// The PICKING variant (entered via the dom heap node): each input RO's
+    /// "HeapPickId" uniform is captured per-slot into the "HeapPickIds" SSBO the dom
+    /// heap pick-shader writes into the pick buffer; `deregister` is called with a
+    /// slot's pick id when that slot is freed. Signature-deferred like
+    /// `ofRenderObjects` — the pick signature (user semantics + `PickId`) reaches the
+    /// build at compile time, so extra attachments survive.
+    let ofRenderObjectsPicking (storage : HeapStorage) (deregister : int -> unit) (objects : aset<IRenderObject>) : aset<IRenderObject> =
+        deferredCore (fun _ -> storage) ignore true deregister objects
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)
@@ -5018,45 +5340,55 @@ module Heap =
     // whenever any model or the camera changes (AVal.custom over the inputs).
 
 
+/// Runtime factory for the shareable heap storage.
+[<AbstractClass; Sealed; System.Runtime.CompilerServices.Extension>]
+type HeapStorageRuntimeExtensions private() =
+    /// Create a shareable heap data store. Pass it to any number of
+    /// `Heap.ofRenderObjects` / `Heap.ofRenderObjectsPicking` calls (e.g. the main
+    /// render and a shadow pass) — their allocations dedup in the shared pages.
+    /// `pageSizeInBytes` (default 1 GiB) is clamped to the device's
+    /// storage-buffer range.
+    [<System.Runtime.CompilerServices.Extension>]
+    static member CreateHeapStorage(runtime : IRuntime,
+                                    [<System.Runtime.InteropServices.Optional;
+                                      System.Runtime.InteropServices.DefaultParameterValue(0L)>] pageSizeInBytes : int64) : Heap.HeapStorage =
+        if pageSizeInBytes > 0L then Heap.HeapStorage(runtime, pageSizeInBytes) else Heap.HeapStorage(runtime)
+
+
 // ── Sg.heap — scene-graph node for Heap.ofRenderObjects ─────────────────────
-// Collapses the subtree's render objects through `Heap.ofRenderObjects`: the
-// child's RenderObjects set is piped through the heap transform with the
-// traversal's runtime. Non-heapable ROs pass through unchanged (that is
-// `ofRenderObjects`' own behaviour), so a mixed subtree degrades gracefully.
+// Collapses the subtree's render objects through `Heap.ofRenderObjects` against
+// the given (shareable) storage. Non-heapable ROs pass through unchanged (that
+// is `ofRenderObjects`' own behaviour), so a mixed subtree degrades gracefully.
 //
 // Dual-protocol like every Sg node (mirrors GeometrySetNode):
-//   * Ag path        — RenderObjects rule (HeapApplicatorSem below); the runtime
-//     comes from the ambient `Runtime` attribute (`scope.Runtime`, seeded by
-//     `app?Runtime <- runtime` in RuntimeExtensions.toRenderObjects).
-//   * ISimpleSg path — GetRenderObjects; the runtime comes from the explicit
-//     TraversalState (`ts.Runtime`, seeded by TraversalState.withRuntime in the
-//     CompileRender entry point).
+//   * Ag path        — RenderObjects rule (HeapApplicatorSem below)
+//   * ISimpleSg path — GetRenderObjects
 [<AutoOpen>]
 module HeapSgExtensions =
     open Aardvark.SceneGraph.Simple
 
     module Sg =
-        type HeapApplicator(signature : IFramebufferSignature, child : aval<ISg>) =
+        type HeapApplicator(storage : Heap.HeapStorage, child : aval<ISg>) =
             inherit Sg.AbstractApplicator(child)
 
-            /// the framebuffer signature the heap effects are DCE-linked against. No ambient Sg
-            /// attribute carries it, so the caller supplies it (like other signature-taking nodes).
-            member _.Signature = signature
+            /// the (shareable) storage the subtree's heap allocates from
+            member _.Storage = storage
 
             // TS-direct — child ROs gathered with the unchanged TraversalState, then collapsed.
             interface ISimpleSg with
                 member _.GetRenderObjects ts =
                     child
                     |> ASet.bind (fun c -> SimpleDispatch.Get(c, ts))
-                    |> Heap.ofRenderObjects signature
+                    |> Heap.ofRenderObjects storage
 
-            new(signature : IFramebufferSignature, child : ISg) = HeapApplicator(signature, AVal.constant child)
+            new(storage : Heap.HeapStorage, child : ISg) = HeapApplicator(storage, AVal.constant child)
 
         /// Collapses the subtree's render objects through `Heap.ofRenderObjects`
-        /// (N per-object draws -> one indirect multidraw per bucket). Non-heapable
-        /// render objects pass through unchanged. Pass the framebuffer signature the
-        /// scene renders to — it's used to DCE the heap effects (drop dead attributes).
-        let heap (signature : IFramebufferSignature) (sg : ISg) : ISg = HeapApplicator(signature, AVal.constant sg) :> ISg
+        /// (N per-object draws -> one indirect multidraw per bucket), allocating
+        /// from `storage` (create one via `runtime.CreateHeapStorage()`; share it
+        /// across heaps/passes at will). Non-heapable render objects pass through
+        /// unchanged. The framebuffer signature is resolved at compile time.
+        let heap (storage : Heap.HeapStorage) (sg : ISg) : ISg = HeapApplicator(storage, AVal.constant sg) :> ISg
 
 
 namespace Aardvark.SceneGraph.Semantics
@@ -5074,11 +5406,11 @@ module HeapApplicatorSemantics =
 
         // Ag path: same child traversal as the generic IApplicator rule
         // (RenderObjectSem.RenderObjects in Semantics/RenderObject.fs), then the
-        // collapse with the scope's ambient runtime. This concrete-type rule wins
+        // collapse against the node's storage. This concrete-type rule wins
         // over the IApplicator rule (most-specific dispatch — cf. NaiveLod.LodSem).
         member x.RenderObjects(h : Sg.HeapApplicator, scope : Ag.Scope) : aset<IRenderObject> =
             aset {
                 let! c = h.Child
                 yield! c.RenderObjects(scope)
             }
-            |> Heap.ofRenderObjects h.Signature
+            |> Heap.ofRenderObjects h.Storage

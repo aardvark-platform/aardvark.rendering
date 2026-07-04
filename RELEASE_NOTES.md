@@ -1,3 +1,10 @@
+### 5.7.0-prerelease0033
+- [Sg] Heap API (breaking): storage-first + signature-deferred only — `runtime.CreateHeapStorage(?pageSizeInBytes)`, `Heap.ofRenderObjects storage`, `Heap.ofRenderObjectsAuto` (private storage, lives/dies with the heap), `Heap.ofRenderObjectsPicking storage deregister`, `Sg.heap storage`; the eager signature-taking variants and the `*Deferred*` names are removed.
+- [Sg] Heap: one `HeapStorage` backs any number of heaps/passes (e.g. main + shadow) — allocations dedup in shared pages; compaction is page-level with per-bucket participants; a heap teardown releases only its own ref-counts.
+- [Sg] Heap: bucket key covers ALL per-RO pipeline state projected onto the signature (per-written-attachment blend, depth/stencil only when the signature has them, RenderPass, viewport/scissor); the bucket RO is baked entirely from key values — nothing merges on an arbitrary member.
+- [Sg] Heap: per-RO KeyWatcher dirty-tracking — a pipeline-state aval flip re-keys only the affected ROs (no global regroup path anymore).
+- [Sg] Heap: compaction fixes — double regions keep 8-byte alignment, derived-output/constituent/chain-fold blocks are re-seated (were orphaned), header rewrites resolve per-slot pages.
+
 ### 5.7.0-prerelease0032
 - [Sg] Heap: pick path defers its DCE-link to compile time (`ofRenderObjectsPickingDeferred` + `SignatureDependentRenderObject.IsPickable`) — links against the real pick signature (user semantics + PickId), so extra target attachments like a Normals G-buffer survive picking.
 

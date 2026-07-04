@@ -160,8 +160,8 @@ module Deferred =
 
         // ── 1. opaque equivalence ─────────────────────────────────────────
         let opaque = gridOf 256 effectLit false |> ASet.ofArray
-        let eagerPix    = renderColor sigCD (Heap.ofRenderObjects sigCD opaque)
-        let deferredPix = renderColor sigCD (Heap.ofRenderObjectsDeferred opaque)
+        let eagerPix    = renderColor sigCD opaque    // classic individual draws as reference
+        let deferredPix = renderColor sigCD (Heap.ofRenderObjects (runtime.CreateHeapStorage()) opaque)
         let d1 = diff eagerPix deferredPix
         let pass1 = (let (md, nd, nbg, tot) = d1 in report "opaque-equiv" md nd nbg tot)
 
@@ -171,9 +171,9 @@ module Deferred =
                 (gridOf 128 effectLit false)
                 (gridOf 128 effectTransp true)
             |> ASet.ofArray
-        let eagerT    = renderColor sigCD (Heap.ofRenderObjects sigCD mixed)
+        let eagerT    = renderColor sigCD mixed       // classic individual draws as reference
         let before = Heap.buildInvocations
-        let deferredT = renderColor sigCD (Heap.ofRenderObjectsDeferred mixed)
+        let deferredT = renderColor sigCD (Heap.ofRenderObjects (runtime.CreateHeapStorage()) mixed)
         let builds = Heap.buildInvocations - before
         let d2 = diff eagerT deferredT
         let pass2px = (let (md, nd, nbg, tot) = d2 in report "transparent-equiv" md nd nbg tot)
@@ -186,15 +186,15 @@ module Deferred =
         // ── 3. extra attachment (Normals G-buffer) — the SIGABRT fix ───────
         let opaqueN = gridOf 256 effectN false |> ASet.ofArray
         // (a) does not crash rendering into {Colors, Normals, Depth}
-        let deferredNColor = renderColor sigCND (Heap.ofRenderObjectsDeferred opaqueN)
+        let deferredNColor = renderColor sigCND (Heap.ofRenderObjects (runtime.CreateHeapStorage()) opaqueN)
         // (b) Colors identical to the {Colors, Depth} render of the same scene
-        let deferredColorOnly = renderColor sigCD (Heap.ofRenderObjectsDeferred opaqueN)
+        let deferredColorOnly = renderColor sigCD (Heap.ofRenderObjects (runtime.CreateHeapStorage()) opaqueN)
         let d3c = diff deferredColorOnly deferredNColor
         let pass3c = (let (md, nd, nbg, tot) = d3c in report "extra-attach-color" md nd nbg tot)
         // (c) the Normals attachment is actually written (non-cleared coverage); read from
         // the Rgba8 twin so uint8 download works — the Rgba16f render above already proved
         // the float G-buffer format renders without crashing.
-        let normalsPix = renderSem sigCND8 DefaultSemantic.Normals (Heap.ofRenderObjectsDeferred opaqueN)
+        let normalsPix = renderSem sigCND8 DefaultSemantic.Normals (Heap.ofRenderObjects (runtime.CreateHeapStorage()) opaqueN)
         let nv = normalsPix.GetMatrix<C4b>()
         let mutable nWritten = 0L
         nv.ForeachCoord(fun (c : V2l) -> let px = nv.[c] in if int px.R + int px.G + int px.B > 12 then nWritten <- nWritten + 1L)
@@ -203,8 +203,10 @@ module Deferred =
         if pass3n then Log.line "deferred[extra-attach-normals]: PASS" else Log.warn "deferred[extra-attach-normals]: FAIL — Normals target not written"
         let pass3 = pass3c && pass3n
 
-        // ── 4. lifecycle: resize / teardown / rebuild loop ────────────────
-        let deferredLoop = Heap.ofRenderObjectsDeferred opaque
+        // ── 4. lifecycle: resize / teardown / rebuild loop. Uses the AUTO-storage
+        //    variant, so every teardown/rebuild cycle also creates/drops a private
+        //    HeapStorage — the auto lifecycle must not leak or crash. ──
+        let deferredLoop = Heap.ofRenderObjectsAuto opaque
         System.GC.Collect(); System.GC.WaitForPendingFinalizers()
         let rss0 = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64
         let sizes = [| 256; 384; 512; 768; 512; 256 |]
@@ -225,7 +227,33 @@ module Deferred =
         if pass4 then Log.line "deferred[lifecycle]: PASS" else Log.warn "deferred[lifecycle]: FAIL (crashed=%b grewMB=%.1f)" crashed grewMB
 
         transact (fun () -> size.Value <- V2i(512, 512))
-        let allPass = pass1 && pass2 && pass3 && pass4
-        if allPass then Log.line "deferred: ALL PASS (opaque-equiv + transparent+shared-persig + extra-attachment + lifecycle)"
+
+        // ── 5. ONE HeapStorage shared by TWO heaps (the shadow-mapping shape):
+        //    both heaps' allocations dedup in the same pages; both render correctly
+        //    while alive TOGETHER, and tearing one down (task disposal releases its
+        //    ref-counts) must leave the other fully functional. ──
+        let sharedStore = runtime.CreateHeapStorage()
+        let refPix = renderColor sigCD opaque
+        let heapA = Heap.ofRenderObjects sharedStore opaque
+        let heapB = Heap.ofRenderObjects sharedStore opaque
+        let taskA = runtime.CompileRender(sigCD, heapA)
+        let taskB = runtime.CompileRender(sigCD, heapB)
+        let snap (task : IRenderTask) =
+            let out = task |> RenderTask.renderToColor size
+            out.Acquire()
+            try out.GetValue().Download().AsPixImage<uint8>()
+            finally out.Release()
+        let pixA = snap taskA
+        let pixB = snap taskB
+        taskA.Dispose()                                  // heap A tears down; storage must survive
+        let pixB2 = snap taskB
+        taskB.Dispose()
+        let ok label pix =
+            let (md, nd, nbg, tot) = diff refPix pix
+            report label md nd nbg tot
+        let pass5 = ok "shared-storage-A" pixA && ok "shared-storage-B" pixB && ok "shared-storage-B-after-A-teardown" pixB2
+
+        let allPass = pass1 && pass2 && pass3 && pass4 && pass5
+        if allPass then Log.line "deferred: ALL PASS (opaque-equiv + transparent+shared-persig + extra-attachment + lifecycle + shared-storage)"
         else Log.warn "deferred: FAILED"
         allPass

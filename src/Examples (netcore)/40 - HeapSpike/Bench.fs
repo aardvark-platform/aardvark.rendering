@@ -98,7 +98,7 @@ module Bench =
             sw.Stop()
             sw.Elapsed.TotalMilliseconds / float k
 
-        let heap = Heap.ofRenderObjects signature
+        let heap = Heap.ofRenderObjects (runtime.CreateHeapStorage())
 
         printfn ""
         printfn "  N    | ALL changed/frame      | 16 changed/frame       | draws"

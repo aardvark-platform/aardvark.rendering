@@ -398,7 +398,7 @@ module HeapUniforms =
                     mkRO (common @ perObj i) effect)
 
             let classic = renderPix runtime signature (ASet.ofArray objs)
-            let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+            let heap    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray objs))
             let maxDelta, nNonBg, total = compare classic heap
             Expect.isLessThanOrEqual maxDelta 1 (sprintf "classic vs heap max channel delta (%d buckets)" Heap.lastBucketCount)
             Expect.isGreaterThan nNonBg 100L "scene rendered blank — nothing to compare"
@@ -435,7 +435,7 @@ module HeapUniforms =
             let add (ids : int list) = transact (fun () -> for id in ids do let ro = cube id (colOf id) in byId.[id] <- ro; cubes.Add ro |> ignore)
             let remove (ids : int list) = transact (fun () -> for id in ids do match byId.TryGetValue id with | true, ro -> cubes.Remove ro |> ignore; byId.Remove id |> ignore | _ -> ())
 
-            let heapObjs = Heap.ofRenderObjects signature (cubes :> aset<IRenderObject>)
+            let heapObjs = Heap.ofRenderObjects (runtime.CreateHeapStorage()) (cubes :> aset<IRenderObject>)
             use heapTask = runtime.CompileRender(signature, heapObjs)
             let heapOut = heapTask |> RenderTask.renderToColor (AVal.constant (V2i(256)))
             heapOut.Acquire()
@@ -463,7 +463,7 @@ module HeapUniforms =
             let cols = Array.init 6 (fun _ -> AVal.init (V4f(0.3f, 0.3f, 0.6f, 1.0f)))
             let objs = Array.init 6 (fun i -> cube i (cols.[i] :> IAdaptiveValue))
             let set = ASet.ofArray objs
-            use heapTask    = runtime.CompileRender(signature, Heap.ofRenderObjects signature set)
+            use heapTask    = runtime.CompileRender(signature, Heap.ofRenderObjects (runtime.CreateHeapStorage()) set)
             use classicTask = runtime.CompileRender(signature, set)
             let heapOut    = heapTask    |> RenderTask.renderToColor (AVal.constant (V2i(256)))
             let classicOut = classicTask |> RenderTask.renderToColor (AVal.constant (V2i(256)))
@@ -499,7 +499,7 @@ module HeapUniforms =
                            Symbol.Create "HeapColor",      col i
                            Symbol.Create "ViewProjTrafo",  viewProj ] e)
             let classic = renderPix runtime signature (ASet.ofArray objs)
-            let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+            let heap    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray objs))
             let buckets = Heap.lastBucketCount
             let maxDelta, nNonBg, _ = compare classic heap
             Expect.equal buckets 2 (sprintf "two distinct effects should give 2 buckets, got %d" buckets)
@@ -532,7 +532,7 @@ module HeapUniforms =
                     mkRO [ Symbol.Create "ModelViewProjTrafo", (AVal.constant mvp :> IAdaptiveValue)
                            Symbol.Create "HeapColor",          col i ] eff)
             let classicPix = renderPix runtime signature (ASet.ofArray classicObjs)
-            let heapPix    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray heapObjs))
+            let heapPix    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray heapObjs))
             let maxDelta, nNonBg, _ = compare classicPix heapPix
             Expect.isLessThanOrEqual maxDelta 1 (sprintf "derived MVP: heap fp64-compose vs classic precomposed (%d buckets)" Heap.lastBucketCount)
             Expect.isGreaterThan nNonBg 100L "derived rendered blank"
@@ -549,7 +549,7 @@ module HeapUniforms =
             let add (ids : int list) = transact (fun () -> for id in ids do let ro = cube id (colOf id) in byId.[id] <- ro; cubes.Add ro |> ignore)
             let remove (ids : int list) = transact (fun () -> for id in ids do match byId.TryGetValue id with | true, ro -> cubes.Remove ro |> ignore; byId.Remove id |> ignore | _ -> ())
 
-            let heapObjs = Heap.ofRenderObjects signature (cubes :> aset<IRenderObject>)
+            let heapObjs = Heap.ofRenderObjects (runtime.CreateHeapStorage()) (cubes :> aset<IRenderObject>)
             use heapTask = runtime.CompileRender(signature, heapObjs)
             let heapOut = heapTask |> RenderTask.renderToColor (AVal.constant (V2i(256)))
             heapOut.Acquire()
@@ -617,7 +617,7 @@ module HeapUniforms =
             let classicObjs = grid 16 |> Array.map (fun (i, p) -> mkRO (common p @ [ Symbol.Create "DiffuseTexture", (AVal.constant texArray.[i % texCount] :> IAdaptiveValue) ]) effC)
             let heapObjs    = grid 16 |> Array.map (fun (i, p) -> mkRO (common p @ [ Symbol.Create "HeapTexIndex", (AVal.constant (i % texCount) :> IAdaptiveValue); Symbol.Create "Textures", texArrayU ]) effH)
             let classicPix = renderPix runtime signature (ASet.ofArray classicObjs)
-            let heapPix    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray heapObjs))
+            let heapPix    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray heapObjs))
             let maxDelta, nNonBg, _ = compare classicPix heapPix
             Expect.isLessThanOrEqual maxDelta 1 (sprintf "bindless heap textures vs classic per-object sampler (%d buckets)" Heap.lastBucketCount)
             Expect.isGreaterThan nNonBg 100L "textured scene rendered blank"
@@ -654,7 +654,7 @@ module HeapUniforms =
                       Symbol.Create "ViewProjTrafo",  viewProj ]
                 let objs = grid 16 |> Array.map (fun (i, p) -> mkRO (common p @ [ Symbol.Create "DiffuseArray", (AVal.constant (texArray.[i % texCount] :> ITexture) :> IAdaptiveValue) ]) eff)
                 let classic = renderPix runtime signature (ASet.ofArray objs)
-                let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+                let heap    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray objs))
                 Expect.equal Heap.lastBucketCount 1 "Sampler2dArray ROs must collapse to one heap bucket (auto-bindless)"
                 let maxDelta, nNonBg, _ = compare classic heap
                 Expect.isLessThanOrEqual maxDelta 1 "Sampler2dArray bindless heap vs classic"
@@ -687,7 +687,7 @@ module HeapUniforms =
                       Symbol.Create "ViewProjTrafo",  viewProj ]
                 let objs = grid 16 |> Array.map (fun (i, p) -> mkRO (common p @ [ Symbol.Create "ShadowMap", (AVal.constant (texArray.[i % texCount] :> ITexture) :> IAdaptiveValue) ]) eff)
                 let classic = renderPix runtime signature (ASet.ofArray objs)
-                let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+                let heap    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray objs))
                 Expect.equal Heap.lastBucketCount 1 "Sampler2dShadow ROs must collapse to one heap bucket (auto-bindless)"
                 let maxDelta, nNonBg, _ = compare classic heap
                 Expect.isLessThanOrEqual maxDelta 1 "Sampler2dShadow bindless heap vs classic"
@@ -725,7 +725,7 @@ module HeapUniforms =
                       Symbol.Create "ViewProjTrafo",  viewProj ]
                 let objs = grid 16 |> Array.map (fun (i, p) -> mkRO (common p @ [ Symbol.Create "Vol3d", (AVal.constant (texArray.[i % texCount] :> ITexture) :> IAdaptiveValue) ]) eff)
                 let classic = renderPix runtime signature (ASet.ofArray objs)
-                let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+                let heap    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray objs))
                 Expect.equal Heap.lastBucketCount 1 "Sampler3d ROs must collapse to one heap bucket (auto-bindless)"
                 let maxDelta, nNonBg, _ = compare classic heap
                 Expect.isLessThanOrEqual maxDelta 1 "Sampler3d bindless heap vs classic"
@@ -765,7 +765,7 @@ module HeapUniforms =
                     mkRO (common p @ [ Symbol.Create "TexN", (AVal.constant t :> IAdaptiveValue)
                                        Symbol.Create "TexL", (AVal.constant t :> IAdaptiveValue) ]) eff)
                 let classic = renderPix runtime signature (ASet.ofArray objs)
-                let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+                let heap    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray objs))
                 Expect.equal Heap.lastBucketCount 1 "two-state ROs must collapse to one heap bucket"
                 let maxDelta, nNonBg, _ = compare classic heap
                 Expect.isLessThanOrEqual maxDelta 1 "two sampler states (nearest + linear) heap vs classic"
@@ -797,7 +797,7 @@ module HeapUniforms =
                       Symbol.Create "ViewProjTrafo",  viewProj ] colEffect
             let objs = grid 12 |> Array.map (fun (i, p) -> mk i p)
             let classic = renderPix runtime signature (ASet.ofArray objs)
-            let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+            let heap    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray objs))
             let maxDelta, nNonBg, _ = compare classic heap
             Expect.isLessThanOrEqual maxDelta 1 (sprintf "heterogeneous-mesh heap vs classic (%d buckets)" Heap.lastBucketCount)
             Expect.isGreaterThan nNonBg 100L "heterogeneous geometry rendered blank"
@@ -828,7 +828,7 @@ module HeapUniforms =
                 let classicObjs = grid 12 |> Array.map (fun (i, p) -> mkRO (common p @ [ Symbol.Create "DiffuseTexture", (AVal.constant texArray.[i % texCount] :> IAdaptiveValue) ]) effC)
                 let heapObjs    = grid 12 |> Array.map (fun (i, p) -> mkRO (common p @ [ Symbol.Create "HeapTexIndex", (AVal.constant (i % texCount) :> IAdaptiveValue); Symbol.Create "Textures", texArrayU ]) effH)
                 let classicPix = renderPix runtime signature (ASet.ofArray classicObjs)
-                let heapPix    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray heapObjs))
+                let heapPix    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray heapObjs))
                 let maxDelta, nNonBg, _ = compare classicPix heapPix
                 Expect.isLessThanOrEqual maxDelta 4 (sprintf "atlas-fallback heap vs classic (%d buckets)" Heap.lastBucketCount)
                 Expect.isGreaterThan nNonBg 100L "atlas textured rendered blank"
@@ -862,7 +862,7 @@ module HeapUniforms =
                 ro :> IRenderObject
             let objs = grid 12 |> Array.map (fun (_, p) -> mk p)
             let classic = renderPix runtime signature (ASet.ofArray objs)
-            let heap    = renderPix runtime signature (Heap.ofRenderObjects signature (ASet.ofArray objs))
+            let heap    = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray objs))
             // must actually COLLAPSE (else a pass-through would pass without exercising
             // the int/matrix attribute decode at all)
             Expect.equal Heap.lastBucketCount 1 "int+matrix-attr ROs must collapse to one heap bucket (not pass through)"
