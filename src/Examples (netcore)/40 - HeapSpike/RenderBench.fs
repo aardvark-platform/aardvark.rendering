@@ -59,6 +59,24 @@ module RenderBench =
                 return { v with pos = uniform.ViewProjTrafo * v.pos }
             }
 
+        type PV = {
+            [<Position>]   pos : V4f
+            [<Normal>]     n   : V3f
+            [<Color>]      c   : V4f
+            [<InstanceId>] iid : int
+        }
+
+        /// probe: per-object translation via gl_InstanceIndex -> SSBO. The SAME shader
+        /// serves BOTH probe variants: n records with FirstInstance = i (gl_InstanceIndex
+        /// = i) and ONE record with InstanceCount = n (hardware instance loop) — only
+        /// the record structure differs, isolating the front-end's per-record cost.
+        let probeVert (v : PV) =
+            vertex {
+                let offs : V4f[] = uniform?StorageBuffer?Offsets
+                let p = v.pos + offs.[v.iid]
+                return { v with pos = uniform.ViewProjTrafo * p }
+            }
+
         let lit (v : V) =
             fragment {
                 let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
@@ -217,6 +235,57 @@ module RenderBench =
             let gpu, cpu, minGpu = measure runtime task fbo frames
             Log.line "renderbench[%s]: GPU %.2f ms/frame (min %.2f)   task.Run CPU %.2f ms/frame" label gpu minGpu cpu
             gpu
+
+        if argv |> Array.contains "--probe" then
+            // ── FE probe: IDENTICAL vertex work, identical shader — n indirect records
+            //    (FirstInstance = i, InstanceCount = 1) vs ONE instanced record
+            //    (InstanceCount = n). Isolates the GPU front-end's per-record cost
+            //    against the primitive distributor's per-instance cost — the merged-
+            //    record design bets the latter is far cheaper. ──
+            let t = (minTris + maxTris) / 2
+            let (ps0, ns0, idx0) =
+                // fixed-size cone (deterministic): exactly t triangles
+                let ps = Array.init (t + 1) (fun k ->
+                    if k = 0 then V3f(0.0f, 0.0f, 0.45f)
+                    else let a = float32 (k-1) / float32 t * float32 Constant.PiTimesTwo in V3f(0.4f * cos a, 0.4f * sin a, 0.0f))
+                let ns = Array.init (t + 1) (fun k ->
+                    if k = 0 then V3f.OOI
+                    else let a = float32 (k-1) / float32 t * float32 Constant.PiTimesTwo in Vec.normalize (V3f(cos a, sin a, 0.7f)))
+                let idx = Array.init (t * 3) (fun j ->
+                    let k = j / 3
+                    match j % 3 with 0 -> 0 | 1 -> 1 + k | _ -> 1 + ((k + 1) % t))
+                ps, ns, idx
+            let vc = t * 3
+            let soupP = Array.init vc (fun k -> ps0.[idx0.[k]])
+            let soupN = Array.init vc (fun k -> ns0.[idx0.[k]])
+            let soupC = Array.create vc C4b.White
+            let offsets = Array.init n (fun i -> V4f(V3f (posOf i), 0.0f))
+            let probeEffect = Effect.compose [ Effect.ofFunction Sh.probeVert; Effect.ofFunction Sh.lit ]
+            let probeRO (calls : DrawCalls) =
+                let ro = RenderObject()
+                ro.Surface <- Surface.Effect probeEffect
+                ro.Mode    <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <-
+                    AttributeProvider.ofList [
+                        DefaultSemantic.Positions, bv soupP typeof<V3f>
+                        DefaultSemantic.Normals,   bv soupN typeof<V3f>
+                        DefaultSemantic.Colors,    bv soupC typeof<C4b> ]
+                ro.DrawCalls <- calls
+                ro.Uniforms  <-
+                    UniformProvider.ofList [
+                        Symbol.Create "ViewProjTrafo", viewProj
+                        Symbol.Create "Offsets", (AVal.constant offsets :> IAdaptiveValue) ]
+                ro :> IRenderObject
+            let records =
+                Array.init n (fun i -> DrawCallInfo(FaceVertexCount = vc, FirstIndex = 0, BaseVertex = 0, FirstInstance = i, InstanceCount = 1))
+            let one =
+                [| DrawCallInfo(FaceVertexCount = vc, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = n) |]
+            Log.line "probe: %d objects x %d verts (%.1f M verts), identical shader" n vc (float n * float vc / 1e6)
+            let mdi  = renderWith "probe-n-records"   (ASet.single (probeRO (DrawCalls.Indirect (AVal.constant (IndirectBuffer.ofArray records)))))
+            let inst = renderWith "probe-1-instanced" (ASet.single (probeRO (DrawCalls.Indirect (AVal.constant (IndirectBuffer.ofArray one)))))
+            Log.line "probe: n-records / instanced = %.2fx" (mdi / inst)
+            0
+        else
 
         // ── heap: n objects -> bucket indirect draws ──
         let heapObjs = Array.init n (mkHeapRO viewProj)
