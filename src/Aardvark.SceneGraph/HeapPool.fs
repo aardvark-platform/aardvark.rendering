@@ -1465,7 +1465,9 @@ module Heap =
     [<ReflectedDefinition>]
     let private decodeHeapV4f (r : int) (v : int) : V4f =
         let tid = uniform.HeapDataI.[r]
-        let e = v % uniform.HeapDataI.[r + 1]
+        // `% length` only serves the length-1 singleton broadcast (indices are
+        // always < length otherwise) — a select avoids the emulated integer division
+        let e = if uniform.HeapDataI.[r + 1] = 1 then 0 else v
         if tid = 13 then                                            // f32 x3 (V3f/C3f)
             let o = r + 4 + e * 3
             V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], 1.0f)
@@ -1509,7 +1511,9 @@ module Heap =
     [<ReflectedDefinition>]
     let private decodeHeapV4i (r : int) (v : int) : V4i =
         let tid = uniform.HeapDataI.[r]
-        let e = v % uniform.HeapDataI.[r + 1]
+        // `% length` only serves the length-1 singleton broadcast (indices are
+        // always < length otherwise) — a select avoids the emulated integer division
+        let e = if uniform.HeapDataI.[r + 1] = 1 then 0 else v
         if tid = 23 then                                            // i32 x3
             let o = r + 4 + e * 3
             V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], 1)
@@ -1553,18 +1557,18 @@ module Heap =
     // matrix shape (a matrix attribute isn't widened/cast across sizes).
     [<ReflectedDefinition>]
     let private decodeHeapM22f (r : int) (v : int) : M22f =
-        let o = r + 4 + (v % uniform.HeapDataI.[r + 1]) * 4
+        let o = r + 4 + (if uniform.HeapDataI.[r + 1] = 1 then 0 else v) * 4
         M22f(uniform.HeapData.[o+0], uniform.HeapData.[o+1],
              uniform.HeapData.[o+2], uniform.HeapData.[o+3])
     [<ReflectedDefinition>]
     let private decodeHeapM33f (r : int) (v : int) : M33f =
-        let o = r + 4 + (v % uniform.HeapDataI.[r + 1]) * 9
+        let o = r + 4 + (if uniform.HeapDataI.[r + 1] = 1 then 0 else v) * 9
         M33f(uniform.HeapData.[o+0], uniform.HeapData.[o+1], uniform.HeapData.[o+2],
              uniform.HeapData.[o+3], uniform.HeapData.[o+4], uniform.HeapData.[o+5],
              uniform.HeapData.[o+6], uniform.HeapData.[o+7], uniform.HeapData.[o+8])
     [<ReflectedDefinition>]
     let private decodeHeapM44f (r : int) (v : int) : M44f =
-        let o = r + 4 + (v % uniform.HeapDataI.[r + 1]) * 16
+        let o = r + 4 + (if uniform.HeapDataI.[r + 1] = 1 then 0 else v) * 16
         M44f(uniform.HeapData.[o+0],  uniform.HeapData.[o+1],  uniform.HeapData.[o+2],  uniform.HeapData.[o+3],
              uniform.HeapData.[o+4],  uniform.HeapData.[o+5],  uniform.HeapData.[o+6],  uniform.HeapData.[o+7],
              uniform.HeapData.[o+8],  uniform.HeapData.[o+9],  uniform.HeapData.[o+10], uniform.HeapData.[o+11],
