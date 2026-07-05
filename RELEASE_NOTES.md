@@ -1,3 +1,9 @@
+### 5.7.0-prerelease0034
+- [Sg] Heap render perf: field/attribute gathers hoisted to one let per (name, type) per stage; singleton broadcast via `min` instead of `% length`; decode ladder = 3 hot arms + one generic arm. renderbench (700k unique 10-100-tri objects): 22.0 -> 18.3 ms/frame (2.37x -> 1.98x vs baked single-draw floor).
+- [Sg] Heap: all mirror buffers (headers, draw records, slot attrs, pick ids, chain links) are device-local — no BAR-size surprises on other GPUs.
+- [Sg] Heap: binding a LENGTH-1 buffer to an attribute broadcasts like a singleton (tested pixel-identical to `SingleValueBuffer`; the latter stays the ADAPTIVE variant).
+- [Sg] HeapSpike `renderbench`: synthetic GPU-time benchmark (heap vs baked floor, Vienna-shaped unique geometry, probes for records/packing/indirection/decode variants, `--window` turntable for Nsight).
+
 ### 5.7.0-prerelease0033
 - [Sg] Heap API (breaking): storage-first + signature-deferred only — `runtime.CreateHeapStorage(?pageSizeInBytes)`, `Heap.ofRenderObjects storage`, `Heap.ofRenderObjectsAuto` (private storage, lives/dies with the heap), `Heap.ofRenderObjectsPicking storage deregister`, `Sg.heap storage`; the eager signature-taking variants and the `*Deferred*` names are removed.
 - [Sg] Heap: one `HeapStorage` backs any number of heaps/passes (e.g. main + shadow) — allocations dedup in shared pages; compaction is page-level with per-bucket participants; a heap teardown releases only its own ref-counts.

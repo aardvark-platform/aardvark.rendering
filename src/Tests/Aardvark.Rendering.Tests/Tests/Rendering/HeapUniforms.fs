@@ -311,6 +311,26 @@ module HeapUniforms =
                 return V4f(v.c.XYZ * d, 1.0f)
             }
 
+    // reads the Colors VERTEX ATTRIBUTE — target of the length-1-buffer broadcast test
+    module private LenOneSh =
+        type V = {
+            [<Position>] pos : V4f
+            [<Normal>]   n   : V3f
+            [<Color>]    c   : V4f
+        }
+        let vtx (v : V) =
+            vertex {
+                let m  : M44f = uniform?HeapModelTrafo
+                let vp : M44f = uniform?ViewProjTrafo
+                return { v with pos = vp * (m * v.pos); n = m.TransformDir v.n }
+            }
+        let frag (v : V) =
+            fragment {
+                let l = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
+                let d = 0.25f + 0.75f * max 0.0f (Vec.dot (Vec.normalize v.n) l)
+                return V4f(v.c.XYZ * d, 1.0f)
+            }
+
     module private Harness =
         let private g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
         let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
@@ -802,6 +822,39 @@ module HeapUniforms =
             Expect.isLessThanOrEqual maxDelta 1 (sprintf "heterogeneous-mesh heap vs classic (%d buckets)" Heap.lastBucketCount)
             Expect.isGreaterThan nNonBg 100L "heterogeneous geometry rendered blank"
 
+        /// SINGLETON via a LENGTH-1 BUFFER: binding a 1-element buffer to an attribute
+        /// BROADCASTS to every vertex (the allocation's length-1 clamps the element
+        /// index), exactly like a SingleValueBuffer — pixel-identical by construction.
+        let lengthOneBuffer (runtime : IRuntime) =
+            skipUnlessHeapVulkan runtime
+            use signature = sig256 runtime
+            let eff = Effect.compose [ Effect.ofFunction LenOneSh.vtx; Effect.ofFunction LenOneSh.frag ]
+            let colOf i = C4b(byte (60 + 20 * (i % 9)), 200uy, 120uy, 255uy)
+            let mk (single : bool) (i : int) (p : V3d) =
+                let ro = RenderObject()
+                ro.Surface <- Surface.Effect eff
+                ro.Mode    <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <-
+                    AttributeProvider.ofList [
+                        DefaultSemantic.Positions, bv positions typeof<V3f>
+                        DefaultSemantic.Normals,   bv normals typeof<V3f>
+                        DefaultSemantic.Colors,
+                            (if single then BufferView(SingleValueBuffer<C4b>(AVal.constant (colOf i)), typeof<C4b>)
+                             else bv [| colOf i |] typeof<C4b>) ]
+                ro.Indices   <- Some (bv index typeof<int>)
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+                ro.Uniforms  <-
+                    UniformProvider.ofList [
+                        Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                        Symbol.Create "ViewProjTrafo",  viewProj ]
+                ro :> IRenderObject
+            let buf1   = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray (grid 12 |> Array.map (fun (i, p) -> mk false i p))))
+            Expect.equal Heap.lastBucketCount 1 "length-1-buffer ROs must collapse (not pass through)"
+            let single = renderPix runtime signature (Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray (grid 12 |> Array.map (fun (i, p) -> mk true i p))))
+            let maxDelta, nNonBg, _ = compare buf1 single
+            Expect.isLessThanOrEqual maxDelta 0 "length-1 buffer attribute must broadcast exactly like a SingleValueBuffer"
+            Expect.isGreaterThan nNonBg 100L "singleton scene rendered blank"
+
         /// TEXTURE ATLAS fallback: force the Sampler2d atlas path (the non-descriptor-
         /// indexing route) and compare to a classic per-object sampler. Solid tiles +
         /// interior tex-coords -> atlas sampling is exact.
@@ -938,5 +991,6 @@ module HeapUniforms =
           "Bindless Sampler3d",             Harness.texture3d
           "Heterogeneous geometry",         Harness.heterogeneousGeometry
           "Texture atlas fallback",         Harness.texturesAtlas
-          "Int + matrix attributes",        Harness.attributes ]
+          "Int + matrix attributes",        Harness.attributes
+          "Singleton via length-1 buffer",  Harness.lengthOneBuffer ]
         |> prepareCases backend "Heap uniforms"
