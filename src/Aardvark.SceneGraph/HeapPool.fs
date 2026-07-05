@@ -3097,6 +3097,15 @@ module Heap =
         let mutable csStaging : int[] = Array.zeroCreate 64       // authoritative CPU mirror
         let csDirty = System.Collections.Generic.List<struct(int * int)>()
         let mutable csFullDirty = false
+        /// sparse-edit ranges only pay off while they stay FEW: bulk ingest (one
+        /// range per added slot) must not turn the first flush into a million
+        /// upload calls — past the cap, collapse to one full rewrite.
+        let csMarkDirty (o : int) (n : int) =
+            if not csFullDirty then
+                if csDirty.Count >= 2048 then
+                    csDirty.Clear()
+                    csFullDirty <- true
+                else csDirty.Add(struct(o, n))
         let classIdxOfList (page : int) (cls : int) =
             let idx = page * (numClasses + 1) + cls
             while classLists.Count <= idx do
@@ -3138,7 +3147,7 @@ module Heap =
                     csCursor <- csCursor + newCap
                     csEnsureStaging csCursor
                     for j in 0 .. l.Count - 1 do csStaging.[nb + j] <- l.[j]
-                    if l.Count > 0 && not csFullDirty then csDirty.Add(struct(nb, l.Count))
+                    if l.Count > 0 then csMarkDirty nb l.Count
                     classBase.[idx] <- nb
                     classCap.[idx] <- newCap
         let mutable clusterClsOf : int[] = Array.create 16 -1     // slot -> class idx (numClasses = oversized; -1 = not listed)
@@ -3155,7 +3164,7 @@ module Heap =
                 clusterClsOf.[slot] <- cls
                 clusterPosOf.[slot] <- l.Count
                 csStaging.[classBase.[idx] + l.Count] <- slot
-                if not csFullDirty then csDirty.Add(struct(classBase.[idx] + l.Count, 1))
+                csMarkDirty (classBase.[idx] + l.Count) 1
                 l.Add slot
         let classRemove (slot : int) =
             let cls = clusterClsOf.[slot]
@@ -3168,7 +3177,7 @@ module Heap =
                 clusterPosOf.[last] <- pos
                 l.RemoveAt(l.Count - 1)
                 csStaging.[classBase.[idx] + pos] <- last
-                if not csFullDirty then csDirty.Add(struct(classBase.[idx] + pos, 1))
+                csMarkDirty (classBase.[idx] + pos) 1
                 clusterClsOf.[slot] <- -1
         let symPickId = Symbol.Create "HeapPickId"
         let zeroDraw = DrawCallInfo(FaceVertexCount = 0, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 0)
@@ -3653,8 +3662,16 @@ module Heap =
                 csDirty.Clear()
                 if csCursor > 0 then classSlotsBuf.Write(csStaging, 0UL, 0, csCursor)
             elif csDirty.Count > 0 then
-                for (struct(o, n)) in csDirty do
-                    classSlotsBuf.Write(csStaging, uint64 (o * 4), o, n)
+                csDirty.Sort(fun (struct(a, _)) (struct(b, _)) -> compare a b)
+                // small gaps merge — csStaging is the always-valid source of truth
+                let flush lo hi = classSlotsBuf.Write(csStaging, uint64 (lo * 4), lo, hi - lo)
+                let mutable lo = let (struct(o, _)) = csDirty.[0] in o
+                let mutable hi = let (struct(o, n)) = csDirty.[0] in o + n
+                for i in 1 .. csDirty.Count - 1 do
+                    let (struct(o, n)) = csDirty.[i]
+                    if o <= hi + 256 then hi <- max hi (o + n)
+                    else flush lo hi; lo <- o; hi <- o + n
+                flush lo hi
                 csDirty.Clear()
         let clusterRecs = System.Collections.Generic.List<DrawCallInfo>()
 

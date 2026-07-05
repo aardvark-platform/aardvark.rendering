@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0036
+- [Sg] Heap: fixed cluster bulk-ingest regression — building a large scene accumulated one dirty range per added slot, turning the first ClassSlots flush into a million-upload storm (Vienna full-city first frame 121 -> 179 s on 0035). Past 2048 sparse ranges the flush collapses to ONE full rewrite; surviving sparse ranges sort + gap-merge like the draw mirror. Steady-state edits stay O(changed).
+
 ### 5.7.0-prerelease0035
 - [Sg] Heap: CLUSTERED draw records — slots grouped into 51 padded size classes, one instanced record per (page, class) with a `ClassSlots` gl_InstanceIndex->slot indirection; restores warp residency for many-tiny-object scenes. renderbench @700k unique 10-100-tri objects: 18.3 -> 13.9 ms (1.98x -> 1.50x vs the baked single-draw floor); huge geometry (32 x 400k tris) at 0.99x parity. O(changed) membership/gate updates (capacity regions, single-int dirty writes); oversized slots keep exact per-slot records; Vulkan/MoltenVK non-instanced TriangleList buckets only; `HEAP_NO_CLUSTERS=1` kill switch.
 
