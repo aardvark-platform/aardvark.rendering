@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0035
+- [Sg] Heap: CLUSTERED draw records — slots grouped into 51 padded size classes, one instanced record per (page, class) with a `ClassSlots` gl_InstanceIndex->slot indirection; restores warp residency for many-tiny-object scenes. renderbench @700k unique 10-100-tri objects: 18.3 -> 13.9 ms (1.98x -> 1.50x vs the baked single-draw floor); huge geometry (32 x 400k tris) at 0.99x parity. O(changed) membership/gate updates (capacity regions, single-int dirty writes); oversized slots keep exact per-slot records; Vulkan/MoltenVK non-instanced TriangleList buckets only; `HEAP_NO_CLUSTERS=1` kill switch.
+
 ### 5.7.0-prerelease0034
 - [Sg] Heap render perf: field/attribute gathers hoisted to one let per (name, type) per stage; singleton broadcast via `min` instead of `% length`; decode ladder = 3 hot arms + one generic arm. renderbench (700k unique 10-100-tri objects): 22.0 -> 18.3 ms/frame (2.37x -> 1.98x vs baked single-draw floor).
 - [Sg] Heap: all mirror buffers (headers, draw records, slot attrs, pick ids, chain links) are device-local — no BAR-size surprises on other GPUs.
