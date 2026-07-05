@@ -87,6 +87,18 @@ type DevicePtr =
     member this.CopyTo(size: uint64, dst: nativeint) =
         this.CopyTo(0UL, size, dst)
 
+    /// Persistent host pointer of the (host-visible, persistently mapped) allocation; 0n otherwise.
+    member this.MappedPointer : nativeint =
+        if this.hostVisible then this.allocationInfo.allocationInfo.pMappedData
+        else 0n
+
+    /// Flush a range of a host-visible allocation so host writes through the mapped
+    /// pointer become device-visible (no-op for coherent memory).
+    member this.Flush(offset: uint64, size: uint64) =
+        if this.hostVisible then
+            Vma.flushAllocation(this.allocator, this.allocation, offset, size)
+                |> checkf "could not flush memory allocation"
+
     member this.Mapped (offset: uint64, size: uint64, action: nativeint -> 'T) =
         if not this.hostVisible then
             raise <| NotSupportedException("[Vulkan] Cannot map memory allocation without host access.")

@@ -115,12 +115,21 @@ module Heap =
 
     let private cint (v : int) : Expr<int> = Expr.Value v |> Expr.Cast
 
+    // ── pointer writers: all per-draw packing goes STRAIGHT into the arena's
+    //    upload ring (mapped host-visible memory or a pinned fallback array) at a
+    //    word offset relative to the span base. Doubles rely on the ring aligning
+    //    every span to the arena offset's 8-byte parity (see HeapArena.StageWords).
+    let inline private wf (p : nativeint) (i : int) (v : float32) =
+        NativePtr.write (NativePtr.ofNativeInt<float32> (p + nativeint (i <<< 2))) v
+    let inline private memcpy (src : nativeint) (dst : nativeint) (bytes : int) =
+        System.Buffer.MemoryCopy(src.ToPointer(), dst.ToPointer(), int64 bytes, int64 bytes)
+
     // ── matrix packing (extend the type table in gatherFor / packerFor) ──
-    let private packM44 (m : M44f) (a : float32[]) (o : int) =
-        a.[o+0]  <- m.M00; a.[o+1]  <- m.M01; a.[o+2]  <- m.M02; a.[o+3]  <- m.M03
-        a.[o+4]  <- m.M10; a.[o+5]  <- m.M11; a.[o+6]  <- m.M12; a.[o+7]  <- m.M13
-        a.[o+8]  <- m.M20; a.[o+9]  <- m.M21; a.[o+10] <- m.M22; a.[o+11] <- m.M23
-        a.[o+12] <- m.M30; a.[o+13] <- m.M31; a.[o+14] <- m.M32; a.[o+15] <- m.M33
+    let private packM44 (m : M44f) (a : nativeint) (o : int) =
+        wf a (o+0)  m.M00; wf a (o+1)  m.M01; wf a (o+2)  m.M02; wf a (o+3)  m.M03
+        wf a (o+4)  m.M10; wf a (o+5)  m.M11; wf a (o+6)  m.M12; wf a (o+7)  m.M13
+        wf a (o+8)  m.M20; wf a (o+9)  m.M21; wf a (o+10) m.M22; wf a (o+11) m.M23
+        wf a (o+12) m.M30; wf a (o+13) m.M31; wf a (o+14) m.M32; wf a (o+15) m.M33
 
     // ── runtime support ─────────────────────────────────────────────────
     /// Whether `runtime` can run the heap path at all (multi-draw-indirect with
@@ -589,27 +598,26 @@ module Heap =
     // O(changed) diffs); per-draw value marks flow through the reactive arena
     // with offsets/headers held constant.
 
-    /// write an int's BIT PATTERN into a float32 staging slot (netstandard2.0 has no
-    /// Int32BitsToSingle, so reinterpret the 4 bytes). The int arena view (HeapDataI)
-    /// reads it back exactly — used for int/uint/bool/int-vector per-draw fields.
-    let private wi (a : float32[]) (i : int) (n : int) =
-        a.[i] <- System.BitConverter.ToSingle(System.BitConverter.GetBytes n, 0)
+    /// write an int into a ring word slot (bit pattern; the int arena view
+    /// HeapDataI reads it back exactly) — used for int/uint/bool/int-vector fields.
+    let inline private wi (a : nativeint) (i : int) (n : int) =
+        NativePtr.write (NativePtr.ofNativeInt<int> (a + nativeint (i <<< 2))) n
 
-    let private packerFor (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
+    let private packerFor (t : System.Type) : int * (obj -> nativeint -> int -> unit) =
         if   t = typeof<M44f>    then 16, (fun o a off -> packM44 (o :?> M44f) a off)
         elif t = typeof<Trafo3d> then 16, (fun o a off -> packM44 (M44f.op_Explicit (o :?> Trafo3d).Forward) a off)
         elif t = typeof<M44d>    then 16, (fun o a off -> packM44 (M44f.op_Explicit (o :?> M44d)) a off)
-        elif t = typeof<V4f>     then 4,  (fun o a off -> let v = o :?> V4f in a.[off]<-v.X; a.[off+1]<-v.Y; a.[off+2]<-v.Z; a.[off+3]<-v.W)
-        elif t = typeof<C4f>     then 4,  (fun o a off -> let c = o :?> C4f in a.[off]<-c.R; a.[off+1]<-c.G; a.[off+2]<-c.B; a.[off+3]<-c.A)
-        elif t = typeof<V3f>     then 3,  (fun o a off -> let v = o :?> V3f in a.[off]<-v.X; a.[off+1]<-v.Y; a.[off+2]<-v.Z)
-        elif t = typeof<V2f>     then 2,  (fun o a off -> let v = o :?> V2f in a.[off]<-v.X; a.[off+1]<-v.Y)
-        elif t = typeof<V3d>     then 3,  (fun o a off -> let v = o :?> V3d in a.[off]<-float32 v.X; a.[off+1]<-float32 v.Y; a.[off+2]<-float32 v.Z)
-        elif t = typeof<V2d>     then 2,  (fun o a off -> let v = o :?> V2d in a.[off]<-float32 v.X; a.[off+1]<-float32 v.Y)
-        elif t = typeof<V4d>     then 4,  (fun o a off -> let v = o :?> V4d in a.[off]<-float32 v.X; a.[off+1]<-float32 v.Y; a.[off+2]<-float32 v.Z; a.[off+3]<-float32 v.W)
-        elif t = typeof<M33d>    then 9,  (fun o a off -> let m = o :?> M33d in a.[off]<-float32 m.M00; a.[off+1]<-float32 m.M01; a.[off+2]<-float32 m.M02; a.[off+3]<-float32 m.M10; a.[off+4]<-float32 m.M11; a.[off+5]<-float32 m.M12; a.[off+6]<-float32 m.M20; a.[off+7]<-float32 m.M21; a.[off+8]<-float32 m.M22)
-        elif t = typeof<M33f>    then 9,  (fun o a off -> let m = o :?> M33f in a.[off]<-m.M00; a.[off+1]<-m.M01; a.[off+2]<-m.M02; a.[off+3]<-m.M10; a.[off+4]<-m.M11; a.[off+5]<-m.M12; a.[off+6]<-m.M20; a.[off+7]<-m.M21; a.[off+8]<-m.M22)
-        elif t = typeof<float32> then 1,  (fun o a off -> a.[off] <- (o :?> float32))
-        elif t = typeof<float>   then 1,  (fun o a off -> a.[off] <- float32 (o :?> float))
+        elif t = typeof<V4f>     then 4,  (fun o a off -> let v = o :?> V4f in wf a off v.X; wf a (off+1) v.Y; wf a (off+2) v.Z; wf a (off+3) v.W)
+        elif t = typeof<C4f>     then 4,  (fun o a off -> let c = o :?> C4f in wf a off c.R; wf a (off+1) c.G; wf a (off+2) c.B; wf a (off+3) c.A)
+        elif t = typeof<V3f>     then 3,  (fun o a off -> let v = o :?> V3f in wf a off v.X; wf a (off+1) v.Y; wf a (off+2) v.Z)
+        elif t = typeof<V2f>     then 2,  (fun o a off -> let v = o :?> V2f in wf a off v.X; wf a (off+1) v.Y)
+        elif t = typeof<V3d>     then 3,  (fun o a off -> let v = o :?> V3d in wf a off (float32 v.X); wf a (off+1) (float32 v.Y); wf a (off+2) (float32 v.Z))
+        elif t = typeof<V2d>     then 2,  (fun o a off -> let v = o :?> V2d in wf a off (float32 v.X); wf a (off+1) (float32 v.Y))
+        elif t = typeof<V4d>     then 4,  (fun o a off -> let v = o :?> V4d in wf a off (float32 v.X); wf a (off+1) (float32 v.Y); wf a (off+2) (float32 v.Z); wf a (off+3) (float32 v.W))
+        elif t = typeof<M33d>    then 9,  (fun o a off -> let m = o :?> M33d in wf a off (float32 m.M00); wf a (off+1) (float32 m.M01); wf a (off+2) (float32 m.M02); wf a (off+3) (float32 m.M10); wf a (off+4) (float32 m.M11); wf a (off+5) (float32 m.M12); wf a (off+6) (float32 m.M20); wf a (off+7) (float32 m.M21); wf a (off+8) (float32 m.M22))
+        elif t = typeof<M33f>    then 9,  (fun o a off -> let m = o :?> M33f in wf a off m.M00; wf a (off+1) m.M01; wf a (off+2) m.M02; wf a (off+3) m.M10; wf a (off+4) m.M11; wf a (off+5) m.M12; wf a (off+6) m.M20; wf a (off+7) m.M21; wf a (off+8) m.M22)
+        elif t = typeof<float32> then 1,  (fun o a off -> wf a off (o :?> float32))
+        elif t = typeof<float>   then 1,  (fun o a off -> wf a off (float32 (o :?> float)))
         // BIT-EXACT integral fields -> the int arena view (no float32 mantissa loss)
         elif t = typeof<int>     then 1,  (fun o a off -> wi a off (o :?> int))
         elif t = typeof<uint32>  then 1,  (fun o a off -> wi a off (int (o :?> uint32)))
@@ -627,17 +635,15 @@ module Heap =
     // write one double as 2 consecutive arena words (bit-exact; netstandard2.0 has no
     // Int32BitsToSingle, so reinterpret the 8 bytes as two float32 slots). fp64 path:
     // the GPU's native double view reads these 2 words back as one IEEE double.
-    let private wd (a : float32[]) (i : int) (d : float) =
-        let b = System.BitConverter.GetBytes d
-        a.[i]   <- System.BitConverter.ToSingle(b, 0)
-        a.[i+1] <- System.BitConverter.ToSingle(b, 4)
+    let inline private wd (a : nativeint) (i : int) (d : float) =
+        NativePtr.write (NativePtr.ofNativeInt<float> (a + nativeint (i <<< 2))) d
     // df32 path: write the double as a (hi, lo) two-f32 pair — hi = round-to-f32(d),
     // lo = round-to-f32(d − hi) — so the df32 kernels read it as V2f(hi,lo). Same 2
     // words / same 8-byte slot as `wd`; only the CONTENT differs.
-    let private wdDf (a : float32[]) (i : int) (d : float) =
+    let private wdDf (a : nativeint) (i : int) (d : float) =
         let hi = float32 d
-        a.[i]   <- hi
-        a.[i+1] <- float32 (d - float hi)
+        wf a i hi
+        wf a (i+1) (float32 (d - float hi))
     // coerce a PROVIDED boxed uniform value to the shader's REQUESTED double type — the
     // write converts to what the shader asked for, at full precision (upcast f32
     // siblings; extract Trafo3d.Forward). This is what lets the derived ModelView/MVP
@@ -651,7 +657,7 @@ module Heap =
     /// coerces whatever the provider gave to the requested double type. `df32` picks
     /// the (hi,lo) two-f32 encoding (MoltenVK, no shaderFloat64) over the IEEE double
     /// bit pattern; the WORD layout (2 words/scalar) is identical either way.
-    let private doublePackerFor (df32 : bool) (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
+    let private doublePackerFor (df32 : bool) (t : System.Type) : int * (obj -> nativeint -> int -> unit) =
         let wd = if df32 then wdDf else wd
         if   t = typeof<V2d>  then 4,  (fun o a off -> let v = asV2d o in wd a off v.X; wd a (off+2) v.Y)
         elif t = typeof<V3d>  then 6,  (fun o a off -> let v = asV3d o in wd a off v.X; wd a (off+2) v.Y; wd a (off+4) v.Z)
@@ -664,7 +670,7 @@ module Heap =
     /// shader-REQUESTED type so the layout matches `gatherFor`. RECORDS recurse
     /// field-by-field (tight, same order as the gather); leaves use packerFor. The
     /// supplied value must structurally match the requested record type.
-    let rec private compositePacker (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
+    let rec private compositePacker (t : System.Type) : int * (obj -> nativeint -> int -> unit) =
         match tryArr t with
         | Some (len, elem) ->
             // supplied value is a .NET array (T[]) or an Arr<N,T> — read `len` elements
@@ -724,19 +730,13 @@ module Heap =
     let private elemSize (t : System.Type) =
         elemSizeCache.GetOrAdd(t, fun t -> try System.Runtime.InteropServices.Marshal.SizeOf t with _ -> -1)
 
-    /// Read a host buffer-view's raw bytes (respecting its byte Offset). Works for
-    /// ArrayBuffer and any INativeBuffer (incl. a user-supplied NativeMemoryBuffer).
-    /// Assumes a tightly-packed view; interleaved/strided and GPU-resident views are
-    /// rejected by `isHeapable` so they never reach here. TYPE-AGNOSTIC: bytes only.
-    let private readBytesView (bv : BufferView) : byte[] =
-        match bv.Buffer.GetValue() with
-        | :? INativeBuffer as nb ->
-            nb.Use (fun (ptr : nativeint) ->
-                let len = int nb.SizeInBytes - bv.Offset
-                let arr = Array.zeroCreate<byte> len
-                System.Runtime.InteropServices.Marshal.Copy(ptr + nativeint bv.Offset, arr, 0, len)
-                arr)
-        | b -> failwithf "Heap.ofRenderObjects: expected host (INativeBuffer) geometry, got %A" (b.GetType())
+    /// Byte length of a buffer-view's data (respecting its byte Offset). Assumes a
+    /// tightly-packed view; interleaved/strided views are rejected by `isHeapable`.
+    let private geomByteLen' (value : IBuffer) (bv : BufferView) : int =
+        match value with
+        | :? INativeBuffer as nb -> int nb.SizeInBytes - bv.Offset
+        | :? IBackendBuffer as gb -> int gb.SizeInBytes - bv.Offset
+        | b -> failwithf "Heap.ofRenderObjects: geometry buffer is neither host nor backend buffer (%A)" (b.GetType())
 
     /// VALUE-level geometry dedup source: CONSTANT buffer avals are forced once
     /// at ingest and ArrayBuffer-backed ones key on the UNDERLYING ARRAY
@@ -745,33 +745,24 @@ module Heap =
     /// Primitives.Box produce) dedup to ONE packed allocation. Non-constant or
     /// non-ArrayBuffer sources keep aval-identity keying (their bytes may differ
     /// per evaluation / per backend handle).
-    let private geomDedupSource (bv : BufferView) : obj =
+    let private geomDedupSource' (value : IBuffer) (bv : BufferView) : obj =
         let b = bv.Buffer
         if b.IsConstant then
-            match b.GetValue() with
+            match value with
             | :? ArrayBuffer as ab -> ab.Data :> obj
             | _ -> b :> obj
         else b :> obj
 
-    /// Read a buffer-view's raw bytes whether host (INativeBuffer) or GPU-resident
-    /// (IBackendBuffer, downloaded). Used only to COMBINE per-object INDEX buffers
-    /// (small); vertex buffers are never downloaded — they're bound for vertex-pull.
-    let private readGeomBytes (runtime : IRuntime) (bv : BufferView) : byte[] =
-        match bv.Buffer.GetValue() with
+    /// Write a buffer-view's raw bytes STRAIGHT to `dst` (a ring span): host
+    /// (INativeBuffer) sources are one memcpy, GPU-resident (IBackendBuffer, index
+    /// buffers only) download directly into the span — no intermediate byte[].
+    let private stageGeomBytes' (runtime : IRuntime) (value : IBuffer) (bv : BufferView) (len : int) (dst : nativeint) =
+        match value with
         | :? INativeBuffer as nb ->
-            nb.Use (fun (ptr : nativeint) ->
-                let len = int nb.SizeInBytes - bv.Offset
-                let arr = Array.zeroCreate<byte> len
-                System.Runtime.InteropServices.Marshal.Copy(ptr + nativeint bv.Offset, arr, 0, len)
-                arr)
+            nb.Use (fun (ptr : nativeint) -> memcpy (ptr + nativeint bv.Offset) dst len)
         | :? IBackendBuffer as gb ->
-            let len = int gb.SizeInBytes - bv.Offset
-            let arr = Array.zeroCreate<byte> len
-            let gc = System.Runtime.InteropServices.GCHandle.Alloc(arr, System.Runtime.InteropServices.GCHandleType.Pinned)
-            try runtime.Download(gb, uint64 bv.Offset, gc.AddrOfPinnedObject(), uint64 len)
-            finally gc.Free()
-            arr
-        | b -> failwithf "Heap.ofRenderObjects: index buffer is neither host nor backend buffer (%A)" (b.GetType())
+            runtime.Download(gb, uint64 bv.Offset, dst, uint64 len)
+        | b -> failwithf "Heap.ofRenderObjects: geometry buffer is neither host nor backend buffer (%A)" (b.GetType())
 
     /// Number of buckets produced by the most recent `ofRenderObjects` evaluation
     /// (diagnostic / for logging).
@@ -786,6 +777,11 @@ module Heap =
     // vs GPU upload (arena Compute). One-shot logged once the first big upload lands.
     let mutable internal stIngestMs = 0.0
     let mutable internal stIngestN = 0
+    // ingest breakdown (diagnostic): fields/constituents | geometry (attrs+index) | rest
+    let mutable internal stIngestFieldsMs = 0.0
+    let mutable internal stIngestGeomMs = 0.0
+    let mutable internal stIngestCopyMs = 0.0      // geom sub-bucket: source->ring copies (incl. Use/pin)
+    let mutable internal stIngestStageMs = 0.0     // geom sub-bucket: StageWords bookkeeping
     let mutable internal stUploadMs = 0.0
     let mutable internal stUploadBytes = 0L
     let mutable internal stLogged = false
@@ -925,7 +921,7 @@ module Heap =
     /// Adaptive writer for one arena region. Reads its source aval and packs
     /// the floats into the arena's shared staging at its offset. Marked (via
     /// the source) only when that source changes.
-    type internal RegionWriter(src : IAdaptiveValue, off : int, size : int, pack : obj -> float32[] -> int -> unit) =
+    type internal RegionWriter(src : IAdaptiveValue, off : int, size : int, pack : obj -> nativeint -> int -> unit) =
         inherit AdaptiveObject()
         do src.Acquire()
         let mutable off = off
@@ -934,89 +930,167 @@ module Heap =
         /// the new offset — the compactor moves the staged bytes itself).
         member _.Off with get () = off and set v = off <- v
         member _.Size = size
-        member x.Pack(token : AdaptiveToken, staging : float32[]) =
-            x.EvaluateIfNeeded token () (fun token -> pack (src.GetValueUntyped token) staging off)
+        /// pack the region's words through `ptr` (the region's OWN ring span base).
+        member x.Pack(token : AdaptiveToken, ptr : nativeint) =
+            x.EvaluateIfNeeded token () (fun token -> pack (src.GetValueUntyped token) ptr 0)
         member x.Dispose() =
             src.Release()
             src.Outputs.Remove x |> ignore
             x.Outputs.Clear()
 
-    /// Dirty-tracking arena buffer. `InputChangedObject` collects the writers
-    /// whose source changed (no per-source marking callbacks); `Compute` packs
-    /// only those into a shared staging mirror, COALESCES adjacent dirty
-    /// regions into runs, and uploads one sub-range per run. All-dirty -> one
-    /// upload (regions are arena-contiguous); sparse -> a few small uploads.
-    /// Supports dynamic add/remove of regions and pow2 growth (incremental bucket).
+    /// MIRROR-LESS dirty-tracking arena buffer. There is no host copy of arena
+    /// payload: every write stages into an UPLOAD RING — a persistently mapped
+    /// host-visible buffer (pinned-array + per-region Upload fallback when the
+    /// backend exposes no mapping) — as (ringOff, arenaOff, words) regions, and
+    /// `Compute` issues ONE multi-region ring→arena copy per ordered batch. A
+    /// batch splits only when a later write overlaps an earlier one in the same
+    /// cycle (freed block re-allocated — copy order must stay defined) or when a
+    /// compaction move-set is queued. Resize preserves content device-side
+    /// (AdaptiveBuffer's copy-on-grow); compaction moves are a device-side
+    /// temp-buffer bounce (same-buffer overlapping copies are UB). The ring
+    /// grows transiently during bulk ingest and shrinks back after the flush.
     type internal HeapArena(runtime : IBufferRuntime, initialFloats : int) =
         // DEVICE-LOCAL: the arena is read per-vertex every frame; host-visible put it across PCIe
-        // (~1 GB/s) and cost 33x on the render (968 -> 29 ms full Vienna). Writes stage through the
-        // managed `staging` mirror + Compute upload, so editability is unaffected.
+        // (~1 GB/s) and cost 33x on the render (968 -> 29 ms full Vienna).
         inherit AdaptiveBuffer(runtime, uint64 (max 1 initialFloats * 4), BufferUsage.Storage, BufferStorage.Device)
         let mutable capacity = max 1 initialFloats
-        let mutable staging = Array.zeroCreate<float32> capacity
         let pending = LockedSet<RegionWriter>()
-        // a compaction requested a one-shot upload of [0, fullUploadFloats)
-        // (handled in Compute alongside the dirty-writer runs)
-        let mutable fullUploadFloats = 0
-        // one-shot static writes (allocation headers + immutable geometry bytes),
-        // staged by the updater's evaluation, uploaded on the next Compute.
-        let pendingStatic = System.Collections.Generic.List<struct(int * int)>()
-        /// Grow the staging mirror to hold at least n floats. The GPU-side resize is
-        /// DEFERRED to the next Compute (ResizeInPlace there — content-preserving),
-        /// so this is rule-clean inside adaptive evaluation: no transact/MarkOutdated
-        /// happens here. Both call sites guarantee a subsequent re-evaluation: the
-        /// incremental updater is itself the arena's ExtraDependency (already
-        /// evaluating), and the incremental bucket's Add runs in transact + Touch().
+
+        // ── upload ring: a CHAIN of host-visible chunks. Mapped memory is
+        //    write-combined — reading it back (e.g. for a growth memcpy) runs at
+        //    a fraction of cached-RAM speed — so the ring NEVER copies: overflow
+        //    allocates a new (doubled) chunk and staging continues there. Chunk
+        //    pointers stay stable for the whole cycle; the flush issues one
+        //    multi-region copy per (chunk, batch) and frees all but one
+        //    steady-state chunk afterwards.
+        let ringSteadyWords = 4 <<< 20                     // 16 MB steady-state
+        // one chunk: mapped backend buffer (or null + pinned fallback array), ptr, capacity
+        let ringChunks = System.Collections.Generic.List<struct(IBackendBuffer * System.Runtime.InteropServices.GCHandle * nativeint * int)>()
+        let mutable ringPtr = 0n                           // current chunk write pointer
+        let mutable ringWords = 0                          // current chunk capacity (words)
+        let mutable cursor = 0                             // fill of the CURRENT chunk (words)
+
+        /// allocate a fresh chunk of `n` words and make it current.
+        let ringAddChunk (n : int) =
+            let b = runtime.CreateBuffer(uint64 n * 4UL, BufferUsage.ReadWrite, BufferStorage.Host)
+            let struct(buf, pin, p) =
+                match runtime.TryGetMappedPointer b with
+                | ValueSome p -> struct(b, Unchecked.defaultof<System.Runtime.InteropServices.GCHandle>, p)
+                | ValueNone ->
+                    b.Dispose()
+                    let arr = Array.zeroCreate<float32> n
+                    let pin = System.Runtime.InteropServices.GCHandle.Alloc(arr, System.Runtime.InteropServices.GCHandleType.Pinned)
+                    struct(Unchecked.defaultof<IBackendBuffer>, pin, pin.AddrOfPinnedObject())
+            ringChunks.Add(struct(buf, pin, p, n))
+            ringPtr <- p
+            ringWords <- n
+            cursor <- 0
+
+        let ringFreeChunk (struct(buf, pin, _, _) : struct(IBackendBuffer * System.Runtime.InteropServices.GCHandle * nativeint * int)) =
+            if not (obj.ReferenceEquals(buf, null)) then buf.Dispose()
+            elif pin.IsAllocated then pin.Free()
+
+        let ringFree () =
+            for c in ringChunks do ringFreeChunk c
+            ringChunks.Clear()
+            ringPtr <- 0n
+            ringWords <- 0
+            cursor <- 0
+
+        // ── staged regions + ordered op stream ──────────────────────────
+        // regions in write order, merged when adjacent in BOTH spaces. `ops`
+        // interleaves batch cuts with compaction move-sets: entry (e, moves)
+        // means "copy regions [prevE, e) as one submission, then apply `moves`
+        // (null for a plain overlap cut)". Final segment [lastE, Count) is implicit.
+        let regions  = System.Collections.Generic.List<struct(int * int * int * int)>()   // (chunk, ringOff, arenaOff, words)
+        let ops      = System.Collections.Generic.List<struct(int * (struct(int * int * int))[])>()
+        let mutable lastCut = 0                            // regions.Count at the last op cut
+        // covered arena intervals of the CURRENT batch (sorted, disjoint)
+        let covered  = System.Collections.Generic.List<struct(int * int)>()
+
+        let covLowerBound (lo : int) =
+            let mutable l = 0
+            let mutable h = covered.Count
+            while l < h do
+                let m = (l + h) / 2
+                let (struct(s, _)) = covered.[m]
+                if s < lo then l <- m + 1 else h <- m
+            l
+        let covOverlaps (lo : int) (hi : int) =
+            let i = covLowerBound lo
+            (i < covered.Count && (let (struct(s, _)) = covered.[i] in s < hi))
+            || (i > 0 && (let (struct(_, e)) = covered.[i - 1] in e > lo))
+        let covAdd (lo : int) (hi : int) =
+            if covered.Count > 0 && (let (struct(_, le)) = covered.[covered.Count - 1] in lo >= le) then
+                let (struct(ls, le)) = covered.[covered.Count - 1]
+                if lo = le then covered.[covered.Count - 1] <- struct(ls, hi)
+                else covered.Add(struct(lo, hi))
+            elif covered.Count = 0 then covered.Add(struct(lo, hi))
+            else covered.Insert(covLowerBound lo, struct(lo, hi))
+
+        /// Grow the arena's (GPU) capacity to hold at least n floats — the resize
+        /// itself is DEFERRED to the next Compute (device-side, content-preserving),
+        /// so this is rule-clean inside adaptive evaluation.
         member x.EnsureFloats(n : int) =
-            if n > capacity then
-                let nf = Fun.NextPowerOfTwo n
-                let ns = Array.zeroCreate<float32> nf
-                System.Array.Copy(staging, ns, capacity)
-                staging <- ns
-                capacity <- nf
-        /// Move `size` floats within the staging mirror (compaction support; the
-        /// caller is responsible for re-uploading — see RequestFullUpload).
-        member _.MoveStaging(src : int, dst : int, size : int) =
-            if src <> dst && size > 0 then System.Array.Copy(staging, src, staging, dst, size)
-        /// Shrink the staging mirror (and, deferred to the next Compute, the GPU
-        /// buffer) after compaction. Keeps pow2 sizing for amortized regrowth.
+            if n > capacity then capacity <- Fun.NextPowerOfTwo n
+        /// Shrink the arena capacity (deferred to the next Compute, applied AFTER
+        /// the queued compaction moves packed the content below the new size).
         member x.ShrinkFloats(n : int) =
             let nf = max 1024 (Fun.NextPowerOfTwo (max 1 n))
-            if nf < capacity then
-                let ns = Array.zeroCreate<float32> nf
-                System.Array.Copy(staging, ns, nf)
-                staging <- ns
-                capacity <- nf
-        /// Request a one-shot upload of [0, n) floats from staging on the next
-        /// Compute (used by compaction after MoveStaging re-seated the regions —
-        /// rule-clean: no transact, the arena re-evaluates via ExtraDependency).
-        member _.RequestFullUpload(n : int) =
-            fullUploadFloats <- max fullUploadFloats n
-        /// Write a 4-word per-allocation header (typeId, length, strideBytes, 0)
-        /// at word offset `off` (staging only; uploaded on the next Compute).
-        member _.WriteHeader(off : int, typeId : int, length : int, strideBytes : int) =
-            let inline bits (v : int) = System.BitConverter.ToSingle(System.BitConverter.GetBytes v, 0)
-            staging.[off + 0] <- bits typeId
-            staging.[off + 1] <- bits length
-            staging.[off + 2] <- bits strideBytes
-            staging.[off + 3] <- 0.0f
-            pendingStatic.Add(struct(off, off + AllocHeaderWords))
-        /// Blit immutable bytes (attribute/index data) into staging at word
-        /// offset `off`; the covered word range uploads on the next Compute.
-        /// A ragged tail word is zero-padded (deterministic content).
-        member _.WriteStaticBytes(off : int, src : byte[]) =
-            let words = (src.Length + 3) / 4
-            if words > 0 then
-                if src.Length % 4 <> 0 then staging.[off + words - 1] <- 0.0f
-                System.Buffer.BlockCopy(src, 0, staging, off * 4, src.Length)
-                pendingStatic.Add(struct(off, off + words))
+            if nf < capacity then capacity <- nf
+
+        /// Reserve a ring span for arena words [off, off+words) and return its
+        /// write pointer. The caller writes it IMMEDIATELY; the pointer is valid
+        /// only until the next StageWords call (ring growth may relocate it). The
+        /// span start matches `off`'s 8-byte parity so double writes stay aligned.
+        member x.StageWords(off : int, words : int) : nativeint =
+            if ringChunks.Count = 0 then ringAddChunk (max ringSteadyWords (Fun.NextPowerOfTwo (words + 1)))
+            let mutable start = if (cursor &&& 1) <> (off &&& 1) then cursor + 1 else cursor
+            if start + words > ringWords then
+                // chunk full: chain a new (doubled) one — NEVER copy out of mapped
+                // (write-combined) memory
+                ringAddChunk (max (min (ringWords * 2) (256 <<< 20)) (Fun.NextPowerOfTwo (words + 1)))
+                start <- if (off &&& 1) = 1 then 1 else 0
+            if covOverlaps off (off + words) then
+                ops.Add(struct(regions.Count, null))
+                lastCut <- regions.Count
+                covered.Clear()
+            covAdd off (off + words)
+            let chunk = ringChunks.Count - 1
+            let mutable merged = false
+            if regions.Count > lastCut then
+                let (struct(c0, r0, a0, w0)) = regions.[regions.Count - 1]
+                if c0 = chunk && r0 + w0 = start && a0 + w0 = off then
+                    regions.[regions.Count - 1] <- struct(c0, r0, a0, w0 + words)
+                    merged <- true
+            if not merged then regions.Add(struct(chunk, start, off, words))
+            cursor <- start + words
+            ringPtr + nativeint (start <<< 2)
+
+        /// Write a 4-word per-allocation header (typeId, length, strideBytes, 0).
+        member x.WriteHeader(off : int, typeId : int, length : int, strideBytes : int) =
+            let p = x.StageWords(off, AllocHeaderWords)
+            wi p 0 typeId
+            wi p 1 length
+            wi p 2 strideBytes
+            wi p 3 0
+
         /// Stage a ONE-SHOT region write (CONSTANT sources — no RegionWriter
-        /// subscription, no per-flush re-evaluation): `pack` writes into the
-        /// staging mirror NOW; the covered word range uploads on the next
-        /// Compute (same pendingStatic path as headers/static bytes).
-        member _.StageOnce(off : int, size : int, pack : float32[] -> unit) =
-            pack staging
-            pendingStatic.Add(struct(off, off + size))
+        /// subscription): `pack` writes the region's words through the span
+        /// pointer NOW; uploaded on the next Compute.
+        member x.StageOnce(off : int, size : int, pack : nativeint -> unit) =
+            pack (x.StageWords(off, size))
+
+        /// Queue a compaction move-set (oldOff, newOff, contentWords): applied on
+        /// the next Compute AFTER everything staged so far and BEFORE anything
+        /// staged later (a device-side temp-buffer bounce — never an overlapping
+        /// same-buffer copy).
+        member x.QueueMoves(moves : (struct(int * int * int))[]) =
+            if moves.Length > 0 then
+                ops.Add(struct(regions.Count, moves))
+                lastCut <- regions.Count
+                covered.Clear()
+
         /// Add a region writer; returns it so it can be removed later.
         member x.Add(src, off, size, pack) : RegionWriter =
             let w = RegionWriter(src, off, size, pack)
@@ -1042,52 +1116,94 @@ module Heap =
             for i in 0 .. x.Dependencies.Count - 1 do
                 x.Dependencies.[i].GetValueUntyped t |> ignore
             let __uplT0 = System.Diagnostics.Stopwatch.GetTimestamp()
+            // pack dirty region writers into the ring — AFTER all updater staging,
+            // so a writer re-seated by a same-cycle compaction packs at its NEW
+            // offset in a batch after the move-set.
+            let dirty = pending.GetAndClear()
+            for w in dirty do
+                if w.Size > 0 then
+                    w.Pack(t, x.StageWords(w.Off, w.Size))
+            // GROW first (device-side content-preserving) so copies target full size
+            if uint64 capacity * 4UL > x.Size then x.ResizeInPlace(uint64 capacity * 4UL)
+            let h = base.Compute(t, rt)
             let mutable __flushed = 0
             let mutable __runs = 0
-            // apply any deferred growth (EnsureFloats) or shrink (ShrinkFloats) —
-            // content-preserving resize, performed HERE so no transact ever
-            // happens during evaluation.
-            if uint64 capacity * 4UL <> x.Size then
-                x.ResizeInPlace(uint64 capacity * 4UL)
-            let dirty = pending.GetAndClear()
-            let full = fullUploadFloats
-            fullUploadFloats <- 0
-            if dirty.Count > 0 || full > 0 || pendingStatic.Count > 0 then
-                let ranges = System.Collections.Generic.List<struct(int * int)>(dirty.Count + pendingStatic.Count + 1)
-                for w in dirty do
-                    w.Pack(t, staging)
-                    ranges.Add(struct(w.Off, w.Off + w.Size))
-                ranges.AddRange pendingStatic
-                pendingStatic.Clear()
-                if full > 0 then ranges.Add(struct(0, full))
-                ranges.Sort(fun (struct(a, _)) (struct(b, _)) -> compare a b)
-                // clamp to the (possibly shrunk) staging capacity: a compaction in
-                // the same pass may have re-seated content below stale static ranges
-                // (the full upload it requested covers the moved bytes).
-                let flush lo hi =
-                    let lo = min lo capacity
-                    let hi = min hi capacity
-                    if hi > lo then (__flushed <- __flushed + (hi - lo); __runs <- __runs + 1; x.Write(staging, uint64 (lo * 4), lo, hi - lo, false))
-                let mutable lo = let (struct(l, _)) = ranges.[0] in l
-                let mutable hi = let (struct(_, h)) = ranges.[0] in h
-                for i in 1 .. ranges.Count - 1 do
-                    let (struct(o, e)) = ranges.[i]
-                    // GAP-TOLERANT merge: unstaged holes (derive OUTPUT regions, alignment
-                    // slack) otherwise break EVERY part's run — 300k Write calls per bulk
-                    // flush at ~60us each. `staging` is the authoritative mirror, so
-                    // re-uploading a gap's bytes is harmless (derive overwrites its
-                    // regions after every upload; the rest re-uploads current values).
-                    if o <= hi + 4096 then hi <- max hi e   // small gap -> extend run
-                    else flush lo hi; lo <- o; hi <- e      // big gap -> emit run, start new
-                flush lo hi
+            let flushBatch (fromIdx : int) (toIdx : int) =
+                // regions' chunk index is monotone: emit one copy per chunk sub-range
+                let mutable i = fromIdx
+                while i < toIdx do
+                    let (struct(c, _, _, _)) = regions.[i]
+                    let mutable j = i
+                    while j < toIdx && (let (struct(cj, _, _, _)) = regions.[j] in cj = c) do j <- j + 1
+                    let (struct(buf, _, p, _)) = ringChunks.[c]
+                    __runs <- __runs + 1
+                    if not (obj.ReferenceEquals(buf, null)) then
+                        let arr = Array.zeroCreate<BufferCopyRegion> (j - i)
+                        for k in i .. j - 1 do
+                            let (struct(_, r, a, w)) = regions.[k]
+                            __flushed <- __flushed + w
+                            arr.[k - i] <- { SrcOffset = uint64 r * 4UL; DstOffset = uint64 a * 4UL; SizeInBytes = uint64 w * 4UL }
+                        runtime.Copy(buf, h, arr)
+                    else
+                        // no mapping (GL): per-region uploads from the pinned chunk
+                        for k in i .. j - 1 do
+                            let (struct(_, r, a, w)) = regions.[k]
+                            __flushed <- __flushed + w
+                            runtime.Upload(p + nativeint (r <<< 2), h, uint64 a * 4UL, uint64 w * 4UL)
+                    i <- j
+            let applyMoves (moves : (struct(int * int * int))[]) =
+                // merge adjacent moves into runs (residents re-alloc front-to-back)
+                let runs = System.Collections.Generic.List<struct(int * int * int)>()
+                for (struct(o, nw, w)) in moves do
+                    if runs.Count > 0 then
+                        let (struct(po, pn, pw)) = runs.[runs.Count - 1]
+                        if po + pw = o && pn + pw = nw then runs.[runs.Count - 1] <- struct(po, pn, pw + w)
+                        else runs.Add(struct(o, nw, w))
+                    else runs.Add(struct(o, nw, w))
+                let total = runs |> Seq.sumBy (fun (struct(_, _, w)) -> w)
+                if total > 0 then
+                    use temp = runtime.CreateBuffer(uint64 total * 4UL, BufferUsage.ReadWrite, BufferStorage.Device)
+                    let toTemp   = Array.zeroCreate<BufferCopyRegion> runs.Count
+                    let fromTemp = Array.zeroCreate<BufferCopyRegion> runs.Count
+                    let mutable c = 0UL
+                    for i in 0 .. runs.Count - 1 do
+                        let (struct(o, nw, w)) = runs.[i]
+                        toTemp.[i]   <- { SrcOffset = uint64 o * 4UL; DstOffset = c; SizeInBytes = uint64 w * 4UL }
+                        fromTemp.[i] <- { SrcOffset = c; DstOffset = uint64 nw * 4UL; SizeInBytes = uint64 w * 4UL }
+                        c <- c + uint64 w * 4UL
+                    runtime.Copy(h, temp, toTemp)
+                    runtime.Copy(temp, h, fromTemp)
+            let mutable segStart = 0
+            for (struct(e, moves)) in ops do
+                flushBatch segStart e
+                segStart <- e
+                if not (isNull moves) then applyMoves moves
+            flushBatch segStart regions.Count
+            // deferred SHRINK last (compaction packed the content below the new size)
+            let h =
+                if uint64 capacity * 4UL < x.Size then
+                    x.ResizeInPlace(uint64 capacity * 4UL)
+                    base.Compute(t, rt)
+                else h
+            // reset the ring: keep nothing allocated past a bulk flush (the next
+            // cycle lazily re-creates a steady-state chunk)
+            regions.Clear(); ops.Clear(); covered.Clear()
+            lastCut <- 0
+            cursor <- 0
+            if ringChunks.Count > 1 || ringWords > ringSteadyWords then ringFree ()
             // log per BIG upload (each page arena) with running totals; small camera-move
             // re-stages (< 3 MB) are skipped so the totals reflect the geometry upload.
             if __flushed * 4 > 3_000_000 then
-                Log.line "[startup] upload runs this flush: %d (%.1f MB)" __runs (float __flushed * 4.0 / 1e6)
+                Log.line "[startup] upload batches this flush: %d (%.1f MB)" __runs (float __flushed * 4.0 / 1e6)
                 stUploadMs <- stUploadMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __uplT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
                 stUploadBytes <- stUploadBytes + int64 __flushed * 4L
                 Log.line "[startup] ingest %d parts: %.0f ms | GPU upload (cum) %.1f MB: %.0f ms" stIngestN stIngestMs (float stUploadBytes / 1e6) stUploadMs
-            base.Compute(t, rt)
+            h
+        override x.Destroy() =
+            ringFree ()
+            regions.Clear(); ops.Clear(); covered.Clear()
+            lastCut <- 0
+            base.Destroy()
         override x.InputChangedObject(_, o) =
             match o with
             | :? RegionWriter as w -> pending.Add w |> ignore
@@ -1178,59 +1294,121 @@ module Heap =
             | :? GateWriter as w -> dirtyGates.Add w |> ignore
             | _ -> ()
 
+    /// One allocation of a HeapSpace: [Offset, Offset+Size) in caller units.
+    /// Size is EXACTLY the requested size — call sites detect 8-byte-aligned
+    /// content via `block.Size > entry.Size` (the +1 over-allocation), so the
+    /// allocator must never hand out a larger block than asked (splits are exact).
+    [<AllowNullLiteral>]
+    type internal HeapBlock(offset : int, size : int) =
+        member val Offset = offset with get, set
+        member _.Size = size
+        member val IsFree = false with get, set
+
     /// Logical address space for the heap reclamation sites (units are caller-
-    /// defined: floats, vertices, indices, instance slots) — packed geometry
-    /// vertex + index ranges, arena uniform regions, per-instance slot-attribute
-    /// ranges. The allocation policy is Aardvark.Rendering's generic
-    /// `Management.MemoryManager` (size-sorted SortedSetExt free list: O(log n)
-    /// best-fit with split, both-neighbor coalescing on Free) instantiated over
-    /// a VIRTUAL memory (`Memory.nop`, 'a = unit): no real bytes are managed —
-    /// the actual storage lives in the arena staging mirrors, which the
-    /// call sites grow to `Extent`. Callers hold the returned `Block<unit>` per
-    /// allocation and pass it back to `Free`, so the manager coalesces properly.
-    /// This wrapper only adds the two counters the compaction trigger and the
-    /// buffer sizing need and which the manager does not expose: `Live` (units
-    /// in live allocations) and `Extent` (high-water end of the allocated
-    /// space; retracts when the tail allocation is freed, so it tracks the
-    /// tight cursor, not the manager's pow2 capacity). `Reset` (compaction)
-    /// swaps in a fresh manager; the compactors then re-alloc the live entries
-    /// tightly in ascending old-offset order.
+    /// defined: floats, vertices, indices, instance slots). SEGREGATED-FIT +
+    /// BUMP-TAIL allocator: freed blocks live in quarter-pow2 size-class stacks;
+    /// Alloc takes the first block from the smallest class whose members are
+    /// guaranteed >= size (splitting the exact remainder back into its class)
+    /// and BUMPS the virgin tail on a miss. Both paths are O(1) amortized —
+    /// bulk ingest (no frees yet) is a pure bump, churn reuses freed blocks —
+    /// and the bump pointer is the MISS PATH of the one allocator that exists
+    /// from page creation: no ingest/edit mode split, no first-edit cold start.
+    /// There is NO coalescing; fragmentation is bounded by the threshold-
+    /// triggered page compaction (Reset + tight re-alloc), which the Live /
+    /// Extent counters drive. A block freed at the very END retracts the tail.
     type internal HeapSpace() =
-        static let mkManager () = new Management.MemoryManager<unit>(Management.Memory.nop, 16n)
-        let mutable mm = mkManager ()
+        // quarter-pow2 size classes (4 per octave): class of `s`, rounding DOWN —
+        // blocks stored in class c all have size >= classMin.[c]
+        static let classOfDown (s : int) =
+            let mutable v = s
+            let mutable k = 0
+            if v >= 0x10000 then k <- 16; v <- v >>> 16
+            if v >= 0x100 then k <- k + 8; v <- v >>> 8
+            if v >= 0x10 then k <- k + 4; v <- v >>> 4
+            if v >= 4 then k <- k + 2; v <- v >>> 2
+            if v >= 2 then k <- k + 1
+            4 * k + ((s >>> (max 0 (k - 2))) &&& 3)
+        // exact minimum size of class c (Int32.MaxValue for unpopulated classes)
+        static let classMin =
+            let arr = Array.create 128 System.Int32.MaxValue
+            arr.[1] <- 1
+            arr.[6] <- 2
+            arr.[7] <- 3
+            for k in 2 .. 30 do
+                for q in 0 .. 3 do
+                    let c = 4 * k + q
+                    if c < 128 then arr.[c] <- (4 + q) <<< (k - 2)
+            arr
+        static let maxClass = 123                                  // 4*30+3
+
+        let stacks : System.Collections.Generic.Stack<HeapBlock>[] = Array.zeroCreate 128
+        let mutable freeCount = 0
+        let mutable tail = 0
         let mutable live = 0
-        let mutable extent = 0
+
+        let pushFree (b : HeapBlock) =
+            b.IsFree <- true
+            let c = classOfDown b.Size
+            let st =
+                match stacks.[c] with
+                | null -> let st = System.Collections.Generic.Stack<HeapBlock>() in stacks.[c] <- st; st
+                | st -> st
+            st.Push b
+            freeCount <- freeCount + 1
+
         /// high-water end of the allocated address space (in units)
-        member _.Extent = extent
+        member _.Extent = tail
         /// units referenced by live allocations
         member _.Live = live
         /// reclaimable units below Extent (the waste)
-        member _.Waste = extent - live
-        member _.Alloc(size : int) : Management.Block<unit> =
-            let b = mm.Alloc(nativeint size)
+        member _.Waste = tail - live
+
+        member _.Alloc(size : int) : HeapBlock =
+            let size = max 1 size
             live <- live + size
-            extent <- max extent (int b.Offset + size)
-            b
-        member _.Free(b : Management.Block<unit>) =
-            if not (isNull b) && not b.IsFree && b.Size > 0n then
-                live <- live - int b.Size
-                // a block freed at the very END of the space retracts the extent
-                // to the start of the resulting free tail (free blocks are never
-                // adjacent, so the chain after a tail block is at most one free
-                // block before null).
-                let newExtent =
-                    if isNull b.Next || (b.Next.IsFree && isNull b.Next.Next) then
-                        if not (isNull b.Prev) && b.Prev.IsFree then int b.Prev.Offset else int b.Offset
-                    else extent
-                mm.Free b
-                extent <- newExtent
+            let mutable found : HeapBlock = null
+            if freeCount > 0 then
+                // smallest class whose members are all >= size
+                let c0 = classOfDown size
+                let mutable c = if classMin.[c0] = size then c0 else c0 + 1
+                while isNull found && c <= maxClass do
+                    let st = stacks.[c]
+                    if not (isNull st) && st.Count > 0 then found <- st.Pop()
+                    else c <- c + 1
+            if isNull found then
+                // miss -> bump the virgin tail
+                let b = HeapBlock(tail, size)
+                tail <- tail + size
+                b
+            else
+                freeCount <- freeCount - 1
+                if found.Size = size then
+                    found.IsFree <- false
+                    found
+                else
+                    // exact split: remainder returns to its class
+                    pushFree (HeapBlock(found.Offset + size, found.Size - size))
+                    HeapBlock(found.Offset, size)
+
+        member _.Free(b : HeapBlock) =
+            if not (isNull b) && not b.IsFree && b.Size > 0 then
+                live <- live - b.Size
+                if b.Offset + b.Size = tail then
+                    // tail free: retract the bump pointer (blocks are disjoint, so
+                    // every stashed free block stays strictly below the new tail)
+                    b.IsFree <- true
+                    tail <- b.Offset
+                else
+                    pushFree b
+
         /// drop everything and start a fresh address space (used by compaction,
         /// which re-allocs the live entries tightly right afterwards)
         member _.Reset() =
-            mm.Dispose()
-            mm <- mkManager ()
+            for st in stacks do
+                if not (isNull st) then st.Clear()
+            freeCount <- 0
+            tail <- 0
             live <- 0
-            extent <- 0
 
     /// Mutable refcounted arena region (deduped by source-aval identity).
     /// Offset is re-seated by arena compaction. Block is the region's float
@@ -1242,7 +1420,7 @@ module Heap =
     /// subscription, nothing to re-evaluate or dispose).
     type internal RegionEntry =
         { mutable Offset : int; Size : int; Writer : RegionWriter; mutable RefCount : int
-          mutable Block : Management.Block<unit>; HeaderWords : int }
+          mutable Block : HeapBlock; HeaderWords : int }
 
     /// Refcounted STATIC allocation in the bucket arena (one vertex attribute's
     /// bytes, or one index range — written once, deduped by VALUE-level source
@@ -1252,7 +1430,7 @@ module Heap =
     /// index allocations).
     type internal StaticEntry =
         { mutable Ref : int; SizeF : int; Count : int; mutable RefCount : int
-          mutable Block : Management.Block<unit> }
+          mutable Block : HeapBlock }
 
     /// how a slot references one of its attribute allocations (for release +
     /// compaction header rewrite)
@@ -1277,7 +1455,7 @@ module Heap =
           /// the slot renders in that page's sub-draw and frees from that page on remove.
           mutable Page : int
           Instances : int; mutable InstOffset : int
-          mutable InstBlock : Management.Block<unit>
+          mutable InstBlock : HeapBlock
           /// per consumed attribute (host buckets; empty for bindless)
           AttrKeys : AttrKey[]
           /// the slot's index allocation key (value-level source, byte offset,
@@ -1287,8 +1465,8 @@ module Heap =
           /// release (base aval + inverse flag), per-slot output region blocks and
           /// chain-folded Model constituent blocks to free on remove.
           ConstKeys : struct(IAdaptiveValue * bool)[]
-          OutBlocks : Management.Block<unit>[]
-          FoldBlocks : Management.Block<unit>[] }
+          OutBlocks : HeapBlock[]
+          FoldBlocks : HeapBlock[] }
 
     /// Immutable per-RO facts (STRUCTURE only — surface, geometry layout, uniform
     /// presence; never aval VALUES). Cached per RO in a ConditionalWeakTable so a
@@ -1645,18 +1823,16 @@ module Heap =
         (attrTypeId hostT).IsSome && hostTargetTypes.Contains inputT
 
     /// generic native-layout packer for singleton-attribute values: blits the
-    /// boxed struct's bytes (same layout as a 1-element array of it) into the
-    /// arena staging at the region's float offset.
-    let private attrPackerFor (t : System.Type) : int * (obj -> float32[] -> int -> unit) =
+    /// boxed struct's bytes (same layout as a 1-element array of it) straight
+    /// into the upload ring at the region's word offset (ragged tail zeroed).
+    let private attrPackerFor (t : System.Type) : int * (obj -> nativeint -> int -> unit) =
         let es = elemSize t
         if es <= 0 then failwithf "Heap: singleton attribute type %A is not blittable" t
         let szF = (es + 3) / 4
-        szF, fun (o : obj) (a : float32[]) (off : int) ->
+        szF, fun (o : obj) (a : nativeint) (off : int) ->
+            if es % 4 <> 0 then wi a (off + szF - 1) 0
             let h = System.Runtime.InteropServices.GCHandle.Alloc(o, System.Runtime.InteropServices.GCHandleType.Pinned)
-            try
-                let tmp = Array.zeroCreate<byte> (szF * 4)
-                System.Runtime.InteropServices.Marshal.Copy(h.AddrOfPinnedObject(), tmp, 0, es)
-                System.Buffer.BlockCopy(tmp, 0, a, off * 4, szF * 4)
+            try memcpy (h.AddrOfPinnedObject()) (a + nativeint (off <<< 2)) es
             finally h.Free()
 
     /// vertex-pull gather for ofRenderObjects' GPU-geometry buckets: object `slot`'s
@@ -2602,7 +2778,7 @@ module Heap =
     /// to re-allocate (the original BLOCK size, preserving any 8-byte-alignment
     /// slack), whether the content starts 8-byte-aligned within the block, and the
     /// reseat callback receiving (alignedNewOffset, newBlock).
-    type internal Resident = (struct (int * int * bool * (int -> Management.Block<unit> -> unit)))
+    type internal Resident = (struct (int * int * bool * (int -> HeapBlock -> unit)))
 
     /// One bucket's stake in a page (shared storage: several buckets — possibly from
     /// several heaps — allocate from the same page). Compaction must move EVERY
@@ -2677,15 +2853,20 @@ module Heap =
             for p in participants do p.CollectResidents(pageIdx, res)
             res.Sort(fun (struct(a, _, _, _)) (struct(b, _, _, _)) -> compare a b)
             arenaAlloc.Reset()
+            // collect the (oldOff, newOff, contentWords) moves and queue them as ONE
+            // ordered op on the arena: the device-side bounce copy runs on the next
+            // Compute, AFTER uploads staged before this compaction and BEFORE any
+            // staged after it.
+            let moves = System.Collections.Generic.List<struct(int * int * int)>(res.Count)
             for (struct(oldOff, words, align8, reseat)) in res do
                 let b = arenaAlloc.Alloc words
                 let raw = int b.Offset
                 let off = if align8 && (raw &&& 1) = 1 then raw + 1 else raw
                 let contentWords = words - (if align8 then 1 else 0)
-                if off <> oldOff then arena.MoveStaging(oldOff, off, contentWords)
+                if off <> oldOff then moves.Add(struct(oldOff, off, contentWords))
                 reseat off b
+            arena.QueueMoves(moves.ToArray())
             for p in participants do p.RewriteHeaders()
-            arena.RequestFullUpload arenaAlloc.Extent
             arena.ShrinkFloats arenaAlloc.Extent
             compactionCount <- compactionCount + 1
 
@@ -3043,7 +3224,7 @@ module Heap =
         let instDirty = System.Collections.Generic.List<struct(int * int)>()  // [start, end) int ranges
         let mutable instAllDirty = false
 
-        let allocInst (slot : int) (k : int) : Management.Block<unit> =
+        let allocInst (slot : int) (k : int) : HeapBlock =
             let b = instAlloc.Alloc k
             if instAlloc.Extent > instData.Length then
                 let n = Fun.NextPowerOfTwo instAlloc.Extent
@@ -3054,7 +3235,7 @@ module Heap =
             for i in 0 .. k - 1 do instData.[off + i] <- slot
             instDirty.Add(struct(off, off + k))
             b
-        let freeInst (b : Management.Block<unit>) =
+        let freeInst (b : HeapBlock) =
             instAlloc.Free b
 
         // ── GPU trafo-chain state (chainMode only) ───────────────────────
@@ -3071,7 +3252,7 @@ module Heap =
         let mutable chIdx    : int[] = if chainMode then Array.zeroCreate 16 else [||]
         let chIdxAlloc = if chainMode then HeapSpace() else Unchecked.defaultof<HeapSpace>
         let chainLinkKeys = if chainMode then System.Collections.Generic.Dictionary<int, aval<Trafo3d>[]>() else null
-        let chainBlocks = if chainMode then System.Collections.Generic.Dictionary<int, Management.Block<unit>>() else null
+        let chainBlocks = if chainMode then System.Collections.Generic.Dictionary<int, HeapBlock>() else null
         let chainDirtyStruct = if chainMode then System.Collections.Generic.HashSet<int>() else null
         let mutable chainStructAllDirty = false
 
@@ -3344,7 +3525,7 @@ module Heap =
                 // nothing for the flush to re-evaluate). Writer = null marks them.
                 let w =
                     if av.IsConstant then
-                        arena.StageOnce(off, sz, fun st -> pk (av.GetValueUntyped AdaptiveToken.Top) st off)
+                        arena.StageOnce(off, sz, fun p -> pk (av.GetValueUntyped AdaptiveToken.Top) p 0)
                         Unchecked.defaultof<RegionWriter>
                     else arena.Add(av, off, sz, pk)
                 regions.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b; HeaderWords = 0 }
@@ -3368,13 +3549,13 @@ module Heap =
         // backward half is the uploaded `Trafo3d.Backward` — never a `.Inverse`.
         // df32 mode packs each scalar as a (hi,lo) two-f32 pair (wdDf), matching
         // composeDerivedDf32's df32 reads; fp64 packs the IEEE double bytes (wd).
-        let packM44dInto (m : M44d) (a : float32[]) (off : int) =
+        let packM44dInto (m : M44d) (a : nativeint) (off : int) =
             let wd = if df32 then wdDf else wd
             wd a (off+0)  m.M00; wd a (off+2)  m.M01; wd a (off+4)  m.M02; wd a (off+6)  m.M03
             wd a (off+8)  m.M10; wd a (off+10) m.M11; wd a (off+12) m.M12; wd a (off+14) m.M13
             wd a (off+16) m.M20; wd a (off+18) m.M21; wd a (off+20) m.M22; wd a (off+22) m.M23
             wd a (off+24) m.M30; wd a (off+26) m.M31; wd a (off+28) m.M32; wd a (off+30) m.M33
-        let constituentPack (inv : bool) : obj -> float32[] -> int -> unit =
+        let constituentPack (inv : bool) : obj -> nativeint -> int -> unit =
             fun o a off ->
                 let m =
                     match o with
@@ -3413,7 +3594,7 @@ module Heap =
                 let pk = constituentPack inv
                 let w =
                     if av.IsConstant then
-                        arena.StageOnce(off, sz, fun st -> pk (av.GetValueUntyped AdaptiveToken.Top) st off)
+                        arena.StageOnce(off, sz, fun p -> pk (av.GetValueUntyped AdaptiveToken.Top) p 0)
                         Unchecked.defaultof<RegionWriter>
                     else arena.Add(av, off, sz, pk)
                 d.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b; HeaderWords = 0 }
@@ -3430,7 +3611,7 @@ module Heap =
             | _ -> ()
         // an 8-byte-aligned M44d slot the CHAIN fold writes (no aval / writer) — the
         // per-slot Model forward/backward constituent in chainMode.
-        let allocFoldConstituent () : int * Management.Block<unit> =
+        let allocFoldConstituent () : int * HeapBlock =
             let sz = 32
             let b = arenaAlloc.Alloc (sz + 1)
             let raw = int b.Offset
@@ -3439,7 +3620,7 @@ module Heap =
             off, b
         // OUTPUT: a per-slot region the compute writes (no aval / writer), stored as
         // the shader's requested type (f32 M44f = 16 words, M33f = 9, …).
-        let allocOutput (requested : System.Type) : int * Management.Block<unit> =
+        let allocOutput (requested : System.Type) : int * HeapBlock =
             let dbl = isDoubleUniform requested
             let (sz, _) = if dbl then doublePackerFor df32 requested else packerFor requested
             let b = arenaAlloc.Alloc (if dbl then sz + 1 else sz)
@@ -3469,7 +3650,7 @@ module Heap =
                 // constant singleton value -> one-shot staging write (see allocRegion)
                 let w =
                     if av.IsConstant then
-                        arena.StageOnce(off + AllocHeaderWords, szF, fun st -> pk (av.GetValueUntyped AdaptiveToken.Top) st (off + AllocHeaderWords))
+                        arena.StageOnce(off + AllocHeaderWords, szF, fun p -> pk (av.GetValueUntyped AdaptiveToken.Top) p 0)
                         Unchecked.defaultof<RegionWriter>
                     else arena.Add(av, off + AllocHeaderWords, szF, pk)
                 singleRegions.[av] <- { Offset = off; Size = sizeF; Writer = w; RefCount = 1; Block = b; HeaderWords = AllocHeaderWords }
@@ -3488,16 +3669,23 @@ module Heap =
         /// STATIC allocation (immutable bytes + header), refcounted/deduped in
         /// `dict` by source identity. Returns the cached entry on a hit.
         let allocStatic (dict : System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>)
-                        (key : struct(obj * int * int)) (bytes : byte[]) (typeId : int) (count : int) (strideBytes : int) : StaticEntry =
+                        (key : struct(obj * int * int)) (byteLen : int) (writeBytes : nativeint -> unit)
+                        (typeId : int) (count : int) (strideBytes : int) : StaticEntry =
             match dict.TryGetValue key with
             | true, e -> e.RefCount <- e.RefCount + 1; e
             | _ ->
-                let sizeF = AllocHeaderWords + (bytes.Length + 3) / 4
+                let words = (byteLen + 3) / 4
+                let sizeF = AllocHeaderWords + words
                 let b = arenaAlloc.Alloc sizeF
                 let off = int b.Offset
                 arena.EnsureFloats arenaAlloc.Extent
+                let t0 = System.Diagnostics.Stopwatch.GetTimestamp()
                 arena.WriteHeader(off, typeId, count, strideBytes)
-                arena.WriteStaticBytes(off + AllocHeaderWords, bytes)
+                // payload straight into the ring span (ragged tail word zeroed first)
+                let p = arena.StageWords(off + AllocHeaderWords, words)
+                stIngestStageMs <- stIngestStageMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
+                if byteLen % 4 <> 0 then wi p (words - 1) 0
+                writeBytes p
                 let e = { Ref = off; SizeF = sizeF; Count = count; RefCount = 1; Block = b }
                 dict.[key] <- e
                 e
@@ -3524,13 +3712,14 @@ module Heap =
             let bv = match ro.Indices with Some b -> b | None -> failwith "Heap.ofRenderObjects: RO has no index buffer"
             let es = elemSize bv.ElementType
             let tid = if es = 2 then IdxType16 else IdxType32
-            let key = struct(geomDedupSource bv, bv.Offset, tid)
+            // resolve the buffer aval ONCE per index source (dedup key + length + copy)
+            let value = bv.Buffer.GetValue()
+            let key = struct(geomDedupSource' value bv, bv.Offset, tid)
             match idxStatic.TryGetValue key with
             | true, e -> e.RefCount <- e.RefCount + 1; key, e
             | _ ->
-                let bytes = readGeomBytes runtime bv
-                let cnt = bytes.Length / es
-                key, allocStatic idxStatic key bytes tid cnt es
+                let len = geomByteLen' value bv
+                key, allocStatic idxStatic key len (stageGeomBytes' runtime value bv len) tid (len / es) es
 
         /// one consumed attribute of a new slot: singleton -> adaptive region,
         /// real buffer -> static allocation. Returns (release key, header ref).
@@ -3551,13 +3740,15 @@ module Heap =
                     match attrTypeId et with
                     | ValueSome t -> t
                     | ValueNone -> failwithf "Heap: attribute %A element type %A has no storage typeId" sym et
-                let key = struct(geomDedupSource bv, bv.Offset, tid)
+                // resolve the buffer aval ONCE per attribute (dedup key + length + copy)
+                let value = bv.Buffer.GetValue()
+                let key = struct(geomDedupSource' value bv, bv.Offset, tid)
                 match attrStatic.TryGetValue key with
                 | true, e -> e.RefCount <- e.RefCount + 1; AttrKey.Static key, e.Ref
                 | _ ->
                     let es = elemSize et
-                    let bytes = readBytesView bv
-                    let e = allocStatic attrStatic key bytes tid (bytes.Length / es) es
+                    let len = geomByteLen' value bv
+                    let e = allocStatic attrStatic key len (stageGeomBytes' runtime value bv len) tid (len / es) es
                     AttrKey.Static key, e.Ref
 
         // ── threshold-triggered compaction is PAGE-level now (PageArena.Compact):
@@ -4464,8 +4655,9 @@ module Heap =
                     match ro.Uniforms.TryGetUniform(scope, symPickId) with
                     | ValueSome v -> (try v.GetValueUntyped(AdaptiveToken.Top) :?> int with _ -> -1)
                     | ValueNone -> -1
+            let __secT0 = System.Diagnostics.Stopwatch.GetTimestamp()
             let regionKeys = System.Collections.Generic.List<IAdaptiveValue>(names.Length)
-            let outBlocks = System.Collections.Generic.List<Management.Block<unit>>()
+            let outBlocks = System.Collections.Generic.List<HeapBlock>()
             for i in 0 .. names.Length - 1 do
                 if derivedCells.Contains i then
                     // derived composite: a per-slot OUTPUT region the compute writes
@@ -4485,7 +4677,7 @@ module Heap =
             // other constituent is uploaded from the RO's base trafo aval, ref-counted
             // by aval (a shared camera → ONE region, mark re-packs once).
             let constKeys = System.Collections.Generic.List<struct(IAdaptiveValue * bool)>(numConst)
-            let foldBlocks = System.Collections.Generic.List<Management.Block<unit>>()
+            let foldBlocks = System.Collections.Generic.List<HeapBlock>()
             for k in 0 .. numConst - 1 do
                 let c = neededConstituents.[k]
                 let off =
@@ -4510,6 +4702,8 @@ module Heap =
                     | ValueSome (:? aval<aval<Trafo3d>[]> as st) -> AVal.force st
                     | _ -> failwith "Heap.ofRenderObjects: chainMode RO missing aval<aval<Trafo3d>[]> 'ModelTrafoStack'"
                 addChainSlot slot stack
+            let __secT1 = System.Diagnostics.Stopwatch.GetTimestamp()
+            stIngestFieldsMs <- stIngestFieldsMs + float (__secT1 - __secT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
             // geometry: per-attribute arena allocations (host) or the per-slot
             // SSBO-array registration (bindless), plus the index allocation.
             let attrKeys =
@@ -4546,6 +4740,7 @@ module Heap =
                     struct(k, e.Ref, e.Count)
                 | None ->
                     struct(noIdxKey, -1, faceVertexCountOf ro)
+            stIngestGeomMs <- stIngestGeomMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __secT1) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
             headers.[slot * headerStride + idxCell] <- idxRef
             headers.[slot * headerStride + vcCell] <- vertexCount
             vcOfSlot.[slot] <- vertexCount
@@ -4604,7 +4799,7 @@ module Heap =
                             ConstKeys = constKeys.ToArray(); OutBlocks = outBlocks.ToArray(); FoldBlocks = foldBlocks.ToArray() }
             stIngestN <- stIngestN + 1
             stIngestMs <- stIngestMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __ingT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
-            if stIngestN % 100000 = 0 then Log.line "[startup] ingest %d parts so far: %.0f ms" stIngestN stIngestMs
+            if stIngestN % 100000 = 0 then Log.line "[startup] ingest %d parts so far: %.0f ms (fields %.0f | geom %.0f [copy %.0f, stage %.0f] | rest %.0f)" stIngestN stIngestMs stIngestFieldsMs stIngestGeomMs stIngestCopyMs stIngestStageMs (stIngestMs - stIngestFieldsMs - stIngestGeomMs)
 
         member private _.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with

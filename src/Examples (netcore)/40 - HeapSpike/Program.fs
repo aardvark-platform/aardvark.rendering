@@ -118,6 +118,8 @@ let main argv =
         if Golden.run () then 0 else 1
     elif argv |> Array.contains "deferred" then
         if Deferred.run () then 0 else 1
+    elif argv |> Array.contains "churn" then
+        if Churn.run () then 0 else 1
     elif argv |> Array.contains "autofields" then
         if Golden.autoFieldsTest () then 0 else 1
     elif argv |> Array.contains "sgheap" then

@@ -21,6 +21,7 @@
     <Compile Include="Real.fs" />
     <Compile Include="Golden.fs" />
     <Compile Include="Deferred.fs" />
+    <Compile Include="Churn.fs" />
     <Compile Include="ChainBench.fs" />
     <Compile Include="GpuModes.fs" />
     <Compile Include="GLBindless.fs" />

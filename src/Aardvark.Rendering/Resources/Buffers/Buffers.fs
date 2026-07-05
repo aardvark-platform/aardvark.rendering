@@ -52,6 +52,18 @@ type BufferUsage =
 type IBuffer =
     interface end
 
+/// A single region of a multi-region buffer copy.
+[<Struct>]
+type BufferCopyRegion =
+    {
+        /// Offset (in bytes) into the source buffer.
+        SrcOffset   : uint64
+        /// Offset (in bytes) into the destination buffer.
+        DstOffset   : uint64
+        /// Number of bytes to copy.
+        SizeInBytes : uint64
+    }
+
 type INativeBuffer =
     inherit IBuffer
     abstract member SizeInBytes : uint64
@@ -142,3 +154,16 @@ and IBufferRuntime =
     ///<param name="discard">Indicates whether the current content of the destination buffer may be discarded. Default is <c>false</c>.</param>
     abstract member Copy : src : IBackendBuffer * srcOffset : uint64 * dst : IBackendBuffer * dstOffset : uint64 * sizeInBytes : uint64 *
                            [<Optional; DefaultParameterValue(false)>] discard : bool -> unit
+
+    ///<summary>Copies multiple regions from a buffer to another in a single operation.
+    /// Regions must not overlap when source and destination are the same buffer.</summary>
+    ///<param name="src">The buffer to copy data from.</param>
+    ///<param name="dst">The buffer to copy data to.</param>
+    ///<param name="regions">The regions to copy.</param>
+    abstract member Copy : src : IBackendBuffer * dst : IBackendBuffer * regions : BufferCopyRegion[] -> unit
+
+    ///<summary>Returns a persistent host pointer to the buffer's memory if it is host-visible
+    /// and mapped, ValueNone otherwise. The pointer stays valid for the buffer's lifetime;
+    /// writes through it become visible to subsequent copy operations.</summary>
+    ///<param name="buffer">The buffer to query.</param>
+    abstract member TryGetMappedPointer : buffer : IBackendBuffer -> voption<nativeint>

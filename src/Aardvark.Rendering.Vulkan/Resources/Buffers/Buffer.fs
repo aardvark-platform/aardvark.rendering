@@ -197,6 +197,26 @@ module BufferCommands =
 
 
 
+        static member Copy(src : Buffer, dst : Buffer, regions : BufferCopyRegion[]) =
+            for r in regions do
+                if r.SrcOffset + r.SizeInBytes > src.Size || r.DstOffset + r.SizeInBytes > dst.Size then
+                    failf "bad copy region"
+
+            if regions.Length = 0 then
+                Command.Nop
+            else
+                { new Command() with
+                    member x.Compatible = QueueFlags.All
+                    member x.Enqueue cmd =
+                        let copyInfos = regions |> Array.map (fun r -> VkBufferCopy(r.SrcOffset, r.DstOffset, r.SizeInBytes))
+                        cmd.AppendCommand()
+                        copyInfos |> NativeInt.pin (fun pInfos ->
+                            VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, uint32 copyInfos.Length, NativePtr.ofNativeInt pInfos)
+                        )
+                        cmd.AddResource src
+                        cmd.AddResource dst
+                }
+
         static member inline Copy(src : Buffer, dst : Buffer, size : uint64) =
             Command.Copy(src, 0UL, dst, 0UL, size)
 
@@ -554,6 +574,16 @@ module Buffer =
         if sizeInBytes > 0UL then
             src.Device.perform {
                 do! Command.Copy(src, srcOffset, dst, dstOffset, sizeInBytes)
+            }
+
+    /// Copy multiple regions in ONE command submission. A host-visible source is
+    /// flushed first so writes through its mapped pointer are device-visible.
+    let copyRegions (src: Buffer) (dst: Buffer) (regions: BufferCopyRegion[]) =
+        if regions.Length > 0 then
+            if src.Memory.IsHostVisible then
+                src.Memory.Flush(0UL, VkWholeSize)
+            src.Device.perform {
+                do! Command.Copy(src, dst, regions)
             }
 
 

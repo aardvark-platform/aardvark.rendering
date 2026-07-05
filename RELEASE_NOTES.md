@@ -1,3 +1,11 @@
+### 5.7.0-prerelease0038
+- [Rendering] IBufferRuntime: multi-region buffer `Copy(src, dst, regions)` (one command, N regions) and `TryGetMappedPointer` (Vulkan: persistent VMA mapping; GL: none).
+- [Sg] Heap: MIRROR-LESS arena — the host staging mirror is gone; writes stage into chained mapped host-visible ring chunks (never copied: mapped memory is write-combined) and flush as one multi-region copy per ordered batch. Geometry is a single source->ring memcpy (no intermediate byte[]).
+- [Sg] Heap: page compaction is a device-side temp-buffer bounce (no CPU move, no full re-upload); same-cycle block reuse keeps copy order via batch splits.
+- [Sg] Heap: O(1) segregated-fit + bump-tail allocator replaces the best-fit SortedSet manager (bump = miss path, no ingest/edit mode split, no first-edit cold start).
+- [Sg] Heap ingest @700k renderbench: CPU 30.6 -> 18.8 s, GPU upload 2.6 -> 0.7 s (1.5 GB); render unchanged at 13.9 ms (1.50x). Steady-state host RAM drops by the arena payload size.
+- [Sg] HeapSpike: new `churn` golden suite (compaction, same-cycle reuse, shrink/regrow — pixel-identical to classic).
+
 ### 5.7.0-prerelease0037
 - [Sg] Heap: bulk-upload fix — derive OUTPUT regions (GPU-written, never staged) punched a hole into every part's staged range, so a bulk arena flush degenerated into one Write call per part (~60us each; 68 s for 1.5 GB at 700k parts). Ranges now merge across small gaps (staging is the authoritative mirror, so gap bytes are harmless): 300k Write calls -> 1, upload 26x faster, first-frame ingest at 700k parts ~99 s -> ~33 s. Render times unchanged.
 

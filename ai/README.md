@@ -18,6 +18,7 @@ Index for AI coding assistants. Read only the doc you need.
 | Consumer project patterns | CONSUMER-PATTERNS.md | ~4 KB |
 | C# integration | CSHARP-INTEGRATION.md | ~3 KB |
 | Creating consumer project docs | TEMPLATE-CONSUMER.md | ~2 KB |
+| Heap mirror-less arena + allocator rework (plan) | HEAP-MIRRORLESS-PLAN.md | ~12 KB |
 
 ## By Type
 
