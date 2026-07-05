@@ -569,14 +569,15 @@ module RenderBench =
                 recs.[i] <- DrawCallInfo(FaceVertexCount = idx.Length, FirstIndex = 0, BaseVertex = 0, FirstInstance = i, InstanceCount = 1)
                 ib <- ib + idx.Length
                 vb <- vb + ps.Length
-            let mkVariant (label : string) (eff : Effect) (uniforms : (string * IAdaptiveValue) list) =
+            let mkVariantCalls (calls : DrawCallInfo[]) (label : string) (eff : Effect) (uniforms : (string * IAdaptiveValue) list) =
                 let ro = RenderObject()
                 ro.Surface <- Surface.Effect eff
                 ro.Mode    <- IndexedGeometryMode.TriangleList
                 ro.VertexAttributes <- AttributeProvider.ofList ([] : (Symbol * BufferView) list)
-                ro.DrawCalls <- DrawCalls.Indirect (AVal.constant (IndirectBuffer.ofArray recs))
+                ro.DrawCalls <- DrawCalls.Indirect (AVal.constant (IndirectBuffer.ofArray calls))
                 ro.Uniforms  <- UniformProvider.ofList [ for (nm, v) in uniforms -> Symbol.Create nm, v ]
                 renderWith label (ASet.single (ro :> IRenderObject))
+            let mkVariant = mkVariantCalls recs
             let cAF = AVal.constant arenaF :> IAdaptiveValue
             let cII = AVal.constant idxI :> IAdaptiveValue
             Log.line "pack-probe: %d objects, %.1f M drawn verts, identical geometry pulls" n (float totalIdx / 1e6)
@@ -703,6 +704,19 @@ module RenderBench =
                     [ "PArenaF", cF; "PArenaI", cI; "PHdr", (AVal.constant hdrE :> IAdaptiveValue) ]
             Log.line "pack-probe: generic-shader ladder — 3-deep %.2f | flat %.2f | +no-mod %.2f | +vec4-mat %.2f | +data-driven %.2f (vs typed 2-deep %.2f)"
                 deep flat noMod vec4 dd scat
+
+            // ── CLUSTER probe: same HEAVY gather shader, ONE instanced record instead of
+            //    n records. Only valid when all objects share a vertex count
+            //    (--min-tris = --max-tris). If warp RESIDENCY (not FE throughput) is what
+            //    small records cost, the heavy shader shows it where the trivial-shader
+            //    --probe could not. ──
+            if minTris = maxTris then
+                let one = [| DrawCallInfo(FaceVertexCount = minTris * 3, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = n) |]
+                let deepInst =
+                    mkVariantCalls one "3-deep faithful INSTANCED (1 record)"
+                        (Effect.compose [ Effect.ofFunction Sh.deepVert; Effect.ofFunction Sh.lit ])
+                        [ "PArenaF", cF; "PArenaI", cI; "PHdr", (AVal.constant hdrC :> IAdaptiveValue) ]
+                Log.line "pack-probe: heavy shader n-records / 1-instanced = %.2fx  (cluster idea pays if >> 1)" (deep / deepInst)
             0
         elif argv |> Array.contains "--probe" then
             // ── FE probe: IDENTICAL vertex work, identical shader — n indirect records
