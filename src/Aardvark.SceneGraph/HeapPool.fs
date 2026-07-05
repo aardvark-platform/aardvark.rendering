@@ -66,6 +66,9 @@ module HeapUniforms =
         member x.HeapPickIds : int[] = uniform?StorageBuffer?HeapPickIds
         // (the GPU trafo-chain folds each slot's ModelTrafo directly into the
         // arena — HeapData/HeapDataD — so there is no separate chain buffer.)
+        // CLUSTERED buckets: gl_InstanceIndex -> slot (per size-class instanced
+        // records; see clusterClassSizes)
+        member x.HeapClassSlots : int[] = uniform?StorageBuffer?HeapClassSlots
         // Bindless geometry: ONE flat float32 SSBO array indexed by handle
         // (gl_InstanceIndex). Element [h] is object h's interleaved vertex floats;
         // each attribute is decoded by component count at a fixed offset (like the
@@ -845,6 +848,33 @@ module Heap =
     /// (affects only buckets created while set).
     let mutable forceNoDrawId = false
 
+    /// Disable CLUSTERED draw records (size-class instanced draws) — falls back to
+    /// one record per slot. For A/B measurement; also settable via HEAP_NO_CLUSTERS=1.
+    let mutable DisableClusters =
+        match System.Environment.GetEnvironmentVariable "HEAP_NO_CLUSTERS" with
+        | null | "" -> false
+        | s -> let s = s.Trim().ToLowerInvariant() in s = "1" || s = "true" || s = "on"
+
+    /// Padded drawn-vertex-count ladder for CLUSTERED records. All sizes are
+    /// multiples of 3 (TriangleList), so a slot's padding lanes form whole
+    /// degenerate triangles (every lane clamps to the slot's last vertex -> zero
+    /// area, culled). ~9/8 steps bound padding waste at ~12% worst in the geometric
+    /// regime (records are ~free, so the dense ladder costs nothing);
+    /// slots above the cap keep an exact per-slot record.
+    let internal clusterClassSizes =
+        let sizes = System.Collections.Generic.List<int>()
+        let mutable c = 3
+        while c <= 4608 do
+            sizes.Add c
+            c <- max (c + 3) ((c * 9 / 8 + 2) / 3 * 3)
+        sizes.ToArray()
+
+    /// index of the smallest class >= vc, or -1 when vc exceeds the cap (per-slot record)
+    let internal clusterClassOf (vc : int) =
+        let mutable i = 0
+        while i < clusterClassSizes.Length && clusterClassSizes.[i] < vc do i <- i + 1
+        if i < clusterClassSizes.Length then i else -1
+
     /// Extract a host PixImage&lt;byte&gt; (RGBA) from an ITexture for atlas packing.
     let private toAtlasPixImage (t : ITexture) : PixImage<byte> =
         match t with
@@ -1067,6 +1097,10 @@ module Heap =
         let mutable disposed = false
         member _.Slot = slot
         member _.IsDisposed = disposed
+        /// CLUSTERED buckets: the updater evaluates gate flips (class membership must
+        /// change BEFORE any buffer flush); non-clustered buckets leave this null and
+        /// keep the draw-mirror path.
+        member val OnCluster : System.Action<AdaptiveToken> = null with get, set
         /// evaluate the gate; `write slot count` runs iff re-evaluation was needed
         member x.Update(token : AdaptiveToken, write : int -> int -> unit) =
             x.EvaluateIfNeeded token () (fun token ->
@@ -2863,9 +2897,22 @@ module Heap =
         let drawIdWorks = runtime.SupportsMultiDrawIndirectDrawId && not forceNoDrawId
         let useDrawId = (isGL || instanced) && drawIdWorks
         let useSlotAttr = instanced && not drawIdWorks
+        //  (d) CLUSTERED (Vulkan/MoltenVK non-instanced host TriangleList buckets):
+        //      slots grouped into padded SIZE CLASSES, one INSTANCED record per
+        //      (page, class) — gl_InstanceIndex indexes the HeapClassSlots SSBO.
+        //      Small records starve warp residency on latency-bound gathers
+        //      (probe: n-records vs 1-instanced = 1.36x with the real shader);
+        //      the class record restores it. Slots above the class cap keep an
+        //      exact per-slot record THROUGH the same ClassSlots indirection.
+        let useClusters =
+            not DisableClusters && not isGL && not instanced && not useBindlessGeom
+            && pipeKey.Topology = IndexedGeometryMode.TriangleList
         let symSlotAttr = Symbol.Create "HeapSlotAttr"
+        let symClassSlots = Symbol.Create "HeapClassSlots"
+        let slotVar = Var("heapSlot", typeof<int>)
         let slotE : Expr<int> =
-            if useDrawId then <@ getDrawId() @>
+            if useClusters then Expr.Cast (Expr.Var slotVar)
+            elif useDrawId then <@ getDrawId() @>
             elif useSlotAttr then Expr.ReadInput<int>(ParameterKind.Input, "HeapSlotAttr")
             else Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId)
 
@@ -2897,8 +2944,11 @@ module Heap =
         // REF per consumed attribute (host buckets), then ONE index-allocation ref.
         let attrBase = fieldStride + numConst
         let attrCells = if useBindlessGeom then 0 else numAttrs
-        let headerStride = attrBase + attrCells + 1
+        // + idx cell + vc cell (drawn-vertex count: the CLUSTER clamp kills padding
+        // lanes via min(gl_VertexIndex, vc-1) — whole degenerate triangles)
+        let headerStride = attrBase + attrCells + 2
         let idxCell = attrBase + attrCells
+        let vcCell = idxCell + 1
 
         // ── arena: deduped per-draw uniform regions, refcounted, placed by a
         //    coalescing range allocator (float units) — now held by the (per-bucket) storage ──
@@ -3028,6 +3078,98 @@ module Heap =
         // from the RO's "HeapPickId" uniform (-1 = unpickable), flushed to pickIdBuf, exposed
         // as the "HeapPickIds" SSBO read by the dom heap pick-shader via gl_InstanceIndex.
         let mutable pickIds : int[] = Array.zeroCreate 16
+        // ── CLUSTER state (useClusters): per (page, class) live-slot lists; the
+        //    last pseudo-class holds OVERSIZED slots (exact per-slot records).
+        //    ClassSlots buffer + records are FULL-REWRITTEN per flush (tiny /
+        //    same policy as slotPageBuf); membership ops are O(1) swap-remove. ──
+        let numClasses = clusterClassSizes.Length
+        // Each (page, class) owns a CAPACITY REGION in the ClassSlots buffer with a
+        // STABLE base (records reference it via FirstInstance): membership changes
+        // are O(1) single-int writes into the CPU mirror + a dirty range. A full
+        // region doubles into fresh space at the cursor (amortized); when leaked
+        // space exceeds the live capacity the whole buffer RELAYOUTS (full rewrite,
+        // amortized like growth). All mutation happens inside the updater.
+        let classLists = System.Collections.Generic.List<System.Collections.Generic.List<int>>()
+        let classBase  = System.Collections.Generic.List<int>()
+        let classCap   = System.Collections.Generic.List<int>()
+        let mutable csCursor = 0                                  // high-water of the region space
+        let mutable csLiveCaps = 0                                // sum of LIVE region capacities
+        let mutable csStaging : int[] = Array.zeroCreate 64       // authoritative CPU mirror
+        let csDirty = System.Collections.Generic.List<struct(int * int)>()
+        let mutable csFullDirty = false
+        let classIdxOfList (page : int) (cls : int) =
+            let idx = page * (numClasses + 1) + cls
+            while classLists.Count <= idx do
+                classLists.Add(System.Collections.Generic.List<int>())
+                classBase.Add 0
+                classCap.Add 0
+            idx
+        let csEnsureStaging (n : int) =
+            if csStaging.Length < n then
+                let ns = Array.zeroCreate<int> (Fun.NextPowerOfTwo n)
+                System.Array.Copy(csStaging, ns, csStaging.Length)
+                csStaging <- ns
+        /// re-pack every region tightly (drops leaked space); full rewrite
+        let csRelayout () =
+            let mutable o = 0
+            for idx in 0 .. classLists.Count - 1 do
+                let l = classLists.[idx]
+                let cap = if l.Count = 0 then 0 else Fun.NextPowerOfTwo (max 16 l.Count)
+                classBase.[idx] <- o
+                classCap.[idx] <- cap
+                csEnsureStaging (o + cap)
+                for j in 0 .. l.Count - 1 do csStaging.[o + j] <- l.[j]
+                o <- o + cap
+            csCursor <- o
+            csLiveCaps <- o
+            csDirty.Clear()
+            csFullDirty <- true
+        /// make room for one more member of region `idx`: opportunistic RELAYOUT when
+        /// leaked space dominates, then (still-full regions after a tight relayout
+        /// included) grow-and-move to fresh space at the cursor.
+        let csEnsureRoom (idx : int) =
+            if classLists.[idx].Count >= classCap.[idx] then
+                if csCursor > 2 * csLiveCaps + 1024 then csRelayout ()
+                let l = classLists.[idx]
+                if l.Count >= classCap.[idx] then
+                    let newCap = Fun.NextPowerOfTwo (max 16 (l.Count + 1))
+                    csLiveCaps <- csLiveCaps - classCap.[idx] + newCap
+                    let nb = csCursor
+                    csCursor <- csCursor + newCap
+                    csEnsureStaging csCursor
+                    for j in 0 .. l.Count - 1 do csStaging.[nb + j] <- l.[j]
+                    if l.Count > 0 && not csFullDirty then csDirty.Add(struct(nb, l.Count))
+                    classBase.[idx] <- nb
+                    classCap.[idx] <- newCap
+        let mutable clusterClsOf : int[] = Array.create 16 -1     // slot -> class idx (numClasses = oversized; -1 = not listed)
+        let mutable clusterPosOf : int[] = Array.zeroCreate 16    // slot -> position in its class list
+        let mutable vcOfSlot     : int[] = Array.zeroCreate 16    // slot -> drawn-vertex count
+        // per-page CLUSTER record counts (indirect draw counts) — refreshed by the flushes
+        let clusterRecCounts = System.Collections.Generic.List<int>()
+        let classAdd (slot : int) =
+            if clusterClsOf.[slot] < 0 then
+                let cls = match clusterClassOf vcOfSlot.[slot] with | -1 -> numClasses | c -> c
+                let idx = classIdxOfList slotPage.[slot] cls
+                csEnsureRoom idx
+                let l = classLists.[idx]
+                clusterClsOf.[slot] <- cls
+                clusterPosOf.[slot] <- l.Count
+                csStaging.[classBase.[idx] + l.Count] <- slot
+                if not csFullDirty then csDirty.Add(struct(classBase.[idx] + l.Count, 1))
+                l.Add slot
+        let classRemove (slot : int) =
+            let cls = clusterClsOf.[slot]
+            if cls >= 0 then
+                let idx = classIdxOfList slotPage.[slot] cls
+                let l = classLists.[idx]
+                let pos = clusterPosOf.[slot]
+                let last = l.[l.Count - 1]
+                l.[pos] <- last
+                clusterPosOf.[last] <- pos
+                l.RemoveAt(l.Count - 1)
+                csStaging.[classBase.[idx] + pos] <- last
+                if not csFullDirty then csDirty.Add(struct(classBase.[idx] + pos, 1))
+                clusterClsOf.[slot] <- -1
         let symPickId = Symbol.Create "HeapPickId"
         let zeroDraw = DrawCallInfo(FaceVertexCount = 0, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 0)
         let freeSlots = System.Collections.Generic.Stack<int>()
@@ -3076,6 +3218,15 @@ module Heap =
                 let npk = Array.zeroCreate<int> n
                 System.Array.Copy(pickIds, npk, pickIds.Length)
                 pickIds <- npk
+                let ncc = Array.create n -1
+                System.Array.Copy(clusterClsOf, ncc, clusterClsOf.Length)
+                clusterClsOf <- ncc
+                let ncp = Array.zeroCreate<int> n
+                System.Array.Copy(clusterPosOf, ncp, clusterPosOf.Length)
+                clusterPosOf <- ncp
+                let nvc = Array.zeroCreate<int> n
+                System.Array.Copy(vcOfSlot, nvc, vcOfSlot.Length)
+                vcOfSlot <- nvc
                 let nh = Array.zeroCreate<int> (n * headerStride)
                 System.Array.Copy(headers, nh, headers.Length)
                 headers <- nh
@@ -3468,7 +3619,59 @@ module Heap =
         // must be contiguous; entries itself stays in DrawCallInfo layout)
         let mutable drawStaging : DrawCallInfo[] = Array.zeroCreate entries.Length
 
-        let flushDraws (t : AdaptiveToken) (gates : System.Collections.Generic.HashSet<GateWriter>) =
+        // ── CLUSTER records: one instanced record per non-empty (page, class) +
+        //    exact per-slot records for oversized slots — ALL routed through the
+        //    ClassSlots indirection (gl_InstanceIndex is GLOBAL via FirstInstance).
+        //    Bases are a deterministic walk over the lists; every flush derives from
+        //    the same post-updater state, so flush order is irrelevant. ──
+        let clusterRecordsFor (page : int) (dst : System.Collections.Generic.List<DrawCallInfo>) =
+            dst.Clear()
+            for idx in 0 .. classLists.Count - 1 do
+                let l = classLists.[idx]
+                if l.Count > 0 && idx / (numClasses + 1) = page then
+                    let cls = idx % (numClasses + 1)
+                    let basev = classBase.[idx]
+                    if cls < numClasses then
+                        dst.Add(DrawCallInfo(FaceVertexCount = clusterClassSizes.[cls], FirstIndex = 0, BaseVertex = 0,
+                                             FirstInstance = basev, InstanceCount = l.Count))
+                    else
+                        for j in 0 .. l.Count - 1 do
+                            dst.Add(DrawCallInfo(FaceVertexCount = vcOfSlot.[l.[j]], FirstIndex = 0, BaseVertex = 0,
+                                                 FirstInstance = basev + j, InstanceCount = 1))
+        let clusterRecCount (page : int) = if page < clusterRecCounts.Count then clusterRecCounts.[page] else 0
+        let setClusterRecCount (page : int) (n : int) =
+            while clusterRecCounts.Count <= page do clusterRecCounts.Add 0
+            clusterRecCounts.[page] <- n
+        // gl_InstanceIndex -> slot. O(changed): membership edits recorded as dirty
+        // single-int ranges into the CPU mirror; only region growth / relayout pays
+        // a bigger (amortized) upload.
+        let classSlotsBuf = MirrorBuffer(runtime, 64 * 4, BufferUsage.Storage)
+        let flushClassSlots (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
+            classSlotsBuf.ResizeInPlace(uint64 (max 64 csStaging.Length * 4))
+            if csFullDirty then
+                csFullDirty <- false
+                csDirty.Clear()
+                if csCursor > 0 then classSlotsBuf.Write(csStaging, 0UL, 0, csCursor)
+            elif csDirty.Count > 0 then
+                for (struct(o, n)) in csDirty do
+                    classSlotsBuf.Write(csStaging, uint64 (o * 4), o, n)
+                csDirty.Clear()
+        let clusterRecs = System.Collections.Generic.List<DrawCallInfo>()
+
+        let rec flushDraws (t : AdaptiveToken) (gates : System.Collections.Generic.HashSet<GateWriter>) =
+            if useClusters then
+                // record set derived from the class lists (membership settled in the updater)
+                clusterRecordsFor 0 clusterRecs
+                setClusterRecCount 0 clusterRecs.Count
+                if drawStaging.Length < clusterRecs.Count then
+                    drawStaging <- Array.zeroCreate (Fun.NextPowerOfTwo (max 16 clusterRecs.Count))
+                for i in 0 .. clusterRecs.Count - 1 do drawStaging.[i] <- clusterRecs.[i]
+                drawBuf.ResizeInPlace(uint64 (max 16 drawStaging.Length * sizeof<DrawCallInfo>))
+                if clusterRecs.Count > 0 then drawBuf.Write(drawStaging, 0UL, 0, clusterRecs.Count)
+            else
+            flushDrawsPerSlot t gates
+
+        and flushDrawsPerSlot (t : AdaptiveToken) (gates : System.Collections.Generic.HashSet<GateWriter>) =
             // toggled dynamic gates -> InstanceCount of exactly those slots
             for w in gates do
                 if not w.IsDisposed then
@@ -3569,6 +3772,10 @@ module Heap =
             slotPageBuf.Dependency <- dep
             slotPageBuf.Flush <- flushSlotPage
             slotPageBuf.Name <- "HeapSlotPage"
+            if useClusters then
+                classSlotsBuf.Dependency <- dep
+                classSlotsBuf.Flush <- flushClassSlots
+                classSlotsBuf.Name <- "HeapClassSlots"
             if picking then
                 pickIdBuf.Dependency <- dep
                 pickIdBuf.Flush <- flushPickIds
@@ -3587,9 +3794,11 @@ module Heap =
         let indirectAval =
             (drawBuf :> aval<IBackendBuffer>)
             |> AdaptiveResource.mapNonAdaptive (fun b ->
-                IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> highWater (b :> IBuffer))
+                let cnt = if useClusters then clusterRecCount 0 else highWater
+                IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> cnt (b :> IBuffer))
         let instAval = (instBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
         let slotPageU = ((slotPageBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
+        let classSlotsU = ((classSlotsBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         let pickIdU = ((pickIdBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
@@ -3911,7 +4120,13 @@ module Heap =
         //                       objects' EXISTING GPU buffers, zero-copy).
         let heapRewrite : Effect -> Effect =
             let handleE = slotE.Raw
-            let vtxE : Expr<int> = Expr.Cast (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId))
+            let vtxRawE : Expr<int> = Expr.Cast (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId))
+            // CLUSTERED records are padded to the class size: clamp the vertex cursor
+            // to the slot's real count — padding lanes all re-shade the LAST vertex,
+            // so padding triangles are zero-area and culled.
+            let vtxE : Expr<int> =
+                if useClusters then <@ min %vtxRawE (uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint vcCell) ] - 1) @>
+                else vtxRawE
             let idxRefE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint idxCell) ] @>
             let fieldOff (fi : int) : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint fi) ] @>
             fun e ->
@@ -3976,6 +4191,12 @@ module Heap =
                     // only slot/vid), then `heapVid` OUTERMOST so attribute gathers see it
                     let body = Seq.foldBack (fun (v, ge) b -> Expr.Let(v, ge, b)) hoistOrder body
                     let body = if isVertex then Expr.Let(vidVar, (<@ decodeHeapIndex %idxRefE %vtxE @>).Raw, body) else body
+                    // CLUSTERED slot routing: bind the ClassSlots indirection ONCE,
+                    // OUTERMOST (the vid let + every gather reference it via slotE)
+                    let body =
+                        if useClusters then
+                            Expr.Let(slotVar, (<@ (uniform.HeapClassSlots : int[]).[ %(Expr.Cast<int> (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId))) ] @>).Raw, body)
+                        else body
                     Shader.withBody body sh)
 
         // the bucket's render object — created ONCE; identity is stable across
@@ -4033,9 +4254,22 @@ module Heap =
                   Scissor  = pipeKey.Scissor  |> Option.map AVal.constant }
             ro.Surface <-
                 let baseE = heapRewrite effect
-                if useAtlas then Surface.Effect (baseE |> rewriteAtlasSamples slotE atlasByName)
-                elif samplers.Length > 0 then Surface.Effect (baseE |> rewriteSamplers slotE samplerByName |> overrideSamplerStates samplerStateOverrides)
-                else Surface.Effect baseE
+                let withSamplers =
+                    if useAtlas then baseE |> rewriteAtlasSamples slotE atlasByName
+                    elif samplers.Length > 0 then baseE |> rewriteSamplers slotE samplerByName |> overrideSamplerStates samplerStateOverrides
+                    else baseE
+                // CLUSTERED: later passes (sampler/atlas rewrites) splice slotVar into
+                // stages whose (unused) binding was already dropped — bind the
+                // ClassSlots indirection wherever slotVar is still FREE.
+                let final =
+                    if not useClusters then withSamplers
+                    else
+                        withSamplers |> Effect.map (fun sh ->
+                            if sh.shaderBody.GetFreeVars() |> Seq.exists (fun v -> v = slotVar) then
+                                let slotRead = (<@ (uniform.HeapClassSlots : int[]).[ %(Expr.Cast<int> (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId))) ] @>).Raw
+                                Shader.withBody (Expr.Let(slotVar, slotRead, sh.shaderBody)) sh
+                            else sh)
+                Surface.Effect final
             ro.DrawCalls <- DrawCalls.Indirect indirectAval
             // NO fixed-function vertex input: attributes are storage-decoded
             // (host: arena allocations; bindless: SSBO descriptor array).
@@ -4065,6 +4299,7 @@ module Heap =
                         if name = symData || name = symDataI || name = symDataD then ValueSome derivedU
                         elif name = symHeaders then ValueSome headersU
                         elif picking && name = symPickIds then ValueSome pickIdU
+                        elif useClusters && name = symClassSlots then ValueSome classSlotsU
                         else
                             match texLookup.TryGetValue name with
                             | true, v -> ValueSome v
@@ -4111,6 +4346,15 @@ module Heap =
                 let mutable pstaging = Array.zeroCreate<DrawCallInfo> (max 16 entries.Length)
                 let db = MirrorBuffer(runtime, pstaging.Length * sizeof<DrawCallInfo>, BufferUsage.Indirect)
                 let flush (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
+                    if useClusters then
+                        let recs = System.Collections.Generic.List<DrawCallInfo>()
+                        clusterRecordsFor pageIdx recs
+                        setClusterRecCount pageIdx recs.Count
+                        if pstaging.Length < recs.Count then pstaging <- Array.zeroCreate (Fun.NextPowerOfTwo (max 16 recs.Count))
+                        db.ResizeInPlace(uint64 (max 16 pstaging.Length * sizeof<DrawCallInfo>))
+                        for i in 0 .. recs.Count - 1 do pstaging.[i] <- recs.[i]
+                        if recs.Count > 0 then db.Write(pstaging, 0UL, 0, recs.Count)
+                    else
                     if pstaging.Length < entries.Length then pstaging <- Array.zeroCreate entries.Length
                     db.ResizeInPlace(uint64 (pstaging.Length * sizeof<DrawCallInfo>))
                     for s in 0 .. highWater - 1 do
@@ -4122,7 +4366,9 @@ module Heap =
                 pageDrawBufs.Add db
                 let indirectP =
                     (db :> aval<IBackendBuffer>)
-                    |> AdaptiveResource.mapNonAdaptive (fun b -> IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> highWater (b :> IBuffer))
+                    |> AdaptiveResource.mapNonAdaptive (fun b ->
+                        let cnt = if useClusters then clusterRecCount pageIdx else highWater
+                        IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> cnt (b :> IBuffer))
                 let pageArenaU = ((storage.Page(pageIdx).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
                 let ro = RenderObject.Clone bucketRO
                 ro.DrawCalls <- DrawCalls.Indirect indirectP
@@ -4177,7 +4423,7 @@ module Heap =
             lastInstBytes <- instAlloc.Extent * 4
             lastInstLiveBytes <- instAlloc.Live * 4
 
-        member private x.AddInternal(ro : RenderObject) =
+        member private x.AddInternal(t : AdaptiveToken, ro : RenderObject) =
             let __ingT0 = System.Diagnostics.Stopwatch.GetTimestamp()
             let slot = if freeSlots.Count > 0 then freeSlots.Pop() else let s = highWater in highWater <- s + 1; s
             ensureSlot slot
@@ -4277,6 +4523,8 @@ module Heap =
                 | None ->
                     struct(noIdxKey, -1, faceVertexCountOf ro)
             headers.[slot * headerStride + idxCell] <- idxRef
+            headers.[slot * headerStride + vcCell] <- vertexCount
+            vcOfSlot.[slot] <- vertexCount
             dirtyHeaders.Add slot |> ignore
             // register the slot's textures (bindless per-type tables / atlas)
             for (_, _, texSyms, table) in bindlessTexTables do
@@ -4297,7 +4545,20 @@ module Heap =
             let k = if instanced then instanceCountOf ro else 1
             let active = ro.IsActive
             let instCount =
-                if active.IsConstant then (if AVal.force active then k else 0)
+                if useClusters then
+                    // CLUSTERED: gating = class membership; the record set is derived
+                    // from the class lists at flush time. Dynamic gates are evaluated
+                    // by the UPDATER (OnCluster) so membership settles before flushes.
+                    if active.IsConstant then
+                        (if AVal.force active then classAdd slot)
+                    else
+                        let w = GateWriter(active, slot, 1)
+                        w.OnCluster <- System.Action<AdaptiveToken>(fun tok ->
+                            w.Update(tok, fun sl kk -> if kk > 0 then classAdd sl else classRemove sl))
+                        gateWriters.[slot] <- w
+                        w.OnCluster.Invoke t          // subscribes the gate to the UPDATER
+                    1
+                elif active.IsConstant then (if AVal.force active then k else 0)
                 else
                     let w = GateWriter(active, slot, k)
                     gateWriters.[slot] <- w
@@ -4359,6 +4620,7 @@ module Heap =
                 match gateWriters.TryGetValue s.Slot with
                 | true, w -> w.Dispose(); gateWriters.Remove s.Slot |> ignore
                 | _ -> ()
+                if useClusters then classRemove s.Slot
                 // PICKING: release the dom pick id for this slot before it's recycled
                 if picking && pickIds.[s.Slot] >= 0 then deregister pickIds.[s.Slot]
                 freeSlots.Push s.Slot
@@ -4366,9 +4628,9 @@ module Heap =
             | _ -> ()
 
         /// Add ONE new member (no-op if already present). Called from the updater.
-        member x.AddOne(ro : RenderObject) =
+        member x.AddOne(t : AdaptiveToken, ro : RenderObject) =
             if not (slots.ContainsKey ro) then
-                x.AddInternal ro
+                x.AddInternal(t, ro)
                 x.PublishStats()
 
         /// Remove ONE member: tombstone its record, recycle slot + regions.
@@ -4387,7 +4649,7 @@ module Heap =
         /// refs recycled); new ROs take a slot, alloc/refcount their arena regions
         /// and texture refs and (if their geometry is unseen) append to the packed
         /// buffers. Called from the updater's evaluation only.
-        member x.Update(ros : RenderObject[]) =
+        member x.Update(t : AdaptiveToken, ros : RenderObject[]) =
             // removals first so their slots/offsets are reusable by this very update
             let current = System.Collections.Generic.HashSet<RenderObject>(ros, HashIdentity.Reference)
             let mutable dead : System.Collections.Generic.List<RenderObject> = null
@@ -4399,7 +4661,7 @@ module Heap =
                 for ro in dead do x.RemoveInternal ro
                 maybeCompact ()
             for ro in ros do
-                if not (slots.ContainsKey ro) then x.AddInternal ro
+                if not (slots.ContainsKey ro) then x.AddInternal(t, ro)
             x.PublishStats()
 
         /// Release all adaptive references (region writers, texture writers) and
@@ -5030,6 +5292,10 @@ module Heap =
         // updater's InputChangedObject, and the updater re-keys ONLY those ROs.
         let keyWatchers = System.Collections.Generic.Dictionary<RenderObject, KeyWatcher>(HashIdentity.Reference)
         let dirtyKeys = LockedSet<KeyWatcher>()
+        // CLUSTERED buckets evaluate their IsActive gates HERE (class membership must
+        // be settled before any buffer flush serializes it); a marked gate lands in
+        // this set via InputChangedObject below.
+        let dirtyClusterGates = LockedSet<GateWriter>()
         let updaterRef = ref (Unchecked.defaultof<aval<int>>)
         let version = ref 0
 
@@ -5068,6 +5334,7 @@ module Heap =
                 override x.InputChangedObject(_, o) =
                     match o with
                     | :? KeyWatcher as w -> dirtyKeys.Add w |> ignore
+                    | :? GateWriter as g -> dirtyClusterGates.Add g |> ignore
                     | _ -> ()
                 override x.Compute(t) =
                     let delta = objReader.GetChanges t
@@ -5092,7 +5359,7 @@ module Heap =
                             match caches.TryGetValue key with
                             | true, c -> c
                             | _ -> mkBucket key r f
-                        c.AddOne r
+                        c.AddOne(t, r)
                     let removeFrom (key : obj) (r : RenderObject) =
                         roBucket.Remove r |> ignore
                         match caches.TryGetValue key with
@@ -5147,6 +5414,10 @@ module Heap =
                                     removeFrom oldKey r
                                     addTo newKey r f
                             | _ -> ()
+
+                    // cluster gate flips: apply class add/removes NOW (before flushes)
+                    for g in dirtyClusterGates.GetAndClear() do
+                        if not g.IsDisposed && not (isNull g.OnCluster) then g.OnCluster.Invoke t
 
                     lastBucketCount <- caches.Count
                     let mutable chainB = 0

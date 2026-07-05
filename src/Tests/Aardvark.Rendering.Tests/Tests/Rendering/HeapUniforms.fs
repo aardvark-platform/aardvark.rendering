@@ -807,7 +807,10 @@ module HeapUniforms =
             let meshes =
                 [| mesh (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White)
                    mesh (IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.38)) 8 C4b.White)
-                   mesh (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.42)) C4b.White) |]
+                   mesh (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.42)) C4b.White)
+                   // OVERSIZED (beyond the largest cluster size class): exercises the
+                   // exact per-slot record routed through the ClassSlots indirection
+                   mesh (IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.4)) 48 C4b.White) |]
             let col i = AVal.constant (V4f(0.25f + 0.05f * float32 (i % 9), 0.55f, 0.35f, 1.0f)) :> IAdaptiveValue
             let mk i (p : V3d) =
                 let (ps, ns, ix) = meshes.[i % meshes.Length]
