@@ -1446,11 +1446,10 @@ module Heap =
         let hi = uniform.HeapDataI.[p + 1]
         let e = ((hi >>> 20) &&& 0x7FF) - 896
         let s = (hi >>> 31) <<< 31
-        if e >= 255 then Fun.FloatFromBits(s ||| 0x7F800000)
-        elif e <= 0 then 0.0f
-        else
-            let m = ((hi &&& 0xFFFFF) <<< 3) ||| ((lo >>> 29) &&& 0x7)
-            Fun.FloatFromBits((s ||| (e <<< 23) ||| m) + ((lo >>> 28) &&& 1))
+        // branchless: compute the normal case, select the two edge cases
+        let m = ((hi &&& 0xFFFFF) <<< 3) ||| ((lo >>> 29) &&& 0x7)
+        let norm = Fun.FloatFromBits((s ||| (e <<< 23) ||| m) + ((lo >>> 28) &&& 1))
+        if e >= 255 then Fun.FloatFromBits(s ||| 0x7F800000) elif e <= 0 then 0.0f else norm
 
     /// storage-decoded attribute fetch (wombat's loadAttributeByRef,
     /// generalized): BRANCH on the allocation header's typeId at fetch time and
@@ -1465,110 +1464,106 @@ module Heap =
     [<ReflectedDefinition>]
     let private decodeHeapV4f (r : int) (v : int) : V4f =
         let tid = uniform.HeapDataI.[r]
-        // `% length` only serves the length-1 singleton broadcast (indices are
-        // always < length otherwise) — a select avoids the emulated integer division
-        let e = if uniform.HeapDataI.[r + 1] = 1 then 0 else v
-        if tid = 13 then                                            // f32 x3 (V3f/C3f)
+        // `min` handles the length-1 singleton broadcast (indices are always
+        // < length otherwise) in ONE instruction — no modulo, no select chain
+        let e = min v (uniform.HeapDataI.[r + 1] - 1)
+        if tid = 13 then                                            // f32 x3 (V3f/C3f) — HOT
             let o = r + 4 + e * 3
             V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], 1.0f)
-        elif tid = 14 then                                          // f32 x4 (V4f/C4f)
+        elif tid = 14 then                                          // f32 x4 (V4f/C4f) — HOT
             let o = r + 4 + e * 4
             V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], uniform.HeapData.[o + 3])
-        elif tid = 40 then                                          // normalized C4b (BGRA memory layout)
+        elif tid = 40 then                                          // normalized C4b (BGRA memory layout) — HOT
             let w = uniform.HeapDataI.[r + 4 + e]
             V4f(float32 ((w >>> 16) &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 (w &&& 0xFF), float32 ((w >>> 24) &&& 0xFF)) / 255.0f
-        elif tid = 12 then                                          // f32 x2
-            let o = r + 4 + e * 2
-            V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], 0.0f, 1.0f)
-        elif tid = 11 then                                          // f32 x1
-            V4f(uniform.HeapData.[r + 4 + e], 0.0f, 0.0f, 1.0f)
-        elif tid = 33 then                                          // f64 x3 (V3d/C3d)
-            let o = r + 4 + e * 6
-            V4f(decodeHeapF64 o, decodeHeapF64 (o + 2), decodeHeapF64 (o + 4), 1.0f)
-        elif tid = 34 then                                          // f64 x4 (V4d/C4d)
-            let o = r + 4 + e * 8
-            V4f(decodeHeapF64 o, decodeHeapF64 (o + 2), decodeHeapF64 (o + 4), decodeHeapF64 (o + 6))
-        elif tid = 32 then                                          // f64 x2
-            let o = r + 4 + e * 4
-            V4f(decodeHeapF64 o, decodeHeapF64 (o + 2), 0.0f, 1.0f)
-        elif tid = 31 then                                          // f64 x1
-            V4f(decodeHeapF64 (r + 4 + e * 2), 0.0f, 0.0f, 1.0f)
-        elif tid = 23 then                                          // i32 x3 -> float cast
-            let o = r + 4 + e * 3
-            V4f(float32 uniform.HeapDataI.[o], float32 uniform.HeapDataI.[o + 1], float32 uniform.HeapDataI.[o + 2], 1.0f)
-        elif tid = 24 then                                          // i32 x4 -> float cast
-            let o = r + 4 + e * 4
-            V4f(float32 uniform.HeapDataI.[o], float32 uniform.HeapDataI.[o + 1], float32 uniform.HeapDataI.[o + 2], float32 uniform.HeapDataI.[o + 3])
-        elif tid = 22 then                                          // i32 x2 -> float cast
-            let o = r + 4 + e * 2
-            V4f(float32 uniform.HeapDataI.[o], float32 uniform.HeapDataI.[o + 1], 0.0f, 1.0f)
-        elif tid = 21 then                                          // i32 x1 -> float cast
-            V4f(float32 uniform.HeapDataI.[r + 4 + e], 0.0f, 0.0f, 1.0f)
-        else V4f(0.0f, 0.0f, 0.0f, 1.0f)
+        else
+            // ONE generic arm for every remaining source (f32 x1/x2, i32 x1..x4,
+            // f64 x1..x4): class/component-count arithmetic + predicated loads.
+            // The old per-type arms never RAN for hot content, but their inlined
+            // footprint (esp. 10 copies of the f64 bit-decode) cost measurable
+            // register pressure — collapsed here, the f64 tree inlines 4x total.
+            let cls = tid / 10                                      // 1 = f32, 2 = i32, 3 = f64
+            let comps = tid - cls * 10
+            let o = r + 4 + e * comps * (if cls = 3 then 2 else 1)
+            let c0 =
+                if cls = 3 then decodeHeapF64 o
+                elif cls = 2 then float32 uniform.HeapDataI.[o]
+                else uniform.HeapData.[o]
+            let c1 =
+                if comps < 2 then 0.0f
+                elif cls = 3 then decodeHeapF64 (o + 2)
+                elif cls = 2 then float32 uniform.HeapDataI.[o + 1]
+                else uniform.HeapData.[o + 1]
+            let c2 =
+                if comps < 3 then 0.0f
+                elif cls = 3 then decodeHeapF64 (o + 4)
+                elif cls = 2 then float32 uniform.HeapDataI.[o + 2]
+                else uniform.HeapData.[o + 2]
+            let c3 =
+                if comps < 4 then 1.0f
+                elif cls = 3 then decodeHeapF64 (o + 6)
+                elif cls = 2 then float32 uniform.HeapDataI.[o + 3]
+                else uniform.HeapData.[o + 3]
+            V4f(c0, c1, c2, c3)
 
     /// int-target twin of decodeHeapV4f: i32 sources pass through, f32/f64
     /// sources truncate (well-defined casts), C4b unpacks to raw 0..255 ints.
     [<ReflectedDefinition>]
     let private decodeHeapV4i (r : int) (v : int) : V4i =
         let tid = uniform.HeapDataI.[r]
-        // `% length` only serves the length-1 singleton broadcast (indices are
-        // always < length otherwise) — a select avoids the emulated integer division
-        let e = if uniform.HeapDataI.[r + 1] = 1 then 0 else v
-        if tid = 23 then                                            // i32 x3
+        let e = min v (uniform.HeapDataI.[r + 1] - 1)
+        if tid = 23 then                                            // i32 x3 — HOT
             let o = r + 4 + e * 3
             V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], 1)
-        elif tid = 24 then                                          // i32 x4
+        elif tid = 24 then                                          // i32 x4 — HOT
             let o = r + 4 + e * 4
             V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], uniform.HeapDataI.[o + 3])
-        elif tid = 22 then                                          // i32 x2
-            let o = r + 4 + e * 2
-            V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], 0, 1)
-        elif tid = 21 then                                          // i32 x1
-            V4i(uniform.HeapDataI.[r + 4 + e], 0, 0, 1)
-        elif tid = 13 then                                          // f32 x3 -> int cast
-            let o = r + 4 + e * 3
-            V4i(int uniform.HeapData.[o], int uniform.HeapData.[o + 1], int uniform.HeapData.[o + 2], 1)
-        elif tid = 14 then                                          // f32 x4 -> int cast
-            let o = r + 4 + e * 4
-            V4i(int uniform.HeapData.[o], int uniform.HeapData.[o + 1], int uniform.HeapData.[o + 2], int uniform.HeapData.[o + 3])
-        elif tid = 12 then                                          // f32 x2 -> int cast
-            let o = r + 4 + e * 2
-            V4i(int uniform.HeapData.[o], int uniform.HeapData.[o + 1], 0, 1)
-        elif tid = 11 then                                          // f32 x1 -> int cast
-            V4i(int uniform.HeapData.[r + 4 + e], 0, 0, 1)
         elif tid = 40 then                                          // C4b (BGRA memory layout) -> raw 0..255
             let w = uniform.HeapDataI.[r + 4 + e]
             V4i((w >>> 16) &&& 0xFF, (w >>> 8) &&& 0xFF, w &&& 0xFF, (w >>> 24) &&& 0xFF)
-        elif tid = 33 then                                          // f64 x3 -> int cast
-            let o = r + 4 + e * 6
-            V4i(int (decodeHeapF64 o), int (decodeHeapF64 (o + 2)), int (decodeHeapF64 (o + 4)), 1)
-        elif tid = 34 then                                          // f64 x4 -> int cast
-            let o = r + 4 + e * 8
-            V4i(int (decodeHeapF64 o), int (decodeHeapF64 (o + 2)), int (decodeHeapF64 (o + 4)), int (decodeHeapF64 (o + 6)))
-        elif tid = 32 then                                          // f64 x2 -> int cast
-            let o = r + 4 + e * 4
-            V4i(int (decodeHeapF64 o), int (decodeHeapF64 (o + 2)), 0, 1)
-        elif tid = 31 then                                          // f64 x1 -> int cast
-            V4i(int (decodeHeapF64 (r + 4 + e * 2)), 0, 0, 1)
-        else V4i(0, 0, 0, 1)
+        else
+            // ONE generic arm: i32 x1/x2, f32 x1..x4 (cast), f64 x1..x4 (cast)
+            let cls = tid / 10
+            let comps = tid - cls * 10
+            let o = r + 4 + e * comps * (if cls = 3 then 2 else 1)
+            let c0 =
+                if cls = 3 then int (decodeHeapF64 o)
+                elif cls = 1 then int uniform.HeapData.[o]
+                else uniform.HeapDataI.[o]
+            let c1 =
+                if comps < 2 then 0
+                elif cls = 3 then int (decodeHeapF64 (o + 2))
+                elif cls = 1 then int uniform.HeapData.[o + 1]
+                else uniform.HeapDataI.[o + 1]
+            let c2 =
+                if comps < 3 then 0
+                elif cls = 3 then int (decodeHeapF64 (o + 4))
+                elif cls = 1 then int uniform.HeapData.[o + 2]
+                else uniform.HeapDataI.[o + 2]
+            let c3 =
+                if comps < 4 then 1
+                elif cls = 3 then int (decodeHeapF64 (o + 6))
+                elif cls = 1 then int uniform.HeapData.[o + 3]
+                else uniform.HeapDataI.[o + 3]
+            V4i(c0, c1, c2, c3)
 
     // f32 matrix attribute decoders: the matrix is stored tight (rows*cols floats
     // per element, row-major), so a row-wise read reconstructs it. Source==target
     // matrix shape (a matrix attribute isn't widened/cast across sizes).
     [<ReflectedDefinition>]
     let private decodeHeapM22f (r : int) (v : int) : M22f =
-        let o = r + 4 + (if uniform.HeapDataI.[r + 1] = 1 then 0 else v) * 4
+        let o = r + 4 + (min v (uniform.HeapDataI.[r + 1] - 1)) * 4
         M22f(uniform.HeapData.[o+0], uniform.HeapData.[o+1],
              uniform.HeapData.[o+2], uniform.HeapData.[o+3])
     [<ReflectedDefinition>]
     let private decodeHeapM33f (r : int) (v : int) : M33f =
-        let o = r + 4 + (if uniform.HeapDataI.[r + 1] = 1 then 0 else v) * 9
+        let o = r + 4 + (min v (uniform.HeapDataI.[r + 1] - 1)) * 9
         M33f(uniform.HeapData.[o+0], uniform.HeapData.[o+1], uniform.HeapData.[o+2],
              uniform.HeapData.[o+3], uniform.HeapData.[o+4], uniform.HeapData.[o+5],
              uniform.HeapData.[o+6], uniform.HeapData.[o+7], uniform.HeapData.[o+8])
     [<ReflectedDefinition>]
     let private decodeHeapM44f (r : int) (v : int) : M44f =
-        let o = r + 4 + (if uniform.HeapDataI.[r + 1] = 1 then 0 else v) * 16
+        let o = r + 4 + (min v (uniform.HeapDataI.[r + 1] - 1)) * 16
         M44f(uniform.HeapData.[o+0],  uniform.HeapData.[o+1],  uniform.HeapData.[o+2],  uniform.HeapData.[o+3],
              uniform.HeapData.[o+4],  uniform.HeapData.[o+5],  uniform.HeapData.[o+6],  uniform.HeapData.[o+7],
              uniform.HeapData.[o+8],  uniform.HeapData.[o+9],  uniform.HeapData.[o+10], uniform.HeapData.[o+11],
