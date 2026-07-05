@@ -3932,25 +3932,50 @@ module Heap =
                     let isVertex = sh.shaderStage = ShaderStage.Vertex
                     let vidVar = Var("heapVid", typeof<int>)
                     let vidE : Expr<int> = Expr.Cast (Expr.Var vidVar)
+                    // HOIST every gather into ONE let per (name, type) per stage.
+                    // SubstituteReads splices its result into EVERY read site, so a
+                    // field read N times (e.g. ModelTrafo for the position AND the
+                    // normal) would otherwise re-materialize the whole gather N times
+                    // — for a matrix that's N×16 scalar loads + N mat4 constructions
+                    // the GLSL compiler does not reliably CSE (measured ~6ms/frame at
+                    // 700k objects / 115M verts). Reads become a Var; the gathers are
+                    // bound once at the top of the body (after `heapVid`, which the
+                    // attribute gathers reference).
+                    let hoisted = System.Collections.Generic.Dictionary<struct(string * System.Type), Var>()
+                    let hoistOrder = System.Collections.Generic.List<Var * Expr>()
+                    let hoist (name : string) (ityp : System.Type) (mk : unit -> Expr) : Expr =
+                        let key = struct(name, ityp)
+                        match hoisted.TryGetValue key with
+                        | true, v -> Expr.Var v
+                        | _ ->
+                            let v = Var("heap_" + name, ityp)
+                            hoisted.[key] <- v
+                            hoistOrder.Add(v, mk ())
+                            Expr.Var v
                     let body =
                         sh.shaderBody.SubstituteReads (fun kind ityp name idx _ ->
                             match kind, idx with
                             | ParameterKind.Uniform, None ->
                                 match Map.tryFind name nameToField with
-                                | Some fi -> Some (gatherFor ityp (fieldOff fi))
+                                | Some fi -> Some (hoist name ityp (fun () -> gatherFor ityp (fieldOff fi)))
                                 | None -> None
                             | ParameterKind.Input, None when isVertex ->
                                 match attrInfos |> Array.tryFind (fun (_, n, _, _, _, _, _) -> n = name) with
                                 | Some (ai, _, _, _, _, strideF, offF) ->
-                                    if useBindlessGeom then
-                                        Some (bindlessGatherFlat handleE vidE.Raw ityp numAttrs ai strideF offF)
-                                    else
-                                        let refE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint (attrBase + ai)) ] @>
-                                        match hostGather ityp refE vidE with
-                                        | Some g -> Some g
-                                        | None -> failwithf "Heap: cannot storage-decode shader input '%s' (%A — supported: float32/V2f/V3f/V4f and int/V2i/V3i/V4i)" name ityp
+                                    let mk () =
+                                        if useBindlessGeom then
+                                            bindlessGatherFlat handleE vidE.Raw ityp numAttrs ai strideF offF
+                                        else
+                                            let refE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint (attrBase + ai)) ] @>
+                                            match hostGather ityp refE vidE with
+                                            | Some g -> g
+                                            | None -> failwithf "Heap: cannot storage-decode shader input '%s' (%A — supported: float32/V2f/V3f/V4f and int/V2i/V3i/V4i)" name ityp
+                                    Some (hoist name ityp mk)
                                 | None -> None
                             | _ -> None)
+                    // bind the hoisted gathers (mutually independent — they reference
+                    // only slot/vid), then `heapVid` OUTERMOST so attribute gathers see it
+                    let body = Seq.foldBack (fun (v, ge) b -> Expr.Let(v, ge, b)) hoistOrder body
                     let body = if isVertex then Expr.Let(vidVar, (<@ decodeHeapIndex %idxRefE %vtxE @>).Raw, body) else body
                     Shader.withBody body sh)
 

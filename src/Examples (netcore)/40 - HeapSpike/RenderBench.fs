@@ -232,6 +232,126 @@ module RenderBench =
                 return { v with pos = vp * wp; n = m.TransformDir nrm.XYZ; c = col }
             }
 
+        /// pDecodeV4f WITHOUT the integer modulo: singleton broadcast via
+        /// compare-select (len == 1 -> element 0) — same generality, no emulated
+        /// integer division per attribute per vertex.
+        [<ReflectedDefinition>]
+        let pDecodeV4fNoMod (tid : int) (len : int) (d : int) (v : int) : V4f =
+            let e = if len = 1 then 0 else v
+            if tid = 13 then
+                let o = d + e * 3
+                V4f(uniform.PArenaF.[o], uniform.PArenaF.[o + 1], uniform.PArenaF.[o + 2], 1.0f)
+            elif tid = 14 then
+                let o = d + e * 4
+                V4f(uniform.PArenaF.[o], uniform.PArenaF.[o + 1], uniform.PArenaF.[o + 2], uniform.PArenaF.[o + 3])
+            elif tid = 40 then
+                let w = uniform.PArenaI.[d + e]
+                V4f(float32 ((w >>> 16) &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 (w &&& 0xFF), float32 ((w >>> 24) &&& 0xFF)) / 255.0f
+            elif tid = 12 then
+                let o = d + e * 2
+                V4f(uniform.PArenaF.[o], uniform.PArenaF.[o + 1], 0.0f, 1.0f)
+            elif tid = 11 then
+                V4f(uniform.PArenaF.[d + e], 0.0f, 0.0f, 1.0f)
+            elif tid = 33 then
+                let o = d + e * 6
+                V4f(pF64 o, pF64 (o + 2), pF64 (o + 4), 1.0f)
+            elif tid = 34 then
+                let o = d + e * 8
+                V4f(pF64 o, pF64 (o + 2), pF64 (o + 4), pF64 (o + 6))
+            elif tid = 23 then
+                let o = d + e * 3
+                V4f(float32 uniform.PArenaI.[o], float32 uniform.PArenaI.[o + 1], float32 uniform.PArenaI.[o + 2], 1.0f)
+            else V4f(0.0f, 0.0f, 0.0f, 1.0f)
+
+        type UniformScope with
+            member x.PMatV : V4f[] = uniform?StorageBuffer?PMatV
+
+        [<ReflectedDefinition>]
+        let pMatV4 (row : int) : M44f =
+            let r0 = uniform.PMatV.[row + 0]
+            let r1 = uniform.PMatV.[row + 1]
+            let r2 = uniform.PMatV.[row + 2]
+            let r3 = uniform.PMatV.[row + 3]
+            M44f(r0.X, r0.Y, r0.Z, r0.W,
+                 r1.X, r1.Y, r1.Z, r1.W,
+                 r2.X, r2.Y, r2.Z, r2.W,
+                 r3.X, r3.Y, r3.Z, r3.W)
+
+        /// variant E — flat header + NO modulo (generic; full ladder kept)
+        let flatNoModVert (v : PV) =
+            vertex {
+                let s = v.iid
+                let b = s * 20
+                let matOff = uniform.PHdr.[b + 0]
+                let vptOff = uniform.PHdr.[b + 1]
+                let vid = pDecodeIdx uniform.PHdr.[b + 11] uniform.PHdr.[b + 12] v.vtx
+                let p   = pDecodeV4fNoMod uniform.PHdr.[b + 5] uniform.PHdr.[b + 6] uniform.PHdr.[b + 7] vid
+                let nrm = pDecodeV4fNoMod uniform.PHdr.[b + 8] uniform.PHdr.[b + 9] uniform.PHdr.[b + 10] vid
+                let col = pDecodeV4fNoMod uniform.PHdr.[b + 2] uniform.PHdr.[b + 3] uniform.PHdr.[b + 4] vid
+                let m  = pMat matOff
+                let vp = pMat vptOff
+                let wp = m * V4f(p.XYZ, 1.0f)
+                return { v with pos = vp * wp; n = m.TransformDir nrm.XYZ; c = col }
+            }
+
+        /// variant F — E + matrices as vec4 loads from an ALIGNED V4f view (generic)
+        let flatNoModVec4Vert (v : PV) =
+            vertex {
+                let s = v.iid
+                let b = s * 20
+                let matRow = uniform.PHdr.[b + 0]
+                let vptRow = uniform.PHdr.[b + 1]
+                let vid = pDecodeIdx uniform.PHdr.[b + 11] uniform.PHdr.[b + 12] v.vtx
+                let p   = pDecodeV4fNoMod uniform.PHdr.[b + 5] uniform.PHdr.[b + 6] uniform.PHdr.[b + 7] vid
+                let nrm = pDecodeV4fNoMod uniform.PHdr.[b + 8] uniform.PHdr.[b + 9] uniform.PHdr.[b + 10] vid
+                let col = pDecodeV4fNoMod uniform.PHdr.[b + 2] uniform.PHdr.[b + 3] uniform.PHdr.[b + 4] vid
+                let m  = pMatV4 matRow
+                let vp = pMatV4 vptRow
+                let wp = m * V4f(p.XYZ, 1.0f)
+                return { v with pos = vp * wp; n = m.TransformDir nrm.XYZ; c = col }
+            }
+
+        /// one component of a DATA-DRIVEN decode: typeIds are arithmetic
+        /// (class = tid/10: 1=f32, 2=i32, 3=f64; comps = tid%10), so component k
+        /// loads via two selects instead of a 9-arm ladder.
+        [<ReflectedDefinition>]
+        let pLoadComp (cls : int) (o : int) (k : int) (comps : int) : float32 =
+            if k >= comps then (if k = 3 then 1.0f else 0.0f)
+            elif cls = 1 then uniform.PArenaF.[o + k]
+            elif cls = 2 then float32 uniform.PArenaI.[o + k]
+            else pF64 (o + k * 2)
+
+        /// variant G — data-driven decode: SAME types, SAME flexibility, one shader,
+        /// but the ladder collapses to tid arithmetic + 4 selecting component loads
+        /// (C4b keeps its one special arm).
+        [<ReflectedDefinition>]
+        let pDecodeV4fDD (tid : int) (len : int) (d : int) (v : int) : V4f =
+            let e = if len = 1 then 0 else v
+            if tid = 40 then
+                let w = uniform.PArenaI.[d + e]
+                V4f(float32 ((w >>> 16) &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 (w &&& 0xFF), float32 ((w >>> 24) &&& 0xFF)) / 255.0f
+            else
+                let cls = tid / 10
+                let comps = tid - cls * 10
+                let o = d + e * comps * (if cls = 3 then 2 else 1)
+                V4f(pLoadComp cls o 0 comps, pLoadComp cls o 1 comps, pLoadComp cls o 2 comps, pLoadComp cls o 3 comps)
+
+        let flatDDVert (v : PV) =
+            vertex {
+                let s = v.iid
+                let b = s * 20
+                let matOff = uniform.PHdr.[b + 0]
+                let vptOff = uniform.PHdr.[b + 1]
+                let vid = pDecodeIdx uniform.PHdr.[b + 11] uniform.PHdr.[b + 12] v.vtx
+                let p   = pDecodeV4fDD uniform.PHdr.[b + 5] uniform.PHdr.[b + 6] uniform.PHdr.[b + 7] vid
+                let nrm = pDecodeV4fDD uniform.PHdr.[b + 8] uniform.PHdr.[b + 9] uniform.PHdr.[b + 10] vid
+                let col = pDecodeV4fDD uniform.PHdr.[b + 2] uniform.PHdr.[b + 3] uniform.PHdr.[b + 4] vid
+                let m  = pMat matOff
+                let vp = pMat vptOff
+                let wp = m * V4f(p.XYZ, 1.0f)
+                return { v with pos = vp * wp; n = m.TransformDir nrm.XYZ; c = col }
+            }
+
         /// variant D — FLAT header, same runtime flexibility: (tid, len, dataOff) per
         /// attribute directly in the draw header (ONE indirection to data).
         /// hdr stride 20: matOff, vptOff, col(tid,len,off), pos(...), nrm(...), idx(tid,off)
@@ -375,7 +495,13 @@ module RenderBench =
             0
         else
 
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        // `--dump-glsl`: print every compiled shader (use with a small --n and pipe to a file)
+        use app =
+            if argv |> Array.contains "--dump-glsl" then
+                new Aardvark.Application.Slim.VulkanApplication(
+                    { Aardvark.Rendering.Vulkan.DebugConfig.None with PrintShaderCode = true } :> IDebugConfig)
+            else
+                new Aardvark.Application.Slim.VulkanApplication(false)
         let runtime = app.Runtime :> IRuntime
         let size = V2i(sizePx, sizePx)
         use signature =
@@ -543,6 +669,40 @@ module RenderBench =
                     (Effect.compose [ Effect.ofFunction Sh.flatVert; Effect.ofFunction Sh.lit ])
                     [ "PArenaF", cF; "PArenaI", cI; "PHdr", (AVal.constant hdrD :> IAdaptiveValue) ]
             Log.line "pack-probe: 3-deep / flat-header = %.2fx   (flat keeps the full decode ladder)" (deep / flat)
+
+            // ── variants E (flat + NO integer modulo: singleton via compare-select)
+            //    and F (E + matrices as ALIGNED vec4 loads) — both fully generic,
+            //    same one shader for any bucket content. ──
+            // matrices in a V4f row array: vpt rows [0..3], object i rows [4 + i*4 ..]
+            let matV = Array.zeroCreate<V4f> ((n + 1) * 4)
+            matV.[0] <- vpM.R0; matV.[1] <- vpM.R1; matV.[2] <- vpM.R2; matV.[3] <- vpM.R3
+            let hdrE = Array.copy hdrD
+            for i in 0 .. n - 1 do
+                let t = V3f (posOf i)
+                matV.[4 + i*4 + 0] <- V4f(1.0f, 0.0f, 0.0f, t.X)
+                matV.[4 + i*4 + 1] <- V4f(0.0f, 1.0f, 0.0f, t.Y)
+                matV.[4 + i*4 + 2] <- V4f(0.0f, 0.0f, 1.0f, t.Z)
+                matV.[4 + i*4 + 3] <- V4f(0.0f, 0.0f, 0.0f, 1.0f)
+            let hdrF = Array.copy hdrD
+            for i in 0 .. n - 1 do
+                hdrF.[i*20 + 0] <- 4 + i * 4        // matRow in the V4f view
+                hdrF.[i*20 + 1] <- 0                // vptRow
+            let noMod =
+                mkVariant "flat + no-modulo (compare-select singleton)"
+                    (Effect.compose [ Effect.ofFunction Sh.flatNoModVert; Effect.ofFunction Sh.lit ])
+                    [ "PArenaF", cF; "PArenaI", cI; "PHdr", (AVal.constant hdrE :> IAdaptiveValue) ]
+            let vec4 =
+                mkVariant "flat + no-modulo + vec4 matrices"
+                    (Effect.compose [ Effect.ofFunction Sh.flatNoModVec4Vert; Effect.ofFunction Sh.lit ])
+                    [ "PArenaF", cF; "PArenaI", cI
+                      "PHdr", (AVal.constant hdrF :> IAdaptiveValue)
+                      "PMatV", (AVal.constant matV :> IAdaptiveValue) ]
+            let dd =
+                mkVariant "flat + no-mod + data-driven decode"
+                    (Effect.compose [ Effect.ofFunction Sh.flatDDVert; Effect.ofFunction Sh.lit ])
+                    [ "PArenaF", cF; "PArenaI", cI; "PHdr", (AVal.constant hdrE :> IAdaptiveValue) ]
+            Log.line "pack-probe: generic-shader ladder — 3-deep %.2f | flat %.2f | +no-mod %.2f | +vec4-mat %.2f | +data-driven %.2f (vs typed 2-deep %.2f)"
+                deep flat noMod vec4 dd scat
             0
         elif argv |> Array.contains "--probe" then
             // ── FE probe: IDENTICAL vertex work, identical shader — n indirect records
