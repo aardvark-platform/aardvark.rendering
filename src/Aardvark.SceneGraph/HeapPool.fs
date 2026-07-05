@@ -1043,6 +1043,7 @@ module Heap =
                 x.Dependencies.[i].GetValueUntyped t |> ignore
             let __uplT0 = System.Diagnostics.Stopwatch.GetTimestamp()
             let mutable __flushed = 0
+            let mutable __runs = 0
             // apply any deferred growth (EnsureFloats) or shrink (ShrinkFloats) —
             // content-preserving resize, performed HERE so no transact ever
             // happens during evaluation.
@@ -1066,17 +1067,23 @@ module Heap =
                 let flush lo hi =
                     let lo = min lo capacity
                     let hi = min hi capacity
-                    if hi > lo then (__flushed <- __flushed + (hi - lo); x.Write(staging, uint64 (lo * 4), lo, hi - lo, false))
+                    if hi > lo then (__flushed <- __flushed + (hi - lo); __runs <- __runs + 1; x.Write(staging, uint64 (lo * 4), lo, hi - lo, false))
                 let mutable lo = let (struct(l, _)) = ranges.[0] in l
                 let mutable hi = let (struct(_, h)) = ranges.[0] in h
                 for i in 1 .. ranges.Count - 1 do
                     let (struct(o, e)) = ranges.[i]
-                    if o <= hi then hi <- max hi e          // contiguous / overlapping -> extend run
-                    else flush lo hi; lo <- o; hi <- e      // gap -> emit run, start new
+                    // GAP-TOLERANT merge: unstaged holes (derive OUTPUT regions, alignment
+                    // slack) otherwise break EVERY part's run — 300k Write calls per bulk
+                    // flush at ~60us each. `staging` is the authoritative mirror, so
+                    // re-uploading a gap's bytes is harmless (derive overwrites its
+                    // regions after every upload; the rest re-uploads current values).
+                    if o <= hi + 4096 then hi <- max hi e   // small gap -> extend run
+                    else flush lo hi; lo <- o; hi <- e      // big gap -> emit run, start new
                 flush lo hi
             // log per BIG upload (each page arena) with running totals; small camera-move
             // re-stages (< 3 MB) are skipped so the totals reflect the geometry upload.
             if __flushed * 4 > 3_000_000 then
+                Log.line "[startup] upload runs this flush: %d (%.1f MB)" __runs (float __flushed * 4.0 / 1e6)
                 stUploadMs <- stUploadMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __uplT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
                 stUploadBytes <- stUploadBytes + int64 __flushed * 4L
                 Log.line "[startup] ingest %d parts: %.0f ms | GPU upload (cum) %.1f MB: %.0f ms" stIngestN stIngestMs (float stUploadBytes / 1e6) stUploadMs

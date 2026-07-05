@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0037
+- [Sg] Heap: bulk-upload fix — derive OUTPUT regions (GPU-written, never staged) punched a hole into every part's staged range, so a bulk arena flush degenerated into one Write call per part (~60us each; 68 s for 1.5 GB at 700k parts). Ranges now merge across small gaps (staging is the authoritative mirror, so gap bytes are harmless): 300k Write calls -> 1, upload 26x faster, first-frame ingest at 700k parts ~99 s -> ~33 s. Render times unchanged.
+
 ### 5.7.0-prerelease0036
 - [Sg] Heap: fixed cluster bulk-ingest regression — building a large scene accumulated one dirty range per added slot, turning the first ClassSlots flush into a million-upload storm (Vienna full-city first frame 121 -> 179 s on 0035). Past 2048 sparse ranges the flush collapses to ONE full rewrite; surviving sparse ranges sort + gap-merge like the draw mirror. Steady-state edits stay O(changed).
 
