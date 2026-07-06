@@ -33,8 +33,10 @@ echo "building HeapSpike (Release)…" >&2
 dotnet build -c Release -v q >/dev/null
 BIN="../../../bin/Release/net8.0/40 - HeapSpike"
 
-gpuinfo=$(vulkaninfo 2>/dev/null | grep -m1 -E "deviceName" | sed 's/.*= //' || echo "unknown")
-driver=$(vulkaninfo 2>/dev/null | grep -m1 -E "driverName" | sed 's/.*= //' || echo "unknown")
+# (vulkaninfo gets SIGPIPE from grep -m1 -> nonzero under pipefail; swallow it)
+gpuinfo=$( (vulkaninfo 2>/dev/null || true) | grep -m1 -E "deviceName" | sed 's/.*= //')
+driver=$( (vulkaninfo 2>/dev/null || true) | grep -m1 -E "driverName" | sed 's/.*= //')
+gpuinfo=${gpuinfo:-unknown}; driver=${driver:-unknown}
 commit=$(git rev-parse --short HEAD 2>/dev/null || echo "?")
 
 {
