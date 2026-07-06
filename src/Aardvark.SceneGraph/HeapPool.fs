@@ -722,13 +722,23 @@ module Heap =
                     c <- c + w)
         else packerFor t
 
+    /// Symbol.Create allocates per call — per-part call sites go through this
+    /// cache instead (name sets are tiny: effect inputs, derived bases).
+    let private symCache = System.Collections.Concurrent.ConcurrentDictionary<string, Symbol>()
+    let private symFactory = System.Func<string, Symbol>(fun s -> Symbol.Create s)
+    let internal cachedSym (s : string) = symCache.GetOrAdd(s, symFactory)
+
     /// Size in bytes of a blittable attribute/index element type (-1 if it isn't
     /// blittable — such an RO is then treated as un-heapable and passed through).
     /// Cached per type: Marshal.SizeOf is a marshalling-info lookup and the
     /// eligibility checks call this several times per classified RO.
     let private elemSizeCache = System.Collections.Concurrent.ConcurrentDictionary<System.Type, int>()
+    // static factory: `GetOrAdd(t, fun ...)` at the call site allocates a fresh
+    // Func per CALL (F# closure conversion) — ~115 MB over a large ingest.
+    let private elemSizeFactory =
+        System.Func<System.Type, int>(fun t -> try System.Runtime.InteropServices.Marshal.SizeOf t with _ -> -1)
     let private elemSize (t : System.Type) =
-        elemSizeCache.GetOrAdd(t, fun t -> try System.Runtime.InteropServices.Marshal.SizeOf t with _ -> -1)
+        elemSizeCache.GetOrAdd(t, elemSizeFactory)
 
     /// Byte length of a buffer-view's data (respecting its byte Offset). Assumes a
     /// tightly-packed view; interleaved/strided views are rejected by `isHeapable`.
@@ -1583,9 +1593,24 @@ module Heap =
                     (fun (n1 : string, m1 : BlendMode, k1 : ColorMask) (n2, m2, k2) ->
                         n1 = n2 && m1.Equals m2 && k1 = k2)
                     x.Blend y.Blend
-                && x.BlendConstant = y.BlendConstant
-                && x.Depth = y.Depth && x.Stencil = y.Stencil
-                && x.Viewport = y.Viewport && x.Scissor = y.Scissor
+                // box-free: structural `=` on option-of-struct(-tuple) boxes every
+                // member per comparison (StencilMode/StencilMask/C4f/Box2i)
+                && (match x.BlendConstant, y.BlendConstant with
+                    | Some a, Some b -> a.Equals b
+                    | None, None -> true | _ -> false)
+                && (match x.Depth, y.Depth with
+                    | Some (t1, b1, w1, c1), Some (t2, b2, w2, c2) -> t1 = t2 && b1.Equals b2 && w1 = w2 && c1 = c2
+                    | None, None -> true | _ -> false)
+                && (match x.Stencil, y.Stencil with
+                    | Some (mf1, kf1, mb1, kb1), Some (mf2, kf2, mb2, kb2) ->
+                        mf1.Equals mf2 && kf1.Equals kf2 && mb1.Equals mb2 && kb1.Equals kb2
+                    | None, None -> true | _ -> false)
+                && (match x.Viewport, y.Viewport with
+                    | Some a, Some b -> a.Equals b
+                    | None, None -> true | _ -> false)
+                && (match x.Scissor, y.Scissor with
+                    | Some a, Some b -> a.Equals b
+                    | None, None -> true | _ -> false)
             | _ -> false
 
     /// an input RO may ALREADY be instanced (instanceCount > 1); preserved per-slot.
@@ -2797,10 +2822,12 @@ module Heap =
     type internal PageArena(runtime : IRuntime) =
         let arena = HeapArena(runtime, 1024)
         let arenaAlloc = HeapSpace()
-        let regions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
-        let singleRegions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
-        let constituentsF = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
-        let constituentsB = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(HashIdentity.Reference)
+        // page-scoped fixed initial capacities: pages are GB-scale, a 16k-slot
+        // table is noise — and it kills bulk ingest's resize/rehash churn.
+        let regions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(1 <<< 14, HashIdentity.Reference)
+        let singleRegions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(1 <<< 10, HashIdentity.Reference)
+        let constituentsF = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(1 <<< 14, HashIdentity.Reference)
+        let constituentsB = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(1 <<< 14, HashIdentity.Reference)
         // geometry static-attribute + index dedup (by value-level source identity, byte offset,
         // typeId) — MUST be per-page: a shared mesh's attrs live in THIS page's arena, so a slot on
         // another page can't reference them (it binds its own arena). Cross-page = duplicated.
@@ -2810,8 +2837,8 @@ module Heap =
                     System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode o ^^^ (i * 0x9E3779B1) ^^^ (t * 0x85EBCA6B)
                 member _.Equals(struct(a, ai, at), struct(b, bi, bt)) =
                     System.Object.ReferenceEquals(a, b) && ai = bi && at = bt }
-        let attrStatic = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(geomKeyComparer)
-        let idxStatic  = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(geomKeyComparer)
+        let attrStatic = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(1 <<< 15, geomKeyComparer)
+        let idxStatic  = System.Collections.Generic.Dictionary<struct(obj * int * int), StaticEntry>(1 <<< 14, geomKeyComparer)
         // the buckets currently allocating from / rendering this page
         let participants = System.Collections.Generic.HashSet<IPageParticipant>(HashIdentity.Reference)
         member _.Arena = arena
@@ -2984,9 +3011,9 @@ module Heap =
         // simply isn't derivable and the name falls back to a plain/diagnosed field.
         let isTrafoSupply (t : System.Type) = t = typeof<Trafo3d> || t = typeof<M44d> || t = typeof<M44f>
         let ro0BaseSupplied (b : string) =
-            (match ro0.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create b) with ValueSome v -> isTrafoSupply v.ContentType | _ -> false)
+            (match ro0.Uniforms.TryGetUniform(Ag.Scope.Root, cachedSym b) with ValueSome v -> isTrafoSupply v.ContentType | _ -> false)
             || (b = Derived.MBASE &&
-                (match ro0.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create "ModelTrafoStack") with ValueSome _ -> true | _ -> false))
+                (match ro0.Uniforms.TryGetUniform(Ag.Scope.Root, cachedSym "ModelTrafoStack") with ValueSome _ -> true | _ -> false))
         let derivedPlan =                       // (fieldCell, arm, constituents in mul order)
             names |> Array.mapi (fun i n -> i, n)
                   |> Array.choose (fun (i, n) ->
@@ -3594,7 +3621,13 @@ module Heap =
                 let pk = constituentPack inv
                 let w =
                     if av.IsConstant then
-                        arena.StageOnce(off, sz, fun p -> pk (av.GetValueUntyped AdaptiveToken.Top) p 0)
+                        // typed fast path: GetValueUntyped boxes the Trafo3d per part
+                        (match av with
+                         | :? aval<Trafo3d> as tv ->
+                             let tr = tv.GetValue AdaptiveToken.Top
+                             arena.StageOnce(off, sz, fun p -> packM44dInto (if inv then tr.Backward else tr.Forward) p 0)
+                         | _ ->
+                             arena.StageOnce(off, sz, fun p -> pk (av.GetValueUntyped AdaptiveToken.Top) p 0))
                         Unchecked.defaultof<RegionWriter>
                     else arena.Add(av, off, sz, pk)
                 d.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b; HeaderWords = 0 }
@@ -4687,7 +4720,7 @@ module Heap =
                         o
                     else
                         let bav =
-                            match ro.Uniforms.TryGetUniform(scope, Symbol.Create c.CBase) with
+                            match ro.Uniforms.TryGetUniform(scope, cachedSym c.CBase) with
                             | ValueSome v -> v
                             | ValueNone -> failwithf "Heap.ofRenderObjects: derived uniform needs base trafo '%s' but the RO doesn't supply it" c.CBase
                         constKeys.Add(struct(bav, c.CInv))
@@ -5108,7 +5141,7 @@ module Heap =
             match r.Surface with
             | Surface.Effect e ->
                 e.Inputs |> Map.toList |> List.map (fun (name, _) ->
-                    match r.VertexAttributes.TryGetAttribute (Symbol.Create name) with
+                    match r.VertexAttributes.TryGetAttribute (cachedSym name) with
                     | ValueSome bv -> sprintf "%s:%s:%d:%d" name bv.ElementType.FullName bv.Offset bv.Stride
                     | ValueNone -> name + ":?") |> String.concat ";"
             | _ -> ""
@@ -5229,9 +5262,9 @@ module Heap =
         // in fp64; the backward halves come from those same Trafo3d avals).
         let isTrafoSupply (t : System.Type) = t = typeof<Trafo3d> || t = typeof<M44d> || t = typeof<M44f>
         let baseSupplied (r : RenderObject) (b : string) =
-            (match r.Uniforms.TryGetUniform(scope, Symbol.Create b) with ValueSome v -> isTrafoSupply v.ContentType | ValueNone -> false)
+            (match r.Uniforms.TryGetUniform(scope, cachedSym b) with ValueSome v -> isTrafoSupply v.ContentType | ValueNone -> false)
             || (b = Derived.MBASE &&
-                (match r.Uniforms.TryGetUniform(scope, Symbol.Create "ModelTrafoStack") with ValueSome _ -> true | ValueNone -> false))
+                (match r.Uniforms.TryGetUniform(scope, cachedSym "ModelTrafoStack") with ValueSome _ -> true | ValueNone -> false))
         let detectFields (r : RenderObject) (e : Effect) =
             consumedNonSamplerNames e
             |> Array.filter (fun n ->
@@ -5260,7 +5293,7 @@ module Heap =
                         | Some alts ->
                             alts |> List.iter (fun (_, op) ->
                                 Derived.constituentsOf op |> List.iter (fun c ->
-                                    match r.Uniforms.TryGetUniform(scope, Symbol.Create c.CBase) with
+                                    match r.Uniforms.TryGetUniform(scope, cachedSym c.CBase) with
                                     | ValueSome cv when not (isTrafoSupply cv.ContentType) ->
                                         diag (sprintf "derived uniform '%s' cannot be derived: its constituent '%s' is supplied in an UNPACKABLE type (%s — need Trafo3d/M44d/M44f)." n c.CBase cv.ContentType.Name)
                                     | _ -> ()))
@@ -5346,7 +5379,7 @@ module Heap =
                         // ── attributes: HOST storage decode OR bindless vertex-pull ──
                         let hostIssue =
                             e.Inputs |> Map.toSeq |> Seq.filter (fun (name, _) -> needed.Contains name) |> Seq.tryPick (fun (name, inputT) ->
-                                match ro.VertexAttributes.TryGetAttribute (Symbol.Create name) with
+                                match ro.VertexAttributes.TryGetAttribute (cachedSym name) with
                                 | ValueNone -> Some (sprintf "effect input '%s' has no vertex attribute on the RO" name)
                                 | ValueSome bv ->
                                     if not (isHostTight bv) then
@@ -5364,7 +5397,7 @@ module Heap =
                                 Some "vertex-pull does not support pre-instanced draws (per-draw FirstInstance routes the handle)"
                             else
                                 e.Inputs |> Map.toSeq |> Seq.filter (fun (name, _) -> needed.Contains name) |> Seq.tryPick (fun (name, _) ->
-                                    match ro.VertexAttributes.TryGetAttribute (Symbol.Create name) with
+                                    match ro.VertexAttributes.TryGetAttribute (cachedSym name) with
                                     | ValueNone -> Some (sprintf "effect input '%s' has no vertex attribute on the RO" name)
                                     | ValueSome bv ->
                                         if isBindlessAttr bv then None
@@ -5439,7 +5472,7 @@ module Heap =
                             consumedNonSamplerNames e |> Array.exists Derived.dependsOnModel
                         let chain =
                             not disableChain && dependsOnModel &&
-                            (match r.Uniforms.TryGetUniform(scope, Symbol.Create "ModelTrafoStack") with
+                            (match r.Uniforms.TryGetUniform(scope, cachedSym "ModelTrafoStack") with
                              | ValueSome (:? aval<aval<Trafo3d>[]>) -> true
                              | _ -> false)
                         // per-draw field set: DETECTED (effect-consumed ∩ derivable/
@@ -5456,8 +5489,9 @@ module Heap =
                         // strategy and its baked field layout are fixed at
                         // creation), so fold them into the layout sig.
                         let layout =
-                            (if bindless then "gpu:" + bindlessSig r else "host")
-                            + (if inst then "|inst" else "")
+                            if bindless then "gpu:" + bindlessSig r + (if inst then "|inst" else "")
+                            elif inst then "host|inst"
+                            else "host"
                             + (if chain then "|chain" else "")
                             + "|f:" + String.concat ";" fields
                         // the key is CONSTANT iff every aval it reads is — where depth /

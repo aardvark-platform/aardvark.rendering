@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0039
+- [Sg] Heap ingest allocation diet (profile-driven): static elemSize factory (per-call Func), box-free BucketKey equality (structural `=` boxed StencilMode/Mask/C4f/Box2i per lookup), interned per-part Symbols, typed Trafo3d constituent pack (no GetValueUntyped boxing), presized page dicts. renderbench @700k Release: 12.0 -> 11.2 s CPU ingest; heap-side garbage ~9.5 -> ~1.5 KB/part.
+
 ### 5.7.0-prerelease0038
 - [Rendering] IBufferRuntime: multi-region buffer `Copy(src, dst, regions)` (one command, N regions) and `TryGetMappedPointer` (Vulkan: persistent VMA mapping; GL: none).
 - [Sg] Heap: MIRROR-LESS arena — the host staging mirror is gone; writes stage into chained mapped host-visible ring chunks (never copied: mapped memory is write-combined) and flush as one multi-region copy per ordered batch. Geometry is a single source->ring memcpy (no intermediate byte[]).
