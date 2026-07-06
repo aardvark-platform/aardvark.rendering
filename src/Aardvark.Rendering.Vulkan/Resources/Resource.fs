@@ -9,6 +9,28 @@ open System.Threading
 module internal ResourceInstrumentation =
     let mutable liveCountRef = 0
 
+    /// Opt-in (AARDVARK_TRACE_RESOURCE_REFS=1): record creation / AddReference /
+    /// Dispose stacks per resource and dump them when a reference count goes
+    /// negative. Costs one branch when disabled.
+    let traceRefs =
+        match System.Environment.GetEnvironmentVariable "AARDVARK_TRACE_RESOURCE_REFS" with
+        | null | "" -> false
+        | s -> let s = s.Trim().ToLowerInvariant() in s = "1" || s = "true" || s = "on"
+
+    let private stacks = System.Runtime.CompilerServices.ConditionalWeakTable<obj, System.Collections.Generic.List<string>>()
+
+    let record (o : obj) (label : string) =
+        if traceRefs then
+            let l = stacks.GetOrCreateValue o
+            lock l (fun () -> l.Add(label + "\n" + System.Diagnostics.StackTrace(2, true).ToString()))
+
+    let dump (o : obj) =
+        if traceRefs then
+            match stacks.TryGetValue o with
+            | true, l -> lock l (fun () -> String.concat "\n────────\n" l)
+            | _ -> "(no recorded stacks)"
+        else "(set AARDVARK_TRACE_RESOURCE_REFS=1 to record creation/addref/dispose stacks)"
+
 [<AbstractClass>]
 type Resource =
     class
@@ -33,11 +55,14 @@ type Resource =
 
         member x.AddReference() =
             Interlocked.Increment(&x.refCount) |> ignore
+            if ResourceInstrumentation.traceRefs then ResourceInstrumentation.record x $"addref -> {x.refCount}"
 
         member x.Dispose() =
             let refs = Interlocked.Decrement(&x.refCount)
+            if ResourceInstrumentation.traceRefs then ResourceInstrumentation.record x $"dispose -> {refs}"
             if refs < 0 then
                 Log.warn $"[Vulkan] Resource {x} has negative reference count ({refs})"
+                Log.warn $"[Vulkan] ref history of {x}:\n{ResourceInstrumentation.dump x}"
             elif refs = 0 then
                 Interlocked.Decrement(&ResourceInstrumentation.liveCountRef) |> ignore
                 x.Destroy()
@@ -48,12 +73,14 @@ type Resource =
 
         abstract member Destroy : unit -> unit
 
-        new(device: Device) =
+        new(device: Device) as x =
             Interlocked.Increment(&ResourceInstrumentation.liveCountRef) |> ignore
             { Device = device; refCount = 1 }
-        new(device: Device, referenceCount: int) =
+            then if ResourceInstrumentation.traceRefs then ResourceInstrumentation.record x "created (refs=1)"
+        new(device: Device, referenceCount: int) as x =
             Interlocked.Increment(&ResourceInstrumentation.liveCountRef) |> ignore
             { Device = device; refCount = referenceCount }
+            then if ResourceInstrumentation.traceRefs then ResourceInstrumentation.record x $"created (refs={referenceCount})"
 
         interface IResource with
             member x.AddReference() = x.AddReference()

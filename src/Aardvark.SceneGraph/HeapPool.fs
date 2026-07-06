@@ -1091,6 +1091,17 @@ module Heap =
         member x.StageOnce(off : int, size : int, pack : nativeint -> unit) =
             pack (x.StageWords(off, size))
 
+        /// Stage ZEROS for a GPU-written region (derive outputs, chain folds) at
+        /// ALLOCATION time. The zeros are placeholders — the derive pass rewrites
+        /// the region after the upload (new slots are always derive-dirty) — but
+        /// staging them keeps a slot's allocations CONTIGUOUS in ring and arena:
+        /// without this every slot punches a hole that breaks region merging, and
+        /// a bulk flush degenerates to O(parts) copy regions (MoltenVK executes
+        /// each VkBufferCopy as a separate Metal blit command -> GPU hang).
+        member x.StageZero(off : int, size : int) =
+            let p = x.StageWords(off, size)
+            for i in 0 .. size - 1 do wi p i 0
+
         /// Queue a compaction move-set (oldOff, newOff, contentWords): applied on
         /// the next Compute AFTER everything staged so far and BEFORE anything
         /// staged later (a device-side temp-buffer bounce — never an overlapping
@@ -1138,15 +1149,23 @@ module Heap =
             let h = base.Compute(t, rt)
             let mutable __flushed = 0
             let mutable __runs = 0
+            let mutable __regions = 0
             let flushBatch (fromIdx : int) (toIdx : int) =
-                // regions' chunk index is monotone: emit one copy per chunk sub-range
+                // regions' chunk index is monotone: emit one copy per chunk sub-range,
+                // capped at 16k regions per submission — MoltenVK turns every
+                // VkBufferCopy into a separate Metal blit command, so an unbounded
+                // region list in ONE command buffer can trip the GPU watchdog.
+                let maxRegionsPerCopy = 16384
                 let mutable i = fromIdx
                 while i < toIdx do
                     let (struct(c, _, _, _)) = regions.[i]
                     let mutable j = i
-                    while j < toIdx && (let (struct(cj, _, _, _)) = regions.[j] in cj = c) do j <- j + 1
+                    while j < toIdx
+                          && j - i < maxRegionsPerCopy
+                          && (let (struct(cj, _, _, _)) = regions.[j] in cj = c) do j <- j + 1
                     let (struct(buf, _, p, _)) = ringChunks.[c]
                     __runs <- __runs + 1
+                    __regions <- __regions + (j - i)
                     if not (obj.ReferenceEquals(buf, null)) then
                         let arr = Array.zeroCreate<BufferCopyRegion> (j - i)
                         for k in i .. j - 1 do
@@ -1204,7 +1223,7 @@ module Heap =
             // log per BIG upload (each page arena) with running totals; small camera-move
             // re-stages (< 3 MB) are skipped so the totals reflect the geometry upload.
             if __flushed * 4 > 3_000_000 then
-                Log.line "[startup] upload batches this flush: %d (%.1f MB)" __runs (float __flushed * 4.0 / 1e6)
+                Log.line "[startup] upload batches this flush: %d (%.1f MB, %d regions)" __runs (float __flushed * 4.0 / 1e6) __regions
                 stUploadMs <- stUploadMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __uplT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
                 stUploadBytes <- stUploadBytes + int64 __flushed * 4L
                 Log.line "[startup] ingest %d parts: %.0f ms | GPU upload (cum) %.1f MB: %.0f ms" stIngestN stIngestMs (float stUploadBytes / 1e6) stUploadMs
@@ -3543,18 +3562,29 @@ module Heap =
                 let b = arenaAlloc.Alloc (if dbl then sz + 1 else sz)
                 let raw = int b.Offset
                 let off = if dbl && (raw &&& 1) = 1 then raw + 1 else raw
-                // grows only the staging mirror; the GPU resize is deferred to the
-                // arena's own Compute (which depends on the updater whose
-                // evaluation we are inside) — no transact happens here.
+                // the GPU resize is deferred to the arena's own Compute (which
+                // depends on the updater whose evaluation we are inside) — no
+                // transact happens here.
                 arena.EnsureFloats arenaAlloc.Extent
                 // CONSTANT sources are packed ONCE into staging — no RegionWriter
                 // (no adaptive subscription to create at add / dispose at remove,
                 // nothing for the flush to re-evaluate). Writer = null marks them.
                 let w =
                     if av.IsConstant then
-                        arena.StageOnce(off, sz, fun p -> pk (av.GetValueUntyped AdaptiveToken.Top) p 0)
+                        if dbl then
+                            // ONE span for the whole over-allocated block: zero the
+                            // alignment slack in-span — an unstaged 1-word hole breaks
+                            // the flush's region merging (see StageZero)
+                            arena.StageOnce(raw, sz + 1, fun p ->
+                                wi p (if off > raw then 0 else sz) 0
+                                pk (av.GetValueUntyped AdaptiveToken.Top) p (off - raw))
+                        else
+                            arena.StageOnce(off, sz, fun p -> pk (av.GetValueUntyped AdaptiveToken.Top) p 0)
                         Unchecked.defaultof<RegionWriter>
-                    else arena.Add(av, off, sz, pk)
+                    else
+                        // writer re-packs its exact range; stage the slack once here
+                        if dbl then arena.StageZero((if off > raw then raw else raw + sz), 1)
+                        arena.Add(av, off, sz, pk)
                 regions.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b; HeaderWords = 0 }
                 off
 
@@ -3621,15 +3651,22 @@ module Heap =
                 let pk = constituentPack inv
                 let w =
                     if av.IsConstant then
-                        // typed fast path: GetValueUntyped boxes the Trafo3d per part
+                        // ONE span for the whole block, slack zeroed in-span (see
+                        // StageZero); typed fast path — GetValueUntyped boxes the Trafo3d
                         (match av with
                          | :? aval<Trafo3d> as tv ->
                              let tr = tv.GetValue AdaptiveToken.Top
-                             arena.StageOnce(off, sz, fun p -> packM44dInto (if inv then tr.Backward else tr.Forward) p 0)
+                             arena.StageOnce(raw, sz + 1, fun p ->
+                                 wi p (if off > raw then 0 else sz) 0
+                                 packM44dInto (if inv then tr.Backward else tr.Forward) p (off - raw))
                          | _ ->
-                             arena.StageOnce(off, sz, fun p -> pk (av.GetValueUntyped AdaptiveToken.Top) p 0))
+                             arena.StageOnce(raw, sz + 1, fun p ->
+                                 wi p (if off > raw then 0 else sz) 0
+                                 pk (av.GetValueUntyped AdaptiveToken.Top) p (off - raw)))
                         Unchecked.defaultof<RegionWriter>
-                    else arena.Add(av, off, sz, pk)
+                    else
+                        arena.StageZero((if off > raw then raw else raw + sz), 1)
+                        arena.Add(av, off, sz, pk)
                 d.[av] <- { Offset = off; Size = sz; Writer = w; RefCount = 1; Block = b; HeaderWords = 0 }
                 off
         let freeConstituent (av : IAdaptiveValue) (inv : bool) =
@@ -3650,6 +3687,7 @@ module Heap =
             let raw = int b.Offset
             let off = if (raw &&& 1) = 1 then raw + 1 else raw
             arena.EnsureFloats arenaAlloc.Extent
+            arena.StageZero(raw, sz + 1)     // placeholder incl. align slack (see StageZero)
             off, b
         // OUTPUT: a per-slot region the compute writes (no aval / writer), stored as
         // the shader's requested type (f32 M44f = 16 words, M33f = 9, …).
@@ -3660,6 +3698,7 @@ module Heap =
             let raw = int b.Offset
             let off = if dbl && (raw &&& 1) = 1 then raw + 1 else raw
             arena.EnsureFloats arenaAlloc.Extent
+            arena.StageZero(raw, (if dbl then sz + 1 else sz))   // placeholder (see StageZero)
             off, b
 
         /// SINGLETON attribute (SingleValueBuffer): a header + an adaptive
@@ -4937,7 +4976,9 @@ module Heap =
             // release the derived-uniform compute resources (else the runtime's
             // resource cache keeps live references to the ComputeProgram).
             let disp (o : obj) = match o with | :? System.IDisposable as d -> d.Dispose() | _ -> ()
-            if hasDerived then (for inp in pageDeriveInputs do disp inp); disp derivedShader; disp recBuf
+            // (recBuf is disposed ONCE above — a second disp here stole the
+            // ResourceManager's reference and drove the count to -1 at teardown)
+            if hasDerived then (for inp in pageDeriveInputs do disp inp); disp derivedShader
             if chainActive then
                 disp chainProg; disp chainInput; disp chainShader
                 if not (isNull (box chOffBuf)) then chOffBuf.Dispose()

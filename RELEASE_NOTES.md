@@ -1,3 +1,8 @@
+### 5.7.0-prerelease0040
+- [Sg] Heap: MoltenVK GPU-hang fix — derive-output/alignment holes broke upload-region merging, so a bulk flush issued O(parts) VkBufferCopy regions in one command (each = a Metal blit command -> watchdog). Holes are now staged as zero placeholders: 700k regions -> 12; also caps regions per copy at 16k and logs region counts. Bonus: ingest 11.2 -> 8.6 s @700k, mac upload 8x faster.
+- [Sg] Heap: fixed a double dispose of the derive-records buffer in bucket teardown (the long-standing "negative reference count (-1)" warning).
+- [Vulkan] AARDVARK_TRACE_RESOURCE_REFS=1 records per-resource creation/addref/dispose stacks and dumps the history when a reference count goes negative.
+
 ### 5.7.0-prerelease0039
 - [Sg] Heap ingest allocation diet (profile-driven): static elemSize factory (per-call Func), box-free BucketKey equality (structural `=` boxed StencilMode/Mask/C4f/Box2i per lookup), interned per-part Symbols, typed Trafo3d constituent pack (no GetValueUntyped boxing), presized page dicts. renderbench @700k Release: 12.0 -> 11.2 s CPU ingest; heap-side garbage ~9.5 -> ~1.5 KB/part.
 
