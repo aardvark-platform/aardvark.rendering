@@ -6,8 +6,9 @@
 #   -Ns       object counts to sweep (space-separated, default: 100k 300k 700k)
 #   -Frames   timed frames per round (default 60; use ~20 on slow iGPUs)
 #   -Out      output markdown report (default: bench-report-<host>.md here)
-#   -Icd      Vulkan ICD json to pin a specific GPU/driver (sets VK_DRIVER_FILES;
-#             on Windows GPU selection usually works without this)
+#   -Gpu      pick the Vulkan device by NAME substring (e.g. -Gpu radeon);
+#             preferred over -Icd — no ICD paths needed
+#   -Icd      Vulkan ICD json to pin a specific GPU/driver (sets VK_DRIVER_FILES)
 #   -NoQuery  fence-blocked CPU timing instead of GPU time queries
 #
 # Run from anywhere; builds HeapSpike Release and sweeps `renderbench`.
@@ -15,6 +16,7 @@ param(
     [string]$Ns = "100000 300000 700000",
     [int]$Frames = 60,
     [string]$Out = "",
+    [string]$Gpu = "",
     [string]$Icd = "",
     [switch]$NoQuery
 )
@@ -50,6 +52,7 @@ $lines = @(
     "| commit | $commit |",
     "| frames/round | $Frames (median of 3 rounds, 30-frame warmup) |"
 )
+if ($Gpu -ne "") { $lines += "| GPU filter | -Gpu $Gpu |" }
 if ($Icd -ne "") { $lines += "| ICD override | $Icd |" }
 if ($NoQuery)    { $lines += "| timing | fence-blocked CPU (no GPU queries) |" }
 $lines += @(
@@ -65,7 +68,8 @@ function Get-Last([string[]]$log, [string]$pattern) {
 
 foreach ($n in ($Ns -split "\s+")) {
     Write-Host "=== n=$n ==="
-    $log = & $bin renderbench --n $n --frames $Frames 2>&1 | ForEach-Object { "$_" }
+    $gpuArgs = @(); if ($Gpu -ne "") { $gpuArgs = @("--gpu", $Gpu) }
+    $log = & $bin renderbench --n $n --frames $Frames @gpuArgs 2>&1 | ForEach-Object { "$_" }
     if ($LASTEXITCODE -ne 0) {
         $lines += "| $n | run FAILED | | | | | | |"
         $log | Select-Object -Last 3 | Write-Host

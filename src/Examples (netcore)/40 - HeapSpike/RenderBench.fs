@@ -500,13 +500,31 @@ module RenderBench =
             0
         else
 
+        // `--gpu <substring>`: pick the physical device by (case-insensitive) name
+        // match instead of wrestling with VK_DRIVER_FILES/ICD paths. No match ->
+        // list what's there and fail loudly.
+        let chooser : Aardvark.Rendering.Vulkan.IDeviceChooser =
+            match argv |> Array.tryFindIndex ((=) "--gpu") with
+            | Some i when i + 1 < argv.Length ->
+                let wanted = argv.[i + 1]
+                { new Aardvark.Rendering.Vulkan.IDeviceChooser with
+                    member _.Run devices =
+                        match devices |> Array.tryFind (fun d -> d.Name.ToLowerInvariant().Contains(wanted.ToLowerInvariant())) with
+                        | Some d ->
+                            Log.line "renderbench: --gpu '%s' -> %s" wanted d.Name
+                            d
+                        | None ->
+                            for d in devices do Log.warn "available GPU: %s" d.Name
+                            failwithf "renderbench: no Vulkan device matches --gpu '%s'" wanted }
+            | _ -> null
         // `--dump-glsl`: print every compiled shader (use with a small --n and pipe to a file)
         use app =
             if argv |> Array.contains "--dump-glsl" then
                 new Aardvark.Application.Slim.VulkanApplication(
-                    { Aardvark.Rendering.Vulkan.DebugConfig.None with PrintShaderCode = true } :> IDebugConfig)
+                    { Aardvark.Rendering.Vulkan.DebugConfig.None with PrintShaderCode = true } :> IDebugConfig,
+                    deviceChooser = chooser)
             else
-                new Aardvark.Application.Slim.VulkanApplication(false)
+                new Aardvark.Application.Slim.VulkanApplication(false, deviceChooser = chooser)
         let runtime = app.Runtime :> IRuntime
         let size = V2i(sizePx, sizePx)
         use signature =

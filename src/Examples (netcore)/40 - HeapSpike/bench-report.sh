@@ -8,6 +8,8 @@
 #   -n          object counts to sweep (default: 100k 300k 700k)
 #   -f          timed frames per round (default 60; use ~20 on slow iGPUs)
 #   -o          output markdown report (default: bench-report-<host>.md here)
+#   --gpu       pick the Vulkan device by NAME substring (e.g. --gpu radeon);
+#               preferred over --icd — no ICD paths needed
 #   --icd       Vulkan ICD json to pin a specific GPU/driver (sets VK_DRIVER_FILES)
 #   --no-query  fence-blocked CPU timing instead of GPU time queries
 #               (HEAPSPIKE_NO_GPU_QUERY=1 — needed on drivers whose time queries
@@ -19,11 +21,13 @@ cd "$(dirname "$0")"
 
 NS="100000 300000 700000"
 FRAMES=60
+GPU=""
 OUT="bench-report-$(hostname).md"
 while [[ $# -gt 0 ]]; do case "$1" in
   -n) NS="$2"; shift 2 ;;
   -f) FRAMES="$2"; shift 2 ;;
   -o) OUT="$2"; shift 2 ;;
+  --gpu) GPU="$2"; shift 2 ;;
   --icd) export VK_DRIVER_FILES="$2" VK_ICD_FILENAMES="$2"; shift 2 ;;
   --no-query) export HEAPSPIKE_NO_GPU_QUERY=1; shift ;;
   *) echo "unknown arg: $1" >&2; exit 1 ;;
@@ -50,6 +54,7 @@ commit=$(git rev-parse --short HEAD 2>/dev/null || echo "?")
   echo "| OS | $(uname -sr) |"
   echo "| commit | ${commit} |"
   echo "| frames/round | ${FRAMES} (median of 3 rounds, 30-frame warmup) |"
+  [[ -n "$GPU" ]] && echo "| GPU filter | --gpu $GPU |"
   [[ -n "${VK_DRIVER_FILES:-}" ]] && echo "| ICD override | ${VK_DRIVER_FILES} |"
   [[ -n "${HEAPSPIKE_NO_GPU_QUERY:-}" ]] && echo "| timing | fence-blocked CPU (no GPU queries) |"
   echo
@@ -60,7 +65,7 @@ commit=$(git rev-parse --short HEAD 2>/dev/null || echo "?")
 for n in $NS; do
   echo "=== n=$n ===" >&2
   log=$(mktemp)
-  if ! "$BIN" renderbench --n "$n" --frames "$FRAMES" > "$log" 2>&1; then
+  if ! "$BIN" renderbench --n "$n" --frames "$FRAMES" ${GPU:+--gpu "$GPU"} > "$log" 2>&1; then
     echo "| $n | run FAILED (see $log) | | | | | | |" >> "$OUT"
     tail -3 "$log" >&2
     continue
