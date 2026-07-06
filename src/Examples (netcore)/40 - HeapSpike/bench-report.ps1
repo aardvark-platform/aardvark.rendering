@@ -80,6 +80,8 @@ foreach ($n in ($Ns -split "\s+")) {
     $baseG  = Get-Last $log 'renderbench\[baked-baseline\]: GPU ([0-9.]+)'
     $baseC  = Get-Last $log 'renderbench\[baked-baseline\]:.*task\.Run CPU ([0-9.]+)'
     $ratio  = Get-Last $log 'heap/baseline = ([0-9.]+x)'
+    $dev    = Get-Last $log 'renderbench: device = (.+)'
+    if ($dev) { $lines = $lines | ForEach-Object { $_ -replace '^\| GPU \| .*', "| GPU | $dev |" } }
     $ingest = Get-Last $log 'ingest [0-9]+ parts: ([0-9]+)'
     $upload = Get-Last $log 'GPU upload \(cum\) [0-9.]+ MB: ([0-9]+)'
     if ($NoQuery) {

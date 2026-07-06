@@ -75,6 +75,8 @@ for n in $NS; do
   baseG=$(grep -oP 'renderbench\[baked-baseline\]: GPU \K[0-9.]+' "$log" | tail -1)
   baseC=$(grep -oP 'renderbench\[baked-baseline\]:.*task\.Run CPU \K[0-9.]+' "$log" | tail -1)
   ratio=$(grep -oP 'heap/baseline = \K[0-9.]+x' "$log" | tail -1)
+  dev=$(grep -oP 'renderbench: device = \K.*' "$log" | tail -1)
+  [[ -n "$dev" ]] && sed -i "s#^| GPU | .*#| GPU | $dev |#" "$OUT"
   ingest=$(grep -oP 'ingest [0-9]+ parts: \K[0-9]+' "$log" | tail -1)
   upload=$(grep -oP 'GPU upload \(cum\) [0-9.]+ MB: \K[0-9]+' "$log" | tail -1)
   # no-query mode reports GPU as 0.00 — fall back to the fence-blocked CPU numbers

@@ -525,6 +525,7 @@ module RenderBench =
                     deviceChooser = chooser)
             else
                 new Aardvark.Application.Slim.VulkanApplication(false, deviceChooser = chooser)
+        Log.line "renderbench: device = %s" app.Runtime.Device.PhysicalDevice.Name
         let runtime = app.Runtime :> IRuntime
         let size = V2i(sizePx, sizePx)
         use signature =
