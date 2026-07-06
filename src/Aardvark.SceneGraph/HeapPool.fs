@@ -1049,6 +1049,20 @@ module Heap =
             let nf = max 1024 (Fun.NextPowerOfTwo (max 1 n))
             if nf < capacity then capacity <- nf
 
+        // Staging can happen OUTSIDE this arena's own evaluation: a SECOND heap
+        // build over a SHARED storage expands lazily inside ANOTHER render
+        // task's pull — possibly AFTER this arena already flushed for the frame.
+        // Nothing marks the (clean) arena then, so the staged regions would sit
+        // in the ring forever and the new build's buckets never appear. Detect
+        // stage-while-clean and schedule ONE post-evaluation Touch: the transact
+        // from a pool thread serializes with the adaptive lock, so it lands
+        // right after the current evaluation and the next frame flushes.
+        member val private TouchScheduled = ref 0 with get
+        member private x.ScheduleTouchIfClean() =
+            if not x.OutOfDate && System.Threading.Interlocked.Exchange(x.TouchScheduled, 1) = 0 then
+                System.Threading.Tasks.Task.Run(fun () ->
+                    transact (fun () -> x.MarkOutdated())) |> ignore
+
         /// Reserve a ring span for arena words [off, off+words) and return its
         /// write pointer. The caller writes it IMMEDIATELY; the pointer is valid
         /// only until the next StageWords call (ring growth may relocate it). The
@@ -1075,6 +1089,7 @@ module Heap =
                     merged <- true
             if not merged then regions.Add(struct(chunk, start, off, words))
             cursor <- start + words
+            x.ScheduleTouchIfClean()
             ringPtr + nativeint (start <<< 2)
 
         /// Write a 4-word per-allocation header (typeId, length, strideBytes, 0).
@@ -1134,6 +1149,7 @@ module Heap =
         member x.AddDependency(d : IAdaptiveValue) =
             if not (x.Dependencies.Contains d) then x.Dependencies.Add d
         override x.Compute(t, rt) =
+            x.TouchScheduled.Value <- 0
             for i in 0 .. x.Dependencies.Count - 1 do
                 x.Dependencies.[i].GetValueUntyped t |> ignore
             let __uplT0 = System.Diagnostics.Stopwatch.GetTimestamp()

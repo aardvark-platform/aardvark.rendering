@@ -265,22 +265,28 @@ module Churn =
             | _ -> false
         let pickables    = heaped |> ASet.filter isPickableSdr
         let unpickables  = heaped |> ASet.filter (isPickableSdr >> not)
-        use pickTask = runtime.CompileRender(pickSig, pickables)
+        // dom shape: TWO tasks over shared attachments; simplified — both use the
+        // BASE signature so no effect needs to write PickId (the question here is
+        // whether the unpickable partition's task draws AT ALL)
+        use pickTask = runtime.CompileRender(baseSig, pickables)
         use baseTask = runtime.CompileRender(baseSig, unpickables)
         // shared attachments (dom: nf/pf over the same renderbuffers)
         let size = V2i(512, 512)
         let colorTex = runtime.CreateTexture2D(size, TextureFormat.Rgba8, 1, 1)
         let pickTex  = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1)
         let depthTex = runtime.CreateTexture2D(size, TextureFormat.Depth24Stencil8, 1, 1)
-        let pf = runtime.CreateFramebuffer(pickSig, [ DefaultSemantic.Colors, colorTex.[TextureAspect.Color, 0, 0] :> IFramebufferOutput
-                                                      pickSym, pickTex.[TextureAspect.Color, 0, 0] :> IFramebufferOutput
+        let pf = runtime.CreateFramebuffer(baseSig, [ DefaultSemantic.Colors, colorTex.[TextureAspect.Color, 0, 0] :> IFramebufferOutput
                                                       DefaultSemantic.DepthStencil, depthTex.[TextureAspect.DepthStencil, 0, 0] :> IFramebufferOutput ] |> Map.ofList)
         let nf = runtime.CreateFramebuffer(baseSig, [ DefaultSemantic.Colors, colorTex.[TextureAspect.Color, 0, 0] :> IFramebufferOutput
                                                       DefaultSemantic.DepthStencil, depthTex.[TextureAspect.DepthStencil, 0, 0] :> IFramebufferOutput ] |> Map.ofList)
-        use clearTask = runtime.CompileClear(pickSig, clear { color C4f.Black; depth 1.0; stencil 0 })
-        clearTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer pf)
-        pickTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer pf)
-        baseTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer nf)
+        use clearTask = runtime.CompileClear(baseSig, clear { color C4f.Black; depth 1.0; stencil 0 })
+        // a build expanding inside a task pull flushes ONE FRAME LATER (the
+        // stage-while-clean Touch) — render two frames like a real loop would
+        for _ in 1 .. 2 do
+            clearTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer pf)
+            pickTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer pf)
+            baseTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer nf)
+            System.Threading.Thread.Sleep 50
         let pix = runtime.Download(colorTex).AsPixImage<uint8>()
         let m = pix.GetMatrix<C4b>()
         let mutable blue = 0

@@ -1,3 +1,7 @@
+### 5.7.0-prerelease0042
+- [Sg] Heap: stage-while-clean fix — a second heap build over a SHARED storage that expands lazily inside another render task's pull (e.g. the 0041 pick partition's unpickable heap) staged into an already-flushed arena that nothing marked outdated again, so its buckets never appeared. Staging into a clean arena now schedules a post-evaluation Touch (one-frame latency, same as any add).
+- [Sg] HeapSpike: `picksplit2` covers the two-task dom shape (was the gap that let 0041 ship with invisible unpickable partitions).
+
 ### 5.7.0-prerelease0041
 - [Sg] Heap: `ofRenderObjectsPicking` partitions members by the `HeapPickId` marker — unpickable (Sg.NoEvents) members build a plain IsPickable=false heap over the same storage, so dom routes them into the base pass: pick-through semantics preserved, and no bucket is ever linked against a pick attachment it doesn't write (fixes the "[Vulkan] Could not get attribute 'PickId'" crash).
 - [Vulkan] richer missing-attribute error: reports the pipeline's inputs and the surface effect's stages/inputs/outputs/uniforms.
