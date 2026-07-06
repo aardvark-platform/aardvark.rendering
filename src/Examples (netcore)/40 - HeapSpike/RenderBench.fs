@@ -377,14 +377,19 @@ module RenderBench =
     /// collected in 3 ROUNDS, (3) the MEDIAN round is reported (min in parens shows
     /// the full-clock floor). Heap-vs-baseline ratios use the medians.
     let private measure (runtime : IRuntime) (task : IRenderTask) (fbo : IFramebuffer) (frames : int) =
-        let gpuQuery = runtime.CreateTimeQuery()
-        let token = { RenderToken.Empty with Queries = [ gpuQuery ] }
+        // HEAPSPIKE_NO_GPU_QUERY=1: skip time queries entirely (KosmicKrisp beta
+        // device-loses on them); task.Run blocks on the fence, so the reported CPU
+        // ms ~= GPU + ~1ms submit overhead.
+        let noQuery = System.Environment.GetEnvironmentVariable "HEAPSPIKE_NO_GPU_QUERY" = "1"
+        let gpuQuery = if noQuery then Unchecked.defaultof<_> else runtime.CreateTimeQuery()
+        let getResult () = if noQuery then 0.0 else (gpuQuery.GetResult((), reset = true)).TotalMilliseconds
+        let token = if noQuery then RenderToken.Empty else { RenderToken.Empty with Queries = [ gpuQuery ] }
         let output = OutputDescription.ofFramebuffer fbo
         task.Run(AdaptiveToken.Top, token, output)
-        gpuQuery.GetResult((), reset = true) |> ignore                       // build + first submit
+        getResult () |> ignore                                               // build + first submit
         for _ in 1 .. 30 do                                                  // clock ramp-up
             task.Run(AdaptiveToken.Top, token, output)
-            gpuQuery.GetResult((), reset = true) |> ignore
+            getResult () |> ignore
         let round () =
             let sw = Stopwatch()
             let mutable gpu = 0.0
@@ -392,7 +397,7 @@ module RenderBench =
                 sw.Start()
                 task.Run(AdaptiveToken.Top, token, output)
                 sw.Stop()
-                gpu <- gpu + (gpuQuery.GetResult((), reset = true)).TotalMilliseconds
+                gpu <- gpu + getResult ()
             gpu / float frames, sw.Elapsed.TotalMilliseconds / float frames
         let rounds = Array.init 3 (fun _ -> round ())
         let byGpu = rounds |> Array.sortBy fst

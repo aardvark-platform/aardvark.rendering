@@ -5862,6 +5862,7 @@ module Heap =
                 match memo.TryGetValue key with
                 | true, s -> s
                 | _ ->
+                    Log.line "[Heap] deferred build: picking=%b sig=[%s]" picking key
                     let s = ofRenderObjectsCore getStorage releaseStorage picking deregister signature objects
                     memo.[key] <- s
                     s)
@@ -5925,7 +5926,32 @@ module Heap =
     /// `ofRenderObjects` — the pick signature (user semantics + `PickId`) reaches the
     /// build at compile time, so extra attachments survive.
     let ofRenderObjectsPicking (storage : HeapStorage) (deregister : int -> unit) (objects : aset<IRenderObject>) : aset<IRenderObject> =
-        deferredCore (fun _ -> storage) ignore true deregister objects
+        // PARTITION by pickability — known BY CONSTRUCTION from the `HeapPickId`
+        // marker uniform (HeapNode attaches it to exactly the members it
+        // pick-composed). The dom pick system's semantics live in its ROUTING:
+        // pickable geometry renders FIRST into the PickId pass, unpickable
+        // (Sg.NoEvents) geometry renders AFTER into the shared color+depth
+        // through a signature WITHOUT the pick attachment — it occludes
+        // visually but leaves the pick ids of geometry behind it intact
+        // (pick-THROUGH). So unpickable members build a SEPARATE (plain,
+        // IsPickable=false) heap over the SAME storage: dom routes those SDRs
+        // into the base pass. Routing them into the PickId pass instead would
+        // either occlude picks (id write) or crash (the backend links a
+        // non-PickId-writing bucket against the pick pass by auto-passing the
+        // output through the stages — a phantom `PickId` VERTEX INPUT).
+        // Partitioning the INPUT (two builds) rather than filtering one build's
+        // SDRs also keeps every slot ingested exactly once.
+        let pickSym = Symbol.Create "HeapPickId"
+        let isPickMarked (ro : IRenderObject) =
+            match ro with
+            | :? RenderObject as r ->
+                (match r.Uniforms.TryGetUniform(Ag.Scope.Root, pickSym) with
+                 | ValueSome _ -> true
+                 | _ -> false)
+            | _ -> false
+        ASet.union
+            (deferredCore (fun _ -> storage) ignore true deregister (objects |> ASet.filter isPickMarked))
+            (deferredCore (fun _ -> storage) ignore false ignore (objects |> ASet.filter (isPickMarked >> not)))
 
     // ── fp64 derived-uniform compute pre-pass ───────────────────────────
     // Wombat derives per-object trafos (ModelViewProjTrafo, NormalMatrix, ...)

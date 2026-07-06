@@ -120,6 +120,10 @@ let main argv =
         if Deferred.run () then 0 else 1
     elif argv |> Array.contains "churn" then
         if Churn.run () then 0 else 1
+    elif argv |> Array.contains "picksplit" then
+        if Churn.pickSplit () then 0 else 1
+    elif argv |> Array.contains "picksplit2" then
+        if Churn.pickSplit2 () then 0 else 1
     elif argv |> Array.contains "autofields" then
         if Golden.autoFieldsTest () then 0 else 1
     elif argv |> Array.contains "sgheap" then

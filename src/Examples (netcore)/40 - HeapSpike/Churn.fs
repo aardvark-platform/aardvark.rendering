@@ -147,3 +147,150 @@ module Churn =
         if pass then Log.line "churn: ALL PASS (add/remove/compaction/same-cycle-reuse == classic)"
         else Log.warn "churn: FAILED"
         pass
+
+    /// pick-partition probe: `ofRenderObjectsPicking` must render BOTH partitions —
+    /// members carrying the `HeapPickId` marker (pick heap) AND unmarked members
+    /// (plain heap, dom routes those to the base pass). Regression for the dom
+    /// NoEvents pick-through fix: the unmarked partition must not vanish.
+    let pickSplit () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 12.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let effect = FShade.Effect.compose [ FShade.Effect.ofFunction Shaders.shade; FShade.Effect.ofFunction Shaders.shadeFrag ]
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.8)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let mk (i : int) (marked : bool) : IRenderObject =
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect effect
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>
+                                                              DefaultSemantic.Normals, bv normals typeof<V3f> ]
+            ro.Indices <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms <- UniformProvider.ofList [
+                yield Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation(float (i % 4) * 1.2 - 1.8, float (i / 4) * 1.2 - 0.6, 0.0)).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                yield Symbol.Create "HeapColor",      (AVal.constant ((if marked then C4f.DodgerBlue else C4f.Orange).ToV4f()) :> IAdaptiveValue)
+                yield Symbol.Create "ViewProjTrafo",  viewProj
+                if marked then yield Symbol.Create "HeapPickId", (AVal.constant i :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        // 4 marked (blue) + 4 unmarked (orange)
+        let input = ASet.ofList [ for i in 0 .. 7 -> mk i (i % 2 = 0) ]
+        let heaped = Heap.ofRenderObjectsPicking (runtime.CreateHeapStorage()) ignore input
+        use task = runtime.CompileRender(signature, heaped)
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        let pix = try out.GetValue().Download().AsPixImage<uint8>() finally out.Release()
+        let m = pix.GetMatrix<C4b>()
+        let mutable blue = 0
+        let mutable orange = 0
+        m.ForeachCoord(fun (c : V2l) ->
+            let p = m.[c]
+            if int p.B > int p.R + 40 && int p.B > 60 then blue <- blue + 1
+            elif int p.R > int p.B + 40 && int p.R > 60 then orange <- orange + 1)
+        Log.line "pickSplit: blue px=%d orange px=%d" blue orange
+        let ok = blue > 1000 && orange > 1000
+        if ok then Log.line "pickSplit: PASS (both partitions render)"
+        else Log.warn "pickSplit: FAIL (a partition is missing)"
+        ok
+
+    /// dom-shaped variant: split the pick-heap's SDRs by IsPickable into TWO
+    /// tasks over SHARED attachments (pick task first, base task second) — the
+    /// exact SceneHandler/PickProducer arrangement. The unpickable partition
+    /// must still be visible in the shared color buffer.
+    module private PS =
+        open FShade
+        type FIn = { [<Color>] c : V4f }
+        type FOut = { [<Color>] c : V4f; [<Semantic("PickId")>] pid : V4f }
+        let write (v : FIn) =
+            fragment {
+                let pid : int = uniform?HeapPickId
+                let r : FOut = { c = v.c; pid = V4f(float32 pid, 0.0f, 0.0f, 0.0f) }
+                return r
+            }
+
+    let pickSplit2 () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let baseSig =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let pickSym = Symbol.Create "PickId"
+        let pickSig =
+            runtime.CreateFramebufferSignature(
+                Map.add baseSig.ColorAttachmentSlots { Name = pickSym; Format = TextureFormat.Rgba32f } baseSig.ColorAttachments,
+                baseSig.DepthStencilAttachment)
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 12.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 100.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let effect = FShade.Effect.compose [ FShade.Effect.ofFunction Shaders.shade; FShade.Effect.ofFunction Shaders.shadeFrag ]
+        // marked members WRITE PickId (dom's HeapNode composes the heap pick chain)
+        let pickEffect = FShade.Effect.compose [ FShade.Effect.ofFunction Shaders.shade; FShade.Effect.ofFunction Shaders.shadeFrag; FShade.Effect.ofFunction PS.write ]
+        let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.8)) C4b.White).ToIndexed()
+        let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+        let normals   = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]>
+        let index     = g.IndexArray |> unbox<int[]>
+        let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
+        let mk (i : int) (marked : bool) : IRenderObject =
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect (if marked then pickEffect else effect)
+            ro.Mode <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList [ DefaultSemantic.Positions, bv positions typeof<V3f>
+                                                              DefaultSemantic.Normals, bv normals typeof<V3f> ]
+            ro.Indices <- Some (bv index typeof<int>)
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = index.Length, InstanceCount = 1) |])
+            ro.Uniforms <- UniformProvider.ofList [
+                yield Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation(float (i % 4) * 1.2 - 1.8, float (i / 4) * 1.2 - 0.6, 0.0)).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                yield Symbol.Create "HeapColor",      (AVal.constant ((if marked then C4f.DodgerBlue else C4f.Orange).ToV4f()) :> IAdaptiveValue)
+                yield Symbol.Create "ViewProjTrafo",  viewProj
+                if marked then yield Symbol.Create "HeapPickId", (AVal.constant i :> IAdaptiveValue) ]
+            ro :> IRenderObject
+        let input = ASet.ofList [ for i in 0 .. 7 -> mk i (i % 2 = 0) ]
+        let heaped = Heap.ofRenderObjectsPicking (runtime.CreateHeapStorage()) ignore input
+        let isPickableSdr (ro : IRenderObject) =
+            match ro with
+            | :? SignatureDependentRenderObject as s -> s.IsPickable
+            | _ -> false
+        let pickables    = heaped |> ASet.filter isPickableSdr
+        let unpickables  = heaped |> ASet.filter (isPickableSdr >> not)
+        use pickTask = runtime.CompileRender(pickSig, pickables)
+        use baseTask = runtime.CompileRender(baseSig, unpickables)
+        // shared attachments (dom: nf/pf over the same renderbuffers)
+        let size = V2i(512, 512)
+        let colorTex = runtime.CreateTexture2D(size, TextureFormat.Rgba8, 1, 1)
+        let pickTex  = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1)
+        let depthTex = runtime.CreateTexture2D(size, TextureFormat.Depth24Stencil8, 1, 1)
+        let pf = runtime.CreateFramebuffer(pickSig, [ DefaultSemantic.Colors, colorTex.[TextureAspect.Color, 0, 0] :> IFramebufferOutput
+                                                      pickSym, pickTex.[TextureAspect.Color, 0, 0] :> IFramebufferOutput
+                                                      DefaultSemantic.DepthStencil, depthTex.[TextureAspect.DepthStencil, 0, 0] :> IFramebufferOutput ] |> Map.ofList)
+        let nf = runtime.CreateFramebuffer(baseSig, [ DefaultSemantic.Colors, colorTex.[TextureAspect.Color, 0, 0] :> IFramebufferOutput
+                                                      DefaultSemantic.DepthStencil, depthTex.[TextureAspect.DepthStencil, 0, 0] :> IFramebufferOutput ] |> Map.ofList)
+        use clearTask = runtime.CompileClear(pickSig, clear { color C4f.Black; depth 1.0; stencil 0 })
+        clearTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer pf)
+        pickTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer pf)
+        baseTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer nf)
+        let pix = runtime.Download(colorTex).AsPixImage<uint8>()
+        let m = pix.GetMatrix<C4b>()
+        let mutable blue = 0
+        let mutable orange = 0
+        m.ForeachCoord(fun (c : V2l) ->
+            let p = m.[c]
+            if int p.B > int p.R + 40 && int p.B > 60 then blue <- blue + 1
+            elif int p.R > int p.B + 40 && int p.R > 60 then orange <- orange + 1)
+        Log.line "pickSplit2: blue px=%d orange px=%d" blue orange
+        let ok = blue > 1000 && orange > 1000
+        if ok then Log.line "pickSplit2: PASS (two-task split renders both)"
+        else Log.warn "pickSplit2: FAIL (a partition is missing)"
+        ok

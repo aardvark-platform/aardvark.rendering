@@ -9,6 +9,15 @@ open System.Runtime.InteropServices
 type VulkanLoader =
     static let [<Literal>] MoltenVK = "MoltenVK"
 
+    /// explicit override (name or absolute path) — e.g. to select a specific
+    /// loader/driver build such as KosmicKrisp's SDK loader on macOS, where
+    /// DYLD_* variables are stripped by SIP and cannot redirect the default.
+    /// WINS over LibraryNames / PreferMoltenVK set by application code.
+    static let envOverride =
+        match Environment.GetEnvironmentVariable "AARDVARK_VULKAN_LIBRARY" with
+        | null | "" -> ValueNone
+        | s -> ValueSome s
+
     static let mutable libraryNames =
         if RuntimeInformation.IsOSPlatform OSPlatform.Windows then [| "vulkan-1"; "vulkan" |]
         elif RuntimeInformation.IsOSPlatform OSPlatform.OSX then [| "vulkan.1"; "vulkan"; MoltenVK |]
@@ -16,11 +25,17 @@ type VulkanLoader =
 
     static let library =
         lazy (
-            libraryNames |> Array.tryPickV (fun libraryName ->
-                let ptr = Aardvark.LoadLibrary(libraryName, typeof<VulkanLoader>.Assembly)
-                if ptr <> 0n then ValueSome ptr else ValueNone
-            )
-            |> ValueOption.defaultWith (fun _ -> failwith "Failed to load Vulkan library.")
+            match envOverride with
+            | ValueSome path ->
+                let ptr = Aardvark.LoadLibrary(path, typeof<VulkanLoader>.Assembly)
+                if ptr = 0n then failwithf "Failed to load Vulkan library '%s' (AARDVARK_VULKAN_LIBRARY)." path
+                ptr
+            | ValueNone ->
+                libraryNames |> Array.tryPickV (fun libraryName ->
+                    let ptr = Aardvark.LoadLibrary(libraryName, typeof<VulkanLoader>.Assembly)
+                    if ptr <> 0n then ValueSome ptr else ValueNone
+                )
+                |> ValueOption.defaultWith (fun _ -> failwith "Failed to load Vulkan library.")
         )
 
     /// Handle of the Vulkan library.
@@ -38,7 +53,9 @@ type VulkanLoader =
     static member PreferMoltenVK
         with get() = VulkanLoader.LibraryNames |> Array.tryHeadV |> ValueOption.contains MoltenVK
         and set value =
-            let names = VulkanLoader.LibraryNames |> Array.filter ((=) MoltenVK)
+            // note ((<>) MoltenVK): the previous ((=) MoltenVK) KEPT ONLY MoltenVK,
+            // collapsing the candidate list to the bundled library for either value
+            let names = VulkanLoader.LibraryNames |> Array.filter ((<>) MoltenVK)
 
             if value then
                 VulkanLoader.LibraryNames <- Array.append [| MoltenVK |] names

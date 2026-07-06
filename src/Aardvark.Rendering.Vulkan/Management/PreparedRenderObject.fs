@@ -337,7 +337,18 @@ type DevicePreparedRenderObjectExtensions private() =
                     let struct (view, perInstance) =
                         match ro.TryGetAttribute semantic with
                         | ValueSome attr -> attr
-                        | _ -> failf "could not get attribute '%A'" semantic
+                        | _ ->
+                            let ins = programLayout.PipelineInfo.pInputs |> List.map (fun i -> i.paramSemantic) |> String.concat ", "
+                            let surf =
+                                match ro.Surface with
+                                | Surface.Effect e ->
+                                    let stages = e.Shaders |> Map.toList |> List.map (fst >> string) |> String.concat "+"
+                                    let inputs = e.Inputs |> Map.toList |> List.map fst |> String.concat ","
+                                    let outputs = e.Outputs |> Map.toList |> List.map fst |> String.concat ","
+                                    let unis = e.Uniforms |> Map.toList |> List.map fst |> List.truncate 16 |> String.concat ","
+                                    sprintf "effect %s stages=[%s] inputs=[%s] outputs=[%s] uniforms=[%s]" e.Id stages inputs outputs unis
+                                | s -> string s
+                            failf "could not get attribute '%A' (pipeline inputs: [%s]; %s)" semantic ins surf
 
                     let buffer = this.CreateVertexBuffer(semantic, view.Buffer)
 

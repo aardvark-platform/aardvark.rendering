@@ -1,3 +1,9 @@
+### 5.7.0-prerelease0041
+- [Sg] Heap: `ofRenderObjectsPicking` partitions members by the `HeapPickId` marker — unpickable (Sg.NoEvents) members build a plain IsPickable=false heap over the same storage, so dom routes them into the base pass: pick-through semantics preserved, and no bucket is ever linked against a pick attachment it doesn't write (fixes the "[Vulkan] Could not get attribute 'PickId'" crash).
+- [Vulkan] richer missing-attribute error: reports the pipeline's inputs and the surface effect's stages/inputs/outputs/uniforms.
+- [Vulkan] `AARDVARK_VULKAN_LIBRARY` overrides the loaded Vulkan library (wins over `VulkanLoader.PreferMoltenVK`); fixed `PreferMoltenVK` setter collapsing the candidate list to only MoltenVK (`filter ((=) MoltenVK)` -> `((<>) MoltenVK)`) — required to run under KosmicKrisp/the Khronos loader on macOS.
+- [Sg] HeapSpike: `picksplit`/`picksplit2` golden probes (pick-partition rendering), `HEAPSPIKE_NO_GPU_QUERY=1` renderbench fallback (KosmicKrisp beta device-loses on time queries).
+
 ### 5.7.0-prerelease0040
 - [Sg] Heap: MoltenVK GPU-hang fix — derive-output/alignment holes broke upload-region merging, so a bulk flush issued O(parts) VkBufferCopy regions in one command (each = a Metal blit command -> watchdog). Holes are now staged as zero placeholders: 700k regions -> 12; also caps regions per copy at 16k and logs region counts. Bonus: ingest 11.2 -> 8.6 s @700k, mac upload 8x faster.
 - [Sg] Heap: fixed a double dispose of the derive-records buffer in bucket teardown (the long-standing "negative reference count (-1)" warning).
