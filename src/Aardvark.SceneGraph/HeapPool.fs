@@ -1265,6 +1265,9 @@ module Heap =
         let mutable disposed = false
         member _.Slot = slot
         member _.IsDisposed = disposed
+        /// the slot's gated-on instance count. MUTABLE: an RO whose Direct
+        /// draw-call instance count changes adaptively updates it in place.
+        member val Instances = instances with get, set
         /// CLUSTERED buckets: the updater evaluates gate flips (class membership must
         /// change BEFORE any buffer flush); non-clustered buckets leave this null and
         /// keep the draw-mirror path.
@@ -1272,12 +1275,49 @@ module Heap =
         /// evaluate the gate; `write slot count` runs iff re-evaluation was needed
         member x.Update(token : AdaptiveToken, write : int -> int -> unit) =
             x.EvaluateIfNeeded token () (fun token ->
-                write slot (if src.GetValue token then instances else 0))
+                write slot (if src.GetValue token then x.Instances else 0))
         member x.Dispose() =
             disposed <- true
             (src :> IAdaptiveValue).Release()
             (src :> IAdaptiveValue).Outputs.Remove x |> ignore
             x.Outputs.Clear()
+
+    /// Generic per-slot adaptive watcher for values the heap used to snapshot at
+    /// add time (geometry buffer avals, draw-call shape, pick ids, model-stack
+    /// structure). Marked (via the source) only when ITS value changes; the
+    /// UPDATER collects marked writers into a dirty set (InputChangedObject, same
+    /// idiom as KeyWatcher / cluster GateWriters) and invokes `OnChange` — which
+    /// applies the change O(affected) inside the membership update, BEFORE any
+    /// arena / mirror flush serializes state.
+    type internal DynWriter(src : IAdaptiveValue) =
+        inherit AdaptiveObject()
+        do src.Acquire()
+        member val IsDisposed = false with get, set
+        /// set when the ADD already consumed the current value (geometry bytes
+        /// staged by the allocation itself): the first apply — which only runs
+        /// because a fresh AdaptiveObject starts OutOfDate — skips its work and
+        /// just establishes the subscription. Without it, ingest would stage
+        /// every dynamic-source geometry TWICE.
+        member val Fresh = false with get, set
+        /// bucket-provided applier; must route through `Update` so the writer
+        /// (re)subscribes to its source through the caller's token.
+        member val OnChange : System.Action<AdaptiveToken> = null with get, set
+        /// evaluate the source; `apply` runs iff re-evaluation was needed
+        member x.Update(token : AdaptiveToken, apply : AdaptiveToken -> obj -> unit) =
+            x.EvaluateIfNeeded token () (fun tok -> apply tok (src.GetValueUntyped tok))
+        member x.Dispose() =
+            x.IsDisposed <- true
+            src.Release()
+            src.Outputs.Remove x |> ignore
+            x.Outputs.Clear()
+
+    /// how a bucket receives "your slot's geometry allocation moved / changed
+    /// element count" from a (page-shared, possibly cross-bucket) dynamic
+    /// geometry entry. `cell` is the slot's header cell holding the allocation
+    /// ref; `isIndex` routes the vertex-count consequences (vcCell + draw
+    /// record + cluster reclassification).
+    type internal IGeomSink =
+        abstract member GeomMoved : slot : int * cell : int * newRef : int * newCount : int * isIndex : bool -> unit
 
     /// Per-RO watcher over exactly the avals its bucket key reads (created ONLY for
     /// ROs whose key is not all-constant — constant keys are interned once and never
@@ -1474,8 +1514,14 @@ module Heap =
     /// is the element count (the per-slot draw record's FaceVertexCount for
     /// index allocations).
     type internal StaticEntry =
-        { mutable Ref : int; SizeF : int; Count : int; mutable RefCount : int
-          mutable Block : HeapBlock }
+        { mutable Ref : int; mutable SizeF : int; mutable Count : int; mutable RefCount : int
+          mutable Block : HeapBlock
+          /// DYNAMIC source (non-constant buffer aval): the adaptive re-stage /
+          /// realloc writer (null for constant sources — written once, no
+          /// subscription) and the referencing (sink, slot, headerCell) set the
+          /// realloc path re-bakes — O(sharers) = O(affected).
+          mutable Writer : DynWriter
+          mutable DynRefs : System.Collections.Generic.HashSet<struct(IGeomSink * int * int)> }
 
     /// how a slot references one of its attribute allocations (for release +
     /// compaction header rewrite)
@@ -1499,7 +1545,7 @@ module Heap =
           /// which storage page this slot's group lives on (all its regions are on it);
           /// the slot renders in that page's sub-draw and frees from that page on remove.
           mutable Page : int
-          Instances : int; mutable InstOffset : int
+          mutable Instances : int; mutable InstOffset : int
           mutable InstBlock : HeapBlock
           /// per consumed attribute (host buckets; empty for bindless)
           AttrKeys : AttrKey[]
@@ -1649,9 +1695,8 @@ module Heap =
             | _ -> false
 
     /// an input RO may ALREADY be instanced (instanceCount > 1); preserved per-slot.
-    /// STRUCTURAL read (forced once, cached in RoFacts): an RO whose Direct call list
-    /// changes its instance count later is NOT re-bucketed — the heap treats draw-call
-    /// shape as immutable, like the geometry layout.
+    /// Forced here for the INITIAL value; a non-constant Direct call list gets a
+    /// per-slot DynWriter at add time that applies later count changes in place.
     let private instanceCountOf (ro : RenderObject) =
         match ro.DrawCalls with
         | DrawCalls.Direct calls ->
@@ -1662,8 +1707,8 @@ module Heap =
 
     /// a NON-indexed slot's vertex count: the RO's Direct draw call (classify
     /// requires Direct, single-call, zero offsets for non-indexed ROs).
-    /// STRUCTURAL read like instanceCountOf — forced once at add, never
-    /// re-read (the heap treats draw-call shape as immutable).
+    /// Forced here for the INITIAL value; a non-constant call list gets a
+    /// per-slot DynWriter at add time (vcCell + record + cluster reclass).
     let private faceVertexCountOf (ro : RenderObject) =
         match ro.DrawCalls with
         | DrawCalls.Direct calls ->
@@ -3444,6 +3489,17 @@ module Heap =
         // entry at add time) — each gets a GateWriter marked only when ITS gate
         // changes; the draw mirror re-stages exactly the toggled slots.
         let gateWriters = System.Collections.Generic.Dictionary<int, GateWriter>()
+        // per-slot adaptive watchers for values the heap used to snapshot at add
+        // time (draw-call shape, pick id, model-stack structure) — disposed with
+        // the slot. Geometry writers are ENTRY-owned (freed at refcount 0).
+        let slotDynWriters = System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<DynWriter>>()
+        let regSlotWriter (slot : int) (w : DynWriter) =
+            match slotDynWriters.TryGetValue slot with
+            | true, l -> l.Add w
+            | _ ->
+                let l = System.Collections.Generic.List<DynWriter>()
+                l.Add w
+                slotDynWriters.[slot] <- l
 
         // ── texture tables: ONE per input sampler (si). A freed cell emits a Remove and the
         // backend nulls the unbound slot, so there is no per-type dummy — any sampler type works.
@@ -3774,7 +3830,8 @@ module Heap =
                 stIngestStageMs <- stIngestStageMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
                 if byteLen % 4 <> 0 then wi p (words - 1) 0
                 writeBytes p
-                let e = { Ref = off; SizeF = sizeF; Count = count; RefCount = 1; Block = b }
+                let e = { Ref = off; SizeF = sizeF; Count = count; RefCount = 1; Block = b
+                          Writer = Unchecked.defaultof<DynWriter>; DynRefs = null }
                 dict.[key] <- e
                 e
 
@@ -3783,9 +3840,55 @@ module Heap =
             | true, e ->
                 e.RefCount <- e.RefCount - 1
                 if e.RefCount = 0 then
+                    if not (isNull e.Writer) then e.Writer.Dispose()
                     dict.Remove key |> ignore
                     arenaAlloc.Free e.Block
             | _ -> ()
+
+        /// Upgrade a freshly-allocated geometry entry whose SOURCE aval is
+        /// non-constant to a DYNAMIC entry: an adaptive writer re-stages the
+        /// payload in place on a same-size value change (O(bytes)) and
+        /// free/realloc-s + re-writes the header + re-bakes every referencing
+        /// slot (O(sharers), via IGeomSink.GeomMoved) on a size change. The
+        /// entry's bytes were already staged by the allocation, so the writer
+        /// starts Fresh (its first apply only subscribes). Captures the entry's
+        /// OWN page — compaction may re-seat the block (the pack reads e.Ref
+        /// fresh), but an allocation never migrates pages.
+        let makeDynamic (e : StaticEntry) (bv : BufferView) (typeId : int) (esBytes : int) (isIndex : bool) =
+            let pg = storage.Page curPage
+            let w = DynWriter(bv.Buffer)
+            w.Fresh <- true
+            e.Writer <- w
+            e.DynRefs <- System.Collections.Generic.HashSet<struct(IGeomSink * int * int)>()
+            w.OnChange <- System.Action<AdaptiveToken>(fun tok ->
+                w.Update(tok, fun _ (o : obj) ->
+                    if w.Fresh then w.Fresh <- false
+                    else
+                        let value = o :?> IBuffer
+                        let byteLen = geomByteLen' value bv
+                        let words = (byteLen + 3) / 4
+                        if AllocHeaderWords + words = e.SizeF then
+                            // same-size change: payload re-stage in place; an index
+                            // entry keeps its count, so headers/records stay valid.
+                            let p = pg.Arena.StageWords(e.Ref + AllocHeaderWords, words)
+                            if byteLen % 4 <> 0 then wi p (words - 1) 0
+                            stageGeomBytes' runtime value bv byteLen p
+                        else
+                            pg.ArenaAlloc.Free e.Block
+                            let sizeF = AllocHeaderWords + words
+                            let b = pg.ArenaAlloc.Alloc sizeF
+                            e.Block <- b
+                            e.Ref <- int b.Offset
+                            e.SizeF <- sizeF
+                            e.Count <- byteLen / esBytes
+                            pg.Arena.EnsureFloats pg.ArenaAlloc.Extent
+                            pg.Arena.WriteHeader(e.Ref, typeId, e.Count, esBytes)
+                            let p = pg.Arena.StageWords(e.Ref + AllocHeaderWords, words)
+                            if byteLen % 4 <> 0 then wi p (words - 1) 0
+                            stageGeomBytes' runtime value bv byteLen p
+                            for struct(sink, slot, cell) in e.DynRefs do
+                                sink.GeomMoved(slot, cell, e.Ref, e.Count, isIndex)))
+            w
 
         /// the slot's index allocation: raw index bytes (host or downloaded GPU
         /// buffer) with a header carrying the ELEMENT TYPE (u16 vs 32-bit) —
@@ -3807,7 +3910,9 @@ module Heap =
             | true, e -> e.RefCount <- e.RefCount + 1; key, e
             | _ ->
                 let len = geomByteLen' value bv
-                key, allocStatic idxStatic key len (stageGeomBytes' runtime value bv len) tid (len / es) es
+                let e = allocStatic idxStatic key len (stageGeomBytes' runtime value bv len) tid (len / es) es
+                if not bv.Buffer.IsConstant then makeDynamic e bv tid es true |> ignore
+                key, e
 
         /// one consumed attribute of a new slot: singleton -> adaptive region,
         /// real buffer -> static allocation. Returns (release key, header ref).
@@ -3837,6 +3942,7 @@ module Heap =
                     let es = elemSize et
                     let len = geomByteLen' value bv
                     let e = allocStatic attrStatic key len (stageGeomBytes' runtime value bv len) tid (len / es) es
+                    if not bv.Buffer.IsConstant then makeDynamic e bv tid es false |> ignore
                     AttrKey.Static key, e.Ref
 
         // ── threshold-triggered compaction is PAGE-level now (PageArena.Compact):
@@ -4737,12 +4843,20 @@ module Heap =
             // per-slot blocks and re-bake headers when the page moves things
             storage.Page(curPage).Register (x :> IPageParticipant)
             slotPage.[slot] <- curPage
-            // PICKING: capture the dom-sourced pick id (constant per slot; -1 = unpickable)
+            // PICKING: the dom-sourced pick id (-1 = unpickable). Almost always
+            // constant per slot; a non-constant id gets a watcher (the pick-id
+            // mirror is full-rewrite-on-pull, so updating the CPU cell suffices).
             if picking then
-                pickIds.[slot] <-
-                    match ro.Uniforms.TryGetUniform(scope, symPickId) with
-                    | ValueSome v -> (try v.GetValueUntyped(AdaptiveToken.Top) :?> int with _ -> -1)
-                    | ValueNone -> -1
+                match ro.Uniforms.TryGetUniform(scope, symPickId) with
+                | ValueSome v ->
+                    pickIds.[slot] <- (try v.GetValueUntyped(AdaptiveToken.Top) :?> int with _ -> -1)
+                    if not v.IsConstant then
+                        let w = DynWriter(v)
+                        w.OnChange <- System.Action<AdaptiveToken>(fun tok ->
+                            w.Update(tok, fun _ o -> pickIds.[slot] <- (try o :?> int with _ -> -1)))
+                        regSlotWriter slot w
+                        w.OnChange.Invoke t
+                | ValueNone -> pickIds.[slot] <- -1
             let __secT0 = System.Diagnostics.Stopwatch.GetTimestamp()
             let regionKeys = System.Collections.Generic.List<IAdaptiveValue>(names.Length)
             let outBlocks = System.Collections.Generic.List<HeapBlock>()
@@ -4785,11 +4899,24 @@ module Heap =
             // arena (deduped) + a chIdx run; the GPU folds it into the slot's Model
             // forward (and, when consumed, backward) constituent region.
             if chainMode then
-                let stack =
+                let st =
                     match ro.Uniforms.TryGetUniform(scope, symModelStack) with
-                    | ValueSome (:? aval<aval<Trafo3d>[]> as st) -> AVal.force st
+                    | ValueSome (:? aval<aval<Trafo3d>[]> as st) -> st
                     | _ -> failwith "Heap.ofRenderObjects: chainMode RO missing aval<aval<Trafo3d>[]> 'ModelTrafoStack'"
-                addChainSlot slot stack
+                addChainSlot slot (AVal.force st)
+                // the stack ELEMENTS are adaptive via the link arena; the stack
+                // STRUCTURE (re-parenting) gets a watcher that re-routes the chain
+                if not st.IsConstant then
+                    let w = DynWriter(st)
+                    w.Fresh <- true
+                    w.OnChange <- System.Action<AdaptiveToken>(fun tok ->
+                        w.Update(tok, fun _ o ->
+                            if w.Fresh then w.Fresh <- false
+                            else
+                                removeChainSlot slot
+                                addChainSlot slot (o :?> aval<Trafo3d>[])))
+                    regSlotWriter slot w
+                    w.OnChange.Invoke t
             let __secT1 = System.Diagnostics.Stopwatch.GetTimestamp()
             stIngestFieldsMs <- stIngestFieldsMs + float (__secT1 - __secT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
             // geometry: per-attribute arena allocations (host) or the per-slot
@@ -4817,6 +4944,17 @@ module Heap =
                     attrInfos |> Array.map (fun (ai, _, sym, _, _, _, _) ->
                         let (key, r) = attrFor ro sym
                         headers.[slot * headerStride + attrBase + ai] <- r
+                        // dynamic-source allocation: register this slot's header cell
+                        // for the realloc re-bake and subscribe THIS bucket's updater
+                        // (idempotent evaluation — a clean writer just adds the edge)
+                        (match key with
+                         | AttrKey.Static k ->
+                             (match attrStatic.TryGetValue k with
+                              | true, e when not (isNull e.Writer) ->
+                                  e.DynRefs.Add(struct(x :> IGeomSink, slot, attrBase + ai)) |> ignore
+                                  e.Writer.OnChange.Invoke t
+                              | _ -> ())
+                         | _ -> ())
                         key)
             // index allocation — or the -1 sentinel for NON-indexed members
             // (the shader's decodeHeapIndex passes gl_VertexIndex through);
@@ -4825,6 +4963,9 @@ module Heap =
                 match ro.Indices with
                 | Some _ ->
                     let (k, e) = idxFor ro
+                    if not (isNull e.Writer) then
+                        e.DynRefs.Add(struct(x :> IGeomSink, slot, idxCell)) |> ignore
+                        e.Writer.OnChange.Invoke t
                     struct(k, e.Ref, e.Count)
                 | None ->
                     struct(noIdxKey, -1, faceVertexCountOf ro)
@@ -4882,14 +5023,56 @@ module Heap =
             entries.[slot] <- DrawCallInfo(FaceVertexCount = vertexCount, FirstIndex = 0, BaseVertex = 0,
                                            FirstInstance = firstInstance, InstanceCount = instCount)
             dirtyDraws.Add slot |> ignore
-            slots.[ro] <- { Slot = slot; Page = curPage; RegionKeys = regionKeys.ToArray(); Active = active; Instances = k; InstOffset = firstInstance
-                            InstBlock = instBlock; AttrKeys = attrKeys; IdxKey = idxKey
-                            ConstKeys = constKeys.ToArray(); OutBlocks = outBlocks.ToArray(); FoldBlocks = foldBlocks.ToArray() }
+            let hs = { Slot = slot; Page = curPage; RegionKeys = regionKeys.ToArray(); Active = active; Instances = k; InstOffset = firstInstance
+                       InstBlock = instBlock; AttrKeys = attrKeys; IdxKey = idxKey
+                       ConstKeys = constKeys.ToArray(); OutBlocks = outBlocks.ToArray(); FoldBlocks = foldBlocks.ToArray() }
+            slots.[ro] <- hs
+            // draw-call SHAPE watcher: a non-constant Direct call list updates the
+            // slot's vertex count (non-indexed members; indexed counts come from
+            // the index allocation) and — on instanced buckets — its instance
+            // count, in place, O(1) per change.
+            (match ro.DrawCalls with
+             | DrawCalls.Direct calls when not calls.IsConstant && (ro.Indices.IsNone || instanced) ->
+                 let indexed = ro.Indices.IsSome
+                 let w = DynWriter(calls)
+                 w.OnChange <- System.Action<AdaptiveToken>(fun tok ->
+                     w.Update(tok, fun _ o ->
+                         let arr = o :?> DrawCallInfo[]
+                         if not indexed then
+                             let vc = if arr.Length = 0 then 0 else arr.[0].FaceVertexCount
+                             if vcOfSlot.[slot] <> vc then
+                                 headers.[slot * headerStride + vcCell] <- vc
+                                 vcOfSlot.[slot] <- vc
+                                 dirtyHeaders.Add slot |> ignore
+                                 if useClusters then
+                                     (if clusterClsOf.[slot] >= 0 then classRemove slot; classAdd slot)
+                                 else
+                                     entries.[slot].FaceVertexCount <- vc
+                                     dirtyDraws.Add slot |> ignore
+                         if instanced then
+                             let k' = match arr with [||] -> 1 | a -> max 1 a.[0].InstanceCount
+                             if k' <> hs.Instances then
+                                 hs.Instances <- k'
+                                 (match gateWriters.TryGetValue slot with
+                                  | true, gw -> gw.Instances <- k'
+                                  | _ -> ())
+                                 if useSlotAttr then
+                                     freeInst hs.InstBlock
+                                     let nb = allocInst slot k'
+                                     hs.InstBlock <- nb
+                                     hs.InstOffset <- int nb.Offset
+                                     entries.[slot].FirstInstance <- int nb.Offset
+                                 // gated-ON slots re-stage their record with the new count
+                                 if entries.[slot].InstanceCount <> 0 then entries.[slot].InstanceCount <- k'
+                                 dirtyDraws.Add slot |> ignore))
+                 regSlotWriter slot w
+                 w.OnChange.Invoke t
+             | _ -> ())
             stIngestN <- stIngestN + 1
             stIngestMs <- stIngestMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __ingT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
             if stIngestN % 100000 = 0 then Log.line "[startup] ingest %d parts so far: %.0f ms (fields %.0f | geom %.0f [copy %.0f, stage %.0f] | rest %.0f)" stIngestN stIngestMs stIngestFieldsMs stIngestGeomMs stIngestCopyMs stIngestStageMs (stIngestMs - stIngestFieldsMs - stIngestGeomMs)
 
-        member private _.RemoveInternal(ro : RenderObject) =
+        member private x.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with
             | true, s ->
                 // free from the page the slot's group lives on
@@ -4899,11 +5082,28 @@ module Heap =
                 for struct(av, inv) in s.ConstKeys do freeConstituent av inv
                 for b in s.OutBlocks do arenaAlloc.Free b
                 for b in s.FoldBlocks do arenaAlloc.Free b
-                for k in s.AttrKeys do
+                s.AttrKeys |> Array.iteri (fun ai k ->
                     match k with
                     | AttrKey.Single av -> freeSingle av
-                    | AttrKey.Static key -> freeStatic attrStatic key
+                    | AttrKey.Static key ->
+                        // drop this slot's realloc back-ref BEFORE the free (which
+                        // may retire the entry + its writer at refcount 0)
+                        (match attrStatic.TryGetValue key with
+                         | true, e when not (isNull e.Writer) ->
+                             e.DynRefs.Remove(struct(x :> IGeomSink, s.Slot, attrBase + ai)) |> ignore
+                         | _ -> ())
+                        freeStatic attrStatic key)
+                (match idxStatic.TryGetValue s.IdxKey with
+                 | true, e when not (isNull e.Writer) ->
+                     e.DynRefs.Remove(struct(x :> IGeomSink, s.Slot, idxCell)) |> ignore
+                 | _ -> ())
                 freeStatic idxStatic s.IdxKey
+                // per-slot adaptive watchers (draw-call shape / pick id / model stack)
+                (match slotDynWriters.TryGetValue s.Slot with
+                 | true, l ->
+                     for w in l do w.Dispose()
+                     slotDynWriters.Remove s.Slot |> ignore
+                 | _ -> ())
                 if useBindlessGeom then
                     for ai in 0 .. numAttrs - 1 do
                         let pos = s.Slot * numAttrs + ai
@@ -5002,6 +5202,24 @@ module Heap =
                 if not (isNull (box chIdxBuf)) then chIdxBuf.Dispose()
             if chainBwdActive then disp chainInvProg; disp chainInvInput; disp chainInvShader
             slots.Clear()
+
+        interface IGeomSink with
+            /// a dynamic geometry entry this slot references was REALLOCATED
+            /// (size change): re-bake the slot's header cell; an index entry also
+            /// carries the slot's drawn-vertex count (vcCell + draw record /
+            /// cluster class). Runs inside the updater evaluation — before any
+            /// mirror or arena flush serializes state.
+            member _.GeomMoved(slot, cell, newRef, newCount, isIndex) =
+                headers.[slot * headerStride + cell] <- newRef
+                if isIndex then
+                    headers.[slot * headerStride + vcCell] <- newCount
+                    vcOfSlot.[slot] <- newCount
+                    if useClusters then
+                        (if clusterClsOf.[slot] >= 0 then classRemove slot; classAdd slot)
+                    else
+                        entries.[slot].FaceVertexCount <- newCount
+                        dirtyDraws.Add slot |> ignore
+                dirtyHeaders.Add slot |> ignore
 
         // shared-page compaction stake: contribute this bucket's per-slot arena
         // blocks (derived outputs, chain folds — they live in slots, not in the
@@ -5606,6 +5824,10 @@ module Heap =
         // be settled before any buffer flush serializes it); a marked gate lands in
         // this set via InputChangedObject below.
         let dirtyClusterGates = LockedSet<GateWriter>()
+        // adaptive watchers over formerly-snapshot values (geometry buffers,
+        // draw-call shape, pick ids, model-stack structure); a marked writer
+        // lands here and its OnChange applies the delta inside the updater.
+        let dirtyDynWriters = LockedSet<DynWriter>()
         let updaterRef = ref (Unchecked.defaultof<aval<int>>)
         let version = ref 0
 
@@ -5645,6 +5867,7 @@ module Heap =
                     match o with
                     | :? KeyWatcher as w -> dirtyKeys.Add w |> ignore
                     | :? GateWriter as g -> dirtyClusterGates.Add g |> ignore
+                    | :? DynWriter as d -> dirtyDynWriters.Add d |> ignore
                     | _ -> ()
                 override x.Compute(t) =
                     let delta = objReader.GetChanges t
@@ -5729,6 +5952,12 @@ module Heap =
                     for g in dirtyClusterGates.GetAndClear() do
                         if not g.IsDisposed && not (isNull g.OnCluster) then g.OnCluster.Invoke t
 
+                    // adaptive value flips (geometry bytes, draw-call shape, pick
+                    // ids, model-stack structure): apply O(changed) NOW — arena
+                    // staging + header/record mutations land before any flush
+                    for d in dirtyDynWriters.GetAndClear() do
+                        if not d.IsDisposed && not (isNull d.OnChange) then d.OnChange.Invoke t
+
                     lastBucketCount <- caches.Count
                     let mutable chainB = 0
                     let mutable chainD = 0
@@ -5752,6 +5981,7 @@ module Heap =
             for KeyValue(_, w) in keyWatchers do w.Dispose()
             keyWatchers.Clear()
             dirtyKeys.GetAndClear() |> ignore
+            dirtyDynWriters.GetAndClear() |> ignore
             match box objReader with
             | :? System.IDisposable as d -> d.Dispose()
             | _ -> ()

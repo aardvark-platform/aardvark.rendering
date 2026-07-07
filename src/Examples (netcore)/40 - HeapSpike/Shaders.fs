@@ -21,6 +21,15 @@ module Shaders =
             return { v with pos = vp * (m * v.pos); c = col; n = m.TransformDir v.n }
         }
 
+    // vertex-COLOR variant: passes the Colors attribute through (the adaptive
+    // geometry probe flips the attribute VALUE — full array <-> singleton).
+    let shadeVtx (v : Vertex) =
+        vertex {
+            let m   : M44f = uniform?HeapModelTrafo
+            let vp  : M44f = uniform?ViewProjTrafo
+            return { v with pos = vp * (m * v.pos); n = m.TransformDir v.n }
+        }
+
     let shadeFrag (v : Vertex) =
         fragment {
             let l  = Vec.normalize (V3f(1.0f, 2.0f, 3.0f))
