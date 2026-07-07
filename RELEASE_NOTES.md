@@ -1,3 +1,8 @@
+### 5.7.0-prerelease0045
+- [Vulkan] HeapRenderObjectCommand: recompile now RESETS the previous generation — the persistent VKVM stream was APPENDED on every recompile (one per heap membership version, e.g. per adaptive recolor) and the old derive DispatchCommands lingered in the pre-pass replay list. Every click permanently rendered the whole scene (and its derive pass) ONE MORE TIME per frame — the staircase-into-diashow degradation on all platforms (hekla-verified: 6 picks 27.7 -> 5.3 ms/frame).
+- [Sg] Heap: dynamic geometry values that FIT the existing allocation re-stage IN PLACE (header count rewritten when it changes) — the select-toggle (full array <-> singleton) never reallocs, no free/alloc churn, no header re-bake.
+- [Sg] HeapSpike: `dynpick` probe — repeated adaptive recolors under the two-task picking shape must not accumulate per-frame cost.
+
 ### 5.7.0-prerelease0044
 - [Sg] Heap: `AARDVARK_HEAP_STATIC_GEOM=1` kill-switch disables the 0043 adaptive machinery (geometry re-upload writers, draw-call/pick-id/model-stack watchers) — snapshot-at-add behavior for bisecting regressions.
 

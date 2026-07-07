@@ -461,3 +461,164 @@ module Churn =
         if pass then Log.line "dynGeom: ALL PASS (adaptive attrs/index/draw-calls == classic)"
         else Log.warn "dynGeom: FAILED"
         pass
+
+    /// TOGGLE-CHURN perf probe: repeated singleton<->full color flips (the demo's
+    /// select/deselect) must stay O(change) and NOT degrade — no arena growth, no
+    /// fragmentation creep, no accumulating adaptive state. Renders every round
+    /// (arena flush included) and reports first-vs-last round timings + arena size.
+    let dynPerf () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(512, 512))
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 42.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let effect = FShade.Effect.compose [ FShade.Effect.ofFunction Shaders.shadeVtx; FShade.Effect.ofFunction Shaders.shadeFrag ]
+        let lightBlue = C4b(115uy, 199uy, 255uy)
+
+        let n = 4096
+        let selC = Array.init n (fun _ -> cval false)
+        let mkRO (i : int) : IRenderObject =
+            let rand = RandomSystem(i * 7919 + 13)
+            let tess = 10 + rand.UniformInt 8
+            let g = (IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.55)) tess C4b.White).ToIndexed()
+            let pos = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]> |> Array.copy
+            let nrm = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]> |> Array.copy
+            let idx = g.IndexArray |> unbox<int[]> |> Array.copy
+            let full = Array.init pos.Length (fun v -> C4b(byte (60 + (i * 13) % 180), byte (60 + v % 160), 90uy))
+            let cols = selC.[i] |> AVal.map (fun sel -> if sel then [| lightBlue |] else full)
+            let s = 64
+            let p = V3d(float (i % s - s/2) * 1.2, float (i / s - s/2) * 1.2, 0.0)
+            let bvA (av : aval<'a[]>) t = BufferView(av |> AVal.map (fun a -> ArrayBuffer(a :> System.Array) :> IBuffer), t)
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect effect
+            ro.Mode    <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList [
+                DefaultSemantic.Positions, BufferView(AVal.constant (ArrayBuffer pos :> IBuffer), typeof<V3f>)
+                DefaultSemantic.Normals,   BufferView(AVal.constant (ArrayBuffer nrm :> IBuffer), typeof<V3f>)
+                DefaultSemantic.Colors,    bvA cols typeof<C4b> ]
+            ro.Indices   <- Some (BufferView(AVal.constant (ArrayBuffer idx :> IBuffer), typeof<int>))
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = idx.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                Symbol.Create "ViewProjTrafo",  viewProj ]
+            ro :> IRenderObject
+
+        let storage = runtime.CreateHeapStorage()
+        let heapObjs = Heap.ofRenderObjects storage (ASet.ofArray (Array.init n mkRO))
+        use task = runtime.CompileRender(signature, heapObjs)
+        let out = task |> RenderTask.renderToColor size
+        out.Acquire()
+        out.GetValue() |> ignore   // ingest + first frame
+
+        let sw = System.Diagnostics.Stopwatch()
+        let round (r : int) =
+            sw.Restart()
+            transact (fun () -> for i in 0 .. n - 1 do if i % 2 = r % 2 then selC.[i].Value <- not selC.[i].Value)
+            out.GetValue() |> ignore
+            sw.Elapsed.TotalMilliseconds
+
+        let rounds = 400
+        let times = Array.init rounds round
+        let head = Array.averageBy id times.[0..19]
+        let tail = Array.averageBy id times.[rounds-20..]
+        Log.line "dynPerf: %d objects, %d toggle rounds" n rounds
+        Log.line "dynPerf: first20 avg %.2f ms | last20 avg %.2f ms | max %.2f ms" head tail (Array.max times)
+        let ok = tail < head * 2.0 + 2.0
+        if ok then Log.line "dynPerf: PASS (no degradation)"
+        else Log.warn "dynPerf: FAIL — per-toggle cost grew %.2f -> %.2f ms" head tail
+        out.Release()
+        ok
+
+    /// TOGGLE-ACCUMULATION probe on the DEMO SHAPE: picking build (two partitions
+    /// over one shared storage, two tasks) + adaptive singleton<->full color flips
+    /// of ONE object, repeatedly. Measures per-toggle wall time — the CadSceneDemo
+    /// report is "1st click fine, 2nd feelable, 3rd terrible", so a compounding
+    /// cost must show up within a handful of toggles.
+    let dynPick () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let baseSig =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 42.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let effect = FShade.Effect.compose [ FShade.Effect.ofFunction Shaders.shadeVtx; FShade.Effect.ofFunction Shaders.shadeFrag ]
+        let pickEffect = FShade.Effect.compose [ FShade.Effect.ofFunction Shaders.shadeVtx; FShade.Effect.ofFunction Shaders.shadeFrag; FShade.Effect.ofFunction PS.write ]
+        let lightBlue = C4b(115uy, 199uy, 255uy)
+
+        let n = 2048
+        let selC = Array.init n (fun _ -> cval false)
+        let mkRO (i : int) : IRenderObject =
+            let rand = RandomSystem(i * 7919 + 13)
+            let tess = 10 + rand.UniformInt 8
+            let g = (IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.55)) tess C4b.White).ToIndexed()
+            let pos = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]> |> Array.copy
+            let nrm = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]> |> Array.copy
+            let idx = g.IndexArray |> unbox<int[]> |> Array.copy
+            let full = Array.init pos.Length (fun v -> C4b(byte (60 + (i * 13) % 180), byte (60 + v % 160), 90uy))
+            let cols = selC.[i] |> AVal.map (fun sel -> if sel then [| lightBlue |] else full)
+            let s = 46
+            let p = V3d(float (i % s - s/2) * 1.2, float (i / s - s/2) * 1.2, 0.0)
+            let bvA (av : aval<'a[]>) t = BufferView(av |> AVal.map (fun a -> ArrayBuffer(a :> System.Array) :> IBuffer), t)
+            let ro = RenderObject()
+            ro.Surface <- Surface.Effect (if i % 2 = 0 then pickEffect else effect)
+            ro.Mode    <- IndexedGeometryMode.TriangleList
+            ro.VertexAttributes <- AttributeProvider.ofList [
+                DefaultSemantic.Positions, BufferView(AVal.constant (ArrayBuffer pos :> IBuffer), typeof<V3f>)
+                DefaultSemantic.Normals,   BufferView(AVal.constant (ArrayBuffer nrm :> IBuffer), typeof<V3f>)
+                DefaultSemantic.Colors,    bvA cols typeof<C4b> ]
+            ro.Indices   <- Some (BufferView(AVal.constant (ArrayBuffer idx :> IBuffer), typeof<int>))
+            ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = idx.Length, InstanceCount = 1) |])
+            ro.Uniforms  <- UniformProvider.ofList [
+                yield Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                yield Symbol.Create "ViewProjTrafo",  viewProj
+                if i % 2 = 0 then yield Symbol.Create "HeapPickId", (AVal.constant i :> IAdaptiveValue) ]
+            ro :> IRenderObject
+
+        let heaped = Heap.ofRenderObjectsPicking (runtime.CreateHeapStorage()) ignore (ASet.ofList [ for i in 0 .. n - 1 -> mkRO i ])
+        let isPickableSdr (ro : IRenderObject) =
+            match ro with
+            | :? SignatureDependentRenderObject as s -> s.IsPickable
+            | _ -> false
+        use pickTask = runtime.CompileRender(baseSig, heaped |> ASet.filter isPickableSdr)
+        use baseTask = runtime.CompileRender(baseSig, heaped |> ASet.filter (isPickableSdr >> not))
+        let size = V2i(512, 512)
+        let colorTex = runtime.CreateTexture2D(size, TextureFormat.Rgba8, 1, 1)
+        let depthTex = runtime.CreateTexture2D(size, TextureFormat.Depth24Stencil8, 1, 1)
+        let fb = runtime.CreateFramebuffer(baseSig, [ DefaultSemantic.Colors, colorTex.[TextureAspect.Color, 0, 0] :> IFramebufferOutput
+                                                      DefaultSemantic.DepthStencil, depthTex.[TextureAspect.DepthStencil, 0, 0] :> IFramebufferOutput ] |> Map.ofList)
+        use clearTask = runtime.CompileClear(baseSig, clear { color C4f.Black; depth 1.0; stencil 0 })
+        let frame () =
+            clearTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fb)
+            pickTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fb)
+            baseTask.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fb)
+        for _ in 1 .. 3 do frame ()
+
+        // toggle ONE pickable object repeatedly (the demo click), render after each,
+        // and ALSO time plain no-change frames between toggles (the "stutter")
+        let sw = System.Diagnostics.Stopwatch()
+        let mutable pass = true
+        let mutable firstToggle = 0.0
+        for t in 1 .. 12 do
+            sw.Restart()
+            transact (fun () -> selC.[0].Value <- not selC.[0].Value)
+            frame ()
+            let tog = sw.Elapsed.TotalMilliseconds
+            sw.Restart()
+            for _ in 1 .. 5 do frame ()
+            let idle5 = sw.Elapsed.TotalMilliseconds
+            if t = 1 then firstToggle <- tog
+            Log.line "dynPick toggle %2d: toggle+frame %.2f ms | 5 idle frames %.2f ms" t tog idle5
+            if t > 3 && (tog > firstToggle * 4.0 + 4.0 || idle5 > 100.0) then pass <- false
+        if pass then Log.line "dynPick: PASS (no per-toggle accumulation)"
+        else Log.warn "dynPick: FAIL — toggles or idle frames degrade"
+        pass

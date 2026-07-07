@@ -126,6 +126,10 @@ let main argv =
         if Churn.pickSplit2 () then 0 else 1
     elif argv |> Array.contains "dyngeom" then
         if Churn.dynGeom () then 0 else 1
+    elif argv |> Array.contains "dynperf" then
+        if Churn.dynPerf () then 0 else 1
+    elif argv |> Array.contains "dynpick" then
+        if Churn.dynPick () then 0 else 1
     elif argv |> Array.contains "autofields" then
         if Golden.autoFieldsTest () then 0 else 1
     elif argv |> Array.contains "sgheap" then

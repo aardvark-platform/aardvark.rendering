@@ -3874,9 +3874,20 @@ module Heap =
                         let value = o :?> IBuffer
                         let byteLen = geomByteLen' value bv
                         let words = (byteLen + 3) / 4
-                        if AllocHeaderWords + words = e.SizeF then
-                            // same-size change: payload re-stage in place; an index
-                            // entry keeps its count, so headers/records stay valid.
+                        if AllocHeaderWords + words <= int e.Block.Size then
+                            // IN-PLACE: the new payload fits the existing block — keep
+                            // the allocation (no free/alloc, no slot header re-bake; the
+                            // header cell offsets stay valid), rewrite the header's
+                            // element count when it changed, and re-stage the payload.
+                            // The demo's select toggle (full array <-> singleton) lives
+                            // entirely on this path, in both directions.
+                            let count = byteLen / esBytes
+                            if count <> e.Count then
+                                e.Count <- count
+                                pg.Arena.WriteHeader(e.Ref, typeId, count, esBytes)
+                                if isIndex then
+                                    for struct(sink, slot, cell) in e.DynRefs do
+                                        sink.GeomMoved(slot, cell, e.Ref, count, true)
                             let p = pg.Arena.StageWords(e.Ref + AllocHeaderWords, words)
                             if byteLen % 4 <> 0 then wi p (words - 1) 0
                             stageGeomBytes' runtime value bv byteLen p

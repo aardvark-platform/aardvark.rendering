@@ -900,6 +900,18 @@ module private RuntimeCommands =
             prepared <- []
 
         override x.Compile(token, stream) =
+            // RE-compile: reset the PREVIOUS generation FIRST — Update passes the
+            // command's PERSISTENT stream, so without Clear every recompile (one per
+            // heap membership-version bump, i.e. per recolor click) APPENDED the full
+            // page-draw sequence: the scene literally rendered once more per click
+            // (the staircase-to-diashow degradation). Same for the derive dispatches,
+            // which otherwise linger in compiler.dispatches and replay every frame.
+            // The prepared DRAWS are NOT disposed: PrepareRenderObject is manager-
+            // cached per RO (disposing would serve dead descriptors); the resource
+            // set add below is idempotent.
+            stream.Clear()
+            for d in dispatches do d.Free()
+            dispatches <- []
             // 1) DERIVES → pre-pass compute dispatches. Each writes its page's arena and its
             //    stream ends with a compute→vertex barrier; replayed before the render pass.
             dispatches <-
