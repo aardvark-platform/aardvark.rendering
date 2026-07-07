@@ -1,3 +1,7 @@
+### 5.7.0-prerelease0043
+- [Sg] Heap: no non-reactive values — everything declared adaptive is respected in O(change) amortized. Non-constant vertex-attribute and index buffer avals re-upload (in place on same size; free/realloc + per-slot header/record re-bake on size change — a length-1 singleton broadcast now flips live, the aardvark.dom recolor path). Draw-call shape (vertex/instance count), pick ids and the ModelTrafoStack structure got per-slot watchers.
+- [Sg] HeapSpike: `dyngeom` probe — adaptive attrs/index/draw-calls validated pixel-by-pixel against a classic render (singleton flip, in-place edit, whole-geometry swap, fvc shrink).
+
 ### 5.7.0-prerelease0042
 - [Sg] Heap: stage-while-clean fix — a second heap build over a SHARED storage that expands lazily inside another render task's pull (e.g. the 0041 pick partition's unpickable heap) staged into an already-flushed arena that nothing marked outdated again, so its buckets never appeared. Staging into a clean arena now schedules a post-evaluation Touch (one-frame latency, same as any add).
 - [Sg] HeapSpike: `picksplit2` covers the two-task dom shape (was the gap that let 0041 ship with invisible unpickable partitions).
