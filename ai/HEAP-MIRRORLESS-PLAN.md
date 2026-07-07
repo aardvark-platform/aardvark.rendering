@@ -1,6 +1,6 @@
 # Heap: Mirror-less Arena + O(1) Allocator — Implementation Plan
 
-Status: **PHASES 0–2 IMPLEMENTED & VERIFIED (2026-07-05, uncommitted on `v57`).**
+Status: **PHASES 0–2 IMPLEMENTED, VERIFIED & COMMITTED (a6dee196 on `v57`, shipping since ~0038).**
 Measured @700k renderbench: CPU ingest 30.6 → 18.8 s (26.9 µs/part), upload
 2.6 → 0.7 s (1.5 GB @ ~2 GB/s), GPU render 13.91 ms (1.50×) unchanged; all
 golden suites + 21 heap tests + NEW `churn` suite (HeapSpike `churn`: compaction
