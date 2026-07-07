@@ -1,3 +1,7 @@
+### 5.7.0-prerelease0046
+- [Vulkan] HeapRenderObjectCommand no longer subscribes to the dispatch group-count avals at compile time (the pre-pass re-records dispatches every frame anyway) — content-only heap changes cause ZERO command recompiles; a command compiles once per structural generation.
+- [Sg] Heap: pick-id and slot->page mirrors flush dirty slots as gap-merged sub-ranges instead of full rewrites per updater version (a recolor no longer re-uploads highWater*4 bytes twice).
+
 ### 5.7.0-prerelease0045
 - [Vulkan] HeapRenderObjectCommand: recompile now RESETS the previous generation — the persistent VKVM stream was APPENDED on every recompile (one per heap membership version, e.g. per adaptive recolor) and the old derive DispatchCommands lingered in the pre-pass replay list. Every click permanently rendered the whole scene (and its derive pass) ONE MORE TIME per frame — the staircase-into-diashow degradation on all platforms (hekla-verified: 6 picks 27.7 -> 5.3 ms/frame).
 - [Sg] Heap: dynamic geometry values that FIT the existing allocation re-stage IN PLACE (header count rewritten when it changes) — the select-toggle (full array <-> singleton) never reallocs, no free/alloc churn, no header re-bake.
