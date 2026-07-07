@@ -907,6 +907,13 @@ module Heap =
     let mutable disableChain =
         System.Environment.GetEnvironmentVariable "AARDVARK_HEAP_NOCHAIN" = "1"
 
+    /// Kill-switch for the 0043 adaptive machinery (geometry re-upload writers,
+    /// draw-call / pick-id / model-stack watchers): reverts to snapshot-at-add
+    /// behavior for BISECTING regressions. Defaults from
+    /// AARDVARK_HEAP_STATIC_GEOM=1; settable directly.
+    let mutable disableDynGeom =
+        System.Environment.GetEnvironmentVariable "AARDVARK_HEAP_STATIC_GEOM" = "1"
+
     // ── per-allocation headers (wombat parity: pools.ts writeAttribute) ──────
     // Every host geometry allocation in the bucket arena (vertex attribute,
     // singleton attribute, index range) starts with a 4-word header
@@ -3911,7 +3918,7 @@ module Heap =
             | _ ->
                 let len = geomByteLen' value bv
                 let e = allocStatic idxStatic key len (stageGeomBytes' runtime value bv len) tid (len / es) es
-                if not bv.Buffer.IsConstant then makeDynamic e bv tid es true |> ignore
+                if not bv.Buffer.IsConstant && not disableDynGeom then makeDynamic e bv tid es true |> ignore
                 key, e
 
         /// one consumed attribute of a new slot: singleton -> adaptive region,
@@ -3942,7 +3949,7 @@ module Heap =
                     let es = elemSize et
                     let len = geomByteLen' value bv
                     let e = allocStatic attrStatic key len (stageGeomBytes' runtime value bv len) tid (len / es) es
-                    if not bv.Buffer.IsConstant then makeDynamic e bv tid es false |> ignore
+                    if not bv.Buffer.IsConstant && not disableDynGeom then makeDynamic e bv tid es false |> ignore
                     AttrKey.Static key, e.Ref
 
         // ── threshold-triggered compaction is PAGE-level now (PageArena.Compact):
@@ -4850,7 +4857,7 @@ module Heap =
                 match ro.Uniforms.TryGetUniform(scope, symPickId) with
                 | ValueSome v ->
                     pickIds.[slot] <- (try v.GetValueUntyped(AdaptiveToken.Top) :?> int with _ -> -1)
-                    if not v.IsConstant then
+                    if not v.IsConstant && not disableDynGeom then
                         let w = DynWriter(v)
                         w.OnChange <- System.Action<AdaptiveToken>(fun tok ->
                             w.Update(tok, fun _ o -> pickIds.[slot] <- (try o :?> int with _ -> -1)))
@@ -4906,7 +4913,7 @@ module Heap =
                 addChainSlot slot (AVal.force st)
                 // the stack ELEMENTS are adaptive via the link arena; the stack
                 // STRUCTURE (re-parenting) gets a watcher that re-routes the chain
-                if not st.IsConstant then
+                if not st.IsConstant && not disableDynGeom then
                     let w = DynWriter(st)
                     w.Fresh <- true
                     w.OnChange <- System.Action<AdaptiveToken>(fun tok ->
@@ -5032,7 +5039,7 @@ module Heap =
             // the index allocation) and — on instanced buckets — its instance
             // count, in place, O(1) per change.
             (match ro.DrawCalls with
-             | DrawCalls.Direct calls when not calls.IsConstant && (ro.Indices.IsNone || instanced) ->
+             | DrawCalls.Direct calls when not calls.IsConstant && (ro.Indices.IsNone || instanced) && not disableDynGeom ->
                  let indexed = ro.Indices.IsSome
                  let w = DynWriter(calls)
                  w.OnChange <- System.Action<AdaptiveToken>(fun tok ->

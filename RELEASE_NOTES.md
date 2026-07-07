@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0044
+- [Sg] Heap: `AARDVARK_HEAP_STATIC_GEOM=1` kill-switch disables the 0043 adaptive machinery (geometry re-upload writers, draw-call/pick-id/model-stack watchers) — snapshot-at-add behavior for bisecting regressions.
+
 ### 5.7.0-prerelease0043
 - [Sg] Heap: no non-reactive values — everything declared adaptive is respected in O(change) amortized. Non-constant vertex-attribute and index buffer avals re-upload (in place on same size; free/realloc + per-slot header/record re-bake on size change — a length-1 singleton broadcast now flips live, the aardvark.dom recolor path). Draw-call shape (vertex/instance count), pick ids and the ModelTrafoStack structure got per-slot watchers.
 - [Sg] HeapSpike: `dyngeom` probe — adaptive attrs/index/draw-calls validated pixel-by-pixel against a classic render (singleton flip, in-place edit, whole-geometry swap, fvc shrink).
