@@ -918,7 +918,12 @@ module private RuntimeCommands =
                 o.Derives |> List.map (fun (shader, groups, args) ->
                     let d = new DispatchCommand(compiler, shader, groups, args)
                     compiler.dispatches.Add d
-                    d.Record token
+                    // deliberately NOT recorded here: the pre-pass re-records every
+                    // dispatch each frame with the TASK's token (fresh descriptor
+                    // pointer + group count). Recording with the COMPILE token would
+                    // subscribe this whole command to the dispatch args (group-count
+                    // avals bump per heap membership version), forcing a full
+                    // recompile on every content-only change.
                     d
                 )
             // 2) DRAWS → in-pass; read the freshly-derived arenas (same submission as the derives).

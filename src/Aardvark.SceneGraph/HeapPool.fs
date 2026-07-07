@@ -3380,6 +3380,13 @@ module Heap =
         // from the RO's "HeapPickId" uniform (-1 = unpickable), flushed to pickIdBuf, exposed
         // as the "HeapPickIds" SSBO read by the dom heap pick-shader via gl_InstanceIndex.
         let mutable pickIds : int[] = Array.zeroCreate 16
+        // dirty tracking for slotPage/pickIds (same contract as dirtyHeaders):
+        // write sites mark the slot, the flush uploads gap-merged sub-ranges —
+        // a content-only updater version must not re-upload highWater*4 bytes.
+        let slotPageDirty = System.Collections.Generic.HashSet<int>()   // slots
+        let mutable slotPageAllDirty = false
+        let pickIdsDirty = System.Collections.Generic.HashSet<int>()    // slots
+        let mutable pickIdsAllDirty = false
         // ── CLUSTER state (useClusters): per (page, class) live-slot lists; the
         //    last pseudo-class holds OVERSIZED slots (exact per-slot records).
         //    ClassSlots buffer + records are FULL-REWRITTEN per flush (tiny /
@@ -4024,16 +4031,36 @@ module Heap =
         let drawBuf    = MirrorBuffer(runtime, entries.Length * sizeof<DrawCallInfo>, BufferUsage.Indirect)
         let headersBuf = MirrorBuffer(runtime, headers.Length * 4, BufferUsage.Storage)
         let instBuf    = MirrorBuffer(runtime, instData.Length * 4, BufferUsage.Vertex)
-        // slot->page SSBO (for the per-page derive guard). Small; full-rewrite on pull.
+        // slot->page SSBO (for the per-page derive guard). Dirty-slot flush like headers.
         let slotPageBuf = MirrorBuffer(runtime, max 16 slotPage.Length * 4, BufferUsage.Storage)
+        // shared dirty-slot flush for the two int-per-slot mirrors (slotPage /
+        // pickIds): allDirty → one full write; otherwise gap-merged sub-ranges
+        // over the sorted dirty slots (the CPU array is the always-valid source
+        // of truth, so a gap's bytes re-upload unchanged — see flushHeaders).
+        let flushIntPerSlot (buf : MirrorBuffer) (data : int[]) (dirty : System.Collections.Generic.HashSet<int>) (allDirty : byref<bool>) =
+            buf.ResizeInPlace(uint64 (max 16 data.Length * 4))
+            if allDirty then
+                allDirty <- false
+                dirty.Clear()
+                if highWater > 0 then buf.Write(data, 0UL, 0, highWater)
+            elif dirty.Count > 0 then
+                let ss = System.Collections.Generic.List<int>(dirty)
+                dirty.Clear()
+                ss.Sort()
+                let flush lo hi = buf.Write(data, uint64 (lo * 4), lo, hi - lo + 1)
+                let mutable lo = ss.[0]
+                let mutable hi = ss.[0]
+                for i in 1 .. ss.Count - 1 do
+                    let s = ss.[i]
+                    if s <= hi + 64 then hi <- s
+                    else flush lo hi; lo <- s; hi <- s
+                flush lo hi
         let flushSlotPage (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
-            slotPageBuf.ResizeInPlace(uint64 (max 16 slotPage.Length * 4))
-            if highWater > 0 then slotPageBuf.Write(slotPage, 0UL, 0, highWater)
-        // PICKING: per-slot pick-id SSBO (parallel to slotPageBuf; full-rewrite on pull).
+            flushIntPerSlot slotPageBuf slotPage slotPageDirty &slotPageAllDirty
+        // PICKING: per-slot pick-id SSBO (parallel to slotPageBuf; dirty-slot flush).
         let pickIdBuf = MirrorBuffer(runtime, max 16 pickIds.Length * 4, BufferUsage.Storage)
         let flushPickIds (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
-            pickIdBuf.ResizeInPlace(uint64 (max 16 pickIds.Length * 4))
-            if highWater > 0 then pickIdBuf.Write(pickIds, 0UL, 0, highWater)
+            flushIntPerSlot pickIdBuf pickIds pickIdsDirty &pickIdsAllDirty
         // CPU staging of the draw records in INDEXED layout (uploaded ranges
         // must be contiguous; entries itself stays in DrawCallInfo layout)
         let mutable drawStaging : DrawCallInfo[] = Array.zeroCreate entries.Length
@@ -4861,20 +4888,26 @@ module Heap =
             // per-slot blocks and re-bake headers when the page moves things
             storage.Page(curPage).Register (x :> IPageParticipant)
             slotPage.[slot] <- curPage
+            slotPageDirty.Add slot |> ignore
             // PICKING: the dom-sourced pick id (-1 = unpickable). Almost always
-            // constant per slot; a non-constant id gets a watcher (the pick-id
-            // mirror is full-rewrite-on-pull, so updating the CPU cell suffices).
+            // constant per slot; a non-constant id gets a watcher that updates the
+            // CPU cell AND marks the slot dirty (the mirror flushes dirty slots only).
             if picking then
                 match ro.Uniforms.TryGetUniform(scope, symPickId) with
                 | ValueSome v ->
                     pickIds.[slot] <- (try v.GetValueUntyped(AdaptiveToken.Top) :?> int with _ -> -1)
+                    pickIdsDirty.Add slot |> ignore
                     if not v.IsConstant && not disableDynGeom then
                         let w = DynWriter(v)
                         w.OnChange <- System.Action<AdaptiveToken>(fun tok ->
-                            w.Update(tok, fun _ o -> pickIds.[slot] <- (try o :?> int with _ -> -1)))
+                            w.Update(tok, fun _ o ->
+                                pickIds.[slot] <- (try o :?> int with _ -> -1)
+                                pickIdsDirty.Add slot |> ignore))
                         regSlotWriter slot w
                         w.OnChange.Invoke t
-                | ValueNone -> pickIds.[slot] <- -1
+                | ValueNone ->
+                    pickIds.[slot] <- -1
+                    pickIdsDirty.Add slot |> ignore
             let __secT0 = System.Diagnostics.Stopwatch.GetTimestamp()
             let regionKeys = System.Collections.Generic.List<IAdaptiveValue>(names.Length)
             let outBlocks = System.Collections.Generic.List<HeapBlock>()
