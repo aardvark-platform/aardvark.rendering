@@ -5040,6 +5040,18 @@ module Heap =
                     member _.Dispose() = () }
             ro :> IRenderObject
         let ensurePageROs () =
+            // prune clones of DEAD partitions (dematerialized / re-materialized
+            // under a fresh id): dropping the dict reference releases the clone
+            // and its indirect MirrorBuffer through the normal resource refcounts
+            // (the epoch-keyed HeapRenderObject rebuild already removed them from
+            // the draw list).
+            if partROs.Count > 0 then
+                let dead =
+                    [ for KeyValue(k, _) in partROs do
+                        let struct(_, pid) = k
+                        if pid > 0 && (pid >= partById.Count || not partById.[pid].Materialized || partById.[pid].Id <> pid) then
+                            yield k ]
+                for k in dead do partROs.Remove k |> ignore
             for pageIdx in 0 .. storage.Count - 1 do
                 // dynamic partition clone per page (page 0 = bucketRO itself)
                 if pageIdx > 0 && not (partROs.ContainsKey(struct(pageIdx, 0))) then
