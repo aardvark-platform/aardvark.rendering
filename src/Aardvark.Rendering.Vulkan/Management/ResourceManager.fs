@@ -1584,10 +1584,22 @@ module Resources =
                           colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
                           depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
                           multisample : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>,
-                          specialization : option<INativeResourceLocation<VkSpecializationInfo>>) =
+                          specialization : option<INativeResourceLocation<VkSpecializationInfo>>,
+                          fallback : option<INativeResourceLocation<VkPipeline>>) =
         inherit AbstractPointerResource<VkPipeline>(owner, key)
 
         let device = renderPass.Device
+        // ASYNC SPECIALIZATION (only when a fallback pipeline is supplied): the
+        // specialized pipeline compiles on a background thread while this
+        // resource publishes the fallback's (unspecialized, always-correct)
+        // handle — never a hitch, never a wrong pixel. State: 0 idle,
+        // 1 compiling, 2 compiled-awaiting-adoption. `ownsHandle` guards Free:
+        // a borrowed fallback handle must never be destroyed here.
+        let mutable bgState = 0
+        let mutable bgHandle = VkPipeline.Null
+        let mutable ownsHandle = true
+        let mutable cancelled = false
+        let bgLock = obj()
 
         override x.Create() =
             base.Create()
@@ -1599,6 +1611,7 @@ module Resources =
             depthStencil.Acquire()
             multisample.Acquire()
             specialization |> Option.iter (fun s -> s.Acquire())
+            fallback |> Option.iter (fun f -> f.Acquire())
 
         override x.Destroy() =
             base.Destroy()
@@ -1610,6 +1623,13 @@ module Resources =
             depthStencil.Release()
             multisample.Release()
             specialization |> Option.iter (fun s -> s.Release())
+            fallback |> Option.iter (fun f -> f.Release())
+            lock bgLock (fun () ->
+                cancelled <- true
+                if bgState = 2 && bgHandle.IsValid then
+                    VkRaw.vkDestroyPipeline(device.Handle, bgHandle, NativePtr.zero)
+                    bgHandle <- VkPipeline.Null
+                bgState <- 0)
 
         override x.Update(handle : VkPipeline byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             let prog = program.Update(user, token, renderToken).handle
@@ -1683,6 +1703,82 @@ module Resources =
             let colorBlendState = colorBlendState.Update(user, token, renderToken) |> ignore; colorBlendState.Pointer
             let multisample = multisample.Update(user, token, renderToken) |> ignore; multisample.Pointer
 
+            // ── ASYNC SPECIALIZATION: with a fallback and non-empty spec values,
+            //    compile the specialized pipeline OFF-THREAD (vkCreateGraphicsPipelines
+            //    is legal from any thread; the VkPipelineCache is internally
+            //    synchronized) and publish the fallback's unspecialized handle
+            //    meanwhile — always correct, never a stall. The referenced state
+            //    structs live in stable AbstractPointerResource memory; for the
+            //    heap's partition clones they are constants (a mid-compile state
+            //    change would re-mark this resource and recompile anyway). ──
+            let asyncSpec = fallback.IsSome && NativePtr.toNativeInt pSpec <> 0n
+            if asyncSpec && (lock bgLock (fun () -> bgState = 2)) then
+                // adopt the background-compiled specialized pipeline
+                let adopted =
+                    lock bgLock (fun () ->
+                        let h = bgHandle
+                        bgHandle <- VkPipeline.Null
+                        bgState <- 0
+                        h)
+                if x.HasHandle && ownsHandle then x.Free &handle
+                handle <- adopted
+                ownsHandle <- true
+                true
+            elif asyncSpec then
+                if lock bgLock (fun () -> if bgState = 0 then bgState <- 1; true else false) then
+                    // snapshot what the background build needs (all pointers stable)
+                    let stagesSrc = prog.ShaderCreateInfos
+                    let pSpecC = pSpec
+                    let layoutH = prog.PipelineLayout.Handle
+                    let passH = renderPass.Handle
+                    let hasTess = prog.HasTessellation
+                    let patchSize = prog.TessellationPatchSize
+                    let vpCount =
+                        if device.IsDeviceGroup then
+                            if renderPass.LayerCount > 1 then 1u else uint32 device.PhysicalDevices.Length
+                        else 1u
+                    System.Threading.Tasks.Task.Run(fun () ->
+                        let stageArr = Array.copy stagesSrc
+                        for i in 0 .. stageArr.Length - 1 do stageArr.[i].pSpecializationInfo <- pSpecC
+                        use pStages = fixed stageArr
+                        let mutable vp = VkPipelineViewportStateCreateInfo(VkPipelineViewportStateCreateFlags.None, vpCount, NativePtr.zero, vpCount, NativePtr.zero)
+                        let dynStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
+                        use pDynStates = fixed dynStates
+                        let mutable dyn = VkPipelineDynamicStateCreateInfo(VkPipelineDynamicStateCreateFlags.None, uint32 dynStates.Length, pDynStates)
+                        let mutable tess = VkPipelineTessellationStateCreateInfo(VkPipelineTessellationStateCreateFlags.None, uint32 patchSize)
+                        use pTess = fixed &tess
+                        let pTessUsed = if hasTess then pTess else NativePtr.zero
+                        use pVp = fixed &vp
+                        use pDyn = fixed &dyn
+                        let mutable result = VkPipeline.Null
+                        let mutable ci =
+                            VkGraphicsPipelineCreateInfo(
+                                VkPipelineCreateFlags.AllowDerivativesBit,
+                                uint32 stageArr.Length, pStages,
+                                inputState, inputAssembly, pTessUsed, pVp,
+                                rasterizerState, multisample, depthStencil, colorBlendState,
+                                pDyn, layoutH, passH, 0u, VkPipeline.Null, -1)
+                        use pCi = fixed &ci
+                        use pRes = fixed &result
+                        let ret = VkRaw.vkCreateGraphicsPipelines(device.Handle, device.PipelineCache.Handle, 1u, pCi, NativePtr.zero, pRes)
+                        lock bgLock (fun () ->
+                            if cancelled || ret <> VkResult.Success then
+                                if result.IsValid then VkRaw.vkDestroyPipeline(device.Handle, result, NativePtr.zero)
+                                bgState <- 0
+                            else
+                                bgHandle <- result
+                                bgState <- 2)
+                        if not cancelled && ret = VkResult.Success then
+                            transact (fun () -> x.MarkOutdated())) |> ignore
+                // publish the fallback's (unspecialized) pipeline meanwhile
+                let f = fallback.Value
+                f.Update(user, token, renderToken) |> ignore
+                if x.HasHandle && ownsHandle then x.Free &handle
+                handle <- NativePtr.read f.Pointer
+                ownsHandle <- false
+                true
+            else
+
             let basePipeline, derivativeFlag =
                 if not x.HasHandle then
                     VkPipeline.Null, VkPipelineCreateFlags.None
@@ -1718,14 +1814,18 @@ module Resources =
             VkRaw.vkCreateGraphicsPipelines(device.Handle, device.PipelineCache.Handle, 1u, pCreateInfo, NativePtr.zero, pResult)
                 |> check "could not create pipeline"
 
-            if x.HasHandle then
+            if x.HasHandle && not ownsHandle then
+                handle <- VkPipeline.Null       // borrowed fallback handle: never destroy
+            elif x.HasHandle then
                 x.Free &handle
 
+            ownsHandle <- true
             handle <- result
             true
 
         override x.Free(handle : VkPipeline inref) =
-            VkRaw.vkDestroyPipeline(renderPass.Device.Handle, handle, NativePtr.zero)
+            if ownsHandle then
+                VkRaw.vkDestroyPipeline(renderPass.Device.Handle, handle, NativePtr.zero)
 
     type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, buffer : IResourceLocation<IndirectBuffer>) =
         inherit AbstractPointerResource<DrawCall>(owner, key)
@@ -2591,7 +2691,11 @@ type ResourceManager(device : Device) =
                             colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
                             depthStencil    : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
                             multisample     : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>,
-                            specialization  : option<INativeResourceLocation<VkSpecializationInfo>>) =
+                            specialization  : option<INativeResourceLocation<VkSpecializationInfo>>,
+                            // unspecialized twin published while the specialized pipeline
+                            // compiles in the background (deterministic from the other
+                            // inputs — not part of the cache key)
+                            fallback        : option<INativeResourceLocation<VkPipeline>>) =
 
         // spec values are part of the pipeline identity: two draws whose
         // constants differ must never share a VkPipeline (a sentinel keys the
@@ -2614,7 +2718,8 @@ type ResourceManager(device : Device) =
                     colorBlendState,
                     depthStencil,
                     multisample,
-                    specialization
+                    specialization,
+                    fallback
                 )
 
         )

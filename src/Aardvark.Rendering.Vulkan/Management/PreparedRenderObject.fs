@@ -417,6 +417,18 @@ type DevicePreparedRenderObjectExtensions private() =
                 if sc.IsConstant && Map.isEmpty (AVal.force sc) then None
                 else Some (this.CreateSpecialization(program, sc))
 
+            // async tier-up: the unspecialized twin (cache-shared with any
+            // unspecialized draw of the same state, e.g. the heap's dynamic
+            // partition) serves while the specialized pipeline compiles
+            let fallbackPipeline =
+                match specialization with
+                | Some _ ->
+                    Some (this.CreatePipeline(
+                            program, renderPass, inputState, inputAssembly,
+                            rasterizerState, colorBlendState, depthStencilState,
+                            multisampleState, None, None))
+                | None -> None
+
             let pipeline =
                 this.CreatePipeline(
                     program,
@@ -427,7 +439,8 @@ type DevicePreparedRenderObjectExtensions private() =
                     colorBlendState,
                     depthStencilState,
                     multisampleState,
-                    specialization
+                    specialization,
+                    fallbackPipeline
                 )
 
             resources.Add pipeline
