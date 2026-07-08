@@ -105,6 +105,8 @@ let main argv =
         0
     elif argv |> Array.contains "renderbench" then
         RenderBench.run argv
+    elif argv |> Array.contains "fsgather" then
+        FsGather.run argv
     elif argv |> Array.contains "startup-bench" then
         StartupBench.run ()
         0

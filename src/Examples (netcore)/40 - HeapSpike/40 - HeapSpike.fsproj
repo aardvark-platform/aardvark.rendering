@@ -28,6 +28,7 @@
     <Compile Include="GlslDump.fs" />
     <Compile Include="Showcase.fs" />
     <Compile Include="RenderBench.fs" />
+    <Compile Include="FsGather.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
