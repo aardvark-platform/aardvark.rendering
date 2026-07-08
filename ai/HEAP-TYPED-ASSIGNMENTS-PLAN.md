@@ -214,6 +214,18 @@ CAVEAT on the Apple MDI floor: emulated by MoltenVK — fair vs Vulkan-on-Mac
 engines (= any aardvark deployment), unfair vs native-Metal ICB engines (which
 would land between 6.5 and 12.6). Quote accordingly.
 
+### KosmicKrisp column (Mesa-on-Metal, SDK 1.4.350.1, 2026-07-08)
+Setup: AARDVARK_VULKAN_LIBRARY=<sdk>/lib/libvulkan.dylib + VK_DRIVER_FILES=
+<sdk>/share/vulkan/icd.d/libkosmickrisp_icd.json + AARDVARK_INLINE_RENDERPASS=1
+(KK exposes NO portability_subset -> the useInline gate misses -> its beta
+crashes in vk_common_CmdExecuteCommands; crash-report-confirmed) +
+HEAPSPIKE_NO_GPU_QUERY=1 (queries still device-lose). Results @200k (CPU-
+blocking measure): golden + mixedtypes PASS (second Mesa compiler validates
+typed partitions on Apple silicon); baked 4.10 vs MoltenVK 4.19 = PARITY;
+heap JIT 8.24 vs 6.16 (KK slower on gather-heavy paths — CONFOUNDED by inline
+re-emit CPU); JIT win −25% under KK. Follow-up if KK matters: driver-name
+check in the useInline gate + demo-harness no-query fallback.
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
