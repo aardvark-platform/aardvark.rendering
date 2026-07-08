@@ -791,6 +791,46 @@ module RenderBench =
             let inst = renderWith "probe-1-instanced" (ASet.single (probeRO (DrawCalls.Indirect (AVal.constant (IndirectBuffer.ofArray one)))))
             Log.line "probe: n-records / instanced = %.2fx" (mdi / inst)
             0
+        elif argv |> Array.contains "--churnperf" then
+            // ── LOCALITY-DECAY probe: does churn (free-list reuse scattering later
+            //    slots' regions into old holes) measurably slow the FRAME? Fresh
+            //    ingest is measured, then `--churn-rounds` rounds each remove every
+            //    2nd live object and re-add a FRESH RO for the same index (new
+            //    BufferViews/avals -> dedup misses -> regions reallocate from holes,
+            //    maximal scatter), then the SAME task is measured again. The delta
+            //    is the win a slot-major compaction placement could recover. ──
+            let rounds = arg "--churn-rounds" 6
+            let current = Array.init n (mkHeapRO viewProj)
+            let live = cset<IRenderObject> current
+            use colorTex = runtime.CreateTexture2D(size, TextureFormat.Rgba8)
+            use depthTex = runtime.CreateTexture2D(size, TextureFormat.Depth24Stencil8)
+            use fbo2 =
+                runtime.CreateFramebuffer(signature, [
+                    DefaultSemantic.Colors, colorTex.[TextureAspect.Color, 0, 0] :> IFramebufferOutput
+                    DefaultSemantic.DepthStencil, depthTex.[TextureAspect.DepthStencil, 0, 0] :> IFramebufferOutput ])
+            use task =
+                RenderTask.ofList [
+                    runtime.CompileClear(signature, clearVals)
+                    runtime.CompileRender(signature, Heap.ofRenderObjectsAuto live) ]
+            let gpuF, _, minF = measure runtime task fbo2 frames
+            let c0 = Heap.compactionCount
+            Log.line "churnperf[fresh  ]: GPU %.2f ms/frame (min %.2f)" gpuF minF
+            let out = OutputDescription.ofFramebuffer fbo2
+            let frame () = task.Run(AdaptiveToken.Top, RenderToken.Empty, out)
+            for r in 1 .. rounds do
+                let parity = r % 2
+                let victims = [ for i in 0 .. n - 1 do if i % 2 = parity then yield current.[i] ]
+                transact (fun () -> for v in victims do live.Remove v |> ignore)
+                frame ()                                       // flush the frees
+                for i in 0 .. n - 1 do
+                    if i % 2 = parity then current.[i] <- mkHeapRO viewProj i
+                transact (fun () -> for i in 0 .. n - 1 do (if i % 2 = parity then live.Add current.[i] |> ignore))
+                frame ()
+                Log.line "churnperf: round %d done (compactions so far: %d)" r (Heap.compactionCount - c0)
+            let gpuC, _, minC = measure runtime task fbo2 frames
+            Log.line "churnperf[churned]: GPU %.2f ms/frame (min %.2f)   compactions during churn: %d" gpuC minC (Heap.compactionCount - c0)
+            Log.line "churnperf: churned/fresh = %.3fx  (locality decay recoverable by slot-major compaction)" (gpuC / gpuF)
+            0
         else
 
         // ── heap: n objects -> bucket indirect draws ──
