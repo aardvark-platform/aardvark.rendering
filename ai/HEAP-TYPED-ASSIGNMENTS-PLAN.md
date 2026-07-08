@@ -181,6 +181,28 @@ latency-bound gather gap = exactly the parked LOCALITY lever's home turf.
 Also: MDI-vs-one-draw is free (5060), FASTER (4070Ti/L — distributor
 parallelism), −2% (RADV), −60% GPU/2x CPU (MoltenVK).
 
+### CLEAN-ROOM floors (flow/water dropped EVERYWHERE, heap = LEAN_SHADER=1):
+the definitive gather-vs-stream comparison — same shader work, same 20 B/vert
+floor payload (heap 0.85+singletons ≈ 0.97 incl. metric slack), no per-content
+asymmetries left except the singleton-color rate (0.09 GB, inherent):
+| device | one-draw | MDI floor | heap lean | heap/MDI |
+|--------|---------:|----------:|----------:|----------|
+| RTX 5060        | 4.2  | 4.2  | 5.1  | 1.21× |
+| RTX 4070 Ti     | 4.1  | 3.5  | 4.3  | 1.23× |
+| RTX 4070 Laptop | 5.8  | 4.5  | 6.2  | 1.38× |
+| M1 Max          | 6.5  | 12.6 | 11.8 | **0.94× — heap BEATS the achievable classic pipeline** |
+| hekla RDNA2     | 27.9 | 28.3 | 70.5 | 2.49× |
+| 890M            | 41.7 | 35.1 | 94.5 | 2.69× |
+Three regimes: NVIDIA pays 1.2–1.4× pure gather-latency rent; Apple/MoltenVK's
+per-record tax makes classic per-part MDI WORSE than the heap (clustering is
+load-bearing); AMD APUs at ~2.5× = the latency-gather gap in its purest form —
+the parked LOCALITY-by-compaction lever's precisely-quantified target. NOTE the
+earlier "heap beats floors on NVIDIA" table was flow-subsidized (the monolithic
+bake carried a 0.64 GB zero-flow column a split classic pipeline wouldn't) —
+kept above for the record; THIS table is the honest one. MDI-vs-one-draw:
+FASTER on discrete NVIDIA (distributor parallelism), neutral 5060/RADV,
+2x GPU + 2x CPU cost on MoltenVK.
+
 ### Baseline anatomy (know what the floor measures)
 CadSceneDemo `--baseline` = ALL parts CPU-baked into ONE world-space mesh
 (ModelTrafo folded into positions, oct normals CPU-decoded to V3f, singleton
