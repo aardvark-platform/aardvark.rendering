@@ -281,6 +281,25 @@ reducing the ~24 loads/vertex). Next dynamic step: SQTT capture on hekla RADV
 (MESA_VK_TRACE=rgp) to read the stall composition; blocked while PoE2 owns
 that GPU.
 
+### SQTT/RGP dynamic capture on hekla iGPU (2026-07-08)
+Recipe: demo --window on DISPLAY=:0 (RADV counts frames by PRESENT — the
+offscreen harness never presents, so windowed mode is required),
+AARDVARK_VULKAN=integrated MESA_VK_TRACE=rgp MESA_VK_TRACE_TRIGGER=/tmp/rgp_trigger;
+touch the trigger mid-orbit -> /tmp/dotnet_*.rgp (~271 MB). Viewed in RGP 2.7
+(RadeonDeveloperToolSuite linux tgz from gpuopen.com/rdts-linux) on airtop :0.
+Capture: airtop ~/arcbench/hekla_igpu_heap.rgp.
+
+Result (Instruction timing, big typed-partition vkCmdDrawIndirect, VS):
+FOUR s_waitcnt vmcnt(0) instructions consume ~54% of shader time at ~900 clk
+average latency each (903/887/976/912) — the waits after each dependent
+buffer_load gather round (header, index, attributes). 981 waves at 5-8.7k clk
+each; VMEM 19.6k vs VALU 90k (memory pump, trivial ALU); HW utilization ~27%.
+Combined with RGA (no spills, max occupancy): the APU gap is FULLY explained —
+waves exist but all park ~900 clk on DRAM gathers, 4 dependent rounds per
+vertex. Levers, now quantified: (a) locality/compaction to turn DRAM latency
+into cache hits, (b) merging/reducing the 4 dependent gather ROUNDS — each
+round eliminated saves ~900 clk x waves on cache-less APUs.
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
