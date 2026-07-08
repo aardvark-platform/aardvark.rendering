@@ -4,9 +4,9 @@ Status: **STEPS 1–2 IMPLEMENTED & MEASURED (c6bebba3, 2026-07-08).** Decoders 
 per-ordinal spec-constant tids (HeapTid0..7 + HeapTidIdx, 0 = runtime); bucket
 publishes INTERIM bucket-level inferred tids (unique per field, else 0). All
 probes green. Inferred A/B vs AARDVARK_HEAP_NO_SPEC=1:
-**5060 @700k 9.16 vs 13.86 (−34%, ≈1.0× vs baked — PARITY); RADV @200k 53.9 vs
-79.0 same-session (−32%, ratio 3.3→2.33×); 890M 31.65 vs 41.66 (−24%).** M1
-pending (machine offline). Index typing beat the Q&D numbers.
+**5060 @700k 9.16 vs 13.86 (−34%, ≈1.0× vs baked — PARITY); M1 5.43 vs 8.75
+(−38%, 1.53× vs baked); RADV @200k 53.9 vs 79.0 same-session (−32%, ratio
+3.3→2.33×); 890M 31.65 vs 41.66 (−24%).** Index typing beat the Q&D numbers.
 REMAINING: §3.2–3.4 assignment partitioning (removes the interim mixed-type
 one-frame hazard + bucket-wide de-specialization), §3.5 mixedtypes probe,
 async pipeline creation, §3.6 ship chain (fshade release first!).
@@ -54,6 +54,14 @@ every remaining laddered field.
   different spec values). The generic ladder (all tids 0) is only the
   debug/bisect state and the trivial "pipeline not yet compiled" first-frame
   state — steady-state dynamic decode does not exist.
+- **Dynamic partition as STAGING + long tail (settled, user 2026-07-08).**
+  The unspecialized pipeline backs a permanent partition (id 0). New slots
+  ENTER through it (correct from frame one — no hazard window exists at all)
+  and MIGRATE to their typed partition once (a) the assignment is
+  materialized and (b) its pipeline is compiled — an O(1) cluster-style
+  membership move. Typed partitions are POPULATION-GATED (threshold +
+  hysteresis): esoteric assignments with a handful of slots stay dynamic
+  forever — no pipeline/partition explosion, today's speed for the tail.
 - **Async pipeline creation (settled).** The unspecialized pipeline (all tids
   0) is a CORRECT placeholder by construction, so async is risk-free: the
   per-assignment pipeline resource returns the bucket's generic pipeline
