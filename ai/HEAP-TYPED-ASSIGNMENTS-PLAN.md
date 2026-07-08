@@ -1,7 +1,17 @@
 # Heap: Typed Assignments — per-field spec-constant tids + assignment-partitioned draws
 
-Status: **DESIGN SETTLED 2026-07-08, implementation starting.** User directive: v2
-(assignment partitioning) is an immediate need — NO bucket-wide dynamic fallback.
+Status: **STEPS 1–2 IMPLEMENTED & MEASURED (c6bebba3, 2026-07-08).** Decoders take
+per-ordinal spec-constant tids (HeapTid0..7 + HeapTidIdx, 0 = runtime); bucket
+publishes INTERIM bucket-level inferred tids (unique per field, else 0). All
+probes green. Inferred A/B vs AARDVARK_HEAP_NO_SPEC=1:
+**5060 @700k 9.16 vs 13.86 (−34%, ≈1.0× vs baked — PARITY); RADV @200k 53.9 vs
+79.0 same-session (−32%, ratio 3.3→2.33×); 890M 31.65 vs 41.66 (−24%).** M1
+pending (machine offline). Index typing beat the Q&D numbers.
+REMAINING: §3.2–3.4 assignment partitioning (removes the interim mixed-type
+one-frame hazard + bucket-wide de-specialization), §3.5 mixedtypes probe,
+async pipeline creation, §3.6 ship chain (fshade release first!).
+User directive: v2 (assignment partitioning) is an immediate need — NO
+bucket-wide dynamic fallback.
 
 ## 1. The result this is built on (all measured 2026-07-08)
 
