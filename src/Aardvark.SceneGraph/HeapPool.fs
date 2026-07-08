@@ -1834,10 +1834,18 @@ module Heap =
         // 0 = unknown): a concrete value folds this whole ladder to ONE typed
         // arm at pipeline compile and the header tid is never loaded; 0 keeps
         // today's runtime ladder, byte-identical.
-        let tid = if tidSpec <> 0 then tidSpec else uniform.HeapDataI.[r]
+        // bits 6-7 of tidSpec are the pipeline-time EXTENT class: 2 = SINGLETON
+        // folds e = 0, 1 = FULL folds e = vid — both remove the header LENGTH
+        // load, so the data fetch no longer waits on a header round; 0 keeps
+        // the runtime min-against-length clamp (and tidSpec = 0 additionally
+        // loads the tid — the fully dynamic path, byte-identical to before).
+        let tid = if tidSpec <> 0 then tidSpec &&& 63 else uniform.HeapDataI.[r]
         // `min` handles the length-1 singleton broadcast (indices are always
         // < length otherwise) in ONE instruction — no modulo, no select chain
-        let e = min v (uniform.HeapDataI.[r + 1] - 1)
+        let e =
+            if tidSpec >= 128 then 0
+            elif tidSpec >= 64 then v
+            else min v (uniform.HeapDataI.[r + 1] - 1)
         if tid = 13 then                                            // f32 x3 (V3f/C3f) — HOT
             let o = r + 4 + e * 3
             V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], 1.0f)
@@ -1881,8 +1889,11 @@ module Heap =
     /// sources truncate (well-defined casts), C4b unpacks to raw 0..255 ints.
     [<ReflectedDefinition>]
     let private decodeHeapV4i (tidSpec : int) (r : int) (v : int) : V4i =
-        let tid = if tidSpec <> 0 then tidSpec else uniform.HeapDataI.[r]
-        let e = min v (uniform.HeapDataI.[r + 1] - 1)
+        let tid = if tidSpec <> 0 then tidSpec &&& 63 else uniform.HeapDataI.[r]
+        let e =
+            if tidSpec >= 128 then 0
+            elif tidSpec >= 64 then v
+            else min v (uniform.HeapDataI.[r + 1] - 1)
         if tid = 23 then                                            // i32 x3 — HOT
             let o = r + 4 + e * 3
             V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], 1)
@@ -3455,17 +3466,44 @@ module Heap =
         // AARDVARK_HEAP_NO_SPEC=1: bisect switch — never materialize typed
         // partitions, everything renders through the dynamic pipeline.
         let noSpec = System.Environment.GetEnvironmentVariable "AARDVARK_HEAP_NO_SPEC" = "1"
-        let packAssign (fieldTids : int[]) (idxTid : int) : int64 =
-            let mutable k = int64 idxTid
-            for i in 0 .. min 7 (fieldTids.Length - 1) do
-                k <- k ||| (int64 (fieldTids.[i] &&& 0x3F) <<< (6 * (i + 1)))
-            k
-        let assignTidMap (fieldTids : int[]) (idxTid : int) : Map<string, int> =
+        // per-field assignment value: 6-bit tid + a 2-bit EXTENT class in bits
+        // 6-7 (0 = runtime clamp against the header length, 1 = FULL folds
+        // e = vid, 2 = SINGLETON folds e = 0). The full vector no longer fits
+        // an int64 bit-pack, so assignment keys are INTERNED vector ids.
+        let internTable = System.Collections.Generic.Dictionary<struct(int64 * int64), int64>()
+        let internAssign (fieldVals : int[]) (idxTid : int) : int64 =
+            let mutable k1 = 0L
+            for i in 0 .. min 7 (fieldVals.Length - 1) do
+                k1 <- k1 ||| (int64 (fieldVals.[i] &&& 0xFF) <<< (8 * i))
+            if k1 = 0L && idxTid = 0 then 0L
+            else
+                let kk = struct(k1, int64 idxTid)
+                match internTable.TryGetValue kk with
+                | true, id -> id
+                | _ ->
+                    let id = int64 (internTable.Count + 1)
+                    internTable.[kk] <- id
+                    id
+        let mapOfTids (fieldVals : int[]) (idxTid : int) : Map<string, int> =
             let mutable m = Map.empty
-            for i in 0 .. min 7 (fieldTids.Length - 1) do
-                if fieldTids.[i] > 0 then m <- Map.add (sprintf "HeapTid%d" i) fieldTids.[i] m
+            for i in 0 .. min 7 (fieldVals.Length - 1) do
+                if fieldVals.[i] > 0 then m <- Map.add (sprintf "HeapTid%d" i) fieldVals.[i] m
             if idxTid > 0 then m <- Map.add "HeapTidIdx" idxTid m
             m
+        /// combine the slot's raw per-field tids + allocation lengths into the
+        /// assignment's field values. SINGLETON (length 1) folds e = 0 — always
+        /// safe. FULL (length >= drawn count, NON-indexed slots only — indexed
+        /// slots address attributes by decoded index values, which only the
+        /// runtime clamp can guard) folds e = vid. Everything else keeps the
+        /// runtime clamp with the tid still folded. Matrix fields (tid > 40)
+        /// never fold extent — their decoders don't consume the spec constant.
+        let extendTids (rawTids : int[]) (lens : int[]) (vc : int) (indexed : bool) : int[] =
+            let r = Array.copy rawTids
+            for i in 0 .. r.Length - 1 do
+                if r.[i] > 0 && r.[i] <= 40 then
+                    if lens.[i] = 1 then r.[i] <- r.[i] ||| 0x80
+                    elif not indexed && lens.[i] >= vc then r.[i] <- r.[i] ||| 0x40
+            r
         // partition registry: key -> state. Id 0 is the implicit dynamic partition.
         let partitions = System.Collections.Generic.Dictionary<int64, HeapPartition>()
         let partById = System.Collections.Generic.List<HeapPartition>()      // index = partition id (0 = dynamic sentinel at index 0)
@@ -3475,6 +3513,11 @@ module Heap =
         let mutable slotAssign : int64[] = Array.zeroCreate 16    // slot -> assignment key
         let mutable slotPart   : int[]   = Array.zeroCreate 16    // slot -> partition RESIDENCY (0 = dynamic)
         let mutable slotAsgPos : int[]   = Array.zeroCreate 16    // slot -> position in its assignment's slot list
+        // raw per-field source tids + allocation lengths (extent reclassification
+        // on in-place length changes needs the full picture, not just the key)
+        let mutable slotFieldTid : int[] = Array.zeroCreate (16 * 8)
+        let mutable slotFieldLen : int[] = Array.zeroCreate (16 * 8)
+        let mutable slotIdxTidA  : int[] = Array.zeroCreate 16
         // migration needs classAdd/classRemove (defined below with the cluster
         // state) — wired via this mutable hook to keep definition order simple.
         let mutable relistSlot : int -> int -> unit = fun _ _ -> ()   // slot, newPart
@@ -3644,6 +3687,23 @@ module Heap =
             if listed then classRemove slot
             slotPart.[slot] <- target
             if listed then classAdd slot
+        /// re-derive the slot's assignment key from its raw tids + CURRENT
+        /// allocation lengths / drawn count and migrate its partition residency
+        /// + cluster listing if the key changed. Called when an in-place edit
+        /// flips an extent class (the demo's recolor toggles full <-> singleton)
+        /// or the drawn-vertex count changes.
+        let recomputeAssign (slot : int) =
+            let raw = Array.init 8 (fun i -> slotFieldTid.[slot * 8 + i])
+            let lens = Array.init 8 (fun i -> slotFieldLen.[slot * 8 + i])
+            let idxTid = slotIdxTidA.[slot]
+            let tids = extendTids raw lens vcOfSlot.[slot] (idxTid > 0)
+            let key = internAssign tids idxTid
+            if key <> slotAssign.[slot] then
+                let listed = clusterClsOf.[slot] >= 0
+                if listed then classRemove slot
+                asgRemove slot
+                asgAdd slot key (lazy (mapOfTids tids idxTid))
+                if listed then classAdd slot
         let symPickId = Symbol.Create "HeapPickId"
         let zeroDraw = DrawCallInfo(FaceVertexCount = 0, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 0)
         let freeSlots = System.Collections.Generic.Stack<int>()
@@ -3715,6 +3775,15 @@ module Heap =
                 let nap = Array.zeroCreate<int> n
                 System.Array.Copy(slotAsgPos, nap, slotAsgPos.Length)
                 slotAsgPos <- nap
+                let nft = Array.zeroCreate<int> (n * 8)
+                System.Array.Copy(slotFieldTid, nft, slotFieldTid.Length)
+                slotFieldTid <- nft
+                let nfl = Array.zeroCreate<int> (n * 8)
+                System.Array.Copy(slotFieldLen, nfl, slotFieldLen.Length)
+                slotFieldLen <- nfl
+                let nit = Array.zeroCreate<int> n
+                System.Array.Copy(slotIdxTidA, nit, slotIdxTidA.Length)
+                slotIdxTidA <- nit
                 let ncp = Array.zeroCreate<int> n
                 System.Array.Copy(clusterPosOf, ncp, clusterPosOf.Length)
                 clusterPosOf <- ncp
@@ -4057,9 +4126,11 @@ module Heap =
                             if count <> e.Count then
                                 e.Count <- count
                                 pg.Arena.WriteHeader(e.Ref, typeId, count, esBytes)
-                                if isIndex then
-                                    for struct(sink, slot, cell) in e.DynRefs do
-                                        sink.GeomMoved(slot, cell, e.Ref, count, true)
+                                // notify ATTRIBUTE refs too (ref unchanged): a length
+                                // change can flip the extent class (full <-> singleton)
+                                // and the slot's typed-partition assignment with it
+                                for struct(sink, slot, cell) in e.DynRefs do
+                                    sink.GeomMoved(slot, cell, e.Ref, count, isIndex)
                             let p = pg.Arena.StageWords(e.Ref + AllocHeaderWords, words)
                             if byteLen % 4 <> 0 then wi p (words - 1) 0
                             stageGeomBytes' runtime value bv byteLen p
@@ -4109,7 +4180,7 @@ module Heap =
         /// The allocation's header carries the RO's OWN element typeId — the
         /// shader decode branches on it at fetch time, so member element types
         /// vary freely within a bucket (they are NOT part of the bucket key).
-        let attrFor (ro : RenderObject) (sym : Symbol) : AttrKey * int * int =
+        let attrFor (ro : RenderObject) (sym : Symbol) : AttrKey * int * int * int =
             let bv =
                 match ro.VertexAttributes.TryGetAttribute sym with
                 | ValueSome b -> b
@@ -4121,7 +4192,7 @@ module Heap =
                 | ValueNone -> 0
             match bv.Buffer with
             | :? ISingleValueBuffer as svb ->
-                AttrKey.Single svb.Value, allocSingle svb.Value bv.ElementType, srcTid
+                AttrKey.Single svb.Value, allocSingle svb.Value bv.ElementType, srcTid, 1
             | _ ->
                 let et = bv.ElementType
                 let tid =
@@ -4132,13 +4203,13 @@ module Heap =
                 let value = bv.Buffer.GetValue()
                 let key = struct(geomDedupSource' value bv, bv.Offset, tid)
                 match attrStatic.TryGetValue key with
-                | true, e -> e.RefCount <- e.RefCount + 1; AttrKey.Static key, e.Ref, srcTid
+                | true, e -> e.RefCount <- e.RefCount + 1; AttrKey.Static key, e.Ref, srcTid, e.Count
                 | _ ->
                     let es = elemSize et
                     let len = geomByteLen' value bv
                     let e = allocStatic attrStatic key len (stageGeomBytes' runtime value bv len) tid (len / es) es
                     if not bv.Buffer.IsConstant && not disableDynGeom then makeDynamic e bv tid es false |> ignore
-                    AttrKey.Static key, e.Ref, srcTid
+                    AttrKey.Static key, e.Ref, srcTid, e.Count
 
         // ── threshold-triggered compaction is PAGE-level now (PageArena.Compact):
         //    a page's dicts hold entries from EVERY bucket sharing the storage, so
@@ -5231,6 +5302,7 @@ module Heap =
             // TYPED ASSIGNMENTS: this slot's per-field source tids (packed into
             // its assignment key below; partition residency starts DYNAMIC)
             let slotTids = Array.zeroCreate<int> 8
+            let slotLens = Array.zeroCreate<int> 8
             let mutable slotIdxTid = 0
             // geometry: per-attribute arena allocations (host) or the per-slot
             // SSBO-array registration (bindless), plus the index allocation.
@@ -5255,8 +5327,10 @@ module Heap =
                     [||]
                 else
                     attrInfos |> Array.map (fun (ai, _, sym, _, _, _, _) ->
-                        let (key, r, srcTid) = attrFor ro sym
-                        (if ai < 8 then slotTids.[ai] <- srcTid)
+                        let (key, r, srcTid, srcLen) = attrFor ro sym
+                        (if ai < 8 then
+                            slotTids.[ai] <- srcTid
+                            slotLens.[ai] <- srcLen)
                         headers.[slot * headerStride + attrBase + ai] <- r
                         // dynamic-source allocation: register this slot's header cell
                         // for the realloc re-bake and subscribe THIS bucket's updater
@@ -5309,8 +5383,16 @@ module Heap =
             let active = ro.IsActive
             // TYPED ASSIGNMENTS: register the slot's assignment (residency starts
             // dynamic; crossing the threshold materializes + migrates) — BEFORE any
-            // classAdd path so cluster listing sees the final slotPart
-            asgAdd slot (packAssign slotTids slotIdxTid) (lazy (assignTidMap slotTids slotIdxTid))
+            // classAdd path so cluster listing sees the final slotPart. Raw tids +
+            // lengths are kept per slot so in-place length edits (full <->
+            // singleton) can reclassify the extent and migrate (recomputeAssign).
+            for i in 0 .. 7 do
+                slotFieldTid.[slot * 8 + i] <- slotTids.[i]
+                slotFieldLen.[slot * 8 + i] <- slotLens.[i]
+            slotIdxTidA.[slot] <- slotIdxTid
+            let asgTids = extendTids slotTids slotLens vertexCount (slotIdxTid > 0)
+            let asgKey = internAssign asgTids slotIdxTid
+            asgAdd slot asgKey (lazy (mapOfTids asgTids slotIdxTid))
             let instCount =
                 if useClusters then
                     // CLUSTERED: gating = class membership; the record set is derived
@@ -5534,11 +5616,20 @@ module Heap =
                 if isIndex then
                     headers.[slot * headerStride + vcCell] <- newCount
                     vcOfSlot.[slot] <- newCount
+                    // a drawn-count change can invalidate FULL extent classes
+                    recomputeAssign slot
                     if useClusters then
                         (if clusterClsOf.[slot] >= 0 then classRemove slot; classAdd slot)
                     else
                         entries.[slot].FaceVertexCount <- newCount
                         dirtyDraws.Add slot |> ignore
+                elif cell >= attrBase && cell - attrBase < 8 then
+                    // attribute length change: reclassify the extent (the demo's
+                    // recolor toggles a color array between full and singleton)
+                    let ai = cell - attrBase
+                    if slotFieldLen.[slot * 8 + ai] <> newCount then
+                        slotFieldLen.[slot * 8 + ai] <- newCount
+                        recomputeAssign slot
                 dirtyHeaders.Add slot |> ignore
 
         // shared-page compaction stake: contribute this bucket's per-slot arena
