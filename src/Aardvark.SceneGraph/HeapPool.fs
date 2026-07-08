@@ -49,17 +49,22 @@ module HeapUniforms =
         // headers (typeId/length/stride), index data and integral attributes decode
         // their 4-byte words as ints (bit pattern is identical).
         member x.HeapDataI   : int[]     = uniform?StorageBuffer?HeapDataI
-        /// SPEC-CONSTANT arm masks (bits of DISABLED decode-ladder arms; 0 =
-        /// everything enabled = unspecialized). On Vulkan these are pipeline
-        /// specialization constants (the magic FShade `SpecConstants` scope) —
-        /// disabled arms are dead-coded before register allocation. On GL they
-        /// degrade to ordinary uniforms served by the bucket (runtime branch,
-        /// today's behavior). Bit meanings (shared by both masks):
-        ///   1 = f32 x1/x2 generic   2 = x3 HOT arm    4 = x4 HOT arm
-        ///   8 = cross-class cast arm (i32-in-F / f32-in-I)
-        ///  16 = f64 bit-decode tree 32 = normalized C4b
-        member x.HeapSpecDisabledF : int = uniform?SpecConstants?HeapSpecDisabledF
-        member x.HeapSpecDisabledI : int = uniform?SpecConstants?HeapSpecDisabledI
+        /// TYPED-ASSIGNMENT spec constants (ai/HEAP-TYPED-ASSIGNMENTS-PLAN.md):
+        /// per-ATTRIBUTE source typeIds by attribute ordinal, + the index typeId.
+        /// 0 = unknown -> the decoder reads the header tid at runtime (today's
+        /// ladder, always correct). A concrete tid folds the decoder to ONE
+        /// typed arm at pipeline compile and the header tid is NEVER read.
+        /// On Vulkan these are pipeline specialization constants; on GL they
+        /// degrade to ordinary uniforms served by the bucket provider.
+        member x.HeapTid0 : int = uniform?SpecConstants?HeapTid0
+        member x.HeapTid1 : int = uniform?SpecConstants?HeapTid1
+        member x.HeapTid2 : int = uniform?SpecConstants?HeapTid2
+        member x.HeapTid3 : int = uniform?SpecConstants?HeapTid3
+        member x.HeapTid4 : int = uniform?SpecConstants?HeapTid4
+        member x.HeapTid5 : int = uniform?SpecConstants?HeapTid5
+        member x.HeapTid6 : int = uniform?SpecConstants?HeapTid6
+        member x.HeapTid7 : int = uniform?SpecConstants?HeapTid7
+        member x.HeapTidIdx : int = uniform?SpecConstants?HeapTidIdx
         // the SAME arena buffer bound a THIRD time as a native double view: a uniform
         // the shader requests at DOUBLE precision (M33d/M44d/V*d) is stored as real
         // doubles (8-byte aligned, 2 words/scalar) and read here with full precision —
@@ -1764,23 +1769,6 @@ module Heap =
         elif t = typeof<M44f>    then ValueSome 54
         else ValueNone
 
-    /// DISABLED-arm bits a source typeId needs ENABLED in the spec-constant
-    /// masks (union over both decoders — see UniformScope.HeapSpecDisabledF).
-    /// f32 tids also need the cast arm (8): the INT-target decoder reads them
-    /// through its cls=1 cast branch. Index tids (1/2) and matrices (50+) have
-    /// no gated runtime arm.
-    let private armBitsOfTid (tid : int) : int =
-        if tid >= 50 then 0
-        elif tid = 40 then 32
-        elif tid >= 31 then 16
-        elif tid = 24 then 8 ||| 4
-        elif tid = 23 then 8 ||| 2
-        elif tid >= 21 then 8
-        elif tid = 14 then 4 ||| 8
-        elif tid = 13 then 2 ||| 8
-        elif tid >= 11 then 1 ||| 8
-        else 0
-
     /// decode the vertex index for `gl_VertexIndex = v` from the index
     /// allocation whose HEADER lives at arena word offset `r`: u16 elements
     /// (typeId 2) unpack two-per-word, anything else reads a whole word.
@@ -1788,12 +1776,15 @@ module Heap =
     /// the vertex index passes through unchanged. The branch is coherent per
     /// draw — all vertices of a slot read the same header cell.
     [<ReflectedDefinition>]
-    let private decodeHeapIndex (r : int) (v : int) : int =
+    let private decodeHeapIndex (tidSpec : int) (r : int) (v : int) : int =
         if r < 0 then v
-        elif uniform.HeapDataI.[r] = 2 then
-            (uniform.HeapDataI.[r + 4 + (v >>> 1)] >>> ((v &&& 1) <<< 4)) &&& 0xFFFF
         else
-            uniform.HeapDataI.[r + 4 + v]
+            // tidSpec: pipeline-time index typeId (0 -> read the header)
+            let t = if tidSpec <> 0 then tidSpec else uniform.HeapDataI.[r]
+            if t = 2 then
+                (uniform.HeapDataI.[r + 4 + (v >>> 1)] >>> ((v &&& 1) <<< 4)) &&& 0xFFFF
+            else
+                uniform.HeapDataI.[r + 4 + v]
 
     /// reconstruct ONE f32 from a little-endian f64 at int-view word offset `p`
     /// (lo word, hi word) — pure bit manipulation, NO shaderFloat64 dependency:
@@ -1821,26 +1812,22 @@ module Heap =
     /// singletons never misaddress (element 0). The branch is COHERENT per
     /// draw — all vertices of a draw read the same header.
     [<ReflectedDefinition>]
-    let private decodeHeapV4f (r : int) (v : int) : V4f =
-        let dis = uniform.HeapSpecDisabledF
-        let tid = uniform.HeapDataI.[r]
+    let private decodeHeapV4f (tidSpec : int) (r : int) (v : int) : V4f =
+        // tidSpec is a SPECIALIZATION CONSTANT (per-attribute source typeId,
+        // 0 = unknown): a concrete value folds this whole ladder to ONE typed
+        // arm at pipeline compile and the header tid is never loaded; 0 keeps
+        // today's runtime ladder, byte-identical.
+        let tid = if tidSpec <> 0 then tidSpec else uniform.HeapDataI.[r]
         // `min` handles the length-1 singleton broadcast (indices are always
         // < length otherwise) in ONE instruction — no modulo, no select chain
         let e = min v (uniform.HeapDataI.[r + 1] - 1)
-        // every arm is gated on a DISABLED-mask bit: `dis` is a specialization
-        // constant, so a disabled arm's condition folds to false at PIPELINE
-        // compile and the arm (incl. its register footprint) is dead-coded.
-        // Disabled-but-present hot arms degrade GRACEFULLY (the generic arm
-        // computes the same result); the mask is inferred per bucket from the
-        // typeIds actually allocated, so that only happens for one frame when
-        // a brand-new source type joins a live bucket.
-        if (dis &&& 2) = 0 && tid = 13 then                         // f32 x3 (V3f/C3f) — HOT
+        if tid = 13 then                                            // f32 x3 (V3f/C3f) — HOT
             let o = r + 4 + e * 3
             V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], 1.0f)
-        elif (dis &&& 4) = 0 && tid = 14 then                       // f32 x4 (V4f/C4f) — HOT
+        elif tid = 14 then                                          // f32 x4 (V4f/C4f) — HOT
             let o = r + 4 + e * 4
             V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], uniform.HeapData.[o + 3])
-        elif (dis &&& 32) = 0 && tid = 40 then                      // normalized C4b (BGRA memory layout) — HOT
+        elif tid = 40 then                                          // normalized C4b (BGRA memory layout) — HOT
             let w = uniform.HeapDataI.[r + 4 + e]
             V4f(float32 ((w >>> 16) &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 (w &&& 0xFF), float32 ((w >>> 24) &&& 0xFF)) / 255.0f
         else
@@ -1853,40 +1840,39 @@ module Heap =
             let comps = tid - cls * 10
             let o = r + 4 + e * comps * (if cls = 3 then 2 else 1)
             let c0 =
-                if (dis &&& 16) = 0 && cls = 3 then decodeHeapF64 o
-                elif (dis &&& 8) = 0 && cls = 2 then float32 uniform.HeapDataI.[o]
+                if cls = 3 then decodeHeapF64 o
+                elif cls = 2 then float32 uniform.HeapDataI.[o]
                 else uniform.HeapData.[o]
             let c1 =
                 if comps < 2 then 0.0f
-                elif (dis &&& 16) = 0 && cls = 3 then decodeHeapF64 (o + 2)
-                elif (dis &&& 8) = 0 && cls = 2 then float32 uniform.HeapDataI.[o + 1]
+                elif cls = 3 then decodeHeapF64 (o + 2)
+                elif cls = 2 then float32 uniform.HeapDataI.[o + 1]
                 else uniform.HeapData.[o + 1]
             let c2 =
                 if comps < 3 then 0.0f
-                elif (dis &&& 16) = 0 && cls = 3 then decodeHeapF64 (o + 4)
-                elif (dis &&& 8) = 0 && cls = 2 then float32 uniform.HeapDataI.[o + 2]
+                elif cls = 3 then decodeHeapF64 (o + 4)
+                elif cls = 2 then float32 uniform.HeapDataI.[o + 2]
                 else uniform.HeapData.[o + 2]
             let c3 =
                 if comps < 4 then 1.0f
-                elif (dis &&& 16) = 0 && cls = 3 then decodeHeapF64 (o + 6)
-                elif (dis &&& 8) = 0 && cls = 2 then float32 uniform.HeapDataI.[o + 3]
+                elif cls = 3 then decodeHeapF64 (o + 6)
+                elif cls = 2 then float32 uniform.HeapDataI.[o + 3]
                 else uniform.HeapData.[o + 3]
             V4f(c0, c1, c2, c3)
 
     /// int-target twin of decodeHeapV4f: i32 sources pass through, f32/f64
     /// sources truncate (well-defined casts), C4b unpacks to raw 0..255 ints.
     [<ReflectedDefinition>]
-    let private decodeHeapV4i (r : int) (v : int) : V4i =
-        let dis = uniform.HeapSpecDisabledI
-        let tid = uniform.HeapDataI.[r]
+    let private decodeHeapV4i (tidSpec : int) (r : int) (v : int) : V4i =
+        let tid = if tidSpec <> 0 then tidSpec else uniform.HeapDataI.[r]
         let e = min v (uniform.HeapDataI.[r + 1] - 1)
-        if (dis &&& 2) = 0 && tid = 23 then                         // i32 x3 — HOT
+        if tid = 23 then                                            // i32 x3 — HOT
             let o = r + 4 + e * 3
             V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], 1)
-        elif (dis &&& 4) = 0 && tid = 24 then                       // i32 x4 — HOT
+        elif tid = 24 then                                          // i32 x4 — HOT
             let o = r + 4 + e * 4
             V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], uniform.HeapDataI.[o + 3])
-        elif (dis &&& 32) = 0 && tid = 40 then                      // C4b (BGRA memory layout) -> raw 0..255
+        elif tid = 40 then                                          // C4b (BGRA memory layout) -> raw 0..255
             let w = uniform.HeapDataI.[r + 4 + e]
             V4i((w >>> 16) &&& 0xFF, (w >>> 8) &&& 0xFF, w &&& 0xFF, (w >>> 24) &&& 0xFF)
         else
@@ -1895,25 +1881,26 @@ module Heap =
             let comps = tid - cls * 10
             let o = r + 4 + e * comps * (if cls = 3 then 2 else 1)
             let c0 =
-                if (dis &&& 16) = 0 && cls = 3 then int (decodeHeapF64 o)
-                elif (dis &&& 8) = 0 && cls = 1 then int uniform.HeapData.[o]
+                if cls = 3 then int (decodeHeapF64 o)
+                elif cls = 1 then int uniform.HeapData.[o]
                 else uniform.HeapDataI.[o]
             let c1 =
                 if comps < 2 then 0
-                elif (dis &&& 16) = 0 && cls = 3 then int (decodeHeapF64 (o + 2))
-                elif (dis &&& 8) = 0 && cls = 1 then int uniform.HeapData.[o + 1]
+                elif cls = 3 then int (decodeHeapF64 (o + 2))
+                elif cls = 1 then int uniform.HeapData.[o + 1]
                 else uniform.HeapDataI.[o + 1]
             let c2 =
                 if comps < 3 then 0
-                elif (dis &&& 16) = 0 && cls = 3 then int (decodeHeapF64 (o + 4))
-                elif (dis &&& 8) = 0 && cls = 1 then int uniform.HeapData.[o + 2]
+                elif cls = 3 then int (decodeHeapF64 (o + 4))
+                elif cls = 1 then int uniform.HeapData.[o + 2]
                 else uniform.HeapDataI.[o + 2]
             let c3 =
                 if comps < 4 then 1
-                elif (dis &&& 16) = 0 && cls = 3 then int (decodeHeapF64 (o + 6))
-                elif (dis &&& 8) = 0 && cls = 1 then int uniform.HeapData.[o + 3]
+                elif cls = 3 then int (decodeHeapF64 (o + 6))
+                elif cls = 1 then int uniform.HeapData.[o + 3]
                 else uniform.HeapDataI.[o + 3]
             V4i(c0, c1, c2, c3)
+
 
     // f32 matrix attribute decoders: the matrix is stored tight (rows*cols floats
     // per element, row-major), so a row-wise read reconstructs it. Source==target
@@ -1942,16 +1929,26 @@ module Heap =
     /// narrow / normalize / casts per SOURCE typeId at fetch time — the input
     /// type is fixed per effect, the source type varies per allocation).
     /// Returns None for unsupported shader input types.
-    let private hostGather (inputT : System.Type) (refE : Expr<int>) (vidE : Expr<int>) : Expr option =
+    /// per-attribute-ordinal spec-constant reads (quotation splices for
+    /// hostGather); ordinals beyond the pool splice constant 0 = runtime decode.
+    let private heapTidReads : Expr<int>[] =
+        [| <@ uniform.HeapTid0 @>; <@ uniform.HeapTid1 @>; <@ uniform.HeapTid2 @>; <@ uniform.HeapTid3 @>
+           <@ uniform.HeapTid4 @>; <@ uniform.HeapTid5 @>; <@ uniform.HeapTid6 @>; <@ uniform.HeapTid7 @> |]
+    let private heapTidRead (ai : int) : Expr<int> =
+        if ai >= 0 && ai < heapTidReads.Length then heapTidReads.[ai] else <@ 0 @>
+
+    /// tidE: the attribute's per-ordinal spec-constant tid (heapTidRead) — a
+    /// concrete pipeline value folds the decode to one typed arm; 0 = runtime.
+    let private hostGather (tidE : Expr<int>) (inputT : System.Type) (refE : Expr<int>) (vidE : Expr<int>) : Expr option =
         let inline f1 (q : Expr<'a>) = Some q.Raw
-        if   inputT = typeof<V4f>     then f1 <@ decodeHeapV4f %refE %vidE @>
-        elif inputT = typeof<V3f>     then f1 <@ (decodeHeapV4f %refE %vidE).XYZ @>
-        elif inputT = typeof<V2f>     then f1 <@ (decodeHeapV4f %refE %vidE).XY @>
-        elif inputT = typeof<float32> then f1 <@ (decodeHeapV4f %refE %vidE).X @>
-        elif inputT = typeof<V4i>     then f1 <@ decodeHeapV4i %refE %vidE @>
-        elif inputT = typeof<V3i>     then f1 <@ (decodeHeapV4i %refE %vidE).XYZ @>
-        elif inputT = typeof<V2i>     then f1 <@ (decodeHeapV4i %refE %vidE).XY @>
-        elif inputT = typeof<int>     then f1 <@ (decodeHeapV4i %refE %vidE).X @>
+        if   inputT = typeof<V4f>     then f1 <@ decodeHeapV4f %tidE %refE %vidE @>
+        elif inputT = typeof<V3f>     then f1 <@ (decodeHeapV4f %tidE %refE %vidE).XYZ @>
+        elif inputT = typeof<V2f>     then f1 <@ (decodeHeapV4f %tidE %refE %vidE).XY @>
+        elif inputT = typeof<float32> then f1 <@ (decodeHeapV4f %tidE %refE %vidE).X @>
+        elif inputT = typeof<V4i>     then f1 <@ decodeHeapV4i %tidE %refE %vidE @>
+        elif inputT = typeof<V3i>     then f1 <@ (decodeHeapV4i %tidE %refE %vidE).XYZ @>
+        elif inputT = typeof<V2i>     then f1 <@ (decodeHeapV4i %tidE %refE %vidE).XY @>
+        elif inputT = typeof<int>     then f1 <@ (decodeHeapV4i %tidE %refE %vidE).X @>
         elif inputT = typeof<M22f>    then f1 <@ decodeHeapM22f %refE %vidE @>
         elif inputT = typeof<M33f>    then f1 <@ decodeHeapM33f %refE %vidE @>
         elif inputT = typeof<M44f>    then f1 <@ decodeHeapM44f %refE %vidE @>
@@ -3169,8 +3166,6 @@ module Heap =
         let derivedCells = derivedPlan |> Array.map (fun (c, _, _) -> c) |> Set.ofArray
         let scope = Ag.Scope.Root
         let symData = Symbol.Create "HeapData"
-        let symSpecDisF = Symbol.Create "HeapSpecDisabledF"
-        let symSpecDisI = Symbol.Create "HeapSpecDisabledI"
         let symPickIds = Symbol.Create "HeapPickIds"
         let symDataI = Symbol.Create "HeapDataI"
         let symDataD = Symbol.Create "HeapDataD"   // native double view of the arena (fp64-requested uniforms)
@@ -3426,28 +3421,39 @@ module Heap =
         let mutable slotPageAllDirty = false
         let pickIdsDirty = System.Collections.Generic.HashSet<int>()    // slots
         let mutable pickIdsAllDirty = false
-        // ── SPEC-CONSTANT ARM INFERENCE: bits of decode-ladder arms this bucket's
-        //    content actually needs (armBitsOfTid, union over both decoders).
-        //    Observed CPU-side wherever an attribute typeId is resolved; published
-        //    to `observedArmsVal` via a post-evaluation transact (same discipline
-        //    as ScheduleTouchIfClean — we are inside the updater's evaluation).
-        //    -1 = nothing published yet -> SpecConstants stays EMPTY (unspecialized,
-        //    all arms enabled) so the first frames are correct by construction; the
-        //    first publish tightens the pipeline to exactly the observed set. A
-        //    brand-new source type joining a LIVE bucket widens one frame late
-        //    (hot arms degrade gracefully through the generic arm meanwhile). ──
-        let mutable observedArms = 0
-        let observedArmsVal = cval -1
-        let observeScheduled = ref 0
-        let observeArms (bits : int) =
-            if bits <> 0 && (observedArms &&& bits) <> bits then
-                observedArms <- observedArms ||| bits
-                if System.Threading.Interlocked.Exchange(observeScheduled, 1) = 0 then
-                    System.Threading.Tasks.Task.Run(fun () ->
-                        System.Threading.Interlocked.Exchange(observeScheduled, 0) |> ignore
-                        let bits = observedArms
-                        transact (fun () ->
-                            observedArmsVal.Value <- (max 0 observedArmsVal.Value) ||| bits)) |> ignore
+        // ── TYPED-ASSIGNMENT tid inference (INTERIM bucket-level publication —
+        //    the per-assignment draw partitioning of ai/HEAP-TYPED-ASSIGNMENTS-
+        //    PLAN.md §3.3/3.4 replaces this): per-attribute-ordinal observed
+        //    source tid (0 = unseen, >0 = unique, -1 = MIXED -> runtime decode)
+        //    plus the index tid, published as spec-constant values via a
+        //    post-evaluation transact (we are inside the updater's evaluation).
+        //    KNOWN interim hazard: a SECOND type arriving for a field renders
+        //    one frame through the stale typed pipeline before the republish
+        //    de-specializes it (partitioning removes this entirely).
+        let fieldTidState : int[] = Array.zeroCreate 8
+        let mutable idxTidState = 0
+        let publishedTids = cval (Map.empty : Map<string, int>)
+        let tidPublishScheduled = ref 0
+        let scheduleTidPublish () =
+            if System.Threading.Interlocked.Exchange(tidPublishScheduled, 1) = 0 then
+                System.Threading.Tasks.Task.Run(fun () ->
+                    System.Threading.Interlocked.Exchange(tidPublishScheduled, 0) |> ignore
+                    let mutable m = Map.empty
+                    for i in 0 .. fieldTidState.Length - 1 do
+                        let t = fieldTidState.[i]
+                        if t > 0 then m <- Map.add (sprintf "HeapTid%d" i) t m
+                    if idxTidState > 0 then m <- Map.add "HeapTidIdx" idxTidState m
+                    transact (fun () -> publishedTids.Value <- m)) |> ignore
+        let observeFieldTid (ai : int) (tid : int) =
+            if ai >= 0 && ai < fieldTidState.Length && tid > 0 then
+                let cur = fieldTidState.[ai]
+                if cur = 0 then fieldTidState.[ai] <- tid; scheduleTidPublish ()
+                elif cur > 0 && cur <> tid then fieldTidState.[ai] <- -1; scheduleTidPublish ()
+        let observeIdxTid (tid : int) =
+            if tid > 0 then
+                let cur = idxTidState
+                if cur = 0 then idxTidState <- tid; scheduleTidPublish ()
+                elif cur > 0 && cur <> tid then idxTidState <- -1; scheduleTidPublish ()
         // ── CLUSTER state (useClusters): per (page, class) live-slot lists; the
         //    last pseudo-class holds OVERSIZED slots (exact per-slot records).
         //    ClassSlots buffer + records are FULL-REWRITTEN per flush (tiny /
@@ -4005,17 +4011,19 @@ module Heap =
         /// The allocation's header carries the RO's OWN element typeId — the
         /// shader decode branches on it at fetch time, so member element types
         /// vary freely within a bucket (they are NOT part of the bucket key).
-        let attrFor (ro : RenderObject) (sym : Symbol) : AttrKey * int =
+        let attrFor (ro : RenderObject) (sym : Symbol) : AttrKey * int * int =
             let bv =
                 match ro.VertexAttributes.TryGetAttribute sym with
                 | ValueSome b -> b
                 | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym
-            (match attrTypeId bv.ElementType with
-             | ValueSome t -> observeArms (armBitsOfTid t)
-             | ValueNone -> ())
+            // the SOURCE tid this member feeds the field (spec-constant inference)
+            let srcTid =
+                match attrTypeId bv.ElementType with
+                | ValueSome t -> t
+                | ValueNone -> 0
             match bv.Buffer with
             | :? ISingleValueBuffer as svb ->
-                AttrKey.Single svb.Value, allocSingle svb.Value bv.ElementType
+                AttrKey.Single svb.Value, allocSingle svb.Value bv.ElementType, srcTid
             | _ ->
                 let et = bv.ElementType
                 let tid =
@@ -4026,13 +4034,13 @@ module Heap =
                 let value = bv.Buffer.GetValue()
                 let key = struct(geomDedupSource' value bv, bv.Offset, tid)
                 match attrStatic.TryGetValue key with
-                | true, e -> e.RefCount <- e.RefCount + 1; AttrKey.Static key, e.Ref
+                | true, e -> e.RefCount <- e.RefCount + 1; AttrKey.Static key, e.Ref, srcTid
                 | _ ->
                     let es = elemSize et
                     let len = geomByteLen' value bv
                     let e = allocStatic attrStatic key len (stageGeomBytes' runtime value bv len) tid (len / es) es
                     if not bv.Buffer.IsConstant && not disableDynGeom then makeDynamic e bv tid es false |> ignore
-                    AttrKey.Static key, e.Ref
+                    AttrKey.Static key, e.Ref, srcTid
 
         // ── threshold-triggered compaction is PAGE-level now (PageArena.Compact):
         //    a page's dicts hold entries from EVERY bucket sharing the storage, so
@@ -4699,7 +4707,7 @@ module Heap =
                                             bindlessGatherFlat handleE vidE.Raw ityp numAttrs ai strideF offF
                                         else
                                             let refE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint (attrBase + ai)) ] @>
-                                            match hostGather ityp refE vidE with
+                                            match hostGather (heapTidRead ai) ityp refE vidE with
                                             | Some g -> g
                                             | None -> failwithf "Heap: cannot storage-decode shader input '%s' (%A — supported: float32/V2f/V3f/V4f and int/V2i/V3i/V4i)" name ityp
                                     Some (hoist name ityp mk)
@@ -4708,7 +4716,7 @@ module Heap =
                     // bind the hoisted gathers (mutually independent — they reference
                     // only slot/vid), then `heapVid` OUTERMOST so attribute gathers see it
                     let body = Seq.foldBack (fun (v, ge) b -> Expr.Let(v, ge, b)) hoistOrder body
-                    let body = if isVertex then Expr.Let(vidVar, (<@ decodeHeapIndex %idxRefE %vtxE @>).Raw, body) else body
+                    let body = if isVertex then Expr.Let(vidVar, (<@ decodeHeapIndex uniform.HeapTidIdx %idxRefE %vtxE @>).Raw, body) else body
                     // CLUSTERED slot routing: bind the ClassSlots indirection ONCE,
                     // OUTERMOST (the vid let + every gather reference it via slotE)
                     let body =
@@ -4722,22 +4730,25 @@ module Heap =
         // provider answering ONLY heap-internal names (arena/headers/textures/
         // atlas/user sampler arrays) — user uniforms are gathered regions, never
         // resolved from a member.
-        // DISABLED-arm masks for the RO (Vulkan spec constants; GL reads the same
-        // values as ordinary uniforms via the provider below). Inference-only —
-        // NEVER user-specified. Empty map until the first publish = unspecialized.
-        let specDisabled =
-            observedArmsVal |> AVal.map (fun bits ->
-                if bits < 0 then 0 else 0b111111 &&& ~~~bits)
+        // per-field tid spec values for the RO (Vulkan pipelines; GL reads the
+        // same values as ordinary uniforms via the provider below). Inference-
+        // only — never user-specified. Empty map = unspecialized = the runtime
+        // ladder, always correct.
         let specConstantsVal =
             // AARDVARK_HEAP_NO_SPEC=1: bisect switch — render unspecialized
             if System.Environment.GetEnvironmentVariable "AARDVARK_HEAP_NO_SPEC" = "1" then
                 AVal.constant Map.empty
             else
-                observedArmsVal |> AVal.map (fun bits ->
-                    if bits < 0 then Map.empty
-                    else
-                        let dis = 0b111111 &&& ~~~bits
-                        Map.ofList [ "HeapSpecDisabledF", dis; "HeapSpecDisabledI", dis ])
+                publishedTids :> aval<Map<string, int>>
+        // GL fallback lookups (Vulkan never asks: the members live in the
+        // SpecConstants scope, which has no UBO in its program interface)
+        let specUniformLookup =
+            let d = System.Collections.Generic.Dictionary<Symbol, IAdaptiveValue>()
+            let entry (n : string) =
+                d.[Symbol.Create n] <- (specConstantsVal |> AVal.map (fun m -> defaultArg (Map.tryFind n m) 0)) :> IAdaptiveValue
+            for i in 0 .. 7 do entry (sprintf "HeapTid%d" i)
+            entry "HeapTidIdx"
+            d
 
         let bucketRO =
             let ro = RenderObject.Clone ro0
@@ -4834,9 +4845,9 @@ module Heap =
                         // to arenaU when the bucket has no derived uniforms.
                         if name = symData || name = symDataI || name = symDataD then ValueSome derivedU
                         elif name = symHeaders then ValueSome headersU
-                        // GL fallback: the spec-constant masks as live uniforms
+                        // GL fallback: the spec-constant tids as live uniforms
                         // (same values, runtime-branched instead of dead-coded)
-                        elif name = symSpecDisF || name = symSpecDisI then ValueSome (specDisabled :> IAdaptiveValue)
+                        elif specUniformLookup.ContainsKey name then ValueSome specUniformLookup.[name]
                         elif picking && name = symPickIds then ValueSome pickIdU
                         elif useClusters && name = symClassSlots then ValueSome classSlotsU
                         else
@@ -5078,7 +5089,8 @@ module Heap =
                     [||]
                 else
                     attrInfos |> Array.map (fun (ai, _, sym, _, _, _, _) ->
-                        let (key, r) = attrFor ro sym
+                        let (key, r, srcTid) = attrFor ro sym
+                        observeFieldTid ai srcTid
                         headers.[slot * headerStride + attrBase + ai] <- r
                         // dynamic-source allocation: register this slot's header cell
                         // for the realloc re-bake and subscribe THIS bucket's updater
@@ -5097,7 +5109,8 @@ module Heap =
             // their vertex count comes from the RO's Direct draw call.
             let struct(idxKey, idxRef, vertexCount) =
                 match ro.Indices with
-                | Some _ ->
+                | Some bvIdx ->
+                    observeIdxTid (if bvIdx.ElementType = typeof<int16> || bvIdx.ElementType = typeof<uint16> then 2 else 1)
                     let (k, e) = idxFor ro
                     if not (isNull e.Writer) then
                         e.DynRefs.Add(struct(x :> IGeomSink, slot, idxCell)) |> ignore
