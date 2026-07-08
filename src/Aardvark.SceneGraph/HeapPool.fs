@@ -49,6 +49,17 @@ module HeapUniforms =
         // headers (typeId/length/stride), index data and integral attributes decode
         // their 4-byte words as ints (bit pattern is identical).
         member x.HeapDataI   : int[]     = uniform?StorageBuffer?HeapDataI
+        /// SPEC-CONSTANT arm masks (bits of DISABLED decode-ladder arms; 0 =
+        /// everything enabled = unspecialized). On Vulkan these are pipeline
+        /// specialization constants (the magic FShade `SpecConstants` scope) —
+        /// disabled arms are dead-coded before register allocation. On GL they
+        /// degrade to ordinary uniforms served by the bucket (runtime branch,
+        /// today's behavior). Bit meanings (shared by both masks):
+        ///   1 = f32 x1/x2 generic   2 = x3 HOT arm    4 = x4 HOT arm
+        ///   8 = cross-class cast arm (i32-in-F / f32-in-I)
+        ///  16 = f64 bit-decode tree 32 = normalized C4b
+        member x.HeapSpecDisabledF : int = uniform?SpecConstants?HeapSpecDisabledF
+        member x.HeapSpecDisabledI : int = uniform?SpecConstants?HeapSpecDisabledI
         // the SAME arena buffer bound a THIRD time as a native double view: a uniform
         // the shader requests at DOUBLE precision (M33d/M44d/V*d) is stored as real
         // doubles (8-byte aligned, 2 words/scalar) and read here with full precision —
@@ -1753,6 +1764,23 @@ module Heap =
         elif t = typeof<M44f>    then ValueSome 54
         else ValueNone
 
+    /// DISABLED-arm bits a source typeId needs ENABLED in the spec-constant
+    /// masks (union over both decoders — see UniformScope.HeapSpecDisabledF).
+    /// f32 tids also need the cast arm (8): the INT-target decoder reads them
+    /// through its cls=1 cast branch. Index tids (1/2) and matrices (50+) have
+    /// no gated runtime arm.
+    let private armBitsOfTid (tid : int) : int =
+        if tid >= 50 then 0
+        elif tid = 40 then 32
+        elif tid >= 31 then 16
+        elif tid = 24 then 8 ||| 4
+        elif tid = 23 then 8 ||| 2
+        elif tid >= 21 then 8
+        elif tid = 14 then 4 ||| 8
+        elif tid = 13 then 2 ||| 8
+        elif tid >= 11 then 1 ||| 8
+        else 0
+
     /// decode the vertex index for `gl_VertexIndex = v` from the index
     /// allocation whose HEADER lives at arena word offset `r`: u16 elements
     /// (typeId 2) unpack two-per-word, anything else reads a whole word.
@@ -1794,17 +1822,25 @@ module Heap =
     /// draw — all vertices of a draw read the same header.
     [<ReflectedDefinition>]
     let private decodeHeapV4f (r : int) (v : int) : V4f =
+        let dis = uniform.HeapSpecDisabledF
         let tid = uniform.HeapDataI.[r]
         // `min` handles the length-1 singleton broadcast (indices are always
         // < length otherwise) in ONE instruction — no modulo, no select chain
         let e = min v (uniform.HeapDataI.[r + 1] - 1)
-        if tid = 13 then                                            // f32 x3 (V3f/C3f) — HOT
+        // every arm is gated on a DISABLED-mask bit: `dis` is a specialization
+        // constant, so a disabled arm's condition folds to false at PIPELINE
+        // compile and the arm (incl. its register footprint) is dead-coded.
+        // Disabled-but-present hot arms degrade GRACEFULLY (the generic arm
+        // computes the same result); the mask is inferred per bucket from the
+        // typeIds actually allocated, so that only happens for one frame when
+        // a brand-new source type joins a live bucket.
+        if (dis &&& 2) = 0 && tid = 13 then                         // f32 x3 (V3f/C3f) — HOT
             let o = r + 4 + e * 3
             V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], 1.0f)
-        elif tid = 14 then                                          // f32 x4 (V4f/C4f) — HOT
+        elif (dis &&& 4) = 0 && tid = 14 then                       // f32 x4 (V4f/C4f) — HOT
             let o = r + 4 + e * 4
             V4f(uniform.HeapData.[o], uniform.HeapData.[o + 1], uniform.HeapData.[o + 2], uniform.HeapData.[o + 3])
-        elif tid = 40 then                                          // normalized C4b (BGRA memory layout) — HOT
+        elif (dis &&& 32) = 0 && tid = 40 then                      // normalized C4b (BGRA memory layout) — HOT
             let w = uniform.HeapDataI.[r + 4 + e]
             V4f(float32 ((w >>> 16) &&& 0xFF), float32 ((w >>> 8) &&& 0xFF), float32 (w &&& 0xFF), float32 ((w >>> 24) &&& 0xFF)) / 255.0f
         else
@@ -1817,23 +1853,23 @@ module Heap =
             let comps = tid - cls * 10
             let o = r + 4 + e * comps * (if cls = 3 then 2 else 1)
             let c0 =
-                if cls = 3 then decodeHeapF64 o
-                elif cls = 2 then float32 uniform.HeapDataI.[o]
+                if (dis &&& 16) = 0 && cls = 3 then decodeHeapF64 o
+                elif (dis &&& 8) = 0 && cls = 2 then float32 uniform.HeapDataI.[o]
                 else uniform.HeapData.[o]
             let c1 =
                 if comps < 2 then 0.0f
-                elif cls = 3 then decodeHeapF64 (o + 2)
-                elif cls = 2 then float32 uniform.HeapDataI.[o + 1]
+                elif (dis &&& 16) = 0 && cls = 3 then decodeHeapF64 (o + 2)
+                elif (dis &&& 8) = 0 && cls = 2 then float32 uniform.HeapDataI.[o + 1]
                 else uniform.HeapData.[o + 1]
             let c2 =
                 if comps < 3 then 0.0f
-                elif cls = 3 then decodeHeapF64 (o + 4)
-                elif cls = 2 then float32 uniform.HeapDataI.[o + 2]
+                elif (dis &&& 16) = 0 && cls = 3 then decodeHeapF64 (o + 4)
+                elif (dis &&& 8) = 0 && cls = 2 then float32 uniform.HeapDataI.[o + 2]
                 else uniform.HeapData.[o + 2]
             let c3 =
                 if comps < 4 then 1.0f
-                elif cls = 3 then decodeHeapF64 (o + 6)
-                elif cls = 2 then float32 uniform.HeapDataI.[o + 3]
+                elif (dis &&& 16) = 0 && cls = 3 then decodeHeapF64 (o + 6)
+                elif (dis &&& 8) = 0 && cls = 2 then float32 uniform.HeapDataI.[o + 3]
                 else uniform.HeapData.[o + 3]
             V4f(c0, c1, c2, c3)
 
@@ -1841,15 +1877,16 @@ module Heap =
     /// sources truncate (well-defined casts), C4b unpacks to raw 0..255 ints.
     [<ReflectedDefinition>]
     let private decodeHeapV4i (r : int) (v : int) : V4i =
+        let dis = uniform.HeapSpecDisabledI
         let tid = uniform.HeapDataI.[r]
         let e = min v (uniform.HeapDataI.[r + 1] - 1)
-        if tid = 23 then                                            // i32 x3 — HOT
+        if (dis &&& 2) = 0 && tid = 23 then                         // i32 x3 — HOT
             let o = r + 4 + e * 3
             V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], 1)
-        elif tid = 24 then                                          // i32 x4 — HOT
+        elif (dis &&& 4) = 0 && tid = 24 then                       // i32 x4 — HOT
             let o = r + 4 + e * 4
             V4i(uniform.HeapDataI.[o], uniform.HeapDataI.[o + 1], uniform.HeapDataI.[o + 2], uniform.HeapDataI.[o + 3])
-        elif tid = 40 then                                          // C4b (BGRA memory layout) -> raw 0..255
+        elif (dis &&& 32) = 0 && tid = 40 then                      // C4b (BGRA memory layout) -> raw 0..255
             let w = uniform.HeapDataI.[r + 4 + e]
             V4i((w >>> 16) &&& 0xFF, (w >>> 8) &&& 0xFF, w &&& 0xFF, (w >>> 24) &&& 0xFF)
         else
@@ -1858,23 +1895,23 @@ module Heap =
             let comps = tid - cls * 10
             let o = r + 4 + e * comps * (if cls = 3 then 2 else 1)
             let c0 =
-                if cls = 3 then int (decodeHeapF64 o)
-                elif cls = 1 then int uniform.HeapData.[o]
+                if (dis &&& 16) = 0 && cls = 3 then int (decodeHeapF64 o)
+                elif (dis &&& 8) = 0 && cls = 1 then int uniform.HeapData.[o]
                 else uniform.HeapDataI.[o]
             let c1 =
                 if comps < 2 then 0
-                elif cls = 3 then int (decodeHeapF64 (o + 2))
-                elif cls = 1 then int uniform.HeapData.[o + 1]
+                elif (dis &&& 16) = 0 && cls = 3 then int (decodeHeapF64 (o + 2))
+                elif (dis &&& 8) = 0 && cls = 1 then int uniform.HeapData.[o + 1]
                 else uniform.HeapDataI.[o + 1]
             let c2 =
                 if comps < 3 then 0
-                elif cls = 3 then int (decodeHeapF64 (o + 4))
-                elif cls = 1 then int uniform.HeapData.[o + 2]
+                elif (dis &&& 16) = 0 && cls = 3 then int (decodeHeapF64 (o + 4))
+                elif (dis &&& 8) = 0 && cls = 1 then int uniform.HeapData.[o + 2]
                 else uniform.HeapDataI.[o + 2]
             let c3 =
                 if comps < 4 then 1
-                elif cls = 3 then int (decodeHeapF64 (o + 6))
-                elif cls = 1 then int uniform.HeapData.[o + 3]
+                elif (dis &&& 16) = 0 && cls = 3 then int (decodeHeapF64 (o + 6))
+                elif (dis &&& 8) = 0 && cls = 1 then int uniform.HeapData.[o + 3]
                 else uniform.HeapDataI.[o + 3]
             V4i(c0, c1, c2, c3)
 
@@ -3132,6 +3169,8 @@ module Heap =
         let derivedCells = derivedPlan |> Array.map (fun (c, _, _) -> c) |> Set.ofArray
         let scope = Ag.Scope.Root
         let symData = Symbol.Create "HeapData"
+        let symSpecDisF = Symbol.Create "HeapSpecDisabledF"
+        let symSpecDisI = Symbol.Create "HeapSpecDisabledI"
         let symPickIds = Symbol.Create "HeapPickIds"
         let symDataI = Symbol.Create "HeapDataI"
         let symDataD = Symbol.Create "HeapDataD"   // native double view of the arena (fp64-requested uniforms)
@@ -3387,6 +3426,28 @@ module Heap =
         let mutable slotPageAllDirty = false
         let pickIdsDirty = System.Collections.Generic.HashSet<int>()    // slots
         let mutable pickIdsAllDirty = false
+        // ── SPEC-CONSTANT ARM INFERENCE: bits of decode-ladder arms this bucket's
+        //    content actually needs (armBitsOfTid, union over both decoders).
+        //    Observed CPU-side wherever an attribute typeId is resolved; published
+        //    to `observedArmsVal` via a post-evaluation transact (same discipline
+        //    as ScheduleTouchIfClean — we are inside the updater's evaluation).
+        //    -1 = nothing published yet -> SpecConstants stays EMPTY (unspecialized,
+        //    all arms enabled) so the first frames are correct by construction; the
+        //    first publish tightens the pipeline to exactly the observed set. A
+        //    brand-new source type joining a LIVE bucket widens one frame late
+        //    (hot arms degrade gracefully through the generic arm meanwhile). ──
+        let mutable observedArms = 0
+        let observedArmsVal = cval -1
+        let observeScheduled = ref 0
+        let observeArms (bits : int) =
+            if bits <> 0 && (observedArms &&& bits) <> bits then
+                observedArms <- observedArms ||| bits
+                if System.Threading.Interlocked.Exchange(observeScheduled, 1) = 0 then
+                    System.Threading.Tasks.Task.Run(fun () ->
+                        System.Threading.Interlocked.Exchange(observeScheduled, 0) |> ignore
+                        let bits = observedArms
+                        transact (fun () ->
+                            observedArmsVal.Value <- (max 0 observedArmsVal.Value) ||| bits)) |> ignore
         // ── CLUSTER state (useClusters): per (page, class) live-slot lists; the
         //    last pseudo-class holds OVERSIZED slots (exact per-slot records).
         //    ClassSlots buffer + records are FULL-REWRITTEN per flush (tiny /
@@ -3949,6 +4010,9 @@ module Heap =
                 match ro.VertexAttributes.TryGetAttribute sym with
                 | ValueSome b -> b
                 | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing shader input attribute %A" sym
+            (match attrTypeId bv.ElementType with
+             | ValueSome t -> observeArms (armBitsOfTid t)
+             | ValueNone -> ())
             match bv.Buffer with
             | :? ISingleValueBuffer as svb ->
                 AttrKey.Single svb.Value, allocSingle svb.Value bv.ElementType
@@ -4658,9 +4722,27 @@ module Heap =
         // provider answering ONLY heap-internal names (arena/headers/textures/
         // atlas/user sampler arrays) — user uniforms are gathered regions, never
         // resolved from a member.
+        // DISABLED-arm masks for the RO (Vulkan spec constants; GL reads the same
+        // values as ordinary uniforms via the provider below). Inference-only —
+        // NEVER user-specified. Empty map until the first publish = unspecialized.
+        let specDisabled =
+            observedArmsVal |> AVal.map (fun bits ->
+                if bits < 0 then 0 else 0b111111 &&& ~~~bits)
+        let specConstantsVal =
+            // AARDVARK_HEAP_NO_SPEC=1: bisect switch — render unspecialized
+            if System.Environment.GetEnvironmentVariable "AARDVARK_HEAP_NO_SPEC" = "1" then
+                AVal.constant Map.empty
+            else
+                observedArmsVal |> AVal.map (fun bits ->
+                    if bits < 0 then Map.empty
+                    else
+                        let dis = 0b111111 &&& ~~~bits
+                        Map.ofList [ "HeapSpecDisabledF", dis; "HeapSpecDisabledI", dis ])
+
         let bucketRO =
             let ro = RenderObject.Clone ro0
             ro.IsActive <- AVal.constant true      // per-draw gating lives in the indirect buffer
+            ro.SpecConstants <- specConstantsVal
             // ALL pipeline state comes from the bucket KEY's resolved VALUES, baked
             // as constants — never from a member's live avals: a member whose
             // dynamic state aval changes MOVES buckets (regroup pass) and must not
@@ -4752,6 +4834,9 @@ module Heap =
                         // to arenaU when the bucket has no derived uniforms.
                         if name = symData || name = symDataI || name = symDataD then ValueSome derivedU
                         elif name = symHeaders then ValueSome headersU
+                        // GL fallback: the spec-constant masks as live uniforms
+                        // (same values, runtime-branched instead of dead-coded)
+                        elif name = symSpecDisF || name = symSpecDisI then ValueSome (specDisabled :> IAdaptiveValue)
                         elif picking && name = symPickIds then ValueSome pickIdU
                         elif useClusters && name = symClassSlots then ValueSome classSlotsU
                         else

@@ -410,6 +410,13 @@ type DevicePreparedRenderObjectExtensions private() =
             let multisampleState =
                 this.CreateMultisampleState(renderPass, ro.RasterizerState.Multisample, program)
 
+            // constant-empty spec constants (the default) skip the whole
+            // specialization path — byte-identical to the pre-spec behavior.
+            let specialization =
+                let sc = ro.SpecConstants
+                if sc.IsConstant && Map.isEmpty (AVal.force sc) then None
+                else Some (this.CreateSpecialization(program, sc))
+
             let pipeline =
                 this.CreatePipeline(
                     program,
@@ -419,7 +426,8 @@ type DevicePreparedRenderObjectExtensions private() =
                     rasterizerState,
                     colorBlendState,
                     depthStencilState,
-                    multisampleState
+                    multisampleState,
+                    specialization
                 )
 
             resources.Add pipeline

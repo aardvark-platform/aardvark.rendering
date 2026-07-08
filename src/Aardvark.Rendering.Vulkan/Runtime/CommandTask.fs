@@ -95,7 +95,8 @@ type ResourceManagerExtensions private() =
                 rasterizerState,
                 colorBlendState,
                 depthStencilState,
-                multisampleState
+                multisampleState,
+                None    // command-API PipelineState has no spec-constant surface (yet)
             )
         {
             ppPipeline  = pipeline

@@ -1295,6 +1295,61 @@ module Resources =
 
             true
 
+    /// VkSpecializationInfo for a pipeline: constant values keyed by FShade
+    /// `SpecConstants` member NAME, resolved to constant_ids through the
+    /// program interface. Names the program doesn't declare are ignored;
+    /// declared-but-unset constants keep their zero defaults (unspecialized
+    /// behavior). Entry/data memory follows the ColorBlendStateResource
+    /// discipline: allocated unmanaged, freed in Destroy — never a managed
+    /// array (the create-info must stay valid while vkCreateGraphicsPipelines
+    /// reads it).
+    type SpecializationResource(owner : IResourceCache, key : list<obj>,
+                                program : IResourceLocation<ShaderProgram>,
+                                values : aval<Map<string, int>>) =
+        inherit AbstractPointerResource<VkSpecializationInfo>(owner, key)
+
+        let mutable pEntries = NativePtr.zero<VkSpecializationMapEntry>
+        let mutable pData = NativePtr.zero<int>
+        let mutable capacity = 0
+
+        override x.Create() =
+            base.Create()
+            program.Acquire()
+
+        override x.Destroy() =
+            if capacity > 0 then
+                NativePtr.free pEntries
+                NativePtr.free pData
+                pEntries <- NativePtr.zero
+                pData <- NativePtr.zero
+                capacity <- 0
+            program.Release()
+            base.Destroy()
+
+        override x.Update(handle : VkSpecializationInfo byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            let prog = program.Update(user, token, renderToken).handle
+            let values = values.GetValue(user, token, renderToken)
+            let iface = prog.Interface
+            let resolved =
+                values |> Map.toArray |> Array.choose (fun (name, v) ->
+                    match MapExt.tryFind name iface.specConstants with
+                    | Some sc -> Some (uint32 sc.specId, v)
+                    | None -> None)
+            let n = resolved.Length
+            if n > capacity then
+                if capacity > 0 then
+                    NativePtr.free pEntries
+                    NativePtr.free pData
+                pEntries <- NativePtr.alloc n
+                pData <- NativePtr.alloc n
+                capacity <- n
+            for i in 0 .. n - 1 do
+                let (cid, v) = resolved.[i]
+                NativePtr.set pEntries i (VkSpecializationMapEntry(cid, uint32 (i * 4), uint64 4))
+                NativePtr.set pData i v
+            handle <- VkSpecializationInfo(uint32 n, pEntries, uint64 (n * 4), NativePtr.toNativeInt pData)
+            true
+
     // Sample shading is taken from the linked ShaderProgram's
     // `SampleShading` flag, which `ShaderProgram.fragmentInfo` derives from
     // whether the fragment shader references gl_SampleID / gl_SampleMaskIn /
@@ -1528,7 +1583,8 @@ module Resources =
                           rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
                           colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
                           depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
-                          multisample : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>) =
+                          multisample : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>,
+                          specialization : option<INativeResourceLocation<VkSpecializationInfo>>) =
         inherit AbstractPointerResource<VkPipeline>(owner, key)
 
         let device = renderPass.Device
@@ -1542,6 +1598,7 @@ module Resources =
             colorBlendState.Acquire()
             depthStencil.Acquire()
             multisample.Acquire()
+            specialization |> Option.iter (fun s -> s.Acquire())
 
         override x.Destroy() =
             base.Destroy()
@@ -1552,11 +1609,35 @@ module Resources =
             colorBlendState.Release()
             depthStencil.Release()
             multisample.Release()
+            specialization |> Option.iter (fun s -> s.Release())
 
         override x.Update(handle : VkPipeline byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             let prog = program.Update(user, token, renderToken).handle
 
-            use pShaderCreateInfos = fixed prog.ShaderCreateInfos
+            // SPECIALIZATION: the ShaderProgram's stage array is SHARED across
+            // pipelines and must keep its null pSpecializationInfo — build a
+            // per-pipeline copy pointing at this pipeline's VkSpecializationInfo.
+            // An empty value set degrades to the shared array (byte-identical
+            // to the unspecialized path).
+            let pSpec =
+                match specialization with
+                | Some s ->
+                    s.Update(user, token, renderToken) |> ignore
+                    let info : VkSpecializationInfo = NativePtr.read s.Pointer
+                    if info.mapEntryCount = 0u then NativePtr.zero else s.Pointer
+                | None ->
+                    NativePtr.zero
+
+            let stageInfos =
+                if NativePtr.toNativeInt pSpec = 0n then
+                    prog.ShaderCreateInfos
+                else
+                    let arr = Array.copy prog.ShaderCreateInfos
+                    for i in 0 .. arr.Length - 1 do
+                        arr.[i].pSpecializationInfo <- pSpec
+                    arr
+
+            use pShaderCreateInfos = fixed stageInfos
 
             let mutable viewportState =
                 let vp  =
@@ -1614,7 +1695,7 @@ module Resources =
             let mutable createInfo =
                 VkGraphicsPipelineCreateInfo(
                     VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
-                    uint32 prog.ShaderCreateInfos.Length,
+                    uint32 stageInfos.Length,
                     pShaderCreateInfos,
                     inputState,
                     inputAssembly,
@@ -2065,6 +2146,7 @@ type ResourceManager(device : Device) =
     let viewportCache           = NativeResourceLocationCache<VkViewport>(device)
     let scissorCache            = NativeResourceLocationCache<VkRect2D>(device)
     let pipelineCache           = NativeResourceLocationCache<VkPipeline>(device)
+    let specializationCache     = NativeResourceLocationCache<VkSpecializationInfo>(device)
 
     let drawCallCache           = NativeResourceLocationCache<DrawCall>(device)
     let bufferBindingCache      = NativeResourceLocationCache<VertexBufferBinding>(device)
@@ -2106,6 +2188,7 @@ type ResourceManager(device : Device) =
         depthStencilCache.Clear()
         rasterizerStateCache.Clear()
         colorBlendStateCache.Clear()
+        specializationCache.Clear()
         multisampleCache.Clear()
         viewportCache.Clear()
         scissorCache.Clear()
@@ -2494,6 +2577,12 @@ type ResourceManager(device : Device) =
             fun cache key -> ScissorResource(cache, key, scissor)
         )
 
+    member x.CreateSpecialization(program : IResourceLocation<ShaderProgram>, values : aval<Map<string, int>>) =
+        specializationCache.GetOrCreate(
+            [ program :> obj; values :> obj ],
+            fun cache key -> SpecializationResource(cache, key, program, values)
+        )
+
     member x.CreatePipeline(program         : IResourceLocation<ShaderProgram>,
                             pass            : RenderPass,
                             inputState      : INativeResourceLocation<VkPipelineVertexInputStateCreateInfo>,
@@ -2501,10 +2590,19 @@ type ResourceManager(device : Device) =
                             rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
                             colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
                             depthStencil    : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
-                            multisample     : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>) =
+                            multisample     : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>,
+                            specialization  : option<INativeResourceLocation<VkSpecializationInfo>>) =
+
+        // spec values are part of the pipeline identity: two draws whose
+        // constants differ must never share a VkPipeline (a sentinel keys the
+        // unspecialized case so existing pipelines keep their cache entries).
+        let specKey =
+            match specialization with
+            | Some s -> s :> obj
+            | None -> "no-specialization" :> obj
 
         pipelineCache.GetOrCreate(
-            [ program :> obj; pass :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; depthStencil :> obj; multisample :> obj ],
+            [ program :> obj; pass :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; depthStencil :> obj; multisample :> obj; specKey ],
             fun cache key ->
                 PipelineResource(
                     cache, key,
@@ -2515,7 +2613,8 @@ type ResourceManager(device : Device) =
                     rasterizerState,
                     colorBlendState,
                     depthStencil,
-                    multisample
+                    multisample,
+                    specialization
                 )
 
         )

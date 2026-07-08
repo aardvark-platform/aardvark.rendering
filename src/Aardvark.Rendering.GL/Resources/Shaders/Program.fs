@@ -124,6 +124,7 @@ module ProgramExtensions =
                         enabledExtensions = enabledGLSLExts
                         availableExtensions = Map.empty
                         createUniformBuffers = uniformBuffers
+                        specConstants = false    // GL: SpecConstants-scope members stay ordinary uniforms
                         bindingMode = bindingMode
                         createDescriptorSets = false
                         stepDescriptorSets = false
@@ -382,6 +383,7 @@ module ProgramExtensions =
                                         images                      = MapExt.empty
                                         storageBuffers              = MapExt.empty
                                         uniformBuffers              = MapExt.empty
+                                        specConstants               = MapExt.empty
                                         shaders                     = FShade.GLSL.GLSLProgramShaders.Graphics { stages = MapExt.empty }
                                         accelerationStructures      = MapExt.empty
                                         samplerStates               = MapExt.empty

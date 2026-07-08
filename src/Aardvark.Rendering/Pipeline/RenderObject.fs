@@ -50,6 +50,7 @@ and RenderObject private (id                 : RenderObjectId,
                           instanceAttributes : IAttributeProvider,
                           vertexAttributes   : IAttributeProvider,
                           uniforms           : IUniformProvider,
+                          specConstants      : aval<Map<string, int>>,
                           activate           : unit -> IDisposable,
                           isTransparent      : bool) =
     static let empty =
@@ -70,6 +71,7 @@ and RenderObject private (id                 : RenderObjectId,
             instanceAttributes = AttributeProvider.Empty,
             vertexAttributes   = AttributeProvider.Empty,
             uniforms           = UniformProvider.Empty,
+            specConstants      = AVal.constant Map.empty,
             activate           = nopActivate,
             isTransparent      = false
         )
@@ -90,6 +92,12 @@ and RenderObject private (id                 : RenderObjectId,
     member val InstanceAttributes = instanceAttributes with get, set
     member val VertexAttributes   = vertexAttributes   with get, set
     member val Uniforms           = uniforms           with get, set
+    /// Vulkan specialization-constant values by FShade `SpecConstants`-scope
+    /// member name, applied at pipeline creation (VkSpecializationInfo).
+    /// Empty = unspecialized (the shader's zero defaults). Backends without
+    /// specialization support (GL) ignore this and bind the members as
+    /// ordinary uniforms instead.
+    member val SpecConstants      = specConstants      with get, set
     member val Activate           = activate           with get, set
     /// If true, this object writes order-independent transparency (weighted blended OIT) outputs
     /// rather than the framebuffer's normal color attachments. The RenderTask groups all
@@ -116,6 +124,7 @@ and RenderObject private (id                 : RenderObjectId,
             instanceAttributes = other.InstanceAttributes,
             vertexAttributes   = other.VertexAttributes,
             uniforms           = other.Uniforms,
+            specConstants      = other.SpecConstants,
             activate           = other.Activate,
             isTransparent      = other.IsTransparent
         )
