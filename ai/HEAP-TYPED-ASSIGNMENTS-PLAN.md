@@ -219,12 +219,23 @@ Setup: AARDVARK_VULKAN_LIBRARY=<sdk>/lib/libvulkan.dylib + VK_DRIVER_FILES=
 <sdk>/share/vulkan/icd.d/libkosmickrisp_icd.json + AARDVARK_INLINE_RENDERPASS=1
 (KK exposes NO portability_subset -> the useInline gate misses -> its beta
 crashes in vk_common_CmdExecuteCommands; crash-report-confirmed) +
-HEAPSPIKE_NO_GPU_QUERY=1 (queries still device-lose). Results @200k (CPU-
-blocking measure): golden + mixedtypes PASS (second Mesa compiler validates
-typed partitions on Apple silicon); baked 4.10 vs MoltenVK 4.19 = PARITY;
-heap JIT 8.24 vs 6.16 (KK slower on gather-heavy paths — CONFOUNDED by inline
-re-emit CPU); JIT win −25% under KK. Follow-up if KK matters: driver-name
-check in the useInline gate + demo-harness no-query fallback.
+HEAPSPIKE_NO_GPU_QUERY=1 / CADSCENE_NO_GPU_QUERY=1 (KK has NO timestamps:
+queue family reports timestampValidBits = 0 — legal under full conformance,
+timestamps are optional per queue family; aardvark wrote them anyway =
+VUID-vkCmdWriteTimestamp-timestampValidBits-00829 -> device lost. FIXED in
+1a9ba225: CreateTimeQuery returns EmptyTimeQuery when timestampBits = 0, so
+queries-on merely reads zero; validated under KK). All KK numbers below are
+blocking task.Run CPU (~= GPU + ~1 ms, includes inline re-emit CPU).
+
+Correctness: golden + mixedtypes PASS (second Mesa compiler validates typed
+partitions on Apple silicon). DEMO d1-9 clean-room floors, KK vs (MVK CPU col):
+one-draw 8.9 (7.8) | MDI floor 23.0 (24.6) | heap lean 20.0 (12.5) ->
+heap/achievable 0.87x — heap BEATS classic MDI on KK too. Full demo: JIT 21.2
+vs no-spec 29.3 = −28% (MVK −37%). Readings: the per-record MDI tax is nearly
+identical on both layers (23.0 vs 24.6) -> the Apple "heap beats classic"
+result is Vulkan-on-Metal INHERENT, not a MoltenVK artifact. KK's gather-heavy
+codegen (Mesa NIR->MSL) trails SPIRV-Cross by ~60% (heap lean 20.0 vs 12.5)
+while plain streaming is near parity (8.9 vs 7.8).
 
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
