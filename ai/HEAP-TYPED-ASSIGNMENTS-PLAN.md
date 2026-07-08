@@ -255,6 +255,32 @@ floors 4.2/4.2, heap 5.1/5.7/8.5 — exact match). Fallout fixed along the way:
 demo saved PNGs to hardcoded /tmp (crash on stock Windows -> Path.GetTempPath,
 try-wrapped). Package sources: ~/arcbench/pkg + pkg-linux on airtop.
 
+### RGA static analysis of the demo heap VS (2026-07-08, RGA 2.14.2, gfx1150 = 890M)
+Method: carve post-opt SPIR-V from the aardvark shader cache
+(~/.local/share/Aardvark/Cache/Shaders/Vulkan/*.effect — scan for magic
+07230203, cut at last OpFunctionEnd; the GLSL source is in the same blob,
+compile with -DVertex). Typed variant emulated via spirv-opt
+--set-spec-const-default-value "0:13 1:21 2:40 3:13 4:2" --freeze-spec-const
+(real demo tids: V3f=13 int=21 C4b=40 idx-u16=2).
+
+| variant | VGPR | SGPR | spills | scratch | ISA bytes | mem ops |
+|---|---|---|---|---|---|---|
+| generic (shipped, post-spirv-opt) | 32/256 | 44 | 0 | 0 | 5924 | 85 |
+| generic (UNOPTIMIZED glslang)     | 32/256 | 44 | 0 | 0 | 5924 | — |
+| typed (spec consts frozen)        | 34/256 | 28 | 0 | 0 | 1088 | 24 |
+
+Three verdicts: (1) our spirv-opt optimizeDefault is IRRELEVANT on AMD — the
+backend produces byte-identical ISA from opt and unopt SPIR-V; (2) register
+pressure is NOT the APU problem — 32-34 of 256 VGPRs, zero spills, max
+theoretical occupancy in BOTH variants, so no cheap register fix exists;
+(3) the JIT quantified at ISA level: -82% code (5924->1088 B), 85->24 memory
+ops, which is why it pays everywhere. With occupancy maxed and waves
+available, the remaining 2.5x APU gap is pure memory-system latency on
+scattered gathers -> locality-by-compaction CONFIRMED as the lever (and/or
+reducing the ~24 loads/vertex). Next dynamic step: SQTT capture on hekla RADV
+(MESA_VK_TRACE=rgp) to read the stall composition; blocked while PoE2 owns
+that GPU.
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
