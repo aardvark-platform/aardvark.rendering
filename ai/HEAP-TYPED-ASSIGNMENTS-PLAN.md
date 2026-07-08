@@ -137,8 +137,18 @@ vienna_d9c), same machines, plus the `--baseline` baked floor:
 | macbook M1 Max     | 21.4 | 13.4 | −37% | 6.8  | 3.15× → 1.97× |
 | zephyrus (default) | 21.3 | 16.4 | −23% | 15.3 | 1.39× → 1.07× |
 
-SHIPPED: FShade 5.7.15 (master), Aardvark.Rendering 5.7.0-prerelease0047 (v57),
-CadSceneDemo bumped + pushed. Publish-workflow gotcha: path-filtered to
+iGPU columns (0048, AARDVARK_VULKAN selection; "before" = AARDVARK_HEAP_NO_SPEC=1
+on the same build — the unspecialized path is behavior-identical to 0046):
+| iGPU | before-equiv | JIT | win | floor | ratio |
+|------|-------------:|----:|-----|------:|-------|
+| hekla RDNA2 (RADV)  | 126.2 | 80.3  | −36% | 38.3 | 3.30× → 2.10× |
+| zephyrus 890M (AMD) | 116.0 | 100.9 | −13% | 46.7 | 2.48× → 2.16× |
+Zephyrus DEFAULT device identified: RTX 4070 Laptop GPU (the main-table zephyrus
+rows are that device — power-limited, hence 16.4 vs desktop-4070Ti 4.6).
+
+SHIPPED: FShade 5.7.15 (master), Aardvark.Rendering 5.7.0-prerelease0047 +
+0048 (AARDVARK_VULKAN=integrated|discrete|<name> default-chooser override;
+explicit choosers always win) (v57), CadSceneDemo bumped + pushed. Publish-workflow gotcha: path-filtered to
 RELEASE_NOTES.md — a fix commit that doesn't touch it publishes NOTHING
 (retrigger via a notes touch). Blanket `dotnet paket update` broke CI once
 (FsCheck 2→3): use TARGETED per-package updates.
