@@ -117,6 +117,19 @@ every remaining laddered field.
 6. **Ship chain**: fshade `spec-constants` branch → master + release;
    rendering v57 (60f3c48d + this) + paket bump; heap wiring rides rendering.
 
+## 3b. Demo before/after (CadSceneDemo --offscreen, vienna_d9 = districts 1-9,
+##     246,655 parts; mac dataset is an older packing with 200,882 parts)
+
+BEFORE (published 0046 + dom 0017 + fshade 5.7.12), REAL GPU orbit avg:
+| machine  | GPU ms | task.Run CPU ms | note |
+|----------|-------:|----------------:|------|
+| airtop RTX 5060   | 8.5  | 8.9  | |
+| hekla RTX 4070 Ti | 5.8  | 7.5  | |
+| macbook M1 Max    | 19.4 | 20.1 | 200,882-part dataset |
+| zephyrus (default device) | 21.3 | — | demo doesn't print the device; same chooser both runs |
+
+AFTER (0047 typed-assignment JIT): pending release.
+
 ## 4. Gotchas already learned (2026-07-08 session)
 
 - Spec constants ≡ codegen dead-code: PROVEN identical (5060 12.49/12.50,

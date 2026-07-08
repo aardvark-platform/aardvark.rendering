@@ -1,3 +1,10 @@
+### 5.7.0-prerelease0047
+- [Sg] Heap: TYPED ASSIGNMENTS — a tiered "JIT" for the decode ladder. Per-attribute source typeIds become Vulkan specialization constants (inferred per bucket, never user-specified); slots partition by their tid vector: a dynamic partition (unspecialized, always-correct) stages new slots and hosts rare assignments, populous assignments (>= 64 slots) materialize into typed partitions whose pipelines fold the ladder to one arm — the header tid is never read. Renderbench vs unspecialized: RTX 5060 @700k 9.16 vs 13.86 ms (heap/baked = 0.99x — PARITY), M1 Max −38%, RADV RDNA2 −32% (3.3x -> 2.31x), Radeon 890M −24%.
+- [Vulkan] specialization-constant plumbing: RenderObject.SpecConstants (aval<Map<string,int>>, name-resolved via the FShade `SpecConstants` scope interface, requires FShade >= 5.7.15), per-pipeline VkSpecializationInfo with spec values in the pipeline cache key.
+- [Vulkan] async pipeline specialization: specialized pipelines compile on a background thread while the unspecialized twin renders — no hitch, no wrong pixel; borrowed handles never destroyed.
+- [Sg] HeapSpike: `mixedtypes` probe (typed partitions pixel-verified through materialize/dematerialize/re-materialize) + `fsgather`/`churnperf` probes; renderbench `--churnperf` measures locality decay under churn.
+- [Sg] Heap: content-only changes stopped recompiling VKVM commands and full-rewriting pick-id/slot-page mirrors (dirty-slot flushes) — carried over from 0046 line.
+
 ### 5.7.0-prerelease0046
 - [Vulkan] HeapRenderObjectCommand no longer subscribes to the dispatch group-count avals at compile time (the pre-pass re-records dispatches every frame anyway) — content-only heap changes cause ZERO command recompiles; a command compiles once per structural generation.
 - [Sg] Heap: pick-id and slot->page mirrors flush dirty slots as gap-merged sub-ranges instead of full rewrites per updater version (a recolor no longer re-uploads highWater*4 bytes twice).
