@@ -7,11 +7,15 @@ probes green. Inferred A/B vs AARDVARK_HEAP_NO_SPEC=1:
 **5060 @700k 9.16 vs 13.86 (−34%, ≈1.0× vs baked — PARITY); M1 5.43 vs 8.75
 (−38%, 1.53× vs baked); RADV @200k 53.9 vs 79.0 same-session (−32%, ratio
 3.3→2.33×); 890M 31.65 vs 41.66 (−24%).** Index typing beat the Q&D numbers.
-REMAINING: §3.2–3.4 assignment partitioning (removes the interim mixed-type
-one-frame hazard + bucket-wide de-specialization), §3.5 mixedtypes probe,
-async pipeline creation, §3.6 ship chain (fshade release first!).
-User directive: v2 (assignment partitioning) is an immediate need — NO
-bucket-wide dynamic fallback.
+**COMPLETE (2026-07-08, commits 4746222d + 73df3cdd + b70b9dd5): assignment
+partitioning (dynamic staging partition + population-gated typed partitions,
+materialize 64 / dematerialize 16 / re-materialize under fresh ids),
+`mixedtypes` probe (materialize/demat/remat pixel-verified vs classic, PASS on
+5060 + RADV + 890M + M1), async pipeline specialization (background compile,
+unspecialized-fallback publish, ownsHandle borrow guard). All probes green on
+all four machines; renderbench holds: 5060 9.16ms/0.99×, M1 5.43/1.53×, RADV
+51.3/2.31×, 890M 31.8.** REMAINING: §3.6 ship chain only (fshade release →
+rendering → packaging — user parked deliberately).
 
 ## 1. The result this is built on (all measured 2026-07-08)
 
