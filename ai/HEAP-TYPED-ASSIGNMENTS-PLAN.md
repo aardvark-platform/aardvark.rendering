@@ -237,6 +237,24 @@ result is Vulkan-on-Metal INHERENT, not a MoltenVK artifact. KK's gather-heavy
 codegen (Mesa NIR->MSL) trails SPIRV-Cross by ~60% (heap lean 20.0 vs 12.5)
 while plain streaming is near parity (8.9 vs 7.8).
 
+### arcbench: downloadable benchmark package (2026-07-08)
+For collecting table rows from machines we don't own (first target: a friend's
+Intel Arc). https://georg.haaser.me/arcbench.zip (win-x64, 913 MB) and
+arcbench-linux.tar.gz (linux-x64, 813 MB) — self-contained (bundled .NET),
+zero args/env/installs: extract, run run.cmd / ./run.sh, send back results.txt.
+Contents: CadSceneDemo + HeapSpike publishes + vienna d1-9 (3.7 GB unpacked).
+The runner ENUMERATES GPUs via the demo's --listgpus mode (prints
+GPU|name|type; skips Cpu-type = llvmpipe) and runs one section per device via
+AARDVARK_VULKAN=<name>. Per section: golden + mixedtypes probes, renderbench
+200k JIT/no-spec, demo floors (--baseline: one-draw + MDI), demo heap
+lean/JIT/no-spec — a complete driver-matrix row per GPU.
+Verified end-to-end: zephyrus (dual-GPU Windows; "(TM)" name survives batch
+parsing; 890M floors 43.2/35.4, heap 93.3/94.4/107.4; 4070L floors 6.3/4.7,
+heap 6.2/6.7/8.2 — all match the table) and airtop (single-GPU Linux; 5060
+floors 4.2/4.2, heap 5.1/5.7/8.5 — exact match). Fallout fixed along the way:
+demo saved PNGs to hardcoded /tmp (crash on stock Windows -> Path.GetTempPath,
+try-wrapped). Package sources: ~/arcbench/pkg + pkg-linux on airtop.
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
