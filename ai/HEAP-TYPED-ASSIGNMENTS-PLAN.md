@@ -137,14 +137,20 @@ vienna_d9c), same machines, plus the `--baseline` baked floor:
 | macbook M1 Max     | 21.4 | 13.4 | −37% | 6.8  | 3.15× → 1.97× |
 | zephyrus (default) | 21.3 | 16.4 | −23% | 15.3 | 1.39× → 1.07× |
 
-iGPU columns (0048, AARDVARK_VULKAN selection; "before" = AARDVARK_HEAP_NO_SPEC=1
-on the same build — the unspecialized path is behavior-identical to 0046):
-| iGPU | before-equiv | JIT | win | floor | ratio |
-|------|-------------:|----:|-----|------:|-------|
-| hekla RDNA2 (RADV)  | 126.2 | 80.3  | −36% | 38.3 | 3.30× → 2.10× |
-| zephyrus 890M (AMD) | 116.0 | 100.9 | −13% | 46.7 | 2.48× → 2.16× |
-Zephyrus DEFAULT device identified: RTX 4070 Laptop GPU (the main-table zephyrus
-rows are that device — power-limited, hence 16.4 vs desktop-4070Ti 4.6).
+iGPU + zephyrus-corrected columns (0048, AARDVARK_VULKAN selection; "before" =
+AARDVARK_HEAP_NO_SPEC=1 on the same build — behavior-identical to 0046).
+ZEPHYRUS CONTAMINATION: the ORIGINAL zephyrus rows (21.3/16.4/15.3) were taken
+while a FORGOTTEN windowed demo (the user's, from the previous evening — the
+dom self-sustaining-60Hz-loop bug) pinned the 4070 Laptop at 94% for ~20h.
+Clean + rested A/B/A reruns (drift-free: A/A and B/B within noise):
+| device | before-equiv | JIT | win | floor | ratio |
+|--------|-------------:|----:|-----|------:|-------|
+| zephyrus RTX 4070 Laptop | 8.1 | 6.5 | −20% | 6.6 | 1.23× → **1.0× (AT floor)** |
+| zephyrus 890M (medians of 6 runs; APU noise ±9%) | 113 | 94 | −17% | 46 | 2.46× → 2.04× |
+| hekla RDNA2 (RADV) | 126.2 | 80.3 | −36% | 38.3 | 3.30× → 2.10× |
+Thermal soak proved a NON-issue (hot-chassis vs rested identical); concurrent
+load was the entire distortion. Mesa-software (llvmpipe) passes mixedtypes —
+Mesa compiler stack validated; real ANV pending (airtop UHD630 BIOS-disabled).
 
 SHIPPED: FShade 5.7.15 (master), Aardvark.Rendering 5.7.0-prerelease0047 +
 0048 (AARDVARK_VULKAN=integrated|discrete|<name> default-chooser override;
