@@ -203,6 +203,17 @@ kept above for the record; THIS table is the honest one. MDI-vs-one-draw:
 FASTER on discrete NVIDIA (distributor parallelism), neutral 5060/RADV,
 2x GPU + 2x CPU cost on MoltenVK.
 
+### M1 as partial 2x2 evidence (user insight, 2026-07-08)
+Against the ONE-DRAW floor (emulation-free everywhere): NVIDIA dGPUs 1.05-1.21x,
+M1 Max 1.82x, AMD APUs 2.27-2.53x. Apple shares no software with AMD, yet lands
+BETWEEN — the gather-cost gradient tracks MEMORY-SYSTEM gather-friendliness
+(big dGPU L2 -> SLC/TBDR -> small-cache shared-DRAM APU), not vendor drivers.
+Supports "integrated memory system" over "AMD driver"; locality lever remains
+the indicated medicine. (Confound: TBDR also penalizes vertex-heavy work.)
+CAVEAT on the Apple MDI floor: emulated by MoltenVK — fair vs Vulkan-on-Mac
+engines (= any aardvark deployment), unfair vs native-Metal ICB engines (which
+would land between 6.5 and 12.6). Quote accordingly.
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
