@@ -300,6 +300,31 @@ vertex. Levers, now quantified: (a) locality/compaction to turn DRAM latency
 into cache hits, (b) merging/reducing the 4 dependent gather ROUNDS — each
 round eliminated saves ~900 clk x waves on cache-less APUs.
 
+### Extent-class folding (dee52321, 2026-07-08) — chain shortening, phase 1
+The SQTT-indicated fix: the typed arm still loaded the header LENGTH for the
+singleton-broadcast min, serializing every attribute fetch behind a header
+round. Now a per-field 2-bit EXTENT class rides the spec constants (bits 6-7
+of HeapTidN): 0 = runtime clamp (dynamic partition/staging/GL — byte-identical
+to before), 1 = FULL folds e = vid, 2 = SINGLETON folds e = 0. Assignment keys
+became INTERNED vectors (8x8-bit fields outgrew the int64 bit-pack).
+Classification at ingest (extendTids): len 1 -> singleton (always safe);
+len >= drawn count AND non-indexed -> full (indexed slots address by decoded
+index values — only the runtime clamp guards those); matrix fields (tid > 40)
+never fold. In-place length edits (demo recolor toggles full <-> singleton on
+the makeDynamic in-place path!) and vc changes notify ALL DynRefs ->
+recomputeAssign re-derives the key from per-slot raw tid/len shadows and
+migrates residency + cluster listing.
+
+Measured: RADV iGPU (hekla RAPHAEL_MENDOCINO) renderbench 200k typed 47->40 ms
+(-15%, ratio to baked 2.31x -> 1.96x), no-spec 67.5; 5060 stays at baked
+parity (2.63). All probes green on NVIDIA. KNOWN QUIRK: mixedtypes FAILS its
+exact-match pixel criterion on RADV even FULLY DYNAMIC (~100 edge pixels,
+maxDelta ~150) — pre-existing classic-vs-heap rasterization variance on this
+driver, not a regression (bisected: folds off + NO_SPEC both fail identically).
+Demo-level numbers (890M / lean floors) need the next rendering release +
+demo bump. Remaining chain: non-indexed typed slots should now be ONE
+dependent vector round (record reads are draw-uniform -> SMEM).
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
