@@ -532,7 +532,11 @@ type Runtime(device : Device) as this =
 
     // Queries
     member x.CreateTimeQuery() =
-        new TimeQuery(device) :> ITimeQuery
+        if device.GraphicsFamily.Info.timestampBits > 0 then
+            new TimeQuery(device) :> ITimeQuery
+        else
+            Log.warn "[Vulkan] queue family has timestampValidBits = 0 -> time queries report zero"
+            new EmptyTimeQuery() :> ITimeQuery
 
     member x.CreateOcclusionQuery([<Optional; DefaultParameterValue(true)>] precise : bool) =
         let features = &device.EnabledFeatures.Queries
