@@ -1,3 +1,6 @@
+### 5.7.0-prerelease0048
+- [Vulkan] `AARDVARK_VULKAN=integrated|discrete|<name substring>` selects the physical device whenever the application supplies NO explicit IDeviceChooser (an explicit chooser always wins; unset = previous default behavior; an unmatchable value fails loudly listing the devices).
+
 ### 5.7.0-prerelease0047
 <!-- publish retrigger: paket-lock fix -->
 - [Sg] Heap: TYPED ASSIGNMENTS — a tiered "JIT" for the decode ladder. Per-attribute source typeIds become Vulkan specialization constants (inferred per bucket, never user-specified); slots partition by their tid vector: a dynamic partition (unspecialized, always-correct) stages new slots and hosts rare assignments, populous assignments (>= 64 slots) materialize into typed partitions whose pipelines fold the ladder to one arm — the header tid is never read. Renderbench vs unspecialized: RTX 5060 @700k 9.16 vs 13.86 ms (heap/baked = 0.99x — PARITY), M1 Max −38%, RADV RDNA2 −32% (3.3x -> 2.31x), Radeon 890M −24%.

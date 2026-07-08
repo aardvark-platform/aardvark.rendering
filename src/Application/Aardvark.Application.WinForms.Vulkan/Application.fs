@@ -71,7 +71,7 @@ type VulkanApplication(debug: IDebugConfig,
         if instance.Devices.Length = 0 then
             failwithf "[Vulkan] could not get vulkan devices"
         else
-            let chooser = if deviceChooser <> null then deviceChooser else DeviceChooserVisual()
+            let chooser = if deviceChooser <> null then deviceChooser else DeviceChooser.defaultChooserOr (fun () -> DeviceChooserVisual() :> IDeviceChooser)
             chooser.Run instance.Devices
 
     do instance.PrintInfo(physicalDevice, debug.PlatformInformationVerbosity)

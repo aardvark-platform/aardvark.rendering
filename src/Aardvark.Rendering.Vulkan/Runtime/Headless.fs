@@ -42,7 +42,8 @@ type HeadlessVulkanApplication(debug: IDebugConfig,
         if instance.Devices.Length = 0 then
             failwithf "[Vulkan] could not get vulkan devices"
         else
-            let chooser = if deviceChooser <> null then deviceChooser else DeviceChooserAuto(preferDedicated = true)
+            // an explicitly supplied chooser always wins; the default honors AARDVARK_VULKAN
+            let chooser = if deviceChooser <> null then deviceChooser else DeviceChooser.defaultChooser true
             chooser.Run instance.Devices
 
     do instance.PrintInfo(physicalDevice, debug.PlatformInformationVerbosity)

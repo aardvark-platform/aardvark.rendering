@@ -359,14 +359,14 @@ module Utilities =
     let private deviceChooser (cfg : RenderConfig)=
         match cfg.deviceKind with
         | DeviceKind.Any | DeviceKind.None | DeviceKind.Unknown ->
-            DeviceChooserAuto()
+            DeviceChooser.defaultChooserOr (fun () -> DeviceChooserAuto() :> IDeviceChooser)
 
         | kind ->
             let preferDedicated =
                 kind.HasFlag DeviceKind.Dedicated ||
                 not <| kind.HasFlag DeviceKind.Integrated
 
-            DeviceChooserAuto preferDedicated
+            DeviceChooser.defaultChooserOr (fun () -> DeviceChooserAuto preferDedicated :> IDeviceChooser)
 
     let createApplication (cfg : RenderConfig) =
         match cfg.app with
