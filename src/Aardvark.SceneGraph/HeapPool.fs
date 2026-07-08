@@ -1563,6 +1563,19 @@ module Heap =
     /// range reclamation) and — on the MoltenVK slot-attribute path — the offset
     /// of its per-instance range in the slot-attribute buffer (re-seated by
     /// compaction; InstBlock is the backing HeapSpace block).
+    /// One typed-assignment partition ("JIT tier"): the slots whose per-field
+    /// source-tid vector equals Key render through a pipeline specialized with
+    /// TidMap. Id 0 = the DYNAMIC partition (interpreter tier): unspecialized
+    /// pipeline, staging area for fresh slots and permanent home of the long
+    /// tail (population < materialization threshold).
+    type internal HeapPartition =
+        { Key : int64
+          mutable Id : int
+          TidMap : Map<string, int>
+          mutable Count : int
+          Slots : System.Collections.Generic.List<int>
+          mutable Materialized : bool }
+
     type internal HeapSlot =
         { Slot : int; RegionKeys : IAdaptiveValue[]; Active : aval<bool>
           /// which storage page this slot's group lives on (all its regions are on it);
@@ -3421,39 +3434,96 @@ module Heap =
         let mutable slotPageAllDirty = false
         let pickIdsDirty = System.Collections.Generic.HashSet<int>()    // slots
         let mutable pickIdsAllDirty = false
-        // ── TYPED-ASSIGNMENT tid inference (INTERIM bucket-level publication —
-        //    the per-assignment draw partitioning of ai/HEAP-TYPED-ASSIGNMENTS-
-        //    PLAN.md §3.3/3.4 replaces this): per-attribute-ordinal observed
-        //    source tid (0 = unseen, >0 = unique, -1 = MIXED -> runtime decode)
-        //    plus the index tid, published as spec-constant values via a
-        //    post-evaluation transact (we are inside the updater's evaluation).
-        //    KNOWN interim hazard: a SECOND type arriving for a field renders
-        //    one frame through the stale typed pipeline before the republish
-        //    de-specializes it (partitioning removes this entirely).
-        let fieldTidState : int[] = Array.zeroCreate 8
-        let mutable idxTidState = 0
-        let publishedTids = cval (Map.empty : Map<string, int>)
-        let tidPublishScheduled = ref 0
-        let scheduleTidPublish () =
-            if System.Threading.Interlocked.Exchange(tidPublishScheduled, 1) = 0 then
-                System.Threading.Tasks.Task.Run(fun () ->
-                    System.Threading.Interlocked.Exchange(tidPublishScheduled, 0) |> ignore
-                    let mutable m = Map.empty
-                    for i in 0 .. fieldTidState.Length - 1 do
-                        let t = fieldTidState.[i]
-                        if t > 0 then m <- Map.add (sprintf "HeapTid%d" i) t m
-                    if idxTidState > 0 then m <- Map.add "HeapTidIdx" idxTidState m
-                    transact (fun () -> publishedTids.Value <- m)) |> ignore
-        let observeFieldTid (ai : int) (tid : int) =
-            if ai >= 0 && ai < fieldTidState.Length && tid > 0 then
-                let cur = fieldTidState.[ai]
-                if cur = 0 then fieldTidState.[ai] <- tid; scheduleTidPublish ()
-                elif cur > 0 && cur <> tid then fieldTidState.[ai] <- -1; scheduleTidPublish ()
-        let observeIdxTid (tid : int) =
-            if tid > 0 then
-                let cur = idxTidState
-                if cur = 0 then idxTidState <- tid; scheduleTidPublish ()
-                elif cur > 0 && cur <> tid then idxTidState <- -1; scheduleTidPublish ()
+        // ── TYPED-ASSIGNMENT PARTITIONS (ai/HEAP-TYPED-ASSIGNMENTS-PLAN.md §2):
+        //    a slot's per-field source tids + index tid pack into an int64
+        //    assignment KEY (6 bits/field, 9 fields). Partition 0 = DYNAMIC
+        //    (unspecialized pipeline, always present): the STAGING area for
+        //    freshly-added slots and the permanent home of the long tail.
+        //    Assignments MATERIALIZE into their own partition (typed pipeline
+        //    via constant spec values) when their population crosses
+        //    `materializeAt`; hysteresis at `dematerializeAt` avoids flapping.
+        //    Slots migrate via O(1) cluster-style membership moves inside the
+        //    updater. The async pipeline resource renders a not-yet-compiled
+        //    typed pipeline through the generic handle, so migration timing
+        //    needs NO coupling to pipeline state — never a wrong pixel. ──
+        let materializeAt = 64
+        let dematerializeAt = 16
+        // AARDVARK_HEAP_NO_SPEC=1: bisect switch — never materialize typed
+        // partitions, everything renders through the dynamic pipeline.
+        let noSpec = System.Environment.GetEnvironmentVariable "AARDVARK_HEAP_NO_SPEC" = "1"
+        let packAssign (fieldTids : int[]) (idxTid : int) : int64 =
+            let mutable k = int64 idxTid
+            for i in 0 .. min 7 (fieldTids.Length - 1) do
+                k <- k ||| (int64 (fieldTids.[i] &&& 0x3F) <<< (6 * (i + 1)))
+            k
+        let assignTidMap (fieldTids : int[]) (idxTid : int) : Map<string, int> =
+            let mutable m = Map.empty
+            for i in 0 .. min 7 (fieldTids.Length - 1) do
+                if fieldTids.[i] > 0 then m <- Map.add (sprintf "HeapTid%d" i) fieldTids.[i] m
+            if idxTid > 0 then m <- Map.add "HeapTidIdx" idxTid m
+            m
+        // partition registry: key -> state. Id 0 is the implicit dynamic partition.
+        let partitions = System.Collections.Generic.Dictionary<int64, HeapPartition>()
+        let partById = System.Collections.Generic.List<HeapPartition>()      // index = partition id (0 = dynamic sentinel at index 0)
+        do partById.Add { Key = 0L; Id = 0; TidMap = Map.empty; Count = 0; Slots = System.Collections.Generic.List<int>(); Materialized = true }
+        // epoch bumps on materialize/dematerialize -> HeapRenderObject rebuild
+        let mutable partEpoch = 0
+        let mutable slotAssign : int64[] = Array.zeroCreate 16    // slot -> assignment key
+        let mutable slotPart   : int[]   = Array.zeroCreate 16    // slot -> partition RESIDENCY (0 = dynamic)
+        let mutable slotAsgPos : int[]   = Array.zeroCreate 16    // slot -> position in its assignment's slot list
+        // migration needs classAdd/classRemove (defined below with the cluster
+        // state) — wired via this mutable hook to keep definition order simple.
+        let mutable relistSlot : int -> int -> unit = fun _ _ -> ()   // slot, newPart
+        let migratePartition (p : HeapPartition) (target : int) =
+            for i in 0 .. p.Slots.Count - 1 do
+                relistSlot p.Slots.[i] target
+        let materialize (p : HeapPartition) =
+            if not p.Materialized then
+                p.Id <- partById.Count
+                partById.Add p
+                p.Materialized <- true
+                migratePartition p p.Id
+                partEpoch <- partEpoch + 1
+        let dematerialize (p : HeapPartition) =
+            if p.Materialized && p.Id > 0 then
+                migratePartition p 0
+                p.Materialized <- false
+                p.Id <- -1
+                partEpoch <- partEpoch + 1
+        let asgAdd (slot : int) (key : int64) (tidMap : Lazy<Map<string, int>>) =
+            slotAssign.[slot] <- key
+            if key = 0L then
+                slotPart.[slot] <- 0
+                slotAsgPos.[slot] <- -1
+            else
+                let p =
+                    match partitions.TryGetValue key with
+                    | true, p -> p
+                    | _ ->
+                        let p = { Key = key; Id = -1; TidMap = tidMap.Value; Count = 0
+                                  Slots = System.Collections.Generic.List<int>(); Materialized = false }
+                        partitions.[key] <- p
+                        p
+                slotAsgPos.[slot] <- p.Slots.Count
+                p.Slots.Add slot
+                p.Count <- p.Count + 1
+                slotPart.[slot] <- (if p.Materialized then p.Id else 0)
+                if not p.Materialized && p.Count >= materializeAt && useClusters && not noSpec then materialize p
+        let asgRemove (slot : int) =
+            let key = slotAssign.[slot]
+            if key <> 0L then
+                match partitions.TryGetValue key with
+                | true, p ->
+                    let pos = slotAsgPos.[slot]
+                    let last = p.Slots.[p.Slots.Count - 1]
+                    p.Slots.[pos] <- last
+                    slotAsgPos.[last] <- pos
+                    p.Slots.RemoveAt(p.Slots.Count - 1)
+                    p.Count <- p.Count - 1
+                    if p.Materialized && p.Count < dematerializeAt then dematerialize p
+                | _ -> ()
+            slotAssign.[slot] <- 0L
+            slotPart.[slot] <- 0
         // ── CLUSTER state (useClusters): per (page, class) live-slot lists; the
         //    last pseudo-class holds OVERSIZED slots (exact per-slot records).
         //    ClassSlots buffer + records are FULL-REWRITTEN per flush (tiny /
@@ -3482,13 +3552,25 @@ module Heap =
                     csDirty.Clear()
                     csFullDirty <- true
                 else csDirty.Add(struct(o, n))
-        let classIdxOfList (page : int) (cls : int) =
-            let idx = page * (numClasses + 1) + cls
-            while classLists.Count <= idx do
-                classLists.Add(System.Collections.Generic.List<int>())
-                classBase.Add 0
-                classCap.Add 0
-            idx
+        // (page, partition) -> base index of its (numClasses+1) class-list block.
+        // Blocks allocate on demand; the reverse map drives record generation.
+        let classBlockOf = System.Collections.Generic.Dictionary<struct(int * int), int>()
+        let classBlocks = System.Collections.Generic.List<struct(int * int)>()   // blockIdx -> (page, part)
+        let classIdxOfList (page : int) (part : int) (cls : int) =
+            let key = struct(page, part)
+            let blockBase =
+                match classBlockOf.TryGetValue key with
+                | true, b -> b
+                | _ ->
+                    let b = classLists.Count
+                    for _ in 0 .. numClasses do
+                        classLists.Add(System.Collections.Generic.List<int>())
+                        classBase.Add 0
+                        classCap.Add 0
+                    classBlockOf.[key] <- b
+                    classBlocks.Add key
+                    b
+            blockBase + cls
         let csEnsureStaging (n : int) =
             if csStaging.Length < n then
                 let ns = Array.zeroCreate<int> (Fun.NextPowerOfTwo n)
@@ -3529,12 +3611,10 @@ module Heap =
         let mutable clusterClsOf : int[] = Array.create 16 -1     // slot -> class idx (numClasses = oversized; -1 = not listed)
         let mutable clusterPosOf : int[] = Array.zeroCreate 16    // slot -> position in its class list
         let mutable vcOfSlot     : int[] = Array.zeroCreate 16    // slot -> drawn-vertex count
-        // per-page CLUSTER record counts (indirect draw counts) — refreshed by the flushes
-        let clusterRecCounts = System.Collections.Generic.List<int>()
         let classAdd (slot : int) =
             if clusterClsOf.[slot] < 0 then
                 let cls = match clusterClassOf vcOfSlot.[slot] with | -1 -> numClasses | c -> c
-                let idx = classIdxOfList slotPage.[slot] cls
+                let idx = classIdxOfList slotPage.[slot] slotPart.[slot] cls
                 csEnsureRoom idx
                 let l = classLists.[idx]
                 clusterClsOf.[slot] <- cls
@@ -3545,7 +3625,7 @@ module Heap =
         let classRemove (slot : int) =
             let cls = clusterClsOf.[slot]
             if cls >= 0 then
-                let idx = classIdxOfList slotPage.[slot] cls
+                let idx = classIdxOfList slotPage.[slot] slotPart.[slot] cls
                 let l = classLists.[idx]
                 let pos = clusterPosOf.[slot]
                 let last = l.[l.Count - 1]
@@ -3555,6 +3635,11 @@ module Heap =
                 csStaging.[classBase.[idx] + pos] <- last
                 csMarkDirty (classBase.[idx] + pos) 1
                 clusterClsOf.[slot] <- -1
+        do relistSlot <- fun slot target ->
+            let listed = clusterClsOf.[slot] >= 0
+            if listed then classRemove slot
+            slotPart.[slot] <- target
+            if listed then classAdd slot
         let symPickId = Symbol.Create "HeapPickId"
         let zeroDraw = DrawCallInfo(FaceVertexCount = 0, FirstIndex = 0, BaseVertex = 0, FirstInstance = 0, InstanceCount = 0)
         let freeSlots = System.Collections.Generic.Stack<int>()
@@ -3617,6 +3702,15 @@ module Heap =
                 let ncc = Array.create n -1
                 System.Array.Copy(clusterClsOf, ncc, clusterClsOf.Length)
                 clusterClsOf <- ncc
+                let nsa = Array.zeroCreate<int64> n
+                System.Array.Copy(slotAssign, nsa, slotAssign.Length)
+                slotAssign <- nsa
+                let nsp = Array.zeroCreate<int> n
+                System.Array.Copy(slotPart, nsp, slotPart.Length)
+                slotPart <- nsp
+                let nap = Array.zeroCreate<int> n
+                System.Array.Copy(slotAsgPos, nap, slotAsgPos.Length)
+                slotAsgPos <- nap
                 let ncp = Array.zeroCreate<int> n
                 System.Array.Copy(clusterPosOf, ncp, clusterPosOf.Length)
                 clusterPosOf <- ncp
@@ -4142,24 +4236,31 @@ module Heap =
         //    ClassSlots indirection (gl_InstanceIndex is GLOBAL via FirstInstance).
         //    Bases are a deterministic walk over the lists; every flush derives from
         //    the same post-updater state, so flush order is irrelevant. ──
-        let clusterRecordsFor (page : int) (dst : System.Collections.Generic.List<DrawCallInfo>) =
+        let clusterRecordsFor (page : int) (part : int) (dst : System.Collections.Generic.List<DrawCallInfo>) =
             dst.Clear()
-            for idx in 0 .. classLists.Count - 1 do
-                let l = classLists.[idx]
-                if l.Count > 0 && idx / (numClasses + 1) = page then
-                    let cls = idx % (numClasses + 1)
-                    let basev = classBase.[idx]
-                    if cls < numClasses then
-                        dst.Add(DrawCallInfo(FaceVertexCount = clusterClassSizes.[cls], FirstIndex = 0, BaseVertex = 0,
-                                             FirstInstance = basev, InstanceCount = l.Count))
-                    else
-                        for j in 0 .. l.Count - 1 do
-                            dst.Add(DrawCallInfo(FaceVertexCount = vcOfSlot.[l.[j]], FirstIndex = 0, BaseVertex = 0,
-                                                 FirstInstance = basev + j, InstanceCount = 1))
-        let clusterRecCount (page : int) = if page < clusterRecCounts.Count then clusterRecCounts.[page] else 0
-        let setClusterRecCount (page : int) (n : int) =
-            while clusterRecCounts.Count <= page do clusterRecCounts.Add 0
-            clusterRecCounts.[page] <- n
+            match classBlockOf.TryGetValue(struct(page, part)) with
+            | false, _ -> ()
+            | true, blockBase ->
+                for cls in 0 .. numClasses do
+                    let idx = blockBase + cls
+                    let l = classLists.[idx]
+                    if l.Count > 0 then
+                        let basev = classBase.[idx]
+                        if cls < numClasses then
+                            dst.Add(DrawCallInfo(FaceVertexCount = clusterClassSizes.[cls], FirstIndex = 0, BaseVertex = 0,
+                                                 FirstInstance = basev, InstanceCount = l.Count))
+                        else
+                            for j in 0 .. l.Count - 1 do
+                                dst.Add(DrawCallInfo(FaceVertexCount = vcOfSlot.[l.[j]], FirstIndex = 0, BaseVertex = 0,
+                                                     FirstInstance = basev + j, InstanceCount = 1))
+        // record counts per (page, partition) — read by the indirect-count avals
+        let clusterRecCounts2 = System.Collections.Generic.Dictionary<struct(int * int), int>()
+        let clusterRecCount (page : int) (part : int) =
+            match clusterRecCounts2.TryGetValue(struct(page, part)) with
+            | true, n -> n
+            | _ -> 0
+        let setClusterRecCount (page : int) (part : int) (n : int) =
+            clusterRecCounts2.[struct(page, part)] <- n
         // gl_InstanceIndex -> slot. O(changed): membership edits recorded as dirty
         // single-int ranges into the CPU mirror; only region growth / relayout pays
         // a bigger (amortized) upload.
@@ -4186,9 +4287,10 @@ module Heap =
 
         let rec flushDraws (t : AdaptiveToken) (gates : System.Collections.Generic.HashSet<GateWriter>) =
             if useClusters then
-                // record set derived from the class lists (membership settled in the updater)
-                clusterRecordsFor 0 clusterRecs
-                setClusterRecCount 0 clusterRecs.Count
+                // record set derived from the class lists (membership settled in the
+                // updater) — the bucketRO carries (page 0, DYNAMIC partition 0)
+                clusterRecordsFor 0 0 clusterRecs
+                setClusterRecCount 0 0 clusterRecs.Count
                 if drawStaging.Length < clusterRecs.Count then
                     drawStaging <- Array.zeroCreate (Fun.NextPowerOfTwo (max 16 clusterRecs.Count))
                 for i in 0 .. clusterRecs.Count - 1 do drawStaging.[i] <- clusterRecs.[i]
@@ -4320,7 +4422,7 @@ module Heap =
         let indirectAval =
             (drawBuf :> aval<IBackendBuffer>)
             |> AdaptiveResource.mapNonAdaptive (fun b ->
-                let cnt = if useClusters then clusterRecCount 0 else highWater
+                let cnt = if useClusters then clusterRecCount 0 0 else highWater
                 IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> cnt (b :> IBuffer))
         let instAval = (instBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
         let slotPageU = ((slotPageBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
@@ -4730,30 +4832,20 @@ module Heap =
         // provider answering ONLY heap-internal names (arena/headers/textures/
         // atlas/user sampler arrays) — user uniforms are gathered regions, never
         // resolved from a member.
-        // per-field tid spec values for the RO (Vulkan pipelines; GL reads the
-        // same values as ordinary uniforms via the provider below). Inference-
-        // only — never user-specified. Empty map = unspecialized = the runtime
-        // ladder, always correct.
-        let specConstantsVal =
-            // AARDVARK_HEAP_NO_SPEC=1: bisect switch — render unspecialized
-            if System.Environment.GetEnvironmentVariable "AARDVARK_HEAP_NO_SPEC" = "1" then
-                AVal.constant Map.empty
-            else
-                publishedTids :> aval<Map<string, int>>
-        // GL fallback lookups (Vulkan never asks: the members live in the
-        // SpecConstants scope, which has no UBO in its program interface)
+        // GL fallback lookups for the DYNAMIC partition: all tids 0 (Vulkan
+        // never asks — the members live in the SpecConstants scope, which has
+        // no UBO in its program interface). Typed clones override per name.
         let specUniformLookup =
             let d = System.Collections.Generic.Dictionary<Symbol, IAdaptiveValue>()
-            let entry (n : string) =
-                d.[Symbol.Create n] <- (specConstantsVal |> AVal.map (fun m -> defaultArg (Map.tryFind n m) 0)) :> IAdaptiveValue
-            for i in 0 .. 7 do entry (sprintf "HeapTid%d" i)
-            entry "HeapTidIdx"
+            let zero = AVal.constant 0 :> IAdaptiveValue
+            for i in 0 .. 7 do d.[Symbol.Create (sprintf "HeapTid%d" i)] <- zero
+            d.[Symbol.Create "HeapTidIdx"] <- zero
             d
 
         let bucketRO =
             let ro = RenderObject.Clone ro0
             ro.IsActive <- AVal.constant true      // per-draw gating lives in the indirect buffer
-            ro.SpecConstants <- specConstantsVal
+            ro.SpecConstants <- AVal.constant Map.empty     // DYNAMIC partition: unspecialized
             // ALL pipeline state comes from the bucket KEY's resolved VALUES, baked
             // as constants — never from a member's live avals: a member whose
             // dynamic state aval changes MOVES buckets (regroup pass) and must not
@@ -4887,48 +4979,74 @@ module Heap =
         // + a clone of `bucketRO` binding page i's arena. `resultAval` is rebuilt per membership
         // version, so newly-rolled pages appear. FOLLOW-UP: per-page derive — pages >0 bind their
         // plain arena, so any derived/fp64/chain uniform there is page-0-stale until that lands.
-        let pageROs = System.Collections.Generic.List<IRenderObject>()
-        do pageROs.Add(bucketRO :> IRenderObject)
-        let pageDrawBufs = System.Collections.Generic.List<MirrorBuffer>()
+        // ── (page, partition) RO clones. (0,0) = bucketRO (the incremental
+        //    machinery above). Every OTHER combination gets its own indirect
+        //    buffer (that partition's records only) + a clone: page > 0 binds
+        //    that page's arena; partition > 0 carries the assignment's CONSTANT
+        //    spec-value map (typed pipeline) + GL uniform overrides. Clones are
+        //    created lazily and never destroyed (a dematerialized partition's
+        //    lists empty out -> 0 records; the epoch-keyed HeapRenderObject
+        //    rebuild drops it from the draw list). ──
+        let partROs = System.Collections.Generic.Dictionary<struct(int * int), IRenderObject>()
+        let mkPartRO (pageIdx : int) (partIdx : int) =
+            let mutable pstaging = Array.zeroCreate<DrawCallInfo> (max 16 entries.Length)
+            let db = MirrorBuffer(runtime, pstaging.Length * sizeof<DrawCallInfo>, BufferUsage.Indirect)
+            let flush (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
+                if useClusters then
+                    let recs = System.Collections.Generic.List<DrawCallInfo>()
+                    clusterRecordsFor pageIdx partIdx recs
+                    setClusterRecCount pageIdx partIdx recs.Count
+                    if pstaging.Length < recs.Count then pstaging <- Array.zeroCreate (Fun.NextPowerOfTwo (max 16 recs.Count))
+                    db.ResizeInPlace(uint64 (max 16 pstaging.Length * sizeof<DrawCallInfo>))
+                    for i in 0 .. recs.Count - 1 do pstaging.[i] <- recs.[i]
+                    if recs.Count > 0 then db.Write(pstaging, 0UL, 0, recs.Count)
+                else
+                if pstaging.Length < entries.Length then pstaging <- Array.zeroCreate entries.Length
+                db.ResizeInPlace(uint64 (pstaging.Length * sizeof<DrawCallInfo>))
+                for s in 0 .. highWater - 1 do
+                    pstaging.[s] <- (if slotPage.[s] = pageIdx then entries.[s] else zeroDraw)
+                if highWater > 0 then db.Write(pstaging, 0UL, 0, highWater)
+            db.Dependency <- Some (updater :> IAdaptiveValue)
+            db.Flush <- flush
+            db.Name <- "HeapIndirectPart"
+            let indirectP =
+                (db :> aval<IBackendBuffer>)
+                |> AdaptiveResource.mapNonAdaptive (fun b ->
+                    let cnt = if useClusters then clusterRecCount pageIdx partIdx else highWater
+                    IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> cnt (b :> IBuffer))
+            let pageArenaU =
+                if pageIdx = 0 then ValueNone
+                else ValueSome (((storage.Page(pageIdx).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue)
+            let part = if partIdx > 0 && partIdx < partById.Count then partById.[partIdx] else Unchecked.defaultof<HeapPartition>
+            let specGl =
+                let d = System.Collections.Generic.Dictionary<Symbol, IAdaptiveValue>()
+                if partIdx > 0 then
+                    for KeyValue(n, v) in part.TidMap do d.[Symbol.Create n] <- (AVal.constant v :> IAdaptiveValue)
+                d
+            let ro = RenderObject.Clone bucketRO
+            ro.DrawCalls <- DrawCalls.Indirect indirectP
+            // TYPED partition: the assignment's constant spec values (the "JIT tier")
+            if partIdx > 0 then ro.SpecConstants <- AVal.constant part.TidMap
+            ro.Uniforms <-
+                { new IUniformProvider with
+                    member _.TryGetUniform(s, name) =
+                        if pageArenaU.IsSome && (name = symData || name = symDataI || name = symDataD) then pageArenaU
+                        elif specGl.ContainsKey name then ValueSome specGl.[name]
+                        else bucketRO.Uniforms.TryGetUniform(s, name)
+                    member _.Dispose() = () }
+            ro :> IRenderObject
         let ensurePageROs () =
-            while pageROs.Count < storage.Count do
-                let pageIdx = pageROs.Count
-                let mutable pstaging = Array.zeroCreate<DrawCallInfo> (max 16 entries.Length)
-                let db = MirrorBuffer(runtime, pstaging.Length * sizeof<DrawCallInfo>, BufferUsage.Indirect)
-                let flush (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
-                    if useClusters then
-                        let recs = System.Collections.Generic.List<DrawCallInfo>()
-                        clusterRecordsFor pageIdx recs
-                        setClusterRecCount pageIdx recs.Count
-                        if pstaging.Length < recs.Count then pstaging <- Array.zeroCreate (Fun.NextPowerOfTwo (max 16 recs.Count))
-                        db.ResizeInPlace(uint64 (max 16 pstaging.Length * sizeof<DrawCallInfo>))
-                        for i in 0 .. recs.Count - 1 do pstaging.[i] <- recs.[i]
-                        if recs.Count > 0 then db.Write(pstaging, 0UL, 0, recs.Count)
-                    else
-                    if pstaging.Length < entries.Length then pstaging <- Array.zeroCreate entries.Length
-                    db.ResizeInPlace(uint64 (pstaging.Length * sizeof<DrawCallInfo>))
-                    for s in 0 .. highWater - 1 do
-                        pstaging.[s] <- (if slotPage.[s] = pageIdx then entries.[s] else zeroDraw)
-                    if highWater > 0 then db.Write(pstaging, 0UL, 0, highWater)
-                db.Dependency <- Some (updater :> IAdaptiveValue)
-                db.Flush <- flush
-                db.Name <- "HeapIndirectPage"
-                pageDrawBufs.Add db
-                let indirectP =
-                    (db :> aval<IBackendBuffer>)
-                    |> AdaptiveResource.mapNonAdaptive (fun b ->
-                        let cnt = if useClusters then clusterRecCount pageIdx else highWater
-                        IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> cnt (b :> IBuffer))
-                let pageArenaU = ((storage.Page(pageIdx).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
-                let ro = RenderObject.Clone bucketRO
-                ro.DrawCalls <- DrawCalls.Indirect indirectP
-                ro.Uniforms <-
-                    { new IUniformProvider with
-                        member _.TryGetUniform(s, name) =
-                            if name = symData || name = symDataI || name = symDataD then ValueSome pageArenaU
-                            else bucketRO.Uniforms.TryGetUniform(s, name)
-                        member _.Dispose() = () }
-                pageROs.Add(ro :> IRenderObject)
+            for pageIdx in 0 .. storage.Count - 1 do
+                // dynamic partition clone per page (page 0 = bucketRO itself)
+                if pageIdx > 0 && not (partROs.ContainsKey(struct(pageIdx, 0))) then
+                    partROs.[struct(pageIdx, 0)] <- mkPartRO pageIdx 0
+                // typed partition clones (materialized assignments only)
+                if useClusters then
+                    for pid in 1 .. partById.Count - 1 do
+                        // Id = pid guards against RE-materialized partitions whose old
+                        // index still points at them (they get a fresh id each time)
+                        if partById.[pid].Materialized && partById.[pid].Id = pid && not (partROs.ContainsKey(struct(pageIdx, pid))) then
+                            partROs.[struct(pageIdx, pid)] <- mkPartRO pageIdx pid
 
         // ONE HeapRenderObject per bucket, bundling the per-page derives + page draws so the backend
         // records derive(page i)→barrier→draw(page i) as one submission. Rebuilt only when the page
@@ -4937,11 +5055,30 @@ module Heap =
         // lists FIRST, so the snapshot here always sees every live page.
         let mutable heapROCache : IRenderObject = Unchecked.defaultof<_>
         let mutable heapROPageCount = -1
+        let mutable heapROEpoch = -1
+        // draw order: dynamic partition first (page-major), then materialized
+        // typed partitions — deterministic so the command recording is stable
+        let currentDraws () =
+            let l = System.Collections.Generic.List<IRenderObject>()
+            l.Add (bucketRO :> IRenderObject)
+            for pageIdx in 0 .. storage.Count - 1 do
+                if pageIdx > 0 then
+                    match partROs.TryGetValue(struct(pageIdx, 0)) with
+                    | true, ro -> l.Add ro
+                    | _ -> ()
+            for pid in 1 .. partById.Count - 1 do
+                if partById.[pid].Materialized && partById.[pid].Id = pid then
+                    for pageIdx in 0 .. storage.Count - 1 do
+                        match partROs.TryGetValue(struct(pageIdx, pid)) with
+                        | true, ro -> l.Add ro
+                        | _ -> ()
+            l
         let buildHeapRO () =
-            if heapROPageCount <> storage.Count then
+            if heapROPageCount <> storage.Count || heapROEpoch <> partEpoch then
                 heapROPageCount <- storage.Count
+                heapROEpoch <- partEpoch
                 let derives = if hasDerived then List.ofSeq deriveSpecs else []
-                let draws = List.ofSeq pageROs
+                let draws = List.ofSeq (currentDraws ())
                 let hro = HeapRenderObject(RenderPass.main, scope, derives, draws)
                 // pickability is a construction-time property of the bucket (its ROs carry the
                 // `HeapPickId` marker); only a real pick bucket is routed into the dom's PickId pass.
@@ -4955,7 +5092,7 @@ module Heap =
         // (called from the membership updater); the members just hand back the current set.
         member x.SyncPages() = ensurePageROs (); ensureDeriveROs ()
         member x.HeapRO : IRenderObject = buildHeapRO ()
-        member x.RenderObjects : IRenderObject[] = pageROs.ToArray()
+        member x.RenderObjects : IRenderObject[] = (currentDraws ()).ToArray()
         member x.DeriveROs : IRenderObject[] = [||]
         member _.Count = slots.Count
         member _.IsChain = chainMode
@@ -5066,6 +5203,10 @@ module Heap =
                     w.OnChange.Invoke t
             let __secT1 = System.Diagnostics.Stopwatch.GetTimestamp()
             stIngestFieldsMs <- stIngestFieldsMs + float (__secT1 - __secT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
+            // TYPED ASSIGNMENTS: this slot's per-field source tids (packed into
+            // its assignment key below; partition residency starts DYNAMIC)
+            let slotTids = Array.zeroCreate<int> 8
+            let mutable slotIdxTid = 0
             // geometry: per-attribute arena allocations (host) or the per-slot
             // SSBO-array registration (bindless), plus the index allocation.
             let attrKeys =
@@ -5090,7 +5231,7 @@ module Heap =
                 else
                     attrInfos |> Array.map (fun (ai, _, sym, _, _, _, _) ->
                         let (key, r, srcTid) = attrFor ro sym
-                        observeFieldTid ai srcTid
+                        (if ai < 8 then slotTids.[ai] <- srcTid)
                         headers.[slot * headerStride + attrBase + ai] <- r
                         // dynamic-source allocation: register this slot's header cell
                         // for the realloc re-bake and subscribe THIS bucket's updater
@@ -5110,7 +5251,7 @@ module Heap =
             let struct(idxKey, idxRef, vertexCount) =
                 match ro.Indices with
                 | Some bvIdx ->
-                    observeIdxTid (if bvIdx.ElementType = typeof<int16> || bvIdx.ElementType = typeof<uint16> then 2 else 1)
+                    slotIdxTid <- (if bvIdx.ElementType = typeof<int16> || bvIdx.ElementType = typeof<uint16> then 2 else 1)
                     let (k, e) = idxFor ro
                     if not (isNull e.Writer) then
                         e.DynRefs.Add(struct(x :> IGeomSink, slot, idxCell)) |> ignore
@@ -5141,6 +5282,10 @@ module Heap =
             // reads its actual value) re-staged only when IT toggles
             let k = if instanced then instanceCountOf ro else 1
             let active = ro.IsActive
+            // TYPED ASSIGNMENTS: register the slot's assignment (residency starts
+            // dynamic; crossing the threshold materializes + migrates) — BEFORE any
+            // classAdd path so cluster listing sees the final slotPart
+            asgAdd slot (packAssign slotTids slotIdxTid) (lazy (assignTidMap slotTids slotIdxTid))
             let instCount =
                 if useClusters then
                     // CLUSTERED: gating = class membership; the record set is derived
@@ -5277,6 +5422,7 @@ module Heap =
                 | true, w -> w.Dispose(); gateWriters.Remove s.Slot |> ignore
                 | _ -> ()
                 if useClusters then classRemove s.Slot
+                asgRemove s.Slot
                 // PICKING: release the dom pick id for this slot before it's recycled
                 if picking && pickIds.[s.Slot] >= 0 then deregister pickIds.[s.Slot]
                 freeSlots.Push s.Slot
