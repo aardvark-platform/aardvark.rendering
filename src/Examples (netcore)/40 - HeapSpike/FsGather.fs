@@ -287,7 +287,12 @@ module FsGather =
         let arenaU = "Arena", (AVal.constant arena :> IAdaptiveValue)
 
         let linU = "Lin", (AVal.constant linear :> IAdaptiveValue)
+        // identity hop: SAME two-hop shader as fs2hop, but the header points at a
+        // LINEAR per-slot layout — measures the hop itself once its target is
+        // coherent (the "make it local by allocation policy, keep the code" idea).
+        let idHdr = Array.init (n * k) id
         let a  = variant "fs2hop"   [ Effect.ofFunction vsA; Effect.ofFunction fsA ] [ gridU; hdrU; arenaU ] []
+        let ih = variant "fsidhop"  [ Effect.ofFunction vsA; Effect.ofFunction fsA ] [ gridU; ("Hdr", (AVal.constant idHdr :> IAdaptiveValue)); ("Arena", linU |> snd) ] []
         let ch = variant "fscoher"  [ Effect.ofFunction vsA; Effect.ofFunction fsCoh ] [ gridU; linU ] []
         let c  = variant "fs1hop"   [ Effect.ofFunction vsC; Effect.ofFunction fsC ] [ gridU; hdrU; arenaU ] []
         let b  = variant "vsfetch"  [ Effect.ofFunction vsB; Effect.ofFunction fsB ] [ gridU; hdrU; arenaU ] []
