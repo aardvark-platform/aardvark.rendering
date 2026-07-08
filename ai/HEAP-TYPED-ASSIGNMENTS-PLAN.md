@@ -128,7 +128,20 @@ BEFORE (published 0046 + dom 0017 + fshade 5.7.12), REAL GPU orbit avg:
 | macbook M1 Max    | 19.4 | 20.1 | 200,882-part dataset |
 | zephyrus (default device) | 21.3 | — | demo doesn't print the device; same chooser both runs |
 
-AFTER (0047 typed-assignment JIT): pending release.
+AFTER (0047 typed-assignment JIT), same data (canonical 246,655 parts, mac on
+vienna_d9c), same machines, plus the `--baseline` baked floor:
+| machine  | BEFORE | AFTER | win | baked floor | ratio before→after |
+|----------|-------:|------:|-----|------------:|--------------------|
+| airtop RTX 5060    | 8.5  | 5.7  | −33% | 4.2  | 2.02× → 1.36× |
+| hekla RTX 4070 Ti  | 5.8  | 4.6  | −21% | 3.8  | 1.53× → 1.21× |
+| macbook M1 Max     | 21.4 | 13.4 | −37% | 6.8  | 3.15× → 1.97× |
+| zephyrus (default) | 21.3 | 16.4 | −23% | 15.3 | 1.39× → 1.07× |
+
+SHIPPED: FShade 5.7.15 (master), Aardvark.Rendering 5.7.0-prerelease0047 (v57),
+CadSceneDemo bumped + pushed. Publish-workflow gotcha: path-filtered to
+RELEASE_NOTES.md — a fix commit that doesn't touch it publishes NOTHING
+(retrigger via a notes touch). Blanket `dotnet paket update` broke CI once
+(FsCheck 2→3): use TARGETED per-package updates.
 
 ## 4. Gotchas already learned (2026-07-08 session)
 
