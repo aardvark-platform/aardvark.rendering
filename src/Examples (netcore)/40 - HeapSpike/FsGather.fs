@@ -76,6 +76,18 @@ module FsGather =
                 return acc * 0.125f
             }
 
+        // ── fscoher: FS direct loads from a LINEAR per-slot layout (no header,
+        //    no permutation) — separates the fetch MECHANISM from the memory
+        //    LAYOUT: same coherence as instattr, but per-fragment SSBO reads. ──
+        let fsCoh (v : VtxA) =
+            fragment {
+                let lin : V4f[] = uniform?StorageBuffer?Lin
+                let mutable acc = V4f.Zero
+                for i in 0 .. 7 do
+                    acc <- acc + lin.[v.slot * 8 + i]
+                return acc * 0.125f
+            }
+
         // ── fs1hop: VS resolves offsets, FS loads directly (flat ivec4-packed) ──
         type VtxC = {
             [<Position>] pos : V4f
@@ -192,7 +204,19 @@ module FsGather =
         let cold   = argv |> Array.contains "--coldslots"    // each layer reads a DISTINCT slot range (arena can exceed L2)
 
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let chooser : Aardvark.Rendering.Vulkan.IDeviceChooser =
+            match argv |> Array.tryFindIndex ((=) "--gpu") with
+            | Some i when i + 1 < argv.Length ->
+                let wanted = argv.[i + 1]
+                { new Aardvark.Rendering.Vulkan.IDeviceChooser with
+                    member _.Run devices =
+                        match devices |> Array.tryFind (fun d -> d.Name.ToLowerInvariant().Contains(wanted.ToLowerInvariant())) with
+                        | Some d -> d
+                        | None ->
+                            for d in devices do Log.warn "available GPU: %s" d.Name
+                            failwithf "fsgather: no Vulkan device matches --gpu '%s'" wanted }
+            | _ -> null
+        use app = new Aardvark.Application.Slim.VulkanApplication(false, deviceChooser = chooser)
         let runtime = app.Runtime :> IRuntime
         Log.line "fsgather: device = %s" app.Runtime.Device.PhysicalDevice.Name
 
@@ -215,11 +239,13 @@ module FsGather =
         let hdr   = perm
         let arena = Array.zeroCreate<V4f> (n * k)
         let iattr = Array.init k (fun _ -> Array.zeroCreate<V4f> n)
+        let linear = Array.zeroCreate<V4f> (n * k)          // coherent per-slot layout (fscoher)
         for s in 0 .. n - 1 do
             for i in 0 .. k - 1 do
                 let v = V4f(float32 ((s * 31 + i * 7) % 255) / 255.0f, 0.25f, 0.5f, 1.0f)
                 arena.[hdr.[s * k + i]] <- v
                 iattr.[i].[s] <- v
+                linear.[s * k + i] <- v
 
         use signature =
             runtime.CreateFramebufferSignature [
@@ -260,14 +286,16 @@ module FsGather =
         let hdrU   = "Hdr",   (AVal.constant hdr :> IAdaptiveValue)
         let arenaU = "Arena", (AVal.constant arena :> IAdaptiveValue)
 
+        let linU = "Lin", (AVal.constant linear :> IAdaptiveValue)
         let a  = variant "fs2hop"   [ Effect.ofFunction vsA; Effect.ofFunction fsA ] [ gridU; hdrU; arenaU ] []
+        let ch = variant "fscoher"  [ Effect.ofFunction vsA; Effect.ofFunction fsCoh ] [ gridU; linU ] []
         let c  = variant "fs1hop"   [ Effect.ofFunction vsC; Effect.ofFunction fsC ] [ gridU; hdrU; arenaU ] []
         let b  = variant "vsfetch"  [ Effect.ofFunction vsB; Effect.ofFunction fsB ] [ gridU; hdrU; arenaU ] []
         let i  = variant "instattr" [ Effect.ofFunction vsI; Effect.ofFunction fsI ] [ gridU ]
                     [ for j in 0 .. k - 1 -> (sprintf "Ia%d" j), bv iattr.[j] typeof<V4f> ]
 
-        Log.line "fsgather: fs2hop/instattr = %.2fx   fs2hop/fs1hop = %.2fx   fs2hop/vsfetch = %.2fx"
-            (a / i) (a / c) (a / b)
+        Log.line "fsgather: fs2hop/instattr = %.2fx   fs2hop/fs1hop = %.2fx   fs2hop/vsfetch = %.2fx   fs2hop/fscoher = %.2fx"
+            (a / i) (a / c) (a / b) (a / ch)
         Log.line "fsgather: the fs2hop->fs1hop delta is what the heap could recover by passing"
         Log.line "fsgather: resolved offsets VS->FS; fs1hop->vsfetch/instattr is the residual cost"
         Log.line "fsgather: of ANY per-fragment fetch vs pure interpolant consumption."
