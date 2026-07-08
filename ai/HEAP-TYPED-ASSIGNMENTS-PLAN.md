@@ -159,6 +159,28 @@ RELEASE_NOTES.md — a fix commit that doesn't touch it publishes NOTHING
 (retrigger via a notes touch). Blanket `dotnet paket update` broke CI once
 (FsCheck 2→3): use TARGETED per-package updates.
 
+### FAIR floors — the campaign's closing table (2026-07-08)
+Baseline reworked for SAME-WORK parity (in-shader oct decode, water chain,
+identity Model/NormalMatrix mat muls executed, flow column carried, 32 B/vert
+expanded = 1.70 GB/frame) + a SECOND floor: plain MDI, one record per part
+(per-part identity preserved = the ACHIEVABLE classic pipeline). Heap payload:
+0.97 GB/frame (43% fewer bytes — oct + singleton colors survive; a bake must
+expand). GPU ms, d1-9:
+| device | one-draw | MDI floor | heap JIT | heap/MDI |
+|--------|---------:|----------:|---------:|----------|
+| RTX 5060        | 5.6  | 5.6  | 5.7  | 1.02× |
+| RTX 4070 Ti     | 7.0  | 4.9  | 4.6  | **0.94× — heap FASTEST** |
+| RTX 4070 Laptop | 7.1  | 6.8  | 6.5  | **0.96× — heap FASTEST** |
+| M1 Max          | 8.2  | 13.2 | 13.4 | 1.02× (MoltenVK per-record tax hits the MDI floor; heap's clustering dodges it) |
+| hekla RDNA2     | 44.1 | 43.3 | 80.3 | 1.85× |
+| 890M            | 63.2 | 54.1 | ~94  | 1.74× |
+VERDICT: the fully-editable heap renders at or BELOW the achievable classic
+pipeline on every non-AMD-integrated device (byte savings from preserved
+structure outweigh residual gather latency). AMD integrated at ~1.8× = the
+latency-bound gather gap = exactly the parked LOCALITY lever's home turf.
+Also: MDI-vs-one-draw is free (5060), FASTER (4070Ti/L — distributor
+parallelism), −2% (RADV), −60% GPU/2x CPU (MoltenVK).
+
 ### Baseline anatomy (know what the floor measures)
 CadSceneDemo `--baseline` = ALL parts CPU-baked into ONE world-space mesh
 (ModelTrafo folded into positions, oct normals CPU-decoded to V3f, singleton
