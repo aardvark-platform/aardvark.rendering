@@ -203,6 +203,15 @@ kept above for the record; THIS table is the honest one. MDI-vs-one-draw:
 FASTER on discrete NVIDIA (distributor parallelism), neutral 5060/RADV,
 2x GPU + 2x CPU cost on MoltenVK.
 
+### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
+The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
+vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
+benches ~1.2-1.4x like the NVIDIA dGPUs, it's the memory system (locality lever
+= medicine); if ~2x, it's the compiler/arch. An Arc dGPU (A380/A750) adds
+ANV-on-hardware + Intel discrete. Rig: the user's UM890 Pro (OCuLink) + eGPU
+dock — also closes the clean-APU row via its own 780M. Everything scripted;
+AARDVARK_VULKAN selects; one command per card.
+
 ### Baseline anatomy (know what the floor measures)
 CadSceneDemo `--baseline` = ALL parts CPU-baked into ONE world-space mesh
 (ModelTrafo folded into positions, oct normals CPU-decoded to V3f, singleton
