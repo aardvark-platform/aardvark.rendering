@@ -159,6 +159,18 @@ RELEASE_NOTES.md — a fix commit that doesn't touch it publishes NOTHING
 (retrigger via a notes touch). Blanket `dotnet paket update` broke CI once
 (FsCheck 2→3): use TARGETED per-package updates.
 
+### Baseline anatomy (know what the floor measures)
+CadSceneDemo `--baseline` = ALL parts CPU-baked into ONE world-space mesh
+(ModelTrafo folded into positions, oct normals CPU-decoded to V3f, singleton
+colors EXPANDED), one draw, stock trafo shader, a single ViewProjTrafo uniform.
+ALU is deliberately EVEN with the heap: the stock shader still executes the
+(identity) ModelTrafo and NormalMatrix multiplies per vertex (UBO values are
+not driver-folded) — so the floor is slightly INFLATED (~5%, flattering
+"heap at floor" claims); a strict floor would skip Model/NormalMatrix.
+Payload (exact accounting, d1-9): baseline 1.49 GB/frame (28 B/vert) vs heap
+0.97 GB/frame (pos 12 + NormalOct 4; 110k/247k parts singleton-colored) — the
+editable representation moves 35% FEWER bytes than the baked one.
+
 ## 4. Gotchas already learned (2026-07-08 session)
 
 - Spec constants ≡ codegen dead-code: PROVEN identical (5060 12.49/12.50,
