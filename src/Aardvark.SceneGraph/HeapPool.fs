@@ -793,6 +793,10 @@ module Heap =
     /// Number of buckets produced by the most recent `ofRenderObjects` evaluation
     /// (diagnostic / for logging).
     let mutable lastBucketCount = 0
+    /// diagnostics: live MATERIALIZED typed partitions (sum over buckets) and
+    /// slots resident in the dynamic partitions — published per update.
+    let mutable lastMaterializedPartitions = 0
+    let mutable lastDynamicResidents = 0
 
     /// Count of `buildHeap` invocations = distinct GPU arenas built (diagnostic /
     /// for the deferred-path test: the shared-PerSig memo must collapse the opaque
@@ -5103,6 +5107,15 @@ module Heap =
         /// arena footprint (kept for tooling/tests: exact-size churn must keep
         /// them FLAT — freed allocations are reused in place).
         member private _.PublishStats() =
+            let mutable mat = 0
+            let mutable typedSlots = 0
+            for pid in 1 .. partById.Count - 1 do
+                let p = partById.[pid]
+                if p.Materialized && p.Id = pid then
+                    mat <- mat + 1
+                    typedSlots <- typedSlots + p.Count
+            lastMaterializedPartitions <- mat
+            lastDynamicResidents <- slots.Count - typedSlots
             lastPackedGeomBytes <- arenaAlloc.Extent * 4
             lastPackedGeomLiveBytes <- arenaAlloc.Live * 4
             lastArenaBytes <- arenaAlloc.Extent * 4

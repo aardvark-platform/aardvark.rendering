@@ -126,6 +126,8 @@ let main argv =
         if Churn.pickSplit () then 0 else 1
     elif argv |> Array.contains "picksplit2" then
         if Churn.pickSplit2 () then 0 else 1
+    elif argv |> Array.contains "mixedtypes" then
+        (if Churn.mixedTypes () then 0 else 1)
     elif argv |> Array.contains "dyngeom" then
         if Churn.dynGeom () then 0 else 1
     elif argv |> Array.contains "dynperf" then

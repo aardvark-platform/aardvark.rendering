@@ -622,3 +622,110 @@ module Churn =
         if pass then Log.line "dynPick: PASS (no per-toggle accumulation)"
         else Log.warn "dynPick: FAIL — toggles or idle frames degrade"
         pass
+
+    /// TYPED-ASSIGNMENT partitions (ai/HEAP-TYPED-ASSIGNMENTS-PLAN.md): one
+    /// bucket whose Colors semantic is fed by THREE source types — two popular
+    /// groups (C4b / C4f, above the materialization threshold) and one small
+    /// V3f tail (stays in the dynamic partition). Pixel-verified against the
+    /// classic render; partition counts asserted through materialization,
+    /// DEmaterialization (remove one group) and RE-materialization (re-add).
+    let mixedTypes () =
+        Aardvark.Init()
+        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        let runtime = app.Runtime
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
+        let size = AVal.constant (V2i(1024, 1024))
+        let view = CameraView.lookAt (V3d(0.0, -1.0, 1.0) * 26.0) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let proj = Frustum.perspective 70.0 0.1 5000.0 1.0 |> Frustum.projTrafo
+        let viewProj = AVal.constant (view * proj) :> IAdaptiveValue
+        let effect = FShade.Effect.compose [ FShade.Effect.ofFunction Shaders.shadeVtx; FShade.Effect.ofFunction Shaders.shadeFrag ]
+        let palette = [| C4b(230uy,80uy,60uy); C4b(90uy,200uy,90uy); C4b(70uy,120uy,230uy); C4b(240uy,200uy,60uy) |]
+
+        let sphereArrays (tess : int) =
+            let g = (IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.55)) tess C4b.White).ToIndexed()
+            let pos = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]> |> Array.copy
+            let nrm = g.IndexedAttributes.[DefaultSemantic.Normals]   |> unbox<V3f[]> |> Array.copy
+            let idx = g.IndexArray |> unbox<int[]> |> Array.copy
+            pos, nrm, idx
+
+        // 90 C4b + 90 C4f + 20 V3f color sources; grid placement, one bucket
+        let n = 200
+        let geo = Array.init n (fun i -> sphereArrays (10 + i % 8))
+        let mkPair (i : int) : IRenderObject * IRenderObject =
+            let s = 15
+            let p = V3d(float (i % s - s/2) * 1.35, float (i / s - s/2) * 1.35, 0.0)
+            let (pos, nrm, idx) = geo.[i]
+            let colBuf : System.Array * System.Type =
+                if i < 90 then
+                    (Array.init pos.Length (fun v -> palette.[(i + v / 16) % 4]) :> System.Array), typeof<C4b>
+                elif i < 180 then
+                    (Array.init pos.Length (fun v -> palette.[(i + v / 12) % 4].ToC4f()) :> System.Array), typeof<C4f>
+                else
+                    (Array.init pos.Length (fun v ->
+                        let c = palette.[(i + v / 8) % 4].ToC4f() in V3f(c.R, c.G, c.B)) :> System.Array), typeof<V3f>
+            let (colArr, colT) = colBuf
+            let mk () =
+                let ro = RenderObject()
+                ro.Surface <- Surface.Effect effect
+                ro.Mode    <- IndexedGeometryMode.TriangleList
+                ro.VertexAttributes <- AttributeProvider.ofList [
+                    DefaultSemantic.Positions, BufferView(AVal.constant (ArrayBuffer pos :> IBuffer), typeof<V3f>)
+                    DefaultSemantic.Normals,   BufferView(AVal.constant (ArrayBuffer nrm :> IBuffer), typeof<V3f>)
+                    DefaultSemantic.Colors,    BufferView(AVal.constant (ArrayBuffer colArr :> IBuffer), colT) ]
+                ro.Indices   <- Some (BufferView(AVal.constant (ArrayBuffer idx :> IBuffer), typeof<int>))
+                ro.DrawCalls <- DrawCalls.Direct (AVal.constant [| DrawCallInfo(FaceVertexCount = idx.Length, InstanceCount = 1) |])
+                ro.Uniforms  <- UniformProvider.ofList [
+                    Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                    Symbol.Create "ViewProjTrafo",  viewProj ]
+                ro :> IRenderObject
+            mk (), mk ()
+
+        let pairs = Array.init n mkPair
+        let heapLive    = cset (pairs |> Array.map fst)
+        let classicLive = cset (pairs |> Array.map snd)
+
+        let heapObjs = Heap.ofRenderObjects (runtime.CreateHeapStorage()) heapLive
+        use heapTask = runtime.CompileRender(signature, heapObjs)
+        let heapOut = heapTask |> RenderTask.renderToColor size
+        heapOut.Acquire()
+        use classicTask = runtime.CompileRender(signature, classicLive)
+        let classicOut = classicTask |> RenderTask.renderToColor size
+        classicOut.Acquire()
+
+        let mutable pass = true
+        let check (label : string) (expectedParts : int) (expectedDyn : int) =
+            let h = heapOut.GetValue().Download().AsPixImage<uint8>()
+            let c = classicOut.GetValue().Download().AsPixImage<uint8>()
+            let maxDelta, nDiff, nNonBg, total = diff c h
+            let pixOk = maxDelta <= 1 && nNonBg > 1000L
+            let partOk = Heap.lastMaterializedPartitions = expectedParts && Heap.lastDynamicResidents = expectedDyn
+            if pixOk && partOk then
+                Log.line "mixedTypes[%s]: PASS (coverage=%d, partitions=%d, dynamic=%d)" label nNonBg Heap.lastMaterializedPartitions Heap.lastDynamicResidents
+            else
+                Log.warn "mixedTypes[%s]: FAIL pix(maxDelta=%d diff=%d/%d coverage=%d) partitions=%d (exp %d) dynamic=%d (exp %d)"
+                    label maxDelta nDiff total nNonBg Heap.lastMaterializedPartitions expectedParts Heap.lastDynamicResidents expectedDyn
+            pass <- pass && pixOk && partOk
+
+        // both 90-groups materialize; the 20 V3f stay dynamic
+        check "initial" 2 20
+
+        // remove the C4f group -> its partition DEmaterializes
+        transact (fun () ->
+            for i in 90 .. 179 do
+                heapLive.Remove (fst pairs.[i]) |> ignore
+                classicLive.Remove (snd pairs.[i]) |> ignore)
+        check "remove-c4f" 1 20
+
+        // re-add -> RE-materializes under a FRESH partition id (double-draw guard)
+        transact (fun () ->
+            for i in 90 .. 179 do
+                heapLive.Add (fst pairs.[i]) |> ignore
+                classicLive.Add (snd pairs.[i]) |> ignore)
+        check "readd-c4f" 2 20
+
+        if pass then Log.line "mixedTypes: ALL PASS (typed partitions == classic; materialize/demat/remat verified)"
+        else Log.warn "mixedTypes: FAIL"
+        pass
