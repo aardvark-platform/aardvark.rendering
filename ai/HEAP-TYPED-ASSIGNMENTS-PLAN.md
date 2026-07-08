@@ -66,6 +66,10 @@ every remaining laddered field.
   membership move. Typed partitions are POPULATION-GATED (threshold +
   hysteresis): esoteric assignments with a handful of slots stay dynamic
   forever — no pipeline/partition explosion, today's speed for the tail.
+  Thresholds SETTLED (user, 2026-07-08): materialize 64 / dematerialize 16 —
+  "single instances don't fragment it and heavily used paths are optimized."
+  (A vertex-weighted threshold via vcOfSlot noted as a possible future
+  refinement, not needed now.)
 - **Async pipeline creation (settled).** The unspecialized pipeline (all tids
   0) is a CORRECT placeholder by construction, so async is risk-free: the
   per-assignment pipeline resource returns the bucket's generic pipeline
