@@ -394,6 +394,28 @@ Lesson cemented: NEVER trust cross-day numbers on shared/laptop boxes — only
 same-session A/Bs; hekla floors were poisoned for a full day of tables.
 grep -c trap hit a THIRD time (sweep commit silently skipped).
 
+### Instance-rate record rows (3dc06dea, 2026-07-09) — chain shortening, phase 2
+The designed lever, built: ClassSlots entries widen from {slot} to
+[slot; vc; idxRef; attrRef0..N-1] (rowWords = 3 + min 8 numAttrs), bound as
+HeapRec0..N VertexInputRate.Instance int attributes over the SAME MirrorBuffer
+(usage +Vertex, per-attr offset, stride rowWords*4). Records' FirstInstance
+addresses the row; the hardware fetches it at wave launch -> the
+ClassSlots->record dependent double-hop leaves the shader chain for BOTH typed
+and dynamic partitions. Shader: slotVar/vtx-clamp/idxRef/attr refs read
+HeapRec* inputs (FShade auto-plumbs them to FS as flat varyings for uniform
+gathers — same mechanism as the old HeapSlotAttr MoltenVK fallback).
+Maintenance: rowFill rides classAdd/classRemove/relayout/ensureRoom + refresh
+hooks in GeomMoved and compaction RewriteHeaders (slot->entry via
+clusterClsOf/clusterPosOf). Zero new buffers; rows REPLACE ClassSlots.
+
+Renderbench 200k typed/no-spec vs baked: 5060 2.56/3.77 vs 2.65 (0.97x) |
+4070Ti 1.63/2.16 vs 1.97 (0.83x) | 4070L 3.14/3.86 vs 3.74 (0.84x) | 890M
+28.1/41.5 vs 21.8 (1.29x, was 1.43x) | RADV 2CU 34.6/53.9 vs 22.1 (1.57x, was
+1.96x; dynamic -20%). M1 PENDING (mac off — validate MoltenVK instance attrs
+before shipping 0050). Probes ALL PASS (AMD-Windows + NVIDIA; RADV keeps its
+known pre-existing edge-pixel variance). Campaign totals on APUs:
+890M 2.1x -> 1.29x, RADV-2CU 3.3x -> 1.57x vs baked.
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
