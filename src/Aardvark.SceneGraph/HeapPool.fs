@@ -3587,7 +3587,17 @@ module Heap =
         let classCap   = System.Collections.Generic.List<int>()
         let mutable csCursor = 0                                  // high-water of the region space
         let mutable csLiveCaps = 0                                // sum of LIVE region capacities
-        let mutable csStaging : int[] = Array.zeroCreate 64       // authoritative CPU mirror
+        // INSTANCE-RATE RECORD ROWS: each class-list entry is a ROW of hot
+        // per-slot record fields — [slot; vc; idxRef; attrRef0..N-1] — bound as
+        // VertexInputRate.Instance attributes (HeapRec0..). The hardware fetches
+        // the row at wave launch (address linear in gl_InstanceIndex, applied
+        // via the records' FirstInstance): the ClassSlots->record dependent
+        // double-hop leaves the shader's critical path entirely. classBase /
+        // classCap / csCursor stay in ENTRY units; csStaging is in WORDS.
+        let rowAttrs = min 8 numAttrs
+        let rowWords = 3 + rowAttrs
+        let mutable rowFill : int -> int -> unit = fun _ _ -> ()  // entry, slot (wired below headers)
+        let mutable csStaging : int[] = Array.zeroCreate (64 * rowWords)   // authoritative CPU mirror (words)
         let csDirty = System.Collections.Generic.List<struct(int * int)>()
         let mutable csFullDirty = false
         /// sparse-edit ranges only pay off while they stay FEW: bulk ingest (one
@@ -3618,9 +3628,9 @@ module Heap =
                     classBlocks.Add key
                     b
             blockBase + cls
-        let csEnsureStaging (n : int) =
-            if csStaging.Length < n then
-                let ns = Array.zeroCreate<int> (Fun.NextPowerOfTwo n)
+        let csEnsureStaging (nEntries : int) =
+            if csStaging.Length < nEntries * rowWords then
+                let ns = Array.zeroCreate<int> (Fun.NextPowerOfTwo (nEntries * rowWords))
                 System.Array.Copy(csStaging, ns, csStaging.Length)
                 csStaging <- ns
         /// re-pack every region tightly (drops leaked space); full rewrite
@@ -3632,7 +3642,7 @@ module Heap =
                 classBase.[idx] <- o
                 classCap.[idx] <- cap
                 csEnsureStaging (o + cap)
-                for j in 0 .. l.Count - 1 do csStaging.[o + j] <- l.[j]
+                for j in 0 .. l.Count - 1 do rowFill (o + j) l.[j]
                 o <- o + cap
             csCursor <- o
             csLiveCaps <- o
@@ -3651,13 +3661,21 @@ module Heap =
                     let nb = csCursor
                     csCursor <- csCursor + newCap
                     csEnsureStaging csCursor
-                    for j in 0 .. l.Count - 1 do csStaging.[nb + j] <- l.[j]
-                    if l.Count > 0 then csMarkDirty nb l.Count
+                    for j in 0 .. l.Count - 1 do rowFill (nb + j) l.[j]
+                    if l.Count > 0 then csMarkDirty (nb * rowWords) (l.Count * rowWords)
                     classBase.[idx] <- nb
                     classCap.[idx] <- newCap
         let mutable clusterClsOf : int[] = Array.create 16 -1     // slot -> class idx (numClasses = oversized; -1 = not listed)
         let mutable clusterPosOf : int[] = Array.zeroCreate 16    // slot -> position in its class list
         let mutable vcOfSlot     : int[] = Array.zeroCreate 16    // slot -> drawn-vertex count
+        // wire the row writer (headers/vcOfSlot in scope from here on)
+        do rowFill <- fun entry slot ->
+            let o = entry * rowWords
+            csStaging.[o] <- slot
+            csStaging.[o + 1] <- vcOfSlot.[slot]
+            csStaging.[o + 2] <- headers.[slot * headerStride + idxCell]
+            for i in 0 .. rowAttrs - 1 do
+                csStaging.[o + 3 + i] <- headers.[slot * headerStride + attrBase + i]
         let classAdd (slot : int) =
             if clusterClsOf.[slot] < 0 then
                 let cls = match clusterClassOf vcOfSlot.[slot] with | -1 -> numClasses | c -> c
@@ -3666,8 +3684,8 @@ module Heap =
                 let l = classLists.[idx]
                 clusterClsOf.[slot] <- cls
                 clusterPosOf.[slot] <- l.Count
-                csStaging.[classBase.[idx] + l.Count] <- slot
-                csMarkDirty (classBase.[idx] + l.Count) 1
+                rowFill (classBase.[idx] + l.Count) slot
+                csMarkDirty ((classBase.[idx] + l.Count) * rowWords) rowWords
                 l.Add slot
         let classRemove (slot : int) =
             let cls = clusterClsOf.[slot]
@@ -3679,9 +3697,18 @@ module Heap =
                 l.[pos] <- last
                 clusterPosOf.[last] <- pos
                 l.RemoveAt(l.Count - 1)
-                csStaging.[classBase.[idx] + pos] <- last
-                csMarkDirty (classBase.[idx] + pos) 1
+                rowFill (classBase.[idx] + pos) last
+                csMarkDirty ((classBase.[idx] + pos) * rowWords) rowWords
                 clusterClsOf.[slot] <- -1
+        /// a listed slot's header cells (attr/idx refs) or vc changed: rewrite
+        /// its instance-record row in place (O(1), same dirty-range flush).
+        let refreshRow (slot : int) =
+            let cls = clusterClsOf.[slot]
+            if cls >= 0 then
+                let idx = classIdxOfList slotPage.[slot] slotPart.[slot] cls
+                let entry = classBase.[idx] + clusterPosOf.[slot]
+                rowFill entry slot
+                csMarkDirty (entry * rowWords) rowWords
         do relistSlot <- fun slot target ->
             let listed = clusterClsOf.[slot] >= 0
             if listed then classRemove slot
@@ -4339,13 +4366,13 @@ module Heap =
         // gl_InstanceIndex -> slot. O(changed): membership edits recorded as dirty
         // single-int ranges into the CPU mirror; only region growth / relayout pays
         // a bigger (amortized) upload.
-        let classSlotsBuf = MirrorBuffer(runtime, 64 * 4, BufferUsage.Storage)
+        let classSlotsBuf = MirrorBuffer(runtime, 64 * 4, BufferUsage.Storage ||| BufferUsage.Vertex)
         let flushClassSlots (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
             classSlotsBuf.ResizeInPlace(uint64 (max 64 csStaging.Length * 4))
             if csFullDirty then
                 csFullDirty <- false
                 csDirty.Clear()
-                if csCursor > 0 then classSlotsBuf.Write(csStaging, 0UL, 0, csCursor)
+                if csCursor > 0 then classSlotsBuf.Write(csStaging, 0UL, 0, csCursor * rowWords)
             elif csDirty.Count > 0 then
                 csDirty.Sort(fun (struct(a, _)) (struct(b, _)) -> compare a b)
                 // small gaps merge — csStaging is the always-valid source of truth
@@ -4501,7 +4528,8 @@ module Heap =
                 IndirectBuffer.ofBuffer false 0UL sizeof<DrawCallInfo> cnt (b :> IBuffer))
         let instAval = (instBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
         let slotPageU = ((slotPageBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
-        let classSlotsU = ((classSlotsBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
+        let classRowsAval = (classSlotsBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
+        let classSlotsU = classRowsAval :> IAdaptiveValue
         let pickIdU = ((pickIdBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
@@ -4824,13 +4852,19 @@ module Heap =
         let heapRewrite : Effect -> Effect =
             let handleE = slotE.Raw
             let vtxRawE : Expr<int> = Expr.Cast (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.VertexId))
+            // INSTANCE-RATE RECORD ROW (clusters): the hot per-slot record fields
+            // arrive as HeapRec0.. instance attributes — hardware-fetched at wave
+            // launch (FirstInstance-addressed), NO dependent load in the chain.
+            let recIn (i : int) : Expr<int> = Expr.Cast (Expr.ReadInput<int>(ParameterKind.Input, sprintf "HeapRec%d" i))
             // CLUSTERED records are padded to the class size: clamp the vertex cursor
             // to the slot's real count — padding lanes all re-shade the LAST vertex,
             // so padding triangles are zero-area and culled.
             let vtxE : Expr<int> =
-                if useClusters then <@ min %vtxRawE (uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint vcCell) ] - 1) @>
+                if useClusters then <@ min %vtxRawE (%(recIn 1) - 1) @>
                 else vtxRawE
-            let idxRefE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint idxCell) ] @>
+            let idxRefE : Expr<int> =
+                if useClusters then recIn 2
+                else <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint idxCell) ] @>
             let fieldOff (fi : int) : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint fi) ] @>
             fun e ->
                 // PICKING: rewrite a `uniform.HeapPickId` read (from the dom heap pick-fragment)
@@ -4883,7 +4917,9 @@ module Heap =
                                         if useBindlessGeom then
                                             bindlessGatherFlat handleE vidE.Raw ityp numAttrs ai strideF offF
                                         else
-                                            let refE : Expr<int> = <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint (attrBase + ai)) ] @>
+                                            let refE : Expr<int> =
+                                                if useClusters && ai < rowAttrs then recIn (3 + ai)
+                                                else <@ uniform.HeapHeaders.[ %slotE * %(cint headerStride) + %(cint (attrBase + ai)) ] @>
                                             match hostGather (heapTidRead ai) ityp refE vidE with
                                             | Some g -> g
                                             | None -> failwithf "Heap: cannot storage-decode shader input '%s' (%A — supported: float32/V2f/V3f/V4f and int/V2i/V3i/V4i)" name ityp
@@ -4898,7 +4934,7 @@ module Heap =
                     // OUTERMOST (the vid let + every gather reference it via slotE)
                     let body =
                         if useClusters then
-                            Expr.Let(slotVar, (<@ (uniform.HeapClassSlots : int[]).[ %(Expr.Cast<int> (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId))) ] @>).Raw, body)
+                            Expr.Let(slotVar, (recIn 0).Raw, body)
                         else body
                     Shader.withBody body sh)
 
@@ -4980,7 +5016,7 @@ module Heap =
                     else
                         withSamplers |> Effect.map (fun sh ->
                             if sh.shaderBody.GetFreeVars() |> Seq.exists (fun v -> v = slotVar) then
-                                let slotRead = (<@ (uniform.HeapClassSlots : int[]).[ %(Expr.Cast<int> (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId))) ] @>).Raw
+                                let slotRead = (Expr.ReadInput<int>(ParameterKind.Input, "HeapRec0")).Raw
                                 Shader.withBody (Expr.Let(slotVar, slotRead, sh.shaderBody)) sh
                             else sh)
                 Surface.Effect final
@@ -4996,6 +5032,14 @@ module Heap =
             // ALL members if it ever overlapped a semantic).
             if useSlotAttr then
                 ro.InstanceAttributes <- AttributeProvider.ofList [ symSlotAttr, BufferView(instAval, typeof<int>) ]
+            elif useClusters then
+                // the instance-record row: HeapRec0..N as int attributes striding
+                // over the (page,partition,class)-regioned rows buffer — the
+                // records' FirstInstance addresses the row, hardware fetches it
+                ro.InstanceAttributes <-
+                    AttributeProvider.ofList
+                        [ for i in 0 .. rowWords - 1 ->
+                            Symbol.Create (sprintf "HeapRec%d" i), BufferView(classRowsAval, typeof<int>, i * 4, rowWords * 4) ]
             else
                 ro.InstanceAttributes <- AttributeProvider.ofList ([] : (Symbol * BufferView) list)
             // indices are storage-decoded too: draws are NON-indexed
@@ -5630,6 +5674,8 @@ module Heap =
                     if slotFieldLen.[slot * 8 + ai] <> newCount then
                         slotFieldLen.[slot * 8 + ai] <- newCount
                         recomputeAssign slot
+                // instance-record row mirrors attr/idx refs + vc — refresh it
+                if useClusters then refreshRow slot
                 dirtyHeaders.Add slot |> ignore
 
         // shared-page compaction stake: contribute this bucket's per-slot arena
@@ -5678,6 +5724,8 @@ module Heap =
                     match pg.IdxStatic.TryGetValue s.IdxKey with
                     | true, e -> headers.[hb + idxCell] <- e.Ref
                     | _ -> ()
+                    // compaction moved allocations -> re-bake the instance-record row
+                    if useClusters then refreshRow s.Slot
                 headersAllDirty <- true
 
     /// Collapse an adaptive set of N render objects into B bucket render objects
