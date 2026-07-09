@@ -81,8 +81,19 @@ module HeapUniforms =
         /// per-vertex gathers hit dense lines instead of cells scattered through
         /// ~4KB slot groups in the geometry arena. Float and double views of the
         /// SAME buffer (like HeapData/HeapDataD).
-        member x.HeapUni  : float32[] = uniform?StorageBuffer?HeapUni
-        member x.HeapUniD : float[]   = uniform?StorageBuffer?HeapUniD
+        /// ENTRY STORE ("the UBO layer"): per class-list entry, ALL of the
+        /// bucket's consumed per-draw uniform values packed contiguously with a
+        /// compile-time-derived layout (lane = vec4; scalars pack 4/lane and
+        /// fill vec3 slack). Written by the fan-out compute pre-pass (word
+        /// copies from arena / HeapUni sources), read by the draw shaders with
+        /// chain-free `entry * stride + lane` addressing. Float and int views
+        /// of the SAME buffer (int fields stay bit-exact).
+        member x.HeapVals  : V4f[] = uniform?StorageBuffer?HeapVals
+        member x.HeapValsI : V4i[] = uniform?StorageBuffer?HeapValsI
+        member x.HeapValsRaw : int[] = uniform?StorageBuffer?HeapValsRaw   // word view (fan-out writes)
+        /// the instance-row buffer as a plain int array (the fan-out reads
+        /// entry -> slot from row word 0)
+        member x.HeapRows : int[] = uniform?StorageBuffer?HeapRows
         member x.HeapPageId : int = uniform?HeapPageId
         // PICKING: dom-sourced per-slot pick id, gathered by gl_InstanceIndex; the dom
         // heap pick-shader writes this into the pick buffer. Only bound when picking.
@@ -342,33 +353,6 @@ module Heap =
     /// Standard trafo derivations. ModelTrafo is per-object (arena); the
     /// camera-dependent factors stay globals (UBO, one upload per camera move).
 
-    /// gather a DERIVED-composite value from the DENSE uniform store (HeapUni /
-    /// HeapUniD) at word `off`. Derived outputs are matrix-typed (the compose
-    /// kernels write M44f/M33f, double-requested reads via the double view).
-    let private uniGatherFor (typ : System.Type) (off : Expr<int>) : Expr =
-        if typ = typeof<M44f> then
-            (<@ let o = %off in
-                M44f(uniform.HeapUni.[o+0],  uniform.HeapUni.[o+1],  uniform.HeapUni.[o+2],  uniform.HeapUni.[o+3],
-                     uniform.HeapUni.[o+4],  uniform.HeapUni.[o+5],  uniform.HeapUni.[o+6],  uniform.HeapUni.[o+7],
-                     uniform.HeapUni.[o+8],  uniform.HeapUni.[o+9],  uniform.HeapUni.[o+10], uniform.HeapUni.[o+11],
-                     uniform.HeapUni.[o+12], uniform.HeapUni.[o+13], uniform.HeapUni.[o+14], uniform.HeapUni.[o+15]) @>).Raw
-        elif typ = typeof<M33f> then
-            (<@ let o = %off in
-                M33f(uniform.HeapUni.[o+0], uniform.HeapUni.[o+1], uniform.HeapUni.[o+2],
-                     uniform.HeapUni.[o+3], uniform.HeapUni.[o+4], uniform.HeapUni.[o+5],
-                     uniform.HeapUni.[o+6], uniform.HeapUni.[o+7], uniform.HeapUni.[o+8]) @>).Raw
-        elif typ = typeof<M44d> then
-            (<@ let d = %off >>> 1 in
-                M44d(uniform.HeapUniD.[d+0],  uniform.HeapUniD.[d+1],  uniform.HeapUniD.[d+2],  uniform.HeapUniD.[d+3],
-                     uniform.HeapUniD.[d+4],  uniform.HeapUniD.[d+5],  uniform.HeapUniD.[d+6],  uniform.HeapUniD.[d+7],
-                     uniform.HeapUniD.[d+8],  uniform.HeapUniD.[d+9],  uniform.HeapUniD.[d+10], uniform.HeapUniD.[d+11],
-                     uniform.HeapUniD.[d+12], uniform.HeapUniD.[d+13], uniform.HeapUniD.[d+14], uniform.HeapUniD.[d+15]) @>).Raw
-        elif typ = typeof<M33d> then
-            (<@ let d = %off >>> 1 in
-                M33d(uniform.HeapUniD.[d+0], uniform.HeapUniD.[d+1], uniform.HeapUniD.[d+2],
-                     uniform.HeapUniD.[d+3], uniform.HeapUniD.[d+4], uniform.HeapUniD.[d+5],
-                     uniform.HeapUniD.[d+6], uniform.HeapUniD.[d+7], uniform.HeapUniD.[d+8]) @>).Raw
-        else failwithf "Heap: derived uniform requested as %A — dense uniform store supports matrix types (M33f/M44f/M33d/M44d)" typ
     let standardDerivedRules : Map<string, DerivedRule> =
         Map.ofList [
             // ViewProjTrafo is derived from its constituents so the heap never requests
@@ -2524,19 +2508,6 @@ module Heap =
             uniform.HeapData.[off+0]<-m.M00; uniform.HeapData.[off+1]<-m.M01; uniform.HeapData.[off+2]<-m.M02
             uniform.HeapData.[off+3]<-m.M10; uniform.HeapData.[off+4]<-m.M11; uniform.HeapData.[off+5]<-m.M12
             uniform.HeapData.[off+6]<-m.M20; uniform.HeapData.[off+7]<-m.M21; uniform.HeapData.[off+8]<-m.M22
-        // DENSE uniform-store variants (derived-composite outputs live in the
-        // bucket-global HeapUni buffer, not the paged geometry arena)
-        [<ReflectedDefinition>]
-        let uniM44 (off : int) (m : M44f) =
-            uniform.HeapUni.[off+0]<-m.M00;  uniform.HeapUni.[off+1]<-m.M01;  uniform.HeapUni.[off+2]<-m.M02;  uniform.HeapUni.[off+3]<-m.M03
-            uniform.HeapUni.[off+4]<-m.M10;  uniform.HeapUni.[off+5]<-m.M11;  uniform.HeapUni.[off+6]<-m.M12;  uniform.HeapUni.[off+7]<-m.M13
-            uniform.HeapUni.[off+8]<-m.M20;  uniform.HeapUni.[off+9]<-m.M21;  uniform.HeapUni.[off+10]<-m.M22; uniform.HeapUni.[off+11]<-m.M23
-            uniform.HeapUni.[off+12]<-m.M30; uniform.HeapUni.[off+13]<-m.M31; uniform.HeapUni.[off+14]<-m.M32; uniform.HeapUni.[off+15]<-m.M33
-        [<ReflectedDefinition>]
-        let uniM33 (off : int) (m : M33f) =
-            uniform.HeapUni.[off+0]<-m.M00; uniform.HeapUni.[off+1]<-m.M01; uniform.HeapUni.[off+2]<-m.M02
-            uniform.HeapUni.[off+3]<-m.M10; uniform.HeapUni.[off+4]<-m.M11; uniform.HeapUni.[off+5]<-m.M12
-            uniform.HeapUni.[off+6]<-m.M20; uniform.HeapUni.[off+7]<-m.M21; uniform.HeapUni.[off+8]<-m.M22
         [<ReflectedDefinition>]
         let m44dInto (woff : int) (m : M44d) =
             let o = woff >>> 1
@@ -2923,16 +2894,16 @@ module Heap =
                         let outOff = uniform.HeapHeaders.[hb + records.[rb + 1]]
                         let a = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 2]])
                         match records.[rb] with
-                        | 1 -> HeapWrite.uniM44 outOff (M44f(a))
+                        | 1 -> HeapWrite.m44 outOff (M44f(a))
                         | 2 -> let b = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 3]])
-                               HeapWrite.uniM44 outOff (M44f(a * b))
+                               HeapWrite.m44 outOff (M44f(a * b))
                         | 3 -> let b = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 3]])
                                let c = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 4]])
-                               HeapWrite.uniM44 outOff (M44f(a * b * c))
+                               HeapWrite.m44 outOff (M44f(a * b * c))
                         | _ ->
                             // NormalMatrix = transpose(Model_backward) upper-3x3.
                             let t = a.Transposed
-                            HeapWrite.uniM33 outOff
+                            HeapWrite.m33 outOff
                                 (M33f(float32 t.M00, float32 t.M01, float32 t.M02,
                                       float32 t.M10, float32 t.M11, float32 t.M12,
                                       float32 t.M20, float32 t.M21, float32 t.M22))
@@ -2969,7 +2940,7 @@ module Heap =
                         match records.[rb] with
                         | 1 ->
                             for k in 0 .. 15 do
-                                uniform.HeapUni.[outOff + k] <- Df32.collapse (Df32.ldEntry offA k)
+                                uniform.HeapData.[outOff + k] <- Df32.collapse (Df32.ldEntry offA k)
                         | 2 ->
                             let offB = uniform.HeapHeaders.[hb + records.[rb + 3]]
                             for rr in 0 .. 3 do
@@ -2977,7 +2948,7 @@ module Heap =
                                     let mutable acc = V2f(0.0f, 0.0f)
                                     for t in 0 .. 3 do
                                         acc <- Df32.add acc (Df32.mul (Df32.ldEntry offA (rr * 4 + t)) (Df32.ldEntry offB (t * 4 + c)))
-                                    uniform.HeapUni.[outOff + rr * 4 + c] <- Df32.collapse acc
+                                    uniform.HeapData.[outOff + rr * 4 + c] <- Df32.collapse acc
                         | 3 ->
                             let offB = uniform.HeapHeaders.[hb + records.[rb + 3]]
                             let offC = uniform.HeapHeaders.[hb + records.[rb + 4]]
@@ -2994,12 +2965,104 @@ module Heap =
                                     let mutable acc = V2f(0.0f, 0.0f)
                                     for t in 0 .. 3 do
                                         acc <- Df32.add acc (Df32.mul p.[rr * 4 + t] (Df32.ldEntry offC (t * 4 + c)))
-                                    uniform.HeapUni.[outOff + rr * 4 + c] <- Df32.collapse acc
+                                    uniform.HeapData.[outOff + rr * 4 + c] <- Df32.collapse acc
                         | _ ->
                             // NormalMatrix = transpose(A) upper-3x3.  out[i*3+j] = A[j,i].
                             for i in 0 .. 2 do
                                 for j in 0 .. 2 do
-                                    uniform.HeapUni.[outOff + i * 3 + j] <- Df32.collapse (Df32.ldEntry offA (j * 4 + i))
+                                    uniform.HeapData.[outOff + i * 3 + j] <- Df32.collapse (Df32.ldEntry offA (j * 4 + i))
+            }
+
+    /// ENTRY-STORE ("UBO layer") machinery: packed per-entry uniform layout,
+    /// derived at BUCKET BUILD from the consumed field set (lane = vec4;
+    /// matrices take whole lanes, vec3s leave slack components that scalars
+    /// fill, vec2s pair up, scalars pack 4 per lane). f32/int types only —
+    /// fp64-requested fields keep the arena-gather path (double uniforms are
+    /// banned from tests/demos anyway: MoltenVK has no shader doubles).
+    module internal EntryStore =
+        /// per-field placement: laneOffset, component, copyRowWords, copyRows,
+        /// dstRowStrideWords (matrices copy row-wise: M33f = 3 rows of 3 words
+        /// into vec4-aligned lanes). ValueNone = not entry-storable (legacy path).
+        [<Struct>]
+        type Placement = { Lane : int; Comp : int; RowWords : int; Rows : int; DstRowStride : int }
+
+        let computeLayout (types : System.Type[]) : int * Placement voption[] =
+            let res : Placement voption[] = Array.create types.Length ValueNone
+            let mutable lane = 0
+            // 1. whole-lane fields
+            for i in 0 .. types.Length - 1 do
+                let t = types.[i]
+                if t = typeof<M44f> then
+                    res.[i] <- ValueSome { Lane = lane; Comp = 0; RowWords = 16; Rows = 1; DstRowStride = 16 }
+                    lane <- lane + 4
+                elif t = typeof<M33f> then
+                    res.[i] <- ValueSome { Lane = lane; Comp = 0; RowWords = 3; Rows = 3; DstRowStride = 4 }
+                    lane <- lane + 3
+                elif t = typeof<V4f> || t = typeof<C4f> || t = typeof<V4i> then
+                    res.[i] <- ValueSome { Lane = lane; Comp = 0; RowWords = 4; Rows = 1; DstRowStride = 4 }
+                    lane <- lane + 1
+            // 2. vec3s: own lane, remember the slack component
+            let slack = System.Collections.Generic.Stack<struct(int * int)>()
+            for i in 0 .. types.Length - 1 do
+                let t = types.[i]
+                if t = typeof<V3f> || t = typeof<V3i> || t = typeof<C3f> then
+                    res.[i] <- ValueSome { Lane = lane; Comp = 0; RowWords = 3; Rows = 1; DstRowStride = 3 }
+                    slack.Push(struct(lane, 3))
+                    lane <- lane + 1
+            // 3. vec2s: two per lane
+            let mutable v2open = ValueNone
+            for i in 0 .. types.Length - 1 do
+                let t = types.[i]
+                if t = typeof<V2f> || t = typeof<V2i> then
+                    match v2open with
+                    | ValueSome struct(l, c) ->
+                        res.[i] <- ValueSome { Lane = l; Comp = c; RowWords = 2; Rows = 1; DstRowStride = 2 }
+                        v2open <- ValueNone
+                    | ValueNone ->
+                        res.[i] <- ValueSome { Lane = lane; Comp = 0; RowWords = 2; Rows = 1; DstRowStride = 2 }
+                        v2open <- ValueSome struct(lane, 2)
+                        lane <- lane + 1
+            // 4. scalars: slack components first, then 4 per lane
+            let mutable scOpen = ValueNone
+            for i in 0 .. types.Length - 1 do
+                let t = types.[i]
+                if t = typeof<float32> || t = typeof<int> || t = typeof<uint32> || t = typeof<bool> then
+                    let struct(l, c) =
+                        if slack.Count > 0 then slack.Pop()
+                        else
+                            match scOpen with
+                            | ValueSome struct(l, c) -> struct(l, c)
+                            | ValueNone -> let l = lane in lane <- lane + 1; struct(l, 0)
+                    res.[i] <- ValueSome { Lane = l; Comp = c; RowWords = 1; Rows = 1; DstRowStride = 1 }
+                    if slack.Count = 0 || true then
+                        scOpen <- (if c + 1 < 4 then ValueSome struct(l, c + 1) else ValueNone)
+            (max 1 lane), res
+
+        /// the fan-out: per class-list ENTRY, copy every entry-storable field's
+        /// words from its authoritative source (arena region or the deduped
+        /// HeapUni derive output — the header cell holds the offset either way)
+        /// into the packed entry store. Records: [hdrCell; dstWord; rowWords;
+        /// rows; dstRowStride; isUni] (REC = 6). Word copies = type-agnostic and
+        /// bit-exact for ints. Runs as a pre-pass dispatch AFTER the derive.
+        [<LocalSize(X = 64)>]
+        let fanout (n : int) (nRec : int) (hstride : int) (strideWords : int) (rowWords : int) (records : int[]) =
+            compute {
+                let e = getGlobalId().X
+                if e < n then
+                    let slot = uniform.HeapRows.[e * rowWords]
+                    if slot >= 0 && uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
+                        let hb = slot * hstride
+                        let db = e * strideWords
+                        for r in 0 .. nRec - 1 do
+                            let rb = r * 5
+                            let src = uniform.HeapHeaders.[hb + records.[rb]]
+                            let dst = db + records.[rb + 1]
+                            let rw = records.[rb + 2]
+                            let rows = records.[rb + 3]
+                            let drs = records.[rb + 4]
+                            for rr in 0 .. rows - 1 do
+                                for k in 0 .. rw - 1 do
+                                    uniform.HeapValsRaw.[dst + rr * drs + k] <- uniform.HeapDataI.[src + rr * rw + k]
             }
 
     /// Persistent state of ONE bucket — host OR bindless (vertex-pull) geometry,
@@ -3722,6 +3785,7 @@ module Heap =
                 classCap.[idx] <- cap
                 csEnsureStaging (o + cap)
                 for j in 0 .. l.Count - 1 do rowFill (o + j) l.[j]
+                for j in l.Count .. cap - 1 do csStaging.[(o + j) * rowWords] <- -1
                 o <- o + cap
             csCursor <- o
             csLiveCaps <- o
@@ -3741,7 +3805,8 @@ module Heap =
                     csCursor <- csCursor + newCap
                     csEnsureStaging csCursor
                     for j in 0 .. l.Count - 1 do rowFill (nb + j) l.[j]
-                    if l.Count > 0 then csMarkDirty (nb * rowWords) (l.Count * rowWords)
+                    for j in l.Count .. newCap - 1 do csStaging.[(nb + j) * rowWords] <- -1
+                    csMarkDirty (nb * rowWords) (newCap * rowWords)
                     classBase.[idx] <- nb
                     classCap.[idx] <- newCap
         let mutable clusterClsOf : int[] = Array.create 16 -1     // slot -> class idx (numClasses = oversized; -1 = not listed)
@@ -3778,6 +3843,9 @@ module Heap =
                 l.RemoveAt(l.Count - 1)
                 rowFill (classBase.[idx] + pos) last
                 csMarkDirty ((classBase.[idx] + pos) * rowWords) rowWords
+                // vacated tail entry: slot sentinel so the fan-out skips it
+                csStaging.[(classBase.[idx] + l.Count) * rowWords] <- -1
+                csMarkDirty ((classBase.[idx] + l.Count) * rowWords) 1
                 clusterClsOf.[slot] <- -1
         /// a listed slot's header cells (attr/idx refs) or vc changed: rewrite
         /// its instance-record row in place (O(1), same dirty-range flush).
@@ -4135,19 +4203,17 @@ module Heap =
         // -> share, plus the full registry.
         let derivedShares = System.Collections.Generic.Dictionary<struct(int * int * obj * obj * obj), DerivedShare>()
         let allShares = System.Collections.Generic.HashSet<DerivedShare>(HashIdentity.Reference)
-        // DENSE uniform store: derived outputs live tightly packed in their own
-        // bucket-global buffer (never the paged geometry arena) — consecutive
-        // slots' composites land in adjacent cache lines instead of one per
-        // ~4KB slot group, and the store never participates in page compaction.
-        // GPU-written by the derive kernels, gathered via HeapUni/HeapUniD.
-        let uniBuf = MirrorBuffer(runtime, 64 <<< 20, BufferUsage.Storage)   // DEBUG: pre-sized, no resize
-        let uniAlloc = HeapSpace()
+        // derive OUTPUTS live in the ARENA (deduped, page-compacted): draws never
+        // read them directly — the fan-out materializes them into the entry
+        // store, which is where the draw-side density lives.
         let allocOutput (requested : System.Type) : int * HeapBlock =
             let dbl = isDoubleUniform requested
             let (sz, _) = if dbl then doublePackerFor df32 requested else packerFor requested
-            let b = uniAlloc.Alloc (if dbl then sz + 1 else sz)
+            let b = arenaAlloc.Alloc (if dbl then sz + 1 else sz)
             let raw = int b.Offset
             let off = if dbl && (raw &&& 1) = 1 then raw + 1 else raw
+            arena.EnsureFloats arenaAlloc.Extent
+            arena.StageZero(raw, (if dbl then sz + 1 else sz))   // placeholder (see StageZero)
             off, b
 
         /// SINGLETON attribute (SingleValueBuffer): a header + an adaptive
@@ -4360,6 +4426,28 @@ module Heap =
         // derived OUTPUT regions of a double-requested type are 8-byte-aligned
         let outAligned = derivedCellOrder |> Array.map (fun c -> isDoubleUniform (fieldRequestedType names.[c]))
 
+        // ── ENTRY STORE ("UBO layer"): packed per-entry uniform values, layout
+        // derived HERE at bucket build from the consumed field set. Clustered
+        // buckets only; f32/int-typed fields only (fp64-requested fields keep
+        // the arena-gather path). Written by the fan-out pre-pass, read by the
+        // draw shaders with chain-free entry*stride+lane addressing. ──
+        let entryFieldTypes = names |> Array.map fieldRequestedType
+        let entryStrideLanes, entryPlaces =
+            if useClusters then EntryStore.computeLayout entryFieldTypes
+            else 1, Array.create names.Length ValueNone
+        let entryStrideWords = entryStrideLanes * 4
+        let hasEntryStore =
+            useClusters && (entryPlaces |> Array.exists ValueOption.isSome)
+            && System.Environment.GetEnvironmentVariable "HEAP_NO_VALS" <> "1"
+        // fan-out records: [hdrCell; dstWord; rowWords; rows; dstRowStride; isUni]
+        let entryRecords =
+            [| for i in 0 .. names.Length - 1 do
+                 match entryPlaces.[i] with
+                 | ValueSome pl ->
+                     yield! [| i; pl.Lane * 4 + pl.Comp; pl.RowWords; pl.Rows; pl.DstRowStride |]
+                 | ValueNone -> () |]
+        let numEntryRecords = entryRecords.Length / 5
+
         let compactInst () =
             let nd = Array.zeroCreate<int> (max 16 (Fun.NextPowerOfTwo (max 1 instAlloc.Live)))
             instAlloc.Reset()
@@ -4469,6 +4557,9 @@ module Heap =
         // single-int ranges into the CPU mirror; only region growth / relayout pays
         // a bigger (amortized) upload.
         let classSlotsBuf = MirrorBuffer(runtime, 64 * 4, BufferUsage.Storage ||| BufferUsage.Vertex)
+        // the VALS buffer (entry store): sized by class-entry capacity, content
+        // GPU-written by the fan-out pre-pass — no CPU staging at all.
+        let entryBuf = MirrorBuffer(runtime, 4096, BufferUsage.Storage)
         let flushClassSlots (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
             classSlotsBuf.ResizeInPlace(uint64 (max 64 csStaging.Length * 4))
             if csFullDirty then
@@ -4608,12 +4699,15 @@ module Heap =
                 classSlotsBuf.Dependency <- dep
                 classSlotsBuf.Flush <- flushClassSlots
                 classSlotsBuf.Name <- "HeapClassSlots"
-            if hasDerived then
-                uniBuf.Dependency <- dep
-                uniBuf.Flush <- (fun _ _ ->
-                    if Diagnostics then Log.line "[heap-dbg] uniBuf flush extent=%d" uniAlloc.Extent
-                    uniBuf.ResizeInPlace(uint64 (max 256 uniAlloc.Extent) * 4UL))
-                uniBuf.Name <- "HeapUni"
+            if hasEntryStore then
+                // the VALS buffer only tracks capacity (content is GPU-written by the
+                // fan-out): resize inside its OWN Compute — a cross-buffer ResizeInPlace
+                // (e.g. from flushClassSlots) never reallocates the handle and left
+                // late-grown entries (fresh partition blocks) out of bounds forever.
+                entryBuf.Dependency <- dep
+                entryBuf.Flush <- fun _ _ -> entryBuf.ResizeInPlace(uint64 (max 1024 (csCursor * entryStrideWords)) * 4UL)
+                entryBuf.Name <- "HeapVals"
+
             if picking then
                 pickIdBuf.Dependency <- dep
                 pickIdBuf.Flush <- flushPickIds
@@ -4638,9 +4732,9 @@ module Heap =
         let slotPageU = ((slotPageBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         let classRowsAval = (classSlotsBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
         let classSlotsU = classRowsAval :> IAdaptiveValue
-        let uniBufU = ((uniBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
-        let symUni = Symbol.Create "HeapUni"
-        let symUniD = Symbol.Create "HeapUniD"
+        let entryBufU = ((entryBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
+        let symVals = Symbol.Create "HeapVals"
+        let symValsI = Symbol.Create "HeapValsI"
         let pickIdU = ((pickIdBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
@@ -4728,6 +4822,15 @@ module Heap =
             elif df32 then runtime.CreateComputeShader Chain.composeModelInvDf32
             else runtime.CreateComputeShader Chain.composeModelInv
         let chainInvInput  = if chainBwdActive then runtime.CreateInputBinding chainInvShader else Unchecked.defaultof<_>
+        let fanoutShader =
+            if not hasEntryStore then Unchecked.defaultof<IComputeShader>
+            else runtime.CreateComputeShader EntryStore.fanout
+        let entryRecBuf : IBuffer<int> =
+            if not hasEntryStore then Unchecked.defaultof<_>
+            else
+                let b = runtime.CreateBuffer<int>(max 1 entryRecords.Length, BufferUsage.Write ||| BufferUsage.Storage)
+                if entryRecords.Length > 0 then b.Upload(entryRecords, 0, 0, entryRecords.Length)
+                b
         let derivedShader =
             if not hasDerived then Unchecked.defaultof<_>
             elif df32 then runtime.CreateComputeShader Derived.composeDerivedDf32
@@ -4751,6 +4854,34 @@ module Heap =
         // PAGED: one derive input binding per page — binds THAT page's arena + HeapPageId so the
         // guarded shader writes only page-i slots into page i's arena.
         let pageDeriveInputs = System.Collections.Generic.List<IComputeInputBinding>()
+        // fan-out dispatch state: per-page input bindings (page arena as the
+        // copy source), groups over the class-entry cursor
+        let nAvalEntries = if hasEntryStore then AVal.custom (fun t -> updater.GetValue t |> ignore; csCursor) else AVal.constant 0
+        let entryGroups =
+            if not hasEntryStore then AVal.constant V3i.III
+            else AVal.custom (fun t -> updater.GetValue t |> ignore; V3i(max 1 ((csCursor + 63) / 64), 1, 1))
+        let mkFanoutInput (pageArenaU : IAdaptiveValue) (pid : int) : IComputeInputBinding =
+            let provider =
+                { new IUniformProvider with
+                    member _.TryGetUniform(_, name) =
+                        match string name with
+                        | "n"            -> ValueSome (nAvalEntries :> IAdaptiveValue)
+                        | "nRec"         -> ValueSome (AVal.constant numEntryRecords :> IAdaptiveValue)
+                        | "hstride"      -> ValueSome (AVal.constant headerStride :> IAdaptiveValue)
+                        | "strideWords"  -> ValueSome (AVal.constant entryStrideWords :> IAdaptiveValue)
+                        | "rowWords"     -> ValueSome (AVal.constant rowWords :> IAdaptiveValue)
+                        | "records"      -> ValueSome (AVal.constant (entryRecBuf :> IBuffer) :> IAdaptiveValue)
+                        | "HeapRows"     -> ValueSome classSlotsU
+                        | "HeapHeaders"  -> ValueSome headersU
+                        | "HeapSlotPage" -> ValueSome slotPageU
+                        | "HeapPageId"   -> ValueSome (AVal.constant pid :> IAdaptiveValue)
+                        | "HeapDataI"    -> ValueSome pageArenaU
+                        | "HeapValsRaw"  -> ValueSome entryBufU
+                        | _              -> ValueNone
+                    member _.Dispose() = () }
+            let inp = runtime.CreateInputBinding(fanoutShader, provider)
+            pageDeriveInputs.Add inp
+            inp
         let mkDerivedInput (pageArenaU : IAdaptiveValue) (pid : int) : IComputeInputBinding =
             let provider =
                 { new IUniformProvider with
@@ -4765,7 +4896,6 @@ module Heap =
                         | "HeapPageId"   -> ValueSome (AVal.constant pid :> IAdaptiveValue)
                         | "HeapDataD"    -> ValueSome pageArenaU
                         | "HeapData"     -> ValueSome pageArenaU
-                        | "HeapUni"      -> ValueSome uniBufU
                         | _              -> ValueNone
                     member _.Dispose() = () }
             let inp = runtime.CreateInputBinding(derivedShader, provider)
@@ -4968,6 +5098,58 @@ module Heap =
             // arrive as HeapRec0.. instance attributes — hardware-fetched at wave
             // launch (FirstInstance-addressed), NO dependent load in the chain.
             let recIn (i : int) : Expr<int> = Expr.Cast (Expr.ReadInput<int>(ParameterKind.Input, sprintf "HeapRec%d" i))
+            // VALS ("UBO layer") reads: entry-storable per-draw uniforms come from
+            // the packed entry store at chain-free entry*stride+lane addressing —
+            // whole-lane b128 loads, components selected at compile time.
+            let entryE : Expr<int> = Expr.Cast (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId))
+            let valsGather (typ : System.Type) (pl : EntryStore.Placement) : Expr =
+                // IMPORTANT: the storage-buffer reads must appear LITERALLY inside the
+                // single returned quotation (only int index exprs are spliced) — a
+                // uniform.HeapVals read built in one quotation and %-spliced into
+                // another loses its StorageBuffer scope and FShade emits null[...].
+                let idx (lane : int) : Expr<int> = <@ %entryE * %(cint entryStrideLanes) + %(cint lane) @>
+                if typ = typeof<M44f> then
+                    let i0 = idx pl.Lane in let i1 = idx (pl.Lane+1) in let i2 = idx (pl.Lane+2) in let i3 = idx (pl.Lane+3)
+                    (<@ let r0 = uniform.HeapVals.[%i0]
+                        let r1 = uniform.HeapVals.[%i1]
+                        let r2 = uniform.HeapVals.[%i2]
+                        let r3 = uniform.HeapVals.[%i3]
+                        M44f(r0.X,r0.Y,r0.Z,r0.W, r1.X,r1.Y,r1.Z,r1.W, r2.X,r2.Y,r2.Z,r2.W, r3.X,r3.Y,r3.Z,r3.W) @>).Raw
+                elif typ = typeof<M33f> then
+                    let i0 = idx pl.Lane in let i1 = idx (pl.Lane+1) in let i2 = idx (pl.Lane+2)
+                    (<@ let r0 = uniform.HeapVals.[%i0]
+                        let r1 = uniform.HeapVals.[%i1]
+                        let r2 = uniform.HeapVals.[%i2]
+                        M33f(r0.X,r0.Y,r0.Z, r1.X,r1.Y,r1.Z, r2.X,r2.Y,r2.Z) @>).Raw
+                else
+                let i = idx pl.Lane
+                if typ = typeof<V4f> then (<@ uniform.HeapVals.[%i] @>).Raw
+                elif typ = typeof<C4f> then (<@ let v = uniform.HeapVals.[%i] in C4f(v.X, v.Y, v.Z, v.W) @>).Raw
+                elif typ = typeof<V4i> then (<@ uniform.HeapValsI.[%i] @>).Raw
+                elif typ = typeof<V3f> then (<@ uniform.HeapVals.[%i].XYZ @>).Raw
+                elif typ = typeof<C3f> then (<@ let v = uniform.HeapVals.[%i] in C3f(v.X, v.Y, v.Z) @>).Raw
+                elif typ = typeof<V3i> then (<@ uniform.HeapValsI.[%i].XYZ @>).Raw
+                elif typ = typeof<V2f> then
+                    (if pl.Comp = 0 then <@ uniform.HeapVals.[%i].XY @> else <@ uniform.HeapVals.[%i].ZW @>).Raw
+                elif typ = typeof<V2i> then
+                    (if pl.Comp = 0 then <@ uniform.HeapValsI.[%i].XY @> else <@ uniform.HeapValsI.[%i].ZW @>).Raw
+                elif typ = typeof<float32> then
+                    (match pl.Comp with
+                     | 0 -> <@ uniform.HeapVals.[%i].X @> | 1 -> <@ uniform.HeapVals.[%i].Y @>
+                     | 2 -> <@ uniform.HeapVals.[%i].Z @> | _ -> <@ uniform.HeapVals.[%i].W @>).Raw
+                elif typ = typeof<int> then
+                    (match pl.Comp with
+                     | 0 -> <@ uniform.HeapValsI.[%i].X @> | 1 -> <@ uniform.HeapValsI.[%i].Y @>
+                     | 2 -> <@ uniform.HeapValsI.[%i].Z @> | _ -> <@ uniform.HeapValsI.[%i].W @>).Raw
+                elif typ = typeof<uint32> then
+                    (match pl.Comp with
+                     | 0 -> <@ uint uniform.HeapValsI.[%i].X @> | 1 -> <@ uint uniform.HeapValsI.[%i].Y @>
+                     | 2 -> <@ uint uniform.HeapValsI.[%i].Z @> | _ -> <@ uint uniform.HeapValsI.[%i].W @>).Raw
+                elif typ = typeof<bool> then
+                    (match pl.Comp with
+                     | 0 -> <@ uniform.HeapValsI.[%i].X <> 0 @> | 1 -> <@ uniform.HeapValsI.[%i].Y <> 0 @>
+                     | 2 -> <@ uniform.HeapValsI.[%i].Z <> 0 @> | _ -> <@ uniform.HeapValsI.[%i].W <> 0 @>).Raw
+                else failwithf "Heap: entry store cannot deliver type %A" typ
             // CLUSTERED records are padded to the class size: clamp the vertex cursor
             // to the slot's real count — padding lanes all re-shade the LAST vertex,
             // so padding triangles are zero-area and culled.
@@ -5021,8 +5203,9 @@ module Heap =
                             | ParameterKind.Uniform, None ->
                                 match Map.tryFind name nameToField with
                                 | Some fi ->
-                                    let g = if derivedCells.Contains fi then uniGatherFor else gatherFor
-                                    Some (hoist name ityp (fun () -> g ityp (fieldOff fi)))
+                                    (match (if hasEntryStore then entryPlaces.[fi] else ValueNone) with
+                                     | ValueSome pl -> Some (hoist name ityp (fun () -> valsGather ityp pl))
+                                     | ValueNone -> Some (hoist name ityp (fun () -> gatherFor ityp (fieldOff fi))))
                                 | None -> None
                             | ParameterKind.Input, None when isVertex ->
                                 match attrInfos |> Array.tryFind (fun (_, n, _, _, _, _, _) -> n = name) with
@@ -5175,7 +5358,7 @@ module Heap =
                         elif specUniformLookup.ContainsKey name then ValueSome specUniformLookup.[name]
                         elif picking && name = symPickIds then ValueSome pickIdU
                         elif useClusters && name = symClassSlots then ValueSome classSlotsU
-                        elif hasDerived && (name = symUni || name = symUniD) then ValueSome uniBufU
+                        elif hasEntryStore && (name = symVals || name = symValsI) then ValueSome entryBufU
                         else
                             match texLookup.TryGetValue name with
                             | true, v -> ValueSome v
@@ -5201,12 +5384,20 @@ module Heap =
         // pre-pass (ending in a compute→vertex barrier) in the SAME submission as the bucket's draws,
         // so page i is always drawn against its own freshly-derived arena (kills the [ts] page>0 stale).
         let deriveSpecs = System.Collections.Generic.List<IComputeShader * aval<V3i> * Map<string, obj>>()
+        // fan-out specs run AFTER all derives (each dispatch carries a pre-barrier
+        // covering prior compute writes, so the fan-out reads fresh derive outputs)
+        let fanoutSpecs = System.Collections.Generic.List<IComputeShader * aval<V3i> * Map<string, obj>>()
         let ensureDeriveROs () =
             if hasDerived then
                 while deriveSpecs.Count < storage.Count do
                     let i = deriveSpecs.Count
                     let pageArenaU = ((storage.Page(i).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
                     deriveSpecs.Add(derivedShader, derivedGroups, Map.ofList [ "__input", box (mkDerivedInput pageArenaU i) ])
+            if hasEntryStore then
+                while fanoutSpecs.Count < storage.Count do
+                    let i = fanoutSpecs.Count
+                    let pageArenaU = ((storage.Page(i).Arena :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
+                    fanoutSpecs.Add(fanoutShader, entryGroups, Map.ofList [ "__input", box (mkFanoutInput pageArenaU i) ])
 
         // PAGED draw fan-out. page 0 = `bucketRO` (the incremental machinery above, now zeroing
         // non-page-0 slots). pages >0 each get a fresh indirect (its slots only, full-rewrite flush)
@@ -5323,7 +5514,9 @@ module Heap =
             if heapROPageCount <> storage.Count || heapROEpoch <> partEpoch then
                 heapROPageCount <- storage.Count
                 heapROEpoch <- partEpoch
-                let derives = if hasDerived then List.ofSeq deriveSpecs else []
+                let derives =
+                    (if hasDerived then List.ofSeq deriveSpecs else [])
+                    @ (if hasEntryStore then List.ofSeq fanoutSpecs else [])
                 let draws = List.ofSeq (currentDraws ())
                 let hro = HeapRenderObject(RenderPass.main, scope, derives, draws)
                 // pickability is a construction-time property of the bucket (its ROs carry the
@@ -5688,7 +5881,7 @@ module Heap =
                     if sh.Members.Count = 0 then
                         if sh.Dedup then derivedShares.Remove sh.Key |> ignore
                         allShares.Remove sh |> ignore
-                        uniAlloc.Free sh.Block
+                        arenaAlloc.Free sh.Block
                     elif sh.Owner = s.Slot then
                         // transfer ownership — any member computes the same value
                         let mutable no = -1
@@ -5853,8 +6046,16 @@ module Heap =
         // page dicts) and re-bake every slot's header cells after a move.
         interface IPageParticipant with
             member _.CollectResidents(page, res) =
-                // derived outputs live in the DENSE uniform store (bucket-global,
-                // never page-compacted) — only fold blocks participate here.
+                // derived-output shares are arena blocks: contribute ONCE each
+                // (deduped regions have many referencing slots); every member's
+                // header cell re-bakes from Share.Offset in RewriteHeaders.
+                for sh in allShares do
+                    if sh.Page = page then
+                        let struct(_, j, _, _, _) = sh.Key
+                        let shr = sh
+                        res.Add(struct(sh.Offset, int sh.Block.Size, outAligned.[j], fun off b ->
+                            shr.Offset <- off
+                            shr.Block <- b))
                 for KeyValue(_, s) in slots do
                     if s.Page = page then
                         let hb = s.Slot * headerStride
