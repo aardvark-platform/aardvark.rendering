@@ -428,6 +428,33 @@ The editable heap now sits within ~10% of the achievable classic pipeline on
 desktop/laptop NVIDIA, beats it on Apple, and is under 2x even on a 2-CU
 display adapter.
 
+### MoltenVK validation of the rows + the three-bug untangling (2026-07-09)
+The mac's "golden crash" unwound into THREE independent issues (914b9dfa):
+1. ASYNC-SPEC USE-AFTER-FREE (latent since 0047, all platforms, crashy only on
+   MVK): PipelineResource.Destroy released the native pipeline-state cells
+   while the background vkCreateGraphicsPipelines still read them (SIGSEGV in
+   MVK initSampleLocations). Fix: Destroy waits out the in-flight bgTask.
+2. spirv-opt strips UNREFERENCED buffer declarations -> a stage whose
+   descriptor view has holes breaks MVK argument-buffer padding. Fix: skip
+   optimizeDefault on portability devices (backend re-opts; AMD proved
+   byte-identical).
+3. golden[textured] HARD-CODES the bindless sampler array — a path the heap
+   NEVER takes on MVK (SupportsUnboundedSamplerArrays gate -> atlas; its own
+   comment documents that MVK cannot compile unbounded arrays). The probe was
+   wrong, not the product: it now SKIPs where unbounded is unsupported;
+   atlasheap covers the real MVK path (PASS badPixels=0 with rows).
+   NOTE: MVK golden PASS lines were MISSING all week (silent crashes read as
+   "output buffering"); the remembered ALL PASS was KosmicKrisp (bindless
+   compiles fine under Mesa). Also: the mac's SYSTEM ICD is MoltenVK 1.2.0
+   (SDK 1.3.231, 2022!) — the padding error reproduces on 1.4.350's MVK too.
+   macOS aardvark cache lives at ~/Library/Application Support/Aardvark (NOT
+   ~/.local/share) — clearing the wrong one re-tests stale binaries.
+
+M1 rows numbers: renderbench typed 4.84 / no-spec 8.36 (was 4.98/8.75);
+vienna lean 11.1 / no-spec 20.9 (was 11.3/21.9). FINAL rows table (lean vs
+MDI floor): 5060 1.07x | 4070Ti 1.28x | 4070L 1.09x | M1 0.89x | 890M 1.69x |
+RADV-2CU 1.99x. Ship gate for 0050 CLEARED.
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
