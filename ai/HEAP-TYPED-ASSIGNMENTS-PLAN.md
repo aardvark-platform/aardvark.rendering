@@ -357,6 +357,39 @@ policy): hardware fetches them at wave launch (address linear in instance id,
 NO dependent load) -> kills the ClassSlots->record double-hop -> ONE dependent
 vector round = the VBO chain shape. Core Vulkan everywhere + GL, no features.
 
+### MDI record-granularity sweep + the great floor correction (2026-07-09)
+CADSCENE_MDI_SWEEP=1: same fair VB split into K equal triangle-aligned ranges,
+K = 1..262144 + per-part. Findings per architecture:
+- Desktop NVIDIA (5060 Blackwell, 4070Ti Ada): DEAD FLAT 1..264k — records
+  free, MDI == one-draw. The 4070Ti "MDI beats one-draw" (4.1/3.5) was
+  CONTAMINATION (sunshine/steam streaming on hekla): clean floors are 2.5/2.5.
+- 4070 LAPTOP: mild real effect — one-draw 4.87 -> 4.32 at K>=64, flat after.
+- M1 (MoltenVK): flat 6.17 to ~4k, then LINEAR per-record tax (~22 ns/record):
+  65k=7.7, 264k=12.1 == the per-part floor. Quantifies why clustering is
+  load-bearing on Apple.
+- 890M (RDNA3.5): the REAL anomaly, opposite of Apple — records HELP
+  monotonically: 42.1 flat to 4k, 16k=40.0, 65k=34.8, 264k EQUAL chunks=30.7
+  (beats ragged per-part 35.9 — uniform grain > ragged grain). One-draw is
+  the 890M's WORST case (-27% recoverable by splitting).
+- RADV 2CU: flat (slight uptick only at 264k = 67-vert records).
+
+MORE CORRECTIONS from verified runs: zephyrus D:\heap-bench\CadSceneDemo was
+NOT a git repo (pulls failed silently) -> this morning's "0049" demo run there
+was actually 0048. Verified-0049 rerun == the 0048 numbers (68.1/79.6/91.0 vs
+68.8/81.1/90.7) => EXTENT FOLDING IS DEMO-NEUTRAL ON THE 890M (the earlier
+-27% claim was environment); it IS real on M1 (13.4->12.1, verified) and in
+renderbench A/Bs. hekla heap numbers were never contaminated (clean triple
+identical: 3.3/3.4/4.7), only its FLOORS were; clean 4070Ti renderbench
+heap-beats-baked (1.65 vs 1.97) reproduces — scene-dependent, genuine.
+
+FINAL corrected table (clean same-session floors, lean vs MDI floor):
+5060 4.7 vs 4.2 = 1.12x | 4070Ti 3.3 vs 2.5 = 1.32x | 4070L 6.3 vs 5.3 =
+1.19x (best-grain 4.3 -> 1.46x) | M1 11.3 vs 12.5 = 0.90x | 890M 68.1 vs
+35.3 = 1.93x (best-grain 30.7 -> 2.2x) | RADV 2CU 73.6 vs 27.3 = 2.7x.
+Lesson cemented: NEVER trust cross-day numbers on shared/laptop boxes — only
+same-session A/Bs; hekla floors were poisoned for a full day of tables.
+grep -c trap hit a THIRD time (sweep commit silently skipped).
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
