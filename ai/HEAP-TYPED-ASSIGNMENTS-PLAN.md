@@ -456,6 +456,23 @@ vienna lean 11.1 / no-spec 20.9 (was 11.3/21.9). FINAL rows table (lean vs
 MDI floor): 5060 1.07x | 4070Ti 1.28x | 4070L 1.09x | M1 0.89x | 890M 1.69x |
 RADV-2CU 1.99x. Ship gate for 0050 CLEARED.
 
+### SQTT round 2 (rows, 0050, hekla iGPU, 2026-07-09): the derive pass is the story
+Most-expensive events in the captured frame: vkCmdDispatch(3854,1,1) =
+8,800 us (!!) vs the heap draws at 218/207 us. 3854*64 = 246,656 = ALL slots:
+the fp64 derive recompose runs EVERY FRAME under camera motion because
+NormalMatrix is CAMERA-RELATIVE -> camera dirties every slot. On the 2-CU part
+that's ~8.8 ms/frame resolution-independent (~16% of the 54 ms lean frame);
+its own profile is memory-latency-bound (waits 7,985 / 7,663 clk). The floors
+have NO derive pass — this is pure heap overhead in the comparison.
+VS verdict: the instance row = ONE wait now (seven idxen loads, single
+vmcnt(6) at ~1,194 clk, ~25% of VS) — rows work; remaining VS shape is the
+irreducible row+attribute two rounds on a cache-less part.
+NEXT LEVER (better than any fetch work): make NormalMatrix CAMERA-INDEPENDENT
+(derive from Model only — normals are directions, translation cancellation
+does not apply; fold view rotation into the global ViewProj gather). Derive
+then runs only on EDITS -> the per-frame 8.8 ms vanishes on APUs.
+Capture: airtop ~/arcbench/hekla_igpu_rows.rgp (windowed 0050 demo, 1024x768).
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
