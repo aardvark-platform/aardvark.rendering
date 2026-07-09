@@ -1,3 +1,9 @@
+### 5.7.0-prerelease0050
+- [Sg] Heap: INSTANCE-RATE RECORD ROWS — class-list entries carry the hot per-slot record fields (slot, vc, idxRef, attr refs) as VertexInputRate.Instance attributes; the hardware fetches them at wave launch, removing the ClassSlots->record dependent double-hop for typed AND dynamic partitions (vienna lean vs MDI floor: 5060 1.07x, 4070L 1.09x, M1 0.89x, 890M 1.69x, RADV-2CU 2.7x -> 2.0x).
+- [Vulkan] async pipeline specialization: Destroy waits out an in-flight background compile (use-after-free reading freed pipeline state — SIGSEGV on MoltenVK).
+- [Vulkan] skip spirv-opt on portability-subset devices — stripped buffer declarations broke MoltenVK's argument-buffer padding (measured performance-neutral on AMD and Metal).
+- [Sg] HeapSpike: golden skips its bindless-textured phase where unbounded sampler arrays are unsupported (the heap uses the atlas there — covered by `atlasheap`).
+
 ### 5.7.0-prerelease0049
 - [Sg] Heap: EXTENT-CLASS folding — typed partitions bake full/singleton per attribute into the spec constants, removing the header length load that serialized every attribute fetch behind a header round (RADV RDNA2 renderbench −15%, ratio to baked 2.31x -> 1.96x); in-place length flips (full <-> singleton) reclassify and migrate the slot.
 - [Vulkan] EmptyTimeQuery when the queue family reports timestampValidBits = 0 (KosmicKrisp no longer device-losts on time queries).
