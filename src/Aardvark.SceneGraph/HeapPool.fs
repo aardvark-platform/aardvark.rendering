@@ -88,9 +88,7 @@ module HeapUniforms =
         /// copies from arena / HeapUni sources), read by the draw shaders with
         /// chain-free `entry * stride + lane` addressing. Float and int views
         /// of the SAME buffer (int fields stay bit-exact).
-        member x.HeapVals  : V4f[] = uniform?StorageBuffer?HeapVals
-        member x.HeapValsI : V4i[] = uniform?StorageBuffer?HeapValsI
-        member x.HeapValsRaw : int[] = uniform?StorageBuffer?HeapValsRaw   // word view (fan-out writes)
+        member x.HeapValsRaw : int[] = uniform?StorageBuffer?HeapValsRaw   // word view (the fan-out CS writes; draws read the SAME buffer as HeapVal<N> instance attributes)
         /// the instance-row buffer as a plain int array (the fan-out reads
         /// entry -> slot from row word 0)
         member x.HeapRows : int[] = uniform?StorageBuffer?HeapRows
@@ -2986,57 +2984,79 @@ module Heap =
         [<Struct>]
         type Placement = { Lane : int; Comp : int; RowWords : int; Rows : int; DstRowStride : int }
 
-        let computeLayout (types : System.Type[]) : int * Placement voption[] =
+        /// packing is KIND-SEPARATED (float vs int lanes stay homogeneous): the
+        /// vals buffer is bound as instance-rate V4f/V4i vertex attributes, and a
+        /// vertex attribute has ONE format — an int scalar must not land in a
+        /// float lane's slack. Returns (strideLanes, placements, laneIsInt).
+        let computeLayout (types : System.Type[]) : int * Placement voption[] * bool[] =
             let res : Placement voption[] = Array.create types.Length ValueNone
-            let mutable lane = 0
+            let laneInt = System.Collections.Generic.List<bool>()
+            let alloc (isInt : bool) (n : int) =
+                let l = laneInt.Count
+                for _ in 1 .. n do laneInt.Add isInt
+                l
+            let isIntScalar (t : System.Type) = t = typeof<int> || t = typeof<uint32> || t = typeof<bool>
             // 1. whole-lane fields
             for i in 0 .. types.Length - 1 do
                 let t = types.[i]
                 if t = typeof<M44f> then
-                    res.[i] <- ValueSome { Lane = lane; Comp = 0; RowWords = 16; Rows = 1; DstRowStride = 16 }
-                    lane <- lane + 4
+                    res.[i] <- ValueSome { Lane = alloc false 4; Comp = 0; RowWords = 16; Rows = 1; DstRowStride = 16 }
                 elif t = typeof<M33f> then
-                    res.[i] <- ValueSome { Lane = lane; Comp = 0; RowWords = 3; Rows = 3; DstRowStride = 4 }
-                    lane <- lane + 3
-                elif t = typeof<V4f> || t = typeof<C4f> || t = typeof<V4i> then
-                    res.[i] <- ValueSome { Lane = lane; Comp = 0; RowWords = 4; Rows = 1; DstRowStride = 4 }
-                    lane <- lane + 1
-            // 2. vec3s: own lane, remember the slack component
-            let slack = System.Collections.Generic.Stack<struct(int * int)>()
+                    res.[i] <- ValueSome { Lane = alloc false 3; Comp = 0; RowWords = 3; Rows = 3; DstRowStride = 4 }
+                elif t = typeof<V4f> || t = typeof<C4f> then
+                    res.[i] <- ValueSome { Lane = alloc false 1; Comp = 0; RowWords = 4; Rows = 1; DstRowStride = 4 }
+                elif t = typeof<V4i> then
+                    res.[i] <- ValueSome { Lane = alloc true 1; Comp = 0; RowWords = 4; Rows = 1; DstRowStride = 4 }
+            // 2. vec3s: own lane, remember the slack component (same-kind scalars only)
+            let slackF = System.Collections.Generic.Stack<int>()
+            let slackI = System.Collections.Generic.Stack<int>()
             for i in 0 .. types.Length - 1 do
                 let t = types.[i]
-                if t = typeof<V3f> || t = typeof<V3i> || t = typeof<C3f> then
-                    res.[i] <- ValueSome { Lane = lane; Comp = 0; RowWords = 3; Rows = 1; DstRowStride = 3 }
-                    slack.Push(struct(lane, 3))
-                    lane <- lane + 1
-            // 3. vec2s: two per lane
-            let mutable v2open = ValueNone
+                if t = typeof<V3f> || t = typeof<C3f> then
+                    let l = alloc false 1
+                    res.[i] <- ValueSome { Lane = l; Comp = 0; RowWords = 3; Rows = 1; DstRowStride = 3 }
+                    slackF.Push l
+                elif t = typeof<V3i> then
+                    let l = alloc true 1
+                    res.[i] <- ValueSome { Lane = l; Comp = 0; RowWords = 3; Rows = 1; DstRowStride = 3 }
+                    slackI.Push l
+            // 3. vec2s: two SAME-KIND per lane
+            let mutable v2openF = ValueNone
+            let mutable v2openI = ValueNone
             for i in 0 .. types.Length - 1 do
                 let t = types.[i]
-                if t = typeof<V2f> || t = typeof<V2i> then
-                    match v2open with
-                    | ValueSome struct(l, c) ->
-                        res.[i] <- ValueSome { Lane = l; Comp = c; RowWords = 2; Rows = 1; DstRowStride = 2 }
-                        v2open <- ValueNone
+                if t = typeof<V2f> then
+                    match v2openF with
+                    | ValueSome l -> res.[i] <- ValueSome { Lane = l; Comp = 2; RowWords = 2; Rows = 1; DstRowStride = 2 }; v2openF <- ValueNone
                     | ValueNone ->
-                        res.[i] <- ValueSome { Lane = lane; Comp = 0; RowWords = 2; Rows = 1; DstRowStride = 2 }
-                        v2open <- ValueSome struct(lane, 2)
-                        lane <- lane + 1
-            // 4. scalars: slack components first, then 4 per lane
-            let mutable scOpen = ValueNone
+                        let l = alloc false 1
+                        res.[i] <- ValueSome { Lane = l; Comp = 0; RowWords = 2; Rows = 1; DstRowStride = 2 }
+                        v2openF <- ValueSome l
+                elif t = typeof<V2i> then
+                    match v2openI with
+                    | ValueSome l -> res.[i] <- ValueSome { Lane = l; Comp = 2; RowWords = 2; Rows = 1; DstRowStride = 2 }; v2openI <- ValueNone
+                    | ValueNone ->
+                        let l = alloc true 1
+                        res.[i] <- ValueSome { Lane = l; Comp = 0; RowWords = 2; Rows = 1; DstRowStride = 2 }
+                        v2openI <- ValueSome l
+            // 4. scalars: same-kind slack components first, then 4 per lane
+            let mutable scOpenF = ValueNone
+            let mutable scOpenI = ValueNone
             for i in 0 .. types.Length - 1 do
                 let t = types.[i]
-                if t = typeof<float32> || t = typeof<int> || t = typeof<uint32> || t = typeof<bool> then
+                if t = typeof<float32> || isIntScalar t then
+                    let isInt = isIntScalar t
+                    let slack = if isInt then slackI else slackF
                     let struct(l, c) =
-                        if slack.Count > 0 then slack.Pop()
+                        if slack.Count > 0 then struct(slack.Pop(), 3)
                         else
-                            match scOpen with
+                            match (if isInt then scOpenI else scOpenF) with
                             | ValueSome struct(l, c) -> struct(l, c)
-                            | ValueNone -> let l = lane in lane <- lane + 1; struct(l, 0)
+                            | ValueNone -> struct(alloc isInt 1, 0)
                     res.[i] <- ValueSome { Lane = l; Comp = c; RowWords = 1; Rows = 1; DstRowStride = 1 }
-                    if slack.Count = 0 || true then
-                        scOpen <- (if c + 1 < 4 then ValueSome struct(l, c + 1) else ValueNone)
-            (max 1 lane), res
+                    let nxt = if c + 1 < 4 then ValueSome struct(l, c + 1) else ValueNone
+                    if isInt then scOpenI <- nxt else scOpenF <- nxt
+            (max 1 laneInt.Count), res, laneInt.ToArray()
 
         /// the fan-out: per class-list ENTRY, copy every entry-storable field's
         /// words from its authoritative source (arena region or the deduped
@@ -4432,9 +4452,9 @@ module Heap =
         // the arena-gather path). Written by the fan-out pre-pass, read by the
         // draw shaders with chain-free entry*stride+lane addressing. ──
         let entryFieldTypes = names |> Array.map fieldRequestedType
-        let entryStrideLanes, entryPlaces =
+        let entryStrideLanes, entryPlaces, entryLaneIsInt =
             if useClusters then EntryStore.computeLayout entryFieldTypes
-            else 1, Array.create names.Length ValueNone
+            else 1, Array.create names.Length ValueNone, [| false |]
         let entryStrideWords = entryStrideLanes * 4
         let hasEntryStore =
             useClusters && (entryPlaces |> Array.exists ValueOption.isSome)
@@ -4559,7 +4579,7 @@ module Heap =
         let classSlotsBuf = MirrorBuffer(runtime, 64 * 4, BufferUsage.Storage ||| BufferUsage.Vertex)
         // the VALS buffer (entry store): sized by class-entry capacity, content
         // GPU-written by the fan-out pre-pass — no CPU staging at all.
-        let entryBuf = MirrorBuffer(runtime, 4096, BufferUsage.Storage)
+        let entryBuf = MirrorBuffer(runtime, 4096, BufferUsage.Storage ||| BufferUsage.Vertex)
         let flushClassSlots (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
             classSlotsBuf.ResizeInPlace(uint64 (max 64 csStaging.Length * 4))
             if csFullDirty then
@@ -4732,9 +4752,8 @@ module Heap =
         let slotPageU = ((slotPageBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         let classRowsAval = (classSlotsBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
         let classSlotsU = classRowsAval :> IAdaptiveValue
-        let entryBufU = ((entryBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
-        let symVals = Symbol.Create "HeapVals"
-        let symValsI = Symbol.Create "HeapValsI"
+        let entryValsAval = (entryBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
+        let entryBufU = entryValsAval :> IAdaptiveValue
         let pickIdU = ((pickIdBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
@@ -5098,57 +5117,51 @@ module Heap =
             // arrive as HeapRec0.. instance attributes — hardware-fetched at wave
             // launch (FirstInstance-addressed), NO dependent load in the chain.
             let recIn (i : int) : Expr<int> = Expr.Cast (Expr.ReadInput<int>(ParameterKind.Input, sprintf "HeapRec%d" i))
-            // VALS ("UBO layer") reads: entry-storable per-draw uniforms come from
-            // the packed entry store at chain-free entry*stride+lane addressing —
-            // whole-lane b128 loads, components selected at compile time.
-            let entryE : Expr<int> = Expr.Cast (Expr.ReadInput<int>(ParameterKind.Input, Intrinsics.InstanceId))
             let valsGather (typ : System.Type) (pl : EntryStore.Placement) : Expr =
-                // IMPORTANT: the storage-buffer reads must appear LITERALLY inside the
-                // single returned quotation (only int index exprs are spliced) — a
-                // uniform.HeapVals read built in one quotation and %-spliced into
-                // another loses its StorageBuffer scope and FShade emits null[...].
-                let idx (lane : int) : Expr<int> = <@ %entryE * %(cint entryStrideLanes) + %(cint lane) @>
+                // VALS delivery: instance-rate vertex-attribute lanes (HeapVal<N>,
+                // V4f/V4i) over the packed entry store — the hardware fetches each
+                // entry's values ONCE per instance (per-vertex SSBO reads of the
+                // replicated store forfeit the dedup's cache locality).
+                let laneF (l : int) : Expr<V4f> = Expr.Cast (Expr.ReadInput<V4f>(ParameterKind.Input, sprintf "HeapVal%d" l))
+                let laneI (l : int) : Expr<V4i> = Expr.Cast (Expr.ReadInput<V4i>(ParameterKind.Input, sprintf "HeapVal%d" l))
+                let l = pl.Lane
                 if typ = typeof<M44f> then
-                    let i0 = idx pl.Lane in let i1 = idx (pl.Lane+1) in let i2 = idx (pl.Lane+2) in let i3 = idx (pl.Lane+3)
-                    (<@ let r0 = uniform.HeapVals.[%i0]
-                        let r1 = uniform.HeapVals.[%i1]
-                        let r2 = uniform.HeapVals.[%i2]
-                        let r3 = uniform.HeapVals.[%i3]
+                    (<@ let r0 = %(laneF l)
+                        let r1 = %(laneF (l+1))
+                        let r2 = %(laneF (l+2))
+                        let r3 = %(laneF (l+3))
                         M44f(r0.X,r0.Y,r0.Z,r0.W, r1.X,r1.Y,r1.Z,r1.W, r2.X,r2.Y,r2.Z,r2.W, r3.X,r3.Y,r3.Z,r3.W) @>).Raw
                 elif typ = typeof<M33f> then
-                    let i0 = idx pl.Lane in let i1 = idx (pl.Lane+1) in let i2 = idx (pl.Lane+2)
-                    (<@ let r0 = uniform.HeapVals.[%i0]
-                        let r1 = uniform.HeapVals.[%i1]
-                        let r2 = uniform.HeapVals.[%i2]
+                    (<@ let r0 = %(laneF l)
+                        let r1 = %(laneF (l+1))
+                        let r2 = %(laneF (l+2))
                         M33f(r0.X,r0.Y,r0.Z, r1.X,r1.Y,r1.Z, r2.X,r2.Y,r2.Z) @>).Raw
-                else
-                let i = idx pl.Lane
-                if typ = typeof<V4f> then (<@ uniform.HeapVals.[%i] @>).Raw
-                elif typ = typeof<C4f> then (<@ let v = uniform.HeapVals.[%i] in C4f(v.X, v.Y, v.Z, v.W) @>).Raw
-                elif typ = typeof<V4i> then (<@ uniform.HeapValsI.[%i] @>).Raw
-                elif typ = typeof<V3f> then (<@ uniform.HeapVals.[%i].XYZ @>).Raw
-                elif typ = typeof<C3f> then (<@ let v = uniform.HeapVals.[%i] in C3f(v.X, v.Y, v.Z) @>).Raw
-                elif typ = typeof<V3i> then (<@ uniform.HeapValsI.[%i].XYZ @>).Raw
+                elif typ = typeof<V4f> then (laneF l).Raw
+                elif typ = typeof<C4f> then (<@ let v = %(laneF l) in C4f(v.X, v.Y, v.Z, v.W) @>).Raw
+                elif typ = typeof<V4i> then (laneI l).Raw
+                elif typ = typeof<V3f> then (<@ (%(laneF l)).XYZ @>).Raw
+                elif typ = typeof<C3f> then (<@ let v = %(laneF l) in C3f(v.X, v.Y, v.Z) @>).Raw
+                elif typ = typeof<V3i> then (<@ (%(laneI l)).XYZ @>).Raw
                 elif typ = typeof<V2f> then
-                    (if pl.Comp = 0 then <@ uniform.HeapVals.[%i].XY @> else <@ uniform.HeapVals.[%i].ZW @>).Raw
+                    (if pl.Comp = 0 then <@ (%(laneF l)).XY @> else <@ (%(laneF l)).ZW @>).Raw
                 elif typ = typeof<V2i> then
-                    (if pl.Comp = 0 then <@ uniform.HeapValsI.[%i].XY @> else <@ uniform.HeapValsI.[%i].ZW @>).Raw
+                    (if pl.Comp = 0 then <@ (%(laneI l)).XY @> else <@ (%(laneI l)).ZW @>).Raw
                 elif typ = typeof<float32> then
                     (match pl.Comp with
-                     | 0 -> <@ uniform.HeapVals.[%i].X @> | 1 -> <@ uniform.HeapVals.[%i].Y @>
-                     | 2 -> <@ uniform.HeapVals.[%i].Z @> | _ -> <@ uniform.HeapVals.[%i].W @>).Raw
+                     | 0 -> <@ (%(laneF l)).X @> | 1 -> <@ (%(laneF l)).Y @>
+                     | 2 -> <@ (%(laneF l)).Z @> | _ -> <@ (%(laneF l)).W @>).Raw
                 elif typ = typeof<int> then
                     (match pl.Comp with
-                     | 0 -> <@ uniform.HeapValsI.[%i].X @> | 1 -> <@ uniform.HeapValsI.[%i].Y @>
-                     | 2 -> <@ uniform.HeapValsI.[%i].Z @> | _ -> <@ uniform.HeapValsI.[%i].W @>).Raw
+                     | 0 -> <@ (%(laneI l)).X @> | 1 -> <@ (%(laneI l)).Y @>
+                     | 2 -> <@ (%(laneI l)).Z @> | _ -> <@ (%(laneI l)).W @>).Raw
                 elif typ = typeof<uint32> then
                     (match pl.Comp with
-                     | 0 -> <@ uint uniform.HeapValsI.[%i].X @> | 1 -> <@ uint uniform.HeapValsI.[%i].Y @>
-                     | 2 -> <@ uint uniform.HeapValsI.[%i].Z @> | _ -> <@ uint uniform.HeapValsI.[%i].W @>).Raw
+                     | 0 -> <@ uint (%(laneI l)).X @> | 1 -> <@ uint (%(laneI l)).Y @>
+                     | 2 -> <@ uint (%(laneI l)).Z @> | _ -> <@ uint (%(laneI l)).W @>).Raw
                 elif typ = typeof<bool> then
                     (match pl.Comp with
-                     | 0 -> <@ uniform.HeapValsI.[%i].X <> 0 @> | 1 -> <@ uniform.HeapValsI.[%i].Y <> 0 @>
-                     | 2 -> <@ uniform.HeapValsI.[%i].Z <> 0 @> | _ -> <@ uniform.HeapValsI.[%i].W <> 0 @>).Raw
+                     | 0 -> <@ (%(laneI l)).X <> 0 @> | 1 -> <@ (%(laneI l)).Y <> 0 @>
+                     | 2 -> <@ (%(laneI l)).Z <> 0 @> | _ -> <@ (%(laneI l)).W <> 0 @>).Raw
                 else failwithf "Heap: entry store cannot deliver type %A" typ
             // CLUSTERED records are padded to the class size: clamp the vertex cursor
             // to the slot's real count — padding lanes all re-shade the LAST vertex,
@@ -5335,8 +5348,16 @@ module Heap =
                 // records' FirstInstance addresses the row, hardware fetches it
                 ro.InstanceAttributes <-
                     AttributeProvider.ofList
-                        [ for i in 0 .. rowWords - 1 ->
-                            Symbol.Create (sprintf "HeapRec%d" i), BufferView(classRowsAval, typeof<int>, i * 4, rowWords * 4) ]
+                        ([ for i in 0 .. rowWords - 1 ->
+                             Symbol.Create (sprintf "HeapRec%d" i), BufferView(classRowsAval, typeof<int>, i * 4, rowWords * 4) ]
+                         @ (if not hasEntryStore then []
+                            else
+                              // VALS lanes: per-instance HARDWARE fetch of the packed
+                              // uniform values (per-vertex SSBO reads of the replicated
+                              // store lost the dedup's cache locality — 5.5x on 2-CU RADV)
+                              [ for l in 0 .. entryStrideLanes - 1 ->
+                                  Symbol.Create (sprintf "HeapVal%d" l),
+                                  BufferView(entryValsAval, (if entryLaneIsInt.[l] then typeof<V4i> else typeof<V4f>), l * 16, entryStrideWords * 4) ]))
             else
                 ro.InstanceAttributes <- AttributeProvider.ofList ([] : (Symbol * BufferView) list)
             // indices are storage-decoded too: draws are NON-indexed
@@ -5358,7 +5379,6 @@ module Heap =
                         elif specUniformLookup.ContainsKey name then ValueSome specUniformLookup.[name]
                         elif picking && name = symPickIds then ValueSome pickIdU
                         elif useClusters && name = symClassSlots then ValueSome classSlotsU
-                        elif hasEntryStore && (name = symVals || name = symValsI) then ValueSome entryBufU
                         else
                             match texLookup.TryGetValue name with
                             | true, v -> ValueSome v
