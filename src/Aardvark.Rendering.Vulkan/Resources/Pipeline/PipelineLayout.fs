@@ -133,10 +133,21 @@ module PipelineLayout =
 
                     pushConstants <- ValueSome <| { StageFlags = stages; Buffer = b }
 
+        // storage-buffer usage can hide inside SHARED GLSL helper functions
+        // (e.g. the heap's decode/gather helpers): the per-shader interface only
+        // records DIRECT reads in the entrypoint body, so a stage that touches a
+        // buffer exclusively through helpers would get a too-narrow stage mask —
+        // vkCreateGraphicsPipelines then rejects the stage's module
+        // (VUID-VkGraphicsPipelineCreateInfo-layout-07988). Declaring EXTRA
+        // stages is legal and free: give storage blocks the union of the
+        // program's stages on top of the tracked usage.
+        let programStages =
+            (VkShaderStageFlags.None, iface.shaders.Slots) ||> MapExt.fold (fun accum slot _ ->
+                accum ||| VkShaderStageFlags.ofShaderStage (ShaderStage.ofFShade slot.Stage))
         for (KeyValue(n, b)) in iface.storageBuffers do
             setCount <- max setCount (b.ssbSet + 1)
             let key = b.ssbSet, b.ssbBinding
-            let stages = findStages n
+            let stages = findStages n ||| programStages
             (b, stages) ||> add storageBlocks key
 
         for (KeyValue(n, b)) in iface.samplers do

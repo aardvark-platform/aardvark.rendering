@@ -183,6 +183,24 @@ module Golden =
         let heapU = Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray inputsU)
         let passU = report "uniform" classicU (renderToPix heapU)
 
+        // ── scene 1b: TRANSPARENT bucket (the OIT store path) — the composed
+        // store program gains OIT resources alongside the Heap* buffers, so this
+        // guards the pipeline-layout/binding consistency of the rewritten VS
+        // (VUID-VkGraphicsPipelineCreateInfo-layout-07988 class of failures).
+        // Content is OPAQUE-alpha, so the OIT composite must equal plain
+        // depth-tested rendering for classic AND heap alike.
+        let mkTransparentROs () =
+            gridOf 256 |> Array.map (fun (i, p) ->
+                let ro =
+                    mkRO [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
+                           Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
+                           Symbol.Create "ViewProjTrafo",  viewProj ] effectU
+                (match ro with :? RenderObject as r -> r.IsTransparent <- true | _ -> ())
+                ro)
+        let classicO = renderToPix (ASet.ofArray (mkTransparentROs ()))
+        let heapO = Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray (mkTransparentROs ()))
+        let passO = report "oit-transparent" classicO (renderToPix heapO)
+
         // ── scene 2: textured (conventional per-object vs bindless heap) ───
         let texArray : ITexture[] = Array.init TexCount mkTexture
         // per-texture avals (constant outer array -> known length -> variable
@@ -215,7 +233,7 @@ module Golden =
                 Log.line "golden[textured]: SKIP (no unbounded sampler arrays — the heap uses the atlas here; run `atlasheap`)"
                 true
 
-        let pass = passU && passT
+        let pass = passU && passO && passT
         if pass then Log.line "golden: ALL PASS (uniform + bindless-textured heap == classic)"
         else Log.warn "golden: FAILED"
         pass

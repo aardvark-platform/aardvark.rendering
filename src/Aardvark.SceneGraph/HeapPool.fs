@@ -76,6 +76,13 @@ module HeapUniforms =
         // A page's derive binds its own arena, so it must skip slots on other pages (whose
         // header offsets are page-local to a different page — writing them here corrupts).
         member x.HeapSlotPage : int[] = uniform?StorageBuffer?HeapSlotPage
+        /// DENSE derived-uniform store (bucket-global, NOT paged): derived
+        /// composite outputs live tightly packed in their own buffer so the
+        /// per-vertex gathers hit dense lines instead of cells scattered through
+        /// ~4KB slot groups in the geometry arena. Float and double views of the
+        /// SAME buffer (like HeapData/HeapDataD).
+        member x.HeapUni  : float32[] = uniform?StorageBuffer?HeapUni
+        member x.HeapUniD : float[]   = uniform?StorageBuffer?HeapUniD
         member x.HeapPageId : int = uniform?HeapPageId
         // PICKING: dom-sourced per-slot pick id, gathered by gl_InstanceIndex; the dom
         // heap pick-shader writes this into the pick buffer. Only bound when picking.
@@ -268,6 +275,7 @@ module Heap =
     let rec private gatherFor (typ : System.Type) (off : Expr<int>) : Expr =
         if isCompositeType typ then compositeGather typ off
         else gatherLeaf typ off
+
     /// reconstruct a RECORD value: gather each field at its tight word offset, then
     /// build the record. A surrounding `uniform.Rec.Field` access simplifies to that
     /// field's gather; the whole-record materialisation is optimised away by FShade.
@@ -333,6 +341,34 @@ module Heap =
 
     /// Standard trafo derivations. ModelTrafo is per-object (arena); the
     /// camera-dependent factors stay globals (UBO, one upload per camera move).
+
+    /// gather a DERIVED-composite value from the DENSE uniform store (HeapUni /
+    /// HeapUniD) at word `off`. Derived outputs are matrix-typed (the compose
+    /// kernels write M44f/M33f, double-requested reads via the double view).
+    let private uniGatherFor (typ : System.Type) (off : Expr<int>) : Expr =
+        if typ = typeof<M44f> then
+            (<@ let o = %off in
+                M44f(uniform.HeapUni.[o+0],  uniform.HeapUni.[o+1],  uniform.HeapUni.[o+2],  uniform.HeapUni.[o+3],
+                     uniform.HeapUni.[o+4],  uniform.HeapUni.[o+5],  uniform.HeapUni.[o+6],  uniform.HeapUni.[o+7],
+                     uniform.HeapUni.[o+8],  uniform.HeapUni.[o+9],  uniform.HeapUni.[o+10], uniform.HeapUni.[o+11],
+                     uniform.HeapUni.[o+12], uniform.HeapUni.[o+13], uniform.HeapUni.[o+14], uniform.HeapUni.[o+15]) @>).Raw
+        elif typ = typeof<M33f> then
+            (<@ let o = %off in
+                M33f(uniform.HeapUni.[o+0], uniform.HeapUni.[o+1], uniform.HeapUni.[o+2],
+                     uniform.HeapUni.[o+3], uniform.HeapUni.[o+4], uniform.HeapUni.[o+5],
+                     uniform.HeapUni.[o+6], uniform.HeapUni.[o+7], uniform.HeapUni.[o+8]) @>).Raw
+        elif typ = typeof<M44d> then
+            (<@ let d = %off >>> 1 in
+                M44d(uniform.HeapUniD.[d+0],  uniform.HeapUniD.[d+1],  uniform.HeapUniD.[d+2],  uniform.HeapUniD.[d+3],
+                     uniform.HeapUniD.[d+4],  uniform.HeapUniD.[d+5],  uniform.HeapUniD.[d+6],  uniform.HeapUniD.[d+7],
+                     uniform.HeapUniD.[d+8],  uniform.HeapUniD.[d+9],  uniform.HeapUniD.[d+10], uniform.HeapUniD.[d+11],
+                     uniform.HeapUniD.[d+12], uniform.HeapUniD.[d+13], uniform.HeapUniD.[d+14], uniform.HeapUniD.[d+15]) @>).Raw
+        elif typ = typeof<M33d> then
+            (<@ let d = %off >>> 1 in
+                M33d(uniform.HeapUniD.[d+0], uniform.HeapUniD.[d+1], uniform.HeapUniD.[d+2],
+                     uniform.HeapUniD.[d+3], uniform.HeapUniD.[d+4], uniform.HeapUniD.[d+5],
+                     uniform.HeapUniD.[d+6], uniform.HeapUniD.[d+7], uniform.HeapUniD.[d+8]) @>).Raw
+        else failwithf "Heap: derived uniform requested as %A — dense uniform store supports matrix types (M33f/M44f/M33d/M44d)" typ
     let standardDerivedRules : Map<string, DerivedRule> =
         Map.ofList [
             // ViewProjTrafo is derived from its constituents so the heap never requests
@@ -1580,6 +1616,20 @@ module Heap =
           Slots : System.Collections.Generic.List<int>
           mutable Materialized : bool }
 
+    /// A DEDUPED derived-output region: slots whose recipe (plan index) and
+    /// canonical constituent sources match share ONE output region (refcounted
+    /// via Members); exactly one member (Owner) computes it in the derive pass
+    /// (per-slot ownership-mask header cell). Non-dedupable outputs (chain-folded
+    /// Model constituents are per slot) get a private single-member share.
+    type internal DerivedShare =
+        { Key : struct(int * int * obj * obj * obj)   // page, planIdx, canonical constituent avals
+          Page : int
+          Dedup : bool
+          mutable Block : HeapBlock
+          mutable Offset : int
+          Members : System.Collections.Generic.HashSet<int>
+          mutable Owner : int }
+
     type internal HeapSlot =
         { Slot : int; RegionKeys : IAdaptiveValue[]; Active : aval<bool>
           /// which storage page this slot's group lives on (all its regions are on it);
@@ -1596,7 +1646,7 @@ module Heap =
           /// release (base aval + inverse flag), per-slot output region blocks and
           /// chain-folded Model constituent blocks to free on remove.
           ConstKeys : struct(IAdaptiveValue * bool)[]
-          OutBlocks : HeapBlock[]
+          Shares : DerivedShare[]
           FoldBlocks : HeapBlock[] }
 
     /// Immutable per-RO facts (STRUCTURE only — surface, geometry layout, uniform
@@ -2474,6 +2524,19 @@ module Heap =
             uniform.HeapData.[off+0]<-m.M00; uniform.HeapData.[off+1]<-m.M01; uniform.HeapData.[off+2]<-m.M02
             uniform.HeapData.[off+3]<-m.M10; uniform.HeapData.[off+4]<-m.M11; uniform.HeapData.[off+5]<-m.M12
             uniform.HeapData.[off+6]<-m.M20; uniform.HeapData.[off+7]<-m.M21; uniform.HeapData.[off+8]<-m.M22
+        // DENSE uniform-store variants (derived-composite outputs live in the
+        // bucket-global HeapUni buffer, not the paged geometry arena)
+        [<ReflectedDefinition>]
+        let uniM44 (off : int) (m : M44f) =
+            uniform.HeapUni.[off+0]<-m.M00;  uniform.HeapUni.[off+1]<-m.M01;  uniform.HeapUni.[off+2]<-m.M02;  uniform.HeapUni.[off+3]<-m.M03
+            uniform.HeapUni.[off+4]<-m.M10;  uniform.HeapUni.[off+5]<-m.M11;  uniform.HeapUni.[off+6]<-m.M12;  uniform.HeapUni.[off+7]<-m.M13
+            uniform.HeapUni.[off+8]<-m.M20;  uniform.HeapUni.[off+9]<-m.M21;  uniform.HeapUni.[off+10]<-m.M22; uniform.HeapUni.[off+11]<-m.M23
+            uniform.HeapUni.[off+12]<-m.M30; uniform.HeapUni.[off+13]<-m.M31; uniform.HeapUni.[off+14]<-m.M32; uniform.HeapUni.[off+15]<-m.M33
+        [<ReflectedDefinition>]
+        let uniM33 (off : int) (m : M33f) =
+            uniform.HeapUni.[off+0]<-m.M00; uniform.HeapUni.[off+1]<-m.M01; uniform.HeapUni.[off+2]<-m.M02
+            uniform.HeapUni.[off+3]<-m.M10; uniform.HeapUni.[off+4]<-m.M11; uniform.HeapUni.[off+5]<-m.M12
+            uniform.HeapUni.[off+6]<-m.M20; uniform.HeapUni.[off+7]<-m.M21; uniform.HeapUni.[off+8]<-m.M22
         [<ReflectedDefinition>]
         let m44dInto (woff : int) (m : M44d) =
             let o = woff >>> 1
@@ -2851,21 +2914,25 @@ module Heap =
                 let slot = getGlobalId().X
                 if slot < n && uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
                     let hb = slot * hstride
+                    // ownership mask (LAST header cell): deduped outputs are computed
+                    // by exactly ONE member slot — everyone else skips the record.
+                    let own = uniform.HeapHeaders.[hb + (hstride - 1)]
                     for r in 0 .. nRec - 1 do
+                      if (own >>> r) &&& 1 = 1 then
                         let rb = r * REC_STRIDE
                         let outOff = uniform.HeapHeaders.[hb + records.[rb + 1]]
                         let a = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 2]])
                         match records.[rb] with
-                        | 1 -> HeapWrite.m44 outOff (M44f(a))
+                        | 1 -> HeapWrite.uniM44 outOff (M44f(a))
                         | 2 -> let b = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 3]])
-                               HeapWrite.m44 outOff (M44f(a * b))
+                               HeapWrite.uniM44 outOff (M44f(a * b))
                         | 3 -> let b = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 3]])
                                let c = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 4]])
-                               HeapWrite.m44 outOff (M44f(a * b * c))
+                               HeapWrite.uniM44 outOff (M44f(a * b * c))
                         | _ ->
                             // NormalMatrix = transpose(Model_backward) upper-3x3.
                             let t = a.Transposed
-                            HeapWrite.m33 outOff
+                            HeapWrite.uniM33 outOff
                                 (M33f(float32 t.M00, float32 t.M01, float32 t.M02,
                                       float32 t.M10, float32 t.M11, float32 t.M12,
                                       float32 t.M20, float32 t.M21, float32 t.M22))
@@ -2885,7 +2952,10 @@ module Heap =
                 let slot = getGlobalId().X
                 if slot < n && uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
                     let hb = slot * hstride
+                    // ownership mask (LAST header cell) — see composeDerived.
+                    let own = uniform.HeapHeaders.[hb + (hstride - 1)]
                     for r in 0 .. nRec - 1 do
+                      if (own >>> r) &&& 1 = 1 then
                         let rb = r * REC_STRIDE
                         let outOff = uniform.HeapHeaders.[hb + records.[rb + 1]]
                         let offA = uniform.HeapHeaders.[hb + records.[rb + 2]]
@@ -2899,7 +2969,7 @@ module Heap =
                         match records.[rb] with
                         | 1 ->
                             for k in 0 .. 15 do
-                                uniform.HeapData.[outOff + k] <- Df32.collapse (Df32.ldEntry offA k)
+                                uniform.HeapUni.[outOff + k] <- Df32.collapse (Df32.ldEntry offA k)
                         | 2 ->
                             let offB = uniform.HeapHeaders.[hb + records.[rb + 3]]
                             for rr in 0 .. 3 do
@@ -2907,7 +2977,7 @@ module Heap =
                                     let mutable acc = V2f(0.0f, 0.0f)
                                     for t in 0 .. 3 do
                                         acc <- Df32.add acc (Df32.mul (Df32.ldEntry offA (rr * 4 + t)) (Df32.ldEntry offB (t * 4 + c)))
-                                    uniform.HeapData.[outOff + rr * 4 + c] <- Df32.collapse acc
+                                    uniform.HeapUni.[outOff + rr * 4 + c] <- Df32.collapse acc
                         | 3 ->
                             let offB = uniform.HeapHeaders.[hb + records.[rb + 3]]
                             let offC = uniform.HeapHeaders.[hb + records.[rb + 4]]
@@ -2924,12 +2994,12 @@ module Heap =
                                     let mutable acc = V2f(0.0f, 0.0f)
                                     for t in 0 .. 3 do
                                         acc <- Df32.add acc (Df32.mul p.[rr * 4 + t] (Df32.ldEntry offC (t * 4 + c)))
-                                    uniform.HeapData.[outOff + rr * 4 + c] <- Df32.collapse acc
+                                    uniform.HeapUni.[outOff + rr * 4 + c] <- Df32.collapse acc
                         | _ ->
                             // NormalMatrix = transpose(A) upper-3x3.  out[i*3+j] = A[j,i].
                             for i in 0 .. 2 do
                                 for j in 0 .. 2 do
-                                    uniform.HeapData.[outOff + i * 3 + j] <- Df32.collapse (Df32.ldEntry offA (j * 4 + i))
+                                    uniform.HeapUni.[outOff + i * 3 + j] <- Df32.collapse (Df32.ldEntry offA (j * 4 + i))
             }
 
     /// Persistent state of ONE bucket — host OR bindless (vertex-pull) geometry,
@@ -2977,6 +3047,10 @@ module Heap =
         let singleRegions = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(1 <<< 10, HashIdentity.Reference)
         let constituentsF = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(1 <<< 14, HashIdentity.Reference)
         let constituentsB = System.Collections.Generic.Dictionary<IAdaptiveValue, RegionEntry>(1 <<< 14, HashIdentity.Reference)
+        // canonical aval per (inv, VALUE) for CONSTANT constituents: per-part
+        // `AVal.constant t` wrappers of the SAME trafo value must dedup to ONE
+        // constituent region (and, downstream, ONE derived output region).
+        let constituentsCanon = System.Collections.Generic.Dictionary<struct(bool * obj), IAdaptiveValue>()
         // geometry static-attribute + index dedup (by value-level source identity, byte offset,
         // typeId) — MUST be per-page: a shared mesh's attrs live in THIS page's arena, so a slot on
         // another page can't reference them (it binds its own arena). Cross-page = duplicated.
@@ -2996,6 +3070,7 @@ module Heap =
         member _.SingleRegions = singleRegions
         member _.ConstituentsF = constituentsF
         member _.ConstituentsB = constituentsB
+        member _.ConstituentsCanon = constituentsCanon
         member _.AttrStatic = attrStatic
         member _.IdxStatic = idxStatic
         member _.Register(p : IPageParticipant) = participants.Add p |> ignore
@@ -3310,9 +3385,13 @@ module Heap =
         let attrCells = if useBindlessGeom then 0 else numAttrs
         // + idx cell + vc cell (drawn-vertex count: the CLUSTER clamp kills padding
         // lanes via min(gl_VertexIndex, vc-1) — whole degenerate triangles)
-        let headerStride = attrBase + attrCells + 2
+        // + derive-OWNERSHIP mask cell (LAST cell, shaders read hstride-1): bit j
+        // set = this slot computes derived output j (deduped outputs are computed
+        // by exactly one member slot)
+        let headerStride = attrBase + attrCells + 3
         let idxCell = attrBase + attrCells
         let vcCell = idxCell + 1
+        let ownCell = vcCell + 1
 
         // ── arena: deduped per-draw uniform regions, refcounted, placed by a
         //    coalescing range allocator (float units) — now held by the (per-bucket) storage ──
@@ -3970,6 +4049,7 @@ module Heap =
                 packM44dInto m a off
         let mutable constituentsF = storage.Page(0).ConstituentsF
         let mutable constituentsB = storage.Page(0).ConstituentsB
+        let mutable constituentsCanon = storage.Page(0).ConstituentsCanon
         // current fill page: the slot's allocs (uniforms/geometry/constituents) all route to
         // this page; set per-slot in Add/RemoveInternal. PlacePage rolls when the page fills.
         let mutable curPage = 0
@@ -3978,6 +4058,7 @@ module Heap =
             let pg = storage.Page i
             arena <- pg.Arena; arenaAlloc <- pg.ArenaAlloc; regions <- pg.Regions
             singleRegions <- pg.SingleRegions; constituentsF <- pg.ConstituentsF; constituentsB <- pg.ConstituentsB
+            constituentsCanon <- pg.ConstituentsCanon
             attrStatic <- pg.AttrStatic; idxStatic <- pg.IdxStatic
             arena.AddDependency (updater :> IAdaptiveValue)
         // conservative worst-case word footprint of a slot's group (geometry + per-draw uniforms +
@@ -3985,6 +4066,16 @@ module Heap =
         let estimateSlotWords (ro : RenderObject) : int =
             let vc = faceVertexCountOf ro
             vc * (max 4 (numAttrs * 4)) + (names.Length + numConst + 8) * 32
+        /// CONSTANT constituents dedup by VALUE (per page): distinct AVal.constant
+        /// wrappers of the same trafo resolve to one canonical aval and thus one
+        /// region — and downstream one deduped derived-output region.
+        let canonConstituent (av : IAdaptiveValue) (inv : bool) : IAdaptiveValue =
+            if not av.IsConstant then av
+            else
+                let key = struct(inv, av.GetValueUntyped AdaptiveToken.Top)
+                match constituentsCanon.TryGetValue key with
+                | true, c -> c
+                | _ -> constituentsCanon.[key] <- av; av
         let allocConstituent (av : IAdaptiveValue) (inv : bool) : int =
             let d = if inv then constituentsB else constituentsF
             match d.TryGetValue av with
@@ -4025,6 +4116,8 @@ module Heap =
                     if not (isNull e.Writer) then arena.Remove e.Writer
                     d.Remove av |> ignore
                     arenaAlloc.Free e.Block
+                    if av.IsConstant then
+                        constituentsCanon.Remove(struct(inv, av.GetValueUntyped AdaptiveToken.Top)) |> ignore
             | _ -> ()
         // an 8-byte-aligned M44d slot the CHAIN fold writes (no aval / writer) — the
         // per-slot Model forward/backward constituent in chainMode.
@@ -4036,16 +4129,25 @@ module Heap =
             arena.EnsureFloats arenaAlloc.Extent
             arena.StageZero(raw, sz + 1)     // placeholder incl. align slack (see StageZero)
             off, b
-        // OUTPUT: a per-slot region the compute writes (no aval / writer), stored as
+        // OUTPUT: a region the derive compute writes (no aval / writer), stored as
         // the shader's requested type (f32 M44f = 16 words, M33f = 9, …).
+        // derived-output shares: dedup dict (page, planIdx, canonical constituents)
+        // -> share, plus the full registry.
+        let derivedShares = System.Collections.Generic.Dictionary<struct(int * int * obj * obj * obj), DerivedShare>()
+        let allShares = System.Collections.Generic.HashSet<DerivedShare>(HashIdentity.Reference)
+        // DENSE uniform store: derived outputs live tightly packed in their own
+        // bucket-global buffer (never the paged geometry arena) — consecutive
+        // slots' composites land in adjacent cache lines instead of one per
+        // ~4KB slot group, and the store never participates in page compaction.
+        // GPU-written by the derive kernels, gathered via HeapUni/HeapUniD.
+        let uniBuf = MirrorBuffer(runtime, 64 <<< 20, BufferUsage.Storage)   // DEBUG: pre-sized, no resize
+        let uniAlloc = HeapSpace()
         let allocOutput (requested : System.Type) : int * HeapBlock =
             let dbl = isDoubleUniform requested
             let (sz, _) = if dbl then doublePackerFor df32 requested else packerFor requested
-            let b = arenaAlloc.Alloc (if dbl then sz + 1 else sz)
+            let b = uniAlloc.Alloc (if dbl then sz + 1 else sz)
             let raw = int b.Offset
             let off = if dbl && (raw &&& 1) = 1 then raw + 1 else raw
-            arena.EnsureFloats arenaAlloc.Extent
-            arena.StageZero(raw, (if dbl then sz + 1 else sz))   // placeholder (see StageZero)
             off, b
 
         /// SINGLETON attribute (SingleValueBuffer): a header + an adaptive
@@ -4506,6 +4608,12 @@ module Heap =
                 classSlotsBuf.Dependency <- dep
                 classSlotsBuf.Flush <- flushClassSlots
                 classSlotsBuf.Name <- "HeapClassSlots"
+            if hasDerived then
+                uniBuf.Dependency <- dep
+                uniBuf.Flush <- (fun _ _ ->
+                    if Diagnostics then Log.line "[heap-dbg] uniBuf flush extent=%d" uniAlloc.Extent
+                    uniBuf.ResizeInPlace(uint64 (max 256 uniAlloc.Extent) * 4UL))
+                uniBuf.Name <- "HeapUni"
             if picking then
                 pickIdBuf.Dependency <- dep
                 pickIdBuf.Flush <- flushPickIds
@@ -4530,6 +4638,9 @@ module Heap =
         let slotPageU = ((slotPageBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         let classRowsAval = (classSlotsBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)
         let classSlotsU = classRowsAval :> IAdaptiveValue
+        let uniBufU = ((uniBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
+        let symUni = Symbol.Create "HeapUni"
+        let symUniD = Symbol.Create "HeapUniD"
         let pickIdU = ((pickIdBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         // bindless vertex-pull: object-major flatten of the slots' buffer avals
         // (HeapVertexData[slot*numAttrs + ai]). Depends on the updater version and
@@ -4654,6 +4765,7 @@ module Heap =
                         | "HeapPageId"   -> ValueSome (AVal.constant pid :> IAdaptiveValue)
                         | "HeapDataD"    -> ValueSome pageArenaU
                         | "HeapData"     -> ValueSome pageArenaU
+                        | "HeapUni"      -> ValueSome uniBufU
                         | _              -> ValueNone
                     member _.Dispose() = () }
             let inp = runtime.CreateInputBinding(derivedShader, provider)
@@ -4908,7 +5020,9 @@ module Heap =
                             match kind, idx with
                             | ParameterKind.Uniform, None ->
                                 match Map.tryFind name nameToField with
-                                | Some fi -> Some (hoist name ityp (fun () -> gatherFor ityp (fieldOff fi)))
+                                | Some fi ->
+                                    let g = if derivedCells.Contains fi then uniGatherFor else gatherFor
+                                    Some (hoist name ityp (fun () -> g ityp (fieldOff fi)))
                                 | None -> None
                             | ParameterKind.Input, None when isVertex ->
                                 match attrInfos |> Array.tryFind (fun (_, n, _, _, _, _, _) -> n = name) with
@@ -5061,6 +5175,7 @@ module Heap =
                         elif specUniformLookup.ContainsKey name then ValueSome specUniformLookup.[name]
                         elif picking && name = symPickIds then ValueSome pickIdU
                         elif useClusters && name = symClassSlots then ValueSome classSlotsU
+                        elif hasDerived && (name = symUni || name = symUniD) then ValueSome uniBufU
                         else
                             match texLookup.TryGetValue name with
                             | true, v -> ValueSome v
@@ -5283,14 +5398,55 @@ module Heap =
                     pickIdsDirty.Add slot |> ignore
             let __secT0 = System.Diagnostics.Stopwatch.GetTimestamp()
             let regionKeys = System.Collections.Generic.List<IAdaptiveValue>(names.Length)
-            let outBlocks = System.Collections.Generic.List<HeapBlock>()
+            // derived-uniform CONSTITUENT sources, resolved + CANONICALIZED first —
+            // the derived-output dedup below keys on them. null = chain-folded
+            // Model (per-slot compute output, never shared).
+            let constAvals = Array.zeroCreate<IAdaptiveValue> numConst
+            for k in 0 .. numConst - 1 do
+                let c = neededConstituents.[k]
+                if not (c.CBase = Derived.MBASE && chainMode) then
+                    let bav =
+                        match ro.Uniforms.TryGetUniform(scope, cachedSym c.CBase) with
+                        | ValueSome v -> v
+                        | ValueNone -> failwithf "Heap.ofRenderObjects: derived uniform needs base trafo '%s' but the RO doesn't supply it" c.CBase
+                    constAvals.[k] <- canonConstituent bav c.CInv
+            // DERIVED-OUTPUT DEDUP: slots whose recipe + canonical constituents match
+            // share ONE output region; the FIRST member owns it (computes it in the
+            // derive pass — ownership mask below). Pay per DISTINCT VALUE, not per
+            // object: 246k parts sharing one Model derive ONE ModelTrafoInv.
+            let outShares = System.Collections.Generic.List<DerivedShare>(numDerivedRecords)
+            let mutable ownMask = 0
             for i in 0 .. names.Length - 1 do
                 if derivedCells.Contains i then
-                    // derived composite: a per-slot OUTPUT region the compute writes
-                    // (no aval, no RegionWriter); the rewritten shader gathers it.
-                    let (off, blk) = allocOutput (fieldRequestedType names.[i])
-                    outBlocks.Add blk
-                    headers.[slot * headerStride + i] <- off
+                    let j = outShares.Count
+                    let (_, _, cs) = derivedPlan.[j]
+                    let ck (k : int) : obj =
+                        if k < cs.Length then box constAvals.[constCell.[cs.[k]] - fieldStride] else null
+                    let dedupable = cs |> Array.forall (fun c -> not (c.CBase = Derived.MBASE && chainMode))
+                    let key = struct(curPage, j, ck 0, ck 1, ck 2)
+                    let share =
+                        if dedupable then
+                            match derivedShares.TryGetValue key with
+                            | true, sh ->
+                                sh.Members.Add slot |> ignore
+                                sh
+                            | _ ->
+                                let (off, blk) = allocOutput (fieldRequestedType names.[i])
+                                let sh = { Key = key; Page = curPage; Dedup = true; Block = blk; Offset = off
+                                           Members = System.Collections.Generic.HashSet([slot]); Owner = slot }
+                                derivedShares.[key] <- sh
+                                allShares.Add sh |> ignore
+                                ownMask <- ownMask ||| (1 <<< j)
+                                sh
+                        else
+                            let (off, blk) = allocOutput (fieldRequestedType names.[i])
+                            let sh = { Key = key; Page = curPage; Dedup = false; Block = blk; Offset = off
+                                       Members = System.Collections.Generic.HashSet([slot]); Owner = slot }
+                            allShares.Add sh |> ignore
+                            ownMask <- ownMask ||| (1 <<< j)
+                            sh
+                    outShares.Add share
+                    headers.[slot * headerStride + i] <- share.Offset
                 else
                     let av =
                         match ro.Uniforms.TryGetUniform(scope, nameSyms.[i]) with
@@ -5298,10 +5454,14 @@ module Heap =
                         | ValueNone -> failwithf "Heap.ofRenderObjects: RO missing per-draw uniform '%s'" names.[i]
                     regionKeys.Add av
                     headers.[slot * headerStride + i] <- allocRegion av (fieldRequestedType names.[i])
+            headers.[slot * headerStride + ownCell] <- ownMask
+            if Diagnostics && slot < 3 then
+                Log.line "[heap-dbg] slot %d ownMask=%d shares=%s" slot ownMask
+                    (outShares |> Seq.map (fun sh -> sprintf "%d(own=%d,ded=%b)" sh.Offset sh.Owner sh.Dedup) |> String.concat ",")
             // derived-uniform CONSTITUENT regions (Model/View/Proj fwd/bwd, M44d):
             // Model in chainMode is the per-slot FOLD output (compute-written); every
-            // other constituent is uploaded from the RO's base trafo aval, ref-counted
-            // by aval (a shared camera → ONE region, mark re-packs once).
+            // other constituent is uploaded from the (canonical) base trafo aval,
+            // ref-counted (shared camera / shared constant trafo → ONE region).
             let constKeys = System.Collections.Generic.List<struct(IAdaptiveValue * bool)>(numConst)
             let foldBlocks = System.Collections.Generic.List<HeapBlock>()
             for k in 0 .. numConst - 1 do
@@ -5312,12 +5472,9 @@ module Heap =
                         foldBlocks.Add blk
                         o
                     else
-                        let bav =
-                            match ro.Uniforms.TryGetUniform(scope, cachedSym c.CBase) with
-                            | ValueSome v -> v
-                            | ValueNone -> failwithf "Heap.ofRenderObjects: derived uniform needs base trafo '%s' but the RO doesn't supply it" c.CBase
-                        constKeys.Add(struct(bav, c.CInv))
-                        allocConstituent bav c.CInv
+                        let cav = constAvals.[k]
+                        constKeys.Add(struct(cav, c.CInv))
+                        allocConstituent cav c.CInv
                 headers.[slot * headerStride + (fieldStride + k)] <- off
             // GPU trafo-chain: route the slot's UNFOLDED model stack into the link
             // arena (deduped) + a chIdx run; the GPU folds it into the slot's Model
@@ -5470,7 +5627,7 @@ module Heap =
             dirtyDraws.Add slot |> ignore
             let hs = { Slot = slot; Page = curPage; RegionKeys = regionKeys.ToArray(); Active = active; Instances = k; InstOffset = firstInstance
                        InstBlock = instBlock; AttrKeys = attrKeys; IdxKey = idxKey
-                       ConstKeys = constKeys.ToArray(); OutBlocks = outBlocks.ToArray(); FoldBlocks = foldBlocks.ToArray() }
+                       ConstKeys = constKeys.ToArray(); Shares = outShares.ToArray(); FoldBlocks = foldBlocks.ToArray() }
             slots.[ro] <- hs
             // draw-call SHAPE watcher: a non-constant Direct call list updates the
             // slot's vertex count (non-indexed members; indexed counts come from
@@ -5525,7 +5682,20 @@ module Heap =
                 if chainMode then removeChainSlot s.Slot
                 for k in s.RegionKeys do freeRegion k
                 for struct(av, inv) in s.ConstKeys do freeConstituent av inv
-                for b in s.OutBlocks do arenaAlloc.Free b
+                for j in 0 .. s.Shares.Length - 1 do
+                    let sh = s.Shares.[j]
+                    sh.Members.Remove s.Slot |> ignore
+                    if sh.Members.Count = 0 then
+                        if sh.Dedup then derivedShares.Remove sh.Key |> ignore
+                        allShares.Remove sh |> ignore
+                        uniAlloc.Free sh.Block
+                    elif sh.Owner = s.Slot then
+                        // transfer ownership — any member computes the same value
+                        let mutable no = -1
+                        for m in sh.Members do (if no < 0 then no <- m)
+                        sh.Owner <- no
+                        headers.[no * headerStride + ownCell] <- headers.[no * headerStride + ownCell] ||| (1 <<< j)
+                        dirtyHeaders.Add no |> ignore
                 for b in s.FoldBlocks do arenaAlloc.Free b
                 s.AttrKeys |> Array.iteri (fun ai k ->
                     match k with
@@ -5683,15 +5853,11 @@ module Heap =
         // page dicts) and re-bake every slot's header cells after a move.
         interface IPageParticipant with
             member _.CollectResidents(page, res) =
+                // derived outputs live in the DENSE uniform store (bucket-global,
+                // never page-compacted) — only fold blocks participate here.
                 for KeyValue(_, s) in slots do
                     if s.Page = page then
                         let hb = s.Slot * headerStride
-                        for j in 0 .. s.OutBlocks.Length - 1 do
-                            let cell = derivedCellOrder.[j]
-                            let sj, jj = s, j
-                            res.Add(struct(headers.[hb + cell], int s.OutBlocks.[j].Size, outAligned.[j], fun off b ->
-                                headers.[hb + cell] <- off
-                                sj.OutBlocks.[jj] <- b))
                         for j in 0 .. s.FoldBlocks.Length - 1 do
                             let cell = fieldStride + foldConstIdx.[j]
                             let sj, jj = s, j
@@ -5724,6 +5890,9 @@ module Heap =
                     match pg.IdxStatic.TryGetValue s.IdxKey with
                     | true, e -> headers.[hb + idxCell] <- e.Ref
                     | _ -> ()
+                    // derived-output cells re-bake from the (possibly shared) shares
+                    for j in 0 .. s.Shares.Length - 1 do
+                        headers.[hb + derivedCellOrder.[j]] <- s.Shares.[j].Offset
                     // compaction moved allocations -> re-bake the instance-record row
                     if useClusters then refreshRow s.Slot
                 headersAllDirty <- true
