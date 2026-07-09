@@ -437,7 +437,8 @@ The mac's "golden crash" unwound into THREE independent issues (914b9dfa):
 2. spirv-opt strips UNREFERENCED buffer declarations -> a stage whose
    descriptor view has holes breaks MVK argument-buffer padding. Fix: skip
    optimizeDefault on portability devices (backend re-opts; AMD proved
-   byte-identical).
+   byte-identical; MVK A/B-measured neutral — vienna lean 11.1 opt vs 11.0
+   no-opt, same rows build, cache cleared between runs).
 3. golden[textured] HARD-CODES the bindless sampler array — a path the heap
    NEVER takes on MVK (SupportsUnboundedSamplerArrays gate -> atlas; its own
    comment documents that MVK cannot compile unbounded arrays). The probe was
