@@ -416,6 +416,18 @@ before shipping 0050). Probes ALL PASS (AMD-Windows + NVIDIA; RADV keeps its
 known pre-existing edge-pixel variance). Campaign totals on APUs:
 890M 2.1x -> 1.29x, RADV-2CU 3.3x -> 1.57x vs baked.
 
+### Instance rows — VIENNA numbers (DLL overlay, 2026-07-09 late)
+Rows measured on real content by overlaying the locally built
+Aardvark.SceneGraph.dll (v57 head == 0049 + rows, binary-compatible) into the
+0049 demo output on each machine. Lean / full / no-spec:
+5060 4.5/5.0/7.9 (was 4.7/5.1/8.5) | 4070Ti 3.2/3.3/4.3 | 4070L 5.8/6.2/7.9 |
+890M 59.5/78.7/88.9 (lean was 68.1) | RADV-2CU 54.4/56.5/101.5 (lean was 73.6,
+-26%!). Lean vs MDI floor: 5060 1.07x, 4070Ti 1.28x, 4070L 1.09x, 890M 1.69x,
+RADV-2CU 1.99x, M1 0.90x (0049, rows pending mac power-on).
+The editable heap now sits within ~10% of the achievable classic pipeline on
+desktop/laptop NVIDIA, beats it on Apple, and is under 2x even on a 2-CU
+display adapter.
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
