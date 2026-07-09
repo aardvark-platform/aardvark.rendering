@@ -202,9 +202,18 @@ module Golden =
                        Symbol.Create "ViewProjTrafo",  viewProj
                        Symbol.Create "HeapTexIndex",   (AVal.constant (i % TexCount) :> IAdaptiveValue)
                        Symbol.Create "Textures",       texArrayU ] effectHeap)
-        let classicTpix = renderToPix (ASet.ofArray classicT)
-        let heapTobjs = Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray heapT)
-        let passT = report "textured" classicTpix (renderToPix heapTobjs)
+        // the textured phase HARD-CODES the bindless sampler array — the path the
+        // heap itself only takes when the runtime supports unbounded arrays
+        // (MoltenVK does NOT: SPIRV-Cross argument-buffer padding rejects the
+        // shader — the reason the atlas exists; atlas coverage = `atlasheap`).
+        let passT =
+            if runtime.SupportsUnboundedSamplerArrays then
+                let classicTpix = renderToPix (ASet.ofArray classicT)
+                let heapTobjs = Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray heapT)
+                report "textured" classicTpix (renderToPix heapTobjs)
+            else
+                Log.line "golden[textured]: SKIP (no unbounded sampler arrays — the heap uses the atlas here; run `atlasheap`)"
+                true
 
         let pass = passU && passT
         if pass then Log.line "golden: ALL PASS (uniform + bindless-textured heap == classic)"

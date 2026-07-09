@@ -1599,6 +1599,7 @@ module Resources =
         let mutable bgHandle = VkPipeline.Null
         let mutable ownsHandle = true
         let mutable cancelled = false
+        let mutable bgTask : System.Threading.Tasks.Task = null
         let bgLock = obj()
 
         override x.Create() =
@@ -1615,6 +1616,13 @@ module Resources =
 
         override x.Destroy() =
             base.Destroy()
+            // an IN-FLIGHT background specialization reads the ACQUIRED native
+            // state cells (vertex input / multisample / blend ...): wait it out
+            // BEFORE releasing them — releasing frees the cells under the
+            // running vkCreateGraphicsPipelines (SIGSEGV in MoltenVK's
+            // initSampleLocations reading the dangling pMultisampleState).
+            let t = lock bgLock (fun () -> cancelled <- true; bgTask)
+            if not (isNull t) then (try t.Wait() with _ -> ())
             program.Release()
             inputState.Release()
             inputAssembly.Release()
@@ -1737,7 +1745,7 @@ module Resources =
                         if device.IsDeviceGroup then
                             if renderPass.LayerCount > 1 then 1u else uint32 device.PhysicalDevices.Length
                         else 1u
-                    System.Threading.Tasks.Task.Run(fun () ->
+                    bgTask <- System.Threading.Tasks.Task.Run(fun () ->
                         let stageArr = Array.copy stagesSrc
                         for i in 0 .. stageArr.Length - 1 do stageArr.[i].pSpecializationInfo <- pSpecC
                         use pStages = fixed stageArr
@@ -1769,7 +1777,7 @@ module Resources =
                                 bgHandle <- result
                                 bgState <- 2)
                         if not cancelled && ret = VkResult.Success then
-                            transact (fun () -> x.MarkOutdated())) |> ignore
+                            transact (fun () -> x.MarkOutdated()))
                 // publish the fallback's (unspecialized) pipeline meanwhile
                 let f = fallback.Value
                 f.Update(user, token, renderToken) |> ignore

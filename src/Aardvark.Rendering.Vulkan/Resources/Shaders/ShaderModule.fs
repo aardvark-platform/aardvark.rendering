@@ -102,8 +102,15 @@ module ShaderModule =
                 let wrn = wrn |> String.indent 1
                 Report.Line $"{slot} shader compilation succeeded with warnings:{nl}{nl}{wrn}"
 
+            // MoltenVK: spirv-opt strips UNREFERENCED buffer declarations; a
+            // stage whose descriptor view then has HOLES (e.g. a fragment
+            // shader using only the bindless sampler array at binding 3)
+            // breaks MVK's Metal argument-buffer padding ("resource base type
+            // could not be determined" -> VK_ERROR_INVALID_SHADER_NV). Keep
+            // the declarations on portability devices; the backend compiler
+            // re-optimizes anyway (measured byte-identical ISA on AMD).
             let binary =
-                if not config.OptimizeShaders then binary
+                if not config.OptimizeShaders || device.IsExtensionEnabled KHRPortabilitySubset.Name then binary
                 else GLSLang.GLSLang.optimizeDefault binary
 
             let handle = device |> createRaw binary
