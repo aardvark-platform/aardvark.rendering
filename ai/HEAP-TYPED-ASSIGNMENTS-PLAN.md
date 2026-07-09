@@ -495,6 +495,29 @@ In this scene ModelTrafoInv AND ViewProjTrafo collapse to one hot cell each
 with distinct trafos pay per DISTINCT VALUE, not per object — pay for
 entropy, not object count. Top implementation priority.
 
+### The TWO-PAIRING benchmark redesign + dense-store results (2026-07-09 late)
+User redefined the comparison into matched pairs (the old single table mixed
+costs): PAIR 1 "static" = baked one-draw vs heap with NO per-object trafos
+(HEAP_STATIC=1, trafoStatic: decode + one global ViewProj) — pure
+streaming-vs-gather. PAIR 2 "editable" = MDI with per-object Model/Inv as
+INSTANCE-RATE attributes (baseline-mdi-inst, FirstInstance-indexed — the
+strongest classic delivery) vs heap as-is (fair per-object NM).
+
+Results (same-session floors, clean caches, dense store d0d22dfc):
+PAIR 1: 5060 4.2-5.1 vs 4.4 (~1.0x) | 890M 47.3 vs 67.5 (1.43x) | RADV-2CU
+27.7 vs 40.8 (1.47x) — the irreducible gather rent, now isolated.
+PAIR 2: 5060 6.9 vs 4.4 (0.64x — HEAP WINS) | 890M 42.7 vs 82.1 (1.92x) |
+RADV-2CU 30.3 vs 56.6 (1.87x).
+KEY MECHANICAL FINDING: classic delivers per-object matrices ONCE PER
+INSTANCE (hw fetch: +2.6-4.2 ms) — the heap delivers them ONCE PER VERTEX
+(+14.6-16 ms) = ~215x the traffic at vienna's 72 tris/part. NEXT LEVER
+(designed): promote hot derived outputs (NM/Model) INTO THE INSTANCE ROWS as
+VALUES — per-instance hardware fetch matching classic exactly; needs the
+derive kernel writing via a slot->row map + re-derive on relist.
+Dense-store round context: 5060 lean 4.4 (better than pre-fairNM!), iGPU
+75.7->57.9 (fairNM cost 21->3.5ms), 890M 96.8->85.6 (env ±10%; same-session
+floors also hot). M1 pending (mac off).
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
