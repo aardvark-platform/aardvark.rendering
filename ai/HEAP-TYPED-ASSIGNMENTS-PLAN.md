@@ -566,3 +566,23 @@ editable representation moves 35% FEWER bytes than the baked one.
   (RenderObject.SpecConstants, SpecializationResource, pipeline key) stays.
 - Wash verdict + all A/B numbers: memory `spec-constants-verdict`,
   `fs-gather-not-a-lever`, `heap-render-perf-decomposition`.
+
+### Entry store ("vals") v1 — built, measured, OPT-IN (2026-07-10, c075a13f)
+Three-buffer directive implemented: arena (authoritative, derive outputs back
+from the deleted dense store) + rows (instance attrs) + HeapVals (packed
+per-entry uniforms, compile-time kind-separated lane layout, fan-out CS
+refill). Full gauntlet pixel-exact in all variants. Two debugging traps:
+(1) FShade splice-loses-storage-scope AGAIN in the vals gather (null[...]);
+storage reads must sit literally in the returned quotation. (2) Cross-buffer
+AdaptiveBuffer.ResizeInPlace (entryBuf resized from flushClassSlots) never
+reallocates the handle — vals stuck at first-frame size, re-materialized
+partitions wrote OOB → invisible, PERSISTENT; every capacity-tracking
+MirrorBuffer needs its own Flush. Perf verdict (vienna d9):
+no-vals 5060 3.8/5.2, RADV 35.3/75.0 (static/fairNM) | vals-SSBO 4.0/6.5,
+57.0/311.7 | vals-attr 5.9/13.5, 55.6/306.8. The v1 per-frame brute fan-out
+dominates APUs; replicating shared values forfeits dedup (vienna degenerate:
+all Model identity); NVIDIA prefers SSBO over 12-18 attr lanes and needs no
+vals at all (beats both floors). Dense-store reversion cost RADV fairNM
+56.6->75.0 (5060 flat). v2 design: dirty-gated fan-out (zero dispatch clean
+frames) + derived composites stay arena-side (compile-time rule); HEAP_VALS=1
+enables meanwhile.
