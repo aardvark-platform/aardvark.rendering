@@ -1,3 +1,7 @@
+### 5.7.0-prerelease0049
+- [Sg] Heap: EXTENT-CLASS folding — typed partitions bake full/singleton per attribute into the spec constants, removing the header length load that serialized every attribute fetch behind a header round (RADV RDNA2 renderbench −15%, ratio to baked 2.31x -> 1.96x); in-place length flips (full <-> singleton) reclassify and migrate the slot.
+- [Vulkan] EmptyTimeQuery when the queue family reports timestampValidBits = 0 (KosmicKrisp no longer device-losts on time queries).
+
 ### 5.7.0-prerelease0048
 - [Vulkan] `AARDVARK_VULKAN=integrated|discrete|<name substring>` selects the physical device whenever the application supplies NO explicit IDeviceChooser (an explicit chooser always wins; unset = previous default behavior; an unmatchable value fails loudly listing the devices).
 
