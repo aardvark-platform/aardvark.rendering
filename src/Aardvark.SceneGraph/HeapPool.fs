@@ -4456,9 +4456,13 @@ module Heap =
             if useClusters then EntryStore.computeLayout entryFieldTypes
             else 1, Array.create names.Length ValueNone, [| false |]
         let entryStrideWords = entryStrideLanes * 4
+        // OPT-IN (HEAP_VALS=1) until the v2 dirty-gated fan-out lands: the v1
+        // brute per-frame refill replicates every shared value per entry — on a
+        // 2-CU RADV APU that turned vienna fairNM 75 -> 307 ms/frame, and even
+        // the 5060 paid +25%% (SSBO delivery) / 2.6x (instance-attr delivery).
         let hasEntryStore =
             useClusters && (entryPlaces |> Array.exists ValueOption.isSome)
-            && System.Environment.GetEnvironmentVariable "HEAP_NO_VALS" <> "1"
+            && System.Environment.GetEnvironmentVariable "HEAP_VALS" = "1"
         // fan-out records: [hdrCell; dstWord; rowWords; rows; dstRowStride; isUni]
         let entryRecords =
             [| for i in 0 .. names.Length - 1 do
