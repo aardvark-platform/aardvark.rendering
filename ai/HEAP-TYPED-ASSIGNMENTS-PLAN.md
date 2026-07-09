@@ -473,6 +473,28 @@ does not apply; fold view rotation into the global ViewProj gather). Derive
 then runs only on EDITS -> the per-frame 8.8 ms vanishes on APUs.
 Capture: airtop ~/arcbench/hekla_igpu_rows.rgp (windowed 0050 demo, 1024x768).
 
+### Fair per-object NormalMatrix (demo a241743) + the dedup imperative (2026-07-09)
+User call: no rigid-trafo shortcut — the demo now transforms normals by
+transpose(ModelTrafoInv) (heap derives it per slot via the existing
+DNormal/DMatMul[bwd MBASE] recipes, camera-independent; floors bind the
+scene-graph identity ModelTrafoInv = same instructions, zero extra memory).
+Render verified correct. COST (same-session floors + lean/no-spec):
+5060 lean 4.5->4.9 (+9%) | 4070L 5.8->6.6 | 890M 59.5->96.8 (+63%!!) |
+RADV-2CU 54.4->75.7 (+39%) | 4070Ti CONTAMINATED again (spread 3.8-7.9,
+floors 3.3/4.1 vs clean 2.5/2.5 — box in use, discard) | M1 pending (mac off).
+The one mat4 gather = 64 B x 53M verts ~= 3.4 GB/frame nominal; caches eat it
+on NVIDIA, APUs pay ~+21/+37 ms.
+THE KICKER: all 246,655 vienna parts share ONE identity Model aval — the heap
+dedups the INPUT region but materializes 246k IDENTICAL ModelTrafoInv OUTPUT
+regions, gathered from 246k distinct addresses. Same disease as the per-slot
+ViewProj derive storm (8.8 ms/frame on 2-CU). ONE cure for both:
+DERIVED-OUTPUT DEDUP by (recipe, constituent regions) — collapse output
+regions when ALL constituents match; refcount like base uniform regions.
+In this scene ModelTrafoInv AND ViewProjTrafo collapse to one hot cell each
+(gathers cache-resident, derive dispatch ~1 group on camera move); scenes
+with distinct trafos pay per DISTINCT VALUE, not per object — pay for
+entropy, not object count. Top implementation priority.
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
