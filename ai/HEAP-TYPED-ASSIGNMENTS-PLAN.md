@@ -372,6 +372,10 @@ K = 1..262144 + per-part. Findings per architecture:
   (beats ragged per-part 35.9 — uniform grain > ragged grain). One-draw is
   the 890M's WORST case (-27% recoverable by splitting).
 - RADV 2CU: flat (slight uptick only at 264k = 67-vert records).
+- 890M ORDER CONTROLS (clock/turbo hypothesis REFUTED): re-measuring at the
+  END of the warmed run: K=1-again 41.4 / K=1-again2 41.2 (== initial 41.9),
+  K=262144-again 28.9 (== 28.8). The grain effect is real and stable: -31%
+  for 264k equal chunks vs one draw on RDNA3.5, no order dependence.
 
 MORE CORRECTIONS from verified runs: zephyrus D:\heap-bench\CadSceneDemo was
 NOT a git repo (pulls failed silently) -> this morning's "0049" demo run there
