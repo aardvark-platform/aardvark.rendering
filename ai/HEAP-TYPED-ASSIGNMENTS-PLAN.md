@@ -325,6 +325,38 @@ Demo-level numbers (890M / lean floors) need the next rendering release +
 demo bump. Remaining chain: non-indexed typed slots should now be ONE
 dependent vector round (record reads are draw-uniform -> SMEM).
 
+### Extent folding SHIPPED + measured (0049, 2026-07-09)
+Rendering 5.7.0-prerelease0049 (extent folding + EmptyTimeQuery), demo bumped.
+Renderbench 200k typed/no-spec/baked: 5060 2.63/3.97/2.65 (parity) | 4070Ti
+1.65/2.29/1.97 (BEATS baked 0.84x) | 4070L 3.18/4.14/3.74 (beats baked 0.85x)
+| M1 4.98/8.75/3.54 (-43% total JIT) | 890M 30.9/41.7/21.6 (1.43x, was 2.1x)
+| RADV 2CU 40.1/67.5/20.5 (1.96x). Probes ALL PASS everywhere.
+
+DEMO d1-9 (lean vs same-day MDI floor = the honest heap/achievable):
+5060 4.7 vs 4.2 = 1.12x (was 1.21x) | 4070Ti 3.3 vs 3.5 = 0.94x BEATS FLOOR
+(was 1.23x) | 4070L 6.1 vs 4.5* | M1 11.3 vs 12.6 = 0.90x (was 0.94x) |
+890M 68.8 vs 35.4 = 1.94x (was 2.69x — yesterday's heap numbers were
+thermally soaked; same-day floors identical 42.7/35.4) | RADV 2CU 73.6 vs
+28.3* ~2.5x (env drift ~7%, FULL A/B -14% normalized). Full-demo JIT A/B:
+5060 5.1/8.5 | 4070Ti 3.5/4.7 | 4070L 6.5/8.1 | M1 12.1/21.9 | 890M 81.1/90.7.
+(* floors not re-run same-day on those boxes.)
+
+Learned the hard way AGAIN: HeapSpike falls through to the WINDOWED showcase
+on unknown args — a stale tree (mac: partial rsync kept an old Program.fs;
+zephyrus: git fetch origin v57 + checkout v57 does NOT create the local branch,
+checkout FETCH_HEAD) runs a forever-window that looks exactly like a compiler
+hang. Diagnose with dotnet-stack (managed frames), not sample. Also: stuck
+processes hold DLL locks -> 36 MSB3027 copy errors on rebuild.
+
+Next lever (designed): INSTANCE-RATE-ATTRIBUTE records. gl_DrawID is useless
+under clustering (one record draws a whole class as instances -> slot id is
+per-instance, waves span slots -> not even subgroup-uniform). Instead bind the
+hot record fields (attr data offsets) as a VertexInputRate.Instance buffer
+ordered by class-list position (rewritten under the existing csStaging dirty
+policy): hardware fetches them at wave launch (address linear in instance id,
+NO dependent load) -> kills the ClassSlots->record double-hop -> ONE dependent
+vector round = the VBO chain shape. Core Vulkan everywhere + GL, no features.
+
 ### Open experiment: integrated-vs-driver 2x2 (designed, unrun)
 The AMD-APU 2.5-2.7x gap is confounded: memory-system (APU latency, no big L2)
 vs AMD compiler/arch. Discriminator: a DISCRETE AMD (e.g. used RX 6600) — if it
