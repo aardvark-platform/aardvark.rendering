@@ -332,31 +332,21 @@ module Golden =
         Log.line "autoFields: heap vs classic maxDelta=%d diffPixels=%d/%d  coverage=%d px" dC nC total nbg
         let pixOk = dC <= 1 && nbg > total / 100L && autoBuckets = 1
 
-        // different DETECTED field sets must land in different buckets: same
-        // effect (consumes Gamma), half the ROs supply Gamma, half don't.
-        let effectG = Effect.compose [ Effect.ofFunction Shaders.shade; Effect.ofFunction AF.gammaFrag ]
-        let mixed =
-            Array.init 4 (fun i ->
-                let p = V3d(float i * 1.5, 0.0, 0.0)
-                let base' =
-                    [ Symbol.Create "HeapModelTrafo", (AVal.constant ((Trafo3d.Translation p).Forward |> M44f.op_Explicit) :> IAdaptiveValue)
-                      Symbol.Create "HeapColor",      (AVal.constant (palette.[i % palette.Length].ToV4f()) :> IAdaptiveValue)
-                      Symbol.Create "ViewTrafo",      viewT
-                      Symbol.Create "ProjTrafo",      projT ]
-                let us = if i % 2 = 0 then (Symbol.Create "Gamma", (AVal.constant 1.0f :> IAdaptiveValue)) :: base' else base'
-                mkRO us effectG)
-        // Heap.lastBucketCount is the authoritative split metric (2 distinct field-sets ->
-        // 2 buckets). The output RO set additionally carries one draw-less DERIVE pre-pass
-        // RO per derive-bucket; both buckets here derive ViewProjTrafo, plus the heap's
-        // single ActivationRenderObject (lifetime handle), so 2 draw + 2 derive + 1
-        // activation = 5 output ROs. (The derive RO runs the fp64 composite compute.)
-        let splitCount = Heap.ofRenderObjects (runtime.CreateHeapStorage()) (ASet.ofArray mixed) |> ASet.force |> HashSet.count
-        let splitOk = Heap.lastBucketCount = 2 && splitCount = 5
-        if not splitOk then Log.warn "autoFields: field-set bucket split: %d output RO(s) (expected 5 = 2 draw + 2 derive + 1 activation), %d bucket(s) (expected 2)" splitCount Heap.lastBucketCount
+        // NOTE the former mixed-Gamma "field-set splits buckets" assertion is GONE, twice over:
+        // (1) since the storage-first rework the heap builds SIGNATURE-DEFERRED (lazily on
+        //     first render-task activation), so ASet.force observes a placeholder — bucket
+        //     counts can only be asserted through a real render; and
+        // (2) that scene was invalid anyway: an RO that does not supply a consumed uniform
+        //     (the Gamma-less half) cannot render under ANY path — classic throws
+        //     'Could not find uniform' just the same — and for RENDERABLE ROs sharing one
+        //     effect the detected field set is necessarily equal (consumed ∩
+        //     supplied/derivable), so no valid same-effect split scene exists.
+        // Field-set participation in the bucket key is still real (Layout carries
+        // "|f:<fields>" in factsOf); the first scene asserts detection + pixels.
 
-        let pass = fieldsOk && pixOk && splitOk
-        if pass then Log.line "autoFields: PASS (auto-detected fields render == classic; NotConsumed ignored; field-set splits buckets)"
-        else Log.warn "autoFields: FAIL (fieldsOk=%b pixOk=%b splitOk=%b)" fieldsOk pixOk splitOk
+        let pass = fieldsOk && pixOk
+        if pass then Log.line "autoFields: PASS (auto-detected fields render == classic; NotConsumed ignored)"
+        else Log.warn "autoFields: FAIL (fieldsOk=%b pixOk=%b)" fieldsOk pixOk
         pass
 
     // `Sg.heap` — the scene-graph node around Heap.ofRenderObjects. ONE scene
