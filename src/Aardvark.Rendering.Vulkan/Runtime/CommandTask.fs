@@ -726,6 +726,13 @@ module private RuntimeCommands =
 
         let check () = if isDisposed then failf "using disposed command"
 
+        /// whether the last Update actually changed the command's stream —
+        /// content-only heap edits mark the tree (push is value-blind) but
+        /// produce EMPTY deltas; the task skips the inner re-record then.
+        /// Conservative default TRUE (subclasses that don't track it keep the
+        /// old always-re-record behavior).
+        member val LastChanged = true with get, set
+
         member x.Prev
             with get() = check(); prev
             and set p = check(); prev <- p
@@ -1268,9 +1275,17 @@ module private RuntimeCommands =
             deltas |> HashSetDelta.iter (insert token) (remove)
 
             // get and update the dirty PreparedCommands (can be non-empty due to CommandNode)
-            for cmd in dirty.GetAndClear() do
+            let dirtyCmds = dirty.GetAndClear()
+            for cmd in dirtyCmds do
                 if isValid cmd then cmd.Update token
 
+            // EMPTY update (content-only heap edit marked the tree, nothing
+            // structural moved): keep the existing stream, report no change.
+            if deltas.Count = 0 && dirtyCmds.Count = 0 then
+                x.LastChanged <- false
+            else
+
+            x.LastChanged <- true
             for (KeyValue(_,b)) in trie do
                 b.Update token
 
@@ -2374,7 +2389,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         lock compiled (fun () ->
             if compiled.OutOfDate then
                 compiled.Update token
-                true
+                compiled.LastChanged
             else
                 false
         )

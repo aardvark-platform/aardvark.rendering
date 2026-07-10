@@ -6765,6 +6765,7 @@ module Heap =
             | _ -> ()
         let mutable __resultN = 0
         let mutable __lastHash = 0
+        let mutable __lastArr : IRenderObject[] = [||]
         let resultAval =
             updater |> AVal.map (fun _ ->
                 // derive pre-passes ∪ per-page bucket sub-draws ∪ untouched passthrough.
@@ -6780,7 +6781,20 @@ module Heap =
                 let h = if arr.Length > 0 then LanguagePrimitives.PhysicalHash arr.[0] else 0
                 if __resultN % 10 = 0 || h <> __lastHash then Log.line "[result] #%d: %d ROs, firstHash=%d changed=%b" __resultN arr.Length h (h <> __lastHash)
                 __lastHash <- h
-                arr)
+                // IDENTITY-STABLE output: content-only edits bump the version but
+                // produce the SAME RO instances — return the previous array object
+                // so the downstream set-diff emits an EMPTY delta and the command
+                // tree's actual-change reporting skips the re-record.
+                let same =
+                    arr.Length = __lastArr.Length
+                    && (let mutable eq = true
+                        for i in 0 .. arr.Length - 1 do
+                            if not (System.Object.ReferenceEquals(arr.[i], __lastArr.[i])) then eq <- false
+                        eq)
+                if same then __lastArr
+                else
+                    __lastArr <- arr
+                    arr)
         (resultAval |> ASet.ofAVal), teardown
 
     /// Collapse an adaptive set of N render objects into bucket render objects.
