@@ -612,3 +612,28 @@ legal (nobody needs notification). Expected ~0.2-0.3ms/edit; 0.05
 (0023 mapped-mirror) unreachable without giving back device-local storage.
 Acceptance: stats edit <=0.3ms @k<=64, gauntlet pixel-exact, vienna render
 numbers unchanged.
+
+### Edit-cost portable fixes — implementation spec (2026-07-10, no ReBAR)
+Target: 0.6ms/edit -> ~0.2ms. Three independent pieces:
+(1) COMMAND actual-change: content edits mark the command tree (push is
+value-blind); updateCommands returns "was marked" and forces a re-record on
+EMPTY deltas. Fix: resultAval identity-memoization (same array when membership
+unchanged) + the top set-command's Update reports whether any reader delta was
+non-empty; CommandTask re-records only then (~0.2ms back).
+(2) AGGREGATE GATE + CONSTANT HANDLES: descriptor resources must stop waking
+per version. Mirrors expose AVal.constant handles (constants never mark);
+the bucket provider serves the CURRENT constant (prepared ROs capture theirs).
+ONE gate node (Dependency=updater; registered via bucketRO.IsActive =
+gate-map-true) runs all flushes (dirty flags already exist; recsVersion guard
+96343e3d already skips clean record regen). GROWTH = bufEpoch bump inside the
+updater: buildHeapRO + partROs rebuild with FRESH RO instances + new constants
+-> prepare-cache miss -> new descriptors pull new handles (pow2-rare; watch
+old/new RO resource-refcount overlap so buffers aren't destroyed mid-swap).
+ResizeInPlace happens at updater end (before resultAval), so the first flush
+after growth writes into the right-sized handle (~0.2ms back).
+(3) WRITE BATCHING: headers/rows dirty ranges go through ONE staging chunk +
+one copy submission (the arena ring pattern) instead of ~27us-per-Write calls
+(~0.1ms back).
+Acceptance: same-session stats A/B (env-gated switches during bring-up),
+gauntlet pixel-exact, vienna render numbers unchanged. NEVER compare stats
+across machine states (today's lesson).
