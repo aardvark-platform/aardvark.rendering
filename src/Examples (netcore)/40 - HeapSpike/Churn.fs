@@ -39,7 +39,7 @@ module Churn =
 
     let run () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -154,7 +154,7 @@ module Churn =
     /// NoEvents pick-through fix: the unmarked partition must not vanish.
     let pickSplit () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -221,7 +221,7 @@ module Churn =
 
     let pickSplit2 () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let baseSig =
             runtime.CreateFramebufferSignature [
@@ -315,7 +315,7 @@ module Churn =
     /// (classic pipelines can't broadcast a 1-element vertex attribute).
     let dynGeom () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -468,7 +468,7 @@ module Churn =
     /// (arena flush included) and reports first-vs-last round timings + arena size.
     let dynPerf () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -542,7 +542,7 @@ module Churn =
     /// cost must show up within a handful of toggles.
     let dynPick () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let baseSig =
             runtime.CreateFramebufferSignature [
@@ -631,7 +631,7 @@ module Churn =
     /// DEmaterialization (remove one group) and RE-materialization (re-add).
     let mixedTypes () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [

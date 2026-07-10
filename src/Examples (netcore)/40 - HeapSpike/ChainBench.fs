@@ -42,7 +42,7 @@ module ChainBench =
 
     let run (chain : bool) (n : int) =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime :> IRuntime
         let signature =
             runtime.CreateFramebufferSignature [

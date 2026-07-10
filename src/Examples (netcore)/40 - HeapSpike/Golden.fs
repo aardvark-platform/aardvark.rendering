@@ -115,7 +115,7 @@ module Golden =
 
     let run () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
 
         let signature =
@@ -255,7 +255,7 @@ module Golden =
 
     let autoFieldsTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -406,7 +406,7 @@ module Golden =
     // we can see exactly which page's draw is broken.
     let sgSphereTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -468,7 +468,7 @@ module Golden =
 
     let sgHeapTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -592,7 +592,7 @@ module Golden =
     // breakage can be inspected. samples=1 so the result is downloadable.
     let demoShotTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let size = AVal.constant (V2i(1024, 1024))
         let bv (a : System.Array) t = BufferView(AVal.constant (ArrayBuffer(a) :> IBuffer), t)
@@ -710,7 +710,7 @@ module Golden =
     // (else a pass would be meaningless).
     let sgPrecisionTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -776,7 +776,7 @@ module Golden =
     //   (e) add/remove churn keeps chainMode + correct image (free-list reuse).
     let liveChainTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -911,7 +911,7 @@ module Golden =
     // SSBO-array has a fixed shader-declared capacity ~512 buffers).
     let chainLeakProbeTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let device = runtime.Device
         let frames = match System.Environment.GetEnvironmentVariable "FRAMES" with null | "" -> 4000 | s -> int s
@@ -1071,7 +1071,7 @@ module Golden =
     // EDITK (default 55184 — the trafo death point), KIND (trafo|color), SAMPLE.
     let hostBoxCrashTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let device = runtime.Device
         let n      = match System.Environment.GetEnvironmentVariable "N"      with null | "" -> 100000 | s -> int s
@@ -1168,7 +1168,7 @@ module Golden =
     // COMPLETES (no exception) with bounded resources.
     let bindlessOverCapacityTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let device = runtime.Device
         let n = match System.Environment.GetEnvironmentVariable "N" with null | "" -> 650 | s -> int s
@@ -1240,7 +1240,7 @@ module Golden =
     //   (c) value-dedup of constant leaf links holds across variable depths.
     let liveChainDeepTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -1360,7 +1360,7 @@ module Golden =
     // dynamic outer-trafo edit re-renders correctly (GPU re-fold).
     let sgChainTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -1434,7 +1434,7 @@ module Golden =
     // through UNCHANGED (same instance) in the output, not dropped or crashed.
     let passthroughTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.5)) C4b.White).ToIndexed()
         let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
@@ -1545,7 +1545,7 @@ module Golden =
     // path -> must be pixel-identical.
     let nativeBufTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -1631,7 +1631,7 @@ module Golden =
 
     let varTypeTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -1724,7 +1724,7 @@ module Golden =
 
     let ssboArrayTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -1795,7 +1795,7 @@ module Golden =
 
     let ssboArray2Test () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -1855,7 +1855,7 @@ module Golden =
 
     let ssboArray3Test () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -1904,7 +1904,7 @@ module Golden =
     // honours per-command FirstInstance.
     let ssboArray4Test () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -1967,7 +1967,7 @@ module Golden =
 
     let ssboArray5Test () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -2038,7 +2038,7 @@ module Golden =
 
     let bindlessCleanBoxTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature = runtime.CreateFramebufferSignature [ DefaultSemantic.Colors, TextureFormat.Rgba8; DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8 ]
         let size = AVal.constant (V2i(640, 640))
@@ -2184,7 +2184,7 @@ module Golden =
 
     let texHeapTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -2250,7 +2250,7 @@ module Golden =
     // render at BOTH states AND the swap actually changed the image.
     let texSwapTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -2327,7 +2327,7 @@ module Golden =
     // texState=point PASS together prove state is carried, not defaulted.)
     let texStateTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -2393,7 +2393,7 @@ module Golden =
     // by world normal. Proves the per-TYPE bindless array (samplerCube[]) works.
     let texCubeTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -2528,7 +2528,7 @@ module Golden =
 
     let gpuGeomTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         gpuGeomWith "gpuGeom" true (app.Runtime :> IRuntime)
 
     let gpuGeomTestGL () =
@@ -2591,7 +2591,7 @@ module Golden =
     // hardware sampling, so we allow a few badly-off pixels but require it looks the same.
     let atlasHeapTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -2660,7 +2660,7 @@ module Golden =
     // Forces the render (no download) so a GPU hang reproduces; prints COMPLETED otherwise.
     let msaaTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let samples = match System.Environment.GetEnvironmentVariable "SAMPLES" with null | "" -> 8 | s -> int s
         let n       = match System.Environment.GetEnvironmentVariable "N"       with null | "" -> 2000 | s -> int s
@@ -2715,7 +2715,7 @@ module Golden =
     // that's a confirmed driver/resource-exhaustion bug. N = iterations (default 5000).
     let submitStressTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let n = match System.Environment.GetEnvironmentVariable "N" with null | "" -> 5000 | s -> int s
         let img = PixImage<byte>(Col.Format.RGBA, V2i(8, 8))
@@ -2740,7 +2740,7 @@ module Golden =
     // before the glyph upload (mimics frames; default 1). N = object count (default 20000).
     let glyphWedgeTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let n     = match System.Environment.GetEnvironmentVariable "N"     with null | "" -> 20000 | s -> int s
         let iters = match System.Environment.GetEnvironmentVariable "ITERS" with null | "" -> 1     | s -> int s
@@ -2803,7 +2803,7 @@ module Golden =
     // is exercised on every Acquire — a backend bug there would assert or VK_ERROR here.
     let atlasPoolTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         // small pages so overflow + eviction trigger quickly
         let pageSz, maxPages = 512, 2
@@ -2869,7 +2869,7 @@ module Golden =
     // problem is aardvark's offscreen path on the backend, not the heap.
     let plainTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -2919,7 +2919,7 @@ module Golden =
     // still collapse into one.
     let bucketingTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
         let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
@@ -2966,7 +2966,7 @@ module Golden =
     // without touching the object set.
     let modeRulesTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let g = (IndexedGeometryPrimitives.Box.solidBox (Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)) C4b.White).ToIndexed()
         let positions = g.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
@@ -3092,7 +3092,7 @@ module Golden =
 
     let alreadyInstancedTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -3156,7 +3156,7 @@ module Golden =
     // (in a transact) roughly halves the rendered coverage, with no rebuild.
     let visibilityTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -3220,7 +3220,7 @@ module Golden =
     // returns true. Env N overrides the bucket size (default 5000).
     let churnProbeTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -3320,7 +3320,7 @@ module Golden =
     // geometry (vertex + index ranges) and bindless/vertex-pull (index ranges only).
     let geomChurnTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -3425,7 +3425,7 @@ module Golden =
     // the assertion is not vacuous.
     let geomValueDedupTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -3502,7 +3502,7 @@ module Golden =
     // pass-through) and render pixel-identical.
     let nonIndexedTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -3571,7 +3571,7 @@ module Golden =
     // half-time deterministically trips the live<50% trigger.
     let geomDriftTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let signature =
             runtime.CreateFramebufferSignature [
@@ -3705,7 +3705,7 @@ module Golden =
     // ever destroyed the buffers, and the metrics grow monotonically -> FAIL.
     let lifetimeTest () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
         let device = runtime.Device
         let signature =

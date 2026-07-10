@@ -124,7 +124,7 @@ module StartupBench =
 
     let run () =
         Aardvark.Init()
-        use app = new Aardvark.Application.Slim.VulkanApplication(false)
+        use app = new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication()
         let runtime = app.Runtime
 
         let n =
