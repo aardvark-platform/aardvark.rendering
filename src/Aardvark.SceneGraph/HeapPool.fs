@@ -5404,7 +5404,15 @@ module Heap =
                         else bucketRO.Uniforms.TryGetUniform(s, name)
                     member _.Dispose() = () }
             ro :> IRenderObject
+        // same gate key as buildHeapRO: the clone set only changes when a page appears
+        // or a partition (de)materializes — content-only edits skip the pages×partitions
+        // dictionary walk entirely (it was ~0.7ms per edit batch at 68k parts).
+        let mutable pageROsPageCount = -1
+        let mutable pageROsEpoch = -1
         let ensurePageROs () =
+          if pageROsPageCount <> storage.Count || pageROsEpoch <> partEpoch then
+            pageROsPageCount <- storage.Count
+            pageROsEpoch <- partEpoch
             // prune clones of DEAD partitions (dematerialized / re-materialized
             // under a fresh id): dropping the dict reference releases the clone
             // and its indirect MirrorBuffer through the normal resource refcounts
