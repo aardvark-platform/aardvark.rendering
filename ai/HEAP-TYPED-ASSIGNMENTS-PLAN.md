@@ -647,3 +647,20 @@ the governor, idle 180MHz made steady frames 4.4ms instead of 0.55 and
 poisoned an afternoon of numbers; (2) check nvidia-smi pmon for chrome/
 sunshine/compute; (3) A/B within one session only. Remaining to ~0.2ms:
 aggregate gate (readers 4->1) + write batching (spec above).
+
+### Base-cost gate — locked-clock decomposition + variant map (2026-07-10 end)
+Per-edit extra at locked clocks: +0.5ms updateResources (4-6 readers wake;
+flush work only ~0.2 of it) + ~0.35ms dynWriter invocation. updateCommands/
+re-record turned out STEADY-state (0.44ms/100ms window with zero edits; also
+1 dirty reader + a re-record EVERY steady frame — separate cleanup item).
+Gate variants mapped: (1) constant handles + epoch re-prepare — BLOCKED on
+PrepareRenderObject caching per RO instance (growth needs fresh RO clones +
+refcount-safe swap); (2) de-graph + imperative flush — breaks growth
+notification (the vals lesson); (3) MERGE the five small mirrors
+(headers/rows/slotPage/pickIds/shareRecs) into ONE buffer with section
+offsets — growth machinery unchanged (one Dependency/reader/handle swap),
+readers 5->1; needs SSBO SUB-RANGE bindings through the uniform provider
+(Vulkan descriptor offsets fine; aardvark plumbing = the one unknown).
+RECOMMENDED: variant 3, fresh session, gauntlet + locked-clock stats from
+minute one. Also queue: the steady-frame 1-dirty-reader/re-record cleanup,
+parallel ingest (the edits/frame cap: churn 74us/part single-threaded).
