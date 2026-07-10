@@ -586,3 +586,22 @@ vals at all (beats both floors). Dense-store reversion cost RADV fairNM
 56.6->75.0 (5060 flat). v2 design: dirty-gated fan-out (zero dispatch clean
 frames) + derived composites stay arena-side (compile-time rule); HEAP_VALS=1
 enables meanwhile.
+
+### Edit-latency: the 0.6ms fixed cost + the content-gate design (2026-07-10)
+heap-editor-benchmark regression suite (0023 raw vs 0051 rerun) flagged inplace
+3-22x / subdiv 7-11x; HEAP_EDIT_PROF=1 instrumentation (3a5d8e42) decomposed it:
+compaction @build (fine), syncPages one-time, per-part staging linear 3-8us
+(healthy). TRUE regression = ~0.6ms FIXED vk-side cost per edited frame:
+updateResources walk (~0.7ms; every mirror marks every updater version via
+Dependency -> all descriptor resources dirty) + unconditional command re-record
+(marking is push + value-blind; resultAval identity-memoization measured
+USELESS, reverted). Stats-mode truth: 0.63ms @k16 -> 3.6ms @k1024 (0023 sweep
+3.17 @k1024 — big-k parity; the 3-22x table cells were single-shot noise).
+FIX DESIGN (fresh session): de-graph the mirrors — no Dependency; content
+flushes run imperatively from HeapRenderObjectCommand's per-frame dispatch
+Record hook (FlushContent(token), pre-submit ordering unchanged); structural
+cycles (membership/realloc/compaction/relayout — the only resizers) keep a
+graph path via the indirect/draw-record buffers. Expected ~0.2-0.3ms/edit;
+0.05 (0023 mapped-mirror) unreachable without giving back device-local
+storage. Acceptance: stats edit <=0.3ms @k<=64, gauntlet pixel-exact, vienna
+render numbers unchanged.
