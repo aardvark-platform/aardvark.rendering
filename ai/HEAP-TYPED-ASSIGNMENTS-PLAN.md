@@ -692,3 +692,18 @@ REAL work: dynWriters ~22us/writer (parallel-ingest lever) + arena/header
 staging + ~60us machinery. Full gauntlet green (autofields splitOk=false is
 PRE-EXISTING on baseline: expects 5 output ROs/2 buckets, gets 2/1 — stale
 expectation from the storage-first rework, worth a separate look).
+
+### Writer-path CPU profile (perf, 2026-07-10 night)
+perf + /tmp/perf-PID.map (DOTNET_PerfMapEnabled=1; .NET W^X dual-mapping keeps
+perf report from consuming the map — resolve manually against the memfd
+addresses). 150x1024 inplace batches, geforce-parts: warm DynWriter invocation
+= ~1.9us (the "22us/writer" at k=16 was per-batch fixed cost over few writers).
+Split: ~25% GetValueUntyped pull (EvaluateAlways protocol, NOT boxing — source
+is aval<IBuffer>, reference type; casts measured ~2%), ~24% WeakOutputSet
+drain/re-add cycle (cached weak handles, cost is per-Add TryGetTarget +
+occasional Cleanup — all sets are size 1-2 by design: geometry dedups to ONE
+DynWriter, fan-out via DynRefs CPU lists), ~12% actual bytes (pin+stage+copy).
+BAR memory would address the 12%, not the 88% — dead end. 0023-vs-current
+per-part parity confirmed (±30% both directions) — the adaptive per-writer
+cost is inherent and was always paid; old advantage was resource-layer only
+(since fixed). LEVER: parallel ingest parallelizes the whole 1.9us trivially.
