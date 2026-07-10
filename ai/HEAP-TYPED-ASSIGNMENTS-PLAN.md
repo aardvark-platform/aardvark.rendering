@@ -664,3 +664,31 @@ readers 5->1; needs SSBO SUB-RANGE bindings through the uniform provider
 RECOMMENDED: variant 3, fresh session, gauntlet + locked-clock stats from
 minute one. Also queue: the steady-frame 1-dirty-reader/re-record cleanup,
 parallel ingest (the edits/frame cap: churn 74us/part single-threaded).
+
+### Base-cost verdict — merge premise REFUTED by per-reader profiling (2026-07-10)
+Per-reader timing in ResourceLocationSet.Update (HEAP_EDIT_PROF=1 now names
+each dirty reader) showed the 4-6 wakes are NOT per-mirror BufferResources:
+they are IndirectDrawCallResource x2 + DescriptorSetBindingResource +
+BufferBindingResource, and the mirror flushes ride INSIDE the first poll
+(descriptor-set 200us = arena+headers flush + ~30us machinery). Merging five
+mirrors into one buffer would have kept all four wakes — DROPPED. Landed
+instead (90b0663c, 09af70bf):
+  * IndirectDrawCallResource compared before reporting — it returned
+    changed=true on EVERY wake, making each edit look like a command change
+    (now changed=false on content edits; no spurious re-record).
+  * ensurePageROs gated on (storage.Count, partEpoch) like buildHeapRO —
+    the pages x partitions dict walk (0.7ms first batch at 68k parts) now
+    runs only on page growth / partition (de)materialization.
+  * Vulkan buffer SUB-RANGE binding kept as infrastructure: a non-backend
+    IBufferRange bound as SSBO/vertex becomes a BufferRangeDecorator
+    (descriptor carries offset/size; vertex binding offsets honored); GL
+    rejects storage ranges loudly. Unused today; enables section binding.
+Steady frames confirmed CLEAN: zero dirty readers, reRecord=0.08ms/100ms
+window is lap-accounting noise over ~900 no-op frames, not re-records (the
+earlier \"re-record every steady frame\" reading was wrong).
+Locked A/B (geforce-parts inplace, 3 runs): k=16 3.97→3.17 (first-batch),
+k=64 1.17→1.10, k>=256 unchanged (within noise). Remaining per-batch cost is
+REAL work: dynWriters ~22us/writer (parallel-ingest lever) + arena/header
+staging + ~60us machinery. Full gauntlet green (autofields splitOk=false is
+PRE-EXISTING on baseline: expects 5 output ROs/2 buckets, gets 2/1 — stale
+expectation from the storage-first rework, worth a separate look).
