@@ -597,11 +597,18 @@ Dependency -> all descriptor resources dirty) + unconditional command re-record
 (marking is push + value-blind; resultAval identity-memoization measured
 USELESS, reverted). Stats-mode truth: 0.63ms @k16 -> 3.6ms @k1024 (0023 sweep
 3.17 @k1024 — big-k parity; the 3-22x table cells were single-shot noise).
-FIX DESIGN (fresh session): de-graph the mirrors — no Dependency; content
-flushes run imperatively from HeapRenderObjectCommand's per-frame dispatch
-Record hook (FlushContent(token), pre-submit ordering unchanged); structural
-cycles (membership/realloc/compaction/relayout — the only resizers) keep a
-graph path via the indirect/draw-record buffers. Expected ~0.2-0.3ms/edit;
-0.05 (0023 mapped-mirror) unreachable without giving back device-local
-storage. Acceptance: stats edit <=0.3ms @k<=64, gauntlet pixel-exact, vienna
-render numbers unchanged.
+FIX DESIGN v2 (user-refined; fresh session): adaptivity is NOT abandoned —
+it is AGGREGATED. ONE gate adaptive object (depends on the updater, registered
+as a single resource in the task's set) runs the flushes for exactly the
+buffers whose existing dirty flags are set (csDirty/dirtyHeaders/staging
+pending; dirty != changed, the gate checks). The mirrors themselves lose their
+per-buffer Dependency wiring (the 0.6ms was an artifact of the
+AdaptiveBuffer-with-Dependency pattern: every version marked ~50
+buffer/descriptor nodes and the marked-but-unchanged walk IS the cost).
+RESIZE = the only true handle change, rare + structural: bump the bucket
+epoch when any buffer must grow -> HeapRenderObject identity changes -> full
+re-prepare picks up fresh handles; ResizeInPlace inside the gate is then
+legal (nobody needs notification). Expected ~0.2-0.3ms/edit; 0.05
+(0023 mapped-mirror) unreachable without giving back device-local storage.
+Acceptance: stats edit <=0.3ms @k<=64, gauntlet pixel-exact, vienna render
+numbers unchanged.
