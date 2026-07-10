@@ -76,6 +76,11 @@ module HeapUniforms =
         // A page's derive binds its own arena, so it must skip slots on other pages (whose
         // header offsets are page-local to a different page — writing them here corrupts).
         member x.HeapSlotPage : int[] = uniform?StorageBuffer?HeapSlotPage
+        /// PER-OUTPUT derive dispatch list: [ownerSlot; planIdx] per live SHARE
+        /// (distinct derived value) — the derive kernel runs one thread per share
+        /// instead of one per slot (246k threads discovering they own nothing cost
+        /// 7.1 ms/frame on a 2-CU APU).
+        member x.HeapShareRecs : int[] = uniform?StorageBuffer?HeapShareRecs
         /// DENSE derived-uniform store (bucket-global, NOT paged): derived
         /// composite outputs live tightly packed in their own buffer so the
         /// per-vertex gathers hit dense lines instead of cells scattered through
@@ -1628,7 +1633,9 @@ module Heap =
           mutable Block : HeapBlock
           mutable Offset : int
           Members : System.Collections.Generic.HashSet<int>
-          mutable Owner : int }
+          mutable Owner : int
+          /// position in the bucket's per-output dispatch list (HeapShareRecs)
+          mutable ListIdx : int }
 
     type internal HeapSlot =
         { Slot : int; RegionKeys : IAdaptiveValue[]; Active : aval<bool>
@@ -2909,17 +2916,17 @@ module Heap =
         // array param (int[] binds cleanly, unlike a float[] entry param which FShade
         // would emit as an unsized uniform array). recStride = 5.
         [<LocalSize(X = 64)>]
-        let composeDerived (n : int) (nRec : int) (hstride : int) (records : int[]) =
+        let composeDerived (n : int) (hstride : int) (records : int[]) =
             compute {
-                let slot = getGlobalId().X
-                if slot < n && uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
-                    let hb = slot * hstride
-                    // ownership mask (LAST header cell): deduped outputs are computed
-                    // by exactly ONE member slot — everyone else skips the record.
-                    let own = uniform.HeapHeaders.[hb + (hstride - 1)]
-                    for r in 0 .. nRec - 1 do
-                      if (own >>> r) &&& 1 = 1 then
-                        let rb = r * REC_STRIDE
+                let i = getGlobalId().X
+                if i < n then
+                    // PER-OUTPUT dispatch: one thread per SHARE (distinct derived value),
+                    // listed in HeapShareRecs as [ownerSlot; planIdx]. All offsets still
+                    // resolve through the owner's header cells (compaction-safe).
+                    let slot = uniform.HeapShareRecs.[i * 2]
+                    if uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
+                        let hb = slot * hstride
+                        let rb = uniform.HeapShareRecs.[i * 2 + 1] * REC_STRIDE
                         let outOff = uniform.HeapHeaders.[hb + records.[rb + 1]]
                         let a = ldM44 (uniform.HeapHeaders.[hb + records.[rb + 2]])
                         match records.[rb] with
@@ -2947,16 +2954,15 @@ module Heap =
         // arm 3 holds the A·B intermediate in a local df32 mat4 so no precision is
         // dropped before ·C. NormalMatrix writes out[i*3+j] = A[j,i] collapsed.
         [<LocalSize(X = 64)>]
-        let composeDerivedDf32 (n : int) (nRec : int) (hstride : int) (records : int[]) =
+        let composeDerivedDf32 (n : int) (hstride : int) (records : int[]) =
             compute {
-                let slot = getGlobalId().X
-                if slot < n && uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
-                    let hb = slot * hstride
-                    // ownership mask (LAST header cell) — see composeDerived.
-                    let own = uniform.HeapHeaders.[hb + (hstride - 1)]
-                    for r in 0 .. nRec - 1 do
-                      if (own >>> r) &&& 1 = 1 then
-                        let rb = r * REC_STRIDE
+                let i = getGlobalId().X
+                if i < n then
+                    // per-output dispatch — see composeDerived.
+                    let slot = uniform.HeapShareRecs.[i * 2]
+                    if uniform.HeapSlotPage.[slot] = uniform.HeapPageId then
+                        let hb = slot * hstride
+                        let rb = uniform.HeapShareRecs.[i * 2 + 1] * REC_STRIDE
                         let outOff = uniform.HeapHeaders.[hb + records.[rb + 1]]
                         let offA = uniform.HeapHeaders.[hb + records.[rb + 2]]
                         // Reads/writes mirror the fp64 composeDerived EXACTLY (row-major
@@ -4135,6 +4141,36 @@ module Heap =
         // -> share, plus the full registry.
         let derivedShares = System.Collections.Generic.Dictionary<struct(int * int * obj * obj * obj), DerivedShare>()
         let allShares = System.Collections.Generic.HashSet<DerivedShare>(HashIdentity.Reference)
+        // ── PER-OUTPUT derive dispatch list: [ownerSlot; planIdx] per live share.
+        //    One kernel thread per SHARE (distinct derived value) — never per slot.
+        //    Swap-remove keeps it dense; owner transfer patches in place. ──
+        let shareList = System.Collections.Generic.List<DerivedShare>()
+        let mutable shareStaging : int[] = Array.zeroCreate 256
+        let shareDirtyIdx = System.Collections.Generic.HashSet<int>()
+        let mutable shareAllDirty = true
+        let sharePlanIdx (sh : DerivedShare) = let struct(_, j, _, _, _) = sh.Key in j
+        let shareWrite (sh : DerivedShare) =
+            let o = sh.ListIdx * 2
+            if shareStaging.Length < o + 2 then
+                let ns = Array.zeroCreate<int> (Fun.NextPowerOfTwo (o + 2))
+                System.Array.Copy(shareStaging, ns, shareStaging.Length)
+                shareStaging <- ns
+            shareStaging.[o] <- sh.Owner
+            shareStaging.[o + 1] <- sharePlanIdx sh
+            if not shareAllDirty then
+                if shareDirtyIdx.Count >= 4096 then shareDirtyIdx.Clear(); shareAllDirty <- true
+                else shareDirtyIdx.Add sh.ListIdx |> ignore
+        let shareAdd (sh : DerivedShare) =
+            sh.ListIdx <- shareList.Count
+            shareList.Add sh
+            shareWrite sh
+        let shareRemove (sh : DerivedShare) =
+            let last = shareList.[shareList.Count - 1]
+            shareList.[sh.ListIdx] <- last
+            last.ListIdx <- sh.ListIdx
+            shareList.RemoveAt(shareList.Count - 1)
+            if not (System.Object.ReferenceEquals(last, sh)) then shareWrite last
+            sh.ListIdx <- -1
         // DENSE uniform store: derived outputs live tightly packed in their own
         // bucket-global buffer (never the paged geometry arena) — consecutive
         // slots' composites land in adjacent cache lines instead of one per
@@ -4403,6 +4439,26 @@ module Heap =
         let instBuf    = MirrorBuffer(runtime, instData.Length * 4, BufferUsage.Vertex)
         // slot->page SSBO (for the per-page derive guard). Dirty-slot flush like headers.
         let slotPageBuf = MirrorBuffer(runtime, max 16 slotPage.Length * 4, BufferUsage.Storage)
+        // per-output derive dispatch list ([ownerSlot; planIdx] per share)
+        let shareRecBuf = MirrorBuffer(runtime, 1024, BufferUsage.Storage)
+        let flushShareRecs (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
+            shareRecBuf.ResizeInPlace(uint64 (max 256 (shareList.Count * 2)) * 4UL)
+            if shareAllDirty then
+                shareAllDirty <- false
+                shareDirtyIdx.Clear()
+                if shareList.Count > 0 then shareRecBuf.Write(shareStaging, 0UL, 0, shareList.Count * 2)
+            elif shareDirtyIdx.Count > 0 then
+                let ss = System.Collections.Generic.List<int>(shareDirtyIdx)
+                shareDirtyIdx.Clear()
+                ss.Sort()
+                let flush lo hi = shareRecBuf.Write(shareStaging, uint64 (lo * 8), lo * 2, (hi - lo + 1) * 2)
+                let mutable lo = ss.[0]
+                let mutable hi = ss.[0]
+                for i in 1 .. ss.Count - 1 do
+                    let x = ss.[i]
+                    if x <= hi + 32 then hi <- x
+                    else flush lo hi; lo <- x; hi <- x
+                flush lo hi
         // shared dirty-slot flush for the two int-per-slot mirrors (slotPage /
         // pickIds): allDirty → one full write; otherwise gap-merged sub-ranges
         // over the sorted dirty slots (the CPU array is the always-valid source
@@ -4604,6 +4660,10 @@ module Heap =
             slotPageBuf.Dependency <- dep
             slotPageBuf.Flush <- flushSlotPage
             slotPageBuf.Name <- "HeapSlotPage"
+            if hasDerived then
+                shareRecBuf.Dependency <- dep
+                shareRecBuf.Flush <- flushShareRecs
+                shareRecBuf.Name <- "HeapShareRecs"
             if useClusters then
                 classSlotsBuf.Dependency <- dep
                 classSlotsBuf.Flush <- flushClassSlots
@@ -4747,7 +4807,11 @@ module Heap =
         // SEPARATE resource update (the pre-pass), reading the descriptor asynchronously, so
         // a deferred transact would race. (The chain folds keep Flush + an IMMEDIATE Run, so
         // their values are consumed synchronously in the same eval — no hazard there.)
-        let nAvalDerive = if hasDerived then AVal.custom (fun t -> updater.GetValue t |> ignore; highWater) else AVal.constant 0
+        // PER-OUTPUT dispatch: n = live SHARE count (distinct derived values), not
+        // slots — 246k threads discovering they own nothing cost 7.1 ms/frame on a
+        // 2-CU APU while ONE thread computed the single deduped ViewProj.
+        let nAvalDerive = if hasDerived then AVal.custom (fun t -> updater.GetValue t |> ignore; shareList.Count) else AVal.constant 0
+        let shareRecsU = ((shareRecBuf :> aval<IBackendBuffer>) |> AdaptiveResource.mapNonAdaptive (fun b -> b :> IBuffer)) :> IAdaptiveValue
         // PAGED: one derive input binding per page — binds THAT page's arena + HeapPageId so the
         // guarded shader writes only page-i slots into page i's arena.
         let pageDeriveInputs = System.Collections.Generic.List<IComputeInputBinding>()
@@ -4757,9 +4821,9 @@ module Heap =
                     member _.TryGetUniform(_, name) =
                         match string name with
                         | "n"            -> ValueSome (nAvalDerive :> IAdaptiveValue)
-                        | "nRec"         -> ValueSome (AVal.constant numDerivedRecords :> IAdaptiveValue)
                         | "hstride"      -> ValueSome (AVal.constant headerStride :> IAdaptiveValue)
                         | "records"      -> ValueSome (AVal.constant (recBuf :> IBuffer) :> IAdaptiveValue)
+                        | "HeapShareRecs" -> ValueSome shareRecsU
                         | "HeapHeaders"  -> ValueSome headersU
                         | "HeapSlotPage" -> ValueSome slotPageU
                         | "HeapPageId"   -> ValueSome (AVal.constant pid :> IAdaptiveValue)
@@ -4786,7 +4850,7 @@ module Heap =
         // count, reactive on membership (highWater).
         let derivedGroups =
             if not hasDerived then AVal.constant V3i.III
-            else AVal.custom (fun t -> updater.GetValue t |> ignore; V3i(max 1 ((highWater + 63) / 64), 1, 1))
+            else AVal.custom (fun t -> updater.GetValue t |> ignore; V3i(max 1 ((shareList.Count + 63) / 64), 1, 1))
         let mutable chainProg : IComputeTask = Unchecked.defaultof<_>
         let mutable chainInvProg : IComputeTask = Unchecked.defaultof<_>
         let mutable chainProgG = -1
@@ -5433,16 +5497,18 @@ module Heap =
                             | _ ->
                                 let (off, blk) = allocOutput (fieldRequestedType names.[i])
                                 let sh = { Key = key; Page = curPage; Dedup = true; Block = blk; Offset = off
-                                           Members = System.Collections.Generic.HashSet([slot]); Owner = slot }
+                                           Members = System.Collections.Generic.HashSet([slot]); Owner = slot; ListIdx = -1 }
                                 derivedShares.[key] <- sh
                                 allShares.Add sh |> ignore
+                                shareAdd sh
                                 ownMask <- ownMask ||| (1 <<< j)
                                 sh
                         else
                             let (off, blk) = allocOutput (fieldRequestedType names.[i])
                             let sh = { Key = key; Page = curPage; Dedup = false; Block = blk; Offset = off
-                                       Members = System.Collections.Generic.HashSet([slot]); Owner = slot }
+                                       Members = System.Collections.Generic.HashSet([slot]); Owner = slot; ListIdx = -1 }
                             allShares.Add sh |> ignore
+                            shareAdd sh
                             ownMask <- ownMask ||| (1 <<< j)
                             sh
                     outShares.Add share
@@ -5688,12 +5754,14 @@ module Heap =
                     if sh.Members.Count = 0 then
                         if sh.Dedup then derivedShares.Remove sh.Key |> ignore
                         allShares.Remove sh |> ignore
+                        shareRemove sh
                         uniAlloc.Free sh.Block
                     elif sh.Owner = s.Slot then
                         // transfer ownership — any member computes the same value
                         let mutable no = -1
                         for m in sh.Members do (if no < 0 then no <- m)
                         sh.Owner <- no
+                        shareWrite sh
                         headers.[no * headerStride + ownCell] <- headers.[no * headerStride + ownCell] ||| (1 <<< j)
                         dirtyHeaders.Add no |> ignore
                 for b in s.FoldBlocks do arenaAlloc.Free b
