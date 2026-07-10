@@ -1,3 +1,8 @@
+### 5.7.0-prerelease0052
+- [Vulkan] buffer sub-range binding: a non-backend IBufferRange bound as SSBO or vertex attribute becomes a BufferRangeDecorator carrying (offset, size) into descriptors and vertex-bind offsets; GL rejects storage ranges loudly.
+- [Vulkan] IndirectDrawCallResource reports a change only when the draw call actually differs — every heap edit looked like a command change and triggered pointless re-records.
+- [Sg] Heap: pageRO sync gated on (pageCount, partEpoch) — content-only edits skip the pages×partitions walk (~0.7 ms first edit at 68k parts).
+
 ### 5.7.0-prerelease0051
 - [Sg] Heap: derived-output DEDUP — slots whose recipe + canonical constituent sources match share ONE output region (pay per distinct value, not per object) + DENSE derive-output store (outputs packed tightly instead of scattered through slot groups; RADV-2CU vienna fairNM 75.7 -> 55.6 ms).
 - [Sg] Heap: derive dispatch per OUTPUT SHARE, never per slot — 246k threads discovering they own nothing cost 7.1 ms/frame on 2-CU RADV (RGP-verified); vienna camera orbit now derives with ~1 thread.
