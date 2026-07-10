@@ -1,3 +1,8 @@
+### 5.7.0-prerelease0051
+- [Sg] Heap: derived-output DEDUP — slots whose recipe + canonical constituent sources match share ONE output region (pay per distinct value, not per object) + DENSE derive-output store (outputs packed tightly instead of scattered through slot groups; RADV-2CU vienna fairNM 75.7 -> 55.6 ms).
+- [Sg] Heap: derive dispatch per OUTPUT SHARE, never per slot — 246k threads discovering they own nothing cost 7.1 ms/frame on 2-CU RADV (RGP-verified); vienna camera orbit now derives with ~1 thread.
+- [Vulkan] pipeline layout: storage-buffer stage flags now include ALL shader stages of the interface — usage hidden inside shared GLSL helpers got too-narrow flags (VUID-07988, silently empty renders).
+
 ### 5.7.0-prerelease0050
 - [Sg] Heap: INSTANCE-RATE RECORD ROWS — class-list entries carry the hot per-slot record fields (slot, vc, idxRef, attr refs) as VertexInputRate.Instance attributes; the hardware fetches them at wave launch, removing the ClassSlots->record dependent double-hop for typed AND dynamic partitions (vienna lean vs MDI floor: 5060 1.07x, 4070L 1.09x, M1 0.89x, 890M 1.69x, RADV-2CU 2.7x -> 2.0x).
 - [Vulkan] async pipeline specialization: Destroy waits out an in-flight background compile (use-after-free reading freed pipeline state — SIGSEGV on MoltenVK).
