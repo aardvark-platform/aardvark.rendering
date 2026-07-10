@@ -2872,6 +2872,8 @@ type ResourceLocationSet() =
         let rec run (changed : bool) =
             let mine = dirty.GetAndClear()
 
+            if mine.Count > 0 && System.Environment.GetEnvironmentVariable "HEAP_EDIT_PROF" = "1" then
+                Aardvark.Base.Log.line "[vkprof] dirtyReaders=%d" mine.Count
             if mine.Count > 0 then
                 let mutable changed = changed
 

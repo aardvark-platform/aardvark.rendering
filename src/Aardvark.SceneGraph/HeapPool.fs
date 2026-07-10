@@ -3723,6 +3723,11 @@ module Heap =
         let classBase  = System.Collections.Generic.List<int>()
         let classCap   = System.Collections.Generic.List<int>()
         let mutable csCursor = 0                                  // high-water of the region space
+        // bumped whenever the CLUSTER RECORD SET can have changed (class membership,
+        // region bases, oversized vc): the indirect flushes regenerate records ONLY
+        // when this moved — a content-only edit no longer rebuilds+re-uploads every
+        // (page,partition) record list each version (was ~0.2 ms per edit).
+        let mutable recsVersion = 0
         let mutable csLiveCaps = 0                                // sum of LIVE region capacities
         // INSTANCE-RATE RECORD ROWS: each class-list entry is a ROW of hot
         // per-slot record fields — [slot; vc; idxRef; attrRef0..N-1] — bound as
@@ -3785,6 +3790,7 @@ module Heap =
             csLiveCaps <- o
             csDirty.Clear()
             csFullDirty <- true
+            recsVersion <- recsVersion + 1
         /// make room for one more member of region `idx`: opportunistic RELAYOUT when
         /// leaked space dominates, then (still-full regions after a tight relayout
         /// included) grow-and-move to fresh space at the cursor.
@@ -3802,6 +3808,7 @@ module Heap =
                     if l.Count > 0 then csMarkDirty (nb * rowWords) (l.Count * rowWords)
                     classBase.[idx] <- nb
                     classCap.[idx] <- newCap
+                    recsVersion <- recsVersion + 1
         let mutable clusterClsOf : int[] = Array.create 16 -1     // slot -> class idx (numClasses = oversized; -1 = not listed)
         let mutable clusterPosOf : int[] = Array.zeroCreate 16    // slot -> position in its class list
         let mutable vcOfSlot     : int[] = Array.zeroCreate 16    // slot -> drawn-vertex count
@@ -3824,6 +3831,7 @@ module Heap =
                 rowFill (classBase.[idx] + l.Count) slot
                 csMarkDirty ((classBase.[idx] + l.Count) * rowWords) rowWords
                 l.Add slot
+                recsVersion <- recsVersion + 1
         let classRemove (slot : int) =
             let cls = clusterClsOf.[slot]
             if cls >= 0 then
@@ -3837,6 +3845,7 @@ module Heap =
                 rowFill (classBase.[idx] + pos) last
                 csMarkDirty ((classBase.[idx] + pos) * rowWords) rowWords
                 clusterClsOf.[slot] <- -1
+                recsVersion <- recsVersion + 1
         /// a listed slot's header cells (attr/idx refs) or vc changed: rewrite
         /// its instance-record row in place (O(1), same dirty-range flush).
         let refreshRow (slot : int) =
@@ -4598,18 +4607,23 @@ module Heap =
                 flush lo hi
                 csDirty.Clear()
         let clusterRecs = System.Collections.Generic.List<DrawCallInfo>()
+        let mutable lastRecsVersion0 = -1
 
         let rec flushDraws (t : AdaptiveToken) (gates : System.Collections.Generic.HashSet<GateWriter>) =
             if useClusters then
                 // record set derived from the class lists (membership settled in the
-                // updater) — the bucketRO carries (page 0, DYNAMIC partition 0)
-                clusterRecordsFor 0 0 clusterRecs
-                setClusterRecCount 0 0 clusterRecs.Count
-                if drawStaging.Length < clusterRecs.Count then
-                    drawStaging <- Array.zeroCreate (Fun.NextPowerOfTwo (max 16 clusterRecs.Count))
-                for i in 0 .. clusterRecs.Count - 1 do drawStaging.[i] <- clusterRecs.[i]
-                drawBuf.ResizeInPlace(uint64 (max 16 drawStaging.Length * sizeof<DrawCallInfo>))
-                if clusterRecs.Count > 0 then drawBuf.Write(drawStaging, 0UL, 0, clusterRecs.Count)
+                // updater) — the bucketRO carries (page 0, DYNAMIC partition 0).
+                // Regenerate ONLY when the record-affecting state moved (recsVersion):
+                // content-only edits skip the rebuild + upload entirely.
+                if lastRecsVersion0 <> recsVersion then
+                    lastRecsVersion0 <- recsVersion
+                    clusterRecordsFor 0 0 clusterRecs
+                    setClusterRecCount 0 0 clusterRecs.Count
+                    if drawStaging.Length < clusterRecs.Count then
+                        drawStaging <- Array.zeroCreate (Fun.NextPowerOfTwo (max 16 clusterRecs.Count))
+                    for i in 0 .. clusterRecs.Count - 1 do drawStaging.[i] <- clusterRecs.[i]
+                    drawBuf.ResizeInPlace(uint64 (max 16 drawStaging.Length * sizeof<DrawCallInfo>))
+                    if clusterRecs.Count > 0 then drawBuf.Write(drawStaging, 0UL, 0, clusterRecs.Count)
             else
             flushDrawsPerSlot t gates
 
@@ -5343,8 +5357,11 @@ module Heap =
         let mkPartRO (pageIdx : int) (partIdx : int) =
             let mutable pstaging = Array.zeroCreate<DrawCallInfo> (max 16 entries.Length)
             let db = MirrorBuffer(runtime, pstaging.Length * sizeof<DrawCallInfo>, BufferUsage.Indirect)
+            let mutable lastRecsV = -1
             let flush (_ : AdaptiveToken) (_ : System.Collections.Generic.HashSet<GateWriter>) =
                 if useClusters then
+                  if lastRecsV <> recsVersion then
+                    lastRecsV <- recsVersion
                     let recs = System.Collections.Generic.List<DrawCallInfo>()
                     clusterRecordsFor pageIdx partIdx recs
                     setClusterRecCount pageIdx partIdx recs.Count
@@ -5685,6 +5702,7 @@ module Heap =
             headers.[slot * headerStride + idxCell] <- idxRef
             headers.[slot * headerStride + vcCell] <- vertexCount
             vcOfSlot.[slot] <- vertexCount
+            recsVersion <- recsVersion + 1
             dirtyHeaders.Add slot |> ignore
             // register the slot's textures (bindless per-type tables / atlas)
             for (_, _, texSyms, table) in bindlessTexTables do
@@ -5767,6 +5785,7 @@ module Heap =
                              if vcOfSlot.[slot] <> vc then
                                  headers.[slot * headerStride + vcCell] <- vc
                                  vcOfSlot.[slot] <- vc
+                                 recsVersion <- recsVersion + 1
                                  dirtyHeaders.Add slot |> ignore
                                  if useClusters then
                                      (if clusterClsOf.[slot] >= 0 then classRemove slot; classAdd slot)
@@ -5954,6 +5973,7 @@ module Heap =
                 if isIndex then
                     headers.[slot * headerStride + vcCell] <- newCount
                     vcOfSlot.[slot] <- newCount
+                    recsVersion <- recsVersion + 1
                     // a drawn-count change can invalidate FULL extent classes
                     recomputeAssign slot
                     if useClusters then
