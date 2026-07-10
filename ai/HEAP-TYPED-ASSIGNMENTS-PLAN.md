@@ -637,3 +637,13 @@ one copy submission (the arena ring pattern) instead of ~27us-per-Write calls
 Acceptance: same-session stats A/B (env-gated switches during bring-up),
 gauntlet pixel-exact, vienna render numbers unchanged. NEVER compare stats
 across machine states (today's lesson).
+
+### Edit-latency A/B result (2026-07-10, locked clocks) + bench protocol
+recsVersion guard (96343e3d) + actual-change command reporting (2d094a94):
+fixed base 0.5-0.64 -> 0.39-0.48 ms (1.2-1.55x, CI +-0.02-0.07), large-k
+identical. MEASUREMENT PROTOCOL (mandatory for micro-benches): (1) lock GPU
+clocks (sudo nvidia-smi -lgc 3090,3090; -rgc after) — tiny frames never ramp
+the governor, idle 180MHz made steady frames 4.4ms instead of 0.55 and
+poisoned an afternoon of numbers; (2) check nvidia-smi pmon for chrome/
+sunshine/compute; (3) A/B within one session only. Remaining to ~0.2ms:
+aggregate gate (readers 4->1) + write batching (spec above).
