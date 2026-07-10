@@ -2310,6 +2310,32 @@ module private RuntimeCommands =
                 x.dispatches.Add d
                 d :> PreparedCommand
 
+/// HEAP_EDIT_PROF=1 — per-frame Vulkan task phase accumulator (mirrors the
+/// SceneGraph EditProf; dumped by whoever reads Snapshot — here: logged when a
+/// frame's total exceeds the print floor).
+module internal CommandTaskProf =
+    let enabled = System.Environment.GetEnvironmentVariable "HEAP_EDIT_PROF" = "1"
+    let private times = System.Collections.Generic.Dictionary<string, float>()
+    let add (name : string) (v : float) =
+        lock times (fun () ->
+            times.[name] <- (match times.TryGetValue name with | true, x -> x | _ -> 0.0) + v)
+    let mutable private lastDump = System.Diagnostics.Stopwatch.GetTimestamp()
+    /// print + clear at most every 100ms, only if something accumulated
+    let maybeDump () =
+        if enabled then
+            let now = System.Diagnostics.Stopwatch.GetTimestamp()
+            if float (now - lastDump) / float System.Diagnostics.Stopwatch.Frequency > 0.1 then
+                lastDump <- now
+                lock times (fun () ->
+                    let str =
+                        times
+                        |> Seq.sortByDescending (fun kv -> kv.Value)
+                        |> Seq.filter (fun kv -> kv.Value >= 0.05)
+                        |> Seq.map (fun kv -> sprintf "%s=%.2f" kv.Key kv.Value)
+                        |> String.concat " "
+                    if str <> "" then Aardvark.Base.Log.line "[vkprof] %s" str
+                    times.Clear())
+
 type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : RuntimeCommand) as this =
     inherit AbstractRenderTask()
 
@@ -2386,6 +2412,14 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         f()
 
     override x.Perform(token : AdaptiveToken, renderToken : RenderToken, output : OutputDescription) =
+        let __prof = CommandTaskProf.enabled
+        let __t0 = System.Diagnostics.Stopwatch.GetTimestamp()
+        let inline __lap (name : string) (t0 : int64) =
+            if __prof then
+                let t1 = System.Diagnostics.Stopwatch.GetTimestamp()
+                CommandTaskProf.add name (float (t1 - t0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency)
+                t1
+            else t0
         let vulkanQueries = renderToken.GetVulkanQueries()
 
         let fbo =
@@ -2406,8 +2440,12 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
         let commandChanged =
             updateCommands token
+        let __t1 = __lap "vk:updateCommands" __t0
 
         updateResources token renderToken (fun resourcesChanged ->
+            let __t2 = __lap "vk:updateResources" __t1
+            if __prof && resourcesChanged then CommandTaskProf.add "vk:resourcesChanged" 1.0
+            if __prof && commandChanged then CommandTaskProf.add "vk:commandChanged" 1.0
 
             if not useInline && (outputChanged || commandChanged || resourcesChanged) then
 
@@ -2435,6 +2473,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
                 inner.End()
 
+            let __t3 = __lap "vk:reRecord" __t2
             dt.perform {
                 do! Command.BeginLabel(x.Name ||? x.DefaultName, x.DebugColor)
 
@@ -2494,4 +2533,6 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
                 do! Command.EndLabel()
             }
+            __lap "vk:enqueue+submit" __t3 |> ignore
         )
+        CommandTaskProf.maybeDump ()

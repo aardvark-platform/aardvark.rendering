@@ -999,6 +999,50 @@ module Heap =
     /// Adaptive writer for one arena region. Reads its source aval and packs
     /// the floats into the arena's shared staging at its offset. Marked (via
     /// the source) only when that source changes.
+    /// HEAP_EDIT_PROF=1 — accumulate CPU ms per named phase across the frame
+    /// (updater phases + every mirror flush); dumped at the next updater entry.
+    module internal EditProf =
+        let enabled = System.Environment.GetEnvironmentVariable "HEAP_EDIT_PROF" = "1"
+        let private times = System.Collections.Generic.Dictionary<string, float>()
+        let addMs (name : string) (ms : float) =
+            if enabled then
+                lock times (fun () ->
+                    times.[name] <- (match times.TryGetValue name with | true, v -> v | _ -> 0.0) + ms)
+        let inline time (name : string) (f : unit -> 'a) : 'a =
+            if not enabled then f ()
+            else
+                let t0 = System.Diagnostics.Stopwatch.GetTimestamp()
+                let r = f ()
+                let ms = float (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
+                lock times (fun () ->
+                    times.[name] <- (match times.TryGetValue name with | true, v -> v | _ -> 0.0) + ms)
+                r
+        let private counts = System.Collections.Generic.Dictionary<string, int * int>()
+        let count (name : string) (words : int) =
+            if enabled then
+                lock counts (fun () ->
+                    let (c, w) = match counts.TryGetValue name with | true, v -> v | _ -> (0, 0)
+                    counts.[name] <- (c + 1, w + words))
+        let dump () =
+            if enabled then
+                lock times (fun () ->
+                    let str =
+                        times
+                        |> Seq.sortByDescending (fun kv -> kv.Value)
+                        |> Seq.filter (fun kv -> kv.Value >= 0.05)
+                        |> Seq.map (fun kv -> sprintf "%s=%.2f" kv.Key kv.Value)
+                        |> String.concat " "
+                    let cstr =
+                        lock counts (fun () ->
+                            let r =
+                                counts
+                                |> Seq.sortByDescending (fun kv -> fst kv.Value)
+                                |> Seq.map (fun kv -> sprintf "%s=%dx/%dw" kv.Key (fst kv.Value) (snd kv.Value))
+                                |> String.concat " "
+                            counts.Clear(); r)
+                    if str <> "" || cstr <> "" then Log.line "[editprof] %s | %s" str cstr
+                    times.Clear())
+
     type internal RegionWriter(src : IAdaptiveValue, off : int, size : int, pack : obj -> nativeint -> int -> unit) =
         inherit AdaptiveObject()
         do src.Acquire()
@@ -1217,6 +1261,7 @@ module Heap =
         member x.AddDependency(d : IAdaptiveValue) =
             if not (x.Dependencies.Contains d) then x.Dependencies.Add d
         override x.Compute(t, rt) =
+            let __profT0 = System.Diagnostics.Stopwatch.GetTimestamp()
             x.TouchScheduled.Value <- 0
             for i in 0 .. x.Dependencies.Count - 1 do
                 x.Dependencies.[i].GetValueUntyped t |> ignore
@@ -1311,6 +1356,7 @@ module Heap =
                 stUploadMs <- stUploadMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __uplT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
                 stUploadBytes <- stUploadBytes + int64 __flushed * 4L
                 Log.line "[startup] ingest %d parts: %.0f ms | GPU upload (cum) %.1f MB: %.0f ms" stIngestN stIngestMs (float stUploadBytes / 1e6) stUploadMs
+            EditProf.addMs "arena:compute" (float (System.Diagnostics.Stopwatch.GetTimestamp() - __profT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency)
             h
         override x.Destroy() =
             ringFree ()
@@ -1436,11 +1482,16 @@ module Heap =
         member val Flush : AdaptiveToken -> System.Collections.Generic.HashSet<GateWriter> -> unit = (fun _ _ -> ()) with get, set
         /// register a NEW gate writer for evaluation on the next flush
         member _.MarkGate(w : GateWriter) = dirtyGates.Add w |> ignore
+        /// shadows AdaptiveBuffer.Write to count per-buffer write calls under HEAP_EDIT_PROF
+        member x.Write(data : 'a[], offsetBytes : uint64, start : int, count : int) =
+            EditProf.count (sprintf "wr:%s" (if isNull x.Name then "?" else x.Name)) count
+            (x :> AdaptiveBuffer).Write(data, offsetBytes, start, count)
         override x.Compute(t, rt) =
             match x.Dependency with
             | Some d -> d.GetValueUntyped t |> ignore
             | None -> ()
-            x.Flush t (dirtyGates.GetAndClear())
+            EditProf.time (sprintf "flush:%s" (if isNull x.Name then "?" else x.Name)) (fun () ->
+                x.Flush t (dirtyGates.GetAndClear()))
             base.Compute(t, rt)
         override x.InputChangedObject(_, o) =
             match o with
@@ -3131,6 +3182,7 @@ module Heap =
         member x.MaybeCompact(pageIdx : int) =
             if arenaAlloc.Live * 2 < arenaAlloc.Extent
                && int64 arenaAlloc.Waste * 4L > int64 compactionWasteFloorBytes then
+                if EditProf.enabled then Log.line "[editprof] COMPACT page=%d live=%d extent=%d waste=%d" pageIdx arenaAlloc.Live arenaAlloc.Extent arenaAlloc.Waste
                 x.Compact pageIdx
 
     /// Shader-AGNOSTIC, PAGED, SHAREABLE data store: ≤ a handful of page arenas, each
@@ -4296,10 +4348,12 @@ module Heap =
                                 // and the slot's typed-partition assignment with it
                                 for struct(sink, slot, cell) in e.DynRefs do
                                     sink.GeomMoved(slot, cell, e.Ref, count, isIndex)
+                            EditProf.count "dyn:inplace" words
                             let p = pg.Arena.StageWords(e.Ref + AllocHeaderWords, words)
                             if byteLen % 4 <> 0 then wi p (words - 1) 0
                             stageGeomBytes' runtime value bv byteLen p
                         else
+                            EditProf.count "dyn:realloc" words
                             pg.ArenaAlloc.Free e.Block
                             let sizeF = AllocHeaderWords + words
                             let b = pg.ArenaAlloc.Alloc sizeF
@@ -5400,7 +5454,9 @@ module Heap =
         // its slots' indirect). ensurePageROs lazily creates them; resultAval (rebuilt per
         // membership version) picks up new pages. built deterministically by SyncPages
         // (called from the membership updater); the members just hand back the current set.
-        member x.SyncPages() = ensurePageROs (); ensureDeriveROs ()
+        member x.SyncPages() =
+            EditProf.time "sync:pageROs" ensurePageROs
+            EditProf.time "sync:deriveROs" ensureDeriveROs
         member x.HeapRO : IRenderObject = buildHeapRO ()
         member x.RenderObjects : IRenderObject[] = (currentDraws ()).ToArray()
         member x.DeriveROs : IRenderObject[] = [||]
@@ -5933,6 +5989,7 @@ module Heap =
                                 headers.[hb + cell] <- off
                                 sj.FoldBlocks.[jj] <- b))
             member _.RewriteHeaders() =
+                EditProf.count "COMPACTION-rewriteHeaders" 1
                 // re-bake from the slot's OWN page's dicts (never the current fill
                 // page): plain field cells from RegionKeys, non-fold constituent
                 // cells from ConstKeys, attribute/index cells from the dedup tables.
@@ -6566,7 +6623,8 @@ module Heap =
                     | :? DynWriter as d -> dirtyDynWriters.Add d |> ignore
                     | _ -> ()
                 override x.Compute(t) =
-                    let delta = objReader.GetChanges t
+                    EditProf.dump ()
+                    let delta = EditProf.time "upd:delta" (fun () -> objReader.GetChanges t)
 
                     // the RO's interned key token: constant keys were interned once in
                     // factsOf; a dynamic key evaluates through the RO's KeyWatcher
@@ -6633,7 +6691,8 @@ module Heap =
                     //    flipped (all ROs sharing a flipped aval are collected); an
                     //    RO whose key actually changed MOVES buckets, the rest of
                     //    the heap is untouched. There is no full-regroup path. ──
-                    for w in dirtyKeys.GetAndClear() do
+                    EditProf.time "upd:dirtyKeys" (fun () ->
+                     for w in dirtyKeys.GetAndClear() do
                         if not w.IsDisposed then       // removed by this very delta
                             let r = w.Ro
                             match roBucket.TryGetValue r, roFacts.TryGetValue r with
@@ -6642,27 +6701,30 @@ module Heap =
                                 if not (System.Object.ReferenceEquals(newKey, oldKey)) then
                                     removeFrom oldKey r
                                     addTo newKey r f
-                            | _ -> ()
+                            | _ -> ())
 
                     // cluster gate flips: apply class add/removes NOW (before flushes)
-                    for g in dirtyClusterGates.GetAndClear() do
-                        if not g.IsDisposed && not (isNull g.OnCluster) then g.OnCluster.Invoke t
+                    EditProf.time "upd:gates" (fun () ->
+                     for g in dirtyClusterGates.GetAndClear() do
+                        if not g.IsDisposed && not (isNull g.OnCluster) then g.OnCluster.Invoke t)
 
                     // adaptive value flips (geometry bytes, draw-call shape, pick
                     // ids, model-stack structure): apply O(changed) NOW — arena
                     // staging + header/record mutations land before any flush
-                    for d in dirtyDynWriters.GetAndClear() do
-                        if not d.IsDisposed && not (isNull d.OnChange) then d.OnChange.Invoke t
+                    EditProf.time "upd:dynWriters" (fun () ->
+                     for d in dirtyDynWriters.GetAndClear() do
+                        if not d.IsDisposed && not (isNull d.OnChange) then d.OnChange.Invoke t)
 
                     lastBucketCount <- caches.Count
                     let mutable chainB = 0
                     let mutable chainD = 0
-                    for KeyValue(_, c) in caches do
+                    EditProf.time "upd:syncPages" (fun () ->
+                     for KeyValue(_, c) in caches do
                         // materialize each bucket's per-page render/derive ROs to match its storage,
                         // DETERMINISTICALLY here in the membership update — so they're present in
                         // `resultAval` before any render builds its command buffer (no lazy/first-frame gap).
                         c.SyncPages()
-                        if c.IsChain then chainB <- chainB + 1; chainD <- chainD + c.ChainDistinct
+                        if c.IsChain then chainB <- chainB + 1; chainD <- chainD + c.ChainDistinct)
                     lastChainBuckets <- chainB
                     if chainB > 0 then lastDistinctLinks <- chainD
                     version.Value <- version.Value + 1
