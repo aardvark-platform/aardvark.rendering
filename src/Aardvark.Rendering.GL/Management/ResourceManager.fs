@@ -260,13 +260,23 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Buffer
         })
 
+    // sub-range storage values (IBufferRange that is not a full backend buffer, e.g. heap
+    // mirror sections) would silently bind the WHOLE parent from offset 0 here — the GL
+    // bind path uses glBindBufferBase with no range plumbing. Fail loudly instead.
+    member private x.RejectStorageRanges(data : aval<#IBuffer>) : aval<#IBuffer> =
+        data |> AdaptiveResource.mapNonAdaptive (fun b ->
+            match box b with
+            | :? IBufferRange when not (box b :? IBackendBuffer) ->
+                failwith "[GL] storage-buffer sub-range binding is not supported on the GL backend"
+            | _ -> b)
+
     member x.CreateStorageBuffer(name : string, data : aval<#IBuffer>) =
         let name = if ctx.Runtime.DebugLabelsEnabled then $"{name} (Storage Buffer)" else null
-        x.CreateBuffer(name, data)
+        x.CreateBuffer(name, x.RejectStorageRanges data)
 
     member x.CreateStorageBuffer(name : Symbol, data : aval<#IBuffer>) =
         let name = if ctx.Runtime.DebugLabelsEnabled then $"{name} (Storage Buffer)" else null
-        x.CreateBuffer(name, data)
+        x.CreateBuffer(name, x.RejectStorageRanges data)
 
     member x.CreateStorageBuffer(name : Symbol, data : aval<Array>) =
         let buffer = data |> AdaptiveResource.mapNonAdaptive ArrayBuffer

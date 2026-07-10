@@ -118,6 +118,19 @@ type BufferDecorator =
               Parent = parent }
     end
 
+/// A sub-range view of a prepared buffer: shares the parent's VkBuffer handle but
+/// carries an (offset, size) window that descriptor writes honor. Produced when an
+/// IBufferRange (that is not itself a backend buffer) is bound as a storage buffer.
+type BufferRangeDecorator =
+    class
+        inherit BufferDecorator
+        val public RangeOffset : uint64
+        val public RangeSize : uint64
+
+        new (parent : Buffer, offset : uint64, size : uint64) =
+            { inherit BufferDecorator(parent); RangeOffset = offset; RangeSize = size }
+    end
+
 // =======================================================================
 // Command Extensions
 // =======================================================================

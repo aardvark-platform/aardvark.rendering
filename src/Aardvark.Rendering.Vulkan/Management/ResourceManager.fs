@@ -564,7 +564,11 @@ module Resources =
                 features.BindingStorageBufferUpdateAfterBind
 
             override x.GetDescriptor(buffer) =
-                Descriptor.StorageBuffer(slot, 0, buffer, 0UL, buffer.Size)
+                match buffer with
+                | :? BufferRangeDecorator as r ->
+                    Descriptor.StorageBuffer(slot, 0, buffer, r.RangeOffset, r.RangeSize)
+                | _ ->
+                    Descriptor.StorageBuffer(slot, 0, buffer, 0UL, buffer.Size)
 
         type StorageImage(slot : int, image : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<ImageView>(slot, image)
@@ -652,7 +656,18 @@ module Resources =
             owner, key, ResourceKind.Buffer,
             input,
             {
-                mcreate          = fun (b : IBuffer) -> let r = device.CreateBuffer(usage, b) in (if notNull name && isNull r.Name then r.Name <- name); r
+                mcreate          = fun (b : IBuffer) ->
+                                       let r =
+                                           match b with
+                                           | :? IBufferRange as rng when not (b :? IBackendBuffer) ->
+                                               // plain sub-range value (e.g. a heap mirror section): bind the
+                                               // window, not the whole parent — descriptor writes read the
+                                               // decorator's (offset, size). CreateBuffer AddReferences the
+                                               // parent; the decorator's Destroy releases it.
+                                               let parent = device.CreateBuffer(usage, rng.Buffer)
+                                               new BufferRangeDecorator(parent, rng.Offset, rng.SizeInBytes) :> Buffer
+                                           | _ -> device.CreateBuffer(usage, b)
+                                       (if notNull name && isNull r.Name then r.Name <- name); r
                 mdestroy         = _.Dispose()
                 mtryUpdate       = Buffer.tryUpdate
                 mownsHandle      = ownsBuffer
@@ -1848,8 +1863,18 @@ module Resources =
 
         override x.Update(handle : DrawCall byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             let buffer = buffer.Update(user, token, renderToken).handle
-            handle <- DrawCall.Indirect(buffer.Handle, buffer.Count, buffer.Offset, buffer.Stride, indexed)
-            true
+            let fresh = DrawCall.Indirect(buffer.Handle, buffer.Count, buffer.Offset, buffer.Stride, indexed)
+            // report a change only when the call actually differs — an unconditional
+            // `true` here made every mirror flush look like a command change upstream
+            if handle.IsIndirect = fresh.IsIndirect && handle.IsIndexed = fresh.IsIndexed &&
+               handle.Count = fresh.Count &&
+               handle.DrawCallBuffer.Handle = fresh.DrawCallBuffer.Handle &&
+               handle.DrawCallBuffer.Offset = fresh.DrawCallBuffer.Offset &&
+               handle.DrawCallBuffer.Stride = fresh.DrawCallBuffer.Stride then
+                false
+            else
+                handle <- fresh
+                true
 
     type BufferBindingResource(owner : IResourceCache, key : list<obj>, buffers : IResourceLocation<Buffer>[]) =
         inherit AbstractPointerResource<VertexBufferBinding>(owner, key)
@@ -1869,10 +1894,17 @@ module Resources =
             let mutable changed = false
 
             for i = 0 to buffers.Length - 1 do
-                let buffer = buffers.[i].Update(user, token, renderToken).handle.Handle
+                let buffer = buffers.[i].Update(user, token, renderToken).handle
 
-                if handle.Buffers.[i] <> buffer then
-                    handle.Buffers.[i] <- buffer
+                // sub-range values (BufferRangeDecorator) bind at their window's base
+                let offset =
+                    match buffer with
+                    | :? BufferRangeDecorator as r -> r.RangeOffset
+                    | _ -> 0UL
+
+                if handle.Buffers.[i] <> buffer.Handle || handle.Offsets.[i] <> offset then
+                    handle.Buffers.[i] <- buffer.Handle
+                    handle.Offsets.[i] <- offset
                     changed <- true
 
             changed
@@ -2807,6 +2839,8 @@ type ResourceLocationReader(resource : IResourceLocation) =
 
     let mutable lastVersion = 0
 
+    member x.Location = resource
+
     member x.Dispose() =
         lock resource (fun () ->
             resource.Outputs.Remove x |> ignore
@@ -2872,14 +2906,25 @@ type ResourceLocationSet() =
         let rec run (changed : bool) =
             let mine = dirty.GetAndClear()
 
-            if mine.Count > 0 && System.Environment.GetEnvironmentVariable "HEAP_EDIT_PROF" = "1" then
+            let prof = System.Environment.GetEnvironmentVariable "HEAP_EDIT_PROF" = "1"
+            if mine.Count > 0 && prof then
                 Aardvark.Base.Log.line "[vkprof] dirtyReaders=%d" mine.Count
             if mine.Count > 0 then
                 let mutable changed = changed
 
-                for r in mine do
-                    let c = r.Update(x, token, renderToken)
-                    changed <- changed || c
+                if prof then
+                    let sw = System.Diagnostics.Stopwatch()
+                    for r in mine do
+                        sw.Restart()
+                        let c = r.Update(x, token, renderToken)
+                        sw.Stop()
+                        Aardvark.Base.Log.line "[vkprof]   reader %s = %.1fus (changed=%b)"
+                            (r.Location.GetType().Name) (sw.Elapsed.TotalMilliseconds * 1000.0) c
+                        changed <- changed || c
+                else
+                    for r in mine do
+                        let c = r.Update(x, token, renderToken)
+                        changed <- changed || c
 
                 run changed
             else
