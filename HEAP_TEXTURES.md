@@ -3,9 +3,14 @@
 Design for generalizing the GPU heap's per-object texture support to all 2D/array/cube/shadow
 sampler kinds, with incremental updates and no count-driven fragmentation. Concerns
 `Aardvark.Rendering.Vulkan` (descriptor machinery) **and** `Aardvark.SceneGraph/HeapPool.fs` (the
-heap). Coordinated with Martin (descriptor code is his recent refactor). Status: Phase 1
-(dynamic-grow descriptor arrays) SHIPPED — see the "Phase 1 — DONE" section below; Phases 2-5
-(more sampler kinds, sampler-state threading, churn audit) still open.
+heap). Coordinated with Martin (descriptor code is his recent refactor). Status (2026-07-11
+audit): IMPLEMENTED, beyond this doc's phase framing — `isBindlessSamplerType` accepts every
+non-multisampled, non-1d sampler (2d/3d/cube, array, shadow, int/uint; 3d included although
+this doc excluded it), each sampler gets its OWN generated array carrying its OWN state
+(differing filter/wrap/compare fine), descriptor sets grow on demand, and `BindlessTexTable`
+refcounts textures by identity with freed-index recycling and O(changed) deltas. Atlas
+fallback on non-descriptor-indexing devices remains Sampler2d-only (by design). The phase
+list below is HISTORICAL planning; residual: an explicit textured-churn probe would be nice.
 
 ## Goal
 

@@ -22,8 +22,9 @@ Index for AI coding assistants. Read only the doc you need.
 | Heap typed assignments + campaign log (rows, dedup, edit costs — CURRENT state in tail sections) | HEAP-TYPED-ASSIGNMENTS-PLAN.md | ~60 KB |
 
 Heap docs at the REPO ROOT (not in ai/): `HEAP_PLAN.md` (historical, see its
-RESOLVED banner) and `HEAP_TEXTURES.md` (bindless textures: phase 1 shipped,
-phases 2-5 open).
+RESOLVED banner) and `HEAP_TEXTURES.md` (bindless textures: implemented —
+all non-MS/non-1d sampler kinds, per-sampler states, refcounted recycle;
+the doc's phase list is historical planning).
 
 ## By Type
 

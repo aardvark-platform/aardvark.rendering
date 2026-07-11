@@ -738,8 +738,10 @@ storage-first API, fully-reactive edits, 0052 shipped). What remains, by weight:
    designed & unrun (needs discrete-AMD / Arc hardware — arcbench collects).
 4. Mirrorless phase-3 leftovers: TrafoArena staging onto the ring, optional
    csStaging upload path, dead gap-merge removal.
-5. HEAP_TEXTURES phases 2-5 (sampler kinds, sampler-state threading, churn
-   audit) + the variable-count-binding-must-be-last layout question.
+5. Textures: IMPLEMENTED beyond HEAP_TEXTURES.md's phase list (all non-MS,
+   non-1d kinds incl. 3d/array/shadow; per-sampler states; refcounted dedup +
+   index recycling; dynamic-grow sets). Residual: an explicit textured-CHURN
+   probe (golden covers the static bindless-textured phase only).
 6. dom: the "HeapPickId"/"PickId" string contracts between dom and the heap
    rewrite are unchecked cross-package (documented, not enforced). (The 60 Hz
    clock loop in RemoteHtmlBackend is INTENDED and self-limiting: camera
