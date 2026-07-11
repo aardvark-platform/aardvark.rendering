@@ -740,12 +740,11 @@ storage-first API, fully-reactive edits, 0052 shipped). What remains, by weight:
    csStaging upload path, dead gap-merge removal.
 5. HEAP_TEXTURES phases 2-5 (sampler kinds, sampler-state threading, churn
    audit) + the variable-count-binding-must-be-last layout question.
-6. dom: the 60 Hz clock loop (RemoteHtmlBackend.fs:302-330 bumps scene.Time
-   unconditionally after every frame — any Time-reading scene, e.g. every
-   camera controller, renders at 60 Hz forever even when idle; needs an
-   animation-aware gate). Also: the "HeapPickId"/"PickId" string contracts
-   between dom and the heap rewrite are unchecked cross-package (documented,
-   not enforced).
+6. dom: the "HeapPickId"/"PickId" string contracts between dom and the heap
+   rewrite are unchecked cross-package (documented, not enforced). (The 60 Hz
+   clock loop in RemoteHtmlBackend is INTENDED and self-limiting: camera
+   controllers drop their Time dependency when no animation runs, the bump
+   then marks nobody and the loop parks on its MVar — not an open item.)
 7. Measurement backlog: UE/Blender vienna d1-9 comparison runs; M1 rows
    pending on several tables; real ANV validation (BIOS-disabled UHD630).
 8. Diagnostic surface: Heap.lastXxx public mutable globals + 4 bisect env
