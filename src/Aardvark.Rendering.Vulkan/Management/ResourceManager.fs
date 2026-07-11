@@ -2868,6 +2868,9 @@ module ``Resource Reader Extensions`` =
 type ResourceLocationSet() =
     inherit AdaptiveObject()
 
+    // per-reader profiling gate, read ONCE (HEAP_EDIT_PROF=1) — never per frame
+    static let profEnabled = System.Environment.GetEnvironmentVariable "HEAP_EDIT_PROF" = "1"
+
     // All the resource locations in the set.
     let locations = ReferenceCountingSet<IResourceLocation>()
 
@@ -2906,7 +2909,7 @@ type ResourceLocationSet() =
         let rec run (changed : bool) =
             let mine = dirty.GetAndClear()
 
-            let prof = System.Environment.GetEnvironmentVariable "HEAP_EDIT_PROF" = "1"
+            let prof = profEnabled
             if mine.Count > 0 && prof then
                 Aardvark.Base.Log.line "[vkprof] dirtyReaders=%d" mine.Count
             if mine.Count > 0 then

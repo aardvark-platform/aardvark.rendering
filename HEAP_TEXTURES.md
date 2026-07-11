@@ -3,8 +3,9 @@
 Design for generalizing the GPU heap's per-object texture support to all 2D/array/cube/shadow
 sampler kinds, with incremental updates and no count-driven fragmentation. Concerns
 `Aardvark.Rendering.Vulkan` (descriptor machinery) **and** `Aardvark.SceneGraph/HeapPool.fs` (the
-heap). Coordinated with Martin (descriptor code is his recent refactor). Status: design, not yet
-implemented.
+heap). Coordinated with Martin (descriptor code is his recent refactor). Status: Phase 1
+(dynamic-grow descriptor arrays) SHIPPED — see the "Phase 1 — DONE" section below; Phases 2-5
+(more sampler kinds, sampler-state threading, churn audit) still open.
 
 ## Goal
 

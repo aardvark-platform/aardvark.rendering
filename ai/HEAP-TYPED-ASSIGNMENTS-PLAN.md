@@ -14,8 +14,13 @@ materialize 64 / dematerialize 16 / re-materialize under fresh ids),
 5060 + RADV + 890M + M1), async pipeline specialization (background compile,
 unspecialized-fallback publish, ownsHandle borrow guard). All probes green on
 all four machines; renderbench holds: 5060 9.16ms/0.99×, M1 5.43/1.53×, RADV
-51.3/2.31×, 890M 31.8.** REMAINING: §3.6 ship chain only (fshade release →
-rendering → packaging — user parked deliberately).
+51.3/2.31×, 890M 31.8.** REMAINING (of THIS plan): the ship chain, §3 item 6
+(fshade `spec-constants` branch release → rendering → packaging — user parked
+deliberately).
+NOTE this Status block covers the original typed-assignments plan only. The
+doc continued as a dated campaign log (instance rows → derived dedup →
+entry-store post-mortem → edit-latency/base-cost work); the CURRENT state and
+open-items map live in the LAST few sections of this file.
 
 ## 1. The result this is built on (all measured 2026-07-08)
 
@@ -91,7 +96,9 @@ every remaining laddered field.
    semantic name (threaded 2026-07-08) — emit the scope read per field.
    REMOVE the arm-mask machinery from the earlier wash experiment
    (HeapSpecDisabledF/I gates, armBitsOfTid, observedArms cval,
-   AARDVARK_HEAP_NO_SPEC/SPEC_INLINE/TYPED_INLINE env hacks) — superseded.
+   SPEC_INLINE/TYPED_INLINE env hacks) — superseded. (DONE — except
+   AARDVARK_HEAP_NO_SPEC, which was deliberately KEPT as the bisect switch;
+   the A/B protocols below depend on it.)
 2. **Slot assignment identity**: at AddInternal, collect the slot's per-field
    tids (attr resolution sites have them; index tid from idxFor; uniform
    fields are NOT laddered — codegen-static — and stay out of the vector).
@@ -348,7 +355,8 @@ checkout FETCH_HEAD) runs a forever-window that looks exactly like a compiler
 hang. Diagnose with dotnet-stack (managed frames), not sample. Also: stuck
 processes hold DLL locks -> 36 MSB3027 copy errors on rebuild.
 
-Next lever (designed): INSTANCE-RATE-ATTRIBUTE records. gl_DrawID is useless
+Next lever (designed — SHIPPED in 0050, see the instance-rows section below):
+INSTANCE-RATE-ATTRIBUTE records. gl_DrawID is useless
 under clustering (one record draws a whole class as instances -> slot id is
 per-instance, waves span slots -> not even subgroup-uniform). Instead bind the
 hot record fields (attr data offsets) as a VertexInputRate.Instance buffer
@@ -514,6 +522,9 @@ INSTANCE (hw fetch: +2.6-4.2 ms) — the heap delivers them ONCE PER VERTEX
 (designed): promote hot derived outputs (NM/Model) INTO THE INSTANCE ROWS as
 VALUES — per-instance hardware fetch matching classic exactly; needs the
 derive kernel writing via a slot->row map + re-derive on relist.
+[LATER: this became the entry-store/"vals" experiment — built, measured a
+STRICT LOSS everywhere, REVERTED (947c6087). See the HISTORICAL section
+below and the verdict at the end; do not re-attempt without new evidence.]
 Dense-store round context: 5060 lean 4.4 (better than pre-fairNM!), iGPU
 75.7->57.9 (fairNM cost 21->3.5ms), 890M 96.8->85.6 (env ±10%; same-session
 floors also hot). M1 pending (mac off).
@@ -567,7 +578,11 @@ editable representation moves 35% FEWER bytes than the baked one.
 - Wash verdict + all A/B numbers: memory `spec-constants-verdict`,
   `fs-gather-not-a-lever`, `heap-render-perf-decomposition`.
 
-### Entry store ("vals") v1 — built, measured, OPT-IN (2026-07-10, c075a13f)
+### [HISTORICAL — REVERTED 947c6087] Entry store ("vals") v1 (2026-07-10, c075a13f)
+NOTE: everything in this section was REMOVED from the tree the same day —
+measured a strict loss on every device (see "Entry-store verdict" below).
+HEAP_VALS and the vals buffers no longer exist; the dense derive-output
+store is current. Kept for the record only.
 Three-buffer directive implemented: arena (authoritative, derive outputs back
 from the deleted dense store) + rows (instance attrs) + HeapVals (packed
 per-entry uniforms, compile-time kind-separated lane layout, fan-out CS
@@ -691,7 +706,10 @@ k=64 1.17→1.10, k>=256 unchanged (within noise). Remaining per-batch cost is
 REAL work: dynWriters ~22us/writer (parallel-ingest lever) + arena/header
 staging + ~60us machinery. Full gauntlet green (autofields splitOk=false is
 PRE-EXISTING on baseline: expects 5 output ROs/2 buckets, gets 2/1 — stale
-expectation from the storage-first rework, worth a separate look).
+expectation from the storage-first rework; RESOLVED same day (effad29e): the
+mixed-Gamma split assertion was invalid twice over — signature-deferred build
+makes ASet.force counts meaningless, and the scene itself was unrenderable
+(consumed-but-unsupplied uniform fails classic too) — assertion removed).
 
 ### Writer-path CPU profile (perf, 2026-07-10 night)
 perf + /tmp/perf-PID.map (DOTNET_PerfMapEnabled=1; .NET W^X dual-mapping keeps
@@ -707,3 +725,30 @@ BAR memory would address the 12%, not the 88% — dead end. 0023-vs-current
 per-part parity confirmed (±30% both directions) — the adaptive per-writer
 cost is inherent and was always paid; old advantage was resource-layer only
 (since fixed). LEVER: parallel ingest parallelizes the whole 1.9us trivially.
+
+### OPEN ITEMS — consolidated audit map (2026-07-11, end-to-end audit)
+The heap core is DONE (mirror-less arena, typed assignments + extent folding,
+instance rows, derived dedup + per-share dispatch, bindless geometry, atlas,
+storage-first API, fully-reactive edits, 0052 shipped). What remains, by weight:
+1. PARALLEL INGEST — the one real edit-throughput lever (writer path ~1.9us
+   single-threaded = the edits/frame cap; churn 74us/part incl. structure).
+2. Ship chain §3 item 6 — fshade spec-constants branch release (user-parked).
+3. AMD-APU render gap (1.5-1.9x): locality-by-compaction lever + the
+   per-constituent dirty-range derive; integrated-vs-driver 2x2 experiment
+   designed & unrun (needs discrete-AMD / Arc hardware — arcbench collects).
+4. Mirrorless phase-3 leftovers: TrafoArena staging onto the ring, optional
+   csStaging upload path, dead gap-merge removal.
+5. HEAP_TEXTURES phases 2-5 (sampler kinds, sampler-state threading, churn
+   audit) + the variable-count-binding-must-be-last layout question.
+6. dom: the 60 Hz clock loop (RemoteHtmlBackend.fs:302-330 bumps scene.Time
+   unconditionally after every frame — any Time-reading scene, e.g. every
+   camera controller, renders at 60 Hz forever even when idle; needs an
+   animation-aware gate). Also: the "HeapPickId"/"PickId" string contracts
+   between dom and the heap rewrite are unchecked cross-package (documented,
+   not enforced).
+7. Measurement backlog: UE/Blender vienna d1-9 comparison runs; M1 rows
+   pending on several tables; real ANV validation (BIOS-disabled UHD630).
+8. Diagnostic surface: Heap.lastXxx public mutable globals + 4 bisect env
+   switches (NOCHAIN/STATIC_GEOM/NO_SPEC/NO_CLUSTERS) are deliberate dev
+   tools, NOT curated API — consumers (HeapSpike, benchmarks) read them, so
+   they stay public; do not document them as stable.

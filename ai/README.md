@@ -18,7 +18,12 @@ Index for AI coding assistants. Read only the doc you need.
 | Consumer project patterns | CONSUMER-PATTERNS.md | ~4 KB |
 | C# integration | CSHARP-INTEGRATION.md | ~3 KB |
 | Creating consumer project docs | TEMPLATE-CONSUMER.md | ~2 KB |
-| Heap mirror-less arena + allocator rework (plan) | HEAP-MIRRORLESS-PLAN.md | ~12 KB |
+| Heap mirror-less arena + allocator rework (SHIPPED, phases 0-2) | HEAP-MIRRORLESS-PLAN.md | ~12 KB |
+| Heap typed assignments + campaign log (rows, dedup, edit costs — CURRENT state in tail sections) | HEAP-TYPED-ASSIGNMENTS-PLAN.md | ~60 KB |
+
+Heap docs at the REPO ROOT (not in ai/): `HEAP_PLAN.md` (historical, see its
+RESOLVED banner) and `HEAP_TEXTURES.md` (bindless textures: phase 1 shipped,
+phases 2-5 open).
 
 ## By Type
 

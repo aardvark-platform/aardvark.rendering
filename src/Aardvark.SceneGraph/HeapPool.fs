@@ -1352,10 +1352,11 @@ module Heap =
             // log per BIG upload (each page arena) with running totals; small camera-move
             // re-stages (< 3 MB) are skipped so the totals reflect the geometry upload.
             if __flushed * 4 > 3_000_000 then
-                Log.line "[startup] upload batches this flush: %d (%.1f MB, %d regions)" __runs (float __flushed * 4.0 / 1e6) __regions
                 stUploadMs <- stUploadMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __uplT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
                 stUploadBytes <- stUploadBytes + int64 __flushed * 4L
-                Log.line "[startup] ingest %d parts: %.0f ms | GPU upload (cum) %.1f MB: %.0f ms" stIngestN stIngestMs (float stUploadBytes / 1e6) stUploadMs
+                if EditProf.enabled || Diagnostics then
+                    Log.line "[startup] upload batches this flush: %d (%.1f MB, %d regions)" __runs (float __flushed * 4.0 / 1e6) __regions
+                    Log.line "[startup] ingest %d parts: %.0f ms | GPU upload (cum) %.1f MB: %.0f ms" stIngestN stIngestMs (float stUploadBytes / 1e6) stUploadMs
             EditProf.addMs "arena:compute" (float (System.Diagnostics.Stopwatch.GetTimestamp() - __profT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency)
             h
         override x.Destroy() =
@@ -4237,7 +4238,8 @@ module Heap =
         // slots' composites land in adjacent cache lines instead of one per
         // ~4KB slot group, and the store never participates in page compaction.
         // GPU-written by the derive kernels, gathered via HeapUni/HeapUniD.
-        let uniBuf = MirrorBuffer(runtime, 64 <<< 20, BufferUsage.Storage)   // DEBUG: pre-sized, no resize
+        // 64MB initial capacity; the Flush handler grows it to uniAlloc.Extent on demand
+        let uniBuf = MirrorBuffer(runtime, 64 <<< 20, BufferUsage.Storage)
         let uniAlloc = HeapSpace()
         let allocOutput (requested : System.Type) : int * HeapBlock =
             let dbl = isDoubleUniform requested
@@ -5821,7 +5823,7 @@ module Heap =
              | _ -> ())
             stIngestN <- stIngestN + 1
             stIngestMs <- stIngestMs + float (System.Diagnostics.Stopwatch.GetTimestamp() - __ingT0) * 1000.0 / float System.Diagnostics.Stopwatch.Frequency
-            if stIngestN % 100000 = 0 then Log.line "[startup] ingest %d parts so far: %.0f ms (fields %.0f | geom %.0f [copy %.0f, stage %.0f] | rest %.0f)" stIngestN stIngestMs stIngestFieldsMs stIngestGeomMs stIngestCopyMs stIngestStageMs (stIngestMs - stIngestFieldsMs - stIngestGeomMs)
+            if stIngestN % 100000 = 0 && (EditProf.enabled || Diagnostics) then Log.line "[startup] ingest %d parts so far: %.0f ms (fields %.0f | geom %.0f [copy %.0f, stage %.0f] | rest %.0f)" stIngestN stIngestMs stIngestFieldsMs stIngestGeomMs stIngestCopyMs stIngestStageMs (stIngestMs - stIngestFieldsMs - stIngestGeomMs)
 
         member private x.RemoveInternal(ro : RenderObject) =
             match slots.TryGetValue ro with
