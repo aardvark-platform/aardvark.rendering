@@ -2,6 +2,7 @@
 [![Publish](https://github.com/aardvark-platform/aardvark.rendering/actions/workflows/publish.yml/badge.svg)](https://github.com/aardvark-platform/aardvark.rendering/actions/workflows/publish.yml)
 [![License](https://img.shields.io/github/license/aardvark-platform/aardvark.base.svg?label=License)](https://github.com/aardvark-platform/aardvark.rendering/blob/master/LICENSE)
 [![Discord](https://img.shields.io/discord/611129394764840960?label=Discord)](https://discord.gg/UyecnhM)
+[![Heap GPU tests](https://aardvarkians.com/heap-tests/badge.svg)](https://aardvarkians.com/heap-tests/log.txt)
 
 The Aardvark.Rendering engine is a high-performance engine that tries to bridge the gap between efficiency and high-level easy-to-use abstractions. The engine is used in applied research and industry as well as basic research, and heavily embraces incremental computation. It tracks all changes in the scene description and automatically updates affected parts in the incrementally maintained optimization data structures. The engine currently has two backends: OpenGL and Vulkan, runs on netstandard, and is basically platform independent. It was born in 2006 and was mostly written in C#, but later moved towards functional programming. Now, most of the code is written in F#. Supported platforms are windows, linux, macOS. Render backends exist for OpenGL and Vulkan.
 

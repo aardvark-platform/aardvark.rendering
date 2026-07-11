@@ -518,13 +518,16 @@ module RenderBench =
                             failwithf "renderbench: no Vulkan device matches --gpu '%s'" wanted }
             | _ -> null
         // `--dump-glsl`: print every compiled shader (use with a small --n and pipe to a file)
+        // HEADLESS: renderbench renders into its own FBO — no window, no GLFW. (The
+        // GLFW-backed Slim application crashed on machines with a pre-3.4 system
+        // libglfw: missing glfwInitVulkanLoader — seen on the 5090 arcbench run.)
         use app =
             if argv |> Array.contains "--dump-glsl" then
-                new Aardvark.Application.Slim.VulkanApplication(
+                new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication(
                     { Aardvark.Rendering.Vulkan.DebugConfig.None with PrintShaderCode = true } :> IDebugConfig,
                     deviceChooser = chooser)
             else
-                new Aardvark.Application.Slim.VulkanApplication(false, deviceChooser = chooser)
+                new Aardvark.Rendering.Vulkan.HeadlessVulkanApplication(false, deviceChooser = chooser)
         Log.line "renderbench: device = %s" app.Runtime.Device.PhysicalDevice.Name
         let runtime = app.Runtime :> IRuntime
         let size = V2i(sizePx, sizePx)
