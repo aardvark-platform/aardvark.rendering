@@ -13,15 +13,11 @@
     <OutputPath>..\..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Shaders.fs" />
     <Compile Include="Bench.fs" />
     <Compile Include="StartupBench.fs" />
     <Compile Include="Phase4.fs" />
     <Compile Include="Textures.fs" />
     <Compile Include="Real.fs" />
-    <Compile Include="Golden.fs" />
-    <Compile Include="Deferred.fs" />
-    <Compile Include="Churn.fs" />
     <Compile Include="ChainBench.fs" />
     <Compile Include="GpuModes.fs" />
     <Compile Include="GLBindless.fs" />
@@ -42,6 +38,9 @@
     <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application\Aardvark.Application.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Tests\Aardvark.Rendering.Tests\Aardvark.Rendering.Tests.fsproj" />
   </ItemGroup>
   <Import Project="..\..\..\.paket\Paket.Restore.targets" />
 </Project>

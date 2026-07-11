@@ -16,6 +16,8 @@ let main argv =
             ``Rendering Tests``.testsGL
             ``Rendering Tests``.testsVulkan
 
+            ``Heap Gauntlet``.tests
+
             ``Compute Tests``.testsGL
             ``Compute Tests``.testsVulkan
 

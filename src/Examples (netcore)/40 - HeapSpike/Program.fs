@@ -114,123 +114,20 @@ let main argv =
         Showcase.run true; 0
     elif argv |> Array.contains "showcase" then
         Showcase.run false; 0
-    elif argv |> Array.contains "plain" then
-        if Golden.plainTest () then 0 else 1
-    elif argv |> Array.contains "golden" then
-        if Golden.run () then 0 else 1
-    elif argv |> Array.contains "deferred" then
-        if Deferred.run () then 0 else 1
-    elif argv |> Array.contains "churn" then
-        if Churn.run () then 0 else 1
-    elif argv |> Array.contains "picksplit" then
-        if Churn.pickSplit () then 0 else 1
-    elif argv |> Array.contains "picksplit2" then
-        if Churn.pickSplit2 () then 0 else 1
-    elif argv |> Array.contains "mixedtypes" then
-        (if Churn.mixedTypes () then 0 else 1)
-    elif argv |> Array.contains "dyngeom" then
-        if Churn.dynGeom () then 0 else 1
-    elif argv |> Array.contains "dynperf" then
-        if Churn.dynPerf () then 0 else 1
-    elif argv |> Array.contains "dynpick" then
-        if Churn.dynPick () then 0 else 1
-    elif argv |> Array.contains "autofields" then
-        if Golden.autoFieldsTest () then 0 else 1
-    elif argv |> Array.contains "sgheap" then
-        if Golden.sgHeapTest () then 0 else 1
-    elif argv |> Array.contains "sgsphere" then
-        if Golden.sgSphereTest () then 0 else 1
-    elif argv |> Array.contains "sgprec" then
-        if Golden.sgPrecisionTest () then 0 else 1
-    elif argv |> Array.contains "vis" then
-        if Golden.visibilityTest () then 0 else 1
-    elif argv |> Array.contains "buckets" then
-        if Golden.bucketingTest () then 0 else 1
-    elif argv |> Array.contains "modes" then
-        if Golden.modeRulesTest () then 0 else 1
+    // NOTE the correctness gauntlet (golden/churn/dyngeom/atlas/...) moved to
+    // Aardvark.Rendering.Tests ("Heap gauntlet (Vulkan)" Expecto subtree) —
+    // run it via the test project; HeapSpike is a demo/bench playground.
     elif argv |> Array.contains "gpumodes-gl" then
         if GpuModes.runGL () then 0 else 1
     elif argv |> Array.contains "gpumodes-win" then
         GpuModes.runWin (); 0
     elif argv |> Array.contains "gpumodes" then
         if GpuModes.run () then 0 else 1
-    elif argv |> Array.contains "livechaindeep" then
-        if Golden.liveChainDeepTest () then 0 else 1
-    elif argv |> Array.contains "livechain" then
-        if Golden.liveChainTest () then 0 else 1
-    elif argv |> Array.contains "sgchain" then
-        if Golden.sgChainTest () then 0 else 1
     elif argv |> Array.contains "chainbench" then
         let n = match argv |> Array.tryFindIndex ((=) "--n") with | Some i when i+1 < argv.Length -> int argv.[i+1] | _ -> 20000
         ChainBench.run (not (argv |> Array.contains "--folded")) n
-    elif argv |> Array.contains "passthru" then
-        if Golden.passthroughTest () then 0 else 1
-    elif argv |> Array.contains "nativebuf" then
-        if Golden.nativeBufTest () then 0 else 1
-    elif argv |> Array.contains "vartype" then
-        if Golden.varTypeTest () then 0 else 1
-    elif argv |> Array.contains "demoshot" then
-        if Golden.demoShotTest () then 0 else 1
     elif argv |> Array.contains "glsldump" then
         GlslDump.run (); 0
-    elif argv |> Array.contains "texheap" then
-        if Golden.texHeapTest () then 0 else 1
-    elif argv |> Array.contains "texswap" then
-        if Golden.texSwapTest () then 0 else 1
-    elif argv |> Array.contains "texstate" then
-        if Golden.texStateTest () then 0 else 1
-    elif argv |> Array.contains "texcube" then
-        if Golden.texCubeTest () then 0 else 1
-    elif argv |> Array.contains "gpugeom-gl" then
-        if Golden.gpuGeomTestGL () then 0 else 1
-    elif argv |> Array.contains "gpugeom" then
-        if Golden.gpuGeomTest () then 0 else 1
-    elif argv |> Array.contains "atlas" then
-        if Golden.atlasBuildTest () then 0 else 1
-    elif argv |> Array.contains "atlasheap" then
-        if Golden.atlasHeapTest () then 0 else 1
-    elif argv |> Array.contains "msaa" then
-        if Golden.msaaTest () then 0 else 1
-    elif argv |> Array.contains "churnprobe" then
-        if Golden.churnProbeTest () then 0 else 1
-    elif argv |> Array.contains "noindex" then
-        if Golden.nonIndexedTest () then 0 else 1
-    elif argv |> Array.contains "geomvalue" then
-        if Golden.geomValueDedupTest () then 0 else 1
-    elif argv |> Array.contains "geomchurn" then
-        if Golden.geomChurnTest () then 0 else 1
-    elif argv |> Array.contains "geomdrift" then
-        if Golden.geomDriftTest () then 0 else 1
-    elif argv |> Array.contains "lifetime" then
-        if Golden.lifetimeTest () then 0 else 1
-    elif argv |> Array.contains "submitstress" then
-        if Golden.submitStressTest () then 0 else 1
-    elif argv |> Array.contains "chainleak" then
-        if Golden.chainLeakProbeTest () then 0 else 1
-    elif argv |> Array.contains "hostboxcrash" then
-        if Golden.hostBoxCrashTest () then 0 else 1
-    elif argv |> Array.contains "bindlessovercap" then
-        if Golden.bindlessOverCapacityTest () then 0 else 1
-    elif argv |> Array.contains "glyphwedge" then
-        if Golden.glyphWedgeTest () then 0 else 1
-    elif argv |> Array.contains "atlaspool" then
-        if Golden.atlasPoolTest () then 0 else 1
-    elif argv |> Array.contains "bcbox" then
-        if Golden.bindlessCleanBoxTest () then 0 else 1
-    elif argv |> Array.contains "ssboarray5" then
-        if Golden.ssboArray5Test () then 0 else 1
-    elif argv |> Array.contains "ssboarray4" then
-        if Golden.ssboArray4Test () then 0 else 1
-    elif argv |> Array.contains "ssboarray3" then
-        if Golden.ssboArray3Test () then 0 else 1
-    elif argv |> Array.contains "ssboarray2" then
-        if Golden.ssboArray2Test () then 0 else 1
-    elif argv |> Array.contains "ssboarray" then
-        if Golden.ssboArrayTest () then 0 else 1
-    elif argv |> Array.contains "instbucket" then
-        if Golden.alreadyInstancedTest () then 0 else 1
-    elif argv |> Array.contains "gl" then
-        if Golden.glHeapTest () then 0 else 1
     elif argv |> Array.contains "glbindless-win" then
         GLBindless.runWin (); 0
     elif argv |> Array.contains "glbindless" then
