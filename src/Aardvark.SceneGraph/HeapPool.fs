@@ -1547,6 +1547,14 @@ module Heap =
         static let maxClass = 123                                  // 4*30+3
 
         let stacks : System.Collections.Generic.Stack<HeapBlock>[] = Array.zeroCreate 128
+        // EXACT-SIZE free index: same-size churn (the dominant edit pattern) must
+        // reuse freed blocks even when the size is not a quarter-pow2 class minimum.
+        // The class search alone starts at c0+1 for such sizes — class c0 members
+        // are only guaranteed >= classMin[c0], not >= size — so an equal-size freed
+        // block was INVISIBLE and churn bump-grew the arena (geom-churn: 42->101KB
+        // flat-violation). Every free block lives in BOTH indices; taking it through
+        // one leaves a stale entry in the other, invalidated lazily via IsFree.
+        let exact = System.Collections.Generic.Dictionary<int, System.Collections.Generic.Stack<HeapBlock>>()
         let mutable freeCount = 0
         let mutable tail = 0
         let mutable live = 0
@@ -1559,6 +1567,11 @@ module Heap =
                 | null -> let st = System.Collections.Generic.Stack<HeapBlock>() in stacks.[c] <- st; st
                 | st -> st
             st.Push b
+            let ex =
+                match exact.TryGetValue b.Size with
+                | true, ex -> ex
+                | _ -> let ex = System.Collections.Generic.Stack<HeapBlock>() in exact.[b.Size] <- ex; ex
+            ex.Push b
             freeCount <- freeCount + 1
 
         /// high-water end of the allocated address space (in units)
@@ -1573,13 +1586,24 @@ module Heap =
             live <- live + size
             let mutable found : HeapBlock = null
             if freeCount > 0 then
-                // smallest class whose members are all >= size
-                let c0 = classOfDown size
-                let mutable c = if classMin.[c0] = size then c0 else c0 + 1
-                while isNull found && c <= maxClass do
-                    let st = stacks.[c]
-                    if not (isNull st) && st.Count > 0 then found <- st.Pop()
-                    else c <- c + 1
+                // exact-size reuse first (skip entries already taken via the class path)
+                match exact.TryGetValue size with
+                | true, ex ->
+                    while isNull found && ex.Count > 0 do
+                        let b = ex.Pop()
+                        if b.IsFree then found <- b
+                | _ -> ()
+                if isNull found then
+                    // smallest class whose members are all >= size
+                    let c0 = classOfDown size
+                    let mutable c = if classMin.[c0] = size then c0 else c0 + 1
+                    while isNull found && c <= maxClass do
+                        let st = stacks.[c]
+                        if not (isNull st) && st.Count > 0 then
+                            // skip entries already taken via the exact path
+                            let b = st.Pop()
+                            if b.IsFree then found <- b
+                        else c <- c + 1
             if isNull found then
                 // miss -> bump the virgin tail
                 let b = HeapBlock(tail, size)
@@ -1587,8 +1611,11 @@ module Heap =
                 b
             else
                 freeCount <- freeCount - 1
+                // ALWAYS clear IsFree — it also invalidates the block's stale twin
+                // entry in the other index (split case: the popped block is dead,
+                // its space lives on in the returned block + remainder)
+                found.IsFree <- false
                 if found.Size = size then
-                    found.IsFree <- false
                     found
                 else
                     // exact split: remainder returns to its class
@@ -1611,6 +1638,7 @@ module Heap =
         member _.Reset() =
             for st in stacks do
                 if not (isNull st) then st.Clear()
+            exact.Clear()
             freeCount <- 0
             tail <- 0
             live <- 0

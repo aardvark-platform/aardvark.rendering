@@ -1792,7 +1792,15 @@ module Resources =
                                 bgHandle <- result
                                 bgState <- 2)
                         if not cancelled && ret = VkResult.Success then
-                            transact (fun () -> x.MarkOutdated()))
+                            // DETACHED: the adoption mark must NOT run inside this task.
+                            // Destroy() Task.Wait()s on bgTask while ITSELF running inside a
+                            // transaction (resource Release paths transact) — a transact here
+                            // blocks on that open transaction and the two deadlock (gauntlet
+                            // hang after msaa/golden under GPU contention, 2026-07-12). A
+                            // detached mark lets bgTask complete; marking a since-disposed
+                            // resource is harmless (adoption is bgLock-guarded).
+                            System.Threading.Tasks.Task.Run(fun () ->
+                                transact (fun () -> x.MarkOutdated())) |> ignore)
                 // publish the fallback's (unspecialized) pipeline meanwhile
                 let f = fallback.Value
                 f.Update(user, token, renderToken) |> ignore
