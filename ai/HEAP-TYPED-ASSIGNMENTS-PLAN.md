@@ -753,3 +753,23 @@ storage-first API, fully-reactive edits, 0052 shipped). What remains, by weight:
    switches (NOCHAIN/STATIC_GEOM/NO_SPEC/NO_CLUSTERS) are deliberate dev
    tools, NOT curated API — consumers (HeapSpike, benchmarks) read them, so
    they stay public; do not document them as stable.
+
+### Nightly's first catches — all fixed (2026-07-12, 28f7f43a)
+The badge/nightly infrastructure paid for itself on day one:
+1. geom-churn: HeapSpace.Alloc could not reuse exact-size freed blocks unless
+   the size sat on a quarter-pow2 class minimum (search starts at c0+1; class
+   c0 only guarantees >= classMin). FIX: exact-size free Dictionary consulted
+   before the class stacks; both indices share blocks, lazily invalidated via
+   IsFree (Alloc now ALWAYS clears IsFree — also kills the dead split-donor's
+   stale twin entry). Exact-size churn is flat again.
+2. TEARDOWN DEADLOCK (the hekla 2am hang + airtop hang): resource Release
+   paths run inside a transact; PipelineResource.Destroy Task.Wait()s on an
+   in-flight background spec-compile whose LAST act was transact(MarkOutdated)
+   -> blocks on the open transaction -> mutual wait. Only bites when disposal
+   races a SLOW compile (GPU contention — PoE2 on hekla, desktop on airtop);
+   interactive runs never saw it. FIX: the adoption mark is DETACHED
+   (Task.Run) so bgTask completes before the transact contends.
+3. gl-heap/gpugeom-gl: GL heap path = FUTURE WORK (HeapRenderObject has no GL
+   command-stream compile since the bundling rework); probes stay registered
+   as skipped — implementing the GL path lights them up again.
+Full gauntlet: 50 passed, 2 ignored, 0 failed (34 min, airtop 5060).
