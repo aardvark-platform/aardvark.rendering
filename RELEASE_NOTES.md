@@ -1,3 +1,6 @@
+### 5.6.9
+- [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
+
 ### 5.6.8
 - [Application] Added support for up to 8 mouse buttons
 - [Application] Prevent consecutive double-click events from `EventMouse` to align behavior with Windows Forms
