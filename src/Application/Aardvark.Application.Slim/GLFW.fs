@@ -443,6 +443,53 @@ module internal IconLoader =
     let getIcon() =
         icon.Value
 
+type internal ActivationPolicy =
+    | Regular = 0
+    | Accessory = 1
+    | Prohibited = 2
+
+module internal ActivationPolicy =
+
+    module private Native =
+        let [<Literal>] private lib = "libobjc.dylib"
+
+        [<DllImport(lib, EntryPoint = "objc_getClass", CharSet = CharSet.Ansi)>]
+        extern IntPtr objc_getClass(string className)
+
+        [<DllImport(lib, EntryPoint = "sel_registerName", CharSet = CharSet.Ansi)>]
+        extern IntPtr sel_registerName(string selectorName)
+
+        [<DllImport(lib, EntryPoint = "objc_msgSend")>]
+        extern IntPtr objc_msgSend_IntPtr(IntPtr receiver, IntPtr selector)
+
+        [<DllImport(lib, EntryPoint = "objc_msgSend")>]
+        extern bool objc_msgSend_bool_int64(IntPtr receiver, IntPtr selector, int64 arg1)
+
+    let isSupported() =
+        if RuntimeInformation.IsOSPlatform OSPlatform.OSX then
+            try
+                notNull <| Native.objc_getClass "NSApplication"
+            with _ ->
+                false
+        else
+            false
+
+    let set (policy: ActivationPolicy) =
+        if RuntimeInformation.IsOSPlatform OSPlatform.OSX then
+            try
+                let nsApplicationClass = Native.objc_getClass "NSApplication"
+                let sharedAppSel = Native.sel_registerName "sharedApplication"
+                let nsApp = Native.objc_msgSend_IntPtr(nsApplicationClass, sharedAppSel)
+
+                let setActivationPolicySel = Native.sel_registerName "setActivationPolicy:"
+                let success = Native.objc_msgSend_bool_int64(nsApp, setActivationPolicySel, int64 policy)
+
+                if not success then
+                    Log.warn "Failed to set activation policy."
+
+            with exn ->
+                Log.warn $"Failed to set activation policy: {exn.Message}"
+
 type GlfwGamepad() =
     let a = cval false
     let b = cval false
@@ -599,9 +646,8 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
 
     let glfw = Glfw.GetApi()
     do
-        if hideCocoaMenuBar then
-            Log.line "hiding cocoa menubar"
-            glfw.InitHint(Silk.NET.GLFW.InitHint.CocoaMenubar, false) // glfwInitHint(GLFW_COCOA_MENUBAR, GLFW_FALSE);
+        if ActivationPolicy.isSupported() || hideCocoaMenuBar then
+            glfw.InitHint(InitHint.CocoaMenubar, false)
 
         if not (glfw.Init()) then
             failwith "GLFW init failed"
@@ -758,6 +804,12 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
 
     member x.Run([<System.ParamArray>] ws : Window[]) =    
         let mutable wait = false
+
+        // macOS: Make application visible in the dock on demand
+        // If we only create an offscreen window for the OpenGL context, we usually do
+        // not want to show it in the dock (e.g., aarvark.media applications)
+        if ws.Length > 0 && not hideCocoaMenuBar && ActivationPolicy.isSupported() then
+            ActivationPolicy.set ActivationPolicy.Regular
 
         for w in ws do w.IsVisible <- true
 
