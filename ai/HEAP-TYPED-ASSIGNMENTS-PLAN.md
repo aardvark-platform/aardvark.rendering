@@ -738,9 +738,14 @@ storage-first API, fully-reactive edits, 0052 shipped). What remains, by weight:
    (ripperl 2026-07-28, Arc B580 + RX 9060 XT): both discrete newcomers BEAT
    their baked renderbench floor (0.84x / 0.88x) — the decode penalty is an
    INTEGRATED-GPU phenomenon (cache/bandwidth), not vendor/driver/ladder.
-   Known Arc B580 driver misrender: sparse multi-page post-shrink state drops
-   ~1 part (churn-smallpages pins it; NVIDIA+RDNA4 pass; workaround if ever
-   needed = re-pack tombstone records on bulk remove).
+   The Arc B580 misrender RESOLVED itself under test isolation: it required
+   the pre-isolation contaminated sequence (sgsphere leaked HEAP_PAGE_WORDS
+   into 13 subsequent probes' device lifecycles); isolated, Arc is 51/51
+   GREEN (both page sizes, all variants, in-sequence). Triage facts kept:
+   the stream held NO zero-instance/zero-fvc records (clustered regen
+   compacts them) — the state was page-per-slot with FirstInstance ~29k,
+   and every reproducible form renders correctly. churn-smallpages@27648
+   stays as the canary.
 4. Mirrorless phase-3 leftovers: TrafoArena staging onto the ring, optional
    csStaging upload path, dead gap-merge removal.
 5. Textures: IMPLEMENTED beyond HEAP_TEXTURES.md's phase list (all non-MS,

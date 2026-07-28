@@ -46,11 +46,14 @@ module ``Heap Gauntlet`` =
         )
 
     /// like `probe` but with a page-size override — the multi-page variant of a
-    /// probe (tiny pages force cross-page allocation, tombstone-dense records and
-    /// per-page draws). This coverage existed by ACCIDENT (sgsphere's leaked env)
-    /// and caught an Arc B580 driver misrender in the sparse multi-page state —
-    /// kept deliberately. Known: FAILS on Intel Arc B580 (driver-suspect,
-    /// 2026-07-28: ~111 px of geometry dropped after mass shrink, NVIDIA+AMD pass).
+    /// probe (tiny pages force cross-page allocation and per-page draws). This
+    /// coverage existed by ACCIDENT (sgsphere leaked its env override into all
+    /// later probes) and once caught an Arc B580 misrender (2026-07-28, ~111 px
+    /// dropped after mass shrink). RESOLVED same day: with per-probe isolation
+    /// the full suite is GREEN on Arc — the misrender needed the contaminated
+    /// pre-isolation process state (13 prior probes device-cycling small-paged)
+    /// and no isolated configuration reproduces it (4096 + 27648, no-clusters,
+    /// no-spec, in-sequence all pass). This probe stays as the canary.
     let private probeSmallPages (name : string) (pageWords : int) (run : unit -> bool) =
         testCase name (fun () ->
             if not vulkanAvailable.Value then skiptest "no headless Vulkan device"
