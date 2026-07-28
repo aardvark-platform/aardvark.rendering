@@ -90,7 +90,9 @@ module ``Heap Gauntlet`` =
             probe "deferred"        HeapSpike.Deferred.run
             // membership churn / lifecycle / leaks
             probe "churn"           HeapSpike.Churn.run
-            probeSmallPages "churn-smallpages" 4096 HeapSpike.Churn.run
+            // 27648 = the page size sgsphere used to leak — the configuration the Arc
+            // B580 misrender reproduces in (4096-word pages do NOT reproduce it)
+            probeSmallPages "churn-smallpages" 27648 HeapSpike.Churn.run
             probe "churn-probe"     HeapSpike.Golden.churnProbeTest
             probe "lifetime"        HeapSpike.Golden.lifetimeTest
             probe "submit-stress"   HeapSpike.Golden.submitStressTest
