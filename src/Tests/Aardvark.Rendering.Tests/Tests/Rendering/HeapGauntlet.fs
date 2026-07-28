@@ -38,7 +38,25 @@ module ``Heap Gauntlet`` =
     let private probe (name : string) (run : unit -> bool) =
         testCase name (fun () ->
             if not vulkanAvailable.Value then skiptest "no headless Vulkan device"
+            // ISOLATION: probes are process-global neighbors — clear the page-size
+            // override some probes set (sgsphere sizes pages per sphere and used to
+            // leak it into every later probe, silently changing their page layout)
+            System.Environment.SetEnvironmentVariable("HEAP_PAGE_WORDS", null)
             Expect.isTrue (run ()) (sprintf "heap gauntlet probe '%s' failed (see log above)" name)
+        )
+
+    /// like `probe` but with a page-size override — the multi-page variant of a
+    /// probe (tiny pages force cross-page allocation, tombstone-dense records and
+    /// per-page draws). This coverage existed by ACCIDENT (sgsphere's leaked env)
+    /// and caught an Arc B580 driver misrender in the sparse multi-page state —
+    /// kept deliberately. Known: FAILS on Intel Arc B580 (driver-suspect,
+    /// 2026-07-28: ~111 px of geometry dropped after mass shrink, NVIDIA+AMD pass).
+    let private probeSmallPages (name : string) (pageWords : int) (run : unit -> bool) =
+        testCase name (fun () ->
+            if not vulkanAvailable.Value then skiptest "no headless Vulkan device"
+            System.Environment.SetEnvironmentVariable("HEAP_PAGE_WORDS", string pageWords)
+            try Expect.isTrue (run ()) (sprintf "heap gauntlet probe '%s' failed (see log above)" name)
+            finally System.Environment.SetEnvironmentVariable("HEAP_PAGE_WORDS", null)
         )
 
     // FUTURE WORK: the GL heap path is currently unsupported — HeapRenderObject
@@ -72,6 +90,7 @@ module ``Heap Gauntlet`` =
             probe "deferred"        HeapSpike.Deferred.run
             // membership churn / lifecycle / leaks
             probe "churn"           HeapSpike.Churn.run
+            probeSmallPages "churn-smallpages" 4096 HeapSpike.Churn.run
             probe "churn-probe"     HeapSpike.Golden.churnProbeTest
             probe "lifetime"        HeapSpike.Golden.lifetimeTest
             probe "submit-stress"   HeapSpike.Golden.submitStressTest

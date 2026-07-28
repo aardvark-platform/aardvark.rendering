@@ -436,7 +436,7 @@ module Golden =
 
         let classicPix = renderToPix (scene id)
         let heapPix = renderToPix (scene (Sg.heap (runtime.CreateHeapStorage())))
-        (try classicPix.SaveAsPng "/tmp/sph_classic.png"; heapPix.SaveAsPng "/tmp/sph_heap.png" with _ -> Log.warn "[sphere] png save unavailable")
+        (try classicPix.SaveAsPng (System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sph_classic.png")); heapPix.SaveAsPng (System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sph_heap.png")) with _ -> Log.warn "[sphere] png save unavailable")
 
         let cm = classicPix.GetMatrix<C4b>()
         let hm = heapPix.GetMatrix<C4b>()
@@ -659,9 +659,9 @@ module Golden =
         let classic = renderAt 1 (ASet.ofArray inputs)
         let heap1   = renderAt 1 heapObjs
         let heap8   = renderAt 8 heapObjs        // <-- the windowed demo uses samples=8
-        savePpm "/tmp/demo_classic.ppm" classic
-        savePpm "/tmp/demo_heap.ppm" heap1
-        savePpm "/tmp/demo_heap_msaa.ppm" heap8
+        savePpm (System.IO.Path.Combine(System.IO.Path.GetTempPath(), "demo_classic.ppm")) classic
+        savePpm (System.IO.Path.Combine(System.IO.Path.GetTempPath(), "demo_heap.ppm")) heap1
+        savePpm (System.IO.Path.Combine(System.IO.Path.GetTempPath(), "demo_heap_msaa.ppm")) heap8
         let d0, _, nbg, total = diff classic heap1
         let dm, ndm, _, _ = diff heap1 heap8
         Log.line "demoShot: -> %d bucket(s)  heap-vs-classic(1x) maxDelta=%d  coverage=%d px"
@@ -2083,7 +2083,7 @@ module Golden =
                     buf.[o + 2] <- c.B
                     o <- o + 3
             fs.Write(buf, 0, buf.Length)
-        savePpm "/tmp/bcbox.ppm"
+        savePpm (System.IO.Path.Combine(System.IO.Path.GetTempPath(), "bcbox.ppm"))
         let mutable mag = 0L
         let mutable colored = 0L
         m.ForeachCoord(fun (p : V2l) ->
