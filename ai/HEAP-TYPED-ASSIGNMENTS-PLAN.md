@@ -736,7 +736,9 @@ storage-first API, fully-reactive edits, 0052 shipped). What remains, by weight:
 3. AMD-APU render gap (1.5-1.9x): locality-by-compaction lever + the
    per-constituent dirty-range derive. The 2x2 experiment is ANSWERED
    (ripperl 2026-07-28, Arc B580 + RX 9060 XT): both discrete newcomers BEAT
-   their baked renderbench floor (0.84x / 0.88x) — the decode penalty is an
+   their baked renderbench floor (Arc JIT 0.63x — 3.35 vs 5.28, even no-spec
+   beats baked at 0.84x; RDNA4 0.88x; JIT worth ~25% on Arc, ~32% on RDNA4)
+   — the decode penalty is an
    INTEGRATED-GPU phenomenon (cache/bandwidth), not vendor/driver/ladder.
    The Arc B580 misrender RESOLVED itself under test isolation: it required
    the pre-isolation contaminated sequence (sgsphere leaked HEAP_PAGE_WORDS
