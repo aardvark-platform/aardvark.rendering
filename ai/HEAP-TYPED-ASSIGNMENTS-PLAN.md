@@ -734,8 +734,13 @@ storage-first API, fully-reactive edits, 0052 shipped). What remains, by weight:
    single-threaded = the edits/frame cap; churn 74us/part incl. structure).
 2. Ship chain §3 item 6 — fshade spec-constants branch release (user-parked).
 3. AMD-APU render gap (1.5-1.9x): locality-by-compaction lever + the
-   per-constituent dirty-range derive; integrated-vs-driver 2x2 experiment
-   designed & unrun (needs discrete-AMD / Arc hardware — arcbench collects).
+   per-constituent dirty-range derive. The 2x2 experiment is ANSWERED
+   (ripperl 2026-07-28, Arc B580 + RX 9060 XT): both discrete newcomers BEAT
+   their baked renderbench floor (0.84x / 0.88x) — the decode penalty is an
+   INTEGRATED-GPU phenomenon (cache/bandwidth), not vendor/driver/ladder.
+   Known Arc B580 driver misrender: sparse multi-page post-shrink state drops
+   ~1 part (churn-smallpages pins it; NVIDIA+RDNA4 pass; workaround if ever
+   needed = re-pack tombstone records on bulk remove).
 4. Mirrorless phase-3 leftovers: TrafoArena staging onto the ring, optional
    csStaging upload path, dead gap-merge removal.
 5. Textures: IMPLEMENTED beyond HEAP_TEXTURES.md's phase list (all non-MS,
