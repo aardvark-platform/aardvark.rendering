@@ -5395,6 +5395,15 @@ module Heap =
                     let recs = System.Collections.Generic.List<DrawCallInfo>()
                     clusterRecordsFor pageIdx partIdx recs
                     setClusterRecCount pageIdx partIdx recs.Count
+                    if System.Environment.GetEnvironmentVariable "HEAP_DUMP_RECORDS" = "1" then
+                        let mutable z0i = 0
+                        let mutable z0v = 0
+                        let mutable maxFi = 0
+                        for r in recs do
+                            if r.InstanceCount = 0 then z0i <- z0i + 1
+                            if r.FaceVertexCount = 0 then z0v <- z0v + 1
+                            maxFi <- max maxFi r.FirstInstance
+                        Log.line "[recdump] page=%d part=%d records=%d zeroInst=%d zeroFvc=%d maxFirstInstance=%d" pageIdx partIdx recs.Count z0i z0v maxFi
                     if pstaging.Length < recs.Count then pstaging <- Array.zeroCreate (Fun.NextPowerOfTwo (max 16 recs.Count))
                     db.ResizeInPlace(uint64 (max 16 pstaging.Length * sizeof<DrawCallInfo>))
                     for i in 0 .. recs.Count - 1 do pstaging.[i] <- recs.[i]
