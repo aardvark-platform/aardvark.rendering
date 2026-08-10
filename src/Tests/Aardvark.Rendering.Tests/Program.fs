@@ -24,6 +24,7 @@ let main argv =
             ``SceneGraph Tests``.tests
             ``CompactSet Tests``.tests
             ``AdaptiveResource Tests``.tests
+            ``AListRenderTask Tests``.tests
             ``ContextCreation Tests``.tests
             ``Vulkan Wrapper Tests``.tests
             ``IDictionary StructuralComparer Tests``.tests

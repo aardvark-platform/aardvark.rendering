@@ -356,7 +356,7 @@ module ContextTextureUploadExtensions =
                 | PixTextureCube(info, data) ->
                     let img = data.MipMapArray.[0]
                     let format = img.BaseImage.PixFormat
-                    let levels = data.MipMapArray |> Array.map _.LevelCount |> Array.min
+                    let levels = data.MipMapArray |> Array.map (fun image -> image.LevelCount) |> Array.min
                     let texture = this |> Texture.createOfFormatCube format img.BaseSize.X levels info
                     Texture.uploadPixCube texture format info.HasWantMipMaps 0 data
                     texture

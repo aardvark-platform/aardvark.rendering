@@ -218,7 +218,7 @@ module AttributeBuffer =
                 perInstance singleValue interleaved false runtime
 
         let attributeInt16 (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
-            runtime |> requireFeatures _.Shaders.StorageInputOutput16 "Device does not support 16bit inputs and outputs"
+            runtime |> requireFeatures (fun features -> features.Shaders.StorageInputOutput16) "Device does not support 16bit inputs and outputs"
             runtime |> requireExtensionGL [AMDGpuShaderInt16; NVGpuShader5]
 
             renderAttribute
@@ -250,7 +250,7 @@ module AttributeBuffer =
                 perInstance singleValue interleaved false runtime
 
         let attributeUInt16 (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
-            runtime |> requireFeatures _.Shaders.StorageInputOutput16 "Device does not support 16-bit inputs and outputs"
+            runtime |> requireFeatures (fun features -> features.Shaders.StorageInputOutput16) "Device does not support 16-bit inputs and outputs"
             runtime |> requireExtensionGL [AMDGpuShaderInt16; NVGpuShader5]
 
             renderAttribute
@@ -260,7 +260,7 @@ module AttributeBuffer =
 
         // Treat color as integer
         let attributeUInt16FromC3us (perInstance : bool) (singleValue : bool) (interleaved : bool) (runtime : IRuntime) =
-            runtime |> requireFeatures _.Shaders.StorageInputOutput16 "Device does not support 16-bit inputs and outputs"
+            runtime |> requireFeatures (fun features -> features.Shaders.StorageInputOutput16) "Device does not support 16-bit inputs and outputs"
             runtime |> requireExtensionGL [AMDGpuShaderInt16; NVGpuShader5]
 
             renderAttribute

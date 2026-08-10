@@ -303,17 +303,17 @@ module Samplers =
                 buffer.Release()
 
         let sample2DBorderFloat32 (runtime: IRuntime) =
-            runtime |> requireFeatures _.Samplers.CustomBorderColors "Device does not support custom border colors"
+            runtime |> requireFeatures (fun features -> features.Samplers.CustomBorderColors) "Device does not support custom border colors"
             let value = C4f(0.5f, 1.234f, -4.12f, 90.24f)
             sample2DBorder (value.ToArray()) (SamplerState.withBorderColor value) runtime
 
         let sample2DBorderUInt32 (runtime: IRuntime) =
-            runtime |> requireFeatures _.Samplers.CustomBorderColors "Device does not support custom border colors"
+            runtime |> requireFeatures (fun features -> features.Samplers.CustomBorderColors) "Device does not support custom border colors"
             let value = C4ui(0u, 1u, 347824u, Constant<uint32>.ParseableMaxValue)
             sample2DBorder (value.ToArray()) (SamplerState.withBorderColorui value) runtime
 
         let sample2DBorderInt32 (runtime: IRuntime) =
-            runtime |> requireFeatures _.Samplers.CustomBorderColors "Device does not support custom border colors"
+            runtime |> requireFeatures (fun features -> features.Samplers.CustomBorderColors) "Device does not support custom border colors"
             let value = V4i(0, 1, -347824, Constant<int32>.ParseableMinValue)
             sample2DBorder (value.ToArray()) (SamplerState.withBorderColori value) runtime
 

@@ -137,7 +137,7 @@ module Commands =
                 task |> renderAndCheck expectedColor
 
                 transact (fun _ ->
-                    colors.Value <- colors.Value |> IndexList.sortBy _.R
+                    colors.Value <- colors.Value |> IndexList.sortBy (fun color -> color.R)
                 )
 
                 task |> renderAndCheck expectedColor

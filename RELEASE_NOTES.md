@@ -1,3 +1,5 @@
+- Fixed adaptive render-task list updates to preserve child lifetimes across batches and recompute framebuffer signatures once from the final task set.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 
