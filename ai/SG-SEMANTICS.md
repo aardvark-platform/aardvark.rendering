@@ -89,6 +89,37 @@ type RenderObjectSem() =
 
 Source: `src/Aardvark.SceneGraph/Semantics/RenderObject.fs`
 
+### Picking Semantic and Cache
+
+`Sg.requirePicking` enables the `PickObjects` semantic. Triangle leaves derive an object-space
+`Pickable` from their draw call, position/index buffer views, and topology. Building and indexing
+that CPU geometry is expensive, so the semantic uses a process-wide structural memoization cache.
+
+The important behavior is **shared-geometry reuse**, not object identity:
+
+- independently constructed leaves with equivalent draw calls, buffer views, and topology reuse the
+  same object-space picking representation
+- repeated construction from shared `IndexedGeometry` can therefore reuse downloaded geometry and
+  its acceleration structure
+- model transformations are applied after this cache, so differently transformed instances can
+  share the object-space representation
+- different geometry, draw ranges, or topologies must not alias
+- adaptive draw-call and buffer changes must continue to propagate through a reused entry
+
+The current implementation is a static `Dictionary` using the structural equality of its complete
+leaf key. Structurally unique entries are not evicted and normally remain until the scene-graph
+assembly load context or process ends. This is a known implementation tradeoff and a potential TODO
+pending evidence from realistic unload/reload workloads; permanent retention is not a public API
+guarantee.
+
+Do not replace the cache with a reference-identity lookup such as a directly keyed
+`ConditionalWeakTable`: normal scene-graph constructors can create distinct adaptive wrappers and
+`BufferView` objects that are structurally equal. Such a change silently turns shared-geometry hits
+into misses. Any lifetime change must first preserve the representative reuse and non-aliasing
+regressions and demonstrate a real retained-memory problem.
+
+Source: `src/Aardvark.SceneGraph/HighLevelSceneGraph/Picking.fs`
+
 ## FShade Integration
 
 ### Effect Application

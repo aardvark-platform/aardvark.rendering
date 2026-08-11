@@ -2,6 +2,7 @@
 
 open System
 open System.Reflection
+open System.Threading
 open System.Text.RegularExpressions
 open Aardvark.Base
 open Aardvark.Base.Geometry
@@ -415,6 +416,38 @@ module ``SceneGraph Tests`` =
 
     module Picking =
 
+        type private CountingBuffer(data : Array) =
+            let buffer = ArrayBuffer data
+            let mutable downloadCount = 0
+
+            member _.DownloadCount = Volatile.Read &downloadCount
+
+            interface INativeBuffer with
+                member _.SizeInBytes = buffer.SizeInBytes
+
+                member _.Use action =
+                    Interlocked.Increment &downloadCount |> ignore
+                    buffer.Use action
+
+        let private createPickTree (call : DrawCallInfo) (positions : IBuffer) (index : IBuffer option) =
+            let positions = BufferView(AVal.constant positions, typeof<V3f>)
+            let sg =
+                Sg.RenderNode(call, IndexedGeometryMode.TriangleList) :> ISg
+                |> Sg.vertexBuffer DefaultSemantic.Positions positions
+
+            let sg =
+                match index with
+                | Some index ->
+                    sg |> Sg.indexBuffer (BufferView(AVal.constant index, typeof<int>))
+                | None ->
+                    sg
+
+            sg |> Sg.requirePicking |> PickTree.ofSg
+
+        let private intersects (target : V3d) (tree : PickTree) =
+            let ray = Ray3d(V3d.Zero, target.Normalized)
+            tree.IntersectV ray |> AVal.force |> ValueOption.isSome
+
         let private randomTrafo() =
             let s = (Rnd.v3d() + 0.1) * 2.0
             let t = (Rnd.v3d() - 0.5) * 10.0
@@ -570,6 +603,84 @@ module ``SceneGraph Tests`` =
                 test()
             }
 
+        let cacheReusesEquivalentLeavesAtScale =
+            test "Picking.Cache reuses independently constructed equivalent leaves" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let positions =
+                    CountingBuffer([| V3f(-1, -1, -2); V3f(1, -1, -2); V3f(0, 1, -2) |])
+                let indices = CountingBuffer([| 0; 1; 2 |])
+
+                let trees =
+                    Array.init 256 (fun _ ->
+                        createPickTree (DrawCallInfo(3)) (positions :> IBuffer) (Some (indices :> IBuffer))
+                    )
+
+                Expect.equal positions.DownloadCount 1 "Equivalent leaves downloaded shared positions more than once"
+                Expect.equal indices.DownloadCount 1 "Equivalent leaves downloaded shared indices more than once"
+                Expect.isTrue (intersects (V3d(0, 0, -2)) trees.[0]) "Expected shared geometry to remain pickable"
+                GC.KeepAlive trees
+            }
+
+        let cacheDoesNotAliasDifferentGeometry =
+            test "Picking.Cache does not alias different geometry" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let leftPositions =
+                    CountingBuffer([| V3f(-5, -1, -4); V3f(-3, -1, -4); V3f(-4, 1, -4) |])
+                let rightPositions =
+                    CountingBuffer([| V3f(3, -1, -4); V3f(5, -1, -4); V3f(4, 1, -4) |])
+
+                let left =
+                    Array.init 32 (fun _ ->
+                        createPickTree (DrawCallInfo(3)) (leftPositions :> IBuffer) None
+                    )
+                let right =
+                    Array.init 32 (fun _ ->
+                        createPickTree (DrawCallInfo(3)) (rightPositions :> IBuffer) None
+                    )
+
+                Expect.equal leftPositions.DownloadCount 1 "Equivalent left leaves did not share their geometry"
+                Expect.equal rightPositions.DownloadCount 1 "Equivalent right leaves did not share their geometry"
+                Expect.isTrue (intersects (V3d(-4, 0, -4)) left.[0]) "Expected the left geometry to be pickable"
+                Expect.isFalse (intersects (V3d(4, 0, -4)) left.[0]) "Left geometry aliased the right geometry"
+                Expect.isTrue (intersects (V3d(4, 0, -4)) right.[0]) "Expected the right geometry to be pickable"
+                Expect.isFalse (intersects (V3d(-4, 0, -4)) right.[0]) "Right geometry aliased the left geometry"
+                GC.KeepAlive left
+                GC.KeepAlive right
+            }
+
+        let cacheDoesNotAliasDifferentDrawRanges =
+            test "Picking.Cache does not alias different draw ranges" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let positions =
+                    CountingBuffer(
+                        [|
+                            V3f(-5, -1, -4); V3f(-3, -1, -4); V3f(-4, 1, -4)
+                            V3f(3, -1, -4); V3f(5, -1, -4); V3f(4, 1, -4)
+                        |]
+                    )
+
+                let short =
+                    Array.init 32 (fun _ ->
+                        createPickTree (DrawCallInfo(3)) (positions :> IBuffer) None
+                    )
+                let long =
+                    Array.init 32 (fun _ ->
+                        createPickTree (DrawCallInfo(6)) (positions :> IBuffer) None
+                    )
+
+                Expect.equal positions.DownloadCount 2 "Each distinct draw range should download shared positions once"
+                Expect.isFalse (intersects (V3d(4, 0, -4)) short.[0]) "The short draw range included the second triangle"
+                Expect.isTrue (intersects (V3d(4, 0, -4)) long.[0]) "The long draw range omitted the second triangle"
+                GC.KeepAlive short
+                GC.KeepAlive long
+            }
+
     [<Tests>]
     let tests =
         testList "SceneGraph" [
@@ -589,4 +700,7 @@ module ``SceneGraph Tests`` =
             Picking.renderCommands false true
             Picking.renderCommands true false
             Picking.renderCommands true true
+            Picking.cacheReusesEquivalentLeavesAtScale
+            Picking.cacheDoesNotAliasDifferentGeometry
+            Picking.cacheDoesNotAliasDifferentDrawRanges
         ]

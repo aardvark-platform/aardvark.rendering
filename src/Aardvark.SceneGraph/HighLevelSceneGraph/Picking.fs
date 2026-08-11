@@ -316,7 +316,11 @@ module PickingSemantics =
             | _ ->
                 Array.empty
 
-        // TODO: memory leak
+        // This is process-wide structural memoization: independently constructed but equal leaf keys
+        // must share their object-space picking data.
+        // TODO (evidence required): Entries currently live for the assembly/process lifetime. Revisit
+        // that tradeoff only for a demonstrated workload and without weakening structural reuse (for
+        // example by replacing key equality with reference-identity lookup).
         static let createLeafPickable (key : PickingKey) =
             lock cache (fun () ->
                 cache.GetCreate(key, fun key ->
