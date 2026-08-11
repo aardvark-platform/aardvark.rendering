@@ -1,3 +1,5 @@
+- [SceneGraph] Fixed the picking cache retaining unloaded scene geometry.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 

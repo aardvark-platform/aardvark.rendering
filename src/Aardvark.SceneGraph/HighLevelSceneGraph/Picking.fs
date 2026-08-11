@@ -223,6 +223,7 @@ open Aardvark.Base.Ag
 open Aardvark.Rendering
 open Aardvark.SceneGraph
 open System.Collections.Generic
+open System.Runtime.CompilerServices
 
 [<AutoOpen>]
 module PickingSemantics =
@@ -237,14 +238,14 @@ module PickingSemantics =
         {
             index     : BufferView option
             positions : BufferView voption
-            call      : aval<DrawCallInfo>
             mode      : IndexedGeometryMode
         }
 
     [<Rule>]
     type PickObjectSem() =
 
-        static let cache = Dictionary<PickingKey, aval<Pickable> voption>()
+        static let cache =
+            ConditionalWeakTable<aval<DrawCallInfo>, Dictionary<PickingKey, aval<Pickable> voption>>()
 
         static let bb (t : Triangle3d) =
             let mutable b = t.BoundingBox3d
@@ -316,73 +317,85 @@ module PickingSemantics =
             | _ ->
                 Array.empty
 
-        // TODO: memory leak
-        static let createLeafPickable (key : PickingKey) =
-            lock cache (fun () ->
-                cache.GetCreate(key, fun key ->
-                    match key.mode with
-                    | IndexedGeometryMode.TriangleList
-                    | IndexedGeometryMode.TriangleStrip
-                    | IndexedGeometryMode.TriangleAdjacencyList ->
-                        let index =
-                            match key.index with
-                            | Some view ->
-                                let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<int>
-                                key.call
-                                |> AVal.bind (fun call -> BufferView.download call.FirstIndex call.FaceVertexCount view)
-                                |> AVal.map (converter >> unbox<int[]>)
-                                |> ValueSome
-                            | None ->
-                                ValueNone
+        // Draw calls are deliberately weak keys outside PickingKey. Cached values may reference their call;
+        // ConditionalWeakTable ephemeron semantics still allow the complete value graph to be collected with it.
+        static let createLeafPickable (call : aval<DrawCallInfo>) (key : PickingKey) =
+            let entries = cache.GetOrCreateValue call
+            let mutable lockTaken = false
+            try
+                System.Threading.Monitor.Enter(entries, &lockTaken)
+                let mutable result : aval<Pickable> voption = ValueNone
+                if entries.TryGetValue(key, &result) then
+                    result
+                else
+                    let result =
+                        match key.mode with
+                        | IndexedGeometryMode.TriangleList
+                        | IndexedGeometryMode.TriangleStrip
+                        | IndexedGeometryMode.TriangleAdjacencyList ->
+                            let index =
+                                match key.index with
+                                | Some view ->
+                                    let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<int>
+                                    call
+                                    |> AVal.bind (fun call -> BufferView.download call.FirstIndex call.FaceVertexCount view)
+                                    |> AVal.map (converter >> unbox<int[]>)
+                                    |> ValueSome
+                                | None ->
+                                    ValueNone
 
-                        let positions =
-                            match key.positions with
-                            | ValueSome view ->
-                                let maxVertexExclusice =
+                            let positions =
+                                match key.positions with
+                                | ValueSome view ->
+                                    let maxVertexExclusice =
+                                        match index with
+                                        | ValueSome idx ->
+                                            idx |> AVal.map (fun idx -> 1 + Array.max idx)
+                                        | ValueNone ->
+                                            call |> AVal.map (fun call -> call.FirstIndex + call.FaceVertexCount)
+
+                                    let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<V3d>
+
+                                    maxVertexExclusice
+                                    |> AVal.bind (fun cnt -> BufferView.download 0 cnt view)
+                                    |> AVal.map (converter >> unbox<V3d[]>)
+                                    |> ValueSome
+
+                                | ValueNone ->
+                                    ValueNone
+
+                            match positions with
+                            | ValueSome pos ->
+                                let triangles =
                                     match index with
-                                    | ValueSome idx ->
-                                        idx |> AVal.map (fun idx -> 1 + Array.max idx)
-                                    | ValueNone ->
-                                        key.call |> AVal.map (fun call -> call.FirstIndex + call.FaceVertexCount)
+                                    | ValueSome idx -> AVal.map2 (getTriangles key.mode) idx pos
+                                    | ValueNone -> AVal.map (getTriangles key.mode null) pos
 
-                                let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<V3d>
+                                let pickable =
+                                    let spatial =
+                                        { new Spatial<Triangle3d>() with
+                                            member x.ComputeBounds(ps) = Spatial.triangle.ComputeBounds(ps).EnlargedBy 1E-8
+                                            member x.PlaneSide(a,b) = Spatial.triangle.PlaneSide(a,b)
+                                        }
 
-                                maxVertexExclusice
-                                |> AVal.bind (fun cnt -> BufferView.download 0 cnt view)
-                                |> AVal.map (converter >> unbox<V3d[]>)
-                                |> ValueSome
+                                    triangles |> AVal.map (
+                                        KdTree.build spatial KdBuildInfo.Default >>
+                                        PickShape.Triangles >>
+                                        Pickable.ofShape
+                                    )
 
+                                ValueSome pickable
                             | ValueNone ->
                                 ValueNone
-
-                        match positions with
-                        | ValueSome pos ->
-                            let triangles =
-                                match index with
-                                | ValueSome idx -> AVal.map2 (getTriangles key.mode) idx pos
-                                | ValueNone -> AVal.map (getTriangles key.mode null) pos
-
-                            let pickable =
-                                let spatial =
-                                    { new Spatial<Triangle3d>() with
-                                        member x.ComputeBounds(ps) = Spatial.triangle.ComputeBounds(ps).EnlargedBy 1E-8
-                                        member x.PlaneSide(a,b) = Spatial.triangle.PlaneSide(a,b)
-                                    }
-
-                                triangles |> AVal.map (
-                                    KdTree.build spatial KdBuildInfo.Default >>
-                                    PickShape.Triangles >>
-                                    Pickable.ofShape
-                                )
-
-                            ValueSome pickable
-                        | ValueNone ->
+                        | _ ->
+                            Log.warn "[Pickable] Cannot get triangles for RenderNode (Mode = %A)" key.mode
                             ValueNone
-                    | _ ->
-                        Log.warn "[Pickable] Cannot get triangles for RenderNode (Mode = %A)" key.mode
-                        ValueNone
-                )
-            )
+
+                    entries.Add(key, result)
+                    result
+            finally
+                if lockTaken then
+                    System.Threading.Monitor.Exit entries
 
         member x.RequirePicking(r : Root<ISg>, _ : Scope) =
             r.Child?RequirePicking <- false
@@ -392,15 +405,15 @@ module PickingSemantics =
 
         member x.PickObjects(render : Sg.RenderNode, scope : Scope) : aset<PickObject> =
             if scope.RequirePicking then
+                let call = render.DrawCallInfo
                 let key =
                     {
                         positions = scope.VertexAttributes |> Map.tryFindV DefaultSemantic.Positions
                         index     = scope.VertexIndexBuffer
-                        call      = render.DrawCallInfo
                         mode      = render.Mode
                     }
 
-                match createLeafPickable key with
+                match createLeafPickable call key with
                 | ValueSome pickable ->
                     let pickable = AVal.map2 Pickable.transform scope.ModelTrafo pickable
                     let o = PickObject(scope, pickable)

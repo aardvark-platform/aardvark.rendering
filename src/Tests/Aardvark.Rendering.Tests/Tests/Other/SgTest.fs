@@ -2,6 +2,8 @@
 
 open System
 open System.Reflection
+open System.Runtime.CompilerServices
+open System.Threading
 open System.Text.RegularExpressions
 open Aardvark.Base
 open Aardvark.Base.Geometry
@@ -415,6 +417,51 @@ module ``SceneGraph Tests`` =
 
     module Picking =
 
+        type private CountingBuffer(data : Array) =
+            let buffer = ArrayBuffer data
+            let mutable downloadCount = 0
+
+            member _.DownloadCount = Volatile.Read &downloadCount
+
+            interface INativeBuffer with
+                member _.SizeInBytes = buffer.SizeInBytes
+
+                member _.Use action =
+                    Interlocked.Increment &downloadCount |> ignore
+                    buffer.Use action
+
+        let private createPickTree (call : aval<DrawCallInfo>) (positions : BufferView) (index : BufferView option) =
+            let sg =
+                Sg.RenderNode(call, IndexedGeometryMode.TriangleList) :> ISg
+                |> Sg.vertexBuffer DefaultSemantic.Positions positions
+
+            let sg =
+                match index with
+                | Some index -> sg |> Sg.indexBuffer index
+                | None -> sg
+
+            sg |> Sg.requirePicking |> PickTree.ofSg
+
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
+        let private createEphemeralPickScene() =
+            let call = AVal.constant <| DrawCallInfo(3)
+            let buffer = CountingBuffer([| V3f(-1, -1, 0); V3f(1, -1, 0); V3f(0, 1, 0) |])
+            let positions = BufferView(AVal.constant (buffer :> IBuffer), typeof<V3f>)
+            let tree = createPickTree call positions None
+            let callReference = WeakReference(call :> obj)
+            let bufferReference = WeakReference(buffer :> obj)
+
+            Expect.equal buffer.DownloadCount 1 "Expected the ephemeral geometry to be downloaded"
+            GC.KeepAlive tree
+            GC.KeepAlive call
+            GC.KeepAlive buffer
+            callReference, bufferReference
+
+        let private forceFullCollection() =
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true)
+            GC.WaitForPendingFinalizers()
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true)
+
         let private randomTrafo() =
             let s = (Rnd.v3d() + 0.1) * 2.0
             let t = (Rnd.v3d() - 0.5) * 10.0
@@ -570,6 +617,43 @@ module ``SceneGraph Tests`` =
                 test()
             }
 
+        let cacheReusesLiveGeometry =
+            test "Picking.Cache reuses live geometry" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let call = AVal.constant <| DrawCallInfo(3)
+                let positionBuffer = CountingBuffer([| V3f(-1, -1, 0); V3f(1, -1, 0); V3f(0, 1, 0) |])
+                let indexBuffer = CountingBuffer([| 0; 1; 2 |])
+                let positions = BufferView(AVal.constant (positionBuffer :> IBuffer), typeof<V3f>)
+                let index = BufferView(AVal.constant (indexBuffer :> IBuffer), typeof<int>)
+                let first = createPickTree call positions (Some index)
+                let second = createPickTree call positions (Some index)
+
+                Expect.equal positionBuffer.DownloadCount 1 "Expected shared live positions to be downloaded once"
+                Expect.equal indexBuffer.DownloadCount 1 "Expected shared live indices to be downloaded once"
+                GC.KeepAlive first
+                GC.KeepAlive second
+            }
+
+        let cacheDoesNotRetainScenes =
+            test "Picking.Cache releases ephemeral scenes" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let references = Array.init 32 (fun _ -> createEphemeralPickScene())
+
+                for _ = 1 to 10 do
+                    if references |> Array.exists (fun (call, buffer) -> call.IsAlive || buffer.IsAlive) then
+                        forceFullCollection()
+
+                let retainedCalls = references |> Array.sumBy (fun (call, _) -> if call.IsAlive then 1 else 0)
+                let retainedBuffers = references |> Array.sumBy (fun (_, buffer) -> if buffer.IsAlive then 1 else 0)
+
+                Expect.equal retainedCalls 0 "Picking cache retained ephemeral draw calls"
+                Expect.equal retainedBuffers 0 "Picking cache retained ephemeral position buffers"
+            }
+
     [<Tests>]
     let tests =
         testList "SceneGraph" [
@@ -589,4 +673,6 @@ module ``SceneGraph Tests`` =
             Picking.renderCommands false true
             Picking.renderCommands true false
             Picking.renderCommands true true
+            Picking.cacheReusesLiveGeometry
+            Picking.cacheDoesNotRetainScenes
         ]
