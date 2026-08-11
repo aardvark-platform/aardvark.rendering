@@ -4,6 +4,7 @@ open System
 open System.Reflection
 open System.Runtime.CompilerServices
 open System.Threading
+open System.Threading.Tasks
 open System.Text.RegularExpressions
 open Aardvark.Base
 open Aardvark.Base.Geometry
@@ -430,6 +431,28 @@ module ``SceneGraph Tests`` =
                     Interlocked.Increment &downloadCount |> ignore
                     buffer.Use action
 
+        type private FailOnceBuffer(data : Array) =
+            let buffer = ArrayBuffer data
+            let mutable attemptCount = 0
+
+            member _.AttemptCount = Volatile.Read &attemptCount
+
+            interface INativeBuffer with
+                member _.SizeInBytes = buffer.SizeInBytes
+
+                member _.Use action =
+                    let count = Interlocked.Increment &attemptCount
+                    if count = 1 then
+                        raise <| InvalidOperationException("Expected first download failure")
+                    buffer.Use action
+
+        type private EphemeralReferences =
+            {
+                call      : WeakReference
+                positions : WeakReference
+                index     : WeakReference option
+            }
+
         let private createPickTree (call : aval<DrawCallInfo>) (positions : BufferView) (index : BufferView option) =
             let sg =
                 Sg.RenderNode(call, IndexedGeometryMode.TriangleList) :> ISg
@@ -442,20 +465,43 @@ module ``SceneGraph Tests`` =
 
             sg |> Sg.requirePicking |> PickTree.ofSg
 
-        [<MethodImpl(MethodImplOptions.NoInlining)>]
-        let private createEphemeralPickScene() =
-            let call = AVal.constant <| DrawCallInfo(3)
-            let buffer = CountingBuffer([| V3f(-1, -1, 0); V3f(1, -1, 0); V3f(0, 1, 0) |])
-            let positions = BufferView(AVal.constant (buffer :> IBuffer), typeof<V3f>)
-            let tree = createPickTree call positions None
-            let callReference = WeakReference(call :> obj)
-            let bufferReference = WeakReference(buffer :> obj)
+        let private intersects (target : V3d) (tree : PickTree) =
+            let ray = Ray3d(V3d.Zero, target.Normalized)
+            tree.IntersectV ray |> AVal.force |> ValueOption.isSome
 
-            Expect.equal buffer.DownloadCount 1 "Expected the ephemeral geometry to be downloaded"
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
+        let private createEphemeralPickScene(indexed : bool) =
+            let call = AVal.constant <| DrawCallInfo(3)
+            let positionBuffer = CountingBuffer([| V3f(-1, -1, -2); V3f(1, -1, -2); V3f(0, 1, -2) |])
+            let positions = BufferView(AVal.constant (positionBuffer :> IBuffer), typeof<V3f>)
+
+            let indexBuffer =
+                if indexed then Some <| CountingBuffer([| 0; 1; 2 |])
+                else None
+
+            let index =
+                indexBuffer |> Option.map (fun buffer ->
+                    BufferView(AVal.constant (buffer :> IBuffer), typeof<int>)
+                )
+
+            let tree = createPickTree call positions index
+            let references =
+                {
+                    call = WeakReference(call :> obj)
+                    positions = WeakReference(positionBuffer :> obj)
+                    index = indexBuffer |> Option.map (fun buffer -> WeakReference(buffer :> obj))
+                }
+
+            Expect.equal positionBuffer.DownloadCount 1 "Expected the ephemeral positions to be downloaded"
+            indexBuffer |> Option.iter (fun buffer ->
+                Expect.equal buffer.DownloadCount 1 "Expected the ephemeral indices to be downloaded"
+            )
+
             GC.KeepAlive tree
             GC.KeepAlive call
-            GC.KeepAlive buffer
-            callReference, bufferReference
+            GC.KeepAlive positionBuffer
+            GC.KeepAlive indexBuffer
+            references
 
         let private forceFullCollection() =
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true)
@@ -617,41 +663,160 @@ module ``SceneGraph Tests`` =
                 test()
             }
 
-        let cacheReusesLiveGeometry =
-            test "Picking.Cache reuses live geometry" {
+        let cacheReusesEquivalentLiveGeometry =
+            test "Picking.Cache reuses equivalent live geometry" {
                 IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
                 Aardvark.Init()
 
                 let call = AVal.constant <| DrawCallInfo(3)
-                let positionBuffer = CountingBuffer([| V3f(-1, -1, 0); V3f(1, -1, 0); V3f(0, 1, 0) |])
+                let positionBuffer = CountingBuffer([| V3f(-1, -1, -2); V3f(1, -1, -2); V3f(0, 1, -2) |])
                 let indexBuffer = CountingBuffer([| 0; 1; 2 |])
-                let positions = BufferView(AVal.constant (positionBuffer :> IBuffer), typeof<V3f>)
-                let index = BufferView(AVal.constant (indexBuffer :> IBuffer), typeof<int>)
-                let first = createPickTree call positions (Some index)
-                let second = createPickTree call positions (Some index)
+                let positions = AVal.constant (positionBuffer :> IBuffer)
+                let indices = AVal.constant (indexBuffer :> IBuffer)
+                let first =
+                    createPickTree call
+                        (BufferView(positions, typeof<V3f>))
+                        (Some <| BufferView(indices, typeof<int>))
+                let second =
+                    createPickTree call
+                        (BufferView(positions, typeof<V3f>))
+                        (Some <| BufferView(indices, typeof<int>))
 
-                Expect.equal positionBuffer.DownloadCount 1 "Expected shared live positions to be downloaded once"
-                Expect.equal indexBuffer.DownloadCount 1 "Expected shared live indices to be downloaded once"
+                Expect.equal positionBuffer.DownloadCount 1 "Expected equivalent live positions to be downloaded once"
+                Expect.equal indexBuffer.DownloadCount 1 "Expected equivalent live indices to be downloaded once"
                 GC.KeepAlive first
                 GC.KeepAlive second
             }
 
-        let cacheDoesNotRetainScenes =
-            test "Picking.Cache releases ephemeral scenes" {
+        let cacheRemainsReusableAfterContention =
+            test "Picking.Cache remains reusable after contention" {
                 IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
                 Aardvark.Init()
 
-                let references = Array.init 32 (fun _ -> createEphemeralPickScene())
+                let call = AVal.constant <| DrawCallInfo(3)
+                let positionBuffer = CountingBuffer([| V3f(-1, -1, -2); V3f(1, -1, -2); V3f(0, 1, -2) |])
+                let indexBuffer = CountingBuffer([| 0; 1; 2 |])
+                let positions = AVal.constant (positionBuffer :> IBuffer)
+                let indices = AVal.constant (indexBuffer :> IBuffer)
+                use start = new ManualResetEventSlim(false)
+
+                let create() =
+                    createPickTree call
+                        (BufferView(positions, typeof<V3f>))
+                        (Some <| BufferView(indices, typeof<int>))
+
+                let tasks =
+                    Array.init 32 (fun _ ->
+                        Task.Run(fun () ->
+                            start.Wait()
+                            create()
+                        )
+                    )
+
+                start.Set()
+                let trees = tasks |> Array.map _.Result
+                let positionDownloads = positionBuffer.DownloadCount
+                let indexDownloads = indexBuffer.DownloadCount
+                let final = create()
+
+                Expect.equal positionBuffer.DownloadCount positionDownloads "A lookup after contention reconstructed positions"
+                Expect.equal indexBuffer.DownloadCount indexDownloads "A lookup after contention reconstructed indices"
+                GC.KeepAlive trees
+                GC.KeepAlive final
+            }
+
+        let cacheKeepsDistinctGeometrySeparate =
+            test "Picking.Cache keeps distinct geometry separate" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let call = AVal.constant <| DrawCallInfo(3)
+                let leftBuffer = CountingBuffer([| V3f(-5, -1, -4); V3f(-3, -1, -4); V3f(-4, 1, -4) |])
+                let rightBuffer = CountingBuffer([| V3f(3, -1, -4); V3f(5, -1, -4); V3f(4, 1, -4) |])
+                let left =
+                    createPickTree call (BufferView(AVal.constant (leftBuffer :> IBuffer), typeof<V3f>)) None
+                let right =
+                    createPickTree call (BufferView(AVal.constant (rightBuffer :> IBuffer), typeof<V3f>)) None
+
+                Expect.isTrue (intersects (V3d(-4, 0, -4)) left) "Expected the left geometry to be pickable"
+                Expect.isFalse (intersects (V3d(4, 0, -4)) left) "Left geometry aliased the right geometry"
+                Expect.isTrue (intersects (V3d(4, 0, -4)) right) "Expected the right geometry to be pickable"
+                Expect.isFalse (intersects (V3d(-4, 0, -4)) right) "Right geometry aliased the left geometry"
+                Expect.equal leftBuffer.DownloadCount 1 "Expected the left geometry to be downloaded once"
+                Expect.equal rightBuffer.DownloadCount 1 "Expected the right geometry to be downloaded once"
+            }
+
+        let cachePreservesAdaptiveDrawCalls =
+            test "Picking.Cache preserves adaptive draw-call propagation" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let call = AVal.init <| DrawCallInfo(3)
+                let positionBuffer =
+                    CountingBuffer(
+                        [|
+                            V3f(-5, -1, -4); V3f(-3, -1, -4); V3f(-4, 1, -4)
+                            V3f(3, -1, -4); V3f(5, -1, -4); V3f(4, 1, -4)
+                        |]
+                    )
+                let positions = BufferView(AVal.constant (positionBuffer :> IBuffer), typeof<V3f>)
+                let tree = createPickTree call positions None
+                let target = V3d(4, 0, -4)
+
+                Expect.isFalse (intersects target tree) "The second triangle must initially be outside the draw call"
+                transact (fun _ -> call.Value <- DrawCallInfo(6))
+                Expect.isTrue (intersects target tree) "The cached pickable did not observe the draw-call update"
+                Expect.equal positionBuffer.DownloadCount 2 "Expected geometry to be downloaded again after the draw-call update"
+            }
+
+        let cacheRecoversFromDownloadFailure =
+            test "Picking.Cache recovers from a transient download failure" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let call = AVal.constant <| DrawCallInfo(3)
+                let positionBuffer = FailOnceBuffer([| V3f(-1, -1, -2); V3f(1, -1, -2); V3f(0, 1, -2) |])
+                let positions = BufferView(AVal.constant (positionBuffer :> IBuffer), typeof<V3f>)
+
+                Expect.throwsT<InvalidOperationException>
+                    (fun () -> createPickTree call positions None |> ignore)
+                    "Expected the first geometry download to fail"
+
+                let tree = createPickTree call positions None
+                Expect.isTrue (intersects (V3d(0, 0, -2)) tree) "Expected construction to succeed after the transient failure"
+                Expect.equal positionBuffer.AttemptCount 2 "Expected exactly one failed and one successful download"
+            }
+
+        let cacheDoesNotRetainScenes =
+            test "Picking.Cache releases indexed and non-indexed scenes" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let references =
+                    Array.append
+                        (Array.init 32 (fun _ -> createEphemeralPickScene false))
+                        (Array.init 32 (fun _ -> createEphemeralPickScene true))
+
+                let isAlive references =
+                    references.call.IsAlive || references.positions.IsAlive ||
+                    (references.index |> Option.exists _.IsAlive)
 
                 for _ = 1 to 10 do
-                    if references |> Array.exists (fun (call, buffer) -> call.IsAlive || buffer.IsAlive) then
+                    if references |> Array.exists isAlive then
                         forceFullCollection()
 
-                let retainedCalls = references |> Array.sumBy (fun (call, _) -> if call.IsAlive then 1 else 0)
-                let retainedBuffers = references |> Array.sumBy (fun (_, buffer) -> if buffer.IsAlive then 1 else 0)
+                let retainedCalls = references |> Array.sumBy (fun r -> if r.call.IsAlive then 1 else 0)
+                let retainedPositions = references |> Array.sumBy (fun r -> if r.positions.IsAlive then 1 else 0)
+                let retainedIndices =
+                    references |> Array.sumBy (fun r ->
+                        match r.index with
+                        | Some index when index.IsAlive -> 1
+                        | _ -> 0
+                    )
 
                 Expect.equal retainedCalls 0 "Picking cache retained ephemeral draw calls"
-                Expect.equal retainedBuffers 0 "Picking cache retained ephemeral position buffers"
+                Expect.equal retainedPositions 0 "Picking cache retained ephemeral position buffers"
+                Expect.equal retainedIndices 0 "Picking cache retained ephemeral index buffers"
             }
 
     [<Tests>]
@@ -673,6 +838,10 @@ module ``SceneGraph Tests`` =
             Picking.renderCommands false true
             Picking.renderCommands true false
             Picking.renderCommands true true
-            Picking.cacheReusesLiveGeometry
+            Picking.cacheReusesEquivalentLiveGeometry
+            Picking.cacheRemainsReusableAfterContention
+            Picking.cacheKeepsDistinctGeometrySeparate
+            Picking.cachePreservesAdaptiveDrawCalls
+            Picking.cacheRecoversFromDownloadFailure
             Picking.cacheDoesNotRetainScenes
         ]
