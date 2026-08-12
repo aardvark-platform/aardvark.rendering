@@ -8,6 +8,7 @@ let main argv =
         testList "Tests" [
             ``Buffer Tests``.testsGL
             ``Buffer Tests``.testsVulkan
+            ``Buffer View Boundary Tests``.tests
 
             ``Texture Tests``.compressionTests
             ``Texture Tests``.testsGL

@@ -49,6 +49,7 @@
     <Compile Include="Tests\Buffer\Attributes.fs" />
     <Compile Include="Tests\Buffer\ManagedBuffer.fs" />
     <Compile Include="Tests\Buffer\BufferTests.fs" />
+    <Compile Include="Tests\Buffer\ViewBoundaries.fs" />
     <Compile Include="Tests\Texture\Clear.fs" />
     <Compile Include="Tests\Texture\Copy.fs" />
     <Compile Include="Tests\Texture\Create.fs" />

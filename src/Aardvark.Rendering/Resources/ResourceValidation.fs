@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering
 
 open System
+open System.Runtime.CompilerServices
 open Aardvark.Base
 
 module ResourceValidation =
@@ -288,11 +289,13 @@ module ResourceValidation =
                      raise <| ArgumentException(message + ".")
                  ) format
 
-        /// Raises an ArgumentException if the given range is out of bounds for the given buffer.
+        /// Raises an ArgumentException if the given half-open byte range is out of bounds for the buffer.
+        /// A range of size zero is valid at the end of the buffer.
+        [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
         let validateRange (offset : uint64) (sizeInBytes : uint64) (buffer : IBackendBuffer) =
-            let e = offset + sizeInBytes
-            if e > buffer.SizeInBytes then
-                Utils.failf "range out of bounds { offset = %A; size = %A } (size: %A)" offset sizeInBytes buffer.SizeInBytes
+            let totalSize = buffer.SizeInBytes
+            if offset > totalSize || sizeInBytes > totalSize - offset then
+                Utils.failf "range out of bounds { offset = %A; size = %A } (size: %A)" offset sizeInBytes totalSize
 
     module Framebuffers =
 
