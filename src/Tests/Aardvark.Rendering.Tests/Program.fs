@@ -13,6 +13,7 @@ let tests =
             Buffer.ManagedBuffer.tests
             Buffer.IndirectBuffer.tests
             Buffer.BufferView.tests
+            Buffer.BufferViewBoundaries.tests
         ]
 
         testAllTargets "Textures" [
