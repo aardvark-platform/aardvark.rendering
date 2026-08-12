@@ -147,12 +147,22 @@ type private DeltaHeapEntry<'a, 'b> =
         new(v,p,i,r) = { Value = v; Priority = p; Index = i; RefCount = r }
     end
 
+/// A priority queue with synchronized enqueue and dequeue operations.
+/// Operations for the same value are combined by count, and zero-count operations are ignored.
+/// Dequeue returns the pending operation with the minimum priority.
 type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : SetOperation<'a> -> 'b) =
     
     let heap = List<DeltaHeapEntry<'a, 'b>>()
     let entries = Dict<'a, DeltaHeapEntry<'a, 'b>>()
     let mutable adds = 0
     let mutable rems = 0
+
+    let updateCounts (oldCount : int) (newCount : int) =
+        if oldCount > 0 && newCount <= 0 then adds <- adds - 1
+        elif oldCount < 0 && newCount >= 0 then rems <- rems - 1
+
+        if newCount > 0 && oldCount <= 0 then adds <- adds + 1
+        elif newCount < 0 && oldCount >= 0 then rems <- rems + 1
 
     let swap (l : DeltaHeapEntry<'a, 'b>) (r : DeltaHeapEntry<'a, 'b>) =
         let li = l.Index
@@ -162,33 +172,29 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
         l.Index <- ri
         r.Index <- li
 
-    let rec pushDown (acc : int) (e : DeltaHeapEntry<'a, 'b>) =
-        let l = 2 * e.Index + 1
-        let r = 2 * e.Index + 2
+    let pushDown (acc : int) (e : DeltaHeapEntry<'a, 'b>) =
+        let mutable steps = acc
+        let mutable running = true
 
-        let cl = if l < heap.Count then compare e.Priority heap.[l].Priority <= 0 else true
-        let cr = if r < heap.Count then compare e.Priority heap.[l].Priority <= 0 else true
+        while running do
+            let left = 2 * e.Index + 1
+            if left >= heap.Count then
+                running <- false
+            else
+                let right = left + 1
+                let child =
+                    if right < heap.Count && compare heap.[left].Priority heap.[right].Priority >= 0 then
+                        heap.[right]
+                    else
+                        heap.[left]
 
-        match cl, cr with
-            | true, true -> 
-                acc
-
-            | false, true ->
-                swap heap.[l] e
-                pushDown (acc + 1) e
-
-            | true, false ->
-                swap heap.[r] e
-                pushDown (acc + 1) e
-
-            | false, false ->
-                let c = compare heap.[l].Priority heap.[r].Priority
-                if c < 0 then
-                    swap heap.[l] e
+                if compare e.Priority child.Priority <= 0 then
+                    running <- false
                 else
-                    swap heap.[r] e
-                        
-                pushDown (acc + 1) e
+                    swap child e
+                    steps <- steps + 1
+
+        steps
 
     let rec bubbleUp (acc : int) (e : DeltaHeapEntry<'a, 'b>) =
         if e.Index > 0 then
@@ -225,6 +231,7 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
             let e = heap.[0]
             entries.Remove e.Value |> ignore
             heap.Clear()
+            e.Index <- -1
             adds <- 0
             rems <- 0
             SetOperation(e.Value, e.RefCount)
@@ -252,85 +259,94 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
         else
             dequeue() |> ignore
 
+    /// Number of distinct pending values with a positive coalesced count.
     member x.AddCount = adds
+
+    /// Number of distinct pending values with a negative coalesced count.
     member x.RemoveCount = rems
 
+    /// Number of distinct pending values. Equivalent to AddCount + RemoveCount.
     member x.Count = heap.Count
 
+    /// Adds an operation, coalescing its count with an existing operation for the same value.
+    /// Operations with a count of zero are ignored. This operation is synchronized with enqueue and dequeue operations.
     member x.Enqueue (a : SetOperation<'a>) : unit =
         if a.Count <> 0 then
             lock x (fun () ->
                 let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
                 let oldCount = entry.RefCount
                 entry.RefCount <- entry.RefCount + a.Count
+                updateCounts oldCount entry.RefCount
 
                 if entry.RefCount = 0 then
-                    if oldCount > 0 then adds <- adds - 1
-                    elif oldCount < 0 then rems <- rems - 1
-
                     entries.Remove a.Value |> ignore
                     remove entry
                 else
-                    if oldCount <= 0 && entry.RefCount > 0 then adds <- adds + 1
-                    elif oldCount >= 0 && entry.RefCount < 0 then rems <- rems + 1
-
                     changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
                     Monitor.Pulse x
 
                 assert(adds + rems = heap.Count)
             )
 
+    /// Adds a sequence of operations, coalescing counts for equal values.
+    /// Individual operations with a count of zero are ignored. This operation is synchronized with enqueue and dequeue operations.
     member x.EnqueueMany (a : seq<SetOperation<'a>>) : unit =
         lock x (fun () ->
             for a in a do
-                let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
-                let oldCount = entry.RefCount
-                entry.RefCount <- entry.RefCount + a.Count
+                if a.Count <> 0 then
+                    let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
+                    let oldCount = entry.RefCount
+                    entry.RefCount <- entry.RefCount + a.Count
+                    updateCounts oldCount entry.RefCount
 
-                if entry.RefCount = 0 then
-                    if oldCount > 0 then adds <- adds - 1
-                    elif oldCount < 0 then rems <- rems - 1
-
-                    entries.Remove a.Value |> ignore
-                    remove entry
-                else
-                    if oldCount <= 0 && entry.RefCount > 0 then adds <- adds + 1
-                    elif oldCount >= 0 && entry.RefCount < 0 then rems <- rems + 1
-
-                    changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
+                    if entry.RefCount = 0 then
+                        entries.Remove a.Value |> ignore
+                        remove entry
+                    else
+                        changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
 
             Monitor.Pulse x
             assert(adds + rems = heap.Count)
         )
 
     member x.Pulse() =
-        Monitor.Enter x
-        Monitor.PulseAll x
-        Monitor.Exit x
+        let mutable lockTaken = false
+        try
+            Monitor.Enter(x, &lockTaken)
+            Monitor.PulseAll x
+        finally
+            if lockTaken then Monitor.Exit x
 
 
+    /// Removes and returns the pending operation with the minimum priority, waiting until one is available or cancellation is requested.
     member x.Dequeue (ct : CancellationToken) : SetOperation<'a> = 
-        Monitor.Enter x
-        while heap.Count = 0 do
-            if ct.IsCancellationRequested then
-                Monitor.Exit x
-                raise <| OperationCanceledException()
+        let mutable lockTaken = false
+        try
+            Monitor.Enter(x, &lockTaken)
+            while heap.Count = 0 do
+                if ct.IsCancellationRequested then
+                    raise <| OperationCanceledException()
 
-            Monitor.Wait(x, 100) |> ignore
+                Monitor.Wait(x, 100) |> ignore
 
-        let e = dequeue()
-        assert(adds + rems = heap.Count)
-        Monitor.Exit x
-        e
+            let e = dequeue()
+            assert(adds + rems = heap.Count)
+            e
+        finally
+            if lockTaken then Monitor.Exit x
 
+    /// Removes and returns the pending operation with the minimum priority, waiting until one is available.
     member x.Dequeue () : SetOperation<'a> = 
-        Monitor.Enter x
-        while heap.Count = 0 do
-            Monitor.Wait(x) |> ignore
-        let e = dequeue()
-        assert(adds + rems = heap.Count)
-        Monitor.Exit x
-        e
+        let mutable lockTaken = false
+        try
+            Monitor.Enter(x, &lockTaken)
+            while heap.Count = 0 do
+                Monitor.Wait(x) |> ignore
+            let e = dequeue()
+            assert(adds + rems = heap.Count)
+            e
+        finally
+            if lockTaken then Monitor.Exit x
 
 type LoaderProgress =
     {
@@ -784,9 +800,6 @@ module Loader =
 
     let load (mapping : 'x -> ISet<'a>) (config : LoadConfig<'a, 'b>) (input : aval<'x>) : aset<'b> =
         AsyncLoadASet<'a, 'x, 'b>(config, input, mapping) :> aset<_>
-
-
-
 
 
 
