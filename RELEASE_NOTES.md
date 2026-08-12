@@ -1,3 +1,4 @@
+- Fixed `ConcurrentDeltaPriorityQueue` to dequeue minimum priorities, ignore zero-count batches without evaluating priorities, preserve coalesced count partitions, and release its monitor when dequeue fails.
 - Fixed adaptive buffer resize failures to dispose uncommitted handles, retain previous storage, and retry changed sizes after failed immediate materialization.
 - Fixed adaptive framebuffer cubes to retain completed face/mip handles after initial materialization failures, retry missing slots, and release partially created cubes safely.
 - Fixed subdivision-sphere wireframes to emit every undirected mesh edge exactly once.
