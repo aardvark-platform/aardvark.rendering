@@ -13,10 +13,14 @@ type IBackendBufferExtensions private() =
     ///<summary>Creates a typed view of the given buffer.</summary>
     ///<param name="buffer">The buffer to reinterpret.</param>
     ///<returns>A typed view of the original buffer.</returns>
+    ///<exception cref="ArgumentException">Thrown if the number of complete elements cannot be represented by the typed buffer interface.</exception>
     [<Extension>]
     static member Coerce<'T when 'T : unmanaged>(buffer : IBackendBuffer) =
         match buffer with
-        | :? IBuffer<'T> as buffer -> buffer
+        | :? IBuffer<'T> as typed ->
+            if not (typed :? IValidatedBufferRange) then
+                elementCount<'T> buffer |> ignore
+            typed
         | _ -> new Buffer<'T>(buffer) :> IBuffer<'T>
 
     ///<summary>Copies data from host memory to a buffer.</summary>
@@ -62,50 +66,90 @@ type IBackendBufferExtensions private() =
         src.Runtime.Copy(src, srcOffset, dst, dstOffset, sizeInBytes, discard)
 
 
+module private BufferRangeValidation =
+
+    let private fail (message : string) =
+        raise <| ArgumentException($"[Buffer] {message}.")
+
+    [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
+    let checkIndexRange (name : string) (totalCount : int) (start : int) (count : int) =
+        if totalCount < 0 then fail $"{name} has an invalid negative count ({totalCount})"
+        if start < 0 then fail $"{name} index must not be negative ({start})"
+        if count < 0 then fail $"count must not be negative ({count})"
+        if start > totalCount || count > totalCount - start then
+            fail $"cannot access {name} range (start = {start}, count = {count}, total count = {totalCount})"
+
+    [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
+    let checkBackingRange (range : IBufferRange) =
+        if not (range :? IValidatedBufferRange) &&
+           (range.Offset > range.Buffer.SizeInBytes || range.SizeInBytes > range.Buffer.SizeInBytes - range.Offset) then
+            fail $"logical range exceeds its backing buffer (offset = {range.Offset}, size = {range.SizeInBytes}, buffer size = {range.Buffer.SizeInBytes})"
+
+    [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
+    let getTransferOffset<'T when 'T : unmanaged> (range : IBufferRange<'T>) (index : int) (sizeInBytes : uint64) =
+        let relativeOffset = byteSize<'T> index
+
+        if relativeOffset > range.SizeInBytes || sizeInBytes > range.SizeInBytes - relativeOffset then
+            fail $"element transfer exceeds logical byte range (index = {index}, size = {sizeInBytes}, range size = {range.SizeInBytes})"
+
+        if relativeOffset > UInt64.MaxValue - range.Offset then
+            fail $"absolute element offset is not representable (offset = {range.Offset}, index = {index})"
+
+        range.Offset + relativeOffset
+
+
 [<AbstractClass; Sealed; Extension>]
 type IBufferRangeExtensions private() =
-
-    static let checkNonNegative (name : string) (value : int) =
-        if value < 0 then
-            raise <| ArgumentException($"[Buffer] {name} must not be negative.")
-
-    static let checkArrayBounds (array : Array) (start : int) (length : int) =
-        let last = start + length - 1
-
-        if last >= array.Length then
-            raise <| ArgumentException($"[Buffer] cannot access range [{start}, {last}] of array with length {array.LongLength}.")
 
     ///<summary>Creates a typed view of the given buffer range.</summary>
     ///<param name="range">The buffer range to reinterpret.</param>
     ///<returns>A typed view of the original buffer range.</returns>
-    ///<exception cref="ArgumentException">Thrown if the offset of the input range is not a multiple of the element size of 'T.</exception>
+    ///<exception cref="ArgumentException">Thrown if the input range exceeds its backing buffer, its offset is unaligned, or its origin or element count is not representable.</exception>
     [<Extension>]
     static member CoerceRange<'T when 'T : unmanaged>(range : IBufferRange) =
+        BufferRangeValidation.checkBackingRange range
+
         match range with
-        | :? IBufferRange<'T> as range -> range
+        | :? IBufferRange<'T> as range ->
+            let origin = range.Origin
+            let count = range.Count
+            if origin < 0 || count < 0 || (count > 0 && count - 1 > Int32.MaxValue - origin) then
+                raise <| ArgumentException($"[Buffer] typed range has invalid metadata (origin = {origin}, count = {count}).")
+            range
         | _ ->
             if range.Offset % uint64 sizeof<'T> <> 0UL then
                 raise <| ArgumentException($"[Buffer] offset must be a multiple of {sizeof<'T>}.")
 
-            let origin = int (range.Offset / uint64 sizeof<'T>)
-            let count = int (range.SizeInBytes / uint64 sizeof<'T>)
-            let buffer = range.Buffer.Coerce<'T>()
-            buffer |> BufferSlicing.elements origin count
+            let origin = range.Offset / uint64 sizeof<'T>
+            let count = range.SizeInBytes / uint64 sizeof<'T>
+
+            if origin > uint64 Int32.MaxValue || count > uint64 Int32.MaxValue ||
+               (count > 0UL && count - 1UL > uint64 Int32.MaxValue - origin) then
+                raise <| ArgumentException($"[Buffer] typed range is not representable (origin = {origin}, count = {count}).")
+
+            BufferRange<'T>(range.Buffer, int origin, int count) :> IBufferRange<'T>
 
 
     // ================================================================================================================
     // Upload
     // ================================================================================================================
 
-    ///<summary>Copies data from host memory to a buffer range.</summary>
+    ///<summary>Copies data from host memory to the start of a logical buffer range.</summary>
     ///<param name="dst">The buffer range to copy data to.</param>
     ///<param name="src">Location of the data to copy.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     ///<param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
+    ///<exception cref="ArgumentException">Thrown if the requested transfer exceeds the logical range or its backing buffer.</exception>
     [<Extension>]
     static member inline Upload(dst : IBufferRange, src : nativeint, sizeInBytes : uint64,
                                 [<Optional; DefaultParameterValue(false)>] discard : bool) =
-        dst.Buffer.Upload(dst.Offset, src, sizeInBytes, discard)
+        let rangeSize = dst.SizeInBytes
+        if sizeInBytes > rangeSize then
+            raise <| ArgumentException($"[Buffer] transfer size {sizeInBytes} exceeds logical range size {rangeSize}.")
+        if sizeInBytes > 0UL then
+            dst.Buffer.Upload(dst.Offset, src, sizeInBytes, discard)
+        elif dst.Offset > dst.Buffer.SizeInBytes then
+            raise <| ArgumentException($"[Buffer] transfer offset {dst.Offset} exceeds backing buffer size {dst.Buffer.SizeInBytes}.")
 
     ///<summary>Copies elements from an array to a buffer range.</summary>
     ///<param name="dst">The buffer range to copy data to.</param>
@@ -114,16 +158,19 @@ type IBufferRangeExtensions private() =
     ///<param name="dstIndex">Index at which copying to the buffer range begins.</param>
     ///<param name="count">Number of elements to copy.</param>
     ///<param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
+    ///<exception cref="ArgumentException">Thrown if either the host-array or logical destination range is invalid. A zero-count copy may start at any position through the exact end.</exception>
     [<Extension>]
     static member Upload(dst : IBufferRange<'T>, src : 'T[], srcIndex : int, dstIndex : int, count : int,
                          [<Optional; DefaultParameterValue(false)>] discard : bool) =
-        count |> checkNonNegative "count"
-        srcIndex |> checkNonNegative "srcIndex"
-        (srcIndex, count) ||> checkArrayBounds src
+        BufferRangeValidation.checkIndexRange "source array" src.Length srcIndex count
+        BufferRangeValidation.checkIndexRange "destination range" dst.Count dstIndex count
+        BufferRangeValidation.checkBackingRange dst
+        let sizeInBytes = byteSize<'T> count
+        let dstOffset = BufferRangeValidation.getTransferOffset dst dstIndex sizeInBytes
 
         if count > 0 then
             (srcIndex, src) ||> NativePtr.pinArri (fun pSrc ->
-                dst.Buffer.Upload(dst.Offset + byteSize<'T> dstIndex, pSrc.Address, byteSize<'T> count, discard)
+                dst.Buffer.Upload(dstOffset, pSrc.Address, sizeInBytes, discard)
             )
 
     ///<summary>Copies elements from an array to a buffer range.</summary>
@@ -181,13 +228,20 @@ type IBufferRangeExtensions private() =
     // Download
     // ================================================================================================================
 
-    ///<summary>Copies data from a buffer range to host memory.</summary>
+    ///<summary>Copies data from the start of a logical buffer range to host memory.</summary>
     ///<param name="src">The buffer range to copy data from.</param>
     ///<param name="dst">Location to copy the data to.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
+    ///<exception cref="ArgumentException">Thrown if the requested transfer exceeds the logical range or its backing buffer.</exception>
     [<Extension>]
     static member inline Download(src : IBufferRange, dst : nativeint, sizeInBytes : uint64) =
-        src.Buffer.Download(src.Offset, dst, sizeInBytes)
+        let rangeSize = src.SizeInBytes
+        if sizeInBytes > rangeSize then
+            raise <| ArgumentException($"[Buffer] transfer size {sizeInBytes} exceeds logical range size {rangeSize}.")
+        if sizeInBytes > 0UL then
+            src.Buffer.Download(src.Offset, dst, sizeInBytes)
+        elif src.Offset > src.Buffer.SizeInBytes then
+            raise <| ArgumentException($"[Buffer] transfer offset {src.Offset} exceeds backing buffer size {src.Buffer.SizeInBytes}.")
 
     ///<summary>Copies elements from a buffer range to an array.</summary>
     ///<param name="src">The buffer range to copy data from.</param>
@@ -195,15 +249,18 @@ type IBufferRangeExtensions private() =
     ///<param name="srcIndex">Index at which copying from the buffer range begins.</param>
     ///<param name="dstIndex">Index at which copying to the data array begins.</param>
     ///<param name="count">Number of elements to copy.</param>
+    ///<exception cref="ArgumentException">Thrown if either the logical source or host-array range is invalid. A zero-count copy may start at any position through the exact end.</exception>
     [<Extension>]
     static member Download(src : IBufferRange<'T>, dst : 'T[], srcIndex : int, dstIndex : int, count : int) =
-        count |> checkNonNegative "count"
-        dstIndex |> checkNonNegative "dstIndex"
-        (dstIndex, count) ||> checkArrayBounds dst
+        BufferRangeValidation.checkIndexRange "source range" src.Count srcIndex count
+        BufferRangeValidation.checkIndexRange "destination array" dst.Length dstIndex count
+        BufferRangeValidation.checkBackingRange src
+        let sizeInBytes = byteSize<'T> count
+        let srcOffset = BufferRangeValidation.getTransferOffset src srcIndex sizeInBytes
 
         if count > 0 then
             (dstIndex, dst) ||> NativePtr.pinArri (fun pDst ->
-                src.Buffer.Download(src.Offset + byteSize<'T> srcIndex, pDst.Address, byteSize<'T> count)
+                src.Buffer.Download(srcOffset, pDst.Address, sizeInBytes)
             )
 
     ///<summary>Copies elements from a buffer range to an array.</summary>
@@ -243,14 +300,23 @@ type IBufferRangeExtensions private() =
     // DownloadAsync
     // ================================================================================================================
 
-    ///<summary>Asynchronously copies data from a buffer range to host memory.</summary>
+    ///<summary>Asynchronously copies data from the start of a logical buffer range to host memory.</summary>
     ///<param name="src">The buffer range to copy data from.</param>
     ///<param name="dst">Location to copy the data to.</param>
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     ///<returns>A function that blocks until the download is complete.</returns>
+    ///<exception cref="ArgumentException">Thrown if the requested transfer exceeds the logical range or its backing buffer.</exception>
     [<Extension>]
     static member inline DownloadAsync(src : IBufferRange, dst : nativeint, sizeInBytes : uint64) =
-        src.Buffer.DownloadAsync(src.Offset, dst, sizeInBytes)
+        let rangeSize = src.SizeInBytes
+        if sizeInBytes > rangeSize then
+            raise <| ArgumentException($"[Buffer] transfer size {sizeInBytes} exceeds logical range size {rangeSize}.")
+        if sizeInBytes > 0UL then
+            src.Buffer.DownloadAsync(src.Offset, dst, sizeInBytes)
+        else
+            if src.Offset > src.Buffer.SizeInBytes then
+                raise <| ArgumentException($"[Buffer] transfer offset {src.Offset} exceeds backing buffer size {src.Buffer.SizeInBytes}.")
+            id
 
     ///<summary>Asynchronously copies elements from a buffer range to an array.</summary>
     ///<param name="src">The buffer range to copy data from.</param>
@@ -259,15 +325,18 @@ type IBufferRangeExtensions private() =
     ///<param name="dstIndex">Index at which copying to the data array begins.</param>
     ///<param name="count">Number of elements to copy.</param>
     ///<returns>A function that blocks until the download is complete.</returns>
+    ///<exception cref="ArgumentException">Thrown if either the logical source or host-array range is invalid. A zero-count copy may start at any position through the exact end.</exception>
     [<Extension>]
     static member DownloadAsync(src : IBufferRange<'T>, dst : 'T[], srcIndex : int, dstIndex : int, count : int) =
-        count |> checkNonNegative "count"
-        dstIndex |> checkNonNegative "dstIndex"
-        (dstIndex, count) ||> checkArrayBounds dst
+        BufferRangeValidation.checkIndexRange "source range" src.Count srcIndex count
+        BufferRangeValidation.checkIndexRange "destination array" dst.Length dstIndex count
+        BufferRangeValidation.checkBackingRange src
+        let sizeInBytes = byteSize<'T> count
+        let srcOffset = BufferRangeValidation.getTransferOffset src srcIndex sizeInBytes
 
         if count > 0 then
             (dstIndex, dst) ||> NativePtr.pinArri (fun pDst ->
-                src.Buffer.DownloadAsync(src.Offset + byteSize<'T> srcIndex, pDst.Address, byteSize<'T> count)
+                src.Buffer.DownloadAsync(srcOffset, pDst.Address, sizeInBytes)
             )
         else
             id

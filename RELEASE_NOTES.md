@@ -1,3 +1,5 @@
+- Enforced overflow-safe logical bounds for buffer-range transfers and vector slices, including empty and reversed views.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 
