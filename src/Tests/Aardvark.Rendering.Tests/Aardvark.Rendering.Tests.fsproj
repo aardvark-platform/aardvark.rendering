@@ -88,6 +88,7 @@
     <Compile Include="Tests\IndexedGeometry\SphereTests.fs" />
     <Compile Include="Tests\IndexedGeometry\CylinderNormalsTests.fs" />
     <Compile Include="Tests\IndexedGeometry\PrimitiveSequencesTests.fs" />
+    <Compile Include="Tests\Utilities\ConcurrentDeltaPriorityQueueTests.fs" />
     <Compile Include="Tests\Utilities\MemoryManagerTests.fs" />
     <Compile Include="Tests\Utilities\CompactSetTests.fs" />
     <Compile Include="Tests\Utilities\TrieTests.fs" />
