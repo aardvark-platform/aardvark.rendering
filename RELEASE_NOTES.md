@@ -1,3 +1,5 @@
+- Fixed adaptive resource bindings to retain selected resources through partial releases and switch them exception-safely ([#134](https://github.com/aardvark-platform/aardvark.rendering/issues/134))
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 

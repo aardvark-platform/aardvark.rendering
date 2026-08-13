@@ -305,77 +305,388 @@ module private AdaptiveResourceImplementations =
                 handle <- ValueSome h
                 h
 
+    [<Literal>]
+    let private PhaseIdle = 0
+
+    [<Literal>]
+    let private PhaseEvaluating = 1
+
+    [<Literal>]
+    let private PhaseCleaning = 2
+
+    [<Literal>]
+    let private PhaseNotifying = 3
+
+    [<Literal>]
+    let private PhaseRetiring = 4
+
     [<AbstractClass>]
     type AbstractBind<'Input, 'T>(mapping : 'Input -> aval<'T>) =
         inherit AdaptiveObject()
 
         let mutable valueCache = Unchecked.defaultof<'T>
-        let mutable inner : ValueOption< struct ('Input * aval<'T>) > = ValueNone
-        let mutable inputDirty = 1
+        let mutable inner : ValueOption<struct ('Input * aval<'T>)> = ValueNone
+        let mutable refCount = 0
+        let mutable changeEpoch = 0L
+        let mutable inputEpoch = 0L
+        let mutable committedInputEpoch = -1L
+
+        // All state transitions are reserved under the adaptive object's monitor.
+        // The monitor acquired by each transition is dropped around external calls,
+        // avoiding lock-order inversions with inputs and selected resources.
+        let mutable phase = PhaseIdle
+        let mutable phaseOwner = 0
+        let mutable waiters = 0
+
+        // refCount covers completed outer acquisitions, each of which owns one
+        // input acquisition. inner owns one selected-result acquisition in total,
+        // including when it was materialized by an ownerless evaluation.
 
         abstract member AcquireInput : unit -> unit
         abstract member ReleaseInput : unit -> unit
-        abstract member ReleaseInputAll : unit -> unit
         abstract member InputEquals : 'Input * 'Input -> bool
         abstract member IsInput : IAdaptiveObject -> bool
+        abstract member IsInputOutput : IWeakOutputSet -> bool
         abstract member GetInput : AdaptiveToken * RenderToken -> 'Input
 
-        member x.ReleaseResult(release : aval<'T> -> unit) =
-            lock x (fun _ ->
+        member private x.RestorePhase(resumePhase : int, owner : int) =
+            phase <- resumePhase
+            phaseOwner <- if resumePhase = PhaseIdle then 0 else owner
+            if resumePhase = PhaseIdle && waiters > 0 then Monitor.PulseAll x
+
+        member private x.WaitForIdle(operation : string, owner : int) =
+            while phase <> PhaseIdle do
+                if phaseOwner = owner then
+                    invalidOp $"Cannot {operation} an adaptive resource binding reentrantly during another lifecycle transition."
+
+                waiters <- waiters + 1
+                try Monitor.Wait x |> ignore
+                finally waiters <- waiters - 1
+
+        member private x.WaitForEvaluationAccess() =
+            let owner = Environment.CurrentManagedThreadId
+            let mutable ready = false
+
+            while not ready do
+                if phase = PhaseIdle then
+                    ready <- true
+                elif phaseOwner = owner then
+                    match phase with
+                    | PhaseNotifying
+                    | PhaseRetiring -> ready <- true
+                    | _ -> invalidOp "Cannot evaluate an adaptive resource binding reentrantly during a lifecycle transition."
+                else
+                    waiters <- waiters + 1
+                    try Monitor.Wait x |> ignore
+                    finally waiters <- waiters - 1
+
+            struct (owner, phase)
+
+        member private x.DetachResult(result : aval<'T>) =
+            let outputs = result.Outputs
+
+            let retainedByResult =
                 match inner with
-                | ValueSome (struct (_, result)) ->
-                    release result
+                | ValueSome (struct (_, current)) -> Object.ReferenceEquals(outputs, current.Outputs)
+                | ValueNone -> false
+
+            // Weak output sets do not track dependency multiplicity. Keep the edge
+            // whenever an input or the selected result still exposes the same set.
+            if not retainedByResult && not (x.IsInputOutput outputs) then
+                outputs.Remove x |> ignore
+
+        member private x.DetachFinalResult(result : aval<'T>) =
+            let outputs = result.Outputs
+            if not (x.IsInputOutput outputs) then outputs.Remove x |> ignore
+
+        // Caller holds x. The external release deliberately runs without x.
+        member private x.ReleaseUncommitted(result : aval<'T>) =
+            x.DetachResult result
+            Monitor.Exit x
+            try
+                try
+                    result.Release()
+                    null
+                with e ->
+                    e
+            finally
+                Monitor.Enter x
+
+        // Called inside EvaluateAlways with x held at least once. Every external
+        // operation drops the lock acquired by EvaluateAlways; epochs make the
+        // optimistic result retry if an input or selected resource changed in the
+        // meantime. Explicit recursive caller locking retains its legacy ownership.
+        member private x.Compute(t : AdaptiveToken, rt : RenderToken, resumePhase : int, owner : int) =
+            phase <- PhaseEvaluating
+            phaseOwner <- owner
+
+            let mutable completed = false
+            let mutable answer = Unchecked.defaultof<'T>
+
+            try
+                while not completed do
+                    let capturedChangeEpoch = changeEpoch
+                    let capturedInputEpoch = inputEpoch
+                    let capturedCommittedInputEpoch = committedInputEpoch
+                    let capturedInner = inner
+                    let mutable inputValue = Unchecked.defaultof<'Input>
+                    let mutable selected = Unchecked.defaultof<aval<'T>>
+                    let mutable resultValue = Unchecked.defaultof<'T>
+                    let mutable acquired : aval<'T> = Unchecked.defaultof<_>
+                    let mutable changedResult = false
+                    let mutable externalError : exn = null
+
+                    Monitor.Exit x
+                    try
+                        try
+                            inputValue <- x.GetInput(t, rt)
+
+                            match capturedInner with
+                            | ValueSome (struct (oldInput, oldResult)) ->
+                                let inputUnchanged =
+                                    capturedInputEpoch = capturedCommittedInputEpoch ||
+                                    x.InputEquals(oldInput, inputValue)
+
+                                if inputUnchanged then
+                                    selected <- oldResult
+                                else
+                                    let mapped = mapping inputValue
+
+                                    if Object.ReferenceEquals(oldResult, mapped) || DefaultEquality.equals oldResult mapped then
+                                        selected <- oldResult
+                                    else
+                                        mapped.Acquire()
+                                        acquired <- mapped
+                                        selected <- mapped
+                                        changedResult <- true
+
+                            | ValueNone ->
+                                let mapped = mapping inputValue
+                                mapped.Acquire()
+                                acquired <- mapped
+                                selected <- mapped
+                                changedResult <- true
+
+                            resultValue <- selected.GetValue(t, rt)
+                        with e ->
+                            externalError <- e
+                    finally
+                        Monitor.Enter x
+
+                    if not (isNull externalError) then
+                        if not (Object.ReferenceEquals(acquired, null)) then
+                            x.ReleaseUncommitted acquired |> ignore
+
+                        x.RestorePhase(resumePhase, owner)
+                        System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(externalError).Throw()
+
+                    elif capturedChangeEpoch <> changeEpoch then
+                        if not (Object.ReferenceEquals(acquired, null)) then
+                            let cleanupError = x.ReleaseUncommitted acquired
+                            if not (isNull cleanupError) then
+                                x.RestorePhase(resumePhase, owner)
+                                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(cleanupError).Throw()
+
+                    else
+                        let oldResult =
+                            match capturedInner with
+                            | ValueSome (struct (_, old)) when changedResult -> ValueSome old
+                            | _ -> ValueNone
+
+                        inner <- ValueSome (struct (inputValue, selected))
+                        valueCache <- resultValue
+                        committedInputEpoch <- capturedInputEpoch
+                        answer <- resultValue
+                        completed <- true
+
+                        match oldResult with
+                        | ValueSome old ->
+                            // Remove the obsolete edge while publication is exclusive.
+                            // The old resource itself is released without holding x.
+                            x.DetachResult old
+                            phase <- PhaseRetiring
+
+                            // Publish a valid cache for reentrant destruction callbacks.
+                            // Any dependency change during the unlocked release advances
+                            // changeEpoch and forces another evaluation before returning.
+                            x.OutOfDate <- false
+                            Monitor.Exit x
+                            let mutable retirementError : exn = null
+                            try
+                                try old.Release()
+                                with e -> retirementError <- e
+                            finally Monitor.Enter x
+
+                            phase <- PhaseEvaluating
+
+                            if not (isNull retirementError) then
+                                x.OutOfDate <- true
+                                x.RestorePhase(resumePhase, owner)
+                                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(retirementError).Throw()
+
+                            elif capturedChangeEpoch <> changeEpoch then
+                                x.OutOfDate <- true
+                                completed <- false
+                            else
+                                x.RestorePhase(resumePhase, owner)
+
+                        | ValueNone ->
+                            x.RestorePhase(resumePhase, owner)
+
+                answer
+
+            with _ ->
+                if phase = PhaseEvaluating && phaseOwner = owner then
+                    x.RestorePhase(resumePhase, owner)
+                reraise()
+
+        member private x.Cleanup(result : ValueOption<aval<'T>>, inputCount : int) =
+            let mutable firstError : exn = null
+
+            match result with
+            | ValueSome result ->
+                try result.Release()
+                with e -> firstError <- e
+            | ValueNone -> ()
+
+            let mutable remaining = inputCount
+            while remaining > 0 do
+                try x.ReleaseInput()
+                with e ->
+                    if isNull firstError then firstError <- e
+                remaining <- remaining - 1
+
+            firstError
+
+        member private x.TakeRelease(all : bool) =
+            Monitor.Enter x
+            try
+                let owner = Environment.CurrentManagedThreadId
+                if phase <> PhaseIdle then
+                    let operation = if all then "release all references from" else "release"
+                    x.WaitForIdle(operation, owner)
+
+                if not all && refCount > 1 then
+                    refCount <- refCount - 1
+                    phase <- PhaseCleaning
+                    phaseOwner <- owner
+                    struct (ValueNone, 1, false, owner)
+
+                elif refCount > 0 || inner.IsSome then
+                    let inputCount = if all then refCount elif refCount > 0 then 1 else 0
+                    refCount <- if all then 0 else max 0 (refCount - inputCount)
+
+                    let result =
+                        match inner with
+                        | ValueSome (struct (_, result)) -> ValueSome result
+                        | ValueNone -> ValueNone
+
                     inner <- ValueNone
-                | _ ->
-                    ()
-            )
+                    valueCache <- Unchecked.defaultof<'T>
+                    committedInputEpoch <- -1L
+                    x.OutOfDate <- true
+
+                    match result with
+                    | ValueSome result -> x.DetachFinalResult result
+                    | ValueNone -> ()
+
+                    phase <- PhaseCleaning
+                    phaseOwner <- owner
+                    struct (result, inputCount, true, owner)
+                else
+                    struct (ValueNone, 0, false, owner)
+            finally
+                Monitor.Exit x
+
+        member private x.CompleteRelease(finalRelease : bool, owner : int) =
+            let mutable notificationError : exn = null
+            let mutable notify = false
+
+            Monitor.Enter x
+            try
+                // Outputs can be attached by cleanup callbacks before completion.
+                // Notify the final live set explicitly; notification finalizers may
+                // then materialize a fresh ownerless value from safe inputs.
+                notify <- finalRelease && not x.Outputs.IsEmpty
+
+                if finalRelease && notify then
+                    phase <- PhaseNotifying
+                    phaseOwner <- owner
+                    x.OutOfDate <- false
+                else
+                    if finalRelease then x.OutOfDate <- true
+                    x.RestorePhase(PhaseIdle, owner)
+            finally
+                Monitor.Exit x
+
+            if finalRelease && notify then
+                try transact x.MarkOutdated
+                with e -> notificationError <- e
+
+                Monitor.Enter x
+                try
+                    if not (isNull notificationError) then x.OutOfDate <- true
+                    x.RestorePhase(PhaseIdle, owner)
+                finally
+                    Monitor.Exit x
+
+            notificationError
+
+        member private x.FinishRelease(result, inputCount, finalRelease, owner) =
+            let cleanupError = x.Cleanup(result, inputCount)
+            let completionError = x.CompleteRelease(finalRelease, owner)
+            let error = if isNull cleanupError then completionError else cleanupError
+
+            if not (isNull error) then
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw()
 
         member x.Acquire() =
             x.AcquireInput()
+            try
+                Monitor.Enter x
+                try
+                    if phase <> PhaseIdle then
+                        x.WaitForIdle("acquire", Environment.CurrentManagedThreadId)
+                    if refCount = Int32.MaxValue then
+                        invalidOp "The adaptive resource binding reference count overflowed."
+                    refCount <- refCount + 1
+                finally
+                    Monitor.Exit x
+            with _ ->
+                try x.ReleaseInput()
+                with _ -> ()
+                reraise()
 
         member x.Release() =
-            x.ReleaseResult(fun r -> r.Release())
-            x.ReleaseInput()
+            let struct (result, inputCount, finalRelease, owner) = x.TakeRelease false
+            if inputCount > 0 || finalRelease then
+                x.FinishRelease(result, inputCount, finalRelease, owner)
 
         member x.ReleaseAll() =
-            x.ReleaseResult(fun r -> r.ReleaseAll())
-            x.ReleaseInputAll()
+            let struct (result, inputCount, finalRelease, owner) = x.TakeRelease true
+            if inputCount > 0 || finalRelease then
+                x.FinishRelease(result, inputCount, finalRelease, owner)
 
         override x.InputChangedObject(_, o) =
-            if x.IsInput o then inputDirty <- 1
-
-        member x.Compute(t : AdaptiveToken, rt : RenderToken) =
-            let i = x.GetInput(t, rt)
-            let inputDirty = Interlocked.Exchange(&inputDirty, 0) <> 0
-
-            match inner with
-            | ValueNone ->
-                let result = mapping i
-                inner <- ValueSome (struct (i, result))
-                result.Acquire()
-                result.GetValue(t, rt)
-
-            | ValueSome(struct (io, old)) when not inputDirty || x.InputEquals(io, i) ->
-                old.GetValue(t, rt)
-
-            | ValueSome(struct (_, old)) ->
-                old.Outputs.Remove x |> ignore
-                let result = mapping i
-                if not <| DefaultEquality.equals old result then
-                    old.Release()
-                    result.Acquire()
-
-                inner <- ValueSome (struct (i, result))
-                result.GetValue(t, rt)
+            Interlocked.Increment(&changeEpoch) |> ignore
+            if x.IsInput o then Interlocked.Increment(&inputEpoch) |> ignore
 
         member x.GetValue(t : AdaptiveToken, rt : RenderToken) =
             x.EvaluateAlways t (fun t ->
-                if x.OutOfDate then
-                    let v = x.Compute(t, rt)
-                    valueCache <- v
-                    v
+                if phase = PhaseIdle then
+                    if x.OutOfDate then
+                        x.Compute(t, rt, PhaseIdle, Environment.CurrentManagedThreadId)
+                    else
+                        valueCache
                 else
-                    valueCache
+                    let struct (owner, currentPhase) = x.WaitForEvaluationAccess()
+
+                    if not x.OutOfDate then
+                        valueCache
+                    elif currentPhase = PhaseRetiring then
+                        invalidOp "A dirty adaptive resource binding cannot be evaluated reentrantly during this lifecycle transition."
+                    else
+                        x.Compute(t, rt, currentPhase, owner)
             )
 
         member x.GetValue(t : AdaptiveToken) =
@@ -402,26 +713,37 @@ module private AdaptiveResourceImplementations =
     type BindRes<'T1, 'T2>(mapping: 'T1 -> aval<'T2>, input: aval<'T1>) =
         inherit AbstractBind<'T1, 'T2>(mapping)
 
-        override x.AcquireInput()    = input.Acquire()
-        override x.ReleaseInput()    = input.Release()
-        override x.ReleaseInputAll() = input.ReleaseAll()
+        override x.AcquireInput()  = input.Acquire()
+        override x.ReleaseInput()  = input.Release()
         override x.InputEquals(a, b) = cheapEqual a b
-        override x.IsInput(o)        = Object.ReferenceEquals(o, input)     // FIXME: Broken in FSharp.Data.Adaptive as well!
-        override x.GetInput(t, rt)   = input.GetValue(t, rt)
+        override x.IsInput(o)      = Object.ReferenceEquals(o, input)     // FIXME: Broken in FSharp.Data.Adaptive as well!
+        override x.IsInputOutput(o) = Object.ReferenceEquals(o, input.Outputs)
+        override x.GetInput(t, rt) = input.GetValue(t, rt)
 
 
     type Bind2Res<'T1, 'T2, 'T3>(mapping: 'T1 -> 'T2 -> aval<'T3>, input1: aval<'T1>, input2: aval<'T2>) =
         inherit AbstractBind<struct ('T1 * 'T2), 'T3>(fun (struct (a, b)) -> mapping a b)
 
-        override x.AcquireInput()          = input1.Acquire(); input2.Acquire()
-        override x.ReleaseInput()          = input2.Release(); input1.Release()
-        override x.ReleaseInputAll()       = input2.ReleaseAll(); input1.ReleaseAll()
+        override x.AcquireInput() =
+            input1.Acquire()
+            try input2.Acquire()
+            with _ ->
+                try input1.Release()
+                with _ -> ()
+                reraise()
+
+        override x.ReleaseInput() =
+            try input2.Release()
+            finally input1.Release()
 
         override x.InputEquals(struct(oa, ob), struct(va, vb)) =
             cheapEqual oa va && cheapEqual ob vb
 
         override x.IsInput(o) =
             Object.ReferenceEquals(o, input1) || Object.ReferenceEquals(o, input2)
+
+        override x.IsInputOutput(o) =
+            Object.ReferenceEquals(o, input1.Outputs) || Object.ReferenceEquals(o, input2.Outputs)
 
         override x.GetInput(t, rt) =
             struct (input1.GetValue(t, rt), input2.GetValue(t, rt))
@@ -430,15 +752,37 @@ module private AdaptiveResourceImplementations =
     type Bind3Res<'T1, 'T2, 'T3, 'T4>(mapping: 'T1 -> 'T2 -> 'T3 -> aval<'T4>, input1: aval<'T1>, input2: aval<'T2>, input3: aval<'T3>) =
         inherit AbstractBind<struct ('T1 * 'T2 * 'T3), 'T4>(fun (struct (a, b, c)) -> mapping a b c)
 
-        override x.AcquireInput()          = input1.Acquire(); input2.Acquire(); input3.Acquire()
-        override x.ReleaseInput()          = input3.Release(); input2.Release(); input1.Release()
-        override x.ReleaseInputAll()       = input3.ReleaseAll(); input2.ReleaseAll(); input1.ReleaseAll()
+        override x.AcquireInput() =
+            input1.Acquire()
+            try
+                input2.Acquire()
+                try input3.Acquire()
+                with _ ->
+                    try input2.Release()
+                    with _ -> ()
+                    reraise()
+            with _ ->
+                try input1.Release()
+                with _ -> ()
+                reraise()
+
+        override x.ReleaseInput() =
+            try
+                try input3.Release()
+                finally input2.Release()
+            finally
+                input1.Release()
 
         override x.InputEquals(struct(oa, ob, oc), struct(va, vb, vc)) =
             cheapEqual oa va && cheapEqual ob vb && cheapEqual oc vc
 
         override x.IsInput(o) =
             Object.ReferenceEquals(o, input1) || Object.ReferenceEquals(o, input2) || Object.ReferenceEquals(o, input3)
+
+        override x.IsInputOutput(o) =
+            Object.ReferenceEquals(o, input1.Outputs) ||
+            Object.ReferenceEquals(o, input2.Outputs) ||
+            Object.ReferenceEquals(o, input3.Outputs)
 
         override x.GetInput(t, rt) =
             struct (input1.GetValue(t, rt), input2.GetValue(t, rt), input3.GetValue(t, rt))
@@ -514,7 +858,9 @@ module AdaptiveResource =
 
     /// Returns a new adaptive resource that adaptively applies the mapping function to the given
     /// input and adaptively depends on the resulting adaptive value.
-    /// The resulting adaptive resource will hold the latest value of the aval<_> returned by mapping.
+    /// When a binding wrapper is required, each acquisition is forwarded to the non-constant input.
+    /// The wrapper retains exactly one reference to the selected adaptive value until its final release
+    /// or ReleaseAll.
     let bind (mapping : 'T1 -> aval<'T2>) (value : aval<'T1>) =
         if value.IsConstant then
             value |> AVal.force |> mapping
@@ -523,7 +869,9 @@ module AdaptiveResource =
 
     /// Adaptively applies the mapping function to the given adaptive values and
     /// adaptively depends on the adaptive resource returned by mapping.
-    /// The resulting adaptive resource will hold the latest value of the aval<_> returned by mapping.
+    /// When a binding wrapper is required, each acquisition is forwarded to every non-constant input.
+    /// The wrapper retains exactly one reference to the selected adaptive value until its final release
+    /// or ReleaseAll.
     let bind2 (mapping: 'T1 -> 'T2 -> aval<'T3>) (value1: aval<'T1>) (value2: aval<'T2>) =
         if value1.IsConstant && value2.IsConstant then
             mapping (AVal.force value1) (AVal.force value2)
@@ -541,7 +889,9 @@ module AdaptiveResource =
 
     /// Adaptively applies the mapping function to the given adaptive values and
     /// adaptively depends on the adaptive resource returned by mapping.
-    /// The resulting adpative resource will hold the latest value of the aval<_> returned by mapping.
+    /// When a binding wrapper is required, each acquisition is forwarded to every non-constant input.
+    /// The wrapper retains exactly one reference to the selected adaptive value until its final release
+    /// or ReleaseAll.
     let bind3 (mapping: 'T1 -> 'T2 -> 'T3 -> aval<'T4>) (value1: aval<'T1>) (value2: aval<'T2>) (value3: aval<'T3>) =
         if value1.IsConstant && value2.IsConstant && value3.IsConstant then
             mapping (AVal.force value1) (AVal.force value2) (AVal.force value3)

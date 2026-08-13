@@ -128,6 +128,11 @@ let bound = AdaptiveResource.bind (fun x -> getResource x) input
 let merged = AdaptiveResource.map2 (fun a b -> combine a b) input1 input2
 ```
 
+When a wrapper is required, `bind`, `bind2`, and `bind3` forward every acquisition
+to each non-constant input, but retain the currently selected inner resource only
+once. That inner reference remains valid until the binding's final `Release` or
+`ReleaseAll`, including across partial releases.
+
 ## Render Objects
 
 Encapsulates all state for a draw call.
