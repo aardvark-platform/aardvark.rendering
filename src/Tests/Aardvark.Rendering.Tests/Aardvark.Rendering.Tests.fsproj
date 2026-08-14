@@ -91,6 +91,7 @@
     <Compile Include="Tests\Utilities\ConcurrentDeltaPriorityQueueTests.fs" />
     <Compile Include="Tests\Utilities\MemoryManagerTests.fs" />
     <Compile Include="Tests\Utilities\CompactSetTests.fs" />
+    <Compile Include="Tests\Utilities\ColoredLockTests.fs" />
     <Compile Include="Tests\Utilities\TrieTests.fs" />
     <Compile Include="Tests\Utilities\TaskUtilitiesTests.fs" />
     <Compile Include="Tests\Other\ShapeList\ShapeListBenchmarks.fs" />
