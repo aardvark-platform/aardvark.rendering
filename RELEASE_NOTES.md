@@ -1,3 +1,5 @@
+- Fixed colored resource locks to balance lifecycle callbacks, restore nested ownership safely under contention, and gate resizable GL geometry buffers across render threads ([#137](https://github.com/aardvark-platform/aardvark.rendering/issues/137))
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 

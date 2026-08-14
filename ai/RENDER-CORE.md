@@ -121,6 +121,17 @@ finally
     resource.Release()  // decrement, destroy if 0
 ```
 
+### Resource Locking
+
+`ColoredLock<'T>` allows callers using the same color to share ownership while
+different colors and exclusive updates exclude one another. `ResourceLock` uses
+this to distinguish render and access operations for `ILockedResource` values.
+Nested mode changes temporarily suspend the calling thread's outer colored
+ownership and restore it before returning. Each successful `OnLock` transition
+is paired with `OnUnlock`, including when protected actions or callbacks throw.
+The first and final shared owners may be different threads, so lifecycle
+callbacks must use cross-thread-safe synchronization.
+
 **AdaptiveResource module:**
 ```fsharp
 let mapped = AdaptiveResource.map (fun x -> transform x) input
