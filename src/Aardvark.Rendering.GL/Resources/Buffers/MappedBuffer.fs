@@ -244,7 +244,10 @@ module ManagedBufferImplementation =
             if Interlocked.Increment(&rendering) = 1 then
                 notRendering.Reset()
 
-            fences.WaitGPU()
+            try fences.WaitGPU()
+            with _ ->
+                x.AfterRender()
+                reraise()
 
         member internal x.AfterRender() =
             if Interlocked.Decrement(&rendering) = 0 then
@@ -393,6 +396,8 @@ module ManagedBufferImplementation =
     type ResizeGeometryPool(ctx : Context, types : Map<Symbol, Type>) as this =
         let minCapacity = 1n <<< 20
         let rw = new ReaderWriterLockSlim()
+        let renderState = obj()
+        let renderResizeGate = new SemaphoreSlim(1, 1)
         let handles =
             use __ = ctx.ResourceLock
             let total = Memory.total ctx
@@ -435,30 +440,50 @@ module ManagedBufferImplementation =
                 max res minCapacity
 
         member internal x.BeforeRender() =
-            if Interlocked.Increment(&rendering) = 1 then
-                notRendering.Reset()
-                rw.EnterReadLock()
+            Monitor.Enter renderState
+            try
+                if rendering = 0 then
+                    renderResizeGate.Wait()
+                    notRendering.Reset()
 
-            
-            fences.WaitGPU()
+                rendering <- rendering + 1
+            finally
+                Monitor.Exit renderState
+
+            try fences.WaitGPU()
+            with _ ->
+                x.AfterRender()
+                reraise()
 
         member internal x.AfterRender() =
-            if Interlocked.Decrement(&rendering) = 0 then
-                notRendering.Set()
-                rw.ExitReadLock()
+            Monitor.Enter renderState
+            try
+                if rendering <= 0 then
+                    invalidOp "The resize geometry pool is not rendering."
+
+                rendering <- rendering - 1
+                if rendering = 0 then
+                    try notRendering.Set()
+                    finally renderResizeGate.Release() |> ignore
+            finally
+                Monitor.Exit renderState
 
         member internal x.AdjustSizes() =
             use __ = ctx.ResourceLock
             fences.WaitCPU()
-            ReaderWriterLock.write rw (fun () ->
-                let newCapacity = cap()
+            renderResizeGate.Wait()
+            try
+                ReaderWriterLock.write rw (fun () ->
+                    let newCapacity = cap()
 
-                for (sem, (buffer, es, t)) in Map.toSeq handles do
-                    let c = es * newCapacity
-                    buffer.Resize c
+                    for (sem, (buffer, es, t)) in Map.toSeq handles do
+                        let c = es * newCapacity
+                        buffer.Resize c
 
-                GL.Sync()
-            )
+                    GL.Sync()
+                )
+            finally
+                renderResizeGate.Release() |> ignore
 
         member x.Alloc(fvc : int, g : IndexedGeometry) =
             let ptr = manager.Alloc(nativeint fvc)
@@ -579,4 +604,3 @@ module ManagedBufferImplementation =
                 match c with
                     | Some ResourceUsage.Render -> parent.AfterRender()
                     | _ -> ()
-

@@ -82,6 +82,7 @@
     <Compile Include="Tests\Other\IndexedGeometryTests.fs" />
     <Compile Include="Tests\Other\SgTest.fs" />
     <Compile Include="Tests\Other\CompactSetTests.fs" />
+    <Compile Include="Tests\Other\ColoredLockTests.fs" />
     <Compile Include="Tests\Other\AdaptiveResourceTest.fs" />
     <Compile Include="Tests\Other\ContextCreation.fs" />
     <Compile Include="Tests\Other\StatsBench.fs" />
