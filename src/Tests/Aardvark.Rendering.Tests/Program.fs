@@ -71,6 +71,7 @@ let tests =
         testAllTargets "Utilities" [
             Utilities.ConcurrentDeltaPriorityQueue.tests
             Utilities.CompactSet.tests
+            Utilities.ColoredLock.tests
             Utilities.MemoryManager.tests
             Utilities.Trie.tests
             Utilities.TaskUtilities.tests
