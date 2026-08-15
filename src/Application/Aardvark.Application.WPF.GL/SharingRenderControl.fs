@@ -602,6 +602,11 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
         x.Focusable <- true
 
+        x.LostFocus.Add(fun _ ->
+            keyboard.Reset()
+            mouse.Reset()
+        )
+
         x.KeyDown.Add(fun e ->
             keyboard.KeyDown(key e.Key)
         )
