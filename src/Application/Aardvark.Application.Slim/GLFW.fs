@@ -1009,6 +1009,9 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
 
     let _focusCallback =
         glfw.SetWindowFocusCallback(win, GlfwCallbacks.WindowFocusCallback(fun w f ->
+            if not f then
+                keyboard.Reset()
+                mouse.Reset()
             focus.Trigger(f)
         ))
 
@@ -1758,4 +1761,4 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
         updateGamepads()
 
     member x.Run() =
-        instance.Run x          
+        instance.Run x

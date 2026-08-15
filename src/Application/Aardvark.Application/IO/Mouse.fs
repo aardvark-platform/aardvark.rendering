@@ -60,6 +60,13 @@ type internal MouseClickState() =
                 0
         )
 
+    member this.Reset() =
+        lock this (fun _ ->
+            count <- 0
+            prevTime <- DateTime()
+            prevPosition <- V2i.Zero
+        )
+
 type EventMouse(autoGenerateClickEvents : bool) =
     let buttons = AVal.init MouseButtons.None
     let position = AVal.init <| PixelPosition()
@@ -75,10 +82,15 @@ type EventMouse(autoGenerateClickEvents : bool) =
     let leaveEvent = EventSource<PixelPosition>()
     let moveEvent = EventSource<PixelPosition * PixelPosition>()
 
+    let clickStates =
+        if autoGenerateClickEvents then
+            ConcurrentDictionary<MouseButtons, MouseClickState>()
+        else
+            Unchecked.defaultof<ConcurrentDictionary<MouseButtons, MouseClickState>>
+
     let getClickState =
         if autoGenerateClickEvents then
-            let store = ConcurrentDictionary<MouseButtons, MouseClickState>()
-            fun btn -> store.GetOrAdd(btn, fun _ -> MouseClickState())
+            fun btn -> clickStates.GetOrAdd(btn, fun _ -> MouseClickState())
         else
             Unchecked.defaultof<_>
 
@@ -96,6 +108,7 @@ type EventMouse(autoGenerateClickEvents : bool) =
     abstract member Enter : PixelPosition -> unit
     abstract member Leave : PixelPosition -> unit
     abstract member Move : PixelPosition -> unit
+    /// Releases all held buttons without generating click gestures and starts a fresh click sequence.
     abstract member Reset : unit -> unit
 
     default x.Down(pos : PixelPosition, btns : MouseButtons) =
@@ -164,8 +177,19 @@ type EventMouse(autoGenerateClickEvents : bool) =
         transact (fun () -> position.Value <- p)
         moveEvent.Emit ((last, p))
 
-    default x.Reset() =
-        x.Up(position.Value, buttons.Value)
+    default _.Reset() =
+        if autoGenerateClickEvents then
+            for state in clickStates.Values do
+                state.Reset()
+
+        let mutable held = buttons.Value
+        if held <> MouseButtons.None then
+            transact (fun () -> buttons.Value <- MouseButtons.None)
+
+            while held <> MouseButtons.None do
+                let button = getLowestButton held
+                upEvent.Emit button
+                held <- unsetLowestButton held
 
     member x.IsDown(button : MouseButtons) : aval<bool> =
         buttons |> AVal.map (fun buttons -> buttons.HasFlag button)

@@ -1,3 +1,5 @@
+﻿- [Application] Cancel held keyboard and mouse input on focus loss without generating click gestures or preserving double-click history.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 
