@@ -93,6 +93,7 @@
     <Compile Include="Tests\Other\Camera.fs" />
     <Compile Include="Tests\Other\UniformWriterTests.fs" />
     <Compile Include="Tests\Other\AdaptiveResourceTest.fs" />
+    <Compile Include="Tests\Other\InputTests.fs" />
     <Compile Include="Tests\Other\ContextCreation.fs" />
     <Compile Include="Tests\Other\StatsBench.fs" />
     <Compile Include="Tests\Other\VulkanWrapper.fs" />

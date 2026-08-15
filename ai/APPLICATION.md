@@ -142,6 +142,8 @@ win.DropFiles.Add (fun files ->
 )
 ```
 
+When focus is lost, application backends release all held keys and mouse buttons before publishing the `false` focus event. These cancellation releases update adaptive input state and emit ordinary `Up` events, but do not synthesize `Click` or `DoubleClick`; the next completed click starts a new click sequence.
+
 ### Rendering Modes
 
 ```fsharp

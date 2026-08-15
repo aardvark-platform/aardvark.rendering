@@ -1,3 +1,4 @@
+- [Application] Cancel held keyboard and mouse input on focus loss without generating click gestures or preserving double-click history.
 - Prevent signed-integer overflow from bypassing shared texture slice, mip-level, and window bounds validation ([#143](https://github.com/aardvark-platform/aardvark.rendering/issues/143)).
 - Fixed BC1/BC2/BC3 encoding to preserve color variation when the initial endpoint-estimation direction lies in the covariance matrix's nullspace.
 - Fixed adaptive texture and texture-array replacement failures to forget successfully disposed handles, preventing their reuse or repeated disposal during retries and release.
