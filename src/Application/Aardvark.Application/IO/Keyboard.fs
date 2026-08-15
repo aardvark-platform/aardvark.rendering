@@ -48,6 +48,7 @@ type EventKeyboard() =
     abstract member KeyDown : Keys -> unit
     abstract member KeyUp : Keys -> unit
     abstract member KeyPress : char -> unit
+    /// Releases every held key and clears its adaptive state.
     abstract member Reset : unit -> unit
 
     default x.KeyDown(k : Keys) =
