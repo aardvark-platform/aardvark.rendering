@@ -259,17 +259,57 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
 
     let objects = HashSet<ManagedTraceObject>()
 
+    let release (accel : aval<IAccelerationStructure>) (hasAccel : bool)
+                (disposables : List<IDisposable>)
+                (geometryPtr : managedptr) (hasGeometryPtr : bool)
+                (instanceAttributePtr : managedptr) (hasInstanceAttributePtr : bool)
+                (faceAttributePtrs : List<managedptr>)
+                (indexPtrs : List<managedptr>)
+                (vertexPtrs : List<managedptr>)
+                (geometryAttributePtrs : List<managedptr>) =
+        let mutable error : exn = null
+
+        for i = disposables.Count - 1 downto 0 do
+            try disposables.[i].Dispose()
+            with e -> if isNull error then error <- e
+
+        if hasGeometryPtr then
+            try geometryManager.Free geometryPtr
+            with e -> if isNull error then error <- e
+
+        for i = faceAttributePtrs.Count - 1 downto 0 do
+            try faceAttributeManager.Free faceAttributePtrs.[i]
+            with e -> if isNull error then error <- e
+
+        for i = indexPtrs.Count - 1 downto 0 do
+            try indexManager.Free indexPtrs.[i]
+            with e -> if isNull error then error <- e
+
+        for i = vertexPtrs.Count - 1 downto 0 do
+            try vertexManager.Free vertexPtrs.[i]
+            with e -> if isNull error then error <- e
+
+        if hasInstanceAttributePtr then
+            try instanceAttributeManager.Free instanceAttributePtr
+            with e -> if isNull error then error <- e
+
+        for i = geometryAttributePtrs.Count - 1 downto 0 do
+            try geometryAttributeManager.Free geometryAttributePtrs.[i]
+            with e -> if isNull error then error <- e
+
+        if hasAccel then
+            try accel.Release()
+            with e -> if isNull error then error <- e
+
+        if notNull error then raise error
+
     let free (obj: ManagedTraceObject) =
-        obj.Geometry.Release()
-        for d in obj.Resources.Disposables do d.Dispose()
-
-        geometryManager.Free(obj.Resources.GeometryPtr)
-        instanceAttributeManager.Free(obj.Resources.InstanceAttributePtr)
-
-        for p in obj.Resources.FaceAttributePtrs do faceAttributeManager.Free(p)
-        for p in obj.Resources.GeometryAttributePtrs do geometryAttributeManager.Free(p)
-        for p in obj.Resources.IndexPtrs do indexManager.Free(p)
-        for p in obj.Resources.VertexPtrs do vertexManager.Free(p)
+        let resources = obj.Resources
+        release obj.Geometry true resources.Disposables
+                resources.GeometryPtr true
+                resources.InstanceAttributePtr true
+                resources.FaceAttributePtrs resources.IndexPtrs
+                resources.VertexPtrs resources.GeometryAttributePtrs
 
     let clear() =
         for obj in objects do
@@ -313,6 +353,8 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
                     clear()
         )
 
+    /// <summary>Adds the given trace object to the pool.</summary>
+    /// <remarks>The addition is atomic: if processing fails, all ranges, adaptive subscriptions, and acceleration-structure references acquired by the attempt are released.</remarks>
     member x.Add(obj: TraceObject) =
         if obj.Geometry.Count = 0 then
             failf "trace object does not contain any geometry"
@@ -323,6 +365,14 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
             let iptrs = List()
             let fptrs = List()
             let gptrs = List()
+            let mutable instanceAttributePtr = Unchecked.defaultof<managedptr>
+            let mutable geometryPtr = Unchecked.defaultof<managedptr>
+            let mutable hasInstanceAttributePtr = false
+            let mutable hasGeometryPtr = false
+            let mutable accel = Unchecked.defaultof<aval<IAccelerationStructure>>
+            let mutable hasAccel = false
+            let mutable accelKey = Unchecked.defaultof<struct (AdaptiveTraceGeometry * AccelerationStructureUsage)>
+            let mutable addedAccel = false
 
             let geometryCount      = obj.Geometry.Count
             let vertexAttributes   = obj.VertexAttributes
@@ -333,188 +383,201 @@ and ManagedTracePool(runtime: IRuntime, signature: TraceObjectSignature,
             validateAttributes "vertex" geometryCount vertexAttributes
             validateAttributes "face" geometryCount faceAttributes
             validateAttributes "geometry" geometryCount geometryAttributes
-
-            // Geometry attributes
-            let geometryAttributeIndices =
-                Array.init geometryCount (fun i ->
-                    let geometryAttributes = geometryAttributes.[i]
-                    let geometryAttributePtr = geometryAttributeManager.Alloc(geometryAttributes, 1)
-                    let geometryAttributeIndex = int geometryAttributePtr.Offset
-
-                    for k, _ in geometryAttributeTypes do
-                        let target = geometryAttributeBuffers.[k]
-                        match geometryAttributes.TryGetValue k with
-                        | true, v ->
-                            try
-                                target.Add(v, geometryAttributeIndex) |> ds.Add
-                            with
-                            | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                                failf "cannot convert geometry attribute '%A' from %A to %A" k exn.Source exn.Target
-
-                        | _ ->
-                            target.Set(zero, Range1ul.FromMinAndSize(uint64 geometryAttributeIndex, 0UL))
-
-                    gptrs.Add(geometryAttributePtr)
-                    int32 geometryAttributePtr.Offset
-                )
-
-            // Instance attributes
-            let instanceAttributePtr   = instanceAttributeManager.Alloc(instanceAttributes, 1)
-            let instanceAttributeIndex = int instanceAttributePtr.Offset
-
-            for k, _ in instanceAttributeTypes do
-                let target = instanceAttributeBuffers.[k]
-                match instanceAttributes.TryGetValue k with
-                | true, v ->
-                    try
-                        target.Add(v, instanceAttributeIndex) |> ds.Add
-                    with
-                    | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                        failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
-
-                | _ ->
-                    target.Set(zero, Range1ul.FromMinAndSize(uint64 instanceAttributeIndex, 0UL))
-
-            // Geometry data
-            let geometryIndex, geometryPtr =
-                match obj.Geometry with
-                | AdaptiveTraceGeometry.Triangles meshes ->
-
-                    let vertexOffsets =
-                        meshes |> Array.mapi (fun i m ->
-                            let vertexCount = int m.Vertices.Count
-                            let vertexAttributes = vertexAttributes.[i]
-                            let vertexPtr = vertexManager.Alloc(vertexAttributes, vertexCount)
-                            let vertexRange = Range1ul.FromManagedPtr(vertexPtr, vertexCount)
-
-                            for KeyValue(k, _) in signature.VertexAttributeTypes do
-                                let target = vertexAttributeBuffers.[k]
-                                match vertexAttributes.TryGetValue k with
-                                | true, v ->
-                                    try
-                                        target.Add(v, vertexRange) |> ds.Add
-                                    with
-                                    | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                                        failf "cannot convert vertex attribute '%A' from %A to %A" k exn.Source exn.Target
-
-                                | _ ->
-                                    target.Set(zero, vertexRange)
-
-                            vptrs.Add(vertexPtr)
-                            int32 vertexPtr.Offset
-                        )
-
-                    let indexOffsets =
-                        meshes |> Array.map (fun m ->
-                            let fvc = int m.Primitives * 3
-
-                            let indexPtr =
-                                if m.IsIndexed then
-                                    let indexPtr = indexManager.Alloc((m.Indices, 0), fvc)
-                                    let indexRange = Range1ul.FromManagedPtr(indexPtr, fvc)
-                                    indexBuffer.Add(m.Indices, indexRange) |> ds.Add
-                                    indexPtr
-                                else
-                                    let isNew, indexPtr = indexManager.TryAlloc((null, fvc), fvc)
-                                    let indexRange = Range1ul.FromManagedPtr(indexPtr, fvc)
-
-                                    if isNew then
-                                        let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> indexType
-                                        let data = Array.init fvc id |> conv
-                                        indexBuffer.Set(data, indexRange)
-
-                                    indexPtr
-
-                            iptrs.Add(indexPtr)
-                            int32 indexPtr.Offset
-                        )
-
-                    let faceAttributeOffsets =
-                        meshes |> Array.mapi (fun i m ->
-                            let faceCount = int m.Primitives
-                            let faceAttributes = faceAttributes.[i]
-                            let faceAttributePtr = faceAttributeManager.Alloc(faceAttributes, faceCount)
-                            let faceAttributeRange = Range1ul.FromManagedPtr(faceAttributePtr, faceCount)
-
-                            for k, _ in faceAttributeTypes do
-                                let target = faceAttributeBuffers.[k]
-                                match faceAttributes.TryGetValue k with
-                                | true, v ->
-                                    try
-                                        target.Add(v, faceAttributeRange) |> ds.Add
-                                    with
-                                    | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                                        failf "cannot convert face attribute '%A' from %A to %A" k exn.Source exn.Target
-
-                                | _ ->
-                                    target.Set(zero, faceAttributeRange)
-
-                            fptrs.Add(faceAttributePtr)
-                            int32 faceAttributePtr.Offset
-                        )
-
-                    let geometryKey   = (vertexOffsets, indexOffsets, faceAttributeOffsets, geometryAttributeIndices, instanceAttributeIndex)
-                    let geometryPtr   = geometryManager.Alloc(geometryKey, geometryCount)
-                    let geometryIndex = int geometryPtr.Offset
-
-                    for i = 0 to meshes.Length - 1 do
-                        let info =
-                            { FirstIndex             = indexOffsets.[i]
-                              BaseVertex             = vertexOffsets.[i]
-                              BasePrimitive          = faceAttributeOffsets.[i]
-                              GeometryAttributeIndex = geometryAttributeIndices.[i]
-                              InstanceAttributeIndex = instanceAttributeIndex }
-
-                        geometryBuffer.Set(info, geometryIndex + i)
-
-                    geometryIndex, geometryPtr
-
-                | AdaptiveTraceGeometry.AABBs aabbs ->
-                    let geometryKey   = ([||], [||], [||], geometryAttributeIndices, instanceAttributeIndex)
-                    let geometryPtr   = geometryManager.Alloc(geometryKey, geometryCount)
-                    let geometryIndex = int geometryPtr.Offset
-
-                    for i = 0 to aabbs.Length - 1 do
-                        let info =
-                            { FirstIndex             = 0
-                              BaseVertex             = 0
-                              BasePrimitive          = 0
-                              GeometryAttributeIndex = geometryAttributeIndices.[i]
-                              InstanceAttributeIndex = instanceAttributeIndex }
-
-                        geometryBuffer.Set(info, geometryIndex + i)
-
-                    geometryIndex, geometryPtr
-
-            let accel =
-                let key = struct (obj.Geometry, obj.Usage)
-
-                match accelerationStructures.TryGetValue(key) with
-                | true, accel -> accel
+            try
+                accelKey <- struct (obj.Geometry, obj.Usage)
+                match accelerationStructures.TryGetValue(accelKey) with
+                | true, cached -> accel <- cached
                 | _ ->
                     let data = obj.Geometry.ToAdaptiveValue()
-                    let accel = runtime.CreateAccelerationStructure(data, obj.Usage)
-                    if runtime.DebugLabelsEnabled then accel.Name <- "TraceObject (ManagedTracePool)"
-                    accelerationStructures.[key] <- accel
-                    accel :> aval<_>
+                    let created = runtime.CreateAccelerationStructure(data, obj.Usage)
+                    if runtime.DebugLabelsEnabled then created.Name <- "TraceObject (ManagedTracePool)"
+                    accel <- created :> aval<_>
+                    accelerationStructures.[accelKey] <- accel
+                    addedAccel <- true
 
-            accel.Acquire()
+                accel.Acquire()
+                hasAccel <- true
 
-            let resources =
-                {
-                    Pool                  = x
-                    GeometryPtr           = geometryPtr
-                    GeometryAttributePtrs = gptrs
-                    InstanceAttributePtr  = instanceAttributePtr
-                    FaceAttributePtrs     = fptrs
-                    IndexPtrs             = iptrs
-                    VertexPtrs            = vptrs
-                    Disposables           = ds
-                }
+                // Geometry attributes
+                let geometryAttributeIndices =
+                    Array.init geometryCount (fun i ->
+                        let geometryAttributes = geometryAttributes.[i]
+                        let geometryAttributePtr = geometryAttributeManager.Alloc(geometryAttributes, 1)
+                        gptrs.Add(geometryAttributePtr)
+                        let geometryAttributeIndex = int geometryAttributePtr.Offset
 
-            let mto = new ManagedTraceObject(geometryIndex, accel, obj, resources)
-            objects.Add(mto) |> ignore
-            mto
+                        for k, _ in geometryAttributeTypes do
+                            let target = geometryAttributeBuffers.[k]
+                            match geometryAttributes.TryGetValue k with
+                            | true, v ->
+                                try
+                                    target.Add(v, geometryAttributeIndex) |> ds.Add
+                                with
+                                | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
+                                    failf "cannot convert geometry attribute '%A' from %A to %A" k exn.Source exn.Target
+
+                            | _ ->
+                                target.Set(zero, Range1ul.FromMinAndSize(uint64 geometryAttributeIndex, 0UL))
+
+                        int32 geometryAttributePtr.Offset
+                    )
+
+                // Instance attributes
+                instanceAttributePtr <- instanceAttributeManager.Alloc(instanceAttributes, 1)
+                hasInstanceAttributePtr <- true
+                let instanceAttributeIndex = int instanceAttributePtr.Offset
+
+                for k, _ in instanceAttributeTypes do
+                    let target = instanceAttributeBuffers.[k]
+                    match instanceAttributes.TryGetValue k with
+                    | true, v ->
+                        try
+                            target.Add(v, instanceAttributeIndex) |> ds.Add
+                        with
+                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
+                            failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
+
+                    | _ ->
+                        target.Set(zero, Range1ul.FromMinAndSize(uint64 instanceAttributeIndex, 0UL))
+
+                // Geometry data
+                let geometryIndex =
+                    match obj.Geometry with
+                    | AdaptiveTraceGeometry.Triangles meshes ->
+
+                        let vertexOffsets =
+                            meshes |> Array.mapi (fun i m ->
+                                let vertexCount = int m.Vertices.Count
+                                let vertexAttributes = vertexAttributes.[i]
+                                let vertexPtr = vertexManager.Alloc(vertexAttributes, vertexCount)
+                                vptrs.Add(vertexPtr)
+                                let vertexRange = Range1ul.FromManagedPtr(vertexPtr, vertexCount)
+
+                                for KeyValue(k, _) in signature.VertexAttributeTypes do
+                                    let target = vertexAttributeBuffers.[k]
+                                    match vertexAttributes.TryGetValue k with
+                                    | true, v ->
+                                        try
+                                            target.Add(v, vertexRange) |> ds.Add
+                                        with
+                                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
+                                            failf "cannot convert vertex attribute '%A' from %A to %A" k exn.Source exn.Target
+
+                                    | _ ->
+                                        target.Set(zero, vertexRange)
+
+                                int32 vertexPtr.Offset
+                            )
+
+                        let indexOffsets =
+                            meshes |> Array.map (fun m ->
+                                let fvc = int m.Primitives * 3
+
+                                let indexPtr =
+                                    if m.IsIndexed then
+                                        let indexPtr = indexManager.Alloc((m.Indices, 0), fvc)
+                                        iptrs.Add(indexPtr)
+                                        let indexRange = Range1ul.FromManagedPtr(indexPtr, fvc)
+                                        indexBuffer.Add(m.Indices, indexRange) |> ds.Add
+                                        indexPtr
+                                    else
+                                        let isNew, indexPtr = indexManager.TryAlloc((null, fvc), fvc)
+                                        iptrs.Add(indexPtr)
+                                        let indexRange = Range1ul.FromManagedPtr(indexPtr, fvc)
+
+                                        if isNew then
+                                            let conv = Aardvark.Base.PrimitiveValueConverter.getArrayConverter typeof<int> indexType
+                                            let data = Array.init fvc id |> conv
+                                            indexBuffer.Set(data, indexRange)
+
+                                        indexPtr
+
+                                int32 indexPtr.Offset
+                            )
+
+                        let faceAttributeOffsets =
+                            meshes |> Array.mapi (fun i m ->
+                                let faceCount = int m.Primitives
+                                let faceAttributes = faceAttributes.[i]
+                                let faceAttributePtr = faceAttributeManager.Alloc(faceAttributes, faceCount)
+                                fptrs.Add(faceAttributePtr)
+                                let faceAttributeRange = Range1ul.FromManagedPtr(faceAttributePtr, faceCount)
+
+                                for k, _ in faceAttributeTypes do
+                                    let target = faceAttributeBuffers.[k]
+                                    match faceAttributes.TryGetValue k with
+                                    | true, v ->
+                                        try
+                                            target.Add(v, faceAttributeRange) |> ds.Add
+                                        with
+                                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
+                                            failf "cannot convert face attribute '%A' from %A to %A" k exn.Source exn.Target
+
+                                    | _ ->
+                                        target.Set(zero, faceAttributeRange)
+
+                                int32 faceAttributePtr.Offset
+                            )
+
+                        let geometryKey   = (vertexOffsets, indexOffsets, faceAttributeOffsets, geometryAttributeIndices, instanceAttributeIndex)
+                        geometryPtr <- geometryManager.Alloc(geometryKey, geometryCount)
+                        hasGeometryPtr <- true
+                        let geometryIndex = int geometryPtr.Offset
+
+                        for i = 0 to meshes.Length - 1 do
+                            let info =
+                                { FirstIndex             = indexOffsets.[i]
+                                  BaseVertex             = vertexOffsets.[i]
+                                  BasePrimitive          = faceAttributeOffsets.[i]
+                                  GeometryAttributeIndex = geometryAttributeIndices.[i]
+                                  InstanceAttributeIndex = instanceAttributeIndex }
+
+                            geometryBuffer.Set(info, geometryIndex + i)
+
+                        geometryIndex
+
+                    | AdaptiveTraceGeometry.AABBs aabbs ->
+                        let geometryKey   = ([||], [||], [||], geometryAttributeIndices, instanceAttributeIndex)
+                        geometryPtr <- geometryManager.Alloc(geometryKey, geometryCount)
+                        hasGeometryPtr <- true
+                        let geometryIndex = int geometryPtr.Offset
+
+                        for i = 0 to aabbs.Length - 1 do
+                            let info =
+                                { FirstIndex             = 0
+                                  BaseVertex             = 0
+                                  BasePrimitive          = 0
+                                  GeometryAttributeIndex = geometryAttributeIndices.[i]
+                                  InstanceAttributeIndex = instanceAttributeIndex }
+
+                            geometryBuffer.Set(info, geometryIndex + i)
+
+                        geometryIndex
+
+                let resources =
+                    {
+                        Pool                  = x
+                        GeometryPtr           = geometryPtr
+                        GeometryAttributePtrs = gptrs
+                        InstanceAttributePtr  = instanceAttributePtr
+                        FaceAttributePtrs     = fptrs
+                        IndexPtrs             = iptrs
+                        VertexPtrs            = vptrs
+                        Disposables           = ds
+                    }
+
+                let mto = new ManagedTraceObject(geometryIndex, accel, obj, resources)
+                objects.Add(mto) |> ignore
+                mto
+            with _ ->
+                try
+                    release accel hasAccel ds geometryPtr hasGeometryPtr instanceAttributePtr hasInstanceAttributePtr
+                            fptrs iptrs vptrs gptrs
+                with cleanupError ->
+                    Log.warn "[ManagedTracePool] rollback cleanup failed: %s" cleanupError.Message
+
+                if addedAccel then accelerationStructures.Remove(accelKey) |> ignore
+                reraise()
         )
 
     /// Buffer of TraceGeometryInfo structs.

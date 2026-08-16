@@ -27,6 +27,9 @@ let main argv =
             ``ContextCreation Tests``.tests
             ``Vulkan Wrapper Tests``.tests
             ``IDictionary StructuralComparer Tests``.tests
+            ``Managed Pool Tests``.tests
+            ``Managed Pool Integration Tests``.testsGL
+            ``Managed Pool Integration Tests``.testsVulkan
         ]
 
     let runManuallyInMain = true
