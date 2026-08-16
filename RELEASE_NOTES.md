@@ -1,3 +1,5 @@
+- [SceneGraph] Make managed raster and ray-tracing pool additions atomic, releasing all acquired ranges, subscriptions, and acceleration-structure references when processing fails ([#141](https://github.com/aardvark-platform/aardvark.rendering/issues/141)).
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 

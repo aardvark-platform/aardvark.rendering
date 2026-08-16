@@ -95,11 +95,36 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
     let drawCalls = HashSet<ManagedDrawCall>()
 
+    let release (disposables : List<IDisposable>)
+                (hasIndexPtr : bool) (indexPtr : managedptr)
+                (hasInstancePtr : bool) (instancePtr : managedptr)
+                (hasVertexPtr : bool) (vertexPtr : managedptr) =
+        let mutable error : exn = null
+
+        for i = disposables.Count - 1 downto 0 do
+            try disposables.[i].Dispose()
+            with e -> if isNull error then error <- e
+
+        if hasIndexPtr then
+            try indexManager.Free indexPtr
+            with e -> if isNull error then error <- e
+
+        if hasInstancePtr then
+            try instanceManager.Free instancePtr
+            with e -> if isNull error then error <- e
+
+        if hasVertexPtr then
+            try vertexManager.Free vertexPtr
+            with e -> if isNull error then error <- e
+
+        if notNull error then raise error
+
     let free (mdc : ManagedDrawCall) =
-        for d in mdc.Resources.Value.Disposables do d.Dispose()
-        vertexManager.Free mdc.Resources.Value.VertexPtr
-        instanceManager.Free mdc.Resources.Value.InstancePtr
-        indexManager.Free mdc.Resources.Value.IndexPtr
+        let resources = mdc.Resources.Value
+        release resources.Disposables
+                true resources.IndexPtr
+                true resources.InstancePtr
+                true resources.VertexPtr
 
     let clear() =
         for mdc in drawCalls do
@@ -152,6 +177,7 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
         )
 
     ///<summary>Adds the given geometry to the pool and returns a managed draw call.</summary>
+    ///<remarks>The addition is atomic: if processing fails, all ranges and adaptive subscriptions acquired by the attempt are released.</remarks>
     ///<param name="geometry">The geometry to add.</param>
     ///<param name="indexOffset">An offset added to the FirstIndex field of the resulting draw call. Default is zero.</param>
     ///<param name="faceVertexCount">The face vertex count of the resulting draw call. Ignored if greater than <see cref="geometry.FaceVertexCount"/>, default is <see cref="Int32.MaxValue"/>.</param>
@@ -167,45 +193,55 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                 let ds = List()
                 let fvc = geometry.FaceVertexCount
                 let vertexCount = geometry.VertexCount
+                let mutable vertexPtr = Unchecked.defaultof<managedptr>
+                let mutable instancePtr = Unchecked.defaultof<managedptr>
+                let mutable indexPtr = Unchecked.defaultof<managedptr>
+                let mutable hasVertexPtr = false
+                let mutable hasInstancePtr = false
+                let mutable hasIndexPtr = false
 
-                let vertexPtr = vertexManager.Alloc(geometry.VertexAttributes, vertexCount)
-                let vertexRange = Range1ul.FromManagedPtr(vertexPtr, vertexCount)
-                for k, _ in vertexBufferTypes do
-                    let target = vertexBuffers.[k]
-                    match geometry.VertexAttributes.TryGetValue k with
-                    | true, v ->
-                        try
-                            target.Add(v, vertexRange) |> ds.Add
-                        with
-                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                            failf "cannot convert vertex attribute '%A' from %A to %A" k exn.Source exn.Target
+                try
+                    vertexPtr <- vertexManager.Alloc(geometry.VertexAttributes, vertexCount)
+                    hasVertexPtr <- true
+                    let vertexRange = Range1ul.FromManagedPtr(vertexPtr, vertexCount)
+                    for k, _ in vertexBufferTypes do
+                        let target = vertexBuffers.[k]
+                        match geometry.VertexAttributes.TryGetValue k with
+                        | true, v ->
+                            try
+                                target.Add(v, vertexRange) |> ds.Add
+                            with
+                            | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
+                                failf "cannot convert vertex attribute '%A' from %A to %A" k exn.Source exn.Target
 
-                    | _ ->
-                        target.Set(zero, vertexRange)
+                        | _ ->
+                            target.Set(zero, vertexRange)
 
-                let instancePtr = instanceManager.Alloc(geometry.InstanceAttributes, 1)
-                let instanceIndex = int instancePtr.Offset
-                for k, _ in uniformTypes do
-                    let target = instanceBuffers.[k]
-                    match geometry.InstanceAttributes.TryGetValue k with
-                    | true, v ->
-                        try
-                            target.Add(v, instanceIndex) |> ds.Add
-                        with
-                        | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
-                            failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
+                    instancePtr <- instanceManager.Alloc(geometry.InstanceAttributes, 1)
+                    hasInstancePtr <- true
+                    let instanceIndex = int instancePtr.Offset
+                    for k, _ in uniformTypes do
+                        let target = instanceBuffers.[k]
+                        match geometry.InstanceAttributes.TryGetValue k with
+                        | true, v ->
+                            try
+                                target.Add(v, instanceIndex) |> ds.Add
+                            with
+                            | :? Aardvark.Base.PrimitiveValueConverter.InvalidConversionException as exn ->
+                                failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
 
-                    | _ ->
-                        target.Set(zero, Range1ul.FromMinAndSize(uint64 instanceIndex, 0UL))
+                        | _ ->
+                            target.Set(zero, Range1ul.FromMinAndSize(uint64 instanceIndex, 0UL))
 
-                let indexPtr =
                     if geometry.IsIndexed then
-                        let indexPtr = indexManager.Alloc((geometry.Indices, 0), fvc)
+                        indexPtr <- indexManager.Alloc((geometry.Indices, 0), fvc)
+                        hasIndexPtr <- true
                         let indexRange = Range1ul.FromManagedPtr(indexPtr, fvc)
                         indexBuffer.Add(geometry.Indices, indexRange) |> ds.Add
-                        indexPtr
                     else
-                        let isNew, indexPtr = indexManager.TryAlloc((Unchecked.defaultof<_>, fvc), fvc)
+                        let isNew, ptr = indexManager.TryAlloc((Unchecked.defaultof<_>, fvc), fvc)
+                        indexPtr <- ptr
+                        hasIndexPtr <- true
                         let indexRange = Range1ul.FromManagedPtr(indexPtr, fvc)
 
                         if isNew then
@@ -213,29 +249,33 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                             let data = Array.init fvc id |> conv
                             indexBuffer.Set(data, indexRange)
 
-                        indexPtr
+                    let resources =
+                        {
+                            Pool        = x
+                            IndexPtr    = indexPtr
+                            VertexPtr   = vertexPtr
+                            InstancePtr = instancePtr
+                            Disposables = ds
+                        }
 
-                let resources =
-                    {
-                        Pool        = x
-                        IndexPtr    = indexPtr
-                        VertexPtr   = vertexPtr
-                        InstancePtr = instancePtr
-                        Disposables = ds
-                    }
+                    let call =
+                        DrawCallInfo(
+                            FaceVertexCount = faceVertexCount,
+                            FirstIndex = int indexPtr.Offset + indexOffset,
+                            FirstInstance = int instancePtr.Offset,
+                            InstanceCount = 1,
+                            BaseVertex = int vertexPtr.Offset
+                        )
 
-                let call =
-                    DrawCallInfo(
-                        FaceVertexCount = faceVertexCount,
-                        FirstIndex = int indexPtr.Offset + indexOffset,
-                        FirstInstance = int instancePtr.Offset,
-                        InstanceCount = 1,
-                        BaseVertex = int vertexPtr.Offset
-                    )
-
-                let mdc = new ManagedDrawCall(call, resources)
-                drawCalls.Add(mdc) |> ignore
-                mdc
+                    let mdc = new ManagedDrawCall(call, resources)
+                    drawCalls.Add(mdc) |> ignore
+                    mdc
+                with _ ->
+                    try
+                        release ds hasIndexPtr indexPtr hasInstancePtr instancePtr hasVertexPtr vertexPtr
+                    with cleanupError ->
+                        Log.warn "[ManagedPool] rollback cleanup failed: %s" cleanupError.Message
+                    reraise()
             )
 
     member x.VertexAttributes =
