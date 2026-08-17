@@ -87,6 +87,7 @@
     <Compile Include="Tests\Other\StatsBench.fs" />
     <Compile Include="Tests\Other\VulkanWrapper.fs" />
     <Compile Include="Tests\Other\StructuralComparerTests.fs" />
+    <Compile Include="Tests\Other\ResourceValidationTests.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>
