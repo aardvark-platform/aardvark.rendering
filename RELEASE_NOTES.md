@@ -1,3 +1,4 @@
+- Prevent signed-integer overflow from bypassing shared texture slice, mip-level, and window bounds validation ([#143](https://github.com/aardvark-platform/aardvark.rendering/issues/143)).
 - Fixed line and triangle strip conversion to preserve source geometries and handle empty or underfilled strips.
 - [Sg] Fixed automatic picking to honor `DrawCallInfo` ranges and indexed `BaseVertex` offsets.
 - [Sg] Made render-object bounding-box caching caller-scope aware, fixing reused render-object sets beneath distinct transforms while retaining weak, allocation-free cache hits.

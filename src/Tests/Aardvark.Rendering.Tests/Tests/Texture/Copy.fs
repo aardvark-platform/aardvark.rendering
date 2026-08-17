@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Tests.Texture
 
+open System
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
@@ -44,6 +45,44 @@ module TextureCopy =
                 runtime.DeleteTexture(src)
                 runtime.DeleteTexture(dst)
                 runtime.DeleteTexture(ms)
+
+        let indexRanges (runtime : IRuntime) =
+            // Incompatible level sizes also stop a missed range check before any native copy.
+            use src = runtime.CreateTexture2DArray(V2i(8, 4), TextureFormat.Rgba8, levels = 3, count = 3)
+            use dst = runtime.CreateTexture2DArray(V2i(4, 8), TextureFormat.Rgba8, levels = 2, count = 2)
+
+            for name, isLevel in ["slice", false; "level", true] do
+                for source in [true; false] do
+                    let limit = if source then 3 else 2
+                    let side = if source then "source" else "destination"
+                    let ranges =
+                        if source then
+                            [ -1, 1; Int32.MinValue, 1; 0, 0; 0, -1; 0, Int32.MinValue
+                              3, 1; 2, 2; 0, Int32.MaxValue; 1, Int32.MaxValue
+                              2, Int32.MaxValue; Int32.MaxValue, 2; Int32.MaxValue - 1, 3
+                              Int32.MaxValue, Int32.MaxValue ]
+                        else
+                            // Counts must still fit the source to reach destination validation.
+                            [ -1, 1; Int32.MinValue, 1; 2, 1; 1, 2
+                              Int32.MaxValue, 1; Int32.MaxValue, 2; Int32.MaxValue - 1, 3 ]
+
+                    for first, count in ranges do
+                        let context = $"{side} {name}, first = {first}, count = {count}"
+                        let expected =
+                            if first < 0 then $"base {name} cannot be negative"
+                            elif count < 1 then $"{name} count must be greater than zero"
+                            else
+                                let last = int64 first + int64 count - 1L
+                                $"cannot access texture {name}s with index range [{first}, {last}] (texture has only {limit})"
+
+                        let srcIndex = if source then first else 0
+                        let dstIndex = if source then 0 else first
+                        let copy() =
+                            if isLevel then runtime.Copy(src, 0, srcIndex, dst, 0, dstIndex, 1, count)
+                            else runtime.Copy(src, srcIndex, 0, dst, dstIndex, 0, count, 1)
+
+                        try copy |> shouldThrowArgExn expected
+                        with error -> failtestf "%s: %O" context error
 
         let private createTexture1D (runtime : IRuntime) (size : int) (levels : int) (count : int) =
             let data =
@@ -133,13 +172,16 @@ module TextureCopy =
 
             let srcBaseSlice = 1
             let srcBaseLevel = 2
-            let dstBaseSlice = 3
 
             let copyLevels = 2
             let copySlices = 2
 
-            copyTexture1D runtime srcSize srcLevels srcSlices dstLevels dstSlices
-                                  srcBaseSlice srcBaseLevel dstBaseSlice copyLevels copySlices
+            // Retain the interior copy and also end exactly at the last destination slice.
+            for dstBaseSlice in [3; 4] do
+                try
+                    copyTexture1D runtime srcSize srcLevels srcSlices dstLevels dstSlices
+                                          srcBaseSlice srcBaseLevel dstBaseSlice copyLevels copySlices
+                with error -> failtestf "destination base slice = %d: %O" dstBaseSlice error
 
         let private copyTexture1DSubwindow (runtime : IRuntime)
                                            (srcSize : int) (srcLevels : int) (srcCount : int)
@@ -622,6 +664,7 @@ module TextureCopy =
     let tests (target: TestTarget) =
         [
             "Arguments out of range",           Cases.argumentsOutOfRange
+            "Slice and mip range validation",   Cases.indexRanges
 
             "1D mipmapped",                     Cases.texture1DMipmapped
             "1D mipmapped subwindow",           Cases.texture1DMipmappedSubwindow
