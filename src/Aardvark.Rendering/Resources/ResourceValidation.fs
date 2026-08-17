@@ -107,8 +107,9 @@ module ResourceValidation =
             let validateIndexRange (dimension : TextureDimension) (name : string) (baseIndex : int) (rangeCount : int) (count : int) =
                 if baseIndex < 0 then failf dimension "base %s cannot be negative" name
                 if rangeCount < 1 then failf dimension "%s count must be greater than zero" name
-                if baseIndex + rangeCount - 1 >= count then
-                    failf dimension "cannot access texture %ss with index range [%d, %d] (texture has only %d)" name baseIndex (baseIndex + rangeCount - 1) count
+                if baseIndex >= count || rangeCount > count - baseIndex then
+                    let lastIndex = int64 baseIndex + int64 rangeCount - 1L
+                    failf dimension "cannot access texture %ss with index range [%d, %d] (texture has only %d)" name baseIndex lastIndex count
 
         /// Raises an ArgumentException if the given slice of the texture is invalid.
         let inline validateSlice (slice : int) (texture : ^Texture) =
@@ -117,6 +118,7 @@ module ResourceValidation =
             Utils.validateIndex dimension "slice" slice slices
 
         /// Raises an ArgumentException if the given slice range of the texture is invalid.
+        /// The count must be positive; a range ending exactly at the texture slice count is valid.
         let inline validateSlices (baseSlice : int) (count : int) (texture : ^Texture) =
             let dimension = getDimension texture
             let slices = getSlices texture
@@ -129,6 +131,7 @@ module ResourceValidation =
             Utils.validateIndex dimension "level" level levels
 
         /// Raises an ArgumentException if the given level range of the texture is invalid.
+        /// The count must be positive; a range ending exactly at the texture level count is valid.
         let inline validateLevels (baseLevel : int) (count : int) (texture : ^Texture) =
             let dimension = getDimension texture
             let levels = getLevels texture
@@ -171,6 +174,7 @@ module ResourceValidation =
                 Utils.failf dimension "blit region out-of-bounds (region = %A, size = %A)" region size
 
         /// Raises an ArgumentException if the window for the given texture is invalid.
+        /// Offsets must be non-negative, sizes must be positive, and a window ending exactly at the level boundary is valid.
         let inline validateWindow (level : int) (offset : V3i) (windowSize : V3i) (texture : ^Texture) =
             let dimension = getDimension texture
             let size = getSize level texture
@@ -181,7 +185,7 @@ module ResourceValidation =
             if Vec.anySmaller windowSize 1 then
                 Utils.failf dimension "window size must be greater than 0 (is %A)" windowSize
 
-            if Vec.anyGreater (offset + windowSize) size then
+            if Vec.anyGreater windowSize size || Vec.anyGreater offset (size - windowSize) then
                 Utils.failf dimension "texture window (offset = %A, size = %A) exceeds size of texture level (%A)" offset windowSize size
 
         /// Raises an ArgumentException if the window for the given texture is invalid.

@@ -1,3 +1,5 @@
+- [Rendering] Prevent signed-integer overflow from bypassing shared texture slice, mip-level, and window bounds validation ([#143](https://github.com/aardvark-platform/aardvark.rendering/issues/143)).
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 

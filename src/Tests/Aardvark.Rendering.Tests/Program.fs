@@ -27,6 +27,7 @@ let main argv =
             ``ContextCreation Tests``.tests
             ``Vulkan Wrapper Tests``.tests
             ``IDictionary StructuralComparer Tests``.tests
+            ``Resource Validation Tests``.tests
         ]
 
     let runManuallyInMain = true
