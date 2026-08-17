@@ -46,6 +46,88 @@ module TextureUpload =
 
     module Cases =
 
+        let private expectArgument context message action =
+            try action |> shouldThrowArgExn message
+            with error -> failtestf "%s: %O" context error
+
+        let windowValidation (runtime : IRuntime) =
+            use texture = runtime.CreateTexture3D(V3i(8, 9, 10), TextureFormat.Rgba8, levels = 2)
+            // The CPU buffer is independent of the invalid transfer dimensions.
+            let data = PixVolume<byte>(Col.Format.RGBA, V3i(2))
+
+            for level in [0; 1] do
+                let limit = texture.GetSize(level)
+                for axis in [V3i.IOO; V3i.OIO; V3i.OOI] do
+                    let windows =
+                        [ -axis, V3i.III, "offset cannot be negative"
+                          V3i.Zero, V3i.III - axis, "window size must be greater than 0"
+                          V3i.Zero, V3i.III - 2 * axis, "window size must be greater than 0"
+                          limit * axis, V3i.III, "exceeds size of texture level"
+                          V3i.Zero, V3i.III + limit * axis, "exceeds size of texture level"
+                          Int32.MaxValue * axis, V3i.III + axis, "exceeds size of texture level"
+                          2 * axis, V3i.III + (Int32.MaxValue - 1) * axis, "exceeds size of texture level" ]
+
+                    for offset, size, message in windows do
+                        let context = $"level = {level}, offset = {offset}, size = {size}"
+                        (fun () -> runtime.Upload(texture, data, level = level, offset = offset, size = size))
+                        |> expectArgument context message
+
+        let windowBoundary (runtime : IRuntime) =
+            use texture = runtime.CreateTexture3D(V3i(8, 9, 10), TextureFormat.Rgba32ui, levels = 2)
+            let data = PixVolume.random32ui <| V3i(2)
+
+            for level in [0; 1] do
+                let offset = texture.GetSize(level) - data.Size
+                let result = PixVolume<uint32>(Col.Format.RGBA, data.Size)
+                try
+                    // All-zero size means the CPU volume's size, not an invalid empty transfer.
+                    runtime.Upload(texture, data, level = level, offset = offset, size = V3i.Zero)
+                    runtime.Download(texture, result, level = level, offset = offset, size = V3i.Zero)
+                    PixVolume.compare V3i.Zero data result
+                with error -> failtestf "level = %d, offset = %A: %O" level offset error
+
+        let compressedAlignment (runtime : IRuntime) =
+            use texture = runtime.CreateTexture2D(V2i(16), TextureFormat.CompressedRgbaS3tcDxt1)
+            let data = PixImage.solid (V2i(16)) C4b.Red
+
+            // If the old bounds check admits these windows, block-size validation still rejects
+            // them before any native transfer. These are safe original-source controls.
+            for offset, size in
+                [ V2i(Int32.MaxValue, 0), V2i(2, 4)
+                  V2i(0, Int32.MaxValue), V2i(4, 2)
+                  V2i(2, 0), V2i(Int32.MaxValue, 4)
+                  V2i(0, 2), V2i(4, Int32.MaxValue) ] do
+                (fun () -> runtime.Upload(texture, data, offset = offset, size = size))
+                |> expectArgument $"offset = {offset}, size = {size}" "exceeds size of texture level"
+
+            for offset, size, message in
+                [ V2i(4), V2i(5, 4), "window size must be aligned"
+                  V2i(4), V2i(4, 5), "window size must be aligned"
+                  V2i(1, 4), V2i(4), "window offset must be aligned"
+                  V2i(4, 1), V2i(4), "window offset must be aligned" ] do
+                (fun () -> runtime.Upload(texture, data, offset = offset, size = size))
+                |> expectArgument $"offset = {offset}, size = {size}" message
+
+            // Full levels need not be a block multiple; keep height aligned to avoid mirroring artifacts.
+            for size in [V2i(16); V2i(6, 8)] do
+                use full = runtime.CreateTexture2D(size, TextureFormat.CompressedRgbaS3tcDxt1)
+                let data = PixImage.solid size C4b.Red
+                let result = PixImage<byte>(Col.Format.RGBA, size)
+                try
+                    runtime.Upload(full, data)
+                    runtime.Download(full, result)
+                    PixImage.compare V2i.Zero data result
+                with error -> failtestf "full compressed level size = %A: %O" size error
+
+            let block = PixImage.solid (V2i(4)) C4b.Blue
+            for offset in [V2i(4); V2i(12)] do
+                let result = PixImage<byte>(Col.Format.RGBA, block.Size)
+                try
+                    runtime.Upload(texture, block, offset = offset)
+                    runtime.Download(texture, result, offset = offset)
+                    PixImage.compare V2i.Zero block result
+                with error -> failtestf "compressed block offset = %A: %O" offset error
+
         module private NativeTexture =
 
             let ofPixImages (format : TextureFormat) (wantMipmap : bool) (data : PixImage<'T>[][]) =
@@ -1327,5 +1409,9 @@ module TextureUpload =
 
             "Cube PixTexture mipmapped wrong size",      Cases.pixTextureCubeMipmappedInvalid true
             "Cube PixTexture mipmapped wrong format",    Cases.pixTextureCubeMipmappedInvalid false
+
+            "Volume window validation",                Cases.windowValidation
+            "Volume window boundary and default size", Cases.windowBoundary
+            "Compressed upload alignment",             Cases.compressedAlignment
         ]
         |> prepareCasesGpu "Upload" target
