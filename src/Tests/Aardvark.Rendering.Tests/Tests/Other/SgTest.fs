@@ -441,6 +441,245 @@ module ``SceneGraph Tests`` =
             let indexedDesc = if indexed then "indexed" else "non-indexed"
             $"Picking.{name} ({modeDesc}, {indexedDesc})"
 
+        let private initialize() =
+            IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+            Aardvark.Init()
+
+        let private modeName (mode : IndexedGeometryMode) =
+            match mode with
+            | IndexedGeometryMode.TriangleList -> "triangle list"
+            | IndexedGeometryMode.TriangleStrip -> "triangle strip"
+            | IndexedGeometryMode.TriangleAdjacencyList -> "triangle adjacency list"
+            | _ -> string mode
+
+        let private primitive (mode : IndexedGeometryMode) (center : V3d) =
+            let p0 = center + V3d(-1.0, -1.0, 0.0)
+            let p1 = center + V3d(1.0, -1.0, 0.0)
+            let p2 = center + V3d(0.0, 1.0, 0.0)
+
+            match mode with
+            | IndexedGeometryMode.TriangleAdjacencyList ->
+                [| p0; center + V3d(0.0, -2.0, 0.0)
+                   p1; center + V3d(2.0, 0.0, 0.0)
+                   p2; center + V3d(-2.0, 0.0, 0.0) |]
+            | _ ->
+                [| p0; p1; p2 |]
+
+        let private pickTree (mode : IndexedGeometryMode) (positions : V3d[]) (indices : int[] option) (call : aval<DrawCallInfo>) =
+            let mutable sg = Sg.RenderNode(call, mode) :> ISg
+            sg <- sg |> Sg.vertexAttribute' DefaultSemantic.Positions positions
+
+            match indices with
+            | Some index -> sg <- sg |> Sg.index' index
+            | None -> ()
+
+            sg |> Sg.requirePicking |> PickTree.ofSg
+
+        let private intersects (center : V3d) (tree : PickTree) =
+            let ray = Ray3d(center + 10.0 * V3d.ZAxis, -V3d.ZAxis)
+            tree.Intersect(ray) |> AVal.force |> Option.isSome
+
+        let drawCallRanges =
+            test "Picking.DrawCallInfo subranges" {
+                initialize()
+
+                let modes =
+                    [| IndexedGeometryMode.TriangleList
+                       IndexedGeometryMode.TriangleStrip
+                       IndexedGeometryMode.TriangleAdjacencyList |]
+
+                let targetCenter = V3d.Zero
+                let excludedCenter = V3d(-20.0, 0.0, 0.0)
+                let wrongBaseCenter = V3d(20.0, 0.0, 0.0)
+
+                for mode in modes do
+                    let target = primitive mode targetCenter
+                    let excluded = primitive mode excludedCenter
+                    let count = target.Length
+
+                    let nonIndexedCall =
+                        DrawCallInfo(
+                            FaceVertexCount = count,
+                            InstanceCount = 1,
+                            FirstIndex = count,
+                            BaseVertex = 123
+                        )
+
+                    let nonIndexedTree =
+                        pickTree mode (Array.append excluded target) None (AVal.constant nonIndexedCall)
+
+                    let description = $"{modeName mode}, non-indexed"
+                    Expect.isTrue (intersects targetCenter nonIndexedTree) $"Selected geometry was not pickable ({description})"
+                    Expect.isFalse (intersects excludedCenter nonIndexedTree) $"Geometry before FirstIndex was pickable ({description})"
+
+                    let wrongBase = primitive mode wrongBaseCenter
+                    let baseVertex = wrongBase.Length + 1
+                    let positions = Array.concat [ wrongBase; [| V3d(100.0) |]; target; excluded ]
+                    let excludedIndex = [| count .. 2 * count - 1 |]
+                    let selectedIndex = [| 0 .. count - 1 |]
+                    let indices = Array.append excludedIndex selectedIndex
+
+                    let indexedCall =
+                        DrawCallInfo(
+                            FaceVertexCount = count,
+                            InstanceCount = 1,
+                            FirstIndex = count,
+                            BaseVertex = baseVertex
+                        )
+
+                    let indexedTree = pickTree mode positions (Some indices) (AVal.constant indexedCall)
+                    let description = $"{modeName mode}, indexed"
+                    Expect.isTrue (intersects targetCenter indexedTree) $"Selected base-vertex geometry was not pickable ({description})"
+                    Expect.isFalse (intersects excludedCenter indexedTree) $"Geometry before FirstIndex was pickable ({description})"
+                    Expect.isFalse (intersects wrongBaseCenter indexedTree) $"BaseVertex was ignored ({description})"
+
+                let target = primitive IndexedGeometryMode.TriangleList targetCenter
+                let excluded = primitive IndexedGeometryMode.TriangleList excludedCenter
+                let backing =
+                    Array.append excluded target
+                    |> Array.collect (fun p -> [| p; V3d(100.0) |])
+
+                let view = BufferView(backing, stride = 2 * sizeof<V3d>)
+                let call = DrawCallInfo(FaceVertexCount = 3, InstanceCount = 1, FirstIndex = 3)
+                let tree =
+                    Sg.render IndexedGeometryMode.TriangleList call
+                    |> Sg.vertexBuffer DefaultSemantic.Positions view
+                    |> Sg.requirePicking
+                    |> PickTree.ofSg
+
+                Expect.isTrue (intersects targetCenter tree) "Selected geometry in a strided buffer view was not pickable"
+                Expect.isFalse (intersects excludedCenter tree) "Excluded geometry in a strided buffer view was pickable"
+            }
+
+        let automaticFaceVertexCount =
+            test "Picking.Automatic FaceVertexCount" {
+                initialize()
+
+                let positions = primitive IndexedGeometryMode.TriangleList V3d.Zero
+                let indices = [| 0; 1; 2 |]
+                let call =
+                    DrawCallInfo(
+                        FaceVertexCount = -1,
+                        InstanceCount = 1,
+                        BaseVertex = Int32.MaxValue
+                    )
+
+                let tree = pickTree IndexedGeometryMode.TriangleList positions (Some indices) (AVal.constant call)
+                Expect.isTrue (intersects V3d.Zero tree) "Automatic FaceVertexCount did not use the scoped count and reset BaseVertex"
+            }
+
+        let adaptiveDrawCallRange =
+            test "Picking.Adaptive DrawCallInfo range" {
+                initialize()
+
+                let left = V3d(-3.0, 0.0, 0.0)
+                let right = V3d(3.0, 0.0, 0.0)
+                let positions = Array.append (primitive IndexedGeometryMode.TriangleList left) (primitive IndexedGeometryMode.TriangleList right)
+
+                for indexed in [| false; true |] do
+                    let call =
+                        AVal.init <| DrawCallInfo(
+                            FaceVertexCount = 3,
+                            InstanceCount = 1,
+                            FirstIndex = 0
+                        )
+
+                    let indices =
+                        if indexed then Some [| 0; 1; 2; 0; 1; 2 |]
+                        else None
+
+                    let tree = pickTree IndexedGeometryMode.TriangleList positions indices call
+                    Expect.isTrue (intersects left tree) $"Initial draw range was not pickable (indexed = {indexed})"
+                    Expect.isFalse (intersects right tree) $"Geometry outside the initial draw range was pickable (indexed = {indexed})"
+
+                    transact (fun _ ->
+                        call.Value <- DrawCallInfo(
+                            FaceVertexCount = 3,
+                            InstanceCount = 1,
+                            FirstIndex = 3,
+                            BaseVertex = if indexed then 3 else 0
+                        )
+                    )
+                    tree.Update()
+
+                    Expect.isFalse (intersects left tree) $"Stale geometry remained pickable after a range update (indexed = {indexed})"
+                    Expect.isTrue (intersects right tree) $"Updated draw range was not pickable (indexed = {indexed})"
+            }
+
+        let emptyAndUnderfilledDrawCalls =
+            test "Picking.Empty and underfilled DrawCallInfo ranges" {
+                initialize()
+
+                let modes =
+                    [| IndexedGeometryMode.TriangleList
+                       IndexedGeometryMode.TriangleStrip
+                       IndexedGeometryMode.TriangleAdjacencyList |]
+
+                let positions = primitive IndexedGeometryMode.TriangleAdjacencyList V3d.Zero
+                let indices = [| 0 .. positions.Length - 1 |]
+
+                for mode in modes do
+                    for indexed in [| false; true |] do
+                        let call =
+                            DrawCallInfo(
+                                FaceVertexCount = 0,
+                                InstanceCount = 1,
+                                FirstIndex = Int32.MaxValue,
+                                BaseVertex = Int32.MaxValue
+                            )
+                        let index = if indexed then Some indices else None
+                        let tree = pickTree mode positions index (AVal.constant call)
+                        Expect.isFalse (intersects V3d.Zero tree) $"Zero-count {modeName mode} draw was pickable (indexed = {indexed})"
+
+                for indexed in [| false; true |] do
+                    for count in [| 1; 2 |] do
+                        let call = DrawCallInfo(FaceVertexCount = count, InstanceCount = 1)
+                        let index = if indexed then Some indices else None
+                        let tree = pickTree IndexedGeometryMode.TriangleStrip positions index (AVal.constant call)
+                        Expect.isFalse (intersects V3d.Zero tree) $"Underfilled triangle strip was pickable (indexed = {indexed}, count = {count})"
+            }
+
+        let drawCallRangeOverflow =
+            test "Picking.DrawCallInfo range overflow" {
+                initialize()
+
+                let positions = primitive IndexedGeometryMode.TriangleList V3d.Zero
+
+                let nonIndexedCall =
+                    DrawCallInfo(
+                        FaceVertexCount = 2,
+                        InstanceCount = 1,
+                        FirstIndex = Int32.MaxValue
+                    )
+
+                Expect.throwsT<ArgumentOutOfRangeException>
+                    (fun _ -> pickTree IndexedGeometryMode.TriangleList positions None (AVal.constant nonIndexedCall) |> ignore)
+                    "Overflowing non-indexed range was not rejected"
+
+                let indexedCall =
+                    DrawCallInfo(
+                        FaceVertexCount = 3,
+                        InstanceCount = 1,
+                        BaseVertex = Int32.MaxValue
+                    )
+
+                Expect.throwsT<ArgumentOutOfRangeException>
+                    (fun _ -> pickTree IndexedGeometryMode.TriangleList positions (Some [| 1; 1; 1 |]) (AVal.constant indexedCall) |> ignore)
+                    "Overflowing base-vertex range was not rejected"
+
+                let excessiveSpanCall = DrawCallInfo(FaceVertexCount = 3, InstanceCount = 1)
+                Expect.throwsT<ArgumentOutOfRangeException>
+                    (fun _ ->
+                        pickTree
+                            IndexedGeometryMode.TriangleList
+                            positions
+                            (Some [| 0; Int32.MaxValue; 0 |])
+                            (AVal.constant excessiveSpanCall)
+                        |> ignore
+                    )
+                    "Unrepresentable indexed vertex span was not rejected"
+            }
+
         let renderNode (triangleList: bool) (indexed: bool) =
             test (testDescription "RenderNode" triangleList indexed) {
                 IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
@@ -581,6 +820,11 @@ module ``SceneGraph Tests`` =
             BoundingBox.renderObjectsNode
             BoundingBox.renderCommands
             BoundingBox.runtimeCommands
+            Picking.drawCallRanges
+            Picking.automaticFaceVertexCount
+            Picking.adaptiveDrawCallRange
+            Picking.emptyAndUnderfilledDrawCalls
+            Picking.drawCallRangeOverflow
             Picking.renderNode false false
             Picking.renderNode false true
             Picking.renderNode true false
