@@ -1,3 +1,4 @@
+- [Sg] Fixed automatic picking to honor `DrawCallInfo` ranges and indexed `BaseVertex` offsets.
 - [Sg] Made render-object bounding-box caching caller-scope aware, fixing reused render-object sets beneath distinct transforms while retaining weak, allocation-free cache hits.
 - Fixed orthographic picking to use parallel unit rays from pixel positions on the near plane rather than the camera location.
 - Fixed `BufferView.getCount` and automatic draw counts to honor byte strides, count only complete elements, and return zero for exhausted storage.
