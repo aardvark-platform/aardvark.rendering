@@ -241,31 +241,110 @@ module PickingSemantics =
             mode      : IndexedGeometryMode
         }
 
+    [<Struct>]
+    type private VertexRange =
+        {
+            first     : int
+            count     : int
+            indexBase : int
+        }
+
     [<Rule>]
     type PickObjectSem() =
 
         static let cache = Dictionary<PickingKey, aval<Pickable> voption>()
 
-        static let bb (t : Triangle3d) =
-            let mutable b = t.BoundingBox3d
-            let size = b.Size
-            let d = 1.0E-5 * size.NormMax
+        static let triangleSpatial =
+            { new Spatial<Triangle3d>() with
+                member _.ComputeBounds(ps) = Spatial.triangle.ComputeBounds(ps).EnlargedBy 1E-8
+                member _.PlaneSide(a, b) = Spatial.triangle.PlaneSide(a, b)
+            }
 
-            if size.X <= 0.0 then
-                b.Min.X <- b.Min.X - d
-                b.Max.X <- b.Max.X + d
+        static let createPickable (triangles : Triangle3d[]) =
+            triangles
+            |> KdTree.build triangleSpatial KdBuildInfo.Default
+            |> PickShape.Triangles
+            |> Pickable.ofShape
 
-            if size.Y <= 0.0 then
-                b.Min.Y <- b.Min.Y - d
-                b.Max.Y <- b.Max.Y + d
+        static let resolveCall (scopeCount : int) (call : DrawCallInfo) =
+            if call.FaceVertexCount < 0 then
+                let mutable result = call
+                result.FaceVertexCount <- scopeCount
+                result.BaseVertex <- 0
+                result
+            else
+                call
 
-            if size.Z <= 0.0 then
-                b.Min.Z <- b.Min.Z - d
-                b.Max.Z <- b.Max.Z + d
+        static let getDrawRange (call : DrawCallInfo) =
+            if call.FaceVertexCount <= 0 then
+                ValueNone
+            else
+                let last = int64 call.FirstIndex + int64 call.FaceVertexCount - 1L
+                if call.FirstIndex < 0 || last > int64 System.Int32.MaxValue then
+                    raise <| System.ArgumentOutOfRangeException(
+                        "call",
+                        $"Draw range [{call.FirstIndex}, {last}] cannot be represented."
+                    )
 
-            b
+                ValueSome struct (call.FirstIndex, call.FaceVertexCount)
 
-        static let getTriangles (mode : IndexedGeometryMode) (index : int[]) (pos : V3d[]) : Triangle3d[] =
+        static let getVertexRange (baseVertex : int) (index : int[]) =
+            if index.Length = 0 then
+                ValueNone
+            else
+                let mutable minIndex = index.[0]
+                let mutable maxIndex = minIndex
+
+                for i = 1 to index.Length - 1 do
+                    let value = index.[i]
+                    if value < minIndex then minIndex <- value
+                    if value > maxIndex then maxIndex <- value
+
+                let first = int64 baseVertex + int64 minIndex
+                let last = int64 baseVertex + int64 maxIndex
+                let count = last - first + 1L
+
+                if first < 0L || last > int64 System.Int32.MaxValue || count > int64 System.Int32.MaxValue then
+                    raise <| System.ArgumentOutOfRangeException(
+                        "call",
+                        $"Indexed vertex range [{first}, {last}] cannot be represented."
+                    )
+
+                ValueSome {
+                    first = int first
+                    count = int count
+                    indexBase = minIndex
+                }
+
+        static let downloadRange (token : AdaptiveToken) (startIndex : int) (count : int) (view : BufferView) =
+            match view.SingleValue with
+            | Some value ->
+                value.Accept {
+                    new IAdaptiveValueVisitor<System.Array> with
+                        member _.Visit(value) = Array.replicate count (value.GetValue token) :> System.Array
+                }
+            | None ->
+                let elementSize = view.ElementType.CLRSize
+                let elementStride = if view.Stride = 0 then elementSize else view.Stride
+                let offset = int64 view.Offset + int64 elementStride * int64 startIndex
+
+                if startIndex < 0 || count < 0 || view.Offset < 0 || elementStride <= 0 || offset < 0L then
+                    raise <| System.ArgumentOutOfRangeException(
+                        "view",
+                        $"Buffer view range (start = {startIndex}, count = {count}) cannot be represented."
+                    )
+
+                view.Buffer.GetValue(token).ToArray(
+                    view.ElementType,
+                    uint64 count,
+                    uint64 offset,
+                    uint64 view.Stride
+                )
+
+        static let getTriangles (mode : IndexedGeometryMode) (index : int[]) (indexBase : int) (pos : V3d[]) : Triangle3d[] =
+            let inline at (i : int) =
+                pos.[int (int64 index.[i] - int64 indexBase)]
+
             match mode, index with
             | IndexedGeometryMode.TriangleList, null ->
                 let get (ti : int) =
@@ -277,7 +356,7 @@ module PickingSemantics =
             | IndexedGeometryMode.TriangleList, index ->
                 let get (ti : int) =
                     let i0 = 3 * ti
-                    Triangle3d(pos.[index.[i0]], pos.[index.[i0 + 1]], pos.[index.[i0 + 2]])
+                    Triangle3d(at i0, at (i0 + 1), at (i0 + 2))
 
                 Array.init (index.Length / 3) get
 
@@ -288,16 +367,16 @@ module PickingSemantics =
                     else
                         Triangle3d(pos.[ti + 1], pos.[ti], pos.[ti + 2])
 
-                Array.init (pos.Length - 2) get
+                Array.init (max 0 (pos.Length - 2)) get
 
             | IndexedGeometryMode.TriangleStrip, index ->
                 let get (ti : int) =
                     if ti % 2 = 0 then
-                        Triangle3d(pos.[index.[ti]], pos.[index.[ti + 1]], pos.[index.[ti + 2]])
+                        Triangle3d(at ti, at (ti + 1), at (ti + 2))
                     else
-                        Triangle3d(pos.[index.[ti + 1]], pos.[index.[ti]], pos.[index.[ti + 2]])
+                        Triangle3d(at (ti + 1), at ti, at (ti + 2))
 
-                Array.init (index.Length - 2) get
+                Array.init (max 0 (index.Length - 2)) get
 
             | IndexedGeometryMode.TriangleAdjacencyList, null ->
                 let get (ti : int) =
@@ -309,7 +388,7 @@ module PickingSemantics =
             | IndexedGeometryMode.TriangleAdjacencyList, index ->
                 let get (ti : int) =
                     let i0 = 6 * ti
-                    Triangle3d(pos.[index.[i0]], pos.[index.[i0 + 2]], pos.[index.[i0 + 4]])
+                    Triangle3d(at i0, at (i0 + 2), at (i0 + 4))
 
                 Array.init (index.Length / 6) get
 
@@ -317,63 +396,77 @@ module PickingSemantics =
                 Array.empty
 
         // TODO: memory leak
-        static let createLeafPickable (key : PickingKey) =
+        static let createLeafPickable (scopeCount : aval<int>) (key : PickingKey) =
             lock cache (fun () ->
                 cache.GetCreate(key, fun key ->
                     match key.mode with
                     | IndexedGeometryMode.TriangleList
                     | IndexedGeometryMode.TriangleStrip
                     | IndexedGeometryMode.TriangleAdjacencyList ->
-                        let index =
-                            match key.index with
-                            | Some view ->
-                                let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<int>
-                                key.call
-                                |> AVal.bind (fun call -> BufferView.download call.FirstIndex call.FaceVertexCount view)
-                                |> AVal.map (converter >> unbox<int[]>)
-                                |> ValueSome
-                            | None ->
-                                ValueNone
-
-                        let positions =
-                            match key.positions with
-                            | ValueSome view ->
-                                let maxVertexExclusice =
-                                    match index with
-                                    | ValueSome idx ->
-                                        idx |> AVal.map (fun idx -> 1 + Array.max idx)
-                                    | ValueNone ->
-                                        key.call |> AVal.map (fun call -> call.FirstIndex + call.FaceVertexCount)
-
-                                let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<V3d>
-
-                                maxVertexExclusice
-                                |> AVal.bind (fun cnt -> BufferView.download 0 cnt view)
-                                |> AVal.map (converter >> unbox<V3d[]>)
-                                |> ValueSome
-
-                            | ValueNone ->
-                                ValueNone
-
-                        match positions with
-                        | ValueSome pos ->
-                            let triangles =
-                                match index with
-                                | ValueSome idx -> AVal.map2 (getTriangles key.mode) idx pos
-                                | ValueNone -> AVal.map (getTriangles key.mode null) pos
+                        match key.positions with
+                        | ValueSome positionView ->
+                            let positionConverter = PrimitiveValueConverter.getArrayConverter positionView.ElementType typeof<V3d>
 
                             let pickable =
-                                let spatial =
-                                    { new Spatial<Triangle3d>() with
-                                        member x.ComputeBounds(ps) = Spatial.triangle.ComputeBounds(ps).EnlargedBy 1E-8
-                                        member x.PlaneSide(a,b) = Spatial.triangle.PlaneSide(a,b)
-                                    }
+                                match key.index with
+                                | Some indexView ->
+                                    let indexConverter = PrimitiveValueConverter.getArrayConverter indexView.ElementType typeof<int>
 
-                                triangles |> AVal.map (
-                                    KdTree.build spatial KdBuildInfo.Default >>
-                                    PickShape.Triangles >>
-                                    Pickable.ofShape
-                                )
+                                    AVal.custom (fun token ->
+                                        let call =
+                                            let call = key.call.GetValue token
+                                            if call.FaceVertexCount < 0 then
+                                                resolveCall (scopeCount.GetValue token) call
+                                            else
+                                                call
+
+                                        let triangles =
+                                            match getDrawRange call with
+                                            | ValueSome struct (first, count) ->
+                                                let index =
+                                                    downloadRange token first count indexView
+                                                    |> indexConverter
+                                                    |> unbox<int[]>
+
+                                                match getVertexRange call.BaseVertex index with
+                                                | ValueSome range ->
+                                                    let positions =
+                                                        downloadRange token range.first range.count positionView
+                                                        |> positionConverter
+                                                        |> unbox<V3d[]>
+
+                                                    getTriangles key.mode index range.indexBase positions
+                                                | ValueNone ->
+                                                    Array.empty
+                                            | ValueNone ->
+                                                Array.empty
+
+                                        createPickable triangles
+                                    )
+
+                                | None ->
+                                    AVal.custom (fun token ->
+                                        let call =
+                                            let call = key.call.GetValue token
+                                            if call.FaceVertexCount < 0 then
+                                                resolveCall (scopeCount.GetValue token) call
+                                            else
+                                                call
+
+                                        let triangles =
+                                            match getDrawRange call with
+                                            | ValueSome struct (first, count) ->
+                                                let positions =
+                                                    downloadRange token first count positionView
+                                                    |> positionConverter
+                                                    |> unbox<V3d[]>
+
+                                                getTriangles key.mode null 0 positions
+                                            | ValueNone ->
+                                                Array.empty
+
+                                        createPickable triangles
+                                    )
 
                             ValueSome pickable
                         | ValueNone ->
@@ -400,7 +493,7 @@ module PickingSemantics =
                         mode      = render.Mode
                     }
 
-                match createLeafPickable key with
+                match createLeafPickable scope.FaceVertexCount key with
                 | ValueSome pickable ->
                     let pickable = AVal.map2 Pickable.transform scope.ModelTrafo pickable
                     let o = PickObject(scope, pickable)

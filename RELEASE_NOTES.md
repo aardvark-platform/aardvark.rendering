@@ -1,3 +1,5 @@
+- [Sg] Fixed automatic picking to honor `DrawCallInfo` ranges and indexed `BaseVertex` offsets.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 
