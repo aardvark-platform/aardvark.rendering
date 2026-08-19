@@ -1,3 +1,5 @@
+- Fixed line and triangle strip conversion to preserve source geometries and handle empty or underfilled strips.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 
