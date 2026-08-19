@@ -169,7 +169,7 @@ type IndexData =
         | _ -> false
 
     override this.GetHashCode() =
-        HashCode.Combine(this.Type.GetHashCode(), this.Buffer.GetHashCode(), this.Offset.GetHashCode())
+        HashCode.Combine(this.Type.GetHashCode(), this.Buffer.GetHashCode(), this.Count.GetHashCode(), this.Offset.GetHashCode())
 
     interface IEquatable<IndexData> with
         member this.Equals other = this.Equals other

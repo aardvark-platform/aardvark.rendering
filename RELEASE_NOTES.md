@@ -1,3 +1,5 @@
+- [ManagedPool] Made shared layout identity size-aware, preventing equal content with different logical counts from aliasing pooled buffer ranges and raster or trace geometry offsets.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 
