@@ -80,56 +80,95 @@ module private IndexHelpers =
                             }
                 }
 
+    let private getOutputCount (primitiveSize : int) (stripOverlap : int) (inputCount : int) =
+        let primitiveCount = max 0L (int64 inputCount - int64 stripOverlap)
+        let outputCount = int64 primitiveSize * primitiveCount
+
+        if outputCount > int64 Int32.MaxValue then
+            raise <| ArgumentException($"Strip conversion requires {outputCount} indices, which exceeds the supported array length.")
+
+        int outputCount
+
+    let private lineStripToListVisitor =
+        { new ArrayVisitor<Array>() with
+            member _.Run(index : 'i[]) =
+                let res = Array.zeroCreate<'i> (getOutputCount 2 1 index.Length)
+
+                if index.Length >= 2 then
+                    let mutable oi = 0
+                    let mutable i0 = index.[0]
+
+                    for i = 1 to index.Length - 1 do
+                        let i1 = index.[i]
+                        res.[oi] <- i0
+                        res.[oi + 1] <- i1
+                        i0 <- i1
+                        oi <- oi + 2
+
+                res :> Array
+        }
+
     let lineStripToList (data : Array) =
-        if isNull data then
-            null
-        else
-            data.Visit
-                {
-                    new ArrayVisitor<Array>() with
-                        member x.Run(index : 'i[]) =
-                            let res = Array.zeroCreate (2 * (index.Length - 1))
+        if isNull data then null
+        else data.Visit lineStripToListVisitor
 
-                            let mutable oi = 0
-                            let mutable i0 = index.[0]
-                            for i in 1 .. index.Length - 1 do
-                                let i1 = index.[i]
-                                res.[oi + 0] <- i0
-                                res.[oi + 1] <- i1
-                                i0 <- i1
-                                oi <- oi + 2
+    let createLineList (vertexCount : int) =
+        let res = Array.zeroCreate<int32> (getOutputCount 2 1 vertexCount)
 
-                            res :> Array
-                }
+        let mutable oi = 0
+        for i = 1 to vertexCount - 1 do
+            res.[oi] <- int32 (i - 1)
+            res.[oi + 1] <- int32 i
+            oi <- oi + 2
+
+        res :> Array
+
+    let private triangleStripToListVisitor =
+        { new ArrayVisitor<Array>() with
+            member _.Run(index : 'i[]) =
+                let res = Array.zeroCreate<'i> (getOutputCount 3 2 index.Length)
+
+                if index.Length >= 3 then
+                    let mutable oi = 0
+                    let mutable i0 = index.[0]
+                    let mutable i1 = index.[1]
+
+                    for i = 2 to index.Length - 1 do
+                        let i2 = index.[i]
+
+                        res.[oi] <- i0
+                        res.[oi + 1] <- i1
+                        res.[oi + 2] <- i2
+
+                        // 0 1 2   2 1 3   2 3 4   4 3 5   4 5 6
+                        if i &&& 1 = 0 then i0 <- i2
+                        else i1 <- i2
+
+                        oi <- oi + 3
+
+                res :> Array
+        }
 
     let triangleStripToList (data : Array) =
-        if isNull data then
-            null
-        else
-            data.Visit
-                {
-                    new ArrayVisitor<Array>() with
-                        member x.Run(index : 'i[]) =
-                            let res = Array.zeroCreate (3 * (index.Length - 2))
+        if isNull data then null
+        else data.Visit triangleStripToListVisitor
 
-                            let mutable oi = 0
-                            let mutable i0 = index.[0]
-                            let mutable i1 = index.[1]
-                            for i in 2 .. index.Length - 1 do
-                                let i2 = index.[i]
+    let createTriangleList (vertexCount : int) =
+        let res = Array.zeroCreate<int32> (getOutputCount 3 2 vertexCount)
 
-                                res.[oi + 0] <- i0
-                                res.[oi + 1] <- i1
-                                res.[oi + 2] <- i2
+        let mutable oi = 0
+        for i = 2 to vertexCount - 1 do
+            if i &&& 1 = 0 then
+                res.[oi] <- int32 (i - 2)
+                res.[oi + 1] <- int32 (i - 1)
+            else
+                res.[oi] <- int32 (i - 1)
+                res.[oi + 1] <- int32 (i - 2)
 
-                                // 0 1 2   2 1 3   2 3 4   4 3 5   4 5 6
-                                if i &&& 1 = 0 then i0 <- i2
-                                else i1 <- i2
+            res.[oi + 2] <- int32 i
+            oi <- oi + 3
 
-                                oi <- oi + 3
-
-                            res :> Array
-                }
+        res :> Array
 
 module private ArrayHelpers =
 
@@ -307,21 +346,41 @@ type IndexedGeometry =
 
                 res
 
-        /// Returns a copy of the geometry with a non-stripped primitive topology.
-        /// If the topology is not line or triangle strips, the geometry is returned unmodified.
+        /// <summary>
+        /// Returns a shallow indexed copy of a line or triangle strip using the corresponding list topology.
+        /// The source geometry and its index and attribute arrays remain unchanged. Attribute dictionaries retain
+        /// their existing aliasing: indexed inputs reuse them, while non-indexed inputs receive shallow copies.
+        /// Empty and underfilled strips produce an empty index array with the source index element type, or <see cref="Int32"/> if non-indexed.
+        /// If the topology is not a line or triangle strip, the geometry is returned unmodified.
+        /// </summary>
+        /// <exception cref="ArgumentException">if the converted index count exceeds the supported array length.</exception>
         member x.ToNonStripped() =
             match x.Mode with
             | IndexedGeometryMode.LineStrip ->
-                let x = x.ToIndexed()
-                x.IndexArray <- IndexHelpers.lineStripToList x.IndexArray
-                x.Mode <- IndexedGeometryMode.LineList
-                x
+                let indices =
+                    if isNull x.IndexArray then IndexHelpers.createLineList x.FaceVertexCount
+                    else IndexHelpers.lineStripToList x.IndexArray
+
+                if isNull x.IndexArray then
+                    let copy = x.Clone()
+                    copy.IndexArray <- indices
+                    copy.Mode <- IndexedGeometryMode.LineList
+                    copy
+                else
+                    IndexedGeometry(IndexedGeometryMode.LineList, indices, x.IndexedAttributes, x.SingleAttributes)
 
             | IndexedGeometryMode.TriangleStrip ->
-                let x = x.ToIndexed()
-                x.IndexArray <- IndexHelpers.triangleStripToList x.IndexArray
-                x.Mode <- IndexedGeometryMode.TriangleList
-                x
+                let indices =
+                    if isNull x.IndexArray then IndexHelpers.createTriangleList x.FaceVertexCount
+                    else IndexHelpers.triangleStripToList x.IndexArray
+
+                if isNull x.IndexArray then
+                    let copy = x.Clone()
+                    copy.IndexArray <- indices
+                    copy.Mode <- IndexedGeometryMode.TriangleList
+                    copy
+                else
+                    IndexedGeometry(IndexedGeometryMode.TriangleList, indices, x.IndexedAttributes, x.SingleAttributes)
 
             | _ ->
                 x
@@ -471,8 +530,8 @@ module IndexedGeometry =
     /// If it is already non-indexed, it is returned unmodified.
     let inline toNonIndexed (g : IndexedGeometry) = g.ToNonIndexed()
 
-    /// Returns a copy of the geometry with a non-stripped primitive topology.
-    /// If the topology is not line or triangle strips, the geometry is returned unmodified.
+    /// Returns a shallow indexed copy of a line or triangle strip using the corresponding list topology.
+    /// The source geometry remains unchanged. If the topology is not a strip, the geometry is returned unmodified.
     let inline toNonStripped (g : IndexedGeometry) = g.ToNonStripped()
 
     /// Returns a union of two geometries with another.
