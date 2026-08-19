@@ -105,7 +105,7 @@ type AdaptiveIndexData =
         IndexData(this.Type, this.Buffer.GetValue token, this.Count, this.Offset)
 
     member inline private this.Equals(other: AdaptiveIndexData) =
-        this.Type = other.Type && this.Buffer = other.Buffer && this.Offset = other.Offset
+        this.Type = other.Type && this.Buffer = other.Buffer && this.Count = other.Count && this.Offset = other.Offset
 
     override this.Equals(obj: obj) =
         match obj with
@@ -113,7 +113,7 @@ type AdaptiveIndexData =
         | _ -> false
 
     override this.GetHashCode() =
-        HashCode.Combine(this.Type.GetHashCode(), this.Buffer.GetHashCode(), this.Offset.GetHashCode())
+        HashCode.Combine(this.Type.GetHashCode(), this.Buffer.GetHashCode(), this.Count.GetHashCode(), this.Offset.GetHashCode())
 
     interface IEquatable<AdaptiveIndexData> with
         member this.Equals other = this.Equals other

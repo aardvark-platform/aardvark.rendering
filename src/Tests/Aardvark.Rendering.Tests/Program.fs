@@ -26,6 +26,9 @@ let main argv =
             ``AdaptiveResource Tests``.tests
             ``ContextCreation Tests``.tests
             ``Vulkan Wrapper Tests``.tests
+            ``Managed Pool Layout Tests``.tests
+            ``Managed Pool Layout Integration Tests``.testsGL
+            ``Managed Pool Layout Integration Tests``.testsVulkan
             ``IDictionary StructuralComparer Tests``.tests
         ]
 

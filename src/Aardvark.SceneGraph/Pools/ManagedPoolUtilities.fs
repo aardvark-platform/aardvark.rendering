@@ -101,38 +101,97 @@ module internal ManagedPoolUtilities =
 
             static member Instance = instance
 
-    type LayoutManager<'T when 'T : equality>(comparer: IEqualityComparer<'T>)=
+    [<Struct; NoEquality; NoComparison>]
+    type private LayoutKey<'T> =
+        val Content : 'T
+        val Size : int
+        val Hash : int
+
+        new (content, size, hash) =
+            { Content = content; Size = size; Hash = hash }
+
+    [<Sealed>]
+    type private LayoutKeyComparer<'T>(contentComparer: IEqualityComparer<'T>) =
+        static let isValueType = typeof<'T>.IsValueType
+
+        interface IEqualityComparer<LayoutKey<'T>> with
+            member _.Equals(a, b) =
+                a.Size = b.Size &&
+                    (not isValueType && Object.ReferenceEquals(a.Content, b.Content) ||
+                     contentComparer.Equals(a.Content, b.Content))
+
+            member _.GetHashCode(value) =
+                value.Hash
+
+    /// Manages reference-counted ranges whose identity consists of both content and requested size.
+    /// Content equality follows the configured comparer; only equal content requested at the same size shares a range.
+    type LayoutManager<'T when 'T : equality>(comparer: IEqualityComparer<'T>) =
         let manager = MemoryManager.createNop()
-        let store = Dictionary<'T, managedptr>(comparer)
-        let cnts = Dictionary<managedptr, struct('T * ref<int>)>()
+        let contentComparer : IEqualityComparer<'T> =
+            if isNull comparer then EqualityComparer<'T>.Default
+            else comparer
+        let store = Dictionary<LayoutKey<'T>, managedptr>(LayoutKeyComparer contentComparer)
+        let cnts = Dictionary<managedptr, struct(LayoutKey<'T> * ref<int>)>()
+
+        // Keep the common repeated-sharing path direct while retaining the full dictionary for interleaved keys.
+        let isValueType = typeof<'T>.IsValueType
+        let mutable hasLast = false
+        let mutable lastKey = Unchecked.defaultof<LayoutKey<'T>>
+        let mutable lastValue = Unchecked.defaultof<managedptr>
+
+        let contentEquals a b =
+            not isValueType && Object.ReferenceEquals(a, b) || contentComparer.Equals(a, b)
+
+        let setLast key value =
+            hasLast <- true
+            lastKey <- key
+            lastValue <- value
 
         new () = LayoutManager<'T>(null)
 
         member x.Alloc(key: 'T, size: int) =
-            match store.TryGetValue key with
-            | true, v ->
-                let struct(_,r) = cnts.[v]
+            let hash = (contentComparer.GetHashCode key * 397) ^^^ size
+            if hasLast && lastKey.Hash = hash && lastKey.Size = size && contentEquals lastKey.Content key then
+                let struct(_,r) = cnts.[lastValue]
                 Interlocked.Increment &r.contents |> ignore
-                v
-            | _ ->
-                let v = manager.Alloc (nativeint size)
-                let r = ref 1
-                cnts.[v] <- (key,r)
-                store.[key] <- v
-                v
+                lastValue
+            else
+                let key = LayoutKey(key, size, hash)
+                match store.TryGetValue key with
+                | true, v ->
+                    setLast key v
+                    let struct(_,r) = cnts.[v]
+                    Interlocked.Increment &r.contents |> ignore
+                    v
+                | _ ->
+                    let v = manager.Alloc (nativeint size)
+                    let r = ref 1
+                    cnts.[v] <- (key,r)
+                    store.[key] <- v
+                    setLast key v
+                    v
 
         member x.TryAlloc(key: 'T, size: int) =
-            match store.TryGetValue key with
-            | true, v ->
-                let struct(_,r) = cnts.[v]
+            let hash = (contentComparer.GetHashCode key * 397) ^^^ size
+            if hasLast && lastKey.Hash = hash && lastKey.Size = size && contentEquals lastKey.Content key then
+                let struct(_,r) = cnts.[lastValue]
                 Interlocked.Increment &r.contents |> ignore
-                false, v
-            | _ ->
-                let v = manager.Alloc (nativeint size)
-                let r = ref 1
-                cnts.[v] <- (key,r)
-                store.[key] <- v
-                true, v
+                false, lastValue
+            else
+                let key = LayoutKey(key, size, hash)
+                match store.TryGetValue key with
+                | true, v ->
+                    setLast key v
+                    let struct(_,r) = cnts.[v]
+                    Interlocked.Increment &r.contents |> ignore
+                    false, v
+                | _ ->
+                    let v = manager.Alloc (nativeint size)
+                    let r = ref 1
+                    cnts.[v] <- (key,r)
+                    store.[key] <- v
+                    setLast key v
+                    true, v
 
         member x.Free(value: managedptr) =
             match cnts.TryGetValue value with
@@ -141,6 +200,10 @@ module internal ManagedPoolUtilities =
                     manager.Free value
                     cnts.Remove value |> ignore
                     store.Remove k |> ignore
+                    if hasLast && Object.ReferenceEquals(lastValue, value) then
+                        hasLast <- false
+                        lastKey <- Unchecked.defaultof<_>
+                        lastValue <- Unchecked.defaultof<_>
             | _ ->
                 ()
 
