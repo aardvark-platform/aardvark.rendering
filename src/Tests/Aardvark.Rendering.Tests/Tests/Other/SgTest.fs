@@ -3,6 +3,8 @@
 open System
 open System.Reflection
 open System.Text.RegularExpressions
+open System.Threading
+open System.Threading.Tasks
 open Aardvark.Base
 open Aardvark.Base.Geometry
 open Aardvark.Rendering
@@ -203,6 +205,179 @@ module ``SceneGraph Tests`` =
             Sg.draw IndexedGeometryMode.TriangleList
             |> Sg.vertexArray DefaultSemantic.Positions positions
             |> Sg.trafo trafo
+
+        let private getSingleRenderObject (sg: ISg) =
+            let ro =
+                sg.RenderObjects(Ag.Scope.Root).Content.GetValue()
+                |> Seq.exactlyOne
+
+            ro :?> RenderObject
+
+        let private scopeWithModelTrafo (trafo: aval<Trafo3d>) =
+            drawLeaf trafo [| V3f.Zero; V3f.XAxis; V3f.YAxis |]
+            |> getSingleRenderObject
+            |> _.AttributeScope
+
+        let private adaptiveRenderObject (localTrafo: aval<Trafo3d>) (positions: aval<V3f[]>) (indices: aval<int[]>) =
+            Sg.draw IndexedGeometryMode.TriangleList
+            |> Sg.vertexAttribute DefaultSemantic.Positions positions
+            |> Sg.index indices
+            |> Sg.trafo localTrafo
+            |> getSingleRenderObject
+
+        let private transformedBox (positions: V3f[]) (indices: int[]) (localTrafo: Trafo3d) (outerTrafo: Trafo3d) =
+            let trafo = localTrafo * outerTrafo
+            indices
+            |> Array.map (fun index -> positions.[index] |> V3d |> Mat.transformPos trafo.Forward)
+            |> Box3d
+
+        let fixedScope (runtimeCommand: bool) (reverse: bool) =
+            let path = if runtimeCommand then "RuntimeCommands" else "RenderObjectSet"
+            let order = if reverse then "second-then-first" else "first-then-second"
+
+            test $"Bounding Box.Scope-aware cache ({path}, {order})" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let positions =
+                    [| V3f(-1.0f, -2.0f, 0.5f)
+                       V3f(2.0f, 0.5f, -1.0f)
+                       V3f(0.25f, 4.0f, 3.0f) |]
+
+                let localTrafo = Trafo3d.Scale(0.5, 2.0, 1.5) * Trafo3d.Translation(1.0, -3.0, 2.0)
+                let firstOuter = Trafo3d.Translation(10.0, 2.0, -4.0)
+                let secondOuter = Trafo3d.Translation(-7.0, 5.0, 9.0)
+
+                let objects = (drawLeaf (AVal.constant localTrafo) positions).RenderObjects(Ag.Scope.Root)
+
+                let shared =
+                    if runtimeCommand then
+                        let command = RuntimeCommand.Render objects
+                        let ro = CommandRenderObject(RenderPass.main, Ag.Scope.Root, command) :> IRenderObject
+                        Sg.renderObjectSet (ASet.single ro)
+                    else
+                        Sg.renderObjectSet objects
+
+                let first = shared |> Sg.trafo' firstOuter
+                let second = shared |> Sg.trafo' secondOuter
+
+                let firstBox, secondBox =
+                    if reverse then
+                        let secondBox = second.GlobalBoundingBox(Ag.Scope.Root) |> AVal.force
+                        let firstBox = first.GlobalBoundingBox(Ag.Scope.Root) |> AVal.force
+                        firstBox, secondBox
+                    else
+                        let firstBox = first.GlobalBoundingBox(Ag.Scope.Root) |> AVal.force
+                        let secondBox = second.GlobalBoundingBox(Ag.Scope.Root) |> AVal.force
+                        firstBox, secondBox
+
+                let all = Array.init positions.Length id
+                let expectedFirst = transformedBox positions all localTrafo firstOuter
+                let expectedSecond = transformedBox positions all localTrafo secondOuter
+                Expect.approxEquals firstBox expectedFirst 0.001 "First caller scope was ignored"
+                Expect.approxEquals secondBox expectedSecond 0.001 "Second caller scope reused the first bounds"
+            }
+
+        let scopeAdaptiveUpdates =
+            test "Bounding Box.Scope-aware cache adaptive inputs" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let positions =
+                    cval [| V3f(-2.0f, 1.0f, 0.0f); V3f(4.0f, -3.0f, 2.0f); V3f(0.5f, 5.0f, -1.0f); V3f(7.0f, 2.0f, 3.0f) |]
+                let indices = cval [| 0; 2 |]
+                let localTrafo = cval (Trafo3d.Translation(1.0, 2.0, 3.0))
+                let firstOuter = cval Trafo3d.Identity
+                let secondOuter = cval Trafo3d.Identity
+
+                let ro = adaptiveRenderObject localTrafo positions indices
+                let firstScope = scopeWithModelTrafo firstOuter
+                let secondScope = scopeWithModelTrafo secondOuter
+                let firstBox = ro.GetBoundingBox firstScope
+                let firstBoxAgain = ro.GetBoundingBox firstScope
+                let secondBox = ro.GetBoundingBox secondScope
+
+                Expect.isTrue (Object.ReferenceEquals(firstBox, firstBoxAgain)) "Repeated scope lookup did not reuse the adaptive"
+                Expect.isFalse (Object.ReferenceEquals(firstBox, secondBox)) "Distinct outer adaptives shared a cached bounding box"
+
+                let check() =
+                    let expectedFirst = transformedBox positions.Value indices.Value localTrafo.Value firstOuter.Value
+                    let expectedSecond = transformedBox positions.Value indices.Value localTrafo.Value secondOuter.Value
+                    Expect.approxEquals (firstBox.GetValue()) expectedFirst 0.001 "First adaptive bounds are stale"
+                    Expect.approxEquals (secondBox.GetValue()) expectedSecond 0.001 "Second adaptive bounds are stale"
+
+                check()
+
+                transact (fun _ ->
+                    positions.Value <- [| V3f(-8.0f, 4.0f, 1.0f); V3f(2.0f, 9.0f, -5.0f); V3f(6.0f, -1.0f, 7.0f); V3f(3.0f, 3.0f, 3.0f) |]
+                )
+                check()
+
+                transact (fun _ -> indices.Value <- [| 1; 3 |])
+                check()
+
+                transact (fun _ -> localTrafo.Value <- Trafo3d.Scale(2.0, 0.5, 1.5) * Trafo3d.Translation(-2.0, 1.0, 4.0))
+                check()
+
+                let secondBefore = secondBox.GetValue()
+                transact (fun _ -> firstOuter.Value <- Trafo3d.Translation(20.0, -4.0, 2.0))
+                check()
+                Expect.approxEquals (secondBox.GetValue()) secondBefore 0.001 "Updating the first outer transform changed the second bounds"
+
+                transact (fun _ -> secondOuter.Value <- Trafo3d.Translation(-11.0, 8.0, -3.0))
+                check()
+            }
+
+        let rootAndInvalid =
+            test "Bounding Box.Scope-aware cache root and invalid bounds" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let positions = [| V3f(-1.0f); V3f(2.0f) |]
+                let localTrafo = Trafo3d.Translation(3.0, 4.0, 5.0)
+                let ro = drawLeaf (AVal.constant localTrafo) positions |> getSingleRenderObject
+                let explicitRoot = ro.GetBoundingBox Ag.Scope.Root
+                let implicitRoot = ro.GetBoundingBox()
+
+                Expect.isTrue (Object.ReferenceEquals(explicitRoot, implicitRoot)) "No-argument lookup did not reuse the root entry"
+                let expected = transformedBox positions [| 0; 1 |] localTrafo Trafo3d.Identity
+                Expect.approxEquals (implicitRoot.GetValue()) expected 0.001 "Root bounds changed"
+
+                let invalid =
+                    Sg.draw IndexedGeometryMode.TriangleList
+                    |> getSingleRenderObject
+                    |> _.GetBoundingBox()
+                    |> AVal.force
+
+                Expect.equal invalid Box3d.Invalid "Missing positions no longer produce invalid bounds"
+            }
+
+        let concurrentSameScope =
+            test "Bounding Box.Scope-aware cache concurrent first lookup" {
+                IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+                Aardvark.Init()
+
+                let positions = AVal.constant [| V3f.Zero; V3f.XAxis; V3f.YAxis |]
+                let indices = AVal.constant [| 0; 1; 2 |]
+                let ro = adaptiveRenderObject (AVal.constant Trafo3d.Identity) positions indices
+                let scope = scopeWithModelTrafo (AVal.constant (Trafo3d.Translation(5.0, 6.0, 7.0)))
+                use gate = new ManualResetEventSlim(false)
+
+                let tasks =
+                    Array.init 64 (fun _ ->
+                        Task.Run(fun () ->
+                            gate.Wait()
+                            ro.GetBoundingBox scope
+                        )
+                    )
+
+                gate.Set()
+                tasks |> Array.map (fun task -> task :> Task) |> Task.WaitAll
+
+                let first = tasks.[0].Result
+                for task in tasks do
+                    Expect.isTrue (Object.ReferenceEquals(first, task.Result)) "Concurrent lookup published multiple adaptives"
+            }
 
         let renderNode =
             test "Bounding Box.RenderNode" {
@@ -577,6 +752,13 @@ module ``SceneGraph Tests`` =
             onActivationMultiRenderObject
             delayModifySurface
             modelTrafo
+            BoundingBox.fixedScope false false
+            BoundingBox.fixedScope false true
+            BoundingBox.fixedScope true false
+            BoundingBox.fixedScope true true
+            BoundingBox.scopeAdaptiveUpdates
+            BoundingBox.rootAndInvalid
+            BoundingBox.concurrentSameScope
             BoundingBox.renderNode
             BoundingBox.renderObjectsNode
             BoundingBox.renderCommands
