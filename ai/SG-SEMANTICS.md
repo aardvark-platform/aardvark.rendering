@@ -89,6 +89,14 @@ type RenderObjectSem() =
 
 Source: `src/Aardvark.SceneGraph/Semantics/RenderObject.fs`
 
+### Render-Object Bounding-Box Scope
+
+A render-object bounding box depends on two transformation scopes: the model transform captured in the render object's `AttributeScope` and the effective model-transform adaptive supplied by the caller's `Ag.Scope`. Bounding-box evaluation composes both adaptives, so cache identity must include the `RenderObject` instance and the exact caller transform adaptive, not merely its current value. Both cache levels use weak keys to avoid extending the lifetime of render objects or caller scopes.
+
+This distinction matters when one render-object set is reused below multiple transforms or runtime-command nodes. Equal current transform values from different adaptives remain independent and must continue to update separately.
+
+Source: `src/Aardvark.SceneGraph/Semantics/BoundingBoxes.fs`
+
 ## FShade Integration
 
 ### Effect Application

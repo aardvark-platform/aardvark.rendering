@@ -1,3 +1,5 @@
+- [Sg] Made render-object bounding-box caching caller-scope aware, fixing reused render-object sets beneath distinct transforms while retaining weak, allocation-free cache hits.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 

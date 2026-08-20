@@ -5,12 +5,67 @@ open Aardvark.Base.Ag
 open Aardvark.Rendering
 open Aardvark.SceneGraph
 open FSharp.Data.Adaptive
+open System
 open System.Runtime.CompilerServices
+open System.Threading
 open TrafoOperators
 
 [<AutoOpen>]
 module BoundingBoxExtensions =
-    let private cache = ConditionalWeakTable<RenderObject, aval<Box3d>>()
+    [<Sealed; AllowNullLiteral>]
+    type private ScopedBoundingBox(scope: Scope, outerTrafo: aval<Trafo3d>, value: aval<Box3d>) as this =
+        let scopeHash = RuntimeHelpers.GetHashCode scope
+        let scope = WeakReference<Scope>(scope)
+        let self = WeakReference<ScopedBoundingBox>(this)
+
+        member _.OuterTrafo = outerTrafo
+        member _.Value = value
+        member _.Weak = self
+        member _.ScopeHash = scopeHash
+
+        member _.TryGet(query: Scope, result: byref<aval<Box3d>>) =
+            let mutable cached = Unchecked.defaultof<Scope>
+            if scope.TryGetTarget(&cached) && Object.ReferenceEquals(cached, query) then
+                result <- value
+                true
+            else
+                false
+
+    [<Sealed>]
+    type private RenderObjectBoundingBoxCache() =
+        // Scope semantic lookup allocates, so retain two weak, lock-free aliases for common warmed callers.
+        let mutable recent1 : WeakReference<ScopedBoundingBox> = null
+        let mutable recent1Hash = 0
+        let mutable recent2 : WeakReference<ScopedBoundingBox> = null
+        let mutable recent2Hash = 0
+
+        // Entries define cache identity; Scopes weakly memoize each scope's stable effective transform.
+        member val Entries = ConditionalWeakTable<aval<Trafo3d>, aval<Box3d>>()
+        member val Scopes = ConditionalWeakTable<Scope, ScopedBoundingBox>()
+
+        member _.TryGetRecent(scope: Scope, result: byref<aval<Box3d>>) =
+            let hash = RuntimeHelpers.GetHashCode scope
+            let mutable entry = Unchecked.defaultof<ScopedBoundingBox>
+
+            if Volatile.Read(&recent1Hash) = hash then
+                let first = Volatile.Read(&recent1)
+                notNull first && first.TryGetTarget(&entry) && entry.TryGet(scope, &result)
+            elif Volatile.Read(&recent2Hash) = hash then
+                let second = Volatile.Read(&recent2)
+                notNull second && second.TryGetTarget(&entry) && entry.TryGet(scope, &result)
+            else
+                false
+
+        member _.Remember(entry: ScopedBoundingBox) =
+            let weak = entry.Weak
+            let first = Volatile.Read(&recent1)
+            if not <| Object.ReferenceEquals(first, weak) then
+                Volatile.Write(&recent2, first)
+                Volatile.Write(&recent2Hash, Volatile.Read(&recent1Hash))
+                Volatile.Write(&recent1, weak)
+                Volatile.Write(&recent1Hash, entry.ScopeHash)
+
+    let private cache = ConditionalWeakTable<RenderObject, RenderObjectBoundingBoxCache>()
 
     module internal Box3d =
         let invalid = AVal.constant Box3d.Invalid
@@ -53,22 +108,49 @@ module BoundingBoxExtensions =
 
     type RenderObject with
         member this.GetBoundingBox(scope: Scope) =
-            lock cache (fun _ ->
+            let objectCache =
                 match cache.TryGetValue this with
-                | true, bb -> bb
+                | true, cache -> cache
+                | _ -> cache.GetOrCreateValue this
+
+            let mutable bb = Unchecked.defaultof<aval<Box3d>>
+            if objectCache.TryGetRecent(scope, &bb) then
+                bb
+            else
+                match objectCache.Scopes.TryGetValue scope with
+                | true, entry ->
+                    objectCache.Remember entry
+                    entry.Value
                 | _ ->
-                    let bb =
-                        match this.VertexAttributes.TryGetAttribute DefaultSemantic.Positions with
-                        | ValueSome positionBuffer ->
-                            let trafo = this.AttributeScope.ModelTrafo <*> scope.ModelTrafo
-                            BoundingBox.compute trafo positionBuffer this.Indices
-
+                    lock objectCache (fun _ ->
+                        match objectCache.Scopes.TryGetValue scope with
+                        | true, entry ->
+                            objectCache.Remember entry
+                            entry.Value
                         | _ ->
-                            Box3d.invalid
+                            let outerTrafo = scope.ModelTrafo
 
-                    cache.Add(this, bb)
-                    bb
-            )
+                            let bb =
+                                match objectCache.Entries.TryGetValue outerTrafo with
+                                | true, bb -> bb
+                                | _ ->
+                                    let bb =
+                                        match this.VertexAttributes.TryGetAttribute DefaultSemantic.Positions with
+                                        | ValueSome positionBuffer ->
+                                            let trafo = this.AttributeScope.ModelTrafo <*> outerTrafo
+                                            BoundingBox.compute trafo positionBuffer this.Indices
+
+                                        | _ ->
+                                            Box3d.invalid
+
+                                    objectCache.Entries.Add(outerTrafo, bb)
+                                    bb
+
+                            let entry = ScopedBoundingBox(scope, outerTrafo, bb)
+                            objectCache.Scopes.Add(scope, entry)
+                            objectCache.Remember entry
+                            bb
+                    )
 
         member this.GetBoundingBox() = this.GetBoundingBox Scope.Root
 
