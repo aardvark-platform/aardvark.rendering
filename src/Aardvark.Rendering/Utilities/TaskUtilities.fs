@@ -104,6 +104,20 @@ module Task =
                 | _ -> raise <| OperationCanceledException()
         )
 
+    let private invokeMapping (tcs : TaskCompletionSource<'b>) (mapping : 'a -> Task<'b>) (value : 'a) =
+        try
+            let inner = mapping value
+            if isNull inner then
+                tcs.SetException(InvalidOperationException("The task returned by the mapping function was null."))
+            inner
+        with e ->
+            tcs.SetException e
+            null
+
+    /// Invokes the mapping exactly once when the antecedent completes successfully and returns a task
+    /// that reaches exactly one terminal state by propagating the inner result, fault, or cancellation.
+    /// Antecedent faults and cancellations are propagated without invoking the mapping. Synchronous mapping
+    /// exceptions fault the returned task, while a null inner task faults it with an InvalidOperationException.
     let bind (mapping : 'a -> Task<'b>) (task : Task<'a>) =
         let tcs = TaskCompletionSource<'b>()
 
@@ -114,12 +128,14 @@ module Task =
                 | Faulted e ->
                     tcs.SetException e
                 | Completed v ->
-                    mapping(v).ContinueWith (fun (v : Task<'b>) ->
-                        match getResult v with
-                            | Cancelled -> tcs.SetCanceled()
-                            | Faulted e -> tcs.SetException e
-                            | Completed v -> tcs.SetResult v
-                    ) |> ignore
+                    let inner = invokeMapping tcs mapping v
+                    if not <| isNull inner then
+                        inner.ContinueWith (fun (v : Task<'b>) ->
+                            match getResult v with
+                                | Cancelled -> tcs.SetCanceled()
+                                | Faulted e -> tcs.SetException e
+                                | Completed v -> tcs.SetResult v
+                        ) |> ignore
 
         task.ContinueWith(System.Action<_>(cont)) |> ignore
         tcs.Task
