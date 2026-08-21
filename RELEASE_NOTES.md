@@ -1,5 +1,6 @@
 - Fixed `BufferView.getCount` and automatic draw counts to honor byte strides, count only complete elements, and return zero for exhausted storage.
 - Fixed BC2/BC3 decoding for ascending or equal RGB endpoints by always using the four-color palette.
+- Fixed `Task.bind` to complete when its mapping function throws synchronously or returns a null task.
 - Made `ManagedBuffer` range filling overflow-safe.
 - Fixed `Trie` preorder links for prefix and sibling updates, while preserving comparer and insertion ordering. Replaced, removed, and cleared `Trie` values are now detached cleanly from their trie-owned links.
 - Fixed indirect draw array/list/sequence range validation to reject integer overflow while preserving exact-end empty ranges and array reuse.
