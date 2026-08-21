@@ -1,3 +1,5 @@
+- Fixed `Task.bind` to complete when its mapping function throws synchronously or returns a null task.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 
