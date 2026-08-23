@@ -1,3 +1,5 @@
+- Made managed-buffer range filling overflow-safe, with empty sources rejected for non-empty targets.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 
