@@ -23,3 +23,9 @@ module ``Buffer Tests`` =
     [<Tests>]
     let testsVulkan =
         tests |> testBackend Backend.Vulkan "Buffers"
+
+    [<Tests>]
+    let testsCpu =
+        testList "Buffers" [
+            ManagedBuffer.testsCpu
+        ]
