@@ -1,3 +1,6 @@
+- Fixed `Trie` preorder links for prefix and sibling updates, while preserving comparer and insertion ordering.
+- Replaced, removed, and cleared `Trie` values are now detached cleanly from their trie-owned links.
+
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
 
