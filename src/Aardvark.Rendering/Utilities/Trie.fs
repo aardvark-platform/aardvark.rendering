@@ -3,8 +3,15 @@
 open Aardvark.Base
 open System.Collections.Generic
 
+/// <summary>
+/// A value that can be owned by a <see cref="T:Aardvark.Rendering.Trie`1"/> and linked to its preorder neighbours.
+/// While a value is stored in a trie, the trie owns both links and callers must not modify them or add the value at another key.
+/// Replaced, removed, and cleared values are detached from their trie-owned links.
+/// </summary>
 type ILinked<'a when 'a :> ILinked<'a>> =
+    /// The preceding value in trie preorder, or <c>ValueNone</c> for the first or a detached value.
     abstract member Prev : 'a voption with get, set
+    /// The following value in trie preorder, or <c>ValueNone</c> for the last or a detached value.
     abstract member Next : 'a voption with get, set
 
 [<AutoOpen>]
@@ -194,21 +201,23 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
 
     member x.Key = key
 
+    /// The first value in this subtree in preorder.
     member x.First =
-        match firstChild with
+        match value with
+        | ValueSome v -> ValueSome v
+        | ValueNone ->
+            match firstChild with
+            | null -> failwith "encountered empty Trie"
+            | n -> n.First
+
+    /// The last value in this subtree in preorder.
+    member x.Last =
+        match lastChild with
         | null ->
             match value with
             | ValueSome v -> ValueSome v
             | ValueNone -> failwith "encountered empty Trie"
-        | v -> v.First
-
-    member x.Last =
-        match value with
-        | ValueSome v -> ValueSome v
-        | ValueNone ->
-            match lastChild with
-            | null -> failwith "encountered empty Trie"
-            | n -> n.Last
+        | n -> n.Last
 
     member x.Prev
         with get() = prev
@@ -233,6 +242,7 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
             | [] ->
                 match value with
                 | ValueSome o ->
+                    let isSame = obj.ReferenceEquals(o, newValue)
                     let p = o.Prev
                     let n = o.Next
 
@@ -246,12 +256,17 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
                     | ValueNone -> parent.Last <- ValueSome newValue
                     | ValueSome n -> n.Prev <- ValueSome newValue
 
-                    o.Next <- ValueNone
-                    o.Prev <- ValueNone
+                    if not isSame then
+                        o.Next <- ValueNone
+                        o.Prev <- ValueNone
+
                     value <- ValueSome newValue
                 | ValueNone ->
-                    let l = TrieRef<'a>.Last l
-                    let r = TrieRef<'a>.First r
+                    let l : 'a voption = TrieRef<'a>.Last l
+                    let r =
+                        match l with
+                        | ValueSome predecessor -> predecessor.Next
+                        | ValueNone -> parent.First
 
                     newValue.Prev <- l
                     newValue.Next <- r
@@ -284,7 +299,7 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
 
                     c.Add(rest, lInner, rInner, newValue)
                 | _ ->
-                    let lc, c, rc =
+                    let _, c, rc =
                         children.AlterWithNeighbours(k, fun l _ r ->
                             let c = TrieNode<'a>(parent, k, level + 1)
 
@@ -312,19 +327,27 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
                     let c = c.Value
 
 
+                    // The current global links already delimit the insertion point. In particular, the predecessor
+                    // is the end of the actual preceding sibling subtree, not merely the current prefix value.
+                    let successor =
+                        match rc with
+                        | ValueSome right -> right.First
+                        | ValueNone -> TrieRef<'a>.First r
+
+                    let predecessor =
+                        match successor with
+                        | ValueSome successor -> successor.Prev
+                        | ValueNone -> parent.Last
+
                     let lInner =
-                        match lc with
-                        | ValueSome l ->
-                            match value with
-                            | ValueSome v -> Value v
-                            | ValueNone -> Node l
-                        | ValueNone ->
-                            l
+                        match predecessor with
+                        | ValueSome predecessor -> Value predecessor
+                        | ValueNone -> Nothing
 
                     let rInner =
-                        match rc with
-                        | ValueSome r -> Node r
-                        | ValueNone -> r
+                        match successor with
+                        | ValueSome successor -> Value successor
+                        | ValueNone -> Nothing
 
                     c.Add(rest, lInner, rInner, newValue)
 
@@ -337,13 +360,16 @@ type TrieNode<'a when 'a :> ILinked<'a>>(parent : Trie<'a>, key : obj, level : i
                         let n = v.Next
 
                         match p with
-                            | ValueSome p -> p.Next <- n
+                            | ValueSome p ->
+                                p.Next <- n
+                                v.Prev <- ValueNone
                             | ValueNone -> parent.First <- n
 
                         match n with
-                            | ValueSome n -> n.Prev <- p
+                            | ValueSome n ->
+                                n.Prev <- p
+                                v.Next <- ValueNone
                             | ValueNone -> parent.Last <- p
-
                         value <- ValueNone
                         true
                     | ValueNone ->
@@ -417,19 +443,34 @@ and [<StructuredFormatDisplay("{AsString}")>] Trie<'a when 'a :> ILinked<'a>>(co
         if level >= 0 && level < comparers.Length then comparers.[level]
         else ValueNone
 
+    /// Removes all entries and detaches every formerly owned value from its preorder neighbours.
     member x.Clear() =
+        let mutable current = first
+        while ValueOption.isSome current do
+            let v = current.Value
+            current <- v.Next
+            v.Prev <- ValueNone
+            v.Next <- ValueNone
+
         root <- null
         first <- ValueNone
         last <- ValueNone
 
+    /// The first value in preorder, or <c>ValueNone</c> when the trie is empty.
     member x.First
         with get() : 'a voption = first
         and set (f : 'a voption) = first <- f
 
+    /// The last value in preorder, or <c>ValueNone</c> when the trie is empty.
     member x.Last
         with get() : 'a voption = last
         and set (l : 'a voption) = last <- l
 
+    /// <summary>
+    /// Adds or replaces the value at the given key. A node's value precedes its descendants; children use the configured
+    /// comparer for their level or retain first-insertion order when no comparer is configured.
+    /// </summary>
+    /// <remarks>The trie owns the value's <see cref="P:Aardvark.Rendering.ILinked`1.Prev"/> and <see cref="P:Aardvark.Rendering.ILinked`1.Next"/> links until replacement, removal, or clearing.</remarks>
     member x.Add(key : list<obj>, value : 'a) =
         match root with
             | null ->
@@ -439,6 +480,7 @@ and [<StructuredFormatDisplay("{AsString}")>] Trie<'a when 'a :> ILinked<'a>>(co
             | r ->
                 r.Add(key, Nothing, Nothing, value)
 
+    /// Removes the value at the given key and detaches it from its formerly owned links.
     member x.Remove(key : list<obj>) =
         match root with
             | null -> false
@@ -456,6 +498,7 @@ and [<StructuredFormatDisplay("{AsString}")>] Trie<'a when 'a :> ILinked<'a>>(co
         | null -> 0
         | root -> root.Count
 
+    /// Enumerates values in preorder. A node's value precedes its descendants; sorted children use their configured comparer and unsorted children retain insertion order.
     member x.Values =
         seq {
             let mutable c = first
