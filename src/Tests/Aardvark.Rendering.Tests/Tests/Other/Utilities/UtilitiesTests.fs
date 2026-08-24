@@ -10,4 +10,5 @@ module ``Utilities Tests`` =
         testList "Utilities" [
             CompactSet.tests
             MemoryManager.tests
+            Trie.tests
         ]
