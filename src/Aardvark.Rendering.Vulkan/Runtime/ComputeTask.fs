@@ -107,7 +107,7 @@ module internal ComputeTaskInternals =
                         { s with Commands = cmd :: s.Commands }, stream
                 )
 
-            let private hostCommand (cmd : HostCommand) =
+            let hostCommand (cmd : HostCommand) =
                 State.modify (fun s ->
                     { s with Commands = (CompiledCommand.Host cmd) :: s.Commands }
                 )

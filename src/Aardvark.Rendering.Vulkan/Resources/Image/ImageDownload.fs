@@ -40,8 +40,7 @@ module ImageDownloadExtensions =
         [<AutoOpen>]
         module private CopyUtilities =
 
-            let private iter2<'T, 'U when 'T : unmanaged and 'U : unmanaged>
-                             (f : nativeptr<uint8> -> nativeptr<uint8> -> unit) (src : nativeint) (dst : NativeMatrix<'U>) =
+            let iter2<'T, 'U when 'T : unmanaged and 'U : unmanaged> (f : nativeptr<uint8> -> nativeptr<uint8> -> unit) (src : nativeint) (dst : NativeMatrix<'U>) =
                 let src =
                     let sa = int64 sizeof<'T>
                     let info = MatrixInfo(0L, dst.Size, V2l(sa, dst.Size.X * sa))
