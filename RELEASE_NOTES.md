@@ -1,4 +1,5 @@
 [GL] Explicitly disable GL_EXT_debug_printf
+- Fixed collapsed `DrawCallSet` removals so overlapping active ranges retain their coverage.
 
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
