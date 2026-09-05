@@ -20,6 +20,7 @@ let main argv =
             ``Compute Tests``.testsVulkan
 
             ``Camera Tests``.tests
+            ``UniformWriter Tests``.tests
             ``IndexedGeometry Tests``.tests
             ``SceneGraph Tests``.tests
             ``CompactSet Tests``.tests

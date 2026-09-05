@@ -1,3 +1,5 @@
+- Fixed fixed-size `Arr` uniform writes to truncate surplus values, zero-fill missing target storage, and remain within shader-array bounds.
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
