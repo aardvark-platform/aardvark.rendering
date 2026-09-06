@@ -1,3 +1,5 @@
+- Fixed phi/theta sphere tessellation to keep latitude rings between the explicit poles, eliminating degenerate triangles and zero-length wire segments without changing output counts.
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
