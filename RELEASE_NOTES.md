@@ -1,3 +1,5 @@
+- Made array-backed ray-tracing geometry subranges overflow-safe and restricted the all-remaining sentinel to -1; `Box3d` bounding-box subranges now convert only selected elements into compact storage.
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
