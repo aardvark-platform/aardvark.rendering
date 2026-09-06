@@ -1,3 +1,5 @@
+- Fixed `MemoryManager` and `ChunkedMemoryManager` shrinking to update the surviving block size before releasing its tail, preventing overlapping reported live ranges.
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9

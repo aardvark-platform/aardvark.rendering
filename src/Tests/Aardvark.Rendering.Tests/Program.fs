@@ -23,6 +23,7 @@ let main argv =
             ``IndexedGeometry Tests``.tests
             ``SceneGraph Tests``.tests
             ``CompactSet Tests``.tests
+            ``MemoryManager Tests``.tests
             ``AdaptiveResource Tests``.tests
             ``ContextCreation Tests``.tests
             ``Vulkan Wrapper Tests``.tests
