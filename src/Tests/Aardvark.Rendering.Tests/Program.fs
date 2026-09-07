@@ -9,7 +9,7 @@ let main argv =
             ``Buffer Tests``.testsGL
             ``Buffer Tests``.testsVulkan
 
-            ``Texture Tests``.compressionTests
+            ``Texture Tests``.testsCpu
             ``Texture Tests``.testsGL
             ``Texture Tests``.testsVulkan
 

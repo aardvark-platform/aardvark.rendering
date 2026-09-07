@@ -1,3 +1,5 @@
+Fixed BC volume layout and DDS mip payloads (#171)
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
