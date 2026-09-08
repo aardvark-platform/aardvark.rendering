@@ -1,3 +1,5 @@
+Amortized ASet.compact storage resizing without retaining removed keys (#173)
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
