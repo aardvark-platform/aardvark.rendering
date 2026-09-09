@@ -1,3 +1,5 @@
+[SceneGraph] Build line and triangle attributes in one source pass without per-primitive temporary arrays (#177)
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
