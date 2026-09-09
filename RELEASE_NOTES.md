@@ -1,3 +1,5 @@
+[Text] Make ShapeList.concat linear while preserving layout and enumeration semantics (#175)
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
