@@ -1,3 +1,5 @@
+[SceneGraph] Separate weak buffer-cache representations and atomically publish concurrent misses (#180)
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
