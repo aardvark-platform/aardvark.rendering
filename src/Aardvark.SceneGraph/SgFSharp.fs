@@ -35,28 +35,26 @@ module SgFSharp =
                 let surface = f() |> FShade.Effect.compose |> Surface.Effect
                 fun (sg : ISg) -> Sg.SurfaceApplicator(surface, sg) :> ISg
 
-        // Utilities to create cached buffer views
+        // Reuse the AVal.map results by source identity, independently for each representation.
+        // Weak keys allow source/view cycles to be collected. GetValue atomically publishes one
+        // result even when concurrent miss factories run more than once. Warm hits allocate nothing.
         module Caching =
 
-            // Note: we need these caches because of the AVal.maps below
-            let private cache = ConditionalWeakTable<IAdaptiveValue, obj>()
+            let private trafoCache = ConditionalWeakTable<aval<Trafo3d[]>, BufferView * BufferView>()
 
-            let private getOrCreate (create: 'T1 -> 'T2) (value: 'T1) : 'T2 =
-                match cache.TryGetValue value with
-                | (true, r) when r.GetType() = typeof<'T2> -> unbox<'T2> r
-                | _ ->
-                    let r = create value
-                    cache.Add(value, r)
-                    r
+            // Each array element type has a typed key and callback, with no cast on a miss.
+            // Static callbacks retain no source; only the weak tables associate keys with views.
+            type private ArrayCache<'T>() =
+                static let cache = ConditionalWeakTable<aval<'T[]>, BufferView>()
+                static let create =
+                    ConditionalWeakTable<aval<'T[]>, BufferView>.CreateValueCallback(fun value ->
+                        let b = value |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
+                        BufferView(b, typeof<'T>)
+                    )
+                static member Get(value : aval<'T[]>) = cache.GetValue(value, create)
 
-            let bufferOfArray (value: aval<'T[]>) : BufferView =
-                value |> getOrCreate (fun value ->
-                    let b = value |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
-                    BufferView(b, typeof<'T>)
-                )
-
-            let buffersOfTrafos (value: aval<Trafo3d[]>) : BufferView * BufferView =
-                value |> getOrCreate (fun value ->
+            let private createTrafos =
+                ConditionalWeakTable<aval<Trafo3d[]>, BufferView * BufferView>.CreateValueCallback(fun value ->
                     let forward = value |> AVal.map (fun a ->
                         let a = a |> Array.map (Trafo.forward >> M44f)
                         ArrayBuffer a :> IBuffer
@@ -69,6 +67,12 @@ module SgFSharp =
 
                     BufferView(forward, typeof<M44f>), BufferView(backward, typeof<M44f>)
                 )
+
+            let bufferOfArray (value: aval<'T[]>) : BufferView =
+                ArrayCache<'T>.Get value
+
+            let buffersOfTrafos (value: aval<Trafo3d[]>) : BufferView * BufferView =
+                trafoCache.GetValue(value, createTrafos)
 
     module Sg =
         open SgFSharpHelpers

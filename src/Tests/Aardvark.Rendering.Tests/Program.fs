@@ -22,6 +22,7 @@ let main argv =
             ``Camera Tests``.tests
             ``IndexedGeometry Tests``.tests
             ``SceneGraph Tests``.tests
+            ``SceneGraph Buffer Cache Tests``.tests
             ``CompactSet Tests``.tests
             ``AdaptiveResource Tests``.tests
             ``ContextCreation Tests``.tests
