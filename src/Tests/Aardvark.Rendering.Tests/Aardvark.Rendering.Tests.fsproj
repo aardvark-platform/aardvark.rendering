@@ -80,6 +80,7 @@
     <Compile Include="Tests\Compute\ComputeTests.fs" />
     <Compile Include="Tests\Other\Camera.fs" />
     <Compile Include="Tests\Other\IndexedGeometryTests.fs" />
+    <Compile Include="Tests\Other\ShapeListReplacementTests.fs" />
     <Compile Include="Tests\Other\SgTest.fs" />
     <Compile Include="Tests\Other\CompactSetTests.fs" />
     <Compile Include="Tests\Other\AdaptiveResourceTest.fs" />
@@ -93,6 +94,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.GPGPU\Aardvark.GPGPU.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj" />

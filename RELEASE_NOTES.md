@@ -1,3 +1,5 @@
+[Text] Make ShapeList.replaceString Unicode-correct and stack-bounded; reject empty search patterns (#184)
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
