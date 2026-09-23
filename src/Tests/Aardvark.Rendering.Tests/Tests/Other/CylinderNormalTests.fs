@@ -138,6 +138,7 @@ module ``Cylinder Normal Tests`` =
         if p.Bottom = p.Top then
             Array.iter2 (fun e a -> sameVector e a "exact straight-cylinder normal") (normals before) ns
 
+    [<Tests>]
     let tests =
         testList "Cylinder normals" [
             for mode in modes do
