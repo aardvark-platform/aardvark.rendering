@@ -1,3 +1,5 @@
+[Application] Fix camera orbiting around nonzero world-space centers and avoid an intermediate view (#42)
+
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
