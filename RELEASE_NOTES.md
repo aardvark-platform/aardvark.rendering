@@ -1,5 +1,5 @@
+[SceneGraph] Correct tapered-cylinder and cone side normals while reducing normal-buffer allocation (#186)
 [Application] Fix camera orbiting around nonzero world-space centers and avoid an intermediate view (#42)
-
 [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
