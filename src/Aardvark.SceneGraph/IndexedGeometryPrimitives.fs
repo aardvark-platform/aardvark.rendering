@@ -102,13 +102,33 @@ module IndexedGeometryPrimitives =
     let point = point
     let pointWithNormal = pointWithNormal
 
+    // Arrays can be read directly; other sources are consumed once before building attributes.
+    let private materialize (source : seq<'T>) =
+        match source with
+        | :? ('T[]) as values -> values
+        | _ -> Seq.toArray source
+
+    let private vertexCount (primitiveCount : int) (verticesPerPrimitive : int) =
+        Checked.(*) primitiveCount verticesPerPrimitive
+
     module Line =
 
+        /// Eagerly builds non-indexed lines, consuming the source at most once.
         let lines (lines:seq<Line3d*C4b>) =
-            let pos = lines |> Seq.map fst |> Seq.collect(fun l -> [|l.P0.ToV3f(); l.P1.ToV3f()|]) |> Seq.toArray
-            let col = lines |> Seq.map snd |> Seq.collect(fun c -> [|c;c|]) |> Seq.toArray
+            let lines = materialize lines
+            let count = vertexCount lines.Length 2
+            let pos = Array.zeroCreate<V3f> count
+            let col = Array.zeroCreate<C4b> count
+            for i in 0 .. lines.Length - 1 do
+                let l, c = lines.[i]
+                let j = 2 * i
+                pos.[j] <- l.P0.ToV3f()
+                pos.[j + 1] <- l.P1.ToV3f()
+                col.[j] <- c
+                col.[j + 1] <- c
             IndexedGeometry.fromPosCol pos col None IndexedGeometryMode.LineList
 
+        /// Eagerly builds uniformly colored lines, consuming the source at most once.
         let lines' (ls:seq<Line3d>) (color : C4b) =
             lines  (ls |> Seq.map ( fun l -> l,color))
 
@@ -116,7 +136,9 @@ module IndexedGeometryPrimitives =
             lines [l,color]
     open Line
 
+    /// Eagerly builds non-indexed lines, consuming the source at most once.
     let lines = lines
+    /// Eagerly builds uniformly colored lines, consuming the source at most once.
     let lines' = lines'
     let line = line
 
@@ -202,32 +224,55 @@ module IndexedGeometryPrimitives =
     module Triangle =
         module private Impl = 
             let trianglesWithColors mode (tris:seq<Triangle3d * C4b>) =
-                match mode with
-                | Quad.Impl.Quadranglemode.Solid ->
-                    let pos = tris |> Seq.map fst |> Seq.collect(fun t -> [|t.P0.ToV3f(); t.P1.ToV3f(); t.P2.ToV3f()|]) |> Seq.toArray
-                    let col = tris |> Seq.map snd |> Seq.collect(fun c -> [|c;c;c|]) |> Seq.toArray
-                    let nrm = tris |> Seq.map fst |> Seq.collect(fun t -> let n = V3f t.Normal in [|n;n;n|]) |> Seq.toArray
-                    IndexedGeometry.fromPosColNorm pos col nrm None IndexedGeometryMode.TriangleList
-                | Quad.Impl.Quadranglemode.Wire ->
-                    let pos = tris |> Seq.map fst |> Seq.collect(fun t -> [|t.P0.ToV3f(); t.P1.ToV3f(); t.P1.ToV3f(); t.P2.ToV3f(); t.P2.ToV3f(); t.P0.ToV3f()|]) |> Seq.toArray
-                    let col = tris |> Seq.map snd |> Seq.collect(fun c -> [|c;c;c;c;c;c|]) |> Seq.toArray
-                    let nrm = tris |> Seq.map fst |> Seq.collect(fun t -> let n = V3f t.Normal in [|n;n;n;n;n;n|]) |> Seq.toArray
-                    IndexedGeometry.fromPosColNorm pos col nrm None IndexedGeometryMode.LineList
+                let tris = materialize tris
+                let wire = mode = Quad.Impl.Quadranglemode.Wire
+                let verticesPerTriangle = if wire then 6 else 3
+                let count = vertexCount tris.Length verticesPerTriangle
+                let pos = Array.zeroCreate<V3f> count
+                let col = Array.zeroCreate<C4b> count
+                let nrm = Array.zeroCreate<V3f> count
+                for i in 0 .. tris.Length - 1 do
+                    let t, c = tris.[i]
+                    let j = verticesPerTriangle * i
+                    let p0 = t.P0.ToV3f()
+                    let p1 = t.P1.ToV3f()
+                    let p2 = t.P2.ToV3f()
+                    let n = V3f t.Normal
+                    pos.[j] <- p0
+                    pos.[j + 1] <- p1
+                    if wire then
+                        pos.[j + 2] <- p1
+                        pos.[j + 3] <- p2
+                        pos.[j + 4] <- p2
+                        pos.[j + 5] <- p0
+                    else
+                        pos.[j + 2] <- p2
+                    for k in j .. j + verticesPerTriangle - 1 do
+                        col.[k] <- c
+                        nrm.[k] <- n
+                let mode = if wire then IndexedGeometryMode.LineList else IndexedGeometryMode.TriangleList
+                IndexedGeometry.fromPosColNorm pos col nrm None mode
 
             let trianglesWithColor mode (tris:seq<Triangle3d>) (col : C4b) =
                 trianglesWithColors mode (tris |> Seq.map ( fun t -> t,col ))
         
         open Impl 
 
+        /// Eagerly builds non-indexed solid triangles, consuming the source at most once.
         let solidTrianglesWithColors tris = trianglesWithColors Solid tris
+        /// Eagerly builds uniformly colored solid triangles, consuming the source at most once.
         let solidTrianglesWithColor tris col = trianglesWithColor Solid tris col
         
+        /// Eagerly builds non-indexed triangle edges, consuming the source at most once.
         let wireframeTrianglesWithColors tris = trianglesWithColors Wire tris
+        /// Eagerly builds uniformly colored triangle edges, consuming the source at most once.
         let wireframeTrianglesWithColor tris col = trianglesWithColor Wire tris col
 
     open Triangle
 
+    /// Eagerly builds non-indexed solid triangles, consuming the source at most once.
     let triangles =             solidTrianglesWithColors
+    /// Eagerly builds uniformly colored solid triangles, consuming the source at most once.
     let triangles' =            solidTrianglesWithColor
 
     module Stuff = 
