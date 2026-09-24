@@ -1,6 +1,7 @@
-[SceneGraph] Build line and triangle attributes in one source pass without per-primitive temporary arrays (#177)
-
-[GL] Explicitly disable GL_EXT_debug_printf
+- [SceneGraph] Build line and triangle attributes in one source pass without per-primitive temporary arrays (#177)
+- [SceneGraph] Correct tapered-cylinder and cone side normals while reducing normal-buffer allocation (#186)
+- [Application] Fix camera orbiting around nonzero world-space centers and avoid an intermediate view (#42)
+- [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.

@@ -671,20 +671,47 @@ module IndexedGeometryPrimitives =
             let cylinder (center : V3d) (axis : V3d) (height : float) (radius : float) (radiusTop : float) (tessellation : int) (mode : IndexedGeometryMode) =
             
                 let vertices = List<V3d>()
-                let normals = List<V3d>()
+                // Store the final format directly, without a double-precision normal buffer
+                // and a separate sequence conversion for every duplicated side/cap vertex.
+                let normals = List<V3f>()
                 let indices = List<int>()
 
                 let axisNormalized = axis.Normalized
                 let trafo = Trafo3d.FromNormalFrame(V3d.OOO, axisNormalized)
+                let displacement = axis * height
+
+                // The side tangent is displacement + radial * (radiusTop - radius).
+                // Normalize its perpendicular once, using scaling to avoid squared-length overflow
+                // or underflow. Equal radii and degenerate inputs keep the original radial normals.
+                let mutable tapered = false
+                let mutable radialScale = 1.0
+                let mutable axialNormal = V3d.Zero
+                if radius <> radiusTop && tessellation >= 3 &&
+                   radius >= 0.0 && radius < Double.PositiveInfinity &&
+                   radiusTop >= 0.0 && radiusTop < Double.PositiveInfinity &&
+                   center.IsFinite && axisNormalized.IsFinite && axisNormalized.LengthSquared > 0.0 && displacement.IsFinite then
+                    let axialMax = displacement.NormMax
+                    if axialMax > 0.0 then
+                        let direction = displacement / axialMax
+                        let axialLength = direction.Length
+                        let difference = radius - radiusTop
+                        let scale = max axialMax (abs difference)
+                        let radial = (axialMax / scale) * axialLength
+                        let axial = difference / scale
+                        let inverseLength = 1.0 / sqrt (radial * radial + axial * axial)
+                        radialScale <- radial * inverseLength
+                        axialNormal <- direction * (axial * inverseLength / axialLength)
+                        tapered <- true
 
                 // create a ring of triangles around the outside of the cylinder
                 for i in 0 .. tessellation - 1 do
-                    let normal = getCirclePos i tessellation trafo
+                    let radial = getCirclePos i tessellation trafo
+                    let normal = V3f (if tapered then radial * radialScale + axialNormal else radial)
 
-                    vertices.Add(normal * radiusTop + axis * height)
+                    vertices.Add(radial * radiusTop + displacement)
                     normals.Add(normal)
 
-                    vertices.Add(normal * radius)
+                    vertices.Add(radial * radius)
                     normals.Add(normal)
 
                     match mode with
@@ -699,11 +726,11 @@ module IndexedGeometryPrimitives =
                 for i in 0 .. tessellation - 1 do
                     // top
                     vertices.Add(vertices.[i * 2])
-                    normals.Add(axisNormalized)
+                    normals.Add(V3f axisNormalized)
 
                     // bottom
                     vertices.Add(vertices.[i * 2 + 1])
-                    normals.Add(-axisNormalized)
+                    normals.Add(V3f -axisNormalized)
                 
                     match mode with
                     | IndexedGeometryMode.TriangleList ->
@@ -713,15 +740,15 @@ module IndexedGeometryPrimitives =
                     | _ -> failwith "implement me"
 
                 // top cap center
-                vertices.Add(axis * height)
-                normals.Add(axisNormalized)
+                vertices.Add(displacement)
+                normals.Add(V3f axisNormalized)
 
                 // bottom cap center
                 vertices.Add(V3d.OOO)
-                normals.Add(-axisNormalized)
+                normals.Add(V3f -axisNormalized)
 
                 let pos = vertices |> Seq.toArray |> Array.map (Trafo3d.Translation(center).Forward.TransformPos >> V3f)
-                let norm = normals |> Seq.map V3f |> Seq.toArray
+                let norm = normals.ToArray()
                 let idx = indices  |> Seq.toArray
 
 
@@ -734,27 +761,42 @@ module IndexedGeometryPrimitives =
                 IndexedGeometry.fromPosColNorm pos col norm (Some idx) mode
         open Impl 
 
+        /// Creates a capped cylinder with smooth, slope-aware side normals. The top is placed at
+        /// center + axis * height: axis need not be unit length and height may be signed.
+        /// Equal radii and degenerate inputs retain their existing radial-normal behavior.
         let solidCylinder (center : V3d) (axis : V3d) (height : float) (radiusBottom : float) (radiusTop : float) (tessellation : int) (color : C4b) =
             cylinderWithCol center axis height radiusBottom radiusTop tessellation IndexedGeometryMode.TriangleList color
 
+        /// Creates a wire cylinder with smooth, slope-aware side normals. The top is placed at
+        /// center + axis * height: axis need not be unit length and height may be signed.
+        /// Equal radii and degenerate inputs retain their existing radial-normal behavior.
         let wireframeCylinder (center : V3d) (axis : V3d) (height : float) (radiusBottom : float) (radiusTop : float) (tessellation : int) (color : C4b) =
             cylinderWithCol center axis height radiusBottom radiusTop tessellation IndexedGeometryMode.LineList color
 
     open Cylinder
     
+    /// Creates a capped cylinder with smooth side normals and top displacement axis * height.
     let solidCylinder = solidCylinder
+    /// Creates a wire cylinder with smooth side normals and top displacement axis * height.
     let wireframeCylinder = wireframeCylinder
 
     module Cone = 
         open Cylinder.Impl
+
+        /// Creates a capped cone with smooth side normals. Its tip is at center + axis * height,
+        /// including non-unit axes and signed heights. Degenerate-input behavior is unchanged.
         let solidCone (center : V3d) (axis : V3d) (height : float) (radius : float) (tessellation : int) (color : C4b) =
             cylinderWithCol center axis height radius 0.0 tessellation IndexedGeometryMode.TriangleList color
         
+        /// Creates a wire cone with smooth side normals. Its tip is at center + axis * height,
+        /// including non-unit axes and signed heights. Degenerate-input behavior is unchanged.
         let wireframeCone (center : V3d) (axis : V3d) (height : float) (radius : float) (tessellation : int) (color : C4b) =
             cylinderWithCol center axis height radius 0.0 tessellation IndexedGeometryMode.LineList color
 
     open Cone
+    /// Creates a capped cone with smooth side normals and tip displacement axis * height.
     let solidCone = solidCone
+    /// Creates a wire cone with smooth side normals and tip displacement axis * height.
     let wireframeCone = wireframeCone
     
     module Torus =
