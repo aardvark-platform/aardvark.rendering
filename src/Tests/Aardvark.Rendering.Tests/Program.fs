@@ -75,6 +75,7 @@ let tests =
             Utilities.MemoryManager.tests
             Utilities.Trie.tests
             Utilities.TaskUtilities.tests
+            Utilities.LockedSet.tests
         ]
 
         testAllTargets "Other" [
