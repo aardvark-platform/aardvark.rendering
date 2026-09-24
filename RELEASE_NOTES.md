@@ -1,3 +1,4 @@
+- [Text] Make ShapeList.concat linear while preserving layout and enumeration semantics (#175)
 - [SceneGraph] Build line and triangle attributes in one source pass without per-primitive temporary arrays (#177)
 - [SceneGraph] Correct tapered-cylinder and cone side normals while reducing normal-buffer allocation (#186)
 - [Application] Fix camera orbiting around nonzero world-space centers and avoid an intermediate view (#42)
