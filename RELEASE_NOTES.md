@@ -1,3 +1,4 @@
+- Fixed `MemoryManager` and `ChunkedMemoryManager` shrinking to update the surviving block size before releasing its tail, preventing overlapping reported live ranges.
 - Made array-backed ray-tracing geometry subranges overflow-safe and restricted the all-remaining sentinel to -1; `Box3d` bounding-box subranges now convert only selected elements into compact storage.
 - Fixed BC volume layout and DDS mip payloads (#171)
 - Amortized ASet.compact storage resizing without retaining removed keys (#173)
