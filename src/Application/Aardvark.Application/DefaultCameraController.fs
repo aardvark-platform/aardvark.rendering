@@ -88,10 +88,10 @@ module DefaultCameraController =
                 return AdaptiveFunc.Identity
         }
 
-    /// <summary> Gives a camera look controls, orbiting around a point. 
-    /// Left mouse button controls the functionality.</summary>
+    /// <summary>Orbits the camera around a world-space point while the left mouse button is held.
+    /// Rotates the camera's center-relative offset and looks back toward the center.</summary>
     /// <param name="mouse"> the mouse inputs (this is often pulled from the parent window)</param>
-    /// <param name="center"> the point to orbit around</param>
+    /// <param name="center"> the adaptive world-space point to orbit around</param>
     /// <returns>An incremental function that takes a CameraView</returns>
     let controlOrbitAround (mouse : IMouse) (center : aval<V3d>) =
         let down = mouse.IsDown(MouseButtons.Left)
@@ -106,11 +106,14 @@ module DefaultCameraController =
                         M44d.Rotation(cam.Right, float delta.Y * -0.01) *
                         M44d.Rotation(cam.Sky, float delta.X * -0.01)
 
-                    let newLocation = trafo.TransformDir cam.Location
-                    let tempcam = cam.WithLocation newLocation
-                    let newForward = center' - newLocation |> Vec.normalize
+                    let newOffset = trafo.TransformDir (cam.Location - center')
+                    let newLocation = center' + newOffset
+                    let newForward = -newOffset |> Vec.normalize
 
-                    tempcam.WithForward newForward
+                    let view = CameraView.Look(newLocation, newForward, cam.Sky)
+                    // Keep this large-struct call out of tail position to avoid runtime tail-call helpers.
+                    GC.KeepAlive view
+                    view
                 ) 
             else
                 return AdaptiveFunc.Identity

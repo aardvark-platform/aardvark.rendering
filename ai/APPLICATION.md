@@ -439,10 +439,13 @@ Built-in camera controllers for interactive navigation:
 let view =
     DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
-// Orbit camera around point
+// Orbit around a world-space point, preserving the camera's distance while dragging.
+let orbitCenter = V3d(100.0, 200.0, 30.0)
+let orbitInitialView =
+    CameraView.lookAt (orbitCenter + V3d(0.0, -10.0, 3.0)) orbitCenter V3d.OOI
 let view =
-    AVal.integrate initialView win.Time [
-        DefaultCameraController.controlOrbitAround win.Mouse (AVal.constant V3d.Zero)
+    AVal.integrate orbitInitialView win.Time [
+        DefaultCameraController.controlOrbitAround win.Mouse (AVal.constant orbitCenter)
         DefaultCameraController.controlZoom win.Mouse
     ]
 
@@ -466,7 +469,7 @@ Available controllers:
 |------------|---------|
 | `control` | Basic free-fly (WASD + mouse look) |
 | `controlExt speed` | Free-fly with speed parameter |
-| `controlOrbitAround` | Orbit around point |
+| `controlOrbitAround` | Left-drag orbit around an adaptive world-space point |
 | `controlZoom` / `controlZoomWithSpeed` | Mouse wheel zoom |
 | `controllScroll` / `controllScrollWithSpeed` | Scroll-based movement |
 
