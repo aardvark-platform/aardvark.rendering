@@ -1,3 +1,4 @@
+- Fixed phi/theta sphere tessellation to keep latitude rings between the explicit poles, eliminating degenerate triangles and zero-length wire segments without changing output counts.
 - Fixed `MemoryManager` and `ChunkedMemoryManager` shrinking to update the surviving block size before releasing its tail, preventing overlapping reported live ranges.
 - Made array-backed ray-tracing geometry subranges overflow-safe and restricted the all-remaining sentinel to -1; `Box3d` bounding-box subranges now convert only selected elements into compact storage.
 - Fixed BC volume layout and DDS mip payloads (#171)

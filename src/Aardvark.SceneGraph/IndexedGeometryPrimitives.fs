@@ -550,9 +550,10 @@ module IndexedGeometryPrimitives =
                 normals.Add(-V3d.YAxis)
 
                 // create rings of vertices at progressively higher latitudes
+                let latitudeStep = Constant.Pi / float (verticalSegments + 1)
                 for i in 0 .. verticalSegments - 1 do
             
-                    let latitude = ((float i + 1.0) * Constant.Pi / float verticalSegments) - Constant.PiHalf
+                    let latitude = (float i + 1.0) * latitudeStep - Constant.PiHalf
 
                     let dy = Fun.Sin(latitude)
                     let dxz = Fun.Cos(latitude)
@@ -615,8 +616,10 @@ module IndexedGeometryPrimitives =
 
     open Sphere
     
+    /// Creates a wireframe phi/theta sphere. Levels below three use level three; all latitude rings lie between the two explicit poles.
     let wireframePhiThetaSphere = wireframePhiThetaSphere
         
+    /// Creates a solid phi/theta sphere. Levels below three use level three; all latitude rings lie between the two explicit poles.
     let solidPhiThetaSphere = solidPhiThetaSphere
 
     let wireframeSubdivisionSphere = wireframeSubdivisionSphere
