@@ -23,10 +23,12 @@ let main argv =
             ``IndexedGeometry Tests``.tests
             ``SceneGraph Tests``.tests
             ``CompactSet Tests``.tests
+            ``ShapeList Tests``.tests
             ``AdaptiveResource Tests``.tests
             ``ContextCreation Tests``.tests
             ``Vulkan Wrapper Tests``.tests
             ``IDictionary StructuralComparer Tests``.tests
+            ``Cylinder Normal Tests``.tests
         ]
 
     let runManuallyInMain = true

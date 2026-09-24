@@ -79,6 +79,8 @@
     <Compile Include="Tests\Compute\Jpeg.fs" />
     <Compile Include="Tests\Compute\MutableInputBinding.fs" />
     <Compile Include="Tests\Compute\ComputeTests.fs" />
+    <Compile Include="Tests\Other\ShapeList\ShapeListBenchmarks.fs" />
+    <Compile Include="Tests\Other\ShapeList\ShapeListTests.fs" />
     <Compile Include="Tests\Other\Camera.fs" />
     <Compile Include="Tests\Other\IndexedGeometryTests.fs" />
     <Compile Include="Tests\Other\SgTest.fs" />
@@ -88,12 +90,14 @@
     <Compile Include="Tests\Other\StatsBench.fs" />
     <Compile Include="Tests\Other\VulkanWrapper.fs" />
     <Compile Include="Tests\Other\StructuralComparerTests.fs" />
+    <Compile Include="Tests\Other\CylinderNormalTests.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.GPGPU\Aardvark.GPGPU.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj" />
