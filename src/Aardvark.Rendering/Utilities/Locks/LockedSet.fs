@@ -20,7 +20,9 @@ type LockedSet<'T>(elements : seq<'T>) =
     member x.Remove(item : 'T) =
         lock x (fun _ -> store.Remove item)
 
-    /// Removes all elements from the set and returns them.
+    /// Atomically replaces the backing storage with an empty set and returns the old storage without copying.
+    /// The returned batch is detached: subsequent set operations do not modify it.
+    /// Its owner is responsible for synchronizing any concurrent access to the returned HashSet.
     member x.GetAndClear() =
         lock x (fun _ ->
             let res = store
@@ -28,9 +30,9 @@ type LockedSet<'T>(elements : seq<'T>) =
             res
         )
 
-    /// Removes all elements from the set.
+    /// Clears the current backing storage under the set monitor, retaining its allocated capacity.
     member x.Clear() =
-        lock x store.Clear
+        lock x (fun _ -> store.Clear())
 
     /// Locks the set and performs the given action.
     member x.Lock(action : HashSet<'T> -> 'U) =
