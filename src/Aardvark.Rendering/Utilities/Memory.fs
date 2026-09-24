@@ -363,6 +363,7 @@ module Management =
                             x.Free(b)
                         else
                             let r = Block(x, store, b.Offset + size, b.Size - size, false, b, b.Next)
+                            b.Size <- size
                             b.Next <- r
                             if isNull r.Next then last <- r
                             else r.Next.Prev <- r
@@ -593,6 +594,7 @@ module Management =
                             x.Free(b)
                         else
                             let r = Block(x, b.Memory, b.Offset + size, b.Size - size, false, b, b.Next)
+                            b.Size <- size
                             b.Next <- r
                             if not (isNull r.Next) then r.Next.Prev <- r
                             x.Free(r)

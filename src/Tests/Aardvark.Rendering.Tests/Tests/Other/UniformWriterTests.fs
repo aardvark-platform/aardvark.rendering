@@ -54,7 +54,7 @@ module ``UniformWriter Tests`` =
 
     [<Tests>]
     let tests =
-        testList "UniformWriters" [
+        testList "Uniforms.UniformWriters" [
             testCase "empty Arr stays inside target and zero-fills it" <| fun _ ->
                 verifyArrWrite<N<0>> [||]
 

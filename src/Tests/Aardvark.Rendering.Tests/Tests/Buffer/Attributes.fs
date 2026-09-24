@@ -588,6 +588,13 @@ module AttributeBuffer =
                     "C3b to C4f"
                 ]
 
+            let inputsOutput8BitTests =
+                Set.ofList [
+                    "int8"
+                    "uint8"
+                    "uint8 from C4b"
+                ]
+
             for mode in Mode.All do
                 for name, case in Cases.all do
 
@@ -608,6 +615,10 @@ module AttributeBuffer =
                 // Vulkan does not have normalized 32bit formats (e.g. there is no VK_FORMAT_R32G32B32_UNORM)
                 // See: https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkFormat.html
                 elif backend = Backend.Vulkan && name = "V3f from C3ui normalized" then
+                    ()
+
+                // SPIR-V does not support 8-bit inputs / outputs
+                elif backend = Backend.Vulkan && Set.contains name inputsOutput8BitTests then
                     ()
 
                 else
