@@ -102,13 +102,33 @@ module IndexedGeometryPrimitives =
     let point = point
     let pointWithNormal = pointWithNormal
 
+    // Arrays can be read directly; other sources are consumed once before building attributes.
+    let private materialize (source : seq<'T>) =
+        match source with
+        | :? ('T[]) as values -> values
+        | _ -> Seq.toArray source
+
+    let private vertexCount (primitiveCount : int) (verticesPerPrimitive : int) =
+        Checked.(*) primitiveCount verticesPerPrimitive
+
     module Line =
 
+        /// Eagerly builds non-indexed lines, consuming the source at most once.
         let lines (lines:seq<Line3d*C4b>) =
-            let pos = lines |> Seq.map fst |> Seq.collect(fun l -> [|l.P0.ToV3f(); l.P1.ToV3f()|]) |> Seq.toArray
-            let col = lines |> Seq.map snd |> Seq.collect(fun c -> [|c;c|]) |> Seq.toArray
+            let lines = materialize lines
+            let count = vertexCount lines.Length 2
+            let pos = Array.zeroCreate<V3f> count
+            let col = Array.zeroCreate<C4b> count
+            for i in 0 .. lines.Length - 1 do
+                let l, c = lines.[i]
+                let j = 2 * i
+                pos.[j] <- l.P0.ToV3f()
+                pos.[j + 1] <- l.P1.ToV3f()
+                col.[j] <- c
+                col.[j + 1] <- c
             IndexedGeometry.fromPosCol pos col None IndexedGeometryMode.LineList
 
+        /// Eagerly builds uniformly colored lines, consuming the source at most once.
         let lines' (ls:seq<Line3d>) (color : C4b) =
             lines  (ls |> Seq.map ( fun l -> l,color))
 
@@ -116,7 +136,9 @@ module IndexedGeometryPrimitives =
             lines [l,color]
     open Line
 
+    /// Eagerly builds non-indexed lines, consuming the source at most once.
     let lines = lines
+    /// Eagerly builds uniformly colored lines, consuming the source at most once.
     let lines' = lines'
     let line = line
 
@@ -202,32 +224,55 @@ module IndexedGeometryPrimitives =
     module Triangle =
         module private Impl = 
             let trianglesWithColors mode (tris:seq<Triangle3d * C4b>) =
-                match mode with
-                | Quad.Impl.Quadranglemode.Solid ->
-                    let pos = tris |> Seq.map fst |> Seq.collect(fun t -> [|t.P0.ToV3f(); t.P1.ToV3f(); t.P2.ToV3f()|]) |> Seq.toArray
-                    let col = tris |> Seq.map snd |> Seq.collect(fun c -> [|c;c;c|]) |> Seq.toArray
-                    let nrm = tris |> Seq.map fst |> Seq.collect(fun t -> let n = V3f t.Normal in [|n;n;n|]) |> Seq.toArray
-                    IndexedGeometry.fromPosColNorm pos col nrm None IndexedGeometryMode.TriangleList
-                | Quad.Impl.Quadranglemode.Wire ->
-                    let pos = tris |> Seq.map fst |> Seq.collect(fun t -> [|t.P0.ToV3f(); t.P1.ToV3f(); t.P1.ToV3f(); t.P2.ToV3f(); t.P2.ToV3f(); t.P0.ToV3f()|]) |> Seq.toArray
-                    let col = tris |> Seq.map snd |> Seq.collect(fun c -> [|c;c;c;c;c;c|]) |> Seq.toArray
-                    let nrm = tris |> Seq.map fst |> Seq.collect(fun t -> let n = V3f t.Normal in [|n;n;n;n;n;n|]) |> Seq.toArray
-                    IndexedGeometry.fromPosColNorm pos col nrm None IndexedGeometryMode.LineList
+                let tris = materialize tris
+                let wire = mode = Quad.Impl.Quadranglemode.Wire
+                let verticesPerTriangle = if wire then 6 else 3
+                let count = vertexCount tris.Length verticesPerTriangle
+                let pos = Array.zeroCreate<V3f> count
+                let col = Array.zeroCreate<C4b> count
+                let nrm = Array.zeroCreate<V3f> count
+                for i in 0 .. tris.Length - 1 do
+                    let t, c = tris.[i]
+                    let j = verticesPerTriangle * i
+                    let p0 = t.P0.ToV3f()
+                    let p1 = t.P1.ToV3f()
+                    let p2 = t.P2.ToV3f()
+                    let n = V3f t.Normal
+                    pos.[j] <- p0
+                    pos.[j + 1] <- p1
+                    if wire then
+                        pos.[j + 2] <- p1
+                        pos.[j + 3] <- p2
+                        pos.[j + 4] <- p2
+                        pos.[j + 5] <- p0
+                    else
+                        pos.[j + 2] <- p2
+                    for k in j .. j + verticesPerTriangle - 1 do
+                        col.[k] <- c
+                        nrm.[k] <- n
+                let mode = if wire then IndexedGeometryMode.LineList else IndexedGeometryMode.TriangleList
+                IndexedGeometry.fromPosColNorm pos col nrm None mode
 
             let trianglesWithColor mode (tris:seq<Triangle3d>) (col : C4b) =
                 trianglesWithColors mode (tris |> Seq.map ( fun t -> t,col ))
         
         open Impl 
 
+        /// Eagerly builds non-indexed solid triangles, consuming the source at most once.
         let solidTrianglesWithColors tris = trianglesWithColors Solid tris
+        /// Eagerly builds uniformly colored solid triangles, consuming the source at most once.
         let solidTrianglesWithColor tris col = trianglesWithColor Solid tris col
         
+        /// Eagerly builds non-indexed triangle edges, consuming the source at most once.
         let wireframeTrianglesWithColors tris = trianglesWithColors Wire tris
+        /// Eagerly builds uniformly colored triangle edges, consuming the source at most once.
         let wireframeTrianglesWithColor tris col = trianglesWithColor Wire tris col
 
     open Triangle
 
+    /// Eagerly builds non-indexed solid triangles, consuming the source at most once.
     let triangles =             solidTrianglesWithColors
+    /// Eagerly builds uniformly colored solid triangles, consuming the source at most once.
     let triangles' =            solidTrianglesWithColor
 
     module Stuff = 
@@ -629,20 +674,47 @@ module IndexedGeometryPrimitives =
             let cylinder (center : V3d) (axis : V3d) (height : float) (radius : float) (radiusTop : float) (tessellation : int) (mode : IndexedGeometryMode) =
             
                 let vertices = List<V3d>()
-                let normals = List<V3d>()
+                // Store the final format directly, without a double-precision normal buffer
+                // and a separate sequence conversion for every duplicated side/cap vertex.
+                let normals = List<V3f>()
                 let indices = List<int>()
 
                 let axisNormalized = axis.Normalized
                 let trafo = Trafo3d.FromNormalFrame(V3d.OOO, axisNormalized)
+                let displacement = axis * height
+
+                // The side tangent is displacement + radial * (radiusTop - radius).
+                // Normalize its perpendicular once, using scaling to avoid squared-length overflow
+                // or underflow. Equal radii and degenerate inputs keep the original radial normals.
+                let mutable tapered = false
+                let mutable radialScale = 1.0
+                let mutable axialNormal = V3d.Zero
+                if radius <> radiusTop && tessellation >= 3 &&
+                   radius >= 0.0 && radius < Double.PositiveInfinity &&
+                   radiusTop >= 0.0 && radiusTop < Double.PositiveInfinity &&
+                   center.IsFinite && axisNormalized.IsFinite && axisNormalized.LengthSquared > 0.0 && displacement.IsFinite then
+                    let axialMax = displacement.NormMax
+                    if axialMax > 0.0 then
+                        let direction = displacement / axialMax
+                        let axialLength = direction.Length
+                        let difference = radius - radiusTop
+                        let scale = max axialMax (abs difference)
+                        let radial = (axialMax / scale) * axialLength
+                        let axial = difference / scale
+                        let inverseLength = 1.0 / sqrt (radial * radial + axial * axial)
+                        radialScale <- radial * inverseLength
+                        axialNormal <- direction * (axial * inverseLength / axialLength)
+                        tapered <- true
 
                 // create a ring of triangles around the outside of the cylinder
                 for i in 0 .. tessellation - 1 do
-                    let normal = getCirclePos i tessellation trafo
+                    let radial = getCirclePos i tessellation trafo
+                    let normal = V3f (if tapered then radial * radialScale + axialNormal else radial)
 
-                    vertices.Add(normal * radiusTop + axis * height)
+                    vertices.Add(radial * radiusTop + displacement)
                     normals.Add(normal)
 
-                    vertices.Add(normal * radius)
+                    vertices.Add(radial * radius)
                     normals.Add(normal)
 
                     match mode with
@@ -657,11 +729,11 @@ module IndexedGeometryPrimitives =
                 for i in 0 .. tessellation - 1 do
                     // top
                     vertices.Add(vertices.[i * 2])
-                    normals.Add(axisNormalized)
+                    normals.Add(V3f axisNormalized)
 
                     // bottom
                     vertices.Add(vertices.[i * 2 + 1])
-                    normals.Add(-axisNormalized)
+                    normals.Add(V3f -axisNormalized)
                 
                     match mode with
                     | IndexedGeometryMode.TriangleList ->
@@ -671,15 +743,15 @@ module IndexedGeometryPrimitives =
                     | _ -> failwith "implement me"
 
                 // top cap center
-                vertices.Add(axis * height)
-                normals.Add(axisNormalized)
+                vertices.Add(displacement)
+                normals.Add(V3f axisNormalized)
 
                 // bottom cap center
                 vertices.Add(V3d.OOO)
-                normals.Add(-axisNormalized)
+                normals.Add(V3f -axisNormalized)
 
                 let pos = vertices |> Seq.toArray |> Array.map (Trafo3d.Translation(center).Forward.TransformPos >> V3f)
-                let norm = normals |> Seq.map V3f |> Seq.toArray
+                let norm = normals.ToArray()
                 let idx = indices  |> Seq.toArray
 
 
@@ -692,27 +764,42 @@ module IndexedGeometryPrimitives =
                 IndexedGeometry.fromPosColNorm pos col norm (Some idx) mode
         open Impl 
 
+        /// Creates a capped cylinder with smooth, slope-aware side normals. The top is placed at
+        /// center + axis * height: axis need not be unit length and height may be signed.
+        /// Equal radii and degenerate inputs retain their existing radial-normal behavior.
         let solidCylinder (center : V3d) (axis : V3d) (height : float) (radiusBottom : float) (radiusTop : float) (tessellation : int) (color : C4b) =
             cylinderWithCol center axis height radiusBottom radiusTop tessellation IndexedGeometryMode.TriangleList color
 
+        /// Creates a wire cylinder with smooth, slope-aware side normals. The top is placed at
+        /// center + axis * height: axis need not be unit length and height may be signed.
+        /// Equal radii and degenerate inputs retain their existing radial-normal behavior.
         let wireframeCylinder (center : V3d) (axis : V3d) (height : float) (radiusBottom : float) (radiusTop : float) (tessellation : int) (color : C4b) =
             cylinderWithCol center axis height radiusBottom radiusTop tessellation IndexedGeometryMode.LineList color
 
     open Cylinder
     
+    /// Creates a capped cylinder with smooth side normals and top displacement axis * height.
     let solidCylinder = solidCylinder
+    /// Creates a wire cylinder with smooth side normals and top displacement axis * height.
     let wireframeCylinder = wireframeCylinder
 
     module Cone = 
         open Cylinder.Impl
+
+        /// Creates a capped cone with smooth side normals. Its tip is at center + axis * height,
+        /// including non-unit axes and signed heights. Degenerate-input behavior is unchanged.
         let solidCone (center : V3d) (axis : V3d) (height : float) (radius : float) (tessellation : int) (color : C4b) =
             cylinderWithCol center axis height radius 0.0 tessellation IndexedGeometryMode.TriangleList color
         
+        /// Creates a wire cone with smooth side normals. Its tip is at center + axis * height,
+        /// including non-unit axes and signed heights. Degenerate-input behavior is unchanged.
         let wireframeCone (center : V3d) (axis : V3d) (height : float) (radius : float) (tessellation : int) (color : C4b) =
             cylinderWithCol center axis height radius 0.0 tessellation IndexedGeometryMode.LineList color
 
     open Cone
+    /// Creates a capped cone with smooth side normals and tip displacement axis * height.
     let solidCone = solidCone
+    /// Creates a wire cone with smooth side normals and tip displacement axis * height.
     let wireframeCone = wireframeCone
     
     module Torus =
