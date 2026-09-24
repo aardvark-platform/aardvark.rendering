@@ -579,14 +579,80 @@ module ShapeList =
             renderStyle = RenderStyle.Normal
         }
         
-    /// Appends many ShapeLists.
+    // Two inputs need no contribution buffer or intermediate mapped lists.
+    let private concatPair (l : ShapeList) (r : ShapeList) =
+        let bounds = Box.Union(l.bounds, r.bounds)
+        let renderTrafo = Trafo3d.Translation(V3d(bounds.Center.X, 0.0, 0.0))
+        let inverse = renderTrafo.Inverse
+        let shapes =
+            [ if not l.concreteShapes.IsEmpty then
+                let m = (l.renderTrafo * inverse).Forward
+                let mat = M33d.FromRows(m.R0.XYW, m.R1.XYW, m.R3.XYW)
+                for s in l.concreteShapes do
+                    yield { s with trafo = mat * s.trafo }
+              if not r.concreteShapes.IsEmpty then
+                let m = (r.renderTrafo * inverse).Forward
+                let mat = M33d.FromRows(m.R0.XYW, m.R1.XYW, m.R3.XYW)
+                for s in r.concreteShapes do
+                    yield { s with trafo = mat * s.trafo } ]
+        { bounds = bounds
+          textBounds = bounds
+          concreteShapes = shapes
+          zRange = Range.Union(l.zRange, r.zRange)
+          renderTrafo = renderTrafo
+          flipViewDependent = l.flipViewDependent && r.flipViewDependent
+          renderStyle = RenderStyle.Normal }
+
+    // Called with the enumerator positioned on the third input; concat owns its disposal.
+    let private concatMany (first : ShapeList) (second : ShapeList) (e : IEnumerator<ShapeList>) =
+        // Empty contributions still affect metadata, but need not be retained.
+        let contributions = List<ShapeList>()
+        let mutable bounds = first.bounds
+        let mutable zRange = first.zRange
+        let mutable flipViewDependent = first.flipViewDependent
+        if not first.concreteShapes.IsEmpty then contributions.Add first
+
+        let inline collect (l : ShapeList) =
+            bounds <- Box.Union(bounds, l.bounds)
+            zRange <- Range.Union(zRange, l.zRange)
+            flipViewDependent <- flipViewDependent && l.flipViewDependent
+            if not l.concreteShapes.IsEmpty then contributions.Add l
+
+        collect second
+        collect e.Current
+        while e.MoveNext() do
+            collect e.Current
+
+        let renderTrafo = Trafo3d.Translation(V3d(bounds.Center.X, 0.0, 0.0))
+        let inverse = renderTrafo.Inverse
+        let shapes =
+            [ for l in contributions do
+                let m = (l.renderTrafo * inverse).Forward
+                let mat = M33d.FromRows(m.R0.XYW, m.R1.XYW, m.R3.XYW)
+                for s in l.concreteShapes do
+                    yield { s with trafo = mat * s.trafo } ]
+
+        { bounds = bounds
+          textBounds = bounds
+          concreteShapes = shapes
+          zRange = zRange
+          renderTrafo = renderTrafo
+          flipViewDependent = flipViewDependent
+          renderStyle = RenderStyle.Normal }
+
+    /// Appends many ShapeLists in order, enumerating the source once and disposing its enumerator.
+    /// Runs in O(K + N) time for K input lists containing N shapes, rebasing each shape once.
+    /// Empty input returns empty; singleton input returns the original ShapeList unchanged.
     let concat (many : seq<ShapeList>) =
         use e = many.GetEnumerator()
         if e.MoveNext() then
-            let mutable result = e.Current
-            while e.MoveNext() do
-                result <- append result e.Current
-            result
+            let first = e.Current
+            if e.MoveNext() then
+                let second = e.Current
+                if e.MoveNext() then concatMany first second e
+                else concatPair first second
+            else
+                first
         else
             empty
 

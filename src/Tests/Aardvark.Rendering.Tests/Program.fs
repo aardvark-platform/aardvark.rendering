@@ -9,7 +9,7 @@ let main argv =
             ``Buffer Tests``.testsGL
             ``Buffer Tests``.testsVulkan
 
-            ``Texture Tests``.compressionTests
+            ``Texture Tests``.testsCpu
             ``Texture Tests``.testsGL
             ``Texture Tests``.testsVulkan
 
@@ -24,10 +24,12 @@ let main argv =
             ``TraceGeometry Tests``.tests
             ``SceneGraph Tests``.tests
             ``CompactSet Tests``.tests
+            ``ShapeList Tests``.tests
             ``AdaptiveResource Tests``.tests
             ``ContextCreation Tests``.tests
             ``Vulkan Wrapper Tests``.tests
             ``IDictionary StructuralComparer Tests``.tests
+            ``Cylinder Normal Tests``.tests
         ]
 
     let runManuallyInMain = true

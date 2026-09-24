@@ -1,6 +1,11 @@
 - Made array-backed ray-tracing geometry subranges overflow-safe and restricted the all-remaining sentinel to -1; `Box3d` bounding-box subranges now convert only selected elements into compact storage.
-
-[GL] Explicitly disable GL_EXT_debug_printf
+- Fixed BC volume layout and DDS mip payloads (#171)
+- Amortized ASet.compact storage resizing without retaining removed keys (#173)
+- [Text] Make ShapeList.concat linear while preserving layout and enumeration semantics (#175)
+- [SceneGraph] Build line and triangle attributes in one source pass without per-primitive temporary arrays (#177)
+- [SceneGraph] Correct tapered-cylinder and cone side normals while reducing normal-buffer allocation (#186)
+- [Application] Fix camera orbiting around nonzero world-space centers and avoid an intermediate view (#42)
+- [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
 - [GLFW] Hide the macOS dock icon by default. It appears when `Run()` is invoked, eliminating the need to explicitly set `hideCocoaMenuBar` for offscreen applications.
