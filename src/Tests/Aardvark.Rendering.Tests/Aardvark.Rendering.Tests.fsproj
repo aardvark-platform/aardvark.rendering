@@ -90,6 +90,7 @@
     <Compile Include="Tests\Other\ShapeList\ShapeListBenchmarks.fs" />
     <Compile Include="Tests\Other\ShapeList\ShapeListTests.fs" />
     <Compile Include="Tests\Other\Camera.fs" />
+    <Compile Include="Tests\Other\UniformWriterTests.fs" />
     <Compile Include="Tests\Other\TraceGeometryTests.fs" />
     <Compile Include="Tests\Other\SgTest.fs" />
     <Compile Include="Tests\Other\AdaptiveResourceTest.fs" />
