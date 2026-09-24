@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Rendering.Tests
+﻿namespace Aardvark.Rendering.Tests.Utilities
 
 open System
 open Aardvark.Rendering.Management
@@ -13,7 +13,7 @@ type private TestAllocator =
         Capacity : unit -> nativeint
     }
 
-module ``MemoryManager Tests`` =
+module MemoryManager =
 
     let private validateShrink (allocator : TestAllocator) (releasedCapacity : nativeint) =
         let inspect (block : Block<byte[]>) =
@@ -125,9 +125,8 @@ module ``MemoryManager Tests`` =
             }
             0n
 
-    [<Tests>]
     let tests =
-        testList "Utilities.MemoryManager" [
+        testList "MemoryManager" [
             testCase "Contiguous manager updates size when shrinking" contiguous
             testCase "Chunked manager updates size when shrinking" chunked
         ]

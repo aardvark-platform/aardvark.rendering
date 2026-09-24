@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Rendering.Tests
+﻿namespace Aardvark.Rendering.Tests.Utilities
 
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
@@ -8,7 +8,7 @@ open System.Collections.Generic
 open System.Reflection
 open System.Runtime.CompilerServices
 
-module ``CompactSet Tests`` =
+module CompactSet =
 
     [<AutoOpen>]
     module private Common =
@@ -264,9 +264,8 @@ module ``CompactSet Tests`` =
 
         let collectibilityStructKeys mode = collectibility (fun id -> { Id = id; Reference = Key id }) (fun key -> box key.Reference) mode
 
-    [<Tests>]
     let tests =
-        testList "Utilities.CompactSet" [
+        testList "CompactSet" [
             testCase "Validity"                                 Cases.validity
             testCase "Remove"                                   Cases.remove
             testCase "Add and remove"                           Cases.addAndRemove
