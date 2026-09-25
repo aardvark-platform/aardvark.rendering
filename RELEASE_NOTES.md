@@ -1,3 +1,4 @@
+- [Tests] Add an opt-in CPU diagnostic for scene-graph buffer-cache GC pauses, with rooted live-entry and collection accounting (#181).
 - [SceneGraph] Separate weak buffer-cache representations and atomically publish concurrent misses (#180)
 - Fixed `Arr` uniform writes to truncate surplus values, zero-fill missing target storage, and remain within shader-array bounds.
 - Fixed phi/theta sphere tessellation to keep latitude rings between the explicit poles, eliminating degenerate triangles and zero-length wire segments without changing output counts.

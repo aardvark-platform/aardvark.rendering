@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <BaseOutputPath>..\..\..\..\..\bin\SceneGraphBufferCacheGc\</BaseOutputPath>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="SceneGraphBufferCacheGc.fs" />
+    <ProjectReference Include="..\..\..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />
+  </ItemGroup>
+</Project>
