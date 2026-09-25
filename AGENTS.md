@@ -96,6 +96,9 @@ src/
 - **Language**: F# codebase using FSharp.Data.Adaptive for incremental computation
 - **Shaders**: Written in F# via FShade DSL, not raw GLSL
 - **Resources**: Ref-counted (Acquire/Release), not garbage collected
+- **Picking cache**: Process-wide structural memoization intentionally reuses equivalent geometry across independently constructed leaves.
+  Its current process-lifetime retention is a known tradeoff and potential TODO; any lifetime change must preserve structural reuse.
+  Read `ai/SG-SEMANTICS.md` before modifying it.
 - **Native libs**: GLVM/VKVM are pre-built; only rebuild if modifying C++ source
 
 ## For Consumer Projects
