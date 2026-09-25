@@ -24,6 +24,7 @@ let main argv =
             ``IndexedGeometry Tests``.tests
             ``TraceGeometry Tests``.tests
             ``SceneGraph Tests``.tests
+            ``SceneGraph Buffer Cache Tests``.tests
             ``Utilities Tests``.tests
             ``ShapeList Tests``.tests
             ``AdaptiveResource Tests``.tests
