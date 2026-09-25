@@ -3,6 +3,7 @@
 open Aardvark.Base
 open FSharp.Data.Adaptive
 open System.Collections.Generic
+open System.Runtime.ExceptionServices
 
 type AListRenderTask(tasks : alist<IRenderTask>) as this =
     inherit AbstractRenderTask()
@@ -12,6 +13,24 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
     let tasks = ReferenceCountingSet()
 
     let mutable signature : Option<IFramebufferSignature> = None
+    let mutable signatureDirty = false
+
+    let disposeAll (items : seq<IRenderTask>) =
+        let mutable failure = ValueNone
+
+        for task in items do
+            try
+                task.Dispose()
+            with e ->
+                match failure with
+                | ValueNone -> failure <- ValueSome (ExceptionDispatchInfo.Capture e)
+                | ValueSome _ -> ()
+
+        failure
+
+    let rethrow = function
+        | ValueSome (failure : ExceptionDispatchInfo) -> failure.Throw()
+        | ValueNone -> ()
 
     let updateSignature() =
         signature <-
@@ -19,44 +38,68 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
             |> Array.choose (fun (t : IRenderTask) -> t.FramebufferSignature)
             |> FramebufferSignature.combineMany
 
-    let set (i : Index) (t : IRenderTask) =
-        match content.TryGetValue i with
-        | (true, old) ->
-            if tasks.Remove old then
-                old.Dispose()
-        | _ ->
-            ()
-
-        content.[i] <- t
-        if tasks.Add t then
-            updateSignature()
-
-    let remove (i : Index) =
-        match content.TryGetValue i with
-        | (true, old) ->
-
-            if tasks.Remove old then
-                old.Dispose()
-
-            content.Remove i |> ignore
-            updateSignature()
-
-        | _ ->
-            ()
-
     let processDeltas(token : AdaptiveToken) =
         // TODO: EvaluateAlways should ensure that self is OutOfDate since
         //       when its not we need a transaction to add outputs
         let wasOutOfDate = this.OutOfDate
         this.OutOfDate <- true
 
-        // adjust the dependencies
-        for (i,op) in reader.GetChanges(token) |> IndexListDelta.toSeq do
-            match op with
-                | Set(t) -> set i t
-                | Remove -> remove i
+        try
+            let deltas = reader.GetChanges token
+            if deltas.IsEmpty then
+                // Retry a signature update that failed after an earlier batch was applied.
+                if signatureDirty then
+                    updateSignature()
+                    signatureDirty <- false
+            else
+                // Disposal must be based on the final reference counts of the whole batch.
+                // In particular, a task may temporarily lose its last reference during a swap.
+                let toDispose = HashSet<IRenderTask>()
+                let mutable failure = ValueNone
 
-        this.OutOfDate <- wasOutOfDate
+                try
+                    try
+                        for (i, op) in deltas do
+                            match op with
+                            | Set t ->
+                                match content.TryGetValue i with
+                                | true, old when tasks.Remove old ->
+                                    toDispose.Add old |> ignore
+                                    signatureDirty <- true
+                                | _ ->
+                                    ()
+
+                                content.[i] <- t
+                                if tasks.Add t then
+                                    // The task may have been removed at an earlier index in this batch.
+                                    toDispose.Remove t |> ignore
+                                    signatureDirty <- true
+
+                            | Remove ->
+                                match content.TryGetValue i with
+                                | true, old ->
+                                    content.Remove i |> ignore
+                                    if tasks.Remove old then
+                                        toDispose.Add old |> ignore
+                                        signatureDirty <- true
+                                | _ ->
+                                    ()
+
+                        // Read every final distinct task at most once, after all reference counts settled.
+                        if signatureDirty then
+                            updateSignature()
+                            signatureDirty <- false
+                    with e ->
+                        failure <- ValueSome (ExceptionDispatchInfo.Capture e)
+                finally
+                    // User callbacks may throw. Attempt every final disposal, but preserve the
+                    // exception which interrupted batch processing when there is one.
+                    let disposalFailure = disposeAll toDispose
+                    match failure with
+                    | ValueSome _ -> rethrow failure
+                    | ValueNone -> rethrow disposalFailure
+        finally
+            this.OutOfDate <- wasOutOfDate
 
     override x.Use (f : unit -> 'a) =
         lock x (fun () ->
@@ -72,8 +115,10 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
         )
 
     override x.FramebufferSignature =
-        lock this (fun () -> processDeltas(AdaptiveToken.Top))
-        signature
+        lock this (fun () ->
+            processDeltas(AdaptiveToken.Top)
+            signature
+        )
 
     override x.PerformUpdate(token, renderToken) =
         processDeltas token
@@ -89,10 +134,25 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
             t.Run(token, renderToken, fbo)
 
     override x.Release() =
-        reader.Outputs.Remove this |> ignore
-        for i in tasks do
-            i.Dispose()
+        let current = Seq.asArray tasks
+        let mutable failure = ValueNone
+
+        try
+            reader.Outputs.Remove this |> ignore
+        with e ->
+            failure <- ValueSome (ExceptionDispatchInfo.Capture e)
+
+        // Clear owned state before invoking user disposal callbacks, since the base class
+        // makes Release one-shot even if one of those callbacks fails.
         tasks.Clear()
+        content.Clear()
+        signature <- None
+        signatureDirty <- false
+
+        let disposalFailure = disposeAll current
+        match failure with
+        | ValueSome _ -> rethrow failure
+        | ValueNone -> rethrow disposalFailure
 
     override x.Runtime =
         lock this (fun () ->

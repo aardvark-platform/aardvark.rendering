@@ -308,7 +308,7 @@ module FramebufferSignature =
 
         let renderTo (dimension: TextureDimension) (dynamic: bool) (layered: bool) (count: int) (levels: int) (samples: int) (runtime: IRuntime) =
             if layered then
-                runtime |> requireFeatures _.Shaders.GeometryShader "Device does not support geometry shaders"
+                runtime |> requireFeatures (fun features -> features.Shaders.GeometryShader) "Device does not support geometry shaders"
 
             let totalCount = if dimension = TextureDimension.TextureCube then count * 6 else count
             let layers = if layered then totalCount else 1

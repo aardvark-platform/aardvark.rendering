@@ -27,6 +27,7 @@ let main argv =
             ``Utilities Tests``.tests
             ``ShapeList Tests``.tests
             ``AdaptiveResource Tests``.tests
+            ``AListRenderTask Tests``.tests
             ``ContextCreation Tests``.tests
             ``Vulkan Wrapper Tests``.tests
             ``IDictionary StructuralComparer Tests``.tests

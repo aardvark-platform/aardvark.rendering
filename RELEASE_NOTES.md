@@ -1,3 +1,4 @@
+- Fixed adaptive render-task list updates to preserve child lifetimes across batches and recompute framebuffer signatures once from the final task set.
 - Fixed `Arr` uniform writes to truncate surplus values, zero-fill missing target storage, and remain within shader-array bounds.
 - Fixed phi/theta sphere tessellation to keep latitude rings between the explicit poles, eliminating degenerate triangles and zero-length wire segments without changing output counts.
 - Fixed `MemoryManager` and `ChunkedMemoryManager` shrinking to update the surviving block size before releasing its tail, preventing overlapping reported live ranges.
