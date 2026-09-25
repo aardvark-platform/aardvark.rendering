@@ -122,7 +122,7 @@ module ProgramExtensions =
                     {
                         version = GLSLVersion(ctx.Driver.glsl.Major, ctx.Driver.glsl.Minor, 0)
                         enabledExtensions = enabledGLSLExts
-                        availableExtensions = Map.empty
+                        availableExtensions = Map.ofList [ GLSLExtension.EXTDebugPrintf, false ]
                         createUniformBuffers = uniformBuffers
                         bindingMode = bindingMode
                         createDescriptorSets = false

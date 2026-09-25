@@ -392,15 +392,19 @@ module UniformWriters =
                 if remaining > 0n then
                     clearBytes (ptr + offset) remaining
 
+        /// Writes a fixed-size source array to a fixed-size uniform-array target.
+        /// Surplus source values are ignored, while target storage after the final written value is zero-filled.
         type ArrWriter<'d, 'a when 'd :> INatural>(targetCount : int, stride : nativeint, inner : IWriter<'a>) =
             inherit AbstractWriter<Arr<'d, 'a>>()
             
             let targetSize = nativeint (targetCount - 1) * stride + inner.TargetSize
             let inputCount = Peano.getSize typeof<'d>
-
-            
-                
-            let firstEmptyByte = (stride * nativeint (inputCount - 1) + inner.TargetSize)
+            let writeCount = min inputCount targetCount
+            let firstEmptyByte =
+                if writeCount > 0 then
+                    stride * nativeint (writeCount - 1) + inner.TargetSize
+                else
+                    0n
             let missingBytes = targetSize - firstEmptyByte
                 
 
@@ -408,7 +412,7 @@ module UniformWriters =
 
             override x.Write(values : Arr<'d, 'a>, ptr : nativeint) =
                 let mutable offset = 0n
-                for i in 0 .. inputCount - 1 do
+                for i in 0 .. writeCount - 1 do
                     inner.WriteValue(values.[i], ptr + offset)
                     offset <- offset + stride
                 

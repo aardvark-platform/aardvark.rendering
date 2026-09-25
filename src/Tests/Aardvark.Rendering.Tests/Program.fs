@@ -9,7 +9,7 @@ let main argv =
             ``Buffer Tests``.testsGL
             ``Buffer Tests``.testsVulkan
 
-            ``Texture Tests``.compressionTests
+            ``Texture Tests``.testsCpu
             ``Texture Tests``.testsGL
             ``Texture Tests``.testsVulkan
 
@@ -20,9 +20,12 @@ let main argv =
             ``Compute Tests``.testsVulkan
 
             ``Camera Tests``.tests
+            ``UniformWriter Tests``.tests
             ``IndexedGeometry Tests``.tests
+            ``TraceGeometry Tests``.tests
             ``SceneGraph Tests``.tests
-            ``CompactSet Tests``.tests
+            ``Utilities Tests``.tests
+            ``ShapeList Tests``.tests
             ``AdaptiveResource Tests``.tests
             ``AListRenderTask Tests``.tests
             ``ContextCreation Tests``.tests

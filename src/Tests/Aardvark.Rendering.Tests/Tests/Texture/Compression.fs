@@ -304,6 +304,71 @@ module TextureCompression =
             let region = Box2i.FromMinAndSize(0, 0, 134, height)
             testMirrorCopy (CompressionMode.BC5 false) "data/spiral.png" region
 
+    let layoutTests =
+        let modes =
+            [ CompressionMode.BC1, 8n
+              CompressionMode.BC2, 16n
+              CompressionMode.BC3, 16n
+              CompressionMode.BC4 false, 8n
+              CompressionMode.BC4 true, 8n
+              CompressionMode.BC5 false, 16n
+              CompressionMode.BC5 true, 16n
+              CompressionMode.BC6h, 16n
+              CompressionMode.BC7, 16n ]
+
+        // Independent, widened reference calculation: BC blocks have no depth extent.
+        let blocksXY n = max 1L ((int64 n + 3L) / 4L) |> int
+        let expectedBlocks (size : V3i) = V3i(blocksXY size.X, blocksXY size.Y, max 1 size.Z)
+        let expectedBytes (blocks : V3i) bytesPerBlock =
+            nativeint blocks.X * nativeint blocks.Y * nativeint blocks.Z * bytesPerBlock
+
+        testList "Layout" [
+            for mode, bytesPerBlock in modes do
+                testList (string mode) [
+                    testCase "4x4x1 blocks" <| fun _ ->
+                        Expect.equal (CompressionMode.blockSize mode) 4 "Scalar XY block size"
+                        Expect.equal (CompressionMode.bytesPerBlock mode) bytesPerBlock "Bytes per block"
+                        for width in [1; 2; 3; 4; 5; 7; 8; 9] do
+                            for height in [1; 3; 4; 5; 8; 9] do
+                                for depth in [1; 2; 3; 4; 5; 7; 8; 9] do
+                                    let size = V3i(width, height, depth)
+                                    let blocks = expectedBlocks size
+                                    Expect.equal (CompressionMode.numberOfBlocks size mode) blocks $"Block count for {size}"
+                                    Expect.equal (CompressionMode.sizeInBytes size mode) (expectedBytes blocks bytesPerBlock) $"Byte count for {size}"
+
+                    testCase "1D and 2D compatibility" <| fun _ ->
+                        for width in [1; 3; 4; 5; 16; 127; 256] do
+                            for height in [1; 3; 4; 5; 16; 127; 256] do
+                                let size = V3i(width, height, 1)
+                                let previous = max 1 ((size + 3) / 4)
+                                Expect.equal (CompressionMode.numberOfBlocks size mode) previous $"Block count for {size}"
+                                Expect.equal (CompressionMode.sizeInBytes size mode) (expectedBytes previous bytesPerBlock) $"Byte count for {size}"
+
+                    testCase "Representable large byte counts" <| fun _ ->
+                        if System.IntPtr.Size = 8 then
+                            // XY, XYZ, and byte products exceed Int32 without allocating payloads.
+                            for size in [V3i(262144, 262144, 1); V3i(65536, 65536, 16); V3i(65536, 65536, 1);
+                                         V3i(System.Int32.MaxValue, 5, 1); V3i(5, System.Int32.MaxValue, 1);
+                                         V3i(1, 1, System.Int32.MaxValue)] do
+                                let blocks = expectedBlocks size
+                                Expect.equal (CompressionMode.numberOfBlocks size mode) blocks $"Large block count for {size}"
+                                Expect.equal (CompressionMode.sizeInBytes size mode) (expectedBytes blocks bytesPerBlock) $"Large byte count for {size}"
+                ]
+
+            testCase "Uncompressed layout is unchanged" <| fun _ ->
+                Expect.equal (CompressionMode.blockSize CompressionMode.None) 1 "Uncompressed block size"
+                Expect.equal (CompressionMode.bytesPerBlock CompressionMode.None) 0n "Uncompressed bytes per block"
+                for size in [V3i.Zero; V3i(-3, 0, -1); V3i.One; V3i(5, 7, 9); V3i(System.Int32.MaxValue)] do
+                    Expect.equal (CompressionMode.numberOfBlocks size CompressionMode.None) (max 1 size) "Uncompressed block count"
+                    Expect.equal (CompressionMode.sizeInBytes size CompressionMode.None) 0n "Uncompressed byte count"
+
+            testCase "Minimum block count is unchanged" <| fun _ ->
+                for mode, bytesPerBlock in modes do
+                    for size in [V3i.Zero; V3i(-3, 0, -1)] do
+                        Expect.equal (CompressionMode.numberOfBlocks size mode) V3i.One "At least one block per axis"
+                        Expect.equal (CompressionMode.sizeInBytes size mode) bytesPerBlock "At least one block"
+        ]
+
     let tests =
         [
             "BC1 encode",           Cases.encodeBC1

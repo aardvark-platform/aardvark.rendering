@@ -19,10 +19,15 @@ module internal TraceGeometryUtilities =
             if startIndex > array.Length then
                 raise <| ArgumentOutOfRangeException(nameof startIndex, $"Argument 'startIndex' exceeds array (Length = {array.Length}).")
 
-            if startIndex + count > array.Length then
-                raise <| ArgumentOutOfRangeException(nameof count, $"Range [{startIndex}, {startIndex + count - 1}] exceeds array (Length = {array.Length}).")
-
-            if count < 0 then array.Length - startIndex else count
+            let remaining = array.Length - startIndex
+            if count = -1 then
+                remaining
+            elif count < 0 then
+                raise <| ArgumentOutOfRangeException(nameof count, $"Argument 'count' must be non-negative or -1, but was {count}.")
+            elif count > remaining then
+                raise <| ArgumentOutOfRangeException(nameof count, $"Range starting at {startIndex} with count {count} exceeds array (Length = {array.Length}).")
+            else
+                count
 
 type IndexType =
     | Int16  = 0
@@ -77,7 +82,7 @@ type VertexData =
     /// <param name="startIndex">Index of the first element in the array.</param>
     /// <param name="count">Number of vertices, or -1 for all remaining elements in the array.</param>
     /// <exception cref="ArgumentNullException">if <paramref name="array"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">if the subrange specified by <paramref name="startIndex"/> and <paramref name="count"/> exceeds <paramref name="array"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">if <paramref name="startIndex"/> is negative or greater than the array length, if <paramref name="count"/> is less than -1, or if the specified subrange exceeds <paramref name="array"/>.</exception>
     new (array: Array, [<Optional; DefaultParameterValue(0)>] startIndex: int, [<Optional; DefaultParameterValue(-1)>] count: int) =
         let count = array |> Array.validateSubrange startIndex count
         let buffer = ArrayBuffer array
@@ -131,7 +136,7 @@ type IndexData =
     /// <param name="startIndex">Index of the first element in the array.</param>
     /// <param name="count">Number of indices, or -1 for all remaining elements in the array.</param>
     /// <exception cref="ArgumentNullException">if <paramref name="array"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">if the subrange specified by <paramref name="startIndex"/> and <paramref name="count"/> exceeds <paramref name="array"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">if <paramref name="startIndex"/> is negative or greater than the array length, if <paramref name="count"/> is less than -1, or if the specified subrange exceeds <paramref name="array"/>.</exception>
     /// <exception cref="NotSupportedException">if the element type of <paramref name="array"/> is not int16, uint16, int32, or uint32.</exception>
     new (array: Array, [<Optional; DefaultParameterValue(0)>] startIndex: int, [<Optional; DefaultParameterValue(-1)>] count: int) =
         let count = array |> Array.validateSubrange startIndex count
@@ -154,7 +159,7 @@ type IndexData =
     /// <param name="array">Array of indices or <c>null</c>.</param>
     /// <param name="startIndex">Index of the first element in the array.</param>
     /// <param name="count">Number of indices, or -1 for all remaining elements in the array.</param>
-    /// <exception cref="ArgumentOutOfRangeException">if the subrange specified by <paramref name="startIndex"/> and <paramref name="count"/> exceeds <paramref name="array"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">if <paramref name="startIndex"/> is negative or greater than the array length, if <paramref name="count"/> is less than -1, or if the specified subrange exceeds <paramref name="array"/>.</exception>
     /// <exception cref="NotSupportedException">if the element type of <paramref name="array"/> is not int16, uint16, int32, or uint32.</exception>
     static member inline FromArray(array: Array, [<Optional; DefaultParameterValue(0)>] startIndex: int, [<Optional; DefaultParameterValue(-1)>] count: int) =
         if isNull array then null
@@ -385,7 +390,7 @@ type BoundingBoxes =
     /// <param name="count">Number of bounding boxes, or -1 for all remaining elements in the array.</param>
     /// <param name="flags">Geometry flags of the bounding boxes.</param>
     /// <exception cref="ArgumentNullException">if <paramref name="array"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">if the subrange specified by <paramref name="startIndex"/> and <paramref name="count"/> exceeds <paramref name="array"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">if <paramref name="startIndex"/> is negative or greater than the array length, if <paramref name="count"/> is less than -1, or if the specified subrange exceeds <paramref name="array"/>.</exception>
     new (array: Box3f[],
          [<Optional; DefaultParameterValue(0)>] startIndex: int,
          [<Optional; DefaultParameterValue(-1)>] count: int,
@@ -404,18 +409,28 @@ type BoundingBoxes =
 
     /// <summary>
     /// Creates a new <see cref="BoundingBoxes"/> instance from the given <see cref="Box3d"/> array.
+    /// Only the selected range is converted to compact <see cref="Box3f"/> storage.
     /// </summary>
     /// <param name="array">Array of axis-aligned bounding boxes.</param>
     /// <param name="startIndex">Index of the first element in the array.</param>
     /// <param name="count">Number of bounding boxes, or -1 for all remaining elements in the array.</param>
     /// <param name="flags">Geometry flags of the bounding boxes.</param>
     /// <exception cref="ArgumentNullException">if <paramref name="array"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">if the subrange specified by <paramref name="startIndex"/> and <paramref name="count"/> exceeds <paramref name="array"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">if <paramref name="startIndex"/> is negative or greater than the array length, if <paramref name="count"/> is less than -1, or if the specified subrange exceeds <paramref name="array"/>.</exception>
     new (array: Box3d[],
          [<Optional; DefaultParameterValue(0)>] startIndex: int,
          [<Optional; DefaultParameterValue(-1)>] count: int,
          [<Optional; DefaultParameterValue(GeometryFlags.None)>] flags: GeometryFlags) =
-        BoundingBoxes(array |> Array.map Box3f, startIndex, count, flags)
+        if not (isNull array) && startIndex = 0 && (count = -1 || count = array.Length) then
+            let converted = array |> Array.map Box3f
+            BoundingBoxes(AABBsData(ArrayBuffer converted, 0UL, 24UL), uint32 converted.Length, flags)
+        else
+            let count = array |> Array.validateSubrange startIndex count
+            let converted = Array.zeroCreate<Box3f> count
+            for i = 0 to count - 1 do
+                converted.[i] <- Box3f array.[startIndex + i]
+
+            BoundingBoxes(AABBsData(ArrayBuffer converted, 0UL, 24UL), uint32 count, flags)
 
     /// <summary>
     /// Creates a new <see cref="BoundingBoxes"/> instance from a single <see cref="Box3d"/>.

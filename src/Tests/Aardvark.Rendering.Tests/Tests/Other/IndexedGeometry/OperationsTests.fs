@@ -1,11 +1,11 @@
-﻿namespace Aardvark.Rendering.Tests
+namespace Aardvark.Rendering.Tests.IndexedGeometry
 
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.SceneGraph
 open Expecto
 
-module ``IndexedGeometry Tests`` =
+module Operations =
 
     module Clone =
 
@@ -84,9 +84,8 @@ module ``IndexedGeometry Tests`` =
         let unionNonIndexedAndInt16 = unionNonIndexedAndIndexed "int16" int16
         let unionNonIndexedAndInt32 = unionNonIndexedAndIndexed "int32" int32
 
-    [<Tests>]
     let tests =
-        testList "IndexedGeometry" [
+        testList "Operations" [
             testList "Clone" [
                 Clone.clone true
                 Clone.clone false

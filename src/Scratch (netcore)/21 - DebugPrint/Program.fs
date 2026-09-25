@@ -40,10 +40,7 @@ let main argv =
         Sg.quad
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
-
-                if Config.Backend = Backend.Vulkan then
-                    do! Shader.printPosition
-
+                do! Shader.printPosition
                 do! DefaultSurfaces.constantColor C4f.IndianRed
                 do! DefaultSurfaces.simpleLighting
             }

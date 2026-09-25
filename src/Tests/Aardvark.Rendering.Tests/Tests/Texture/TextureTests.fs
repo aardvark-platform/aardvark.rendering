@@ -15,8 +15,12 @@ module ``Texture Tests`` =
     ]
 
     [<Tests>]
-    let compressionTests =
-        [ TextureCompression.tests ] |> testList "PixImage"
+    let testsCpu =
+        testList "Textures" [
+            TextureCompression.tests
+            TextureCompression.layoutTests
+            TextureDds.tests
+        ]
 
     [<Tests>]
     let testsGL =
