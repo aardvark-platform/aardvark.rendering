@@ -135,11 +135,13 @@ module IndirectBuffer =
     /// The <see cref="DrawCallInfo"/> struct follows the non-indexed layout by default.
     /// </remarks>
     /// <param name="indexed">True if the array contains indexed draw calls, false if it contains non-indexed draw calls.</param>
-    /// <param name="first">The index of the first draw call in the array.</param>
-    /// <param name="count">The number of draw calls.</param>
-    /// <param name="calls">The array containing the draw calls.</param>
+    /// <param name="first">The non-negative index of the first draw call. May equal the array length when count is zero.</param>
+    /// <param name="count">The non-negative number of draw calls, not exceeding the remaining array length.</param>
+    /// <param name="calls">The array containing the draw calls. The buffer reuses this array without copying.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The range is negative or exceeds the input.</exception>
     let inline ofArray' (indexed : bool) (first : int) (count : int) (calls : DrawCallInfo[]) =
-        if first < 0 || count < 0 || first + count > calls.Length then
+        // The sum of two non-negative Int32 values fits in UInt32 without overflow.
+        if first < 0 || count < 0 || uint32 first + uint32 count > uint32 calls.Length then
             raise <| ArgumentOutOfRangeException(null, $"Draw call range exceeds input array (first = {first}, count = {count}, array length = {calls.Length})")
 
         let buffer = ArrayBuffer calls
@@ -161,9 +163,10 @@ module IndirectBuffer =
     /// The <see cref="DrawCallInfo"/> struct follows the non-indexed layout by default.
     /// </remarks>
     /// <param name="indexed">True if the list contains indexed draw calls, false if it contains non-indexed draw calls.</param>
-    /// <param name="first">The index of the first draw call in the list.</param>
-    /// <param name="count">The number of draw calls.</param>
+    /// <param name="first">The non-negative index of the first draw call. May equal the list length when count is zero.</param>
+    /// <param name="count">The non-negative number of draw calls, not exceeding the remaining list length.</param>
     /// <param name="calls">The list containing the draw calls.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The range is negative or exceeds the input.</exception>
     let inline ofList' (indexed : bool) (first : int) (count : int) (calls : DrawCallInfo list) =
         calls |> List.toArray |> ofArray' indexed first count
 
@@ -181,10 +184,11 @@ module IndirectBuffer =
     /// <remarks>
     /// The <see cref="DrawCallInfo"/> struct follows the non-indexed layout by default.
     /// </remarks>
-    /// <param name="indexed">True if the list contains indexed draw calls, false if it contains non-indexed draw calls.</param>
-    /// <param name="first">The index of the first draw call in the sequence.</param>
-    /// <param name="count">The number of draw calls.</param>
-    /// <param name="calls">The sequence containing the draw calls.</param>
+    /// <param name="indexed">True if the sequence contains indexed draw calls, false if it contains non-indexed draw calls.</param>
+    /// <param name="first">The non-negative index of the first draw call. May equal the sequence length when count is zero.</param>
+    /// <param name="count">The non-negative number of draw calls, not exceeding the remaining sequence length.</param>
+    /// <param name="calls">The sequence containing the draw calls. An array input is reused without copying.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The range is negative or exceeds the input.</exception>
     let inline ofSeq' (indexed : bool) (first : int) (count : int) (calls : DrawCallInfo seq) =
         calls |> Seq.asArray |> ofArray' indexed first count
 
