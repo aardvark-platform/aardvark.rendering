@@ -1,3 +1,4 @@
+- Fixed orthographic picking to use parallel unit rays from pixel positions on the near plane rather than the camera location.
 - Fixed `BufferView.getCount` and automatic draw counts to honor byte strides, count only complete elements, and return zero for exhausted storage.
 - Fixed BC2/BC3 decoding for ascending or equal RGB endpoints by always using the four-color palette.
 - Fixed `Task.bind` to complete when its mapping function throws synchronously or returns a null task.
