@@ -472,7 +472,11 @@ type IBufferRuntimeExtensions private() =
                                [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                                [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
         let buffer = this.CreateBuffer<'T>(data.Length, usage, storage)
-        buffer.Upload(data)
+        try
+            buffer.Upload(data)
+        with _ ->
+            try buffer.Dispose() with _ -> ()
+            reraise()
         buffer
 
     ///<summary>Creates a typed buffer from the given span.</summary>
@@ -485,7 +489,11 @@ type IBufferRuntimeExtensions private() =
                                [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                                [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
         let buffer = this.CreateBuffer<'T>(data.Length, usage, storage)
-        buffer.Upload(data)
+        try
+            buffer.Upload(data)
+        with _ ->
+            try buffer.Dispose() with _ -> ()
+            reraise()
         buffer
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
