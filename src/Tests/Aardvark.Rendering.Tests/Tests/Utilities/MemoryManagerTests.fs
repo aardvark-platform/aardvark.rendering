@@ -128,9 +128,186 @@ module MemoryManager =
                 }
                 0n
 
+        [<ReferenceEquality>]
+        type private BackingAllocation =
+            { Id : int; Data : byte[]; mutable Frees : int }
+
+        let private trackedMemory() =
+            let allocations = ResizeArray<BackingAllocation>()
+            let memory =
+                {
+                    malloc = fun size ->
+                        let allocation = { Id = allocations.Count; Data = Array.zeroCreate<byte> (int size); Frees = 0 }
+                        allocations.Add allocation
+                        allocation
+                    mfree = fun allocation size ->
+                        Expect.equal allocation.Frees 0 $"Allocation {allocation.Id} must be freed only once"
+                        Expect.equal (nativeint allocation.Data.Length) size $"Allocation {allocation.Id} release size"
+                        allocation.Frees <- allocation.Frees + 1
+                    mcopy = fun _ _ _ _ _ -> failtest "Chunked reallocation must not copy backing storage"
+                    mrealloc = fun _ _ _ -> failtest "Chunked reallocation must not resize backing storage"
+                }
+            memory, allocations
+
+        let private same expected actual message =
+            Expect.isTrue (Object.ReferenceEquals(expected, actual)) message
+
+        let private checkBlock (manager : ChunkedMemoryManager<BackingAllocation>) (block : Block<BackingAllocation>) storage offset size alignment context =
+            let actual, actualOffset, actualSize = manager.Use(block, fun m o s -> m, o, s)
+            same storage actual $"{context}: expected backing allocation {storage.Id}, got {actual.Id}"
+            Expect.equal actual.Frees 0 $"{context}: backing allocation {actual.Id} must be live"
+            Expect.isFalse block.IsFree $"{context}: caller's block is active"
+            same manager block.Parent $"{context}: parent is retained"
+            Expect.equal (block.Offset, block.Size) (offset, size) $"{context}: block range"
+            Expect.equal (actualOffset, actualSize) (offset, size) $"{context}: Use range"
+            Expect.equal (offset % alignment) 0n $"{context}: alignment {alignment}"
+            Expect.isGreaterThanOrEqual offset 0n $"{context}: nonnegative offset"
+            Expect.isLessThanOrEqual (offset + size) (nativeint actual.Data.Length) $"{context}: range fits backing allocation"
+            if not (isNull block.Prev) then
+                same block block.Prev.Next $"{context}: predecessor links to the caller's block"
+                same block.Memory block.Prev.Memory $"{context}: predecessor shares the memory reference"
+                Expect.equal (block.Prev.Offset + block.Prev.Size) offset $"{context}: predecessor is adjacent"
+            if not (isNull block.Next) then
+                same block block.Next.Prev $"{context}: successor links to the caller's block"
+                same block.Memory block.Next.Memory $"{context}: successor shares the memory reference"
+                Expect.equal block.Next.Offset (offset + size) $"{context}: successor is adjacent"
+
+        let private write (manager : ChunkedMemoryManager<BackingAllocation>) block value =
+            manager.Use(block, fun memory offset size ->
+                Expect.equal memory.Frees 0 $"Cannot write released allocation {memory.Id}"
+                Array.Fill(memory.Data, value, int offset, int size)
+            )
+
+        let private read (manager : ChunkedMemoryManager<BackingAllocation>) block =
+            manager.Use(block, fun memory offset size ->
+                Expect.equal memory.Frees 0 $"Cannot read released allocation {memory.Id}"
+                Array.sub memory.Data (int offset) (int size)
+            )
+
+        let private release (manager : ChunkedMemoryManager<BackingAllocation>) viaRealloc alignment block context =
+            if viaRealloc then manager.Realloc(block, alignment, 0n)
+            else manager.Free block
+            Expect.isTrue block.IsFree $"{context}: released handle"
+            Expect.equal (block.Offset, block.Size) (-1n, 0n) $"{context}: released range"
+            Expect.isNull block.Prev $"{context}: detached predecessor"
+            Expect.isNull block.Next $"{context}: detached successor"
+
+        let private balanced (manager : ChunkedMemoryManager<BackingAllocation>) allocations expectedCount context =
+            Expect.equal manager.Capactiy 0n $"{context}: final freeing releases all capacity"
+            // The manager's zero-sized sentinel is not a positive-sized backing allocation.
+            let positive = allocations |> Seq.filter (fun a -> a.Data.Length > 0) |> Seq.toArray
+            Expect.equal positive.Length expectedCount $"{context}: positive-sized allocation count"
+            for allocation in positive do
+                Expect.equal allocation.Frees 1 $"{context}: allocation {allocation.Id} must be released exactly once"
+
+        let reviveFresh() =
+            for viaRealloc in [false; true] do
+                for alignment in [1n; 3n; 8n; 32n; 64n] do
+                    let memory, allocations = trackedMemory()
+                    use manager = new ChunkedMemoryManager<_>(memory, 64n)
+                    let block = manager.Alloc 7n
+                    for size in [5n; 64n; 97n; 9n] do
+                        let context = $"fresh chunk, Realloc(0)={viaRealloc}, alignment={alignment}, size={size}"
+                        let oldReference = block.Memory
+                        let oldStorage = oldReference.Value
+                        release manager viaRealloc alignment block context
+                        Expect.equal oldStorage.Frees 1 $"{context}: old chunk was released"
+                        Expect.equal manager.Capactiy 0n $"{context}: no old capacity remains"
+
+                        manager.Realloc(block, alignment, size)
+                        let storage = allocations.[allocations.Count - 1]
+                        checkBlock manager block storage 0n size alignment context
+                        Expect.isFalse (Object.ReferenceEquals(oldReference, block.Memory)) $"{context}: adopt a new memory reference"
+                        same oldStorage oldReference.Value $"{context}: do not retarget the old memory reference"
+                        Expect.equal manager.Capactiy (max 64n size) $"{context}: replacement chunk capacity"
+                        write manager block 0x5Auy
+                        Expect.equal (read manager block) (Array.create (int size) 0x5Auy) $"{context}: revived payload"
+                    manager.Free block
+                    balanced manager allocations 5 $"fresh chunks, Realloc(0)={viaRealloc}, alignment={alignment}"
+
+        let reviveShared() =
+            for viaRealloc in [false; true] do
+                for keepOldChunk in [false; true] do
+                    for alignment in [1n; 3n; 8n; 32n; 64n] do
+                        let context = $"shared chunk, Realloc(0)={viaRealloc}, keepOldChunk={keepOldChunk}, alignment={alignment}"
+                        let memory, allocations = trackedMemory()
+                        use manager = new ChunkedMemoryManager<_>(memory, 128n)
+                        let block = manager.Alloc(if keepOldChunk then 120n else 128n)
+                        let oldReference = block.Memory
+                        let oldStorage = oldReference.Value
+                        let keeper = if keepOldChunk then Some (manager.Alloc 8n) else None
+                        keeper |> Option.iter (fun b -> write manager b 0xC3uy)
+                        let prefix = manager.Alloc 5n
+                        let hole = manager.Alloc 91n
+                        let suffix = manager.Alloc 32n
+                        let replacementReference = hole.Memory
+                        Expect.isFalse (Object.ReferenceEquals(oldReference, replacementReference)) $"{context}: distinct fixture chunks"
+                        write manager prefix 0xA1uy
+                        write manager suffix 0xB2uy
+                        manager.Free hole
+                        release manager viaRealloc alignment block context
+                        Expect.equal oldStorage.Frees (if keepOldChunk then 0 else 1) $"{context}: old chunk liveness"
+
+                        // The 91-byte hole wins over the old chunk's 120-byte hole, if that chunk remains live.
+                        let offset = ((5n + alignment - 1n) / alignment) * alignment
+                        for size in [17n; 9n; 23n] do
+                            let context = $"{context}, revived size={size}"
+                            manager.Realloc(block, alignment, size)
+                            checkBlock manager block replacementReference.Value offset size alignment context
+                            same replacementReference block.Memory $"{context}: adopt the replacement's memory reference"
+                            same oldStorage oldReference.Value $"{context}: preserve the old chunk reference"
+                            Expect.equal manager.Capactiy (if keepOldChunk then 256n else 128n) $"{context}: existing capacity is reused"
+                            write manager block (byte size)
+                            Expect.equal (read manager block) (Array.create (int size) (byte size)) $"{context}: revived payload"
+                            Expect.equal (read manager prefix) (Array.create 5 0xA1uy) $"{context}: preceding payload is isolated"
+                            Expect.equal (read manager suffix) (Array.create 32 0xB2uy) $"{context}: following payload is isolated"
+                            keeper |> Option.iter (fun b -> Expect.equal (read manager b) (Array.create 8 0xC3uy) $"{context}: old chunk payload is isolated")
+                            release manager viaRealloc alignment block context
+
+                        let coalesced = manager.Alloc 91n
+                        checkBlock manager coalesced replacementReference.Value 5n 91n 1n context
+                        manager.Free coalesced
+                        manager.Free prefix
+                        manager.Free suffix
+                        Expect.equal replacementReference.Value.Frees 1 $"{context}: replacement chunk is released"
+                        Expect.equal manager.Capactiy (if keepOldChunk then 128n else 0n) $"{context}: only the keeper may remain"
+                        keeper |> Option.iter manager.Free
+                        balanced manager allocations 2 context
+
+        let trackedActiveRealloc() =
+            for alignment in [1n; 3n; 8n; 32n; 64n] do
+                let memory, allocations = trackedMemory()
+                use manager = new ChunkedMemoryManager<_>(memory, 128n)
+                let prefix = manager.Alloc 5n
+                let block = manager.Alloc(alignment, 24n)
+                let reference = block.Memory
+                let offset = ((5n + alignment - 1n) / alignment) * alignment
+                let context = $"active block, alignment={alignment}"
+                checkBlock manager block reference.Value offset 24n alignment context
+                write manager prefix 0xA1uy
+                write manager block 0xD4uy
+                for size in [12n; 32n; 32n; 128n - offset] do
+                    let context = $"{context}, size={size}"
+                    let retained = read manager block |> Array.take (int (min block.Size size))
+                    manager.Realloc(block, alignment, size)
+                    checkBlock manager block reference.Value offset size alignment context
+                    same reference block.Memory $"{context}: active storage reference is unchanged"
+                    Expect.equal (read manager block |> Array.take retained.Length) retained $"{context}: retained payload"
+                    Expect.equal (read manager prefix) (Array.create 5 0xA1uy) $"{context}: neighbor payload"
+                    Expect.equal manager.Capactiy 128n $"{context}: active reallocation retains capacity"
+                    write manager block 0xD4uy
+                Expect.isNull block.Next $"{context}: growth consumes the complete trailing free range"
+                manager.Free block
+                manager.Free prefix
+                balanced manager allocations 1 context
+
     let tests (target: TestTarget) =
         [
             "Contiguous manager updates size when shrinking", Cases.contiguous
             "Chunked manager updates size when shrinking",    Cases.chunked
+
+            "Chunked freed handles adopt fresh chunk storage",                    Cases.reviveFresh
+            "Chunked freed handles adopt another live chunk's free space",        Cases.reviveShared
+            "Chunked ordinary allocation and active reallocation retain storage", Cases.trackedActiveRealloc
         ]
         |> prepareCasesCpu "MemoryManager" target
