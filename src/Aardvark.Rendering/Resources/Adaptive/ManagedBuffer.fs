@@ -19,19 +19,22 @@ type IManagedBuffer =
 
     /// <summary>
     /// Sets the given offset range to the given data. The buffer is resized if necessary.
-    /// The data is repeated if not enough are provided for the specified range.
+    /// The data is repeated if not enough are provided for the specified range. Invalid ranges and empty data are ignored.
     /// </summary>
     /// <param name="data">The data to write.</param>
     /// <param name="sizeInBytes">The size (in bytes) of the provided data.</param>
-    /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
+    /// <param name="range">The inclusive range (i.e. min and max element offsets) in the buffer to write to.</param>
+    /// <exception cref="T:System.ArgumentOutOfRangeException">The target range cannot be represented as a byte range.</exception>
     abstract member Set : data: nativeint * sizeInBytes: uint64 * range: Range1ul -> unit
 
     /// <summary>
     /// Adds a writer that adaptively writes the values in the buffer view to the buffer. The buffer is resized if necessary.
     /// The values are automatically converted if they are not of the buffer element type and there is a known conversion.
+    /// Invalid ranges are ignored without observing the buffer view.
     /// </summary>
     /// <param name="view">The buffer view to write.</param>
-    /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
+    /// <param name="range">The inclusive range (i.e. min and max element offsets) in the buffer to write to.</param>
+    /// <exception cref="T:System.ArgumentOutOfRangeException">The target byte range is not representable or its element count exceeds the buffer-view download limit.</exception>
     abstract member Add : view: BufferView * range: Range1ul -> IDisposable
 
     /// <summary>
@@ -39,7 +42,8 @@ type IManagedBuffer =
     /// The value is automatically converted if it is not of the buffer element type and there is a known conversion.
     /// </summary>
     /// <param name="value">The adaptive value to write.</param>
-    /// <param name="index">The index in the buffer to write to.</param>
+    /// <param name="index">The element index in the buffer to write to.</param>
+    /// <exception cref="T:System.ArgumentOutOfRangeException">The target byte range is not representable.</exception>
     abstract member Add : value: IAdaptiveValue * index: uint64 -> IDisposable
 
 type IManagedBuffer<'T when 'T : unmanaged> =
@@ -61,11 +65,11 @@ type ManagedBufferExtensions private() =
 
     /// <summary>
     /// Sets the given offset range to the given data. The buffer is resized if necessary.
-    /// The data are repeated if not enough are provided for the specified range.
+    /// The data are repeated if not enough are provided for the specified range. Invalid ranges and empty data are ignored.
     /// </summary>
     /// <param name="this">The buffer to write to.</param>
     /// <param name="data">The data to write.</param>
-    /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
+    /// <param name="range">The inclusive range (i.e. min and max element offsets) in the buffer to write to.</param>
     [<Extension>]
     static member inline Set(this : IManagedBuffer, data : byte[], range : Range1ul) =
         data |> NativePtr.pinArr (fun src ->
@@ -96,11 +100,11 @@ type ManagedBufferExtensions private() =
 
     /// <summary>
     /// Sets the given offset range to the given values. The buffer is resized if necessary.
-    /// The data are repeated if not enough are provided for the specified range.
+    /// The data are repeated if not enough are provided for the specified range. Invalid ranges and empty arrays are ignored.
     /// </summary>
     /// <param name="this">The buffer to write to.</param>
     /// <param name="values">The values to write.</param>
-    /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
+    /// <param name="range">The inclusive range (i.e. min and max element offsets) in the buffer to write to.</param>
     [<Extension>]
     static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, values : 'T[], range : Range1ul) =
         values |> NativePtr.pinArr (fun src ->
@@ -109,11 +113,11 @@ type ManagedBufferExtensions private() =
 
     /// <summary>
     /// Sets the given offset range to the given values. The buffer is resized if necessary.
-    /// The data are repeated if not enough are provided for the specified range.
+    /// The data are repeated if not enough are provided for the specified range. Invalid ranges and empty arrays are ignored.
     /// </summary>
     /// <param name="this">The buffer to write to.</param>
     /// <param name="values">The values to write.</param>
-    /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
+    /// <param name="range">The inclusive range (i.e. min and max element offsets) in the buffer to write to.</param>
     [<Extension>]
     static member inline Set(this : IManagedBuffer, values : Array, range : Range1ul) =
         let elementSize = values.GetType().GetElementType().GetCLRSize()
@@ -130,14 +134,24 @@ module internal ManagedBufferImplementation =
         inherit AdaptiveBuffer(runtime, 0UL, usage, storage)
 
         static let elementSize = uint64 sizeof<'T>
+        static let maximumElementCount = UInt64.MaxValue / elementSize
+        static let maximumPowerOfTwo = 1UL <<< 63
 
         let writers = Dict<obj, AbstractWriter>()
         let pending = LockedSet<AbstractWriter>()
 
+        static member inline private IsRangeValid(range : Range1ul) =
+            if range.Max >= maximumElementCount then raise <| ArgumentOutOfRangeException(nameof range, range, "The target range cannot be represented as a byte range.")
+            range.IsValid
+
         member inline private x.Allocate(range : Range1ul) =
             let min = (range.Max + 1UL) * elementSize
             if x.Size < min then
-                x.Resize(Fun.NextPowerOfTwo min)
+                let capacity =
+                    if min > maximumPowerOfTwo then min
+                    else Fun.NextPowerOfTwo min
+
+                x.Resize capacity
 
         member private x.AddRange(writer : AbstractWriter, input : obj, range : Range1ul) =
             transact (fun _ ->
@@ -166,7 +180,7 @@ module internal ManagedBufferImplementation =
             }
 
         member x.Set(data : nativeint, sizeInBytes : uint64, range : Range1ul) =
-            if range.IsValid then
+            if ManagedBuffer<'T>.IsRangeValid range && sizeInBytes > 0UL then
                 x.Allocate range
 
                 let mutable remaining = (range.Size + 1UL) * elementSize
@@ -181,7 +195,7 @@ module internal ManagedBufferImplementation =
                     x.Write(data, offset, remaining)
 
         member x.Add(view : BufferView, range : Range1ul) =
-            if range.IsInvalid then
+            if not <| ManagedBuffer<'T>.IsRangeValid range then
                 Disposable.empty
             else
                 let count = range.Size + 1UL
@@ -192,6 +206,9 @@ module internal ManagedBufferImplementation =
                     x.Set(converted, range)
                     Disposable.empty
                 else
+                    if count > uint64 Int32.MaxValue then
+                        raise <| ArgumentOutOfRangeException(nameof range, range, "The target range exceeds the buffer-view download limit.")
+
                     lock writers (fun _ ->
                         let writer =
                             writers.GetOrCreate(view, fun _ ->
@@ -204,6 +221,8 @@ module internal ManagedBufferImplementation =
                     )
 
         member x.Add(value : IAdaptiveValue, index : uint64) =
+            if index >= maximumElementCount then raise <| ArgumentOutOfRangeException(nameof index, index, "The target index cannot be represented as a byte range.")
+
             if value.IsConstant then
                 let converted : 'T = value |> PrimitiveValueConverter.convertValue |> AVal.force
                 x.Set(converted, index)
