@@ -64,6 +64,8 @@ module TextureFormatCompressionExtensions =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module CompressionMode =
 
+    /// Gets the scalar block width and height (4 for BC, 1 for None).
+    /// BC blocks cover 4x4x1 texels: the depth extent is always one slice.
     let blockSize = function
         | CompressionMode.None -> 1
         | _ -> 4
@@ -73,14 +75,21 @@ module CompressionMode =
         | CompressionMode.BC1 | CompressionMode.BC4 _ -> 8n
         | _ -> 16n
 
+    /// Gets the block count per axis, with at least one block per axis.
+    /// BC rounds X and Y to 4-texel blocks and retains one block plane per depth slice.
+    [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
     let numberOfBlocks (size : V3i) (mode : CompressionMode) =
-        let blockSize = blockSize mode
-        max 1 ((size + (blockSize - 1)) / blockSize)
+        // Positive int dimensions plus three fit in uint32, even at Int32.MaxValue.
+        let size = max 1 size
+        match mode with
+        | CompressionMode.None -> size
+        | _ -> V3i(int ((uint32 size.X + 3u) >>> 2), int ((uint32 size.Y + 3u) >>> 2), size.Z)
 
+    /// Gets the byte count for the 4x4x1 BC layout, or zero for None.
     let sizeInBytes (size : V3i) (mode : CompressionMode) =
         let blocks = mode |> numberOfBlocks size
         let bytesPerBlock = mode |> bytesPerBlock
-        nativeint (blocks.X * blocks.Y * blocks.Z) * bytesPerBlock
+        nativeint blocks.X * nativeint blocks.Y * nativeint blocks.Z * bytesPerBlock
 
 
 module BlockCompression =

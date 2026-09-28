@@ -349,21 +349,20 @@ module DdsTexture =
                     | TextureDimension.TextureCube -> count * 6
                     | _ -> count
 
+                let compressionMode = format.CompressionMode
+                let bytesPerBlock = compressionMode |> CompressionMode.bytesPerBlock |> uint64
                 let mutable totalSize = 0UL
 
                 let metaData =
-                    let bytesPerBlock =
-                        format.CompressionMode |> CompressionMode.bytesPerBlock
-
-                    Array.init slices (fun layer ->
+                    Array.init slices (fun _ ->
                         Array.init levels (fun level ->
                             let size = Fun.MipmapLevelSize(size, level)
-                            let blocks = max 1 ((size + 3) / 4)
-                            let sizeInBytes = uint64 blocks.X * uint64 blocks.Y * uint64 blocks.Z * uint64 bytesPerBlock
+                            let blocks = CompressionMode.numberOfBlocks size compressionMode
+                            let sizeInBytes = uint64 blocks.X * uint64 blocks.Y * uint64 blocks.Z * bytesPerBlock
                             let offset = totalSize
                             totalSize <- totalSize + sizeInBytes
 
-                            size, blocks, offset, sizeInBytes
+                            struct (size, offset, sizeInBytes)
                         )
                     )
 
@@ -372,7 +371,7 @@ module DdsTexture =
                 let layers =
                     Array.init slices (fun layer ->
                         Array.init levels (fun level ->
-                            let size, _, offset, sizeInBytes = metaData.[layer].[level]
+                            let struct (size, offset, sizeInBytes) = metaData.[layer].[level]
 
                             { new INativeTextureData with
                                 member x.Size = size
