@@ -23,6 +23,7 @@ let main argv =
             ``UniformWriter Tests``.tests
             ``IndexedGeometry Tests``.tests
             ``TraceGeometry Tests``.tests
+            ``IndirectBuffer Tests``.tests
             ``SceneGraph Tests``.tests
             ``Utilities Tests``.tests
             ``ShapeList Tests``.tests
