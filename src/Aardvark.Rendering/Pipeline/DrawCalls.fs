@@ -3,11 +3,14 @@
 open Aardvark.Base
 open FSharp.Data.Adaptive
 
+#nowarn "44"
+
 [<RequireQualifiedAccess>]
 type DrawCalls =
     | Direct   of aval<DrawCallInfo[]>
     | Indirect of aval<IndirectBuffer>
 
+[<System.Obsolete>]
 type DrawCallSet(collapseAdjacent : bool) =
     inherit AVal.AbstractVal<DrawCallInfo[]>()
 
@@ -76,6 +79,7 @@ type DrawCallSet(collapseAdjacent : bool) =
                )
             |> Seq.toArray
 
+[<System.Obsolete>]
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DrawCallSet =
     let inline create() = DrawCallSet(true)
