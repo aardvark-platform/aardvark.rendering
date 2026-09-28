@@ -266,6 +266,122 @@ module Camera =
                         checkOrbit center (initial.Location - center).Length initial.Sky actual
                 )
 
+    module private Picking =
+        let private vectorClose (expected : V3d) (actual : V3d) message =
+            Expect.isTrue (actual.IsFinite && (actual - expected).Length <= 1e-9)
+                $"{message}: expected {expected}, got {actual}"
+
+        let private identity = CameraView.Look(V3d.Zero, -V3d.ZAxis, V3d.YAxis)
+        let private views = [
+            "identity", identity
+            "translated", identity.WithLocation(V3d(17.0, -11.0, 4.0))
+            "rotated and translated", CameraView.LookAt(V3d(4.0, -7.0, 3.0), V3d(-2.0, 5.0, -9.0), V3d.ZAxis)
+        ]
+        let private ortho = [
+            "symmetric", Aardvark.Rendering.Frustum.ortho (Box3d(-4.0, -3.0, 1.0, 4.0, 3.0, 11.0))
+            "off-center", Aardvark.Rendering.Frustum.ortho (Box3d(2.0, -7.0, 0.25, 10.0, -1.0, 60.0))
+            "symmetric crossing zero", Aardvark.Rendering.Frustum.ortho (Box3d(-4.0, -3.0, -5.0, 4.0, 3.0, 5.0))
+            "off-center crossing zero", Aardvark.Rendering.Frustum.ortho (Box3d(-9.0, 2.0, -3.0, 3.0, 8.0, 2.0))
+            "zero near", Aardvark.Rendering.Frustum.ortho (Box3d(-4.0, -3.0, 0.0, 4.0, 3.0, 9.0))
+        ]
+        let private pixels = [|
+            for bounds in [Box2i(V2i.Zero, V2i(200, 100)); Box2i(V2i.Zero, V2i(201, 101)); Box2i(V2i(41, 17), V2i(242, 118))] do
+                for x in [bounds.Min.X; bounds.Min.X + bounds.Size.X / 2; bounds.Max.X - 1] do
+                    for y in [bounds.Min.Y; bounds.Min.Y + bounds.Size.Y / 2; bounds.Max.Y - 1] do
+                        PixelPosition(V2i(x, y), bounds)
+        |]
+        let private cases frusta = seq {
+            for name, frustum in frusta do
+                for viewName, view in views do
+                    for pp in pixels do
+                        yield $"{name}, view={viewName}, pixel={pp.Position}, bounds={pp.Bounds}", { cameraView = view; frustum = frustum }, pp
+        }
+        let private ndc (pp : PixelPosition) z =
+            let p = pp.NormalizedPosition
+            V3d(2.0 * p.X - 1.0, 1.0 - 2.0 * p.Y, z)
+
+        // Projection inversion is independent of the direct frustum-bound interpolation under test.
+        let private nearPoint (cam : Camera) pp =
+            (Aardvark.Rendering.Frustum.projTrafo cam.frustum).Backward.TransformPosProj(ndc pp -1.0)
+
+        let private expectHit expected cam plane pp message =
+            match Camera.tryGetPickPointOnPlane cam plane pp with
+            | Some point -> vectorClose expected point message
+            | None -> failtestf "%s: expected a plane hit, ray = %A" message (Camera.pickRay cam pp)
+
+        let orthographicRays () =
+            for context, cam, pp in cases ortho do
+                let ray = Camera.pickRay cam pp
+                vectorClose (-V3d.ZAxis) (CameraExtensions.Frustum.pickRayDirection pp cam.frustum) (context + " view direction")
+                vectorClose (cam.cameraView.ViewTrafo.Backward.TransformPos(nearPoint cam pp)) ray.Origin (context + " near-plane origin")
+                vectorClose cam.cameraView.Forward ray.Direction (context + " world direction")
+                Expect.floatClose Accuracy.high ray.Direction.Length 1.0 (context + " unit direction")
+
+            // CameraView also accepts a non-unit forward vector; the returned ray must still be unit length.
+            let view = CameraView.Look(V3d.Zero, V3d(0.0, 0.0, -3.0), V3d.YAxis)
+            let cam = { cameraView = view; frustum = snd ortho.Head }
+            let ray = Camera.pickRay cam (PixelPosition(149, 74, 200, 100))
+            vectorClose (-V3d.ZAxis) ray.Direction "non-unit stored forward is normalized"
+
+        let orthographicProjectionAndHits () =
+            let cam = { cameraView = identity; frustum = snd ortho.Head }
+            let pp = PixelPosition(149, 74, 200, 100)
+            expectHit (V3d(1.98, -1.47, -3.0)) cam (Plane3d(V3d.ZAxis, -3.0)) pp
+                "bounds (-4,-3,1)..(4,3,11), pixel (149,74)/200x100, z=-3 (not the perspective-style half-offset)"
+
+            for context, cam, pp in cases ortho do
+                let ray = Camera.pickRay cam pp
+                let projection = Camera.viewProjTrafo cam
+                for distance in [0.0; 0.125; 3.0; 100.0] do
+                    let projected = projection.Forward.TransformPosProj(ray.GetPointOnRay distance)
+                    vectorClose (ndc pp projected.Z) projected $"{context}, distance={distance}, projected pixel"
+                let origin = nearPoint cam pp
+                for depth in [cam.frustum.near + 0.25; (cam.frustum.near + cam.frustum.far) * 0.5; cam.frustum.far + 10.0] do
+                    let expected = cam.cameraView.ViewTrafo.Backward.TransformPos(V3d(origin.X, origin.Y, -depth))
+                    expectHit expected cam (Plane3d(cam.cameraView.Forward, expected)) pp $"{context}, depth={depth}"
+
+        let farPlaneIndependence () =
+            for context, cam, pp in cases ortho do
+                let expected = Camera.pickRay cam pp
+                for far in [cam.frustum.near + 0.5; cam.frustum.near + 100.0; cam.frustum.near + 10000.0] do
+                    let changed = { cam with frustum = { cam.frustum with far = far } }
+                    let actual = Camera.pickRay changed pp
+                    Expect.equal actual expected $"{context}, far={far}"
+                    Expect.equal (CameraExtensions.Frustum.pickRayDirection pp changed.frustum) (-V3d.ZAxis) $"{context}, far={far}, view direction"
+
+        let forwardHalfRay () =
+            let pp = PixelPosition(100, 50, 201, 101)
+            for isOrtho in [false; true] do
+                let f = { snd ortho.Head with isOrtho = isOrtho }
+                let cam = { cameraView = identity; frustum = f }
+                let originZ = if isOrtho then -f.near else 0.0
+                for z in [originZ; originZ - 0.5; -f.far - 10.0] do
+                    expectHit (V3d(0.0, 0.0, z)) cam (Plane3d(V3d.ZAxis, z)) pp $"isOrtho={isOrtho}, plane z={z}"
+                Expect.isNone (Camera.tryGetPickPointOnPlane cam (Plane3d(V3d.ZAxis, originZ + 0.5)) pp)
+                    $"isOrtho={isOrtho}: plane behind ray origin"
+                Expect.isNone (Camera.tryGetPickPointOnPlane cam (Plane3d(V3d.XAxis, 100.0)) pp)
+                    $"isOrtho={isOrtho}: parallel plane"
+
+        let perspectiveCompatibility () =
+            let frusta = [
+                "symmetric perspective", Aardvark.Rendering.Frustum.perspective 67.0 0.1 100.0 1.7
+                "off-center perspective", { left = -0.4; right = 0.8; bottom = -0.3; top = 0.6; near = 0.5; far = 50.0; isOrtho = false }
+            ]
+            for context, cam, pp in cases frusta do
+                let projection = Aardvark.Rendering.Frustum.projTrafo cam.frustum
+                let viewDir = projection.Backward.TransformPosProj(ndc pp 0.0) |> Vec.Normalized
+                let worldDir = cam.cameraView.ViewTrafo.Backward.TransformDir viewDir |> Vec.Normalized
+                let ray = Camera.pickRay cam pp
+                Expect.equal ray.Origin cam.cameraView.Location (context + " eye origin")
+                Expect.equal ray.Direction worldDir (context + " original world direction")
+                Expect.equal (CameraExtensions.Frustum.pickRayDirection pp cam.frustum) viewDir (context + " original view direction")
+                Expect.floatClose Accuracy.high ray.Direction.Length 1.0 (context + " unit direction")
+                for distance in [0.25; 3.0; 100.0] do
+                    let expected = cam.cameraView.Location + distance * worldDir
+                    let projected = (Camera.viewProjTrafo cam).Forward.TransformPosProj(ray.GetPointOnRay distance)
+                    vectorClose (ndc pp projected.Z) projected $"{context}, distance={distance}, projected pixel"
+                    expectHit expected cam (Plane3d(worldDir, expected)) pp $"{context}, distance={distance}, plane hit"
+
     let tests (target: TestTarget) =
         [
             "Frustum.aspect",          Frustum.aspect
@@ -283,5 +399,11 @@ module Camera =
             "Orbit.center rebind retains existing mouse-step initialization",      Orbit.centerRebind
             "Orbit.forward is normalized before adding a large world translation", Orbit.largeWorldTranslation
             "Orbit.seeded drags",                                                  Orbit.seededDrags
+
+            "Picking.Orthographic near-plane origins and parallel unit directions",          Picking.orthographicRays
+            "Picking.Orthographic projection round trips and plane hits at multiple depths", Picking.orthographicProjectionAndHits
+            "Picking.Orthographic rays are independent of the far plane",                    Picking.farPlaneIndependence
+            "Picking.Plane picking uses the forward half-ray without far clipping",          Picking.forwardHalfRay
+            "Picking.Perspective rays and plane hits retain the original calculation",       Picking.perspectiveCompatibility
         ]
         |> prepareCasesCpu "Camera" target
