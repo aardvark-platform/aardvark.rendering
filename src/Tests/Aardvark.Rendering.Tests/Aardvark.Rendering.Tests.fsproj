@@ -86,6 +86,7 @@
     <Compile Include="Tests\Other\IndexedGeometry\IndexedGeometryTests.fs" />
     <Compile Include="Tests\Other\Utilities\MemoryManagerTests.fs" />
     <Compile Include="Tests\Other\Utilities\CompactSetTests.fs" />
+    <Compile Include="Tests\Other\Utilities\TrieTests.fs" />
     <Compile Include="Tests\Other\Utilities\UtilitiesTests.fs" />
     <Compile Include="Tests\Other\ShapeList\ShapeListBenchmarks.fs" />
     <Compile Include="Tests\Other\ShapeList\ShapeListTests.fs" />

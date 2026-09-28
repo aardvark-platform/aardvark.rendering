@@ -1,3 +1,4 @@
+- Fixed `Trie` preorder links for prefix and sibling updates, while preserving comparer and insertion ordering. Replaced, removed, and cleared `Trie` values are now detached cleanly from their trie-owned links.
 - Fixed indirect draw array/list/sequence range validation to reject integer overflow while preserving exact-end empty ranges and array reuse.
 - Fixed `Arr` uniform writes to truncate surplus values, zero-fill missing target storage, and remain within shader-array bounds.
 - Fixed phi/theta sphere tessellation to keep latitude rings between the explicit poles, eliminating degenerate triangles and zero-length wire segments without changing output counts.
