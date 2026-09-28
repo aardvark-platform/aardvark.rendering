@@ -580,6 +580,8 @@ module Management =
                     elif b.IsFree then
                         let n = x.Alloc(align, size)
 
+                        // Revival may move to another chunk; adopt its storage while retaining the caller's block identity.
+                        b.Memory <- n.Memory
                         b.Prev <- n.Prev
                         b.Next <- n.Next
                         b.Size <- n.Size
