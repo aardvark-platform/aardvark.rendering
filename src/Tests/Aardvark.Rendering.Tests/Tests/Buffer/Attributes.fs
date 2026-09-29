@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open FShade
@@ -577,7 +576,7 @@ module AttributeBuffer =
             Instance
         ]
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             let bgrLayoutTests =
                 Set.ofList [
@@ -609,19 +608,19 @@ module AttributeBuffer =
                 // GL_BGRA constant for buffers. Unfortunately, this
                 // only works for normalized float attributes.
                 // For single values we just fix the layout ourselves.
-                if backend = Backend.GL && Set.contains name bgrLayoutTests && not singleValue then
+                if target = TestTarget.GL && Set.contains name bgrLayoutTests && not singleValue then
                     ()
 
                 // Vulkan does not have normalized 32bit formats (e.g. there is no VK_FORMAT_R32G32B32_UNORM)
                 // See: https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkFormat.html
-                elif backend = Backend.Vulkan && name = "V3f from C3ui normalized" then
+                elif target = TestTarget.Vulkan && name = "V3f from C3ui normalized" then
                     ()
 
                 // SPIR-V does not support 8-bit inputs / outputs
-                elif backend = Backend.Vulkan && Set.contains name inputsOutput8BitTests then
+                elif target = TestTarget.Vulkan && Set.contains name inputsOutput8BitTests then
                     ()
 
                 else
-                    yield $"{desc} {name}", case perInstance singleValue interleaved
+                    $"{desc} {name}", case perInstance singleValue interleaved
         ]
-        |> prepareCases backend "Attributes"
+        |> prepareCasesGpu "Attributes" target

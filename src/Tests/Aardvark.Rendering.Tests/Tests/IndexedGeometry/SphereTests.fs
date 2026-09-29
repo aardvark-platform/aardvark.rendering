@@ -2,6 +2,7 @@
 
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
 open Expecto
 
@@ -94,29 +95,26 @@ module Sphere =
 
             geometry
 
-        let clampedLow =
-            test "Phi/theta sphere clamps low levels without malformed poles" {
-                let sphere = Sphere3d(V3d.Zero, 1.0)
-                let lowSolid = validateGeometry sphere -4 false
-                let lowWire = validateGeometry sphere -4 true
-                let minimumSolid = IndexedGeometryPrimitives.solidPhiThetaSphere sphere 3 (C4b(17uy, 63uy, 129uy, 255uy))
-                let minimumWire = IndexedGeometryPrimitives.wireframePhiThetaSphere sphere 3 (C4b(17uy, 63uy, 129uy, 255uy))
+        let clampedLow () =
+            let sphere = Sphere3d(V3d.Zero, 1.0)
+            let lowSolid = validateGeometry sphere -4 false
+            let lowWire = validateGeometry sphere -4 true
+            let minimumSolid = IndexedGeometryPrimitives.solidPhiThetaSphere sphere 3 (C4b(17uy, 63uy, 129uy, 255uy))
+            let minimumWire = IndexedGeometryPrimitives.wireframePhiThetaSphere sphere 3 (C4b(17uy, 63uy, 129uy, 255uy))
 
-                Expect.equal (lowSolid.IndexArray :?> int[]) (minimumSolid.IndexArray :?> int[]) "Solid level clamping indices"
-                Expect.equal (lowSolid.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]) (minimumSolid.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]) "Solid level clamping positions"
-                Expect.equal (lowWire.IndexArray :?> int[]) (minimumWire.IndexArray :?> int[]) "Wire level clamping indices"
-                Expect.equal (lowWire.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]) (minimumWire.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]) "Wire level clamping positions"
-            }
+            Expect.equal (lowSolid.IndexArray :?> int[]) (minimumSolid.IndexArray :?> int[]) "Solid level clamping indices"
+            Expect.equal (lowSolid.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]) (minimumSolid.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]) "Solid level clamping positions"
+            Expect.equal (lowWire.IndexArray :?> int[]) (minimumWire.IndexArray :?> int[]) "Wire level clamping indices"
+            Expect.equal (lowWire.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]) (minimumWire.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]) "Wire level clamping positions"
 
-        let translatedAndScaled =
-            test "Phi/theta sphere has symmetric interior rings and valid topology" {
-                let sphere = Sphere3d(V3d(1.25, -2.5, 3.75), 4.5)
-                validateGeometry sphere 8 false |> ignore
-                validateGeometry sphere 8 true |> ignore
-            }
+        let translatedAndScaled() =
+            let sphere = Sphere3d(V3d(1.25, -2.5, 3.75), 4.5)
+            validateGeometry sphere 8 false |> ignore
+            validateGeometry sphere 8 true |> ignore
 
-    let tests =
-        testList "Sphere" [
-            Cases.clampedLow
-            Cases.translatedAndScaled
+    let tests (target: TestTarget) =
+        [
+            "Phi/theta sphere clamps low levels without malformed poles",       Cases.clampedLow
+            "Phi/theta sphere has symmetric interior rings and valid topology", Cases.translatedAndScaled
         ]
+        |> prepareCasesCpu "Sphere" target

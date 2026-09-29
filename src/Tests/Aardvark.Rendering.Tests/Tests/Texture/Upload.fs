@@ -4,7 +4,6 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open Aardvark.SceneGraph
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
@@ -1205,7 +1204,7 @@ module TextureUpload =
 
             runtime |> renderQuadWithNullTexture shader randomTexture
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "1D",                        Cases.texture1D
             "1D subwindow",              Cases.texture1DSubwindow
@@ -1251,7 +1250,7 @@ module TextureUpload =
             "2D PixTexture mipmapped wrong size",               Cases.pixTexture2DMipmappedInvalid true
             "2D PixTexture mipmapped wrong format",             Cases.pixTexture2DMipmappedInvalid false
 
-            if backend <> Backend.GL then   // not supported
+            if target <> TestTarget.GL then // not supported
                 "2D PixTexture mipmap integer generation",          Cases.pixTexture2DMipmappedInteger MipmapInput.None
                 "2D PixTexture mipmap integer partial generation",  Cases.pixTexture2DMipmappedInteger MipmapInput.Partial
 
@@ -1262,7 +1261,7 @@ module TextureUpload =
             "2D StreamTexture compressed",                   Cases.streamTextureCompressed false
             "2D StreamTexture compressed mipmap generation", Cases.streamTextureCompressed true
 
-            if backend <> Backend.Vulkan then // not supported
+            if target <> TestTarget.Vulkan then // not supported
                 "2D multisampled",                        Cases.texture2DMultisampled
                 "2D multisampled subwindow",              Cases.texture2DMultisampledSubwindow
                 "2D multisampled array",                  Cases.texture2DMultisampledArray
@@ -1273,7 +1272,7 @@ module TextureUpload =
             "2D compressed DDS BC3",                    Cases.texture2DCompressedDDSBC3
             "2D compressed DDS BC4u",                   Cases.texture2DCompressedDDSBC4u
             "2D compressed DDS BC5u",                   Cases.texture2DCompressedDDSBC5u
-            "2D compressed subwindow",                    Cases.texture2DCompressedSubwindow
+            "2D compressed subwindow",                  Cases.texture2DCompressedSubwindow
 
             // Uploading BC6/7 is possible on both backends, but there is no
             // easy way to flip these, and unfortunately we want to flip all our textures on upload -_-
@@ -1281,14 +1280,14 @@ module TextureUpload =
                 //"2D compressed DDS BC7",      Cases.texture2DCompressedDDSBC7
 
             // Vulkan does not support generation of mipmaps for already compressed textures
-            if backend <> Backend.Vulkan then
+            if target <> TestTarget.Vulkan then
                 "2D compressed DDS BC1 mipmap generation",  Cases.texture2DCompressedDDSBC1MipmapGeneration
                 "2D compressed DDS BC2 mipmap generation",  Cases.texture2DCompressedDDSBC2MipmapGeneration
                 "2D compressed DDS BC3 mipmap generation",  Cases.texture2DCompressedDDSBC3MipmapGeneration
                 "2D compressed DDS BC4u mipmap generation", Cases.texture2DCompressedDDSBC4uMipmapGeneration
                 "2D compressed DDS BC5u mipmap generation", Cases.texture2DCompressedDDSBC5uMipmapGeneration
 
-            if backend <> Backend.Vulkan then // not supported (only really used for CEF?)
+            if target <> TestTarget.Vulkan then // not supported (only really used for CEF?)
                 "2D StreamingTexture",      Cases.texture2DStreaming
 
             "3D",                           Cases.texture3D
@@ -1329,4 +1328,4 @@ module TextureUpload =
             "Cube PixTexture mipmapped wrong size",      Cases.pixTextureCubeMipmappedInvalid true
             "Cube PixTexture mipmapped wrong format",    Cases.pixTextureCubeMipmappedInvalid false
         ]
-        |> prepareCases backend "Upload"
+        |> prepareCasesGpu "Upload" target

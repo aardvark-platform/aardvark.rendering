@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.GPGPU
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open System.IO
 open Expecto
 
@@ -30,8 +29,8 @@ module ComputeJpeg =
             Expect.isGreaterThan psnr 50.0 "Bad peak-signal-to-noise ratio"
             Expect.isLessThan rmse 1.0 "Bad root-mean-square error"
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Compress", Cases.compress
         ]
-        |> prepareComputeCases backend "Jpeg"
+        |> prepareCasesCompute "Jpeg" target

@@ -5,6 +5,7 @@ open System.Runtime.InteropServices
 open System.Text
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open Expecto
 
 module TextureDds =
@@ -124,7 +125,41 @@ module TextureDds =
             use stream = new MemoryStream(fixture.Bytes, 0, fixture.Bytes.Length - 1, false)
             Expect.isNone (DdsTexture.tryLoadCompressedFromStream wantMipMaps stream) "Try-load rejects a missing final byte"
 
-    let tests =
+    module private Cases =
+        let volumeMipPayloads4x4x4 header format bytesPerBlock () =
+            let fixture = fixture header format TextureDimension.Texture3D 1 (V3i 4) 3 bytesPerBlock
+            let expected = if bytesPerBlock = 8 then [|32; 16; 8|] else [|64; 32; 16|]
+            Expect.sequenceEqual (fixture.Payloads.[0] |> Array.map Array.length) expected "Reference mip byte sizes"
+            Expect.equal (fixture.Bytes.Length - fixture.HeaderSize) (if bytesPerBlock = 8 then 56 else 112) "Reference volume payload size"
+            for wantMipMaps in [false; true] do verify fixture wantMipMaps
+
+        let unalignedXYDepthBoundaries header format bytesPerBlock () =
+            for depth in [1; 2; 3; 4; 5; 7; 8; 9] do
+                let levels = if depth >= 8 then 4 else 3
+                let fixture = fixture header format TextureDimension.Texture3D 1 (V3i(5, 7, depth)) levels bytesPerBlock
+                for wantMipMaps in [false; true] do verify fixture wantMipMaps
+
+        let truncatedVolumePayloads header format bytesPerBlock () =
+            fixture header format TextureDimension.Texture3D 1 (V3i 4) 3 bytesPerBlock |> verifyTruncated
+
+        let ordering dimension header format bytesPerBlock () =
+            let size = if dimension = TextureDimension.TextureCube then V3i(8, 8, 1) else V3i(5, 7, 1)
+            for levels in [1; 3] do
+                let fixture = fixture header format dimension 1 size levels bytesPerBlock
+                for wantMipMaps in [false; true] do verify fixture wantMipMaps
+
+        let arrayOrdering dimension header format bytesPerBlock () =
+            let size =
+                match dimension with
+                | TextureDimension.Texture1D -> V3i(9, 1, 1)
+                | TextureDimension.TextureCube -> V3i(8, 8, 1)
+                | _ -> V3i(5, 7, 1)
+            for count in [1; 2] do
+                for levels in [1; 3] do
+                    let fixture = fixture header format dimension count size levels bytesPerBlock
+                    for wantMipMaps in [false; true] do verify fixture wantMipMaps
+
+    let tests (target: TestTarget) =
         let formats =
             [ "legacy BC1", Legacy "DXT1", TextureFormat.CompressedRgbaS3tcDxt1, 8
               "legacy BC3", Legacy "DXT5", TextureFormat.CompressedRgbaS3tcDxt5, 16
@@ -139,47 +174,21 @@ module TextureDds =
               "DX10 BC6h signed", DX10 96u, TextureFormat.CompressedRgbBptcSignedFloat, 16
               "DX10 BC7", DX10 98u, TextureFormat.CompressedRgbaBptcUnorm, 16 ]
 
-        testList "DDS" [
+        [
             for name, header, format, bytesPerBlock in formats do
-                testList name [
-                    testCase "4x4x4 volume mip payloads" <| fun _ ->
-                        let fixture = fixture header format TextureDimension.Texture3D 1 (V3i 4) 3 bytesPerBlock
-                        let expected = if bytesPerBlock = 8 then [|32; 16; 8|] else [|64; 32; 16|]
-                        Expect.sequenceEqual (fixture.Payloads.[0] |> Array.map Array.length) expected "Reference mip byte sizes"
-                        Expect.equal (fixture.Bytes.Length - fixture.HeaderSize) (if bytesPerBlock = 8 then 56 else 112) "Reference volume payload size"
-                        for wantMipMaps in [false; true] do verify fixture wantMipMaps
-
-                    testCase "Unaligned XY and depth boundaries" <| fun _ ->
-                        for depth in [1; 2; 3; 4; 5; 7; 8; 9] do
-                            let levels = if depth >= 8 then 4 else 3
-                            let fixture = fixture header format TextureDimension.Texture3D 1 (V3i(5, 7, depth)) levels bytesPerBlock
-                            for wantMipMaps in [false; true] do verify fixture wantMipMaps
-
-                    testCase "Truncated volume payloads" <| fun _ ->
-                        fixture header format TextureDimension.Texture3D 1 (V3i 4) 3 bytesPerBlock |> verifyTruncated
-                ]
+                $"{name}.4x4x4 volume mip payloads",         Cases.volumeMipPayloads4x4x4 header format bytesPerBlock
+                $"{name}.Unaligned XY and depth boundaries", Cases.unalignedXYDepthBoundaries header format bytesPerBlock
+                $"{name}.Truncated volume payloads",         Cases.truncatedVolumePayloads header format bytesPerBlock
 
             for name, header, format, bytesPerBlock in formats do
                 // Legacy and DX10 2D/cube controls cover both block-byte sizes and every BC mode.
                 for dimension in [TextureDimension.Texture2D; TextureDimension.TextureCube] do
-                    testCase $"{name} {dimension} ordering" <| fun _ ->
-                        let size = if dimension = TextureDimension.TextureCube then V3i(8, 8, 1) else V3i(5, 7, 1)
-                        for levels in [1; 3] do
-                            let fixture = fixture header format dimension 1 size levels bytesPerBlock
-                            for wantMipMaps in [false; true] do verify fixture wantMipMaps
+                    $"{name} {dimension} ordering", Cases.ordering dimension header format bytesPerBlock
 
                 match header with
                 | Legacy _ -> ()
                 | DX10 _ ->
                     for dimension in [TextureDimension.Texture1D; TextureDimension.Texture2D; TextureDimension.TextureCube] do
-                        testCase $"{name} {dimension} array ordering" <| fun _ ->
-                            let size =
-                                match dimension with
-                                | TextureDimension.Texture1D -> V3i(9, 1, 1)
-                                | TextureDimension.TextureCube -> V3i(8, 8, 1)
-                                | _ -> V3i(5, 7, 1)
-                            for count in [1; 2] do
-                                for levels in [1; 3] do
-                                    let fixture = fixture header format dimension count size levels bytesPerBlock
-                                    for wantMipMaps in [false; true] do verify fixture wantMipMaps
+                        $"{name} {dimension} array ordering", Cases.arrayOrdering dimension header format bytesPerBlock
         ]
+        |> prepareCasesCpu "Compression.DDS" target

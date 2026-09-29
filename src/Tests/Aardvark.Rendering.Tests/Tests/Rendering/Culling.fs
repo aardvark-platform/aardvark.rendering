@@ -5,7 +5,6 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open Expecto
 
@@ -247,7 +246,7 @@ module Culling =
             FullscreenQuad.cwTrace
             |> traceToPix [| 0uy; 255uy; 0uy |] RayFlags.None "FrontFacing" None
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Default no culling",                     Cases.defaultNoCulling
             "Default front face CCW",                 Cases.defaultFrontFaceCCW
@@ -260,7 +259,7 @@ module Culling =
 
             "Shader front facing",                    Cases.shaderFrontFacing
 
-            if backend = Backend.Vulkan then
+            if target = TestTarget.Vulkan then
                 "Raytracing default no culling",                     Cases.raytracingDefaultNoCulling
 
                 "Raytracing back face culling with front face CCW",  Cases.raytracingBackFaceCullingFrontFaceCCW
@@ -272,4 +271,4 @@ module Culling =
                 "Raytracing shader front facing",                    Cases.raytracingShaderFrontFacing
                 "Raytracing shader back facing",                     Cases.raytracingShaderBackFacing
         ]
-        |> prepareCases backend "Culling"
+        |> prepareCasesGpu "Culling" target

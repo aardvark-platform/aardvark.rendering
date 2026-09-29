@@ -3,7 +3,6 @@
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open Expecto
 open System
@@ -95,7 +94,7 @@ module MutableInputBinding =
             let level = backendTexture.[TextureAspect.Color, 0]
             runtime |> flushTest<ITextureLevel> subres level
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Flush",          Cases.flush
             "Type safety",    Cases.typeSafety
@@ -103,4 +102,4 @@ module MutableInputBinding =
             "Textures",       Cases.textures
             "Texture levels", Cases.textureLevels
         ]
-        |> prepareComputeCases backend "Mutable input binding"
+        |> prepareCasesCompute "Mutable input binding" target

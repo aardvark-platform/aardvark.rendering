@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 
@@ -188,7 +187,7 @@ module Commands =
                     )
             )
 
-    let tests (backend: Backend) =
+    let tests (target: TestTarget) =
         [
             "Ordered",                  Cases.ordered
             "IfThenElse",               Cases.ifThenElse
@@ -196,4 +195,4 @@ module Commands =
             "Nested",                   Cases.nested false 16
             "Nested (as scene graph)",  Cases.nested true 16
         ]
-        |> prepareCases backend "Commands"
+        |> prepareCasesGpu "Commands" target

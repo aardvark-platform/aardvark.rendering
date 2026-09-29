@@ -2,6 +2,7 @@ namespace Aardvark.Rendering.Tests.IndexedGeometry
 
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
 open System
 open System.Collections
@@ -103,10 +104,10 @@ module PrimitiveSequences =
             t, color r)
 
     let private variants name (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) =
-        testList name [
-            for count in [0; 1; 3; 257] do
-                for kind in ["array"; "list"; "lazy"] do
-                    testCase $"{kind}/{count}" <| fun _ ->
+        [
+            for kind in ["array"; "list"; "lazy"] do
+                $"{name}.{kind}", fun () ->
+                    for count in [0; 1; 3; 257] do
                         let values = fixture count
                         let snapshot = Array.copy values
                         let input =
@@ -124,13 +125,13 @@ module PrimitiveSequences =
                             positions.[0] <- V3f(99.0f)
                             Expect.equal values snapshot "output mutation does not affect input"
                             geometry mode (expected snapshot) again
-            for count in [0; 1; 5] do
-                testCase $"single use and exact counts/{count}" <| fun _ ->
+            $"{name}.single use and exact counts", fun () ->
+                for count in [0; 1; 5] do
                     let values = fixture count
                     let source = Source((fun _ -> values), true, "", -1)
                     geometry mode (expected values) (build source)
                     Expect.equal source.Counts (1, count + 1, count, 1) "one eager pass, one current read per item, one disposal"
-            testCase "queue-draining source" <| fun _ ->
+            $"{name}.queue-draining source", fun () ->
                 let values = fixture 5
                 let queue = Queue<_>(values)
                 let mutable disposals = 0
@@ -138,61 +139,69 @@ module PrimitiveSequences =
                 geometry mode (expected values) (build input)
                 Expect.equal queue.Count 0 "eagerly consumed"
                 Expect.equal disposals 1 "disposed once"
-            testCase "changing source cannot mix attribute generations" <| fun _ ->
+            $"{name}.changing source cannot mix attribute generations", fun () ->
                 let values = fixture 5
                 let other = Array.rev values
                 let source = Source((fun generation -> if generation = 1 then values else other), false, "", -1)
                 geometry mode (expected values) (build source)
                 Expect.equal source.Counts (1, 6, 5, 1) "only the first generation is read"
-            for fault, at in ["start", 0; "move", 0; "move", 2; "move", 5; "current", 0; "current", 2; "dispose", 0] do
-                testCase $"{fault} failure/{at}" <| fun _ ->
-                    let source = Source((fun _ -> fixture 5), false, fault, at)
-                    let thrown = try build source |> ignore; None with e -> Some e
-                    Expect.isTrue (thrown |> Option.exists (fun e -> obj.ReferenceEquals(e, source.Error))) "original source exception"
-                    let starts, _, _, disposed = source.Counts
-                    Expect.equal starts 1 "no retry"
-                    Expect.equal disposed (if fault = "start" then 0 else 1) "dispose acquired enumerator on failure"
-            testCase "deterministic randomized inputs" <| fun _ ->
+            for fault, at in ["start", [0]; "move", [0;2;5]; "current", [0;2]; "dispose", [0]] do
+               $"{name}.{fault} failure", fun () ->
+                    for at in at do
+                        let source = Source((fun _ -> fixture 5), false, fault, at)
+                        let thrown = try build source |> ignore; None with e -> Some e
+                        Expect.isTrue (thrown |> Option.exists (fun e -> obj.ReferenceEquals(e, source.Error))) "original source exception"
+                        let starts, _, _, disposed = source.Counts
+                        Expect.equal starts 1 "no retry"
+                        Expect.equal disposed (if fault = "start" then 0 else 1) "dispose acquired enumerator on failure"
+            $"{name}.deterministic randomized inputs", fun () ->
                 let r = Random(1447)
                 for _ in 1 .. 100 do
                     let values = fixture (r.Next(0, 70)) |> Array.sortBy (fun _ -> r.Next())
                     geometry mode (expected values) (build (seq { yield! values }))
         ]
 
-    let tests =
-        testList "Primitive sequences" [
-            variants "lines" lines lineExpected IndexedGeometryMode.LineList P.Line.lines
-            variants "lines alias" lines lineExpected IndexedGeometryMode.LineList P.lines
+    let tests (target: TestTarget) =
+        [
+            yield! variants "lines" lines lineExpected IndexedGeometryMode.LineList P.Line.lines
+            yield! variants "lines alias" lines lineExpected IndexedGeometryMode.LineList P.lines
+
             let lineInput n = lines n |> Array.map fst
             let lineUniform xs = xs |> Array.map (fun l -> l, uniform) |> lineExpected
-            variants "lines'" lineInput lineUniform IndexedGeometryMode.LineList (fun xs -> P.Line.lines' xs uniform)
-            variants "lines' alias" lineInput lineUniform IndexedGeometryMode.LineList (fun xs -> P.lines' xs uniform)
+            yield! variants "lines'" lineInput lineUniform IndexedGeometryMode.LineList (fun xs -> P.Line.lines' xs uniform)
+            yield! variants "lines' alias" lineInput lineUniform IndexedGeometryMode.LineList (fun xs -> P.lines' xs uniform)
+
             for name, wire, build in ["solid colors", false, P.Triangle.solidTrianglesWithColors; "wire colors", true, P.Triangle.wireframeTrianglesWithColors; "triangles alias", false, P.triangles] do
-                variants name triangles (triangleExpected wire) (if wire then IndexedGeometryMode.LineList else IndexedGeometryMode.TriangleList) build
+                yield! variants name triangles (triangleExpected wire) (if wire then IndexedGeometryMode.LineList else IndexedGeometryMode.TriangleList) build
+
             for name, wire, build in ["solid uniform", false, P.Triangle.solidTrianglesWithColor; "wire uniform", true, P.Triangle.wireframeTrianglesWithColor; "triangles' alias", false, P.triangles'] do
-                variants name (fun n -> triangles n |> Array.map fst) (fun ts -> ts |> Array.map (fun t -> t, uniform) |> triangleExpected wire)
+                yield! variants name (fun n -> triangles n |> Array.map fst) (fun ts -> ts |> Array.map (fun t -> t, uniform) |> triangleExpected wire)
                     (if wire then IndexedGeometryMode.LineList else IndexedGeometryMode.TriangleList) (fun ts -> build ts uniform)
-            testCase "single line builders" <| fun _ ->
+
+            "single line builders", fun _ ->
                 for l, c in lines 5 do
                     geometry IndexedGeometryMode.LineList (lineExpected [|l, c|]) (P.Line.line l c)
                     geometry IndexedGeometryMode.LineList (lineExpected [|l, c|]) (P.line l c)
-            testCase "line endpoint conversion and zero-length lines" <| fun _ ->
+
+            "line endpoint conversion and zero-length lines", fun _ ->
                 let values =
                     [| Line3d(V3d.Zero, V3d.Zero), C4b.Black
                        Line3d(V3d(-0.0, 16777217.0, 1e150), V3d(0.0, -16777217.0, -1e150)), uniform |]
                 geometry IndexedGeometryMode.LineList (lineExpected values) (P.Line.lines values)
-            testCase "triangle normals precede float position conversion" <| fun _ ->
+
+            "triangle normals precede float position conversion", fun _ ->
                 let origin = V3d(1e10)
                 let values = [|Triangle3d(origin, origin + V3d.XAxis, origin + V3d.YAxis), uniform|]
                 let g = P.Triangle.solidTrianglesWithColors values
                 geometry IndexedGeometryMode.TriangleList (triangleExpected false values) g
                 for n in g.IndexedAttributes.[DefaultSemantic.Normals] :?> V3f[] do equalVector n V3f.OOI
+
             for name, vertexFactor, create in [
                 "lines", 2, (fun n -> let data = lines n in fun () -> P.Line.lines data)
                 "solid triangles", 3, (fun n -> let data = triangles n in fun () -> P.Triangle.solidTrianglesWithColors data)
                 "wire triangles", 6, (fun n -> let data = triangles n in fun () -> P.Triangle.wireframeTrianglesWithColors data)
             ] do
-                testCase $"array allocation bound/{name}" <| fun _ ->
+                $"array allocation bound.{name}", fun _ ->
                     let count = 2048
                     let build = create count
                     for _ in 1 .. 8 do GC.KeepAlive(build())
@@ -201,12 +210,14 @@ module PrimitiveSequences =
                     let bytes = (GC.GetAllocatedBytesForCurrentThread() - before) / 4L
                     // 12 B positions + 4 B colors + 12 B normals, plus generous fixed geometry overhead.
                     Expect.isLessThan bytes (int64 (count * vertexFactor * 28 + 8192)) "no source copy or per-primitive temporary arrays"
-            testCase "extreme and non-finite triangle conversion" <| fun _ ->
+
+            "extreme and non-finite triangle conversion", fun _ ->
                 for scale in [1e-150; 1e150; Double.PositiveInfinity; Double.NaN] do
                     let values = [|Triangle3d(V3d.Zero, V3d(scale, 0.0, 0.0), V3d(0.0, scale, 0.0)), uniform|]
                     geometry IndexedGeometryMode.TriangleList (triangleExpected false values) (P.Triangle.solidTrianglesWithColors values)
                     geometry IndexedGeometryMode.LineList (triangleExpected true values) (P.Triangle.wireframeTrianglesWithColors values)
-            testCase "checked output count boundaries without huge allocations" <| fun _ ->
+
+            "checked output count boundaries without huge allocations", fun _ ->
                 let typ = typeof<ISg>.Assembly.GetType("Aardvark.SceneGraph.IndexedGeometryPrimitives", true)
                 let method = typ.GetMethod("vertexCount", BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
                 Expect.isNotNull method "shared checked output count"
@@ -216,3 +227,4 @@ module PrimitiveSequences =
                     let thrown = try method.Invoke(null, [|box (Int32.MaxValue / factor + 1); box factor|]) |> ignore; None with e -> Some e
                     Expect.isTrue (thrown |> Option.exists (fun e -> match e with :? TargetInvocationException as t -> t.InnerException :? OverflowException | _ -> false)) "overflow is rejected"
         ]
+        |> prepareCasesCpu "Primitives sequences" target

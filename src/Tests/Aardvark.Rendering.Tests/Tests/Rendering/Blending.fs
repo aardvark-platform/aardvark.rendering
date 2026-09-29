@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open Expecto
@@ -151,10 +150,10 @@ module Blending =
             finally
                 r0.Release(); r1.Release(); r2.Release()
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Global (add)",                       Cases.globalBlend BlendMode.Add (+) (+)
             "Global (color multiply, alpha add)", Cases.globalBlend BlendMode.ColorMulAlphaAdd (*) (+)
             "Per attachment",                     Cases.perAttachmentBlend
         ]
-        |> prepareCases backend "Blending"
+        |> prepareCasesGpu "Blending" target

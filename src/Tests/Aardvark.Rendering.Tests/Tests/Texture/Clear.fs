@@ -5,7 +5,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open Expecto
 
 module TextureClear =
@@ -230,7 +229,7 @@ module TextureClear =
         let framebufferDepthStencilOnlyStencilCompileClear  = framebufferCompileClear clearFramebufferDepthStencilOnlyStencil
         let framebufferDepthStencilOnlyStencilRenderCommand = framebufferRenderCommand clearFramebufferDepthStencilOnlyStencil
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Color rgba8",                              Cases.rgba8
             "Color rgba32i",                            Cases.rgba32i
@@ -262,4 +261,4 @@ module TextureClear =
             "Framebuffer stencil-only, compiled",       Cases.framebufferDepthStencilOnlyStencilCompileClear
             "Framebuffer stencil-only, render command", Cases.framebufferDepthStencilOnlyStencilRenderCommand
         ]
-        |> prepareCases backend "Clear"
+        |> prepareCasesGpu "Clear" target

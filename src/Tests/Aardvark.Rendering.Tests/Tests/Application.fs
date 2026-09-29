@@ -17,6 +17,12 @@ type Framework =
     | GLFW
     | OpenTK
 
+    static member Default =
+        if Aardvark.GetOSPlatform() <> OSPlatform.Windows then
+            Framework.GLFW
+        else
+            Framework.OpenTK
+
 [<Struct; RequireQualifiedAccess>]
 type TestBackend =
     | GL of Framework

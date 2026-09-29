@@ -1,13 +1,14 @@
-﻿namespace Aardvark.Rendering.Tests
+﻿namespace Aardvark.Rendering.Tests.Other
 
 open System
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open Aardvark.Application
 open FSharp.Data.Adaptive
 open Expecto
 
-module ``Camera Tests`` =
+module Camera =
 
     module private Expect =
 
@@ -21,43 +22,33 @@ module ``Camera Tests`` =
             Expect.equal a.isOrtho b.isOrtho (message + " (isOrtho)")
 
     module Frustum =
-        let aspect =
-            test "aspect" {
-                let f = Frustum.perspective 75.0 0.1 100.0 1.77
-                let a = Frustum.aspect f
-                Expect.floatClose Accuracy.high a 1.77 "Aspect is wrong"
-            }
+        let aspect () =
+            let f = Frustum.perspective 75.0 0.1 100.0 1.77
+            let a = Frustum.aspect f
+            Expect.floatClose Accuracy.high a 1.77 "Aspect is wrong"
 
-        let fieldOfView =
-            test "fieldOfView" {
-                let f = Frustum.perspective 75.0 0.1 100.0 1.77
-                let fov = Frustum.horizontalFieldOfViewInDegrees f
-                Expect.floatClose Accuracy.high fov 75.0 "Field of view is wrong"
-            }
+        let fieldOfView () =
+            let f = Frustum.perspective 75.0 0.1 100.0 1.77
+            let fov = Frustum.horizontalFieldOfViewInDegrees f
+            Expect.floatClose Accuracy.high fov 75.0 "Field of view is wrong"
 
-        let withAspect =
-            test "withAspect" {
-                let a = Frustum.perspective 75.0 0.1 100.0 1.77
-                let b = Frustum.perspective 75.0 0.1 100.0 1.5
-                let c = a |> Frustum.withAspect 1.5
-                Expect.frustumClose Accuracy.high b c "Frustums do not match"
-            }
+        let withAspect () =
+            let a = Frustum.perspective 75.0 0.1 100.0 1.77
+            let b = Frustum.perspective 75.0 0.1 100.0 1.5
+            let c = a |> Frustum.withAspect 1.5
+            Expect.frustumClose Accuracy.high b c "Frustums do not match"
 
-        let withNear =
-            test "withNear" {
-                let a = Frustum.perspective 75.0 0.1 100.0 1.77
-                let b = Frustum.perspective 75.0 0.01 100.0 1.77
-                let c = a |> Frustum.withNear 0.01
-                Expect.frustumClose Accuracy.high b c "Frustums do not match"
-            }
+        let withNear () =
+            let a = Frustum.perspective 75.0 0.1 100.0 1.77
+            let b = Frustum.perspective 75.0 0.01 100.0 1.77
+            let c = a |> Frustum.withNear 0.01
+            Expect.frustumClose Accuracy.high b c "Frustums do not match"
 
-        let withFieldOfView =
-            test "withFieldOfView" {
-                let a = Frustum.perspective 75.0 0.1 100.0 1.77
-                let b = Frustum.perspective 90.0 0.1 100.0 1.77
-                let c = a |> Frustum.withHorizontalFieldOfViewInDegrees 90.0
-                Expect.frustumClose Accuracy.high b c "Frustums do not match"
-            }
+        let withFieldOfView () =
+            let a = Frustum.perspective 75.0 0.1 100.0 1.77
+            let b = Frustum.perspective 90.0 0.1 100.0 1.77
+            let c = a |> Frustum.withHorizontalFieldOfViewInDegrees 90.0
+            Expect.frustumClose Accuracy.high b c "Frustums do not match"
 
     module Orbit =
         let private vectorClose tolerance (expected : V3d) (actual : V3d) message =
@@ -133,9 +124,9 @@ module ``Camera Tests`` =
         ]
 
         let tests =
-            testList "Orbit" [
+            [
                 for name, deltas in drags do
-                    testCase $"{name}" <| fun _ ->
+                    $"Orbit.{name}", fun _ ->
                         for center in [V3d.Zero; V3d(100.0, 200.0, 30.0); V3d(-100.0, -200.0, -30.0); V3d(13.25, -47.5, 6.75)] do
                             for offset in [V3d(0.0, -10.0, 3.0); V3d(-7.0, 4.0, -2.0)] do
                                 for sky in [V3d.ZAxis; V3d(1.0, -2.0, 4.0).Normalized] do
@@ -149,9 +140,9 @@ module ``Camera Tests`` =
                                         viewClose (1e-9 * offset.Length) expected actual
                                         checkOrbit center offset.Length sky actual
 
-                testCase $"translation equivariance" <| fun _ ->
+                "Orbit.translation equivariance", fun _ ->
                     for shift in [V3d(100.0, 200.0, 30.0); V3d(-900.0, 13.5, -210.0); V3d(0.125, -0.25, 0.5)] do
-                        for name, deltas in drags do
+                        for _, deltas in drags do
                             let initial = CameraView.LookAt(V3d(0.0, -10.0, 3.0), V3d.Zero, V3d.ZAxis)
                             let origin = Orbit(initial, AVal.constant V3d.Zero)
                             let translated = Orbit(initial.WithLocation(initial.Location + shift), AVal.constant shift, V2i(12, 34))
@@ -162,9 +153,9 @@ module ``Camera Tests`` =
                                 let b = translated.Move delta
                                 viewClose 1e-9 (a.WithLocation(a.Location + shift)) b
 
-                testCase $"origin compatibility" <| fun _ ->
+                "Orbit.origin compatibility", fun _ ->
                     for sky in [V3d.ZAxis; V3d(1.0, 2.0, 3.0).Normalized; V3d(0.0, 0.0, 2.0)] do
-                        for name, deltas in drags do
+                        for _, deltas in drags do
                             let initial = CameraView.LookAt(V3d(2.0, -10.0, 3.0), V3d.Zero, sky)
                             let orbit = Orbit(initial, AVal.constant V3d.Zero)
                             let mutable expected = legacyStep V2i.Zero initial
@@ -173,7 +164,7 @@ module ``Camera Tests`` =
                                 expected <- legacyStep delta expected
                                 viewClose (1e-10 * max 1.0 expected.Location.Length) expected (orbit.Move delta)
 
-                testCase "press, release and inactive movement do not accumulate deltas" <| fun _ ->
+                "Orbit.press, release and inactive movement do not accumulate deltas", fun _ ->
                     let center = V3d(100.0, 200.0, 30.0)
                     let initial = CameraView.LookAt(center + V3d(0.0, -10.0, 3.0), center, V3d.ZAxis)
                     let orbit = Orbit(initial, AVal.constant center)
@@ -188,7 +179,7 @@ module ``Camera Tests`` =
                     viewClose 1e-10 moved (orbit.Down MouseButtons.Left)
                     viewClose 1e-10 (referenceStep center (V2i(-5, 6)) moved) (orbit.Move(V2i(-5, 6)))
 
-                testCase $"only the left button activates orbit" <| fun _ ->
+                "Orbit.only the left button activates orbit", fun _ ->
                     for button in [MouseButtons.Right; MouseButtons.Middle; MouseButtons.Button4; MouseButtons.Right ||| MouseButtons.Middle] do
                         let center = V3d(-17.0, 23.0, -4.0)
                         let initial = CameraView.LookAt(center + V3d(0.0, -10.0, 3.0), center, V3d.ZAxis)
@@ -201,7 +192,7 @@ module ``Camera Tests`` =
                         orbit.Up MouseButtons.Left |> ignore
                         Expect.isTrue (Object.ReferenceEquals(moved, orbit.Move(V2i(7, -3)))) "other buttons do not keep orbit active"
 
-                testCase $"adaptive center change" <| fun _ ->
+                "Orbit.adaptive center change", fun _ ->
                     for active in [false; true] do
                         let center = cval (V3d(100.0, 200.0, 30.0))
                         let initial = CameraView.LookAt(center.Value + V3d(0.0, -10.0, 3.0), center.Value, V3d.ZAxis)
@@ -220,7 +211,7 @@ module ``Camera Tests`` =
                         viewClose 1e-10 (referenceStep next (V2i(20, 10)) ready) actual
                         checkOrbit next (ready.Location - next).Length initial.Sky actual
 
-                testCase "center rebind retains existing mouse-step initialization" <| fun _ ->
+                "Orbit.center rebind retains existing mouse-step initialization", fun _ ->
                     let center = cval V3d.Zero
                     let initial = CameraView.LookAt(V3d(2.0, -10.0, 3.0), center.Value, V3d.ZAxis)
                     let orbit = Orbit(initial, center)
@@ -234,7 +225,7 @@ module ``Camera Tests`` =
                     vectorClose 1e-12 (center.Value - before.Location).Normalized rebound.Forward "rebound facing"
                     viewClose 1e-10 (referenceStep center.Value (V2i(5, 3)) rebound) (orbit.Move(V2i(5, 3)))
 
-                testCase "forward is normalized before adding a large world translation" <| fun _ ->
+                "Orbit.forward is normalized before adding a large world translation", fun _ ->
                     let center = V3d(1e12, -1e12, 1e12)
                     let initial = CameraView.LookAt(center + V3d(0.0, -10.0, 3.0), center, V3d.ZAxis)
                     let orbit = Orbit(initial, AVal.constant center)
@@ -247,7 +238,7 @@ module ``Camera Tests`` =
                     vectorClose 1e-12 expected.Up actual.Up "up precision"
                     Expect.equal actual.Sky initial.Sky "sky preserved"
 
-                testCase $"seeded drags" <| fun _ ->
+                "Orbit.seeded drags", fun _ ->
                     for seed in 0 .. 9 do
                         let random = Random(9127 + seed)
                         let center = V3d(random.NextDouble() * 200.0 - 100.0, random.NextDouble() * 200.0 - 100.0, random.NextDouble() * 200.0 - 100.0)
@@ -262,15 +253,14 @@ module ``Camera Tests`` =
                             checkOrbit center (initial.Location - center).Length initial.Sky actual
             ]
 
-    [<Tests>]
-    let tests =
-        testList "Camera" [
-            testList "Frustum" [
-                Frustum.aspect
-                Frustum.fieldOfView
-                Frustum.withAspect
-                Frustum.withNear
-                Frustum.withFieldOfView
-            ]
-            Orbit.tests
+    let tests (target: TestTarget) =
+        [
+            "Frustum.aspect",          Frustum.aspect
+            "Frustum.fieldOfView",     Frustum.fieldOfView
+            "Frustum.withAspect",      Frustum.withAspect
+            "Frustum.withNear",        Frustum.withNear
+            "Frustum.withFieldOfView", Frustum.withFieldOfView
+
+            yield! Orbit.tests
         ]
+        |> prepareCasesCpu "Camera" target

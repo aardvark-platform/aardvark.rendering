@@ -1,11 +1,7 @@
 ﻿namespace Aardvark.Rendering.Tests.Buffer
 
-open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
-open FSharp.Data.Adaptive
-open FShade
 open Expecto
 open System
 
@@ -73,7 +69,7 @@ module BufferCopy =
         let arrayUint32BufferRange  = testBufferRangeCopy Rnd.uint32 7533 5432 2341 1243
         let arrayUint64BufferRange  = testBufferRangeCopy Rnd.uint64 7533 5432 2341 1243
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Invalid arguments",    Cases.invalidArgs
 
@@ -85,4 +81,4 @@ module BufferCopy =
             "Buffer range uint32",  Cases.arrayUint32BufferRange
             "Buffer range uint64",  Cases.arrayUint64BufferRange
         ]
-        |> prepareCases backend "Copy"
+        |> prepareCasesGpu "Copy" target

@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open Expecto
 
@@ -78,7 +77,7 @@ module IntegerAttachments =
         let renderToR32ui (samples : int) (runtime : IRuntime) =
             runtime |> renderPrimitiveId Unchecked.defaultof<uint32> TextureFormat.R32ui samples
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "2D r8i", Cases.renderToR8i 1
             "2D r16i", Cases.renderToR16i 1
@@ -88,4 +87,4 @@ module IntegerAttachments =
             "2D r32ui", Cases.renderToR32ui 1
             "2D r32ui multisampled", Cases.renderToR32ui 4
         ]
-        |> prepareCases backend "Integer attachments"
+        |> prepareCasesGpu "Integer attachments" target

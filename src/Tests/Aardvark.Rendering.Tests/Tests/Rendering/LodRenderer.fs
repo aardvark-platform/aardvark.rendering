@@ -3,7 +3,6 @@
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open System
 open System.Threading
 open FSharp.Data.Adaptive
@@ -229,9 +228,9 @@ module LodRenderer =
             let effect = FShade.Effect.ofFunction Shader.colorM44f
             attribute Semantic.M44f mat effect (value.ToArray()) perGeometry runtime
 
-    let tests (backend: Backend) =
+    let tests (target: TestTarget) =
         [
-            if (backend = Backend.GL) then
+            if target = TestTarget.GL then
                 yield! [
                   "V3f attribute",  Cases.v3f
                   "V4f attribute",  Cases.v4f
@@ -245,4 +244,4 @@ module LodRenderer =
                     $"{n} (per geometry)", f true
                 ])
         ]
-        |> prepareCases backend "LodRenderer"
+        |> prepareCasesGpu "LodRenderer" target

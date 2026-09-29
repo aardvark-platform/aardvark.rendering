@@ -4,13 +4,11 @@ open Aardvark.Base
 open Aardvark.GPGPU
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open Expecto
 
 module ComputePrimitives =
 
     module Cases =
-        open FShade
 
         let scan (runtime : IRuntime) =
             use p = new ParallelPrimitives(runtime)
@@ -189,7 +187,7 @@ module ComputePrimitives =
         let min3D = reduce3D (fun p -> p.Min) (Seq.reduce min)
 
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Scan",         Cases.scan
             "Scan 2D",      Cases.scan2d
@@ -202,4 +200,4 @@ module ComputePrimitives =
             "Fold",         Cases.fold
             "Map reduce",   Cases.mapReduce
         ]
-        |> prepareComputeCases backend "Primitives"
+        |> prepareCasesCompute "Primitives" target
