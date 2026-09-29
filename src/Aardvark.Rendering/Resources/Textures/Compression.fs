@@ -424,7 +424,8 @@ module BlockCompression =
             for i = 0 to offset - 1 do
                 dstIndex.[i] <- srcIndex.[height - 1]
 
-        let decode (offset : V2i) (src : nativeint) (dst : nativeint) (dstInfo : VolumeInfo) =
+        // Specialize the format flag at callers while keeping a single RGB traversal implementation.
+        let inline decodeRgb (forceFourColors : bool) (offset : V2i) (src : nativeint) (dst : nativeint) (dstInfo : VolumeInfo) =
             assert (Vec.allSmaller offset 4)
             assert (Vec.allGreaterOrEqual offset 0)
             assert (Vec.allSmallerOrEqual dstInfo.Size.XY 4L)
@@ -441,7 +442,8 @@ module BlockCompression =
             colors.[0] <- R5G6B5(pColors.[0]).ToC4b()
             colors.[1] <- R5G6B5(pColors.[1]).ToC4b()
 
-            if pColors.[0] > pColors.[1] then
+            // Only BC1 selects three colors plus transparency by endpoint order; BC2/BC3 always use four RGB colors.
+            if forceFourColors || pColors.[0] > pColors.[1] then
                 colors.[2] <- lerp colors.[0] colors.[1] (1.0f / 3.0f)
                 colors.[3] <- lerp colors.[0] colors.[1] (2.0f / 3.0f)
             else
@@ -454,6 +456,9 @@ module BlockCompression =
                 for x = offset.X to size.X - 1 do
                     let index = (row >>> (2 * x)) &&& 0x03
                     dst.SetC4b(x, y, colors.[index])
+
+        let decode offset src dst dstInfo =
+            decodeRgb false offset src dst dstInfo
 
     module private BC2 =
 
@@ -497,7 +502,7 @@ module BlockCompression =
             assert (Vec.allSmallerOrEqual dstInfo.Size.XY 4L)
             assert (dstInfo.Size.Z >= 4L)
 
-            BC1.decode offset (src + 8n) dst dstInfo
+            BC1.decodeRgb true offset (src + 8n) dst dstInfo
 
             let dst = dst |> NativeVolume.ofNativeInt<uint8> dstInfo
             let size = V2i dst.Size.XY
@@ -670,7 +675,7 @@ module BlockCompression =
             assert (Vec.allSmallerOrEqual dstInfo.Size.XY 4L)
             assert (dstInfo.Size.Z >= 4L)
 
-            BC1.decode offset (src + 8n) dst dstInfo
+            BC1.decodeRgb true offset (src + 8n) dst dstInfo
             BC4.decodeU offset src dst (dstInfo.SubVolumeAlpha())
 
     module private BC5 =
