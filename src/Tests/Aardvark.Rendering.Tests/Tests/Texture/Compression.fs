@@ -363,8 +363,127 @@ module TextureCompression =
                     Expect.equal (CompressionMode.numberOfBlocks size mode) V3i.One "At least one block per axis"
                     Expect.equal (CompressionMode.sizeInBytes size mode) bytesPerBlock "At least one block"
 
+    module private Handcrafted =
+
+        // Literal RGB565 endpoints, four-color palettes and BC1 midpoints; no encoder or production interpolation oracle.
+        let private palettes = [|
+            "ascending black/white", 0x0000us, 0xFFFFus,
+                [| C3b(0uy); C3b(255uy); C3b(85uy); C3b(170uy) |], C3b(128uy)
+            "equal red", 0xF800us, 0xF800us,
+                Array.create 4 (C3b(255uy, 0uy, 0uy)), C3b(255uy, 0uy, 0uy)
+            "descending white/black", 0xFFFFus, 0x0000us,
+                [| C3b(255uy); C3b(0uy); C3b(170uy); C3b(85uy) |], C3b(128uy)
+            "ascending rounded components", 0x0821us, 0x1062us,
+                [| C3b(8uy, 4uy, 8uy); C3b(16uy, 12uy, 16uy); C3b(11uy, 7uy, 11uy); C3b(13uy, 9uy, 13uy) |], C3b(12uy, 8uy, 12uy)
+            "descending rounded components", 0x1062us, 0x0821us,
+                [| C3b(16uy, 12uy, 16uy); C3b(8uy, 4uy, 8uy); C3b(13uy, 9uy, 13uy); C3b(11uy, 7uy, 11uy) |], C3b(12uy, 8uy, 12uy)
+            "ascending distinct RGB", 0x17E5us, 0xD1B7us,
+                [| C3b(16uy, 255uy, 41uy); C3b(214uy, 52uy, 189uy); C3b(82uy, 187uy, 90uy); C3b(148uy, 120uy, 140uy) |], C3b(115uy, 154uy, 115uy)
+        |]
+
+        let private alphaCases = function
+            | CompressionMode.BC1 -> [| Array.empty<byte>, Array.create 16 255uy |]
+            | CompressionMode.BC2 -> [|
+                Array.create 8 255uy, Array.create 16 255uy
+                [| 0x10uy; 0x32uy; 0x54uy; 0x76uy; 0x98uy; 0xBAuy; 0xDCuy; 0xFEuy |], Array.init 16 (fun i -> byte (17 * i))
+              |]
+            | CompressionMode.BC3 -> [|
+                [| 255uy; 255uy; 0uy; 0uy; 0uy; 0uy; 0uy; 0uy |], Array.create 16 255uy
+                // The six selector bytes encode indices 0..7 twice, including selectors crossing byte boundaries.
+                [| 255uy; 0uy; 0x88uy; 0xC6uy; 0xFAuy; 0x88uy; 0xC6uy; 0xFAuy |],
+                    Array.init 16 (fun i -> [| 255uy; 0uy; 218uy; 182uy; 145uy; 109uy; 72uy; 36uy |].[i % 8])
+                [| 11uy; 240uy; 0x88uy; 0xC6uy; 0xFAuy; 0x88uy; 0xC6uy; 0xFAuy |],
+                    Array.init 16 (fun i -> [| 11uy; 240uy; 56uy; 102uy; 148uy; 194uy; 0uy; 255uy |].[i % 8])
+              |]
+            | mode -> failwithf "Unexpected fixture format %A" mode
+
+        let private block mode paletteIndex alphaIndex variedRows =
+            let _, c0, c1, fourColors, midpoint = palettes.[paletteIndex]
+            let alphaBytes, alpha = (alphaCases mode).[alphaIndex]
+            let rows, selectors =
+                if variedRows then
+                    [| 0xE4uy; 0x1Buy; 0x4Euy; 0xB1uy |], [| 0; 1; 2; 3; 3; 2; 1; 0; 2; 3; 0; 1; 1; 0; 3; 2 |]
+                else
+                    Array.create 4 0xE4uy, Array.init 16 (fun i -> i % 4)
+            let rgbBytes = Array.append [| byte c0; byte (c0 >>> 8); byte c1; byte (c1 >>> 8) |] rows
+            let expected =
+                selectors |> Array.mapi (fun i selector ->
+                    if mode = CompressionMode.BC1 && c0 <= c1 then
+                        match selector with
+                        | 2 -> C4b(midpoint, 255uy)
+                        | 3 -> C4b.Zero
+                        | _ -> C4b(fourColors.[selector], 255uy)
+                    else
+                        C4b(fourColors.[selector], alpha.[i])
+                )
+            Array.append alphaBytes rgbBytes, expected
+
+        let private layouts = ["packed"; "padded"; "planar"; "reversed rows"]
+
+        let private check mode channels layout (offset : V2i) (size : V2i) (blocks : (byte[] * C4b[])[]) context =
+            let blocksX = (offset.X + size.X + 3) / 4
+            let blocksY = (offset.Y + size.Y + 3) / 4
+            Expect.equal blocks.Length (blocksX * blocksY) "Handcrafted block count"
+            let payload = blocks |> Array.collect fst
+            let source = Array.create (payload.Length + 32) 0xD7uy
+            System.Array.Copy(payload, 0, source, 16, payload.Length)
+            let original = Array.copy source
+            let dx, dy, dc =
+                match layout with
+                | "packed" -> channels, size.X * channels, 1
+                | "padded" -> channels + 2, (size.X + 3) * (channels + 2) + 5, 1
+                | "planar" -> 1, size.X + 3, (size.Y + 2) * (size.X + 3) + 7
+                | "reversed rows" -> channels + 1, -((size.X + 3) * (channels + 1) + 5), 1
+                | _ -> failwith "Unexpected fixture layout"
+            let ex, ey, ec = (size.X - 1) * dx, (size.Y - 1) * dy, (channels - 1) * dc
+            let origin = 32 - min 0 ex - min 0 ey - min 0 ec
+            let length = origin + max 0 ex + max 0 ey + max 0 ec + 33
+            let destination = Array.create length 0xCDuy
+            let expected = Array.copy destination
+            for y in 0 .. size.Y - 1 do
+                for x in 0 .. size.X - 1 do
+                    let sx, sy = x + offset.X, y + offset.Y
+                    let _, colors = blocks.[(sy / 4) * blocksX + sx / 4]
+                    let color = colors.[(sy % 4) * 4 + sx % 4]
+                    for c in 0 .. channels - 1 do
+                        expected.[origin + x * dx + y * dy + c * dc] <- color.[c]
+            let info = VolumeInfo(int64 origin, V3l(size.X, size.Y, channels), V3l(dx, dy, dc))
+            source |> NativePtr.pinArr (fun src ->
+                destination |> NativePtr.pinArr (fun dst ->
+                    BlockCompression.decode mode offset size (src.Address + 16n) dst.Address info
+                )
+            )
+            Expect.equal source original $"{context}: source and its guards are unchanged"
+            for i in 0 .. destination.Length - 1 do
+                Expect.equal destination.[i] expected.[i]
+                    $"{context}, {mode}, {layout}, channels={channels}, offset={offset}, size={size}, destination byte={i} (including guards)"
+
+        let palette mode () =
+            for paletteIndex in 0 .. palettes.Length - 1 do
+                let name, c0, c1, _, _ = palettes.[paletteIndex]
+                for alphaIndex in 0 .. (alphaCases mode).Length - 1 do
+                    for channels in (if mode = CompressionMode.BC1 then [3; 4] else [4]) do
+                        for layout in layouts do
+                            let context = $"{name}, endpoints={c0}/{c1}, alpha case={alphaIndex}, color index bytes=0xE4"
+                            check mode channels layout V2i.Zero (V2i(4, 4)) [| block mode paletteIndex alphaIndex false |] context
+
+        let windows() =
+            for mode in [CompressionMode.BC1; CompressionMode.BC2; CompressionMode.BC3] do
+                for offset, size in [V2i.Zero, V2i(1, 1); V2i.Zero, V2i(3, 2); V2i(1, 1), V2i(2, 2);
+                                     V2i(3, 3), V2i(1, 1); V2i.Zero, V2i(9, 7); V2i(1, 2), V2i(6, 5); V2i(3, 1), V2i(7, 7)] do
+                    let count = ((offset.X + size.X + 3) / 4) * ((offset.Y + size.Y + 3) / 4)
+                    let blocks = Array.init count (fun i -> block mode (i % palettes.Length) (i % (alphaCases mode).Length) true)
+                    for channels in (if mode = CompressionMode.BC1 then [3; 4] else [4]) do
+                        for layout in layouts do
+                            check mode channels layout offset size blocks "Mixed handcrafted blocks with distinct selector rows"
+
     let tests (target: TestTarget) =
         [
+            "BC1 handcrafted palette and transparency",          Handcrafted.palette CompressionMode.BC1
+            "BC2 handcrafted four-color and explicit alpha",     Handcrafted.palette CompressionMode.BC2
+            "BC3 handcrafted four-color and interpolated alpha", Handcrafted.palette CompressionMode.BC3
+            "Handcrafted partial blocks and guarded windows",    Handcrafted.windows
+
             "BC1 encode",           Cases.encodeBC1
             "BC1a encode",          Cases.encodeBC1a
             "BC1 mirror copy 1px",  Cases.mirrorCopyBC1 1
