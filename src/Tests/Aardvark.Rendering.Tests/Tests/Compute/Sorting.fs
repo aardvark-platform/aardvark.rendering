@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.GPGPU
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open Expecto
 
 module ComputeSorting =
@@ -89,7 +88,7 @@ module ComputeSorting =
         let radixSortPermuteUInt32 = (Array.random Rnd.uint32) |> radixSortPermute (fun r i p -> r.CreatePermutation(i, p))
         let radixSortPermuteFloat32 = (Array.random Rnd.float32) |> radixSortPermute (fun r i p -> r.CreatePermutation(i, p))
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Bitonic", Cases.bitonic
 
@@ -105,4 +104,4 @@ module ComputeSorting =
             "Radix permute uint32", Cases.radixSortPermuteUInt32
             "Radix permute float32", Cases.radixSortPermuteFloat32
         ]
-        |> prepareComputeCases backend "Sorting"
+        |> prepareCasesCompute "Sorting" target

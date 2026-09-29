@@ -4,7 +4,6 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open Expecto
 open FSharp.Quotations
 open FSharp.Data.Adaptive
@@ -217,7 +216,7 @@ module ComputeBuffers =
             Expect.equal dst (reversed |> Array.map ((+) 1)) "Unexpected final result"
 
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Up- / download",                   Cases.uploadDownload
             "Up- / download mismatching size",  Cases.uploadDownloadMismatchingSize
@@ -226,4 +225,4 @@ module ComputeBuffers =
             "Fill",                             Cases.fill
             "Adaptive reverse & increment",     Cases.adaptiveReverseAndIncrement
         ]
-        |> prepareComputeCases backend "Buffers"
+        |> prepareCasesCompute "Buffers" target

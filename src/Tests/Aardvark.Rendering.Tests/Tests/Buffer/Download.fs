@@ -3,9 +3,6 @@
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
-open FSharp.Data.Adaptive
-open FShade
 open Expecto
 open System
 
@@ -79,7 +76,7 @@ module BufferDownload =
         let arrayUint16BufferRange  = testArrayBufferRangeDownload Rnd.uint16 7533 5432 1243
 
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Invalid arguments",         Cases.invalidArgs
 
@@ -94,4 +91,4 @@ module BufferDownload =
             "Array uint16 subrange",     Cases.arrayUint16Subrange
             "Array uint16 buffer range", Cases.arrayUint16BufferRange
         ]
-        |> prepareCases backend "Download"
+        |> prepareCasesGpu "Download" target

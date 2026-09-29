@@ -5,7 +5,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open Expecto
 
@@ -161,15 +160,15 @@ module RenderTasks =
             finally
                 output.Release()
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Update", Cases.update
 
             "Occlusion query", Cases.occlusionQuery false
 
-            if backend = Backend.GL then
+            if target = TestTarget.GL then
                 "Occlusion query with context switch", Cases.occlusionQuery true
 
             "Ordered commands update", Cases.orderedCommandsUpdate
         ]
-        |> prepareCases backend "Render tasks"
+        |> prepareCasesGpu "Render tasks" target

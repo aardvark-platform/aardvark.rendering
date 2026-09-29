@@ -3,9 +3,7 @@
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open Aardvark.SceneGraph
-open FSharp.Data.Adaptive
 open Expecto
 
 #nowarn "44"
@@ -621,7 +619,7 @@ module TextureCopy =
                 runtime.DeleteTexture(src)
                 runtime.DeleteTexture(dst)
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Arguments out of range",           Cases.argumentsOutOfRange
 
@@ -632,7 +630,7 @@ module TextureCopy =
 
             // Vulkan only supports 2D to 3D
             // https://vulkan.lunarg.com/doc/view/1.3.239.0/windows/1.3-extensions/vkspec.html#VUID-vkCmdCopyImage-srcImage-07743
-            if backend <> Backend.Vulkan then
+            if target <> TestTarget.Vulkan then
                 "1D to 2D",                         Cases.texture1DTo2D
                 "1D to 3D",                         Cases.texture1DTo3D
                 "1D to Cube",                       Cases.texture1DToCube
@@ -654,4 +652,4 @@ module TextureCopy =
             "Cube mipmapped",                   Cases.textureCubeMipmapped
             "Cube array mipmapped",             Cases.textureCubeArrayMipmapped
         ]
-        |> prepareCases backend "Copy"
+        |> prepareCasesGpu "Copy" target

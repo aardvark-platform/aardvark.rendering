@@ -649,3 +649,7 @@ module ``Test Utilities`` =
         runtime |> requireGL (fun _ ->
             candidates |> Seq.exists (GL.ExtensionHelpers.isSupported (System.Version(999, 999)))
         ) message
+
+    module Test =
+        let ofList tests =
+            TestList(tests, FocusState.Normal)

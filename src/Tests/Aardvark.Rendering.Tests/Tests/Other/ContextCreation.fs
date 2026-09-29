@@ -1,16 +1,14 @@
-﻿namespace Aardvark.Rendering.Tests
+﻿namespace Aardvark.Rendering.Tests.Other
 
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.GL
+open Aardvark.Rendering.Tests
 
 open System.Threading
-open FSharp.Data.Adaptive
-open Expecto
-open FShade
 open OpenTK.Graphics.OpenGL4
 
-module ``ContextCreation Tests`` =
+module ContextCreation =
 
     module Cases =
 
@@ -129,7 +127,7 @@ module ``ContextCreation Tests`` =
                 for t in threads do
                     t.Join()
 
-    let private testsWithFramework (framework : Framework) =
+    let tests (target: TestTarget) =
         [
             // Tests context sharing and demonstrates that using the
             // last context as parent is not a good strategy. When sharing the
@@ -140,16 +138,4 @@ module ``ContextCreation Tests`` =
             // Worst case scenario in which all contexts are currently used.
             "Create after make current all",    Cases.createAfterMakeCurrentAll
         ]
-        |> List.map (fun (name, test) ->
-            let name = $"[{framework}] {name}"
-
-            testCase name (fun () -> TestApplication.createUse test (TestBackend.GL framework))
-            |> testSequenced
-        )
-
-    [<Tests>]
-    let tests =
-        testList "Context.Creation" [
-            yield! testsWithFramework Framework.GLFW
-            yield! testsWithFramework Framework.OpenTK
-        ]
+        |> prepareCasesFor "Context" target [TestTarget.GLFW; TestTarget.OpenTK]

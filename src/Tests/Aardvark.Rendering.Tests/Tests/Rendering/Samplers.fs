@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open Expecto
@@ -317,7 +316,7 @@ module Samplers =
             let value = V4i(0, 1, -347824, Constant<int32>.ParseableMinValue)
             sample2DBorder (value.ToArray()) (SamplerState.withBorderColori value) runtime
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "2D rgba8i", Cases.sample2Drgba8i 1
             "2D rgba16i", Cases.sample2Drgba16i 1
@@ -339,4 +338,4 @@ module Samplers =
             "2D border color uint32", Cases.sample2DBorderUInt32
             "2D border color int32", Cases.sample2DBorderInt32
         ]
-        |> prepareCases backend "Samplers"
+        |> prepareCasesGpu "Samplers" target

@@ -15,6 +15,7 @@ Index for AI coding assistants. Read only the doc you need.
 | Debugging, shader printing, validation layers | DEBUG.md | ~10 KB |
 | Windowing, application layer, platforms | APPLICATION.md | ~7 KB |
 | Native C++ components (GLVM, VKVM) | NATIVE.md | ~6 KB |
+| Writing and registering tests | TESTING.md | ~5 KB |
 | Consumer project patterns | CONSUMER-PATTERNS.md | ~4 KB |
 | C# integration | CSHARP-INTEGRATION.md | ~3 KB |
 | Creating consumer project docs | TEMPLATE-CONSUMER.md | ~2 KB |
@@ -58,6 +59,11 @@ Index for AI coding assistants. Read only the doc you need.
 - VKVM (Vulkan helpers) -> NATIVE.md
 - P/Invoke patterns -> NATIVE.md
 
+### Testing
+- Choosing CPU, GPU, mixed, and framework targets -> TESTING.md
+- `prepareCases*`, `TestTarget`, and `testAllTargets` -> TESTING.md
+- Test modules, names, parameter matrices, and registration -> TESTING.md
+
 ### Consumer Integration
 - Application initialization patterns -> CONSUMER-PATTERNS.md
 - C# adaptive values, scene graph -> CSHARP-INTEGRATION.md
@@ -83,3 +89,4 @@ Index for AI coding assistants. Read only the doc you need.
 | Debug config, shader printing, validation, debuggers | DEBUG.md |
 | Windowing, input, VR, platform issues | APPLICATION.md |
 | Native C++ (GLVM/VKVM) | NATIVE.md |
+| Adding, moving, or reorganizing tests | TESTING.md |

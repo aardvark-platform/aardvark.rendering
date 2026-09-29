@@ -2,7 +2,6 @@
 
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open Expecto
 open FShade
@@ -74,9 +73,9 @@ module Surfaces =
             let s2 = Surface.Dynamic compile
             Expect.equal s1 s2 "Surface.Dynamic not equal"
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Dynamic shader caching",   Cases.dynamicShaderCaching
             "Equality",                 Cases.equality
         ]
-        |> prepareCases backend "Surfaces"
+        |> prepareCasesGpu "Surfaces" target

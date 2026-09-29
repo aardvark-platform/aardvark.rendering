@@ -4,7 +4,6 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open Expecto
 
 module TextureCreate =
@@ -202,14 +201,14 @@ module TextureCreate =
             memory <- 0L
             check()
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Non-positive arguments",        Cases.nonPositiveArguments
             "Invalid usage",                 Cases.invalidUsage
             "Valid usage",                   Cases.validUsage
             "Unsupported multisample count", Cases.unsupportedMultisamples
 
-            if backend = Backend.GL then
+            if target = TestTarget.GL then
                 "Memory usage",              Cases.memoryUsage
         ]
-        |> prepareCases backend "Create"
+        |> prepareCasesGpu "Create" target

@@ -3,7 +3,6 @@
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open System
 open System.Collections.Generic
@@ -208,7 +207,7 @@ module ManagedBuffer =
                 check a.Value pb
             )
 
-        let zeroSourceIgnored() =
+        let zeroSourceIgnored _ =
             testMock<byte> (fun runtime buffer ->
                 let target = Range1ul(0UL, 3UL)
                 runBounded (fun () -> buffer.Set(0n, 0UL, target))
@@ -220,7 +219,7 @@ module ManagedBuffer =
                 Expect.equal runtime.Uploads.Count 0 "Data was uploaded before rejecting the source"
             )
 
-        let exactAndPartialRepetition() =
+        let exactAndPartialRepetition _ =
             testMock<byte> (fun runtime buffer ->
                 buffer.Set([| 9uy; 8uy; 7uy; 6uy |], Range1ul(0UL, 3UL))
                 buffer.Set([| 1uy; 2uy; 3uy |], Range1ul(5UL, 11UL))
@@ -234,7 +233,7 @@ module ManagedBuffer =
                 expectUpload 13UL 2UL [| 4uy; 5uy |] runtime.Uploads.[4]
             )
 
-        let constantAdditions() =
+        let constantAdditions _ =
             testMock<byte> (fun runtime buffer ->
                 let view = BufferView([| 5uy; 6uy |])
                 use viewWriter = buffer.Add(view, Range1ul(2UL, 3UL))
@@ -247,7 +246,7 @@ module ManagedBuffer =
                 expectUpload 5UL 1UL [| 7uy |] runtime.Uploads.[1]
             )
 
-        let invalidRangesRemainNoOps() =
+        let invalidRangesRemainNoOps _ =
             testMock<byte> (fun runtime buffer ->
                 let invalid = Range1ul(4UL, 3UL)
                 buffer.Set(0n, 0UL, invalid)
@@ -262,7 +261,7 @@ module ManagedBuffer =
                 Expect.isTrue source.Outputs.IsEmpty "Invalid range subscribed to the input"
             )
 
-        let growthAboveMaximumPowerOfTwo() =
+        let growthAboveMaximumPowerOfTwo _ =
             testMock<byte> (fun runtime buffer ->
                 let index = 1UL <<< 63
                 let value = 1uy
@@ -277,7 +276,7 @@ module ManagedBuffer =
                 expectUpload index 1UL [| value |] runtime.Uploads.[0]
             )
 
-        let largestRepresentableRange() =
+        let largestRepresentableRange _ =
             testMock<byte> (fun runtime buffer ->
                 let value = 1uy
                 value |> NativePtr.pin (fun pointer ->
@@ -305,7 +304,7 @@ module ManagedBuffer =
                 Expect.equal runtime.Uploads.[0].Size elementSize "Unexpected typed upload size"
             )
 
-        let unrepresentableRangesRejectedBeforeMutation() =
+        let unrepresentableRangesRejectedBeforeMutation _ =
             testMock<int> (fun runtime buffer ->
                 let maximumElementCount = UInt64.MaxValue / uint64 sizeof<int>
                 let value = 1
@@ -326,7 +325,7 @@ module ManagedBuffer =
                 Expect.equal runtime.Uploads.Count 0 "Rejected range uploaded data"
             )
 
-        let oversizedBufferViewDoesNotSubscribe() =
+        let oversizedBufferViewDoesNotSubscribe _ =
             testMock<byte> (fun runtime buffer ->
                 let source = cval (ArrayBuffer [| 1uy; 2uy |] :> IBuffer)
                 let view = BufferView(source :> aval<IBuffer>, typeof<byte>)
@@ -356,7 +355,7 @@ module ManagedBuffer =
                 reused.Dispose()
             )
 
-        let overflowingValueAddDoesNotSubscribe() =
+        let overflowingValueAddDoesNotSubscribe _ =
             testMock<byte> (fun runtime buffer ->
                 let source = cval 7uy
                 let input = source :> IAdaptiveValue
@@ -378,24 +377,23 @@ module ManagedBuffer =
                 writer.Dispose()
             )
 
-    let tests (backend: Backend) =
+    let tests (target: TestTarget) =
         [
-            "Set",        Cases.set
-            "Set array",  Cases.setArray
-            "Add",        Cases.add
-            "Add buffer", Cases.addBuffer
-        ]
-        |> prepareCases backend "ManagedBuffer"
+            if target = TestTarget.Cpu then
+                "Zero source is ignored",                              Cases.zeroSourceIgnored
+                "Exact and partial repetition",                        Cases.exactAndPartialRepetition
+                "Constant additions use validated layouts",            Cases.constantAdditions
+                "Invalid ranges remain no-ops",                        Cases.invalidRangesRemainNoOps
+                "Growth above the maximum power of two",               Cases.growthAboveMaximumPowerOfTwo
+                "Largest representable range",                         Cases.largestRepresentableRange
+                "Unrepresentable ranges are rejected before mutation", Cases.unrepresentableRangesRejectedBeforeMutation
+                "Oversized BufferView Add rolls back",                 Cases.oversizedBufferViewDoesNotSubscribe
+                "Overflowing value Add rolls back",                    Cases.overflowingValueAddDoesNotSubscribe
 
-    let testsCpu =
-        testList "ManagedBuffer" [
-            testCase "Zero source is ignored"                              Cases.zeroSourceIgnored
-            testCase "Exact and partial repetition"                        Cases.exactAndPartialRepetition
-            testCase "Constant additions use validated layouts"            Cases.constantAdditions
-            testCase "Invalid ranges remain no-ops"                        Cases.invalidRangesRemainNoOps
-            testCase "Growth above the maximum power of two"               Cases.growthAboveMaximumPowerOfTwo
-            testCase "Largest representable range"                         Cases.largestRepresentableRange
-            testCase "Unrepresentable ranges are rejected before mutation" Cases.unrepresentableRangesRejectedBeforeMutation
-            testCase "Oversized BufferView Add rolls back"                 Cases.oversizedBufferViewDoesNotSubscribe
-            testCase "Overflowing value Add rolls back"                    Cases.overflowingValueAddDoesNotSubscribe
+            elif target.IsGpu then
+                "Set",        Cases.set
+                "Set array",  Cases.setArray
+                "Add",        Cases.add
+                "Add buffer", Cases.addBuffer
         ]
+        |> prepareCases "ManagedBuffer" target

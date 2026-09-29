@@ -1,10 +1,11 @@
-﻿namespace Aardvark.Rendering.Tests
+﻿namespace Aardvark.Rendering.Tests.Other
 
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open FSharp.Data.Adaptive
 open Expecto
 
-module ``AdaptiveResource Tests`` =
+module AdaptiveResource =
 
     [<AutoOpen>]
     module private Utils =
@@ -29,7 +30,6 @@ module ``AdaptiveResource Tests`` =
 
         // Relevant for Sg.texture
         let castPreservesEquality() =
-
             let input = DummyResource()
             let m1 = input |> AdaptiveResource.map unbox<Base>
             let m2 = input |> AdaptiveResource.map unbox<Base>
@@ -42,7 +42,6 @@ module ``AdaptiveResource Tests`` =
             Expect.isTrue (c1 = c2) "cast resources are not equal"
 
         let castPreservesResourceSemantics() =
-
             let input = DummyResource()
             let output = input |> AdaptiveResource.cast<Base> 
             let token = RenderToken.Empty
@@ -55,11 +54,10 @@ module ``AdaptiveResource Tests`` =
 
             output.Release()
             Expect.isFalse input.IsAllocated "input still allocated"
-            
 
-    [<Tests>]
-    let tests =
-        testList "Adaptive.AdaptiveResource" [
-            testCase "Cast preserves equality"              Cases.castPreservesEquality
-            testCase "Cast preserves resource semantics"    Cases.castPreservesResourceSemantics
+    let tests (target: TestTarget) =
+        [
+            "Cast preserves equality",           Cases.castPreservesEquality
+            "Cast preserves resource semantics", Cases.castPreservesResourceSemantics
         ]
+        |> prepareCasesCpu "AdaptiveResource" target

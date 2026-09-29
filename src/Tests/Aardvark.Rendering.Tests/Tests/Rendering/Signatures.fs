@@ -5,7 +5,6 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open FShade
@@ -439,12 +438,12 @@ module FramebufferSignature =
             with e ->
                 Expect.stringContains e.Message "framebuffer signature" "Unexpected exception"
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Framebuffer with unsupported sample count", Cases.framebufferWithUnsupportedSampleCounts
             "Framebuffer with holes",                    Cases.framebufferWithHoles
 
-            if backend <> Backend.Vulkan then
+            if target <> TestTarget.Vulkan then
                 "Render subset",       Cases.renderToSubset
                 "Render combined",     Cases.renderCombined
                 "Render multisampled", Cases.renderToMultisampled
@@ -501,4 +500,4 @@ module FramebufferSignature =
 
             "Render prepared object with incompatible signature", Cases.renderPreparedWithIncompatibleSignature
         ]
-        |> prepareCases backend "Framebuffer signatures"
+        |> prepareCasesGpu "Framebuffer signatures" target

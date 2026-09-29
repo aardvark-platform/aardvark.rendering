@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Tests.Utilities
 
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open FSharp.Data.Adaptive
 open Expecto
 open System
@@ -264,19 +265,21 @@ module CompactSet =
 
         let collectibilityStructKeys mode = collectibility (fun id -> { Id = id; Reference = Key id }) (fun key -> box key.Reference) mode
 
-    let tests =
-        testList "CompactSet" [
-            testCase "Validity"                                 Cases.validity
-            testCase "Remove"                                   Cases.remove
-            testCase "Add and remove"                           Cases.addAndRemove
-            testCase "Capacity boundaries"                      Cases.boundaries
-            testCase "Interior and tail removals"               Cases.removals
-            testCase "Mixed and equal-count batches"            Cases.mixedBatches
-            testCase "Bulk shrink and empty-refill cycles"      Cases.bulkAndRefill
-            testCase "Seeded reference model and exact deltas"  Cases.randomized
-            testCase "Overflow-safe capacity policy"            Cases.capacityPolicy
-            testCase "Allocation scaling"                       Cases.allocationScaling
+    let tests (target: TestTarget) =
+        [
+            "Validity",                                 Cases.validity
+            "Remove",                                   Cases.remove
+            "Add and remove",                           Cases.addAndRemove
+            "Capacity boundaries",                      Cases.boundaries
+            "Interior and tail removals",               Cases.removals
+            "Mixed and equal-count batches",            Cases.mixedBatches
+            "Bulk shrink and empty-refill cycles",      Cases.bulkAndRefill
+            "Seeded reference model and exact deltas",  Cases.randomized
+            "Overflow-safe capacity policy",            Cases.capacityPolicy
+            "Allocation scaling",                       Cases.allocationScaling
+
             for mode in ["retained"; "bulk"; "empty"] do
-                testCase $"Reference keys collectible after {mode} removal"                   <| Cases.collectibilityReferenceKeys mode
-                testCase $"Reference-containing struct keys collectible after {mode} removal" <| Cases.collectibilityStructKeys mode
+                $"Reference keys collectible after {mode} removal",                   Cases.collectibilityReferenceKeys mode
+                $"Reference-containing struct keys collectible after {mode} removal", Cases.collectibilityStructKeys mode
         ]
+        |> prepareCasesCpu "CompactSet" target

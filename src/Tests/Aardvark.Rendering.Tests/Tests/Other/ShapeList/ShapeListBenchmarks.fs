@@ -1,4 +1,4 @@
-namespace Aardvark.Rendering.Tests
+namespace Aardvark.Rendering.Tests.ShapeList
 
 open System
 open System.Collections.Generic

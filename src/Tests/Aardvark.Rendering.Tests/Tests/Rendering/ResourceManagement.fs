@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open Expecto
@@ -128,11 +127,11 @@ module ResourceManagement =
         let replaceIndirectBuffer coerce    = indirectBuffer <| Replace coerce
         let noChangeIndirectBuffer          = indirectBuffer NoChange
 
-    let tests (backend: Backend) =
+    let tests (target: TestTarget) =
         [
             // The GL backend caches buffers at aval<IBuffer> level and also at the IBuffer level itself.
             // The latter means that in-place updates are not possible (at least not without introducing locks).
-            if backend <> Backend.GL then
+            if target <> TestTarget.GL then
                 "In-place update vertex buffer",     Cases.inplaceUpdateVertexBuffer
                 "In-place update indirect buffer",   Cases.inplaceUpdateIndirectBuffer
 
@@ -145,4 +144,4 @@ module ResourceManagement =
             "Replace indirect buffer",           Cases.replaceIndirectBuffer false
             "Replace indirect buffer (coerced)", Cases.replaceIndirectBuffer true
         ]
-        |> prepareCases backend "Resource Management"
+        |> prepareCasesGpu "Resource Management" target

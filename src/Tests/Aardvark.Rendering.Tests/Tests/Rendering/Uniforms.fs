@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open Expecto
@@ -174,7 +173,7 @@ module Uniforms =
             let expected = V3f (MyRecord.toV3d values.[0] + MyRecord.toV3d values.[1])
             render (toEffect Shader.recordArr) values (expected.ToArray())
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "M22f",         Cases.m22f
             "M22d",         Cases.m22d
@@ -191,4 +190,4 @@ module Uniforms =
             "Record",       Cases.record
             "Record array", Cases.recordArr
         ]
-        |> prepareCases backend "Uniforms"
+        |> prepareCasesGpu "Uniforms" target

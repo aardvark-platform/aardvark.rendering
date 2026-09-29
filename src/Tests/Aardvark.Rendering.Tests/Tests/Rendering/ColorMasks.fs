@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 
@@ -87,9 +86,9 @@ module ColorMasks =
             finally
                 r1.Release(); r2.Release()
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "Global",         Cases.globalMask
             "Per attachment", Cases.perAttachmentMask
         ]
-        |> prepareCases backend "Color masks"
+        |> prepareCasesGpu "Color masks" target

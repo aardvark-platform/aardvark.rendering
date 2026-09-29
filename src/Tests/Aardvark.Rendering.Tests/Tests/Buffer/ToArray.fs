@@ -3,7 +3,6 @@
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open Expecto
 open System
 
@@ -113,7 +112,7 @@ module BufferToArray =
             let output = array.Data |> unbox<int[]> |> Array.map Fun.FloatFromBits
             buffer |> testToArray false output 0UL 0UL 42UL
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "ArrayBuffer full",             Cases.arrayBufferFull
             "ArrayBuffer range",            Cases.arrayBufferRange
@@ -134,4 +133,4 @@ module BufferToArray =
             "IBackendBuffer reinterpreted", Cases.backendBufferReinterpreted
 
         ]
-        |> prepareCases backend "ToArray"
+        |> prepareCasesGpu "ToArray" target

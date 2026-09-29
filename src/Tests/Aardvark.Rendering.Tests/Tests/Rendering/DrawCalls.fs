@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open System.Runtime.InteropServices
@@ -161,7 +160,7 @@ module DrawCalls =
             let result = render<float32> expected.Size task
             PixImage.compare V2i.Zero expected result
 
-    let tests (backend: Backend) =
+    let tests (target: TestTarget) =
         [
             "Automatic FaceVertexCount computation (non-indexed)",                          Cases.faceVertexCount false false
             "Automatic FaceVertexCount computation (non-indexed, with offset and stride)",  Cases.faceVertexCount true false
@@ -169,7 +168,7 @@ module DrawCalls =
             "Automatic FaceVertexCount computation (indexed, with offset and stride)",      Cases.faceVertexCount false true
 
             // GL always reports in-place updates even if nothing changed
-            if backend <> Backend.GL then
+            if target <> TestTarget.GL then
                 "Automatic FaceVertexCount update (non-indexed)",                           Cases.faceVertexCountUpdate false
                 "Automatic FaceVertexCount update (indexed)",                               Cases.faceVertexCountUpdate true
 
@@ -183,4 +182,4 @@ module DrawCalls =
             "Indirect array (indexed, automatic layout adjustment)",                                 Cases.indirect true false false
             "Indirect array (indexed, with offset and stride, automatic layout adjustment)",         Cases.indirect true true false
         ]
-        |> prepareCases backend "Draw calls"
+        |> prepareCasesGpu "Draw calls" target

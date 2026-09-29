@@ -1,14 +1,15 @@
-﻿namespace Aardvark.Rendering.Tests
+﻿namespace Aardvark.Rendering.Tests.Other
 
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
 open System
 open System.Collections.Generic
 open System.Reflection
 open Expecto
 
-module ``IDictionary StructuralComparer Tests`` =
+module IDictionaryStructuralComparer =
 
     let private structuralComparer<'T> : IEqualityComparer<IDictionary<Symbol, 'T>> =
         let asm = typeof<ManagedPool>.Assembly
@@ -103,9 +104,9 @@ module ``IDictionary StructuralComparer Tests`` =
             Expect.equal map symDict "Map hash does not equal SymbolDict hash"
             Expect.equal map netDict "Map hash does not equal Dictionary hash"
 
-    [<Tests>]
-    let tests =
-        testList "IDictionary.StructuralComparer" [
-            testCase "Equals"       Cases.equals
-            testCase "GetHashCode"  Cases.getHashCode
+    let tests (target: TestTarget) =
+        [
+            "StructuralComparer.Equals",       Cases.equals
+            "StructuralComparer.GetHashCode",  Cases.getHashCode
         ]
+        |> prepareCasesCpu "IDictionary" target

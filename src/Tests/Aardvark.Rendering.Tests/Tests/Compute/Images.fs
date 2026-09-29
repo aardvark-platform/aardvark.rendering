@@ -4,15 +4,14 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 
 [<AutoOpen>]
 module ``Common Compute Test Utilities`` =
     open Aardvark.Rendering.GL.ARB_compute_shader
 
-    let prepareComputeCases backend name =
+    let prepareCasesCompute target name =
         validateRuntimeForCases (requireGL (fun _ -> GL.ARB_compute_shader) "Compute shaders not supported")
-        >> prepareCases backend name
+        >> prepareCasesGpu target name
 
 module ComputeImages =
 
@@ -137,7 +136,7 @@ module ComputeImages =
         let copy2Drgba32f = genericCopy PixImage.random32f TextureFormat.Rgba32f
 
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "2D flip rgba8",    Cases.flipYrgba8
             "2D flip rgba16",   Cases.flipYrgba16
@@ -155,4 +154,4 @@ module ComputeImages =
             "2D copy rgba16",   Cases.copy2Drgba16
             "2D copy rgba32f",  Cases.copy2Drgba32f
         ]
-        |> prepareComputeCases backend "Images"
+        |> prepareCasesCompute "Images" target

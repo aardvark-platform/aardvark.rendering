@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
 open Expecto
 
@@ -138,36 +139,66 @@ module CylinderNormals =
         if p.Bottom = p.Top then
             Array.iter2 (fun e a -> sameVector e a "exact straight-cylinder normal") (normals before) ns
 
-    let tests =
-        testList "Cylinder normals" [
-            for mode in modes do
-                for name, bottom, top in ["straight", 1.5, 1.5; "narrowing", 2.0, 0.5; "widening", 0.5, 2.0; "cone", 1.0, 0.0; "inverted cone", 0.0, 1.0] do
-                    for axisName, axis in ["Z", V3d.ZAxis; "X", V3d.XAxis; "rotated", V3d(1.0, 2.0, 3.0).Normalized; "non-unit", V3d(-2.0, 3.0, -4.0)] do
+    module private Cases =
+        let private withContext context action =
+            try action ()
+            with error -> raise (Exception($"{context}: {error.Message}", error))
+
+        let regular () =
+            let shapes =
+                [
+                    "straight", 1.5, 1.5
+                    "narrowing", 2.0, 0.5
+                    "widening", 0.5, 2.0
+                    "cone", 1.0, 0.0
+                    "inverted cone", 0.0, 1.0
+                ]
+            let axes =
+                [
+                    "Z", V3d.ZAxis
+                    "X", V3d.XAxis
+                    "rotated", V3d(1.0, 2.0, 3.0).Normalized
+                    "non-unit", V3d(-2.0, 3.0, -4.0)
+                ]
+
+            for shape, bottom, top in shapes do
+                for mode in modes do
+                    for axisName, axis in axes do
                         for height in [1.0; -0.75] do
                             for tess in [3; 8; 32] do
-                                testCase $"{name}/{axisName}/h={height}/tess={tess}/{mode}" <| fun _ ->
-                                    checkRegular mode { Center = V3d(13.5, -7.25, 19.0); Axis = axis; Height = height
-                                                        Bottom = bottom; Top = top; Tessellation = tess }
+                                withContext $"shape={shape}, mode={mode}, axis={axisName}, height={height}, tessellation={tess}" (fun () ->
+                                    checkRegular mode {
+                                        Center = V3d(13.5, -7.25, 19.0)
+                                        Axis = axis
+                                        Height = height
+                                        Bottom = bottom
+                                        Top = top
+                                        Tessellation = tess
+                                    }
+                                )
 
+        let layoutCaps () =
             for mode in modes do
                 for tess in [1; 2; 7; 256] do
-                    testCase $"layout and caps/tess={tess}/{mode}" <| fun _ ->
-                        let p = { defaults with Tessellation = tess; Axis = V3d(2.0, -3.0, 4.0); Height = -2.5 }
-                        let before = legacy mode p
-                        let after = build mode p
-                        layout before after
-                        caps p before after
-                for height in [-3.0; 1.0] do
-                    testCase $"translation does not change normals/h={height}/{mode}" <| fun _ ->
-                        let p = { defaults with Axis = V3d(1.0, -2.0, 3.0); Height = height }
-                        let origin = build mode p
-                        let moved = { p with Center = V3d(19.0, 27.0, -123.0) }
-                        let translated = build mode moved
-                        layout (legacy mode moved) translated
-                        Array.iter2 (fun e a -> sameVector e a "translation-invariant normal") (normals origin) (normals translated)
+                    let p = { defaults with Tessellation = tess; Axis = V3d(2.0, -3.0, 4.0); Height = -2.5 }
+                    let before = legacy mode p
+                    let after = build mode p
+                    layout before after
+                    caps p before after
 
+        let translation () =
             for mode in modes do
-                for name, change in [
+                for height in [-3.0; 1.0] do
+                    let p = { defaults with Axis = V3d(1.0, -2.0, 3.0); Height = height }
+                    let origin = build mode p
+                    let moved = { p with Center = V3d(19.0, 27.0, -123.0) }
+                    let translated = build mode moved
+                    layout (legacy mode moved) translated
+                    Array.iter2 (fun e a -> sameVector e a "translation-invariant normal") (normals origin) (normals translated)
+
+        let degenerateCompatibility () =
+            let inputs =
+                [
                     "zero height", fun p -> { p with Height = 0.0 }
                     "negative zero height", fun p -> { p with Height = -0.0 }
                     "zero axis", fun p -> { p with Axis = V3d.Zero }
@@ -196,16 +227,21 @@ module CylinderNormals =
                     "two-sample tessellation", fun p -> { p with Tessellation = 2 }
                     "empty tessellation", fun p -> { p with Tessellation = 0 }
                     "negative tessellation", fun p -> { p with Tessellation = -4 }
-                ] do
-                    testCase $"degenerate compatibility/{name}/{mode}" <| fun _ ->
+                ]
+
+            for name, change in inputs do
+                for mode in modes do
+                    withContext $"input={name}, mode={mode}" (fun () ->
                         let p = change defaults
                         let before = legacy mode p
                         let after = build mode p
                         layout before after
                         Array.iter2 (fun e a -> sameVector e a "unchanged degenerate normal") (normals before) (normals after)
+                    )
 
-            for mode in modes do
-                for name, axis, height, bottom, top, radialWeight, axialWeight in [
+        let stableCoefficients () =
+            let inputs =
+                [
                     "huge slope components", V3d.ZAxis, 1e200, 1e200, 0.0, sqrt 0.5, sqrt 0.5
                     "tiny slope components", V3d.ZAxis, 1e-200, 1e-200, 0.0, sqrt 0.5, sqrt 0.5
                     "subnormal slope components", V3d.ZAxis, Double.Epsilon, Double.Epsilon, 0.0, sqrt 0.5, sqrt 0.5
@@ -215,8 +251,11 @@ module CylinderNormals =
                     "length overflow", V3d(1.0, 1.0, 1.0), 1e308, 1e308, 0.0, sqrt 0.75, 0.5
                     "non-unit scale", V3d(0.0, 0.0, 1e150), 1e150, 1e300, 0.0, sqrt 0.5, sqrt 0.5
                     "small non-unit scale", V3d(0.0, 0.0, 1e-150), 1e-150, 1e-300, 0.0, sqrt 0.5, sqrt 0.5
-                ] do
-                    testCase $"stable coefficients/{name}/{mode}" <| fun _ ->
+                ]
+
+            for name, axis, height, bottom, top, radialWeight, axialWeight in inputs do
+                for mode in modes do
+                    withContext $"input={name}, mode={mode}" (fun () ->
                         let p = { defaults with Axis = axis; Height = height; Bottom = bottom; Top = top }
                         let before = legacy mode p
                         let after = build mode p
@@ -231,63 +270,77 @@ module CylinderNormals =
                             let actual = V3d (normals after).[i * 2]
                             close 1.0 actual.Length 2e-6 "finite unit normal"
                             close 0.0 (actual - expected).Length 2e-6 "stable analytic limit"
+                    )
 
+        let normalStorageAllocation () =
             for mode in modes do
-                for tess in [32; 1024] do
-                    for name, top in ["straight", 1.0; "tapered", 0.25; "cone", 0.0] do
-                        testCase $"normal storage allocation/{name}/tess={tess}/{mode}" <| fun _ ->
-                            let p = { defaults with Bottom = 1.0; Top = top; Tessellation = tess }
-                            let mutable result = build mode p
-                            for _ in 1 .. 5 do result <- build mode p
-                            let start = GC.GetAllocatedBytesForCurrentThread()
-                            for _ in 1 .. 5 do result <- build mode p
-                            let allocated = (GC.GetAllocatedBytesForCurrentThread() - start) / 5L
-                            GC.KeepAlive result
-                            // Allows the existing position/index builders and geometric list growth,
-                            // but not a double-precision normal list plus per-element sequence conversion.
-                            Expect.isLessThanOrEqual allocated (1000L * int64 tess + 8192L) "bounded normal-path allocation"
+                for _, top in ["straight", 1.0; "tapered", 0.25; "cone", 0.0] do
+                    for tess in [32; 1024] do
+                        let p = { defaults with Bottom = 1.0; Top = top; Tessellation = tess }
+                        let mutable result = build mode p
+                        for _ in 1 .. 5 do result <- build mode p
+                        let start = GC.GetAllocatedBytesForCurrentThread()
+                        for _ in 1 .. 5 do result <- build mode p
+                        let allocated = (GC.GetAllocatedBytesForCurrentThread() - start) / 5L
+                        GC.KeepAlive result
+                        // Allows the existing position/index builders and geometric list growth,
+                        // but not a double-precision normal list plus per-element sequence conversion.
+                        Expect.isLessThanOrEqual allocated (1000L * int64 tess + 8192L) "bounded normal-path allocation"
 
+        let randomized () =
             for seed in 0 .. 9 do
-                testCase $"randomized geometry and normals/seed={seed}" <| fun _ ->
-                    let random = Random(50173 + seed)
-                    let scalar() = 8.0 * random.NextDouble() - 4.0
-                    for _ in 1 .. 50 do
-                        let axis = V3d(scalar(), scalar(), scalar())
-                        let height = (0.05 + abs (scalar())) * (if random.Next(2) = 0 then -1.0 else 1.0)
-                        let p = { Center = V3d(scalar(), scalar(), scalar()); Axis = axis; Height = height
-                                  Bottom = random.NextDouble() * 4.0; Top = random.NextDouble() * 4.0
-                                  Tessellation = random.Next(3, 81) }
-                        for mode in modes do checkRegular mode p
+                let random = Random(50173 + seed)
+                let scalar() = 8.0 * random.NextDouble() - 4.0
+                for _ in 1 .. 50 do
+                    let axis = V3d(scalar(), scalar(), scalar())
+                    let height = (0.05 + abs (scalar())) * (if random.Next(2) = 0 then -1.0 else 1.0)
+                    let p = { Center = V3d(scalar(), scalar(), scalar()); Axis = axis; Height = height
+                              Bottom = random.NextDouble() * 4.0; Top = random.NextDouble() * 4.0
+                              Tessellation = random.Next(3, 81) }
+                    for mode in modes do checkRegular mode p
 
+        let cylinderConeAliases () =
             for mode in modes do
-                testCase $"cylinder and cone aliases/{mode}" <| fun _ ->
-                    let p = { defaults with Axis = V3d(1.0, -2.0, 3.0); Height = -2.0 }
-                    let cylinder = if mode = IndexedGeometryMode.TriangleList then P.solidCylinder else P.wireframeCylinder
-                    let actual = cylinder p.Center p.Axis p.Height p.Bottom p.Top p.Tessellation color
-                    let direct = build mode p
-                    layout direct actual
-                    Array.iter2 (fun e a -> sameVector e a "cylinder alias") (normals direct) (normals actual)
-                    let cone = if mode = IndexedGeometryMode.TriangleList then P.Cone.solidCone else P.Cone.wireframeCone
-                    let alias = if mode = IndexedGeometryMode.TriangleList then P.solidCone else P.wireframeCone
-                    let expected = build mode { p with Top = 0.0 }
-                    for actual in [cone p.Center p.Axis p.Height p.Bottom p.Tessellation color
-                                   alias p.Center p.Axis p.Height p.Bottom p.Tessellation color] do
-                        layout expected actual
-                        Array.iter2 (fun e a -> sameVector e a "cone shares cylinder normals") (normals expected) (normals actual)
+                let p = { defaults with Axis = V3d(1.0, -2.0, 3.0); Height = -2.0 }
+                let cylinder = if mode = IndexedGeometryMode.TriangleList then P.solidCylinder else P.wireframeCylinder
+                let actual = cylinder p.Center p.Axis p.Height p.Bottom p.Top p.Tessellation color
+                let direct = build mode p
+                layout direct actual
+                Array.iter2 (fun e a -> sameVector e a "cylinder alias") (normals direct) (normals actual)
+                let cone = if mode = IndexedGeometryMode.TriangleList then P.Cone.solidCone else P.Cone.wireframeCone
+                let alias = if mode = IndexedGeometryMode.TriangleList then P.solidCone else P.wireframeCone
+                let expected = build mode { p with Top = 0.0 }
+                for actual in [cone p.Center p.Axis p.Height p.Bottom p.Tessellation color
+                               alias p.Center p.Axis p.Height p.Bottom p.Tessellation color] do
+                    layout expected actual
+                    Array.iter2 (fun e a -> sameVector e a "cone shares cylinder normals") (normals expected) (normals actual)
 
+        let arrowConeCorrection () =
             for tess in [3; 8; 32] do
-                testCase $"arrow inherits cone correction/tess={tess}" <| fun _ ->
-                    let axis = V3d(1.0, 2.0, -3.0)
-                    let center = V3d(5.0, -9.0, 7.0)
-                    let shaft = { defaults with Center = center; Axis = axis; Height = 1.5; Bottom = 0.1; Top = 0.1; Tessellation = tess }
-                    let head = { shaft with Center = center + axis * shaft.Height; Height = 0.25; Bottom = 0.1 + 0.2; Top = 0.0 }
-                    let oldHead = legacy IndexedGeometryMode.TriangleList head
-                    let headColor = C4b(211uy, 31uy, 79uy, 241uy)
-                    oldHead.IndexedAttributes.[DefaultSemantic.Colors] <- Array.replicate oldHead.VertexCount headColor
-                    let before = IndexedGeometry.union oldHead (legacy IndexedGeometryMode.TriangleList shaft)
-                    let actual = P.arrow center axis shaft.Height shaft.Bottom color head.Height 0.2 headColor tess
-                    layout before actual
-                    let corrected = IndexedGeometry.union (build IndexedGeometryMode.TriangleList head) (build IndexedGeometryMode.TriangleList shaft)
-                    Array.iter2 (fun e a -> sameVector e a "arrow head and shaft normals") (normals corrected) (normals actual)
-                    Expect.isTrue ((normals actual).[0] <> (normals before).[0]) "head slope changes"
+                let axis = V3d(1.0, 2.0, -3.0)
+                let center = V3d(5.0, -9.0, 7.0)
+                let shaft = { defaults with Center = center; Axis = axis; Height = 1.5; Bottom = 0.1; Top = 0.1; Tessellation = tess }
+                let head = { shaft with Center = center + axis * shaft.Height; Height = 0.25; Bottom = 0.1 + 0.2; Top = 0.0 }
+                let oldHead = legacy IndexedGeometryMode.TriangleList head
+                let headColor = C4b(211uy, 31uy, 79uy, 241uy)
+                oldHead.IndexedAttributes.[DefaultSemantic.Colors] <- Array.replicate oldHead.VertexCount headColor
+                let before = IndexedGeometry.union oldHead (legacy IndexedGeometryMode.TriangleList shaft)
+                let actual = P.arrow center axis shaft.Height shaft.Bottom color head.Height 0.2 headColor tess
+                layout before actual
+                let corrected = IndexedGeometry.union (build IndexedGeometryMode.TriangleList head) (build IndexedGeometryMode.TriangleList shaft)
+                Array.iter2 (fun e a -> sameVector e a "arrow head and shaft normals") (normals corrected) (normals actual)
+                Expect.isTrue ((normals actual).[0] <> (normals before).[0]) "head slope changes"
+
+    let tests (target: TestTarget) =
+        [
+            "regular geometry and normals",        Cases.regular
+            "layout and caps",                     Cases.layoutCaps
+            "translation does not change normals", Cases.translation
+            "degenerate compatibility",            Cases.degenerateCompatibility
+            "stable coefficients",                 Cases.stableCoefficients
+            "normal storage allocation",           Cases.normalStorageAllocation
+            "cylinder and cone aliases",           Cases.cylinderConeAliases
+            "randomized geometry and normals",     Cases.randomized
+            "arrow inherits cone correction",      Cases.arrowConeCorrection
         ]
+        |> prepareCasesCpu "Cylinder normals" target

@@ -1,69 +1,70 @@
-﻿namespace Aardvark.Rendering.Tests
+﻿namespace Aardvark.Rendering.Tests.Other
 
 open System
 open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open Expecto
 
-module ``UniformWriter Tests`` =
+module UniformWriter =
 
-    let private targetCount = 3
-    let private stride = 16
-    let private elementSize = sizeof<int>
-    let private targetSize = (targetCount - 1) * stride + elementSize
-    let private guardSize = 64
-    let private guardByte = 0xA5uy
-    let private targetByte = 0xC7uy
+    module Cases =
 
-    let private verifyArrWrite<'d when 'd :> INatural> (values : int[]) =
-        let target = FShade.GLSL.Array(targetCount, FShade.GLSL.Int(true, 32), stride)
-        let writer = UniformWriters.getWriter 0 target typeof<Arr<'d, int>>
-        let source = Arr<'d, int>(values)
+        let private targetCount = 3
+        let private stride = 16
+        let private elementSize = sizeof<int>
+        let private targetSize = (targetCount - 1) * stride + elementSize
+        let private guardSize = 64
+        let private guardByte = 0xA5uy
+        let private targetByte = 0xC7uy
 
-        Expect.equal writer.TargetSize (nativeint targetSize) "TargetSize must describe exactly the shader array storage"
+        let private verifyArrWrite<'d when 'd :> INatural> (values : int[]) =
+            let target = FShade.GLSL.Array(targetCount, FShade.GLSL.Int(true, 32), stride)
+            let writer = UniformWriters.getWriter 0 target typeof<Arr<'d, int>>
+            let source = Arr<'d, int>(values)
 
-        let memory = Array.create (guardSize + targetSize + guardSize) guardByte
-        Array.fill memory guardSize targetSize targetByte
+            Expect.equal writer.TargetSize (nativeint targetSize) "TargetSize must describe exactly the shader array storage"
 
-        let expected = Array.create targetSize targetByte
-        let writeCount = min values.Length targetCount
+            let memory = Array.create (guardSize + targetSize + guardSize) guardByte
+            Array.fill memory guardSize targetSize targetByte
 
-        for i in 0 .. writeCount - 1 do
-            Buffer.BlockCopy(BitConverter.GetBytes values.[i], 0, expected, i * stride, elementSize)
+            let expected = Array.create targetSize targetByte
+            let writeCount = min values.Length targetCount
 
-        let firstEmptyByte =
-            if writeCount > 0 then
-                (writeCount - 1) * stride + elementSize
-            else
-                0
+            for i in 0 .. writeCount - 1 do
+                Buffer.BlockCopy(BitConverter.GetBytes values.[i], 0, expected, i * stride, elementSize)
 
-        if firstEmptyByte < targetSize then
-            Array.Clear(expected, firstEmptyByte, targetSize - firstEmptyByte)
+            let firstEmptyByte =
+                if writeCount > 0 then
+                    (writeCount - 1) * stride + elementSize
+                else
+                    0
 
-        let handle = GCHandle.Alloc(memory, GCHandleType.Pinned)
-        try
-            let ptr = handle.AddrOfPinnedObject() + nativeint guardSize
-            writer.WriteUnsafeValue(source, ptr)
-        finally
-            handle.Free()
+            if firstEmptyByte < targetSize then
+                Array.Clear(expected, firstEmptyByte, targetSize - firstEmptyByte)
 
-        Expect.sequenceEqual memory.[0 .. guardSize - 1] (Array.create guardSize guardByte) "The leading guard must remain unchanged"
-        Expect.sequenceEqual memory.[guardSize .. guardSize + targetSize - 1] expected "The target payload and zero-filled storage must match"
-        Expect.sequenceEqual memory.[guardSize + targetSize ..] (Array.create guardSize guardByte) "The trailing guard must remain unchanged"
+            let handle = GCHandle.Alloc(memory, GCHandleType.Pinned)
+            try
+                let ptr = handle.AddrOfPinnedObject() + nativeint guardSize
+                writer.WriteUnsafeValue(source, ptr)
+            finally
+                handle.Free()
 
-    [<Tests>]
-    let tests =
-        testList "Uniforms.UniformWriters" [
-            testCase "empty Arr stays inside target and zero-fills it" <| fun _ ->
-                verifyArrWrite<N<0>> [||]
+            Expect.sequenceEqual memory.[0 .. guardSize - 1] (Array.create guardSize guardByte) "The leading guard must remain unchanged"
+            Expect.sequenceEqual memory.[guardSize .. guardSize + targetSize - 1] expected "The target payload and zero-filled storage must match"
+            Expect.sequenceEqual memory.[guardSize + targetSize ..] (Array.create guardSize guardByte) "The trailing guard must remain unchanged"
 
-            testCase "short Arr writes values and zero-fills missing storage" <| fun _ ->
-                verifyArrWrite<N<2>> [| 0x1020304; 0x11223344 |]
+        let emptyArr() = verifyArrWrite<N<0>> [||]
+        let shortArr() = verifyArrWrite<N<2>> [| 0x1020304; 0x11223344 |]
+        let exactArr() = verifyArrWrite<N<3>> [| 0x1020304; 0x11223344; 0x55667788 |]
+        let longArr() = verifyArrWrite<N<5>> [| 0x1020304; 0x11223344; 0x55667788; 0x12345678; 0x76543210 |]
 
-            testCase "exact Arr writes every value within target" <| fun _ ->
-                verifyArrWrite<N<3>> [| 0x1020304; 0x11223344; 0x55667788 |]
-
-            testCase "long Arr truncates surplus values at target boundary" <| fun _ ->
-                verifyArrWrite<N<5>> [| 0x1020304; 0x11223344; 0x55667788; 0x12345678; 0x76543210 |]
+    let tests (target: TestTarget) =
+        [
+            "empty Arr stays inside target and zero-fills it",        Cases.emptyArr
+            "short Arr writes values and zero-fills missing storage", Cases.shortArr
+            "exact Arr writes every value within target",             Cases.exactArr
+            "long Arr truncates surplus values at target boundary",   Cases.longArr
         ]
+        |> prepareCasesCpu "UniformWriters" target

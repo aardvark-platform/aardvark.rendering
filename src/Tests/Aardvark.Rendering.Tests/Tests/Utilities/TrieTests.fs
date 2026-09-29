@@ -3,6 +3,7 @@
 open System
 open System.Collections.Generic
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open Expecto
 
 module Trie =
@@ -362,7 +363,7 @@ module Trie =
             trie.Add(key [3], values.[5])
             validate "reuse after clear" trie known [values.[5]; values.[4]]
 
-        let referenceOperations sorted seed =
+        let referenceOperations sorted seed () =
             let comparers =
                 if sorted then
                     [| ValueSome ascending; ValueSome ascending; ValueSome ascending |]
@@ -415,14 +416,15 @@ module Trie =
 
                 validate (sprintf "%s reference step %d" (if sorted then "sorted" else "unsorted") step) trie known model.Values
 
-    let tests =
-        testList "Trie" [
-            testCase "empty and nested prefix keys" Cases.emptyAndPrefixKeys
-            testCase "sorted children use configured comparers" Cases.sortedChildren
-            testCase "unsorted children retain insertion order" Cases.unsortedChildren
-            testCase "same and distinct replacements preserve links" Cases.replacements
-            testCase "removal, pruning, and reinsertion" Cases.removalPruningAndReinsertion
-            testCase "clear detaches values and permits reuse" Cases.clearDetachesValues
-            testCase "fixed-seed unsorted reference operations" (fun () -> Cases.referenceOperations false 0x51A7)
-            testCase "fixed-seed sorted reference operations" (fun () -> Cases.referenceOperations true 0x51A7)
+    let tests (target: TestTarget) =
+        [
+            "empty and nested prefix keys",                  Cases.emptyAndPrefixKeys
+            "sorted children use configured comparers",      Cases.sortedChildren
+            "unsorted children retain insertion order",      Cases.unsortedChildren
+            "same and distinct replacements preserve links", Cases.replacements
+            "removal, pruning, and reinsertion",             Cases.removalPruningAndReinsertion
+            "clear detaches values and permits reuse",       Cases.clearDetachesValues
+            "fixed-seed unsorted reference operations",      Cases.referenceOperations false 0x51A7
+            "fixed-seed sorted reference operations",        Cases.referenceOperations true 0x51A7
         ]
+        |> prepareCasesCpu "Trie" target

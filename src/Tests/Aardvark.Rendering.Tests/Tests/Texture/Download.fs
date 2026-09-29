@@ -3,7 +3,6 @@
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
-open Aardvark.Application
 open Aardvark.SceneGraph
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
@@ -490,7 +489,7 @@ module TextureDownload =
             createAndDownload TextureDimension.TextureCube  4  2  3  neg  |> shouldThrowArgExn "offset cannot be negative"
             createAndDownload TextureDimension.TextureCube  4  2  3  (window (V2i(8)) (V2i(25, 1))) |> shouldThrowArgExn "exceeds size"
 
-    let tests (backend : Backend) =
+    let tests (target: TestTarget) =
         [
             "2D r8",                  Cases.texture2Dr8
             "2D rgba8",               Cases.texture2Drgba8
@@ -529,4 +528,4 @@ module TextureDownload =
 
             "Arguments out of range", Cases.argumentsOutOfRange
         ]
-        |> prepareCases backend "Download"
+        |> prepareCasesGpu "Download" target

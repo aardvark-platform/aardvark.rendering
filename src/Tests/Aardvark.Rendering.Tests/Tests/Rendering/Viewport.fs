@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
-open Aardvark.Application
 
 module Viewport =
 
@@ -105,7 +104,7 @@ module Viewport =
         let renderCmdStaticWithScissor      = viewport true (Render (false, true))
         let renderCmdDynamicWithScissor     = viewport true (Render (true, true))
 
-    let tests (backend: Backend) =
+    let tests (target: TestTarget) =
         [
             "Clear task with static viewport",                  Cases.clearTaskStatic
             "Clear command with static viewport",               Cases.clearCmdStatic
@@ -121,4 +120,4 @@ module Viewport =
             "Render command with static viewport and scissor",  Cases.renderCmdStaticWithScissor
             "Render command with dynamic viewport and scissor", Cases.renderCmdDynamicWithScissor
         ]
-        |> prepareCases backend "Viewport"
+        |> prepareCasesGpu "Viewport" target
