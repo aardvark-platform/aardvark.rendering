@@ -10,7 +10,7 @@ Primary entry point for AI agents working with Aardvark.Rendering.
 | Build (Windows) | `.\build.cmd` | Builds src/Aardvark.Rendering.sln |
 | Build (Linux/macOS) | `./build.sh` | Builds src/Aardvark.Rendering.NonWindows.slnf |
 | Build single project | `dotnet build src/ProjectName/ProjectName.fsproj` | Single project |
-| Test | `dotnet test src/Tests/Aardvark.Rendering.Tests/Aardvark.Rendering.Tests.fsproj` | Expecto framework |
+| Test | `dotnet test src/Tests/Aardvark.Rendering.Tests/Aardvark.Rendering.Tests.fsproj` | Read `ai/TESTING.md` before changing tests |
 | Verify | `.\build.cmd && dotnet test src/Tests/Aardvark.Rendering.Tests/Aardvark.Rendering.Tests.fsproj` | Build + test |
 | Build GLVM | `src/GLVM/build.cmd` (Win) / `src/GLVM/build.sh` (Unix) | Native OpenGL wrapper |
 | Build VKVM | `src/VKVM/build.cmd` (Win) / `src/VKVM/build.sh` (Unix) | Native Vulkan wrapper |
@@ -39,7 +39,7 @@ Primary entry point for AI agents working with Aardvark.Rendering.
 | GL backend | `src/Aardvark.Rendering.GL/**` | |
 | Vulkan backend | `src/Aardvark.Rendering.Vulkan/**` | |
 | Application/windowing | `src/Application/**` | |
-| Add test | `src/Tests/**` | |
+| Add test | `src/Tests/**` | Follow `ai/TESTING.md` |
 | Native GLVM | `src/GLVM/**` | Run build.cmd/sh after |
 | Native VKVM | `src/VKVM/**` | Run build.cmd/sh after |
 | AI documentation | `ai/**` | |

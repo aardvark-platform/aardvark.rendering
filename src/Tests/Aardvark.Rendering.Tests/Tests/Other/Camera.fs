@@ -123,144 +123,164 @@ module Camera =
             "repeated", Array.init 80 (fun i -> if i % 2 = 0 then V2i(7, 3) else V2i(-4, -2))
         ]
 
-        let tests =
-            [
+        let private withContext context action =
+            try action ()
+            with error -> raise (Exception($"{context}: {error.Message}", error))
+
+        let dragCases () =
+            for name, deltas in drags do
+                for center in [V3d.Zero; V3d(100.0, 200.0, 30.0); V3d(-100.0, -200.0, -30.0); V3d(13.25, -47.5, 6.75)] do
+                    for offset in [V3d(0.0, -10.0, 3.0); V3d(-7.0, 4.0, -2.0)] do
+                        for sky in [V3d.ZAxis; V3d(1.0, -2.0, 4.0).Normalized] do
+                            withContext $"drag={name}, center={center}, offset={offset}, sky={sky}" (fun () ->
+                                let initial = CameraView.LookAt(center + offset, center, sky)
+                                let orbit = Orbit(initial, AVal.constant center)
+                                let mutable expected = orbit.Down MouseButtons.Left
+                                viewClose 1e-12 initial expected
+                                for delta in deltas do
+                                    expected <- referenceStep center delta expected
+                                    let actual = orbit.Move delta
+                                    viewClose (1e-9 * offset.Length) expected actual
+                                    checkOrbit center offset.Length sky actual
+                            )
+
+        let translationEquivariance () =
+            for shift in [V3d(100.0, 200.0, 30.0); V3d(-900.0, 13.5, -210.0); V3d(0.125, -0.25, 0.5)] do
                 for name, deltas in drags do
-                    $"Orbit.{name}", fun _ ->
-                        for center in [V3d.Zero; V3d(100.0, 200.0, 30.0); V3d(-100.0, -200.0, -30.0); V3d(13.25, -47.5, 6.75)] do
-                            for offset in [V3d(0.0, -10.0, 3.0); V3d(-7.0, 4.0, -2.0)] do
-                                for sky in [V3d.ZAxis; V3d(1.0, -2.0, 4.0).Normalized] do
-                                    let initial = CameraView.LookAt(center + offset, center, sky)
-                                    let orbit = Orbit(initial, AVal.constant center)
-                                    let mutable expected = orbit.Down MouseButtons.Left
-                                    viewClose 1e-12 initial expected
-                                    for delta in deltas do
-                                        expected <- referenceStep center delta expected
-                                        let actual = orbit.Move delta
-                                        viewClose (1e-9 * offset.Length) expected actual
-                                        checkOrbit center offset.Length sky actual
+                    withContext $"shift={shift}, drag={name}" (fun () ->
+                        let initial = CameraView.LookAt(V3d(0.0, -10.0, 3.0), V3d.Zero, V3d.ZAxis)
+                        let origin = Orbit(initial, AVal.constant V3d.Zero)
+                        let translated = Orbit(initial.WithLocation(initial.Location + shift), AVal.constant shift, V2i(12, 34))
+                        origin.Down MouseButtons.Left |> ignore
+                        translated.Down MouseButtons.Left |> ignore
+                        for delta in deltas do
+                            let a = origin.Move delta
+                            let b = translated.Move delta
+                            viewClose 1e-9 (a.WithLocation(a.Location + shift)) b
+                    )
 
-                "Orbit.translation equivariance", fun _ ->
-                    for shift in [V3d(100.0, 200.0, 30.0); V3d(-900.0, 13.5, -210.0); V3d(0.125, -0.25, 0.5)] do
-                        for _, deltas in drags do
-                            let initial = CameraView.LookAt(V3d(0.0, -10.0, 3.0), V3d.Zero, V3d.ZAxis)
-                            let origin = Orbit(initial, AVal.constant V3d.Zero)
-                            let translated = Orbit(initial.WithLocation(initial.Location + shift), AVal.constant shift, V2i(12, 34))
-                            origin.Down MouseButtons.Left |> ignore
-                            translated.Down MouseButtons.Left |> ignore
-                            for delta in deltas do
-                                let a = origin.Move delta
-                                let b = translated.Move delta
-                                viewClose 1e-9 (a.WithLocation(a.Location + shift)) b
+        let originCompatibility () =
+            for sky in [V3d.ZAxis; V3d(1.0, 2.0, 3.0).Normalized; V3d(0.0, 0.0, 2.0)] do
+                for name, deltas in drags do
+                    withContext $"sky={sky}, drag={name}" (fun () ->
+                        let initial = CameraView.LookAt(V3d(2.0, -10.0, 3.0), V3d.Zero, sky)
+                        let orbit = Orbit(initial, AVal.constant V3d.Zero)
+                        let mutable expected = legacyStep V2i.Zero initial
+                        viewClose 1e-12 expected (orbit.Down MouseButtons.Left)
+                        for delta in deltas do
+                            expected <- legacyStep delta expected
+                            viewClose (1e-10 * max 1.0 expected.Location.Length) expected (orbit.Move delta)
+                    )
 
-                "Orbit.origin compatibility", fun _ ->
-                    for sky in [V3d.ZAxis; V3d(1.0, 2.0, 3.0).Normalized; V3d(0.0, 0.0, 2.0)] do
-                        for _, deltas in drags do
-                            let initial = CameraView.LookAt(V3d(2.0, -10.0, 3.0), V3d.Zero, sky)
-                            let orbit = Orbit(initial, AVal.constant V3d.Zero)
-                            let mutable expected = legacyStep V2i.Zero initial
-                            viewClose 1e-12 expected (orbit.Down MouseButtons.Left)
-                            for delta in deltas do
-                                expected <- legacyStep delta expected
-                                viewClose (1e-10 * max 1.0 expected.Location.Length) expected (orbit.Move delta)
+        let activationLifecycle () =
+            let center = V3d(100.0, 200.0, 30.0)
+            let initial = CameraView.LookAt(center + V3d(0.0, -10.0, 3.0), center, V3d.ZAxis)
+            let orbit = Orbit(initial, AVal.constant center)
+            Expect.isTrue (Object.ReferenceEquals(initial, orbit.Move(V2i(45, -32)))) "inactive movement retains view"
+            viewClose 1e-12 initial (orbit.Down MouseButtons.Left)
+            let moved = orbit.Move(V2i(20, 10))
+            viewClose 1e-10 (referenceStep center (V2i(20, 10)) initial) moved
+            Expect.isTrue (Object.ReferenceEquals(moved, orbit.Read())) "forcing twice does not replay movement"
+            Expect.isTrue (Object.ReferenceEquals(moved, orbit.Tick())) "time alone does not move orbit"
+            Expect.isTrue (Object.ReferenceEquals(moved, orbit.Up(MouseButtons.Left, V2i(8, 13)))) "release movement is gated off"
+            Expect.isTrue (Object.ReferenceEquals(moved, orbit.Move(V2i(-30, 14)))) "released movement retains view"
+            viewClose 1e-10 moved (orbit.Down MouseButtons.Left)
+            viewClose 1e-10 (referenceStep center (V2i(-5, 6)) moved) (orbit.Move(V2i(-5, 6)))
 
-                "Orbit.press, release and inactive movement do not accumulate deltas", fun _ ->
-                    let center = V3d(100.0, 200.0, 30.0)
+        let leftButtonActivation () =
+            for button in [MouseButtons.Right; MouseButtons.Middle; MouseButtons.Button4; MouseButtons.Right ||| MouseButtons.Middle] do
+                withContext $"button={button}" (fun () ->
+                    let center = V3d(-17.0, 23.0, -4.0)
                     let initial = CameraView.LookAt(center + V3d(0.0, -10.0, 3.0), center, V3d.ZAxis)
                     let orbit = Orbit(initial, AVal.constant center)
-                    Expect.isTrue (Object.ReferenceEquals(initial, orbit.Move(V2i(45, -32)))) "inactive movement retains view"
-                    viewClose 1e-12 initial (orbit.Down MouseButtons.Left)
-                    let moved = orbit.Move(V2i(20, 10))
-                    viewClose 1e-10 (referenceStep center (V2i(20, 10)) initial) moved
-                    Expect.isTrue (Object.ReferenceEquals(moved, orbit.Read())) "forcing twice does not replay movement"
-                    Expect.isTrue (Object.ReferenceEquals(moved, orbit.Tick())) "time alone does not move orbit"
-                    Expect.isTrue (Object.ReferenceEquals(moved, orbit.Up(MouseButtons.Left, V2i(8, 13)))) "release movement is gated off"
-                    Expect.isTrue (Object.ReferenceEquals(moved, orbit.Move(V2i(-30, 14)))) "released movement retains view"
-                    viewClose 1e-10 moved (orbit.Down MouseButtons.Left)
-                    viewClose 1e-10 (referenceStep center (V2i(-5, 6)) moved) (orbit.Move(V2i(-5, 6)))
+                    Expect.isTrue (Object.ReferenceEquals(initial, orbit.Down button)) "other button does not activate"
+                    Expect.isTrue (Object.ReferenceEquals(initial, orbit.Move(V2i(12, 13)))) "other-button drag does not move"
+                    orbit.Down MouseButtons.Left |> ignore
+                    let moved = orbit.Move(V2i(-4, 3))
+                    viewClose 1e-10 (referenceStep center (V2i(-4, 3)) initial) moved
+                    orbit.Up MouseButtons.Left |> ignore
+                    Expect.isTrue (Object.ReferenceEquals(moved, orbit.Move(V2i(7, -3)))) "other buttons do not keep orbit active"
+                )
 
-                "Orbit.only the left button activates orbit", fun _ ->
-                    for button in [MouseButtons.Right; MouseButtons.Middle; MouseButtons.Button4; MouseButtons.Right ||| MouseButtons.Middle] do
-                        let center = V3d(-17.0, 23.0, -4.0)
-                        let initial = CameraView.LookAt(center + V3d(0.0, -10.0, 3.0), center, V3d.ZAxis)
-                        let orbit = Orbit(initial, AVal.constant center)
-                        Expect.isTrue (Object.ReferenceEquals(initial, orbit.Down button)) "other button does not activate"
-                        Expect.isTrue (Object.ReferenceEquals(initial, orbit.Move(V2i(12, 13)))) "other-button drag does not move"
-                        orbit.Down MouseButtons.Left |> ignore
-                        let moved = orbit.Move(V2i(-4, 3))
-                        viewClose 1e-10 (referenceStep center (V2i(-4, 3)) initial) moved
-                        orbit.Up MouseButtons.Left |> ignore
-                        Expect.isTrue (Object.ReferenceEquals(moved, orbit.Move(V2i(7, -3)))) "other buttons do not keep orbit active"
-
-                "Orbit.adaptive center change", fun _ ->
-                    for active in [false; true] do
-                        let center = cval (V3d(100.0, 200.0, 30.0))
-                        let initial = CameraView.LookAt(center.Value + V3d(0.0, -10.0, 3.0), center.Value, V3d.ZAxis)
-                        let orbit = Orbit(initial, center)
-                        let before = if active then orbit.Down MouseButtons.Left else orbit.Read()
-                        let next = V3d(-20.0, 70.0, 5.0)
-                        transact (fun () -> center.Value <- next)
-                        let changed = orbit.Read()
-                        vectorClose 1e-12 before.Location changed.Location "center update does not translate the camera"
-                        if active then
-                            vectorClose 1e-12 (next - before.Location).Normalized changed.Forward "active center dependency updates facing"
-                        else
-                            Expect.isTrue (Object.ReferenceEquals(before, changed)) "inactive center change preserves view"
-                        let ready = orbit.Down MouseButtons.Left
-                        let actual = orbit.Move(V2i(20, 10))
-                        viewClose 1e-10 (referenceStep next (V2i(20, 10)) ready) actual
-                        checkOrbit next (ready.Location - next).Length initial.Sky actual
-
-                "Orbit.center rebind retains existing mouse-step initialization", fun _ ->
-                    let center = cval V3d.Zero
-                    let initial = CameraView.LookAt(V3d(2.0, -10.0, 3.0), center.Value, V3d.ZAxis)
+        let adaptiveCenterChange () =
+            for active in [false; true] do
+                withContext $"active={active}" (fun () ->
+                    let center = cval (V3d(100.0, 200.0, 30.0))
+                    let initial = CameraView.LookAt(center.Value + V3d(0.0, -10.0, 3.0), center.Value, V3d.ZAxis)
                     let orbit = Orbit(initial, center)
-                    orbit.Down MouseButtons.Left |> ignore
-                    let before = orbit.Move(V2i(4, 2))
-                    transact (fun () -> center.Value <- V3d(10.0, 20.0, -3.0))
-                    orbit.MoveWithoutRead(V2i(40, -30))
-                    let rebound = orbit.Read()
-                    // A new step snapshots the current position, rather than replaying a pending delta.
-                    vectorClose 1e-12 before.Location rebound.Location "rebind snapshots mouse position"
-                    vectorClose 1e-12 (center.Value - before.Location).Normalized rebound.Forward "rebound facing"
-                    viewClose 1e-10 (referenceStep center.Value (V2i(5, 3)) rebound) (orbit.Move(V2i(5, 3)))
-
-                "Orbit.forward is normalized before adding a large world translation", fun _ ->
-                    let center = V3d(1e12, -1e12, 1e12)
-                    let initial = CameraView.LookAt(center + V3d(0.0, -10.0, 3.0), center, V3d.ZAxis)
-                    let orbit = Orbit(initial, AVal.constant center)
-                    orbit.Down MouseButtons.Left |> ignore
-                    let expected = referenceStep center (V2i(20, 10)) initial
+                    let before = if active then orbit.Down MouseButtons.Left else orbit.Read()
+                    let next = V3d(-20.0, 70.0, 5.0)
+                    transact (fun () -> center.Value <- next)
+                    let changed = orbit.Read()
+                    vectorClose 1e-12 before.Location changed.Location "center update does not translate the camera"
+                    if active then
+                        vectorClose 1e-12 (next - before.Location).Normalized changed.Forward "active center dependency updates facing"
+                    else
+                        Expect.isTrue (Object.ReferenceEquals(before, changed)) "inactive center change preserves view"
+                    let ready = orbit.Down MouseButtons.Left
                     let actual = orbit.Move(V2i(20, 10))
-                    vectorClose 0.001 expected.Location actual.Location "world-space position at representable precision"
-                    vectorClose 1e-12 expected.Forward actual.Forward "translation does not lose forward precision"
-                    vectorClose 1e-12 expected.Right actual.Right "right precision"
-                    vectorClose 1e-12 expected.Up actual.Up "up precision"
-                    Expect.equal actual.Sky initial.Sky "sky preserved"
+                    viewClose 1e-10 (referenceStep next (V2i(20, 10)) ready) actual
+                    checkOrbit next (ready.Location - next).Length initial.Sky actual
+                )
 
-                "Orbit.seeded drags", fun _ ->
-                    for seed in 0 .. 9 do
-                        let random = Random(9127 + seed)
-                        let center = V3d(random.NextDouble() * 200.0 - 100.0, random.NextDouble() * 200.0 - 100.0, random.NextDouble() * 200.0 - 100.0)
-                        let initial = CameraView.LookAt(center + V3d(3.0, -15.0, 7.0), center, V3d.ZAxis)
-                        let orbit = Orbit(initial, AVal.constant center)
-                        let mutable expected = orbit.Down MouseButtons.Left
-                        for _ in 1 .. 100 do
-                            let delta = V2i(random.Next(-20, 21), random.Next(-15, 16))
-                            expected <- referenceStep center delta expected
-                            let actual = orbit.Move delta
-                            viewClose 1e-8 expected actual
-                            checkOrbit center (initial.Location - center).Length initial.Sky actual
-            ]
+        let centerRebind () =
+            let center = cval V3d.Zero
+            let initial = CameraView.LookAt(V3d(2.0, -10.0, 3.0), center.Value, V3d.ZAxis)
+            let orbit = Orbit(initial, center)
+            orbit.Down MouseButtons.Left |> ignore
+            let before = orbit.Move(V2i(4, 2))
+            transact (fun () -> center.Value <- V3d(10.0, 20.0, -3.0))
+            orbit.MoveWithoutRead(V2i(40, -30))
+            let rebound = orbit.Read()
+            // A new step snapshots the current position, rather than replaying a pending delta.
+            vectorClose 1e-12 before.Location rebound.Location "rebind snapshots mouse position"
+            vectorClose 1e-12 (center.Value - before.Location).Normalized rebound.Forward "rebound facing"
+            viewClose 1e-10 (referenceStep center.Value (V2i(5, 3)) rebound) (orbit.Move(V2i(5, 3)))
+
+        let largeWorldTranslation () =
+            let center = V3d(1e12, -1e12, 1e12)
+            let initial = CameraView.LookAt(center + V3d(0.0, -10.0, 3.0), center, V3d.ZAxis)
+            let orbit = Orbit(initial, AVal.constant center)
+            orbit.Down MouseButtons.Left |> ignore
+            let expected = referenceStep center (V2i(20, 10)) initial
+            let actual = orbit.Move(V2i(20, 10))
+            vectorClose 0.001 expected.Location actual.Location "world-space position at representable precision"
+            vectorClose 1e-12 expected.Forward actual.Forward "translation does not lose forward precision"
+            vectorClose 1e-12 expected.Right actual.Right "right precision"
+            vectorClose 1e-12 expected.Up actual.Up "up precision"
+            Expect.equal actual.Sky initial.Sky "sky preserved"
+
+        let seededDrags () =
+            for seed in 0 .. 9 do
+                withContext $"seed={seed}" (fun () ->
+                    let random = Random(9127 + seed)
+                    let center = V3d(random.NextDouble() * 200.0 - 100.0, random.NextDouble() * 200.0 - 100.0, random.NextDouble() * 200.0 - 100.0)
+                    let initial = CameraView.LookAt(center + V3d(3.0, -15.0, 7.0), center, V3d.ZAxis)
+                    let orbit = Orbit(initial, AVal.constant center)
+                    let mutable expected = orbit.Down MouseButtons.Left
+                    for _ in 1 .. 100 do
+                        let delta = V2i(random.Next(-20, 21), random.Next(-15, 16))
+                        expected <- referenceStep center delta expected
+                        let actual = orbit.Move delta
+                        viewClose 1e-8 expected actual
+                        checkOrbit center (initial.Location - center).Length initial.Sky actual
+                )
 
     let tests (target: TestTarget) =
         [
-            "Frustum.aspect",          Frustum.aspect
-            "Frustum.fieldOfView",     Frustum.fieldOfView
-            "Frustum.withAspect",      Frustum.withAspect
-            "Frustum.withNear",        Frustum.withNear
+            "Frustum.aspect", Frustum.aspect
+            "Frustum.fieldOfView", Frustum.fieldOfView
+            "Frustum.withAspect", Frustum.withAspect
+            "Frustum.withNear", Frustum.withNear
             "Frustum.withFieldOfView", Frustum.withFieldOfView
-
-            yield! Orbit.tests
+            "Orbit.drags", Orbit.dragCases
+            "Orbit.translation equivariance", Orbit.translationEquivariance
+            "Orbit.origin compatibility", Orbit.originCompatibility
+            "Orbit.press, release and inactive movement do not accumulate deltas", Orbit.activationLifecycle
+            "Orbit.only the left button activates orbit", Orbit.leftButtonActivation
+            "Orbit.adaptive center change", Orbit.adaptiveCenterChange
+            "Orbit.center rebind retains existing mouse-step initialization", Orbit.centerRebind
+            "Orbit.forward is normalized before adding a large world translation", Orbit.largeWorldTranslation
+            "Orbit.seeded drags", Orbit.seededDrags
         ]
         |> prepareCasesCpu "Camera" target

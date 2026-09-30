@@ -140,13 +140,42 @@ module CylinderNormals =
             Array.iter2 (fun e a -> sameVector e a "exact straight-cylinder normal") (normals before) ns
 
     module private Cases =
-        let regular bottom top () =
-            for mode in modes do
-                for axisName, axis in ["Z", V3d.ZAxis; "X", V3d.XAxis; "rotated", V3d(1.0, 2.0, 3.0).Normalized; "non-unit", V3d(-2.0, 3.0, -4.0)] do
-                    for height in [1.0; -0.75] do
-                        for tess in [3; 8; 32] do
-                            checkRegular mode { Center = V3d(13.5, -7.25, 19.0); Axis = axis; Height = height
-                                                Bottom = bottom; Top = top; Tessellation = tess }
+        let private withContext context action =
+            try action ()
+            with error -> raise (Exception($"{context}: {error.Message}", error))
+
+        let regular () =
+            let shapes =
+                [
+                    "straight", 1.5, 1.5
+                    "narrowing", 2.0, 0.5
+                    "widening", 0.5, 2.0
+                    "cone", 1.0, 0.0
+                    "inverted cone", 0.0, 1.0
+                ]
+            let axes =
+                [
+                    "Z", V3d.ZAxis
+                    "X", V3d.XAxis
+                    "rotated", V3d(1.0, 2.0, 3.0).Normalized
+                    "non-unit", V3d(-2.0, 3.0, -4.0)
+                ]
+
+            for shape, bottom, top in shapes do
+                for mode in modes do
+                    for axisName, axis in axes do
+                        for height in [1.0; -0.75] do
+                            for tess in [3; 8; 32] do
+                                withContext $"shape={shape}, mode={mode}, axis={axisName}, height={height}, tessellation={tess}" (fun () ->
+                                    checkRegular mode {
+                                        Center = V3d(13.5, -7.25, 19.0)
+                                        Axis = axis
+                                        Height = height
+                                        Bottom = bottom
+                                        Top = top
+                                        Tessellation = tess
+                                    }
+                                )
 
         let layoutCaps () =
             for mode in modes do
@@ -167,30 +196,81 @@ module CylinderNormals =
                     layout (legacy mode moved) translated
                     Array.iter2 (fun e a -> sameVector e a "translation-invariant normal") (normals origin) (normals translated)
 
-        let degenerateCompatibility change () =
-            for mode in modes do
-                let p = change defaults
-                let before = legacy mode p
-                let after = build mode p
-                layout before after
-                Array.iter2 (fun e a -> sameVector e a "unchanged degenerate normal") (normals before) (normals after)
+        let degenerateCompatibility () =
+            let inputs =
+                [
+                    "zero height", fun p -> { p with Height = 0.0 }
+                    "negative zero height", fun p -> { p with Height = -0.0 }
+                    "zero axis", fun p -> { p with Axis = V3d.Zero }
+                    "tiny axis", fun p -> { p with Axis = V3d(1e-300, -2e-300, 3e-300) }
+                    "huge axis", fun p -> { p with Axis = V3d(1e300, -2e300, 3e300) }
+                    "negative bottom", fun p -> { p with Bottom = -2.0 }
+                    "negative top", fun p -> { p with Top = -0.5 }
+                    "negative radii", fun p -> { p with Bottom = -2.0; Top = -0.5 }
+                    "zero radii", fun p -> { p with Bottom = 0.0; Top = 0.0 }
+                    "NaN bottom", fun p -> { p with Bottom = Double.NaN }
+                    "NaN top", fun p -> { p with Top = Double.NaN }
+                    "infinite bottom", fun p -> { p with Bottom = Double.PositiveInfinity }
+                    "infinite top", fun p -> { p with Top = Double.PositiveInfinity }
+                    "equal infinite radii", fun p -> { p with Bottom = Double.PositiveInfinity; Top = Double.PositiveInfinity }
+                    "negative infinite radius", fun p -> { p with Bottom = Double.NegativeInfinity }
+                    "NaN axis", fun p -> { p with Axis = V3d(Double.NaN, 1.0, 2.0) }
+                    "infinite axis", fun p -> { p with Axis = V3d(1.0, 2.0, Double.PositiveInfinity) }
+                    "NaN height", fun p -> { p with Height = Double.NaN }
+                    "infinite height", fun p -> { p with Height = Double.PositiveInfinity }
+                    "negative infinite height", fun p -> { p with Height = Double.NegativeInfinity }
+                    "NaN center", fun p -> { p with Center = V3d(Double.NaN, 1.0, 2.0) }
+                    "infinite center", fun p -> { p with Center = V3d(1.0, 2.0, Double.PositiveInfinity) }
+                    "displacement underflow", fun p -> { p with Axis = V3d(1e-100, 2e-100, 3e-100); Height = 1e-300 }
+                    "displacement overflow", fun p -> { p with Axis = V3d(1e100, 2e100, 3e100); Height = 1e300 }
+                    "one-sample tessellation", fun p -> { p with Tessellation = 1 }
+                    "two-sample tessellation", fun p -> { p with Tessellation = 2 }
+                    "empty tessellation", fun p -> { p with Tessellation = 0 }
+                    "negative tessellation", fun p -> { p with Tessellation = -4 }
+                ]
 
-        let stableCoefficients (axis: V3d) (height: float) (bottom: float) (top: float) (radialWeight: float) (axialWeight: float) () =
-            for mode in modes do
-                let p = { defaults with Axis = axis; Height = height; Bottom = bottom; Top = top }
-                let before = legacy mode p
-                let after = build mode p
-                layout before after
-                caps p before after
-                let e = (if height < 0.0 then -axis else axis).Normalized
-                let frame = Trafo3d.FromNormalFrame(V3d.Zero, axis.Normalized)
-                for i in 0 .. p.Tessellation - 1 do
-                    let angle = float i * Constant.PiTimesTwo / float p.Tessellation
-                    let radial = frame.Forward.TransformDir(V3d(cos angle, sin angle, 0.0))
-                    let expected = radial * radialWeight + e * axialWeight
-                    let actual = V3d (normals after).[i * 2]
-                    close 1.0 actual.Length 2e-6 "finite unit normal"
-                    close 0.0 (actual - expected).Length 2e-6 "stable analytic limit"
+            for name, change in inputs do
+                for mode in modes do
+                    withContext $"input={name}, mode={mode}" (fun () ->
+                        let p = change defaults
+                        let before = legacy mode p
+                        let after = build mode p
+                        layout before after
+                        Array.iter2 (fun e a -> sameVector e a "unchanged degenerate normal") (normals before) (normals after)
+                    )
+
+        let stableCoefficients () =
+            let inputs =
+                [
+                    "huge slope components", V3d.ZAxis, 1e200, 1e200, 0.0, sqrt 0.5, sqrt 0.5
+                    "tiny slope components", V3d.ZAxis, 1e-200, 1e-200, 0.0, sqrt 0.5, sqrt 0.5
+                    "subnormal slope components", V3d.ZAxis, Double.Epsilon, Double.Epsilon, 0.0, sqrt 0.5, sqrt 0.5
+                    "steep limit", V3d.ZAxis, 1e-300, 1e300, 0.0, 0.0, 1.0
+                    "shallow limit", V3d.ZAxis, 1e300, 1e-300, 0.0, 1.0, 0.0
+                    "large widening", V3d.ZAxis, -1e200, 0.0, 1e200, sqrt 0.5, -sqrt 0.5
+                    "length overflow", V3d(1.0, 1.0, 1.0), 1e308, 1e308, 0.0, sqrt 0.75, 0.5
+                    "non-unit scale", V3d(0.0, 0.0, 1e150), 1e150, 1e300, 0.0, sqrt 0.5, sqrt 0.5
+                    "small non-unit scale", V3d(0.0, 0.0, 1e-150), 1e-150, 1e-300, 0.0, sqrt 0.5, sqrt 0.5
+                ]
+
+            for name, axis, height, bottom, top, radialWeight, axialWeight in inputs do
+                for mode in modes do
+                    withContext $"input={name}, mode={mode}" (fun () ->
+                        let p = { defaults with Axis = axis; Height = height; Bottom = bottom; Top = top }
+                        let before = legacy mode p
+                        let after = build mode p
+                        layout before after
+                        caps p before after
+                        let e = (if height < 0.0 then -axis else axis).Normalized
+                        let frame = Trafo3d.FromNormalFrame(V3d.Zero, axis.Normalized)
+                        for i in 0 .. p.Tessellation - 1 do
+                            let angle = float i * Constant.PiTimesTwo / float p.Tessellation
+                            let radial = frame.Forward.TransformDir(V3d(cos angle, sin angle, 0.0))
+                            let expected = radial * radialWeight + e * axialWeight
+                            let actual = V3d (normals after).[i * 2]
+                            close 1.0 actual.Length 2e-6 "finite unit normal"
+                            close 0.0 (actual - expected).Length 2e-6 "stable analytic limit"
+                    )
 
         let normalStorageAllocation () =
             for mode in modes do
@@ -253,57 +333,11 @@ module CylinderNormals =
 
     let tests (target: TestTarget) =
         [
-            for name, bottom, top in ["straight", 1.5, 1.5; "narrowing", 2.0, 0.5; "widening", 0.5, 2.0; "cone", 1.0, 0.0; "inverted cone", 0.0, 1.0] do
-                $"{name}", Cases.regular bottom top
-
-            "layout and caps",                     Cases.layoutCaps
+            "regular geometry and normals", Cases.regular
+            "layout and caps", Cases.layoutCaps
             "translation does not change normals", Cases.translation
-
-            for name, change in [
-                "zero height", fun p -> { p with Height = 0.0 }
-                "negative zero height", fun p -> { p with Height = -0.0 }
-                "zero axis", fun p -> { p with Axis = V3d.Zero }
-                "tiny axis", fun p -> { p with Axis = V3d(1e-300, -2e-300, 3e-300) }
-                "huge axis", fun p -> { p with Axis = V3d(1e300, -2e300, 3e300) }
-                "negative bottom", fun p -> { p with Bottom = -2.0 }
-                "negative top", fun p -> { p with Top = -0.5 }
-                "negative radii", fun p -> { p with Bottom = -2.0; Top = -0.5 }
-                "zero radii", fun p -> { p with Bottom = 0.0; Top = 0.0 }
-                "NaN bottom", fun p -> { p with Bottom = Double.NaN }
-                "NaN top", fun p -> { p with Top = Double.NaN }
-                "infinite bottom", fun p -> { p with Bottom = Double.PositiveInfinity }
-                "infinite top", fun p -> { p with Top = Double.PositiveInfinity }
-                "equal infinite radii", fun p -> { p with Bottom = Double.PositiveInfinity; Top = Double.PositiveInfinity }
-                "negative infinite radius", fun p -> { p with Bottom = Double.NegativeInfinity }
-                "NaN axis", fun p -> { p with Axis = V3d(Double.NaN, 1.0, 2.0) }
-                "infinite axis", fun p -> { p with Axis = V3d(1.0, 2.0, Double.PositiveInfinity) }
-                "NaN height", fun p -> { p with Height = Double.NaN }
-                "infinite height", fun p -> { p with Height = Double.PositiveInfinity }
-                "negative infinite height", fun p -> { p with Height = Double.NegativeInfinity }
-                "NaN center", fun p -> { p with Center = V3d(Double.NaN, 1.0, 2.0) }
-                "infinite center", fun p -> { p with Center = V3d(1.0, 2.0, Double.PositiveInfinity) }
-                "displacement underflow", fun p -> { p with Axis = V3d(1e-100, 2e-100, 3e-100); Height = 1e-300 }
-                "displacement overflow", fun p -> { p with Axis = V3d(1e100, 2e100, 3e100); Height = 1e300 }
-                "one-sample tessellation", fun p -> { p with Tessellation = 1 }
-                "two-sample tessellation", fun p -> { p with Tessellation = 2 }
-                "empty tessellation", fun p -> { p with Tessellation = 0 }
-                "negative tessellation", fun p -> { p with Tessellation = -4 }
-            ] do
-                $"degenerate compatibility.{name}", Cases.degenerateCompatibility change
-
-            for name, axis, height, bottom, top, radialWeight, axialWeight in [
-                "huge slope components", V3d.ZAxis, 1e200, 1e200, 0.0, sqrt 0.5, sqrt 0.5
-                "tiny slope components", V3d.ZAxis, 1e-200, 1e-200, 0.0, sqrt 0.5, sqrt 0.5
-                "subnormal slope components", V3d.ZAxis, Double.Epsilon, Double.Epsilon, 0.0, sqrt 0.5, sqrt 0.5
-                "steep limit", V3d.ZAxis, 1e-300, 1e300, 0.0, 0.0, 1.0
-                "shallow limit", V3d.ZAxis, 1e300, 1e-300, 0.0, 1.0, 0.0
-                "large widening", V3d.ZAxis, -1e200, 0.0, 1e200, sqrt 0.5, -sqrt 0.5
-                "length overflow", V3d(1.0, 1.0, 1.0), 1e308, 1e308, 0.0, sqrt 0.75, 0.5
-                "non-unit scale", V3d(0.0, 0.0, 1e150), 1e150, 1e300, 0.0, sqrt 0.5, sqrt 0.5
-                "small non-unit scale", V3d(0.0, 0.0, 1e-150), 1e-150, 1e-300, 0.0, sqrt 0.5, sqrt 0.5
-            ] do
-                $"stable coefficients.{name}", Cases.stableCoefficients axis height bottom top radialWeight axialWeight
-
+            "degenerate compatibility", Cases.degenerateCompatibility
+            "stable coefficients", Cases.stableCoefficients
             "normal storage allocation", Cases.normalStorageAllocation
             "cylinder and cone aliases", Cases.cylinderConeAliases
             "randomized geometry and normals", Cases.randomized
