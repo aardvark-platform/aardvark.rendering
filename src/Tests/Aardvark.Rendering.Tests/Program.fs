@@ -12,6 +12,7 @@ let tests =
             Buffer.AttributeBuffer.tests
             Buffer.ManagedBuffer.tests
             Buffer.IndirectBuffer.tests
+            Buffer.BufferView.tests
         ]
 
         testAllTargets "Textures" [
