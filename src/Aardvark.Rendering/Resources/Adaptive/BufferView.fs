@@ -138,7 +138,12 @@ module BufferView =
     let ofArray (array : Array) =
         BufferView(array)
 
-    /// Returns the maximum number of elements in the buffer view.
+    /// <summary>
+    /// Returns the number of complete elements accessible using the view's byte offset and stride.
+    /// A zero stride means tightly packed elements. Returns zero if no complete element remains,
+    /// or one for a single-value buffer. Only buffer-size metadata is inspected, not buffer contents.
+    /// </summary>
+    /// <remarks>Offset and stride are assumed to be nonnegative.</remarks>
     let getCount (view : BufferView) =
         if view.IsSingleValue then
             AVal.constant 1
@@ -150,7 +155,12 @@ module BufferView =
                     | :? IBackendBuffer as b -> b.SizeInBytes
                     | _ -> failwith $"Cannot determine buffer size for view: {b}"
 
-                int ((sizeInBytes - uint64 view.Offset) / uint64 view.ElementType.CLRSize)
+                let elementSize = uint64 view.ElementType.CLRSize
+                let firstEnd = uint64 view.Offset + elementSize
+                if sizeInBytes < firstEnd then 0
+                else
+                    let stride = if view.Stride = 0 then elementSize else uint64 view.Stride
+                    int (1UL + (sizeInBytes - firstEnd) / stride)
             )
 
     /// Retrieves up to count elements from the given buffer view as an array starting at startIndex.
