@@ -109,7 +109,7 @@ module PrimitiveSequences =
             try action ()
             with error -> raise (Exception($"{context}: {error.Message}", error))
 
-        let private inputRepresentations (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) () =
+        let private checkInputRepresentations (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) () =
             for kind in ["array"; "list"; "lazy"] do
                 for count in [0; 1; 3; 257] do
                     withContext $"kind={kind}, count={count}" (fun () ->
@@ -132,14 +132,16 @@ module PrimitiveSequences =
                             geometry mode (expected snapshot) again
                     )
 
-        let private singleUse (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) () =
+        let private checkSingleUse (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) () =
             for count in [0; 1; 5] do
-                let values = fixture count
-                let source = Source((fun _ -> values), true, "", -1)
-                geometry mode (expected values) (build source)
-                Expect.equal source.Counts (1, count + 1, count, 1) "one eager pass, one current read per item, one disposal"
+                withContext $"count={count}" (fun () ->
+                    let values = fixture count
+                    let source = Source((fun _ -> values), true, "", -1)
+                    geometry mode (expected values) (build source)
+                    Expect.equal source.Counts (1, count + 1, count, 1) "one eager pass, one current read per item, one disposal"
+                )
 
-        let private queueDraining (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) () =
+        let private checkQueueDraining (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) () =
             let values = fixture 5
             let queue = Queue<_>(values)
             let mutable disposals = 0
@@ -148,14 +150,14 @@ module PrimitiveSequences =
             Expect.equal queue.Count 0 "eagerly consumed"
             Expect.equal disposals 1 "disposed once"
 
-        let private changingSource (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) () =
+        let private checkChangingSource (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) () =
             let values = fixture 5
             let other = Array.rev values
             let source = Source((fun generation -> if generation = 1 then values else other), false, "", -1)
             geometry mode (expected values) (build source)
             Expect.equal source.Counts (1, 6, 5, 1) "only the first generation is read"
 
-        let private sourceFailures (fixture : int -> 'T[]) (build : seq<'T> -> IndexedGeometry) () =
+        let private checkSourceFailures (fixture : int -> 'T[]) (build : seq<'T> -> IndexedGeometry) () =
             let failures = ["start", [0]; "move", [0; 2; 5]; "current", [0; 2]; "dispose", [0]]
             for fault, indices in failures do
                 for at in indices do
@@ -168,31 +170,66 @@ module PrimitiveSequences =
                         Expect.equal disposed (if fault = "start" then 0 else 1) "dispose acquired enumerator on failure"
                     )
 
-        let private randomized (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) () =
+        let private checkRandomized (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) () =
             let random = Random(1447)
-            for _ in 1 .. 100 do
+            for iteration in 1 .. 100 do
                 let values = fixture (random.Next(0, 70)) |> Array.sortBy (fun _ -> random.Next())
-                geometry mode (expected values) (build (seq { yield! values }))
+                withContext $"seed=1447, iteration={iteration}, count={values.Length}" (fun () ->
+                    geometry mode (expected values) (build (seq { yield! values }))
+                )
 
-        let variants name (fixture : int -> 'T[]) expected mode (build : seq<'T> -> IndexedGeometry) =
+        // Keep each typed fixture, oracle and builder together while iterating by behavior.
+        type private Checks =
+            { InputRepresentations : unit -> unit
+              SingleUse : unit -> unit
+              QueueDraining : unit -> unit
+              ChangingSource : unit -> unit
+              SourceFailures : unit -> unit
+              Randomized : unit -> unit }
+
+        let private checks fixture expected mode build =
+            { InputRepresentations = checkInputRepresentations fixture expected mode build
+              SingleUse = checkSingleUse fixture expected mode build
+              QueueDraining = checkQueueDraining fixture expected mode build
+              ChangingSource = checkChangingSource fixture expected mode build
+              SourceFailures = checkSourceFailures fixture build
+              Randomized = checkRandomized fixture expected mode build }
+
+        let private lineInput n = lines n |> Array.map fst
+        let private lineUniform xs = xs |> Array.map (fun line -> line, uniform) |> lineExpected
+        let private linePrime xs = P.Line.lines' xs uniform
+        let private linePrimeAlias xs = P.lines' xs uniform
+        let private triangleInput n = triangles n |> Array.map fst
+        let private triangleUniform wire xs = xs |> Array.map (fun triangle -> triangle, uniform) |> triangleExpected wire
+        let private solidUniform xs = P.Triangle.solidTrianglesWithColor xs uniform
+        let private wireUniform xs = P.Triangle.wireframeTrianglesWithColor xs uniform
+        let private aliasUniform xs = P.triangles' xs uniform
+
+        let private builders =
             [
-                $"{name}.input representations", inputRepresentations fixture expected mode build
-                $"{name}.single use and exact counts", singleUse fixture expected mode build
-                $"{name}.queue-draining source", queueDraining fixture expected mode build
-                $"{name}.changing source cannot mix attribute generations", changingSource fixture expected mode build
-                $"{name}.source failures", sourceFailures fixture build
-                $"{name}.deterministic randomized inputs", randomized fixture expected mode build
+                "lines",            checks lines lineExpected IndexedGeometryMode.LineList P.Line.lines
+                "lines alias",      checks lines lineExpected IndexedGeometryMode.LineList P.lines
+                "lines'",           checks lineInput lineUniform IndexedGeometryMode.LineList linePrime
+                "lines' alias",     checks lineInput lineUniform IndexedGeometryMode.LineList linePrimeAlias
+
+                "solid colors",     checks triangles (triangleExpected false) IndexedGeometryMode.TriangleList P.Triangle.solidTrianglesWithColors
+                "wire colors",      checks triangles (triangleExpected true) IndexedGeometryMode.LineList P.Triangle.wireframeTrianglesWithColors
+                "triangles alias",  checks triangles (triangleExpected false) IndexedGeometryMode.TriangleList P.triangles
+                "solid uniform",    checks triangleInput (triangleUniform false) IndexedGeometryMode.TriangleList solidUniform
+                "wire uniform",     checks triangleInput (triangleUniform true) IndexedGeometryMode.LineList wireUniform
+                "triangles' alias", checks triangleInput (triangleUniform false) IndexedGeometryMode.TriangleList aliasUniform
             ]
 
-        let lineInput n = lines n |> Array.map fst
-        let lineUniform xs = xs |> Array.map (fun line -> line, uniform) |> lineExpected
-        let linePrime xs = P.Line.lines' xs uniform
-        let linePrimeAlias xs = P.lines' xs uniform
-        let triangleInput n = triangles n |> Array.map fst
-        let triangleUniform wire xs = xs |> Array.map (fun triangle -> triangle, uniform) |> triangleExpected wire
-        let solidUniform xs = P.Triangle.solidTrianglesWithColor xs uniform
-        let wireUniform xs = P.Triangle.wireframeTrianglesWithColor xs uniform
-        let aliasUniform xs = P.triangles' xs uniform
+        let private forEachBuilder select =
+            for name, checks in builders do
+                withContext $"builder={name}" (select checks)
+
+        let inputRepresentations () = forEachBuilder _.InputRepresentations
+        let singleUse () = forEachBuilder _.SingleUse
+        let queueDraining () = forEachBuilder _.QueueDraining
+        let changingSource () = forEachBuilder _.ChangingSource
+        let sourceFailures () = forEachBuilder _.SourceFailures
+        let randomized () = forEachBuilder _.Randomized
 
         let singleLineBuilders () =
             for line, color in lines 5 do
@@ -251,23 +288,18 @@ module PrimitiveSequences =
 
     let tests (target: TestTarget) =
         [
-            yield! Cases.variants "lines" lines lineExpected IndexedGeometryMode.LineList P.Line.lines
-            yield! Cases.variants "lines alias" lines lineExpected IndexedGeometryMode.LineList P.lines
-            yield! Cases.variants "lines'" Cases.lineInput Cases.lineUniform IndexedGeometryMode.LineList Cases.linePrime
-            yield! Cases.variants "lines' alias" Cases.lineInput Cases.lineUniform IndexedGeometryMode.LineList Cases.linePrimeAlias
+            "input representations",                            Cases.inputRepresentations
+            "single use and exact counts",                      Cases.singleUse
+            "queue-draining source",                            Cases.queueDraining
+            "changing source cannot mix attribute generations", Cases.changingSource
+            "source failures",                                  Cases.sourceFailures
+            "deterministic randomized inputs",                  Cases.randomized
 
-            yield! Cases.variants "solid colors" triangles (triangleExpected false) IndexedGeometryMode.TriangleList P.Triangle.solidTrianglesWithColors
-            yield! Cases.variants "wire colors" triangles (triangleExpected true) IndexedGeometryMode.LineList P.Triangle.wireframeTrianglesWithColors
-            yield! Cases.variants "triangles alias" triangles (triangleExpected false) IndexedGeometryMode.TriangleList P.triangles
-            yield! Cases.variants "solid uniform" Cases.triangleInput (Cases.triangleUniform false) IndexedGeometryMode.TriangleList Cases.solidUniform
-            yield! Cases.variants "wire uniform" Cases.triangleInput (Cases.triangleUniform true) IndexedGeometryMode.LineList Cases.wireUniform
-            yield! Cases.variants "triangles' alias" Cases.triangleInput (Cases.triangleUniform false) IndexedGeometryMode.TriangleList Cases.aliasUniform
-
-            "single line builders", Cases.singleLineBuilders
-            "line endpoint conversion and zero-length lines", Cases.lineEndpointConversion
-            "triangle normals precede float position conversion", Cases.triangleNormalConversion
-            "array allocation bounds", Cases.allocationBounds
-            "extreme and non-finite triangle conversion", Cases.extremeTriangleConversion
+            "single line builders",                                     Cases.singleLineBuilders
+            "line endpoint conversion and zero-length lines",           Cases.lineEndpointConversion
+            "triangle normals precede float position conversion",       Cases.triangleNormalConversion
+            "array allocation bounds",                                  Cases.allocationBounds
+            "extreme and non-finite triangle conversion",               Cases.extremeTriangleConversion
             "checked output count boundaries without huge allocations", Cases.checkedOutputCounts
         ]
         |> prepareCasesCpu "Primitives sequences" target

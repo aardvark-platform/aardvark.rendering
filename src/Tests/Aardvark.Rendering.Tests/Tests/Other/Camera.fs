@@ -268,19 +268,20 @@ module Camera =
 
     let tests (target: TestTarget) =
         [
-            "Frustum.aspect", Frustum.aspect
-            "Frustum.fieldOfView", Frustum.fieldOfView
-            "Frustum.withAspect", Frustum.withAspect
-            "Frustum.withNear", Frustum.withNear
+            "Frustum.aspect",          Frustum.aspect
+            "Frustum.fieldOfView",     Frustum.fieldOfView
+            "Frustum.withAspect",      Frustum.withAspect
+            "Frustum.withNear",        Frustum.withNear
             "Frustum.withFieldOfView", Frustum.withFieldOfView
-            "Orbit.drags", Orbit.dragCases
-            "Orbit.translation equivariance", Orbit.translationEquivariance
-            "Orbit.origin compatibility", Orbit.originCompatibility
+
+            "Orbit.drags",                                                         Orbit.dragCases
+            "Orbit.translation equivariance",                                      Orbit.translationEquivariance
+            "Orbit.origin compatibility",                                          Orbit.originCompatibility
             "Orbit.press, release and inactive movement do not accumulate deltas", Orbit.activationLifecycle
-            "Orbit.only the left button activates orbit", Orbit.leftButtonActivation
-            "Orbit.adaptive center change", Orbit.adaptiveCenterChange
-            "Orbit.center rebind retains existing mouse-step initialization", Orbit.centerRebind
+            "Orbit.only the left button activates orbit",                          Orbit.leftButtonActivation
+            "Orbit.adaptive center change",                                        Orbit.adaptiveCenterChange
+            "Orbit.center rebind retains existing mouse-step initialization",      Orbit.centerRebind
             "Orbit.forward is normalized before adding a large world translation", Orbit.largeWorldTranslation
-            "Orbit.seeded drags", Orbit.seededDrags
+            "Orbit.seeded drags",                                                  Orbit.seededDrags
         ]
         |> prepareCasesCpu "Camera" target

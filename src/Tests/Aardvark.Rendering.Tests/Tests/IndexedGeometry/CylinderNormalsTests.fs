@@ -333,14 +333,14 @@ module CylinderNormals =
 
     let tests (target: TestTarget) =
         [
-            "regular geometry and normals", Cases.regular
-            "layout and caps", Cases.layoutCaps
+            "regular geometry and normals",        Cases.regular
+            "layout and caps",                     Cases.layoutCaps
             "translation does not change normals", Cases.translation
-            "degenerate compatibility", Cases.degenerateCompatibility
-            "stable coefficients", Cases.stableCoefficients
-            "normal storage allocation", Cases.normalStorageAllocation
-            "cylinder and cone aliases", Cases.cylinderConeAliases
-            "randomized geometry and normals", Cases.randomized
-            "arrow inherits cone correction", Cases.arrowConeCorrection
+            "degenerate compatibility",            Cases.degenerateCompatibility
+            "stable coefficients",                 Cases.stableCoefficients
+            "normal storage allocation",           Cases.normalStorageAllocation
+            "cylinder and cone aliases",           Cases.cylinderConeAliases
+            "randomized geometry and normals",     Cases.randomized
+            "arrow inherits cone correction",      Cases.arrowConeCorrection
         ]
         |> prepareCasesCpu "Cylinder normals" target

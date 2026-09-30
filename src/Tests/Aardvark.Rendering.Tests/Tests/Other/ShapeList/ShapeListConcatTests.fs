@@ -261,22 +261,25 @@ module ShapeListConcat =
     let tests (target: TestTarget) =
         [
             "Empty source returns the shared empty value", Cases.emptySource
-            "Singleton identity", Cases.singletonIdentity
-            "Append-fold equivalence", Cases.appendFoldEquivalence
-            "Only empty inputs", Cases.onlyEmptyInputs
-            "Interspersed empty inputs still contribute metadata", Cases.interspersedEmptyInputs
+            "Singleton identity",                          Cases.singletonIdentity
+
+            "Append-fold equivalence",                                                   Cases.appendFoldEquivalence
+            "Only empty inputs",                                                         Cases.onlyEmptyInputs
+            "Interspersed empty inputs still contribute metadata",                       Cases.interspersedEmptyInputs
             "Multiple empty inputs retain bounds/z/flag semantics, not singleton style", Cases.multipleEmptyInputs
-            "Styles/flags", Cases.stylesAndFlags
-            "Two inputs with one metadata-only empty contribution", Cases.metadataOnlyContribution
-            "Z values/ranges are not renumbered or recomputed", Cases.zValuesAndRanges
-            "Translated/scaled lists and rotated/scaled shapes", Cases.transformedListsAndShapes
-            "Nontranslation render transforms use the final frame in append order", Cases.nontranslationRenderTransforms
-            "Large finite coordinates allow only rounding-scale differences", Cases.largeFiniteCoordinates
-            "Finite randomized append-fold oracle", Cases.randomizedAppendFold
-            "Single-use source/disposal", Cases.singleUseSource
-            "Source failures preserve exceptions and disposal", Cases.sourceFailures
+            "Styles/flags",                                                              Cases.stylesAndFlags
+            "Two inputs with one metadata-only empty contribution",                      Cases.metadataOnlyContribution
+            "Z values/ranges are not renumbered or recomputed",                          Cases.zValuesAndRanges
+            "Translated/scaled lists and rotated/scaled shapes",                         Cases.transformedListsAndShapes
+            "Nontranslation render transforms use the final frame in append order",      Cases.nontranslationRenderTransforms
+            "Large finite coordinates allow only rounding-scale differences",            Cases.largeFiniteCoordinates
+            "Finite randomized append-fold oracle",                                      Cases.randomizedAppendFold
+
+            "Single-use source/disposal",                            Cases.singleUseSource
+            "Source failures preserve exceptions and disposal",      Cases.sourceFailures
             "Output construction failure still disposes the source", Cases.outputConstructionFailure
+
             "Allocated output grows linearly, not with copied prefixes", Cases.allocationScaling
-            "Empty contributions do not accumulate retained storage", Cases.emptyInputStorage
+            "Empty contributions do not accumulate retained storage",    Cases.emptyInputStorage
         ]
         |> prepareCasesCpu "ShapeList.Concat" target

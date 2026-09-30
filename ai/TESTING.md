@@ -17,7 +17,10 @@ to `testAllTargets`, which instantiates them for every target:
 
 The resulting names have the form `<category>.<target>.<group>.<case>`, for example
 `Buffers.GL.Download.Array uint8` or `IndexedGeometry.Cpu.Operations.Clone.deep`.
-A group or case name may contain `.` to add another level.
+Reserve `.` exclusively for group separators. A group or case name may use it to add
+another level, never as ordinary punctuation or a decimal point. For example,
+`Rotate by 3.1415` is an invalid name; use a descriptive name such as `Rotate by pi` and
+put numeric parameter values in assertion or exception context.
 
 ## Choose the narrowest preparation helper
 
@@ -40,21 +43,22 @@ must still have type `IRuntime -> unit`; use an ignored argument when the runtim
 needed:
 
 ```fsharp
-let cpuCase _ =
-    // CPU-only assertions
-    ()
+module private Cases =
+    let cpuCase _ =
+        // CPU-only assertions
+        ()
 
-let gpuCase (runtime : IRuntime) =
-    // Backend assertions
-    ()
+    let gpuCase (runtime : IRuntime) =
+        // Backend assertions
+        ()
 
 let tests (target : TestTarget) =
     [
         if target = TestTarget.Cpu then
-            "CPU behavior", cpuCase
+            "CPU behavior", Cases.cpuCase
 
         if target.IsGpu then
-            "GPU behavior", gpuCase
+            "GPU behavior", Cases.gpuCase
     ]
     |> prepareCases "Some group" target
 ```
@@ -72,28 +76,47 @@ namespace Aardvark.Rendering.Tests.Texture
 ```
 
 Put test implementations in a `Cases` module. Another descriptive module is acceptable
-when a large group has meaningful subgroups. Keep the entry point at the bottom of the
-file and make its name/implementation list easy to scan:
+when a large group has meaningful subgroups. Only actual test-case implementations should
+be non-private within these modules; mark helper functions, fixtures, and other bindings
+`private`, even when the module itself is private.
+
+Keep the entry point at the bottom of the file. Align the name/implementation columns
+for readability. Logical subgroups may be separated by a blank line and aligned
+independently, as in `Tests/Texture/Upload.fs`:
 
 ```fsharp
 module SomeGroup =
 
     module private Cases =
-        let first () =
-            // assertions
+        let private samples = [1; 2]
+
+        let private check value =
+            // shared assertions
             ()
 
+        let first () =
+            for value in samples do check value
+
         let second () =
-            // assertions
-            ()
+            check 3
+
+        let boundary () =
+            check 0
 
     let tests (target : TestTarget) =
         [
-            "first", Cases.first
-            "second", Cases.second
+            "first behavior",  Cases.first
+            "second behavior", Cases.second
+
+            "boundary behavior", Cases.boundary
         ]
         |> prepareCasesCpu "Some group" target
 ```
+
+Use explicit, descriptive literal names paired with named case implementations in the
+registration list. Do not generate names or expand registrations with loops, `yield!`, or
+case-list factories. Conditional target selection, as shown above, is still appropriate.
+Keep equivalent builder/alias and parameter iteration inside the case implementations.
 
 Do not inline test implementations in the registration list. Do not use Expecto
 constructors such as `testList` or `testCase`, and do not add `[<Tests>]` attributes in

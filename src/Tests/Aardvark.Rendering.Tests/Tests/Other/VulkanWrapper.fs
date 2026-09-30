@@ -158,21 +158,22 @@ module VulkanWrapper =
 
     let tests (target: TestTarget) =
         [
-            "Arrays.uint32_32", Arrays.uint32_32
-            "Arrays.int32_7", Arrays.int32_7
-            "Arrays.byte_32", Arrays.byte_32
-            "Arrays.byte_8", Arrays.byte_8
-            "Arrays.float32_6", Arrays.float32_6
-            "Arrays.VkPhysicalDevice_32", Arrays.VkPhysicalDevice_32
-            "Arrays.VkDeviceSize_16", Arrays.VkDeviceSize_16
-            "Arrays.VkOffset3D_2", Arrays.VkOffset3D_2
-            "Arrays.VkMemoryHeap_16", Arrays.VkMemoryHeap_16
-            "Arrays.VkMemoryType_32", Arrays.VkMemoryType_32
-            "Arrays.VkQueueGlobalPriority_16", Arrays.VkQueueGlobalPriority_16
+            "Arrays.uint32_32",                            Arrays.uint32_32
+            "Arrays.int32_7",                              Arrays.int32_7
+            "Arrays.byte_32",                              Arrays.byte_32
+            "Arrays.byte_8",                               Arrays.byte_8
+            "Arrays.float32_6",                            Arrays.float32_6
+            "Arrays.VkPhysicalDevice_32",                  Arrays.VkPhysicalDevice_32
+            "Arrays.VkDeviceSize_16",                      Arrays.VkDeviceSize_16
+            "Arrays.VkOffset3D_2",                         Arrays.VkOffset3D_2
+            "Arrays.VkMemoryHeap_16",                      Arrays.VkMemoryHeap_16
+            "Arrays.VkMemoryType_32",                      Arrays.VkMemoryType_32
+            "Arrays.VkQueueGlobalPriority_16",             Arrays.VkQueueGlobalPriority_16
             "Arrays.VkFragmentShadingRateCombinerOpKHR_2", Arrays.VkFragmentShadingRateCombinerOpKHR_2
-            "Arrays.VmaDetailedStatistics_16", Arrays.VmaDetailedStatistics_16
-            "Arrays.VmaDetailedStatistics_32", Arrays.VmaDetailedStatistics_32
-            "Bitfields.VkAccelerationStructureInstanceKHR", Bitfields.VkAccelerationStructureInstanceKHR
+            "Arrays.VmaDetailedStatistics_16",             Arrays.VmaDetailedStatistics_16
+            "Arrays.VmaDetailedStatistics_32",             Arrays.VmaDetailedStatistics_32
+
+            "Bitfields.VkAccelerationStructureInstanceKHR",                       Bitfields.VkAccelerationStructureInstanceKHR
             "Bitfields.VkClusterAccelerationStructureBuildTriangleClusterInfoNV", Bitfields.VkClusterAccelerationStructureBuildTriangleClusterInfoNV
         ]
         |> prepareCasesCpu "VulkanWrapper" target
