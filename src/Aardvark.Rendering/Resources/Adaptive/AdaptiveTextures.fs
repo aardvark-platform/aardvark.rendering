@@ -77,9 +77,11 @@ module private AdaptiveTextureTypes =
             | Some (h, p) when textureParams = p ->
                 h
 
-            | Some (h, _) ->
+            | Some _ ->
                 t.ReplacedResource(ResourceKind.Texture)
-                runtime.DeleteTexture h
+                // Forget the retired handle and parameters before creation can fail;
+                // Destroy clears them only after successful disposal.
+                x.Destroy()
                 x.CreateHandle(runtime, textureParams)
 
             | None ->
