@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Tests.Texture
 
+open System
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
@@ -458,6 +459,28 @@ module TextureDownload =
                 Expect.validStencilResult stencilResult size 1 3
             )
 
+        let windowValidation (runtime : IRuntime) =
+            use texture = runtime.CreateTexture3D(V3i(8, 9, 10), TextureFormat.Rgba8, levels = 2)
+            // Use a fixed target buffer: an allocating region overload could allocate before validation.
+            let result = PixVolume<byte>(Col.Format.RGBA, V3i(2))
+
+            for level in [0; 1] do
+                let limit = texture.GetSize(level)
+                for axis in [V3i.IOO; V3i.OIO; V3i.OOI] do
+                    let windows =
+                        [ -axis, V3i.III, "offset cannot be negative"
+                          V3i.Zero, V3i.III - axis, "window size must be greater than 0"
+                          V3i.Zero, V3i.III - 2 * axis, "window size must be greater than 0"
+                          limit * axis, V3i.III, "exceeds size of texture level"
+                          V3i.Zero, V3i.III + limit * axis, "exceeds size of texture level"
+                          Int32.MaxValue * axis, V3i.III + axis, "exceeds size of texture level"
+                          2 * axis, V3i.III + (Int32.MaxValue - 1) * axis, "exceeds size of texture level" ]
+
+                    for offset, size, message in windows do
+                        let download() = runtime.Download(texture, result, level = level, offset = offset, size = size)
+                        try download |> shouldThrowArgExn message
+                        with error -> failtestf "level = %d, offset = %A, size = %A: %O" level offset size error
+
         let argumentsOutOfRange (runtime : IRuntime) =
             let createAndDownload (dimension : TextureDimension) (levels : int) (level : int) (slice : int) (region : Box2i) () =
                 let size =
@@ -526,6 +549,7 @@ module TextureDownload =
             "Depth32fStencil8",         Cases.textureDepth32fStencil8
             "StencilIndex8",            Cases.textureStencilIndex8
 
-            "Arguments out of range", Cases.argumentsOutOfRange
+            "Arguments out of range",   Cases.argumentsOutOfRange
+            "Volume window validation", Cases.windowValidation
         ]
         |> prepareCasesGpu "Download" target
