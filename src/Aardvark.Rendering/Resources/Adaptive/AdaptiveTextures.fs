@@ -70,7 +70,6 @@ module private AdaptiveTextureTypes =
                 ()
 
         override x.Compute(token : AdaptiveToken, t : RenderToken) =
-
             let textureParams = x.GetParams token
 
             match handle with
@@ -80,6 +79,7 @@ module private AdaptiveTextureTypes =
             | Some (h, _) ->
                 t.ReplacedResource(ResourceKind.Texture)
                 runtime.DeleteTexture h
+                handle <- None
                 x.CreateHandle(runtime, textureParams)
 
             | None ->
