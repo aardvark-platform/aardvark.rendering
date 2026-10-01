@@ -1,3 +1,4 @@
+- Fixed adaptive texture and texture-array replacement failures to forget successfully disposed handles, preventing their reuse or repeated disposal during retries and release.
 - Fixed line and triangle strip conversion to preserve source geometries and handle empty or underfilled strips.
 - [Sg] Fixed automatic picking to honor `DrawCallInfo` ranges and indexed `BaseVertex` offsets.
 - [Sg] Made render-object bounding-box caching caller-scope aware, fixing reused render-object sets beneath distinct transforms while retaining weak, allocation-free cache hits.
