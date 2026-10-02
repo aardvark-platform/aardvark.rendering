@@ -284,8 +284,16 @@ module BlockCompression =
         module private Encoding =
 
             let powerIteration (cov : inref<SymM33f>) =
-                let mutable bk = V3f.One
-                for _ = 0 to 7 do
+                let mutable bk = SymM33f.Multiply(&cov, V3f.One)
+                if bk.X = 0.0f && bk.Y = 0.0f && bk.Z = 0.0f then
+                    // The all-ones seed can be in the nullspace of a nonzero covariance matrix.
+                    // Its largest diagonal selects a nonzero column; a solid block still yields zero.
+                    bk <-
+                        if cov.M00 >= cov.M11 && cov.M00 >= cov.M22 then V3f(cov.M00, cov.M01, cov.M02)
+                        elif cov.M11 >= cov.M22 then V3f(cov.M01, cov.M11, cov.M12)
+                        else V3f(cov.M02, cov.M12, cov.M22)
+                bk.Normalize()
+                for _ = 1 to 7 do
                     bk <- SymM33f.Multiply(&cov, bk)
                     bk.Normalize()
                 bk
