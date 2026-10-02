@@ -363,6 +363,139 @@ module TextureCompression =
                     Expect.equal (CompressionMode.numberOfBlocks size mode) V3i.One "At least one block per axis"
                     Expect.equal (CompressionMode.sizeInBytes size mode) bytesPerBlock "At least one block"
 
+    module private EndpointEncoding =
+
+        let private modes = [CompressionMode.BC1; CompressionMode.BC2; CompressionMode.BC3]
+
+        // Exactly representable RGB565 pairs with equal channel sums: the all-ones PCA seed is orthogonal to their variation.
+        let private pairs = [|
+            "red/green",    C3b(255uy, 0uy, 0uy),   C3b(0uy, 255uy, 0uy),   0xF800us, 0x07E0us
+            "green/blue",   C3b(0uy, 255uy, 0uy),   C3b(0uy, 0uy, 255uy),   0x07E0us, 0x001Fus
+            "blue/red",     C3b(0uy, 0uy, 255uy),   C3b(255uy, 0uy, 0uy),   0x001Fus, 0xF800us
+            "cyan/magenta", C3b(0uy, 255uy, 255uy), C3b(255uy, 0uy, 255uy), 0x07FFus, 0xF81Fus
+            // The largest covariance diagonal is Z, rather than the X/Y ties above.
+            "blue/yellow-green", C3b(0uy, 0uy, 255uy), C3b(24uy, 231uy, 0uy), 0x001Fus, 0x1F20us
+        |]
+
+        let private check context mode (size : V2i) pixel word expected =
+            let context = $"{context}, {mode}, size={size}"
+            let input = PixImage<byte>(Col.Format.RGBA, size)
+            let mutable inputPixels = input.GetMatrix<C4b>()
+            for y in 0 .. size.Y - 1 do
+                for x in 0 .. size.X - 1 do
+                    inputPixels.[x, y] <- pixel x y
+            let original = Array.copy input.Data
+            let output = PixImage<byte>(Col.Format.RGBA, size)
+            let blocksX, blocksY = (size.X + 3) / 4, (size.Y + 3) / 4
+            let blockBytes, colorOffset = if mode = CompressionMode.BC1 then 8, 0 else 16, 8
+            let payloadSize = blocksX * blocksY * blockBytes
+            let compressed = Array.create (payloadSize + 32) 0xCDuy
+            compressed |> NativePtr.pinArr (fun data ->
+                try
+                    PixImage.pin input (fun src -> BlockCompression.encode mode src.Address src.Info (data.Address + 16n))
+                    PixImage.pin output (fun dst -> BlockCompression.decode mode V2i.Zero size (data.Address + 16n) dst.Address dst.Info)
+                with error -> failtestf "%s: %O" context error
+            )
+            Expect.equal input.Data original $"{context}: encoding modified source pixels"
+            for i in 0 .. 15 do
+                Expect.equal compressed.[i] 0xCDuy $"{context}: prefix guard {i}"
+                Expect.equal compressed.[16 + payloadSize + i] 0xCDuy $"{context}: suffix guard {i}"
+
+            // Check endpoint words independently of decoding: two identical erroneous endpoints must not pass.
+            for by in 0 .. blocksY - 1 do
+                for bx in 0 .. blocksX - 1 do
+                    let mutable lo, hi, transparent = System.UInt16.MaxValue, 0us, false
+                    for y in by * 4 .. min (size.Y - 1) (by * 4 + 3) do
+                        for x in bx * 4 .. min (size.X - 1) (bx * 4 + 3) do
+                            lo <- min lo (word x y)
+                            hi <- max hi (word x y)
+                            transparent <- transparent || (pixel x y).A < 127uy
+                    let expectedEndpoints = if mode = CompressionMode.BC1 && transparent then lo, hi else hi, lo
+                    let offset = 16 + (by * blocksX + bx) * blockBytes + colorOffset
+                    let readWord offset = uint16 compressed.[offset] ||| (uint16 compressed.[offset + 1] <<< 8)
+                    Expect.equal (readWord offset, readWord (offset + 2)) expectedEndpoints
+                        $"{context}, block=({bx},{by}): RGB565 endpoints"
+            let decoded = output.GetMatrix<C4b>()
+            for y in 0 .. size.Y - 1 do
+                for x in 0 .. size.X - 1 do
+                    Expect.equal decoded.[x, y] (expected x y) $"{context}, pixel=({x},{y})"
+
+        let private checkPair context mode size pairAt second alpha =
+            let pixel x y =
+                let _, a, b, _, _ = pairAt x y
+                let color : C3b = if second x y then b else a
+                C4b(color, alpha x y)
+            let word x y =
+                let _, _, _, a, b = pairAt x y
+                if second x y then b else a
+            let expected x y =
+                let color = pixel x y
+                if mode <> CompressionMode.BC1 then color
+                elif color.A < 127uy then C4b.Zero
+                else C4b(color.RGB, 255uy)
+            check context mode size pixel word expected
+
+        let chromaticBlocks() =
+            for mode in modes do
+                for (name, _, _, _, _) as pair in pairs do
+                    for pattern in ["checkerboard"; "columns"; "rows"] do
+                        for reverse in [false; true] do
+                            let second x y =
+                                let value =
+                                    match pattern with
+                                    | "columns" -> x >= 2
+                                    | "rows" -> y >= 2
+                                    | _ -> (x + y) % 2 <> 0
+                                value <> reverse
+                            checkPair $"{name}, {pattern}, reverse={reverse}" mode (V2i(4))
+                                (fun _ _ -> pair) second (fun _ _ -> 255uy)
+
+        let partialAndMultipleBlocks() =
+            for mode in modes do
+                for size in [V2i(3, 2); V2i(2, 3); V2i(4, 1); V2i(1, 4); V2i(8, 8); V2i(7, 6); V2i(9, 5)] do
+                    for firstPair in 0 .. pairs.Length - 1 do
+                        let pairAt x y = pairs.[(firstPair + x / 4 + (y / 4) * ((size.X + 3) / 4)) % pairs.Length]
+                        checkPair $"mixed blocks, first pair={firstPair}" mode size pairAt
+                            (fun x y -> (x + y) % 2 <> 0) (fun _ _ -> 255uy)
+
+        let solidAndGrayscale() =
+            for mode in modes do
+                for size in [V2i(4); V2i(3, 2); V2i(7, 5)] do
+                    for color, word, reconstructed in [
+                        C3b(0uy), 0x0000us, C3b(0uy)
+                        C3b(255uy), 0xFFFFus, C3b(255uy)
+                        C3b(255uy, 0uy, 0uy), 0xF800us, C3b(255uy, 0uy, 0uy)
+                        C3b(0uy, 255uy, 0uy), 0x07E0us, C3b(0uy, 255uy, 0uy)
+                        C3b(0uy, 0uy, 255uy), 0x001Fus, C3b(0uy, 0uy, 255uy)
+                        C3b(128uy), 0x8410us, C3b(132uy, 130uy, 132uy)
+                    ] do
+                        check $"solid {color}" mode size (fun _ _ -> C4b color) (fun _ _ -> word) (fun _ _ -> C4b reconstructed)
+                for size in [V2i(4); V2i(8, 4)] do
+                    let pixel x _ = C4b(C3b(byte ((x % 4) * 85)))
+                    let words = [| 0x0000us; 0x52AAus; 0xAD55us; 0xFFFFus |]
+                    let word x _ = words.[x % 4]
+                    check "four grayscale levels" mode size pixel word pixel
+
+        let tinyBlocks() =
+            for mode in modes do
+                for (name, _, _, _, _) as pair in pairs do
+                    for size in [V2i(1); V2i(1, 2); V2i(2, 1)] do
+                        for reverse in [false; true] do
+                            checkPair $"{name}, tiny block, reverse={reverse}" mode size (fun _ _ -> pair)
+                                (fun x y -> ((x + y) % 2 <> 0) <> reverse) (fun _ _ -> 255uy)
+
+        let alpha() =
+            for mode in modes do
+                let alphas =
+                    match mode with
+                    | CompressionMode.BC1 -> [| 0uy; 126uy; 127uy; 255uy |]
+                    | CompressionMode.BC2 -> Array.init 16 (fun i -> byte (17 * i))
+                    | _ -> [| 255uy; 0uy; 218uy; 182uy; 145uy; 109uy; 72uy; 36uy |]
+                for (name, _, _, _, _) as pair in pairs do
+                    for values in [alphas; [| 0uy |]; [| 255uy |]] do
+                        checkPair (sprintf "%s, alpha=%A" name values) mode (V2i(4)) (fun _ _ -> pair)
+                            (fun x y -> (x + y) % 2 <> 0) (fun x y -> values.[(y * 4 + x) % values.Length])
+
     module private Handcrafted =
 
         // Literal RGB565 endpoints, four-color palettes and BC1 midpoints; no encoder or production interpolation oracle.
@@ -479,6 +612,12 @@ module TextureCompression =
 
     let tests (target: TestTarget) =
         [
+            "Encoding.Chromatic endpoint variation",           EndpointEncoding.chromaticBlocks
+            "Encoding.Partial and multiple chromatic blocks",  EndpointEncoding.partialAndMultipleBlocks
+            "Encoding.Solid colors and grayscale",             EndpointEncoding.solidAndGrayscale
+            "Encoding.Tiny blocks",                            EndpointEncoding.tinyBlocks
+            "Encoding.Chromatic alpha controls",               EndpointEncoding.alpha
+
             "BC1 handcrafted palette and transparency",          Handcrafted.palette CompressionMode.BC1
             "BC2 handcrafted four-color and explicit alpha",     Handcrafted.palette CompressionMode.BC2
             "BC3 handcrafted four-color and interpolated alpha", Handcrafted.palette CompressionMode.BC3
