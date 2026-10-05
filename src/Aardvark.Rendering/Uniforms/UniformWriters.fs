@@ -209,8 +209,12 @@ module UniformWriters =
                 )
             let il = meth.GetILGenerator()
 
-            il.Emit(OpCodes.Ldarg_0)
-            il.EmitCall(OpCodes.Callvirt, prop.GetMethod, null)
+            if typeof<'a>.IsValueType then
+                il.Emit(OpCodes.Ldarga_S, 0uy)
+                il.EmitCall(OpCodes.Call, prop.GetMethod, null)
+            else
+                il.Emit(OpCodes.Ldarg_0)
+                il.EmitCall(OpCodes.Callvirt, prop.GetMethod, null)
             il.Emit(OpCodes.Ret)
             let t = System.Linq.Expressions.Expression.GetDelegateType [| typeof<'a>; typeof<'b> |]
             let func = meth.CreateDelegate(t) |> unbox<Func<'a, 'b>>
