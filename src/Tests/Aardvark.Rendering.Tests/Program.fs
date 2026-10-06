@@ -30,6 +30,7 @@ let tests =
         ]
 
         testAllTargets "Rendering" [
+            Rendering.AdaptiveFramebufferCube.tests
             Rendering.Blending.tests
             Rendering.ColorMasks.tests
             Rendering.Culling.tests

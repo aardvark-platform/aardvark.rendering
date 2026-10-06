@@ -61,6 +61,7 @@
     <Compile Include="Tests\Texture\Download.fs" />
     <Compile Include="Tests\Texture\Compression.fs" />
     <Compile Include="Tests\Texture\DdsTexture.fs" />
+    <Compile Include="Tests\Rendering\AdaptiveFramebufferCube.fs" />
     <Compile Include="Tests\Rendering\Tasks.fs" />
     <Compile Include="Tests\Rendering\Culling.fs" />
     <Compile Include="Tests\Rendering\ColorMasks.fs" />
