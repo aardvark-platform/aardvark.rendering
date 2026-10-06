@@ -1,3 +1,5 @@
+- Fixed adaptive buffer resize failures to dispose uncommitted handles, retain previous storage, and retry changed sizes after failed immediate materialization.
+
 ### 5.6.10
 - Fixed adaptive texture-attachment size metadata to track the selected mip level and texture changes rather than reporting the base-level extent.
 - Fixed geometry unions to concatenate only live per-vertex attribute prefixes, preventing trailing padding from becoming another operand's vertex data.
