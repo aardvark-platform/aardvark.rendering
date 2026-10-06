@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Generic
+open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
@@ -452,11 +453,13 @@ module IndexedGeometryPrimitives =
                 
     module Sphere =
 
-        module private Impl = 
+        module private Impl =
             let subdivisionWithMode (sphere : Sphere3d) level (color : C4b) (mode : IndexedGeometryMode) =
                 let center = sphere.Center
                 let radius = sphere.Radius
-                let unitSphere = SgPrimitives.Primitives.unitSphere level
+                let unitSphere =
+                    if mode = IndexedGeometryMode.LineList then SgPrimitives.Sphere.Wire.get level
+                    else SgPrimitives.Primitives.unitSphere level
                 let pos = unitSphere.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]
                 let scl = Trafo3d.Scale radius
                 let tr = Trafo3d.Translation center
@@ -608,6 +611,9 @@ module IndexedGeometryPrimitives =
         let solidPhiThetaSphere (sphere : Sphere3d) (level:int) (color:C4b)  =
             phiThetaWithMode sphere level color IndexedGeometryMode.TriangleList
 
+        /// Creates a wireframe sphere with the supplied center, radius, and color.
+        /// Level zero uses a cube mesh projected onto the sphere; higher levels recursively subdivide its triangles.
+        /// Each undirected mesh edge becomes one line segment.
         let wireframeSubdivisionSphere (sphere : Sphere3d) level (color : C4b) =
             subdivisionWithMode sphere level color IndexedGeometryMode.LineList
 
@@ -622,6 +628,9 @@ module IndexedGeometryPrimitives =
     /// Creates a solid phi/theta sphere. Levels below three use level three; all latitude rings lie between the two explicit poles.
     let solidPhiThetaSphere = solidPhiThetaSphere
 
+    /// Creates a wireframe sphere with the supplied center, radius, and color.
+    /// Level zero uses a cube mesh projected onto the sphere; higher levels recursively subdivide its triangles.
+    /// Each undirected mesh edge becomes one line segment.
     let wireframeSubdivisionSphere = wireframeSubdivisionSphere
 
     let solidSubdivisionSphere = solidSubdivisionSphere
