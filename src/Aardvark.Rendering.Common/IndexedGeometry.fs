@@ -191,6 +191,28 @@ module private ArrayHelpers =
                 }
             )
 
+    let concatPrefix (aCount : int) (bCount : int) (a : Array) (b : Array) =
+        if isNull a then b
+        elif isNull b then a
+        else
+            a.Visit (
+                { new ArrayVisitor<Array>() with
+                    member _.Run(a : 'T[]) =
+                        b.Visit (
+                            { new ArrayVisitor<Array>() with
+                                member _.Run(b : 'U[]) =
+                                    if typeof<'T> <> typeof<'U> then
+                                        raise <| ArgumentException($"Array element types must match to be concatenated (got {typeof<'T>} and {typeof<'U>}).")
+                                    else
+                                        let result = Array.zeroCreate<'T> (aCount + bCount)
+                                        Array.Copy(a, 0, result, 0, aCount)
+                                        Array.Copy(b, 0, result, aCount, bCount)
+                                        result :> Array
+                            }
+                        )
+                }
+            )
+
 
 type IndexedGeometryMode =
     | PointList = 0
@@ -387,6 +409,8 @@ type IndexedGeometry =
 
         /// Returns a union of the geometry with another.
         /// The geometries must have the same attributes and primitive topology.
+        /// Paired non-null per-vertex attributes concatenate only each geometry's VertexCount-length
+        /// prefix, ignoring extra trailing entries. Source arrays and dictionaries remain unchanged.
         member x.Union(y : IndexedGeometry) =
             if x.Mode <> y.Mode then
                 raise <| ArgumentException("IndexedGeometryMode must match.")
@@ -446,12 +470,14 @@ type IndexedGeometry =
                     elif isNull y.IndexedAttributes then x.IndexedAttributes.CopyOrNull()
                     else
                         let r = SymbolDict<Array>()
+                        let xCount = x.VertexCount
+                        let yCount = y.VertexCount
 
                         for KeyValue(sem, a) in x.IndexedAttributes do
                             match y.IndexedAttributes.TryGetValue(sem) with
                             | (true, b) ->
                                 try
-                                    r.[sem] <- ArrayHelpers.concat a b
+                                    r.[sem] <- ArrayHelpers.concatPrefix xCount yCount a b
                                 with
                                 | exn ->
                                     raise <| ArgumentException($"Invalid {sem} attributes: {exn.Message}")
@@ -534,6 +560,8 @@ module IndexedGeometry =
     /// The source geometry remains unchanged. If the topology is not a strip, the geometry is returned unmodified.
     let inline toNonStripped (g : IndexedGeometry) = g.ToNonStripped()
 
-    /// Returns a union of two geometries with another.
+    /// Returns a union of two geometries.
     /// The geometries must have the same attributes and primitive topology.
+    /// Paired non-null per-vertex attributes concatenate only each geometry's VertexCount-length prefix;
+    /// extra trailing entries are ignored and source arrays and dictionaries remain unchanged.
     let inline union (a : IndexedGeometry) (b : IndexedGeometry) = a.Union b

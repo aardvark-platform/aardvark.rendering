@@ -77,6 +77,230 @@ module Operations =
         let nonIndexedAndInt16 = nonIndexedAndIndexed int16
         let nonIndexedAndInt32 = nonIndexedAndIndexed int32
 
+    module private UnionPrefixes =
+
+        let private modes =
+            [ IndexedGeometryMode.PointList, 1
+              IndexedGeometryMode.LineList, 2
+              IndexedGeometryMode.TriangleList, 3
+              IndexedGeometryMode.QuadList, 4 ]
+
+        let private indexTypes : (string * Type * (int[] -> Array)) list =
+            [ "int16",  typeof<int16>,  fun values -> Array.map int16 values :> Array
+              "uint16", typeof<uint16>, fun values -> Array.map uint16 values :> Array
+              "int32",  typeof<int32>,  fun values -> Array.map int32 values :> Array
+              "uint32", typeof<uint32>, fun values -> Array.map uint32 values :> Array ]
+
+        let private scalar = Symbol.Create "Union scalar"
+        let private integer = Symbol.Create "Union integer"
+        let private label = Symbol.Create "Union label"
+        let private values (array : Array) = Array.init array.Length array.GetValue
+
+        let private create mode count padding seed indexed convert =
+            let live i = seed + i
+            let token i = if i < count then live i else -seed - i
+            let attributes = SymbolDict<Array>()
+            attributes.[DefaultSemantic.Positions] <- Array.init count (fun i -> V3f(float32 (live i), float32 i, 1.0f))
+            attributes.[DefaultSemantic.Normals] <- Array.init (count + padding) (fun i -> V3f(float32 (token i), 2.0f, 3.0f))
+            attributes.[DefaultSemantic.Colors] <- Array.init (count + padding) (fun i -> C4b(byte (abs (token i) % 251), 17uy, 31uy, 255uy))
+            attributes.[DefaultSemantic.DiffuseColorCoordinates] <- Array.init (count + padding) (fun i -> V2d(float (token i), 0.5))
+            attributes.[scalar] <- Array.init (count + padding) (fun i -> float (token i) + 0.25)
+            attributes.[integer] <- Array.init (count + padding) token
+            attributes.[label] <- Array.init (count + padding) (fun i -> $"vertex {token i}")
+            let indices =
+                if indexed then
+                    // Repeated and reordered vertices prevent a raw-prefix-only oracle from hiding bad remapping.
+                    Array.init count (fun i -> if i % 3 = 0 then count - 1 else i - 1) |> convert
+                else null
+            let singles = SymbolDict<obj>()
+            singles.[DefaultSemantic.Material] <- "same material"
+            IndexedGeometry(mode, indices, attributes, singles)
+
+        let private snapshot (source : IndexedGeometry) context =
+            let mode, indices = source.Mode, source.IndexArray
+            let indexValues = if isNull indices then [||] else values indices
+            let attributes, singles = source.IndexedAttributes, source.SingleAttributes
+            let arrays = [| for KeyValue(semantic, array) in attributes -> semantic, array, values array |]
+            let singleValues = [| for KeyValue(semantic, value) in singles -> semantic, value |]
+            fun () ->
+                Expect.equal source.Mode mode $"{context}: source topology"
+                Expect.isTrue (Object.ReferenceEquals(indices, source.IndexArray)) $"{context}: source index identity"
+                if not (isNull indices) then Expect.equal (values indices) indexValues $"{context}: source index contents"
+                Expect.isTrue (Object.ReferenceEquals(attributes, source.IndexedAttributes)) $"{context}: source attribute dictionary identity"
+                Expect.equal attributes.Count arrays.Length $"{context}: source attribute keys"
+                for semantic, array, original in arrays do
+                    Expect.isTrue (Object.ReferenceEquals(array, attributes.[semantic])) $"{context}: source {semantic} array identity"
+                    Expect.equal (values array) original $"{context}: source {semantic} contents including padding"
+                Expect.isTrue (Object.ReferenceEquals(singles, source.SingleAttributes)) $"{context}: source single dictionary identity"
+                Expect.equal singles.Count singleValues.Length $"{context}: source single keys"
+                for semantic, value in singleValues do Expect.equal singles.[semantic] value $"{context}: source single {semantic}"
+
+        let private union context (a : IndexedGeometry) (b : IndexedGeometry) =
+            try a.Union b
+            with error -> failtestf "%s: %O" context error
+
+        let private verify context indexType (sources : IndexedGeometry[]) (result : IndexedGeometry) =
+            let count = sources |> Array.sumBy (fun source -> source.VertexCount)
+            let indexed = sources |> Array.exists (fun source -> source.IsIndexed)
+            let mutable offset = 0
+            let expectedIndices =
+                [| for source in sources do
+                       for i in 0 .. source.FaceVertexCount - 1 do
+                           let index = if source.IsIndexed then Convert.ToInt32(source.IndexArray.GetValue i) else i
+                           yield offset + index
+                       offset <- offset + source.VertexCount |]
+            Expect.equal result.Mode sources.[0].Mode $"{context}: topology"
+            Expect.equal result.VertexCount count $"{context}: live vertex count"
+            Expect.equal result.FaceVertexCount expectedIndices.Length $"{context}: face vertex count"
+            Expect.equal result.IsIndexed indexed $"{context}: indexed state"
+            Expect.isTrue result.IsValid $"{context}: valid union"
+            if indexed then
+                Expect.equal (result.IndexArray.GetType().GetElementType()) indexType $"{context}: index element type"
+                Expect.equal (values result.IndexArray |> Array.map Convert.ToInt32) expectedIndices $"{context}: indices and operand offsets"
+            else Expect.isNull result.IndexArray $"{context}: non-indexed union"
+            Expect.equal result.IndexedAttributes.Count sources.[0].IndexedAttributes.Count $"{context}: attribute keys"
+            let expanded = result.ToNonIndexed()
+            Expect.isNull expanded.IndexArray $"{context}: expanded indices"
+            Expect.equal expanded.VertexCount expectedIndices.Length $"{context}: expanded vertex count"
+            for KeyValue(semantic, first) in sources.[0].IndexedAttributes do
+                let expected =
+                    [| for source in sources do
+                           let array = source.IndexedAttributes.[semantic]
+                           for i in 0 .. source.VertexCount - 1 do yield array.GetValue i |]
+                let actual = result.IndexedAttributes.[semantic]
+                // Inspect effective values before lengths so left-padding failures reveal wrong vertex data.
+                Expect.equal (values expanded.IndexedAttributes.[semantic]) (expectedIndices |> Array.map (fun i -> expected.[i])) $"{context}: expanded {semantic} values"
+                Expect.equal actual.Length count $"{context}: {semantic} contains exactly the live prefixes"
+                Expect.equal (actual.GetType()) (first.GetType()) $"{context}: {semantic} element type"
+                Expect.equal (values actual) expected $"{context}: {semantic} raw live values"
+                for source in sources do
+                    Expect.isFalse (Object.ReferenceEquals(actual, source.IndexedAttributes.[semantic])) $"{context}: {semantic} result must not alias source arrays"
+                    Expect.isFalse (Object.ReferenceEquals(result.IndexedAttributes, source.IndexedAttributes)) $"{context}: independent result dictionary"
+            Expect.equal result.SingleAttributes.[DefaultSemantic.Material] (box "same material") $"{context}: single attribute"
+
+        let padded() =
+            for mode, arity in modes do
+                for leftIndexed, rightIndexed in [false, false; true, true; false, true; true, false] do
+                    for name, indexType, convert in indexTypes do
+                        if leftIndexed || rightIndexed || name = "int32" then
+                            for leftCount, rightCount in [2 * arity, 3 * arity; 0, 2 * arity; 2 * arity, 0; 0, 0] do
+                                for leftPadding, rightPadding in [2, 0; 0, 3; 2, 3] do
+                                    let context = $"{mode}, {name}, indexed={leftIndexed}/{rightIndexed}, counts={leftCount}/{rightCount}, padding={leftPadding}/{rightPadding}"
+                                    let left = create mode leftCount leftPadding 100 leftIndexed convert
+                                    let right = create mode rightCount rightPadding 200 rightIndexed convert
+                                    Expect.isTrue (left.IsValid && right.IsValid) $"{context}: fixtures are valid"
+                                    let checkLeft, checkRight = snapshot left context, snapshot right context
+                                    verify context indexType [| left; right |] (union context left right)
+                                    checkLeft(); checkRight()
+
+        let chained() =
+            for mode, arity in modes do
+                for indexed in [[| false; false; false |]; [| true; true; true |]; [| true; false; true |]; [| false; true; false |]] do
+                    for name, indexType, convert in indexTypes do
+                        if Array.exists id indexed || name = "int32" then
+                            let pattern = indexed |> Array.map string |> String.concat "/"
+                            let context = $"{mode}, {name}, chained indexed={pattern}"
+                            let sources = Array.init 3 (fun i -> create mode ((i + 1) * arity) (i + 1) (100 * (i + 1)) indexed.[i] convert)
+                            let checks = sources |> Array.map (fun source -> snapshot source context)
+                            let first = union context sources.[0] sources.[1]
+                            verify context indexType sources.[0..1] first
+                            let checkFirst = snapshot first context
+                            let result = union context first sources.[2]
+                            verify context indexType sources result
+                            let rightFirst = union context sources.[1] sources.[2]
+                            verify context indexType sources.[1..2] rightFirst
+                            verify context indexType sources (union context sources.[0] rightFirst)
+                            checkFirst()
+                            for check in checks do check()
+
+        let emptyAndExact() =
+            for mode, arity in modes do
+                for leftIndexed, rightIndexed in [false, false; true, true; false, true; true, false] do
+                    for name, indexType, convert in indexTypes do
+                        if leftIndexed || rightIndexed || name = "int32" then
+                            for leftCount, rightCount in [0, 0; 0, 2 * arity; 2 * arity, 0; 2 * arity, 3 * arity] do
+                                let context = $"{mode}, {name}, exact indexed={leftIndexed}/{rightIndexed}, counts={leftCount}/{rightCount}"
+                                let left = create mode leftCount 0 100 leftIndexed convert
+                                let right = create mode rightCount 0 200 rightIndexed convert
+                                let checkLeft, checkRight = snapshot left context, snapshot right context
+                                verify context indexType [| left; right |] (union context left right)
+                                checkLeft(); checkRight()
+
+        let dictionaryAndSingleControls() =
+            let convert values = Array.map int32 values :> Array
+            for nullLeft, nullRight in [false, false; true, false; false, true; true, true] do
+                let context = $"null dictionaries={nullLeft}/{nullRight}"
+                let left = create IndexedGeometryMode.PointList 2 0 100 false convert
+                let right = create IndexedGeometryMode.PointList 3 0 200 false convert
+                if nullLeft then left.IndexedAttributes <- null; left.SingleAttributes <- null
+                if nullRight then right.IndexedAttributes <- null; right.SingleAttributes <- null
+                let result = union context left right
+                if nullLeft && nullRight then
+                    Expect.isNull result.IndexedAttributes $"{context}: null attributes remain null"
+                    Expect.isNull result.SingleAttributes $"{context}: null singles remain null"
+                elif nullLeft || nullRight then
+                    let source = if nullLeft then right else left
+                    Expect.isFalse (Object.ReferenceEquals(result.IndexedAttributes, source.IndexedAttributes)) $"{context}: shallow dictionary copy"
+                    Expect.isFalse (Object.ReferenceEquals(result.SingleAttributes, source.SingleAttributes)) $"{context}: single dictionary copy"
+                    for KeyValue(semantic, array) in source.IndexedAttributes do
+                        Expect.isTrue (Object.ReferenceEquals(result.IndexedAttributes.[semantic], array)) $"{context}: passthrough array {semantic}"
+                    Expect.equal result.SingleAttributes.[DefaultSemantic.Material] source.SingleAttributes.[DefaultSemantic.Material] $"{context}: passthrough single"
+                else verify context typeof<int32> [| left; right |] result
+
+            for missingLeft in [false; true] do
+                let context = $"missing attributes left={missingLeft}"
+                let left = create IndexedGeometryMode.PointList 2 0 100 false convert
+                let right = create IndexedGeometryMode.PointList 3 0 200 false convert
+                (if missingLeft then left else right).IndexedAttributes.Remove scalar |> ignore
+                let uniqueLeft, uniqueRight = Symbol.Create "Left single", Symbol.Create "Right single"
+                left.SingleAttributes.[uniqueLeft] <- 17
+                right.SingleAttributes.[uniqueRight] <- 29
+                let result = union context left right
+                Expect.isFalse (result.IndexedAttributes.ContainsKey scalar) $"{context}: only paired indexed attributes are retained"
+                Expect.equal result.SingleAttributes.Count 3 $"{context}: single attributes retain union semantics"
+                Expect.equal result.SingleAttributes.[uniqueLeft] (box 17) $"{context}: left single"
+                Expect.equal result.SingleAttributes.[uniqueRight] (box 29) $"{context}: right single"
+            for nullLeft in [false; true] do
+                let context = $"null array left={nullLeft}"
+                let a = create IndexedGeometryMode.PointList 2 0 100 false convert
+                let b = create IndexedGeometryMode.PointList 3 0 200 false convert
+                (if nullLeft then a else b).IndexedAttributes.[scalar] <- null
+                let source = if nullLeft then b else a
+                let joined = union context a b
+                Expect.isTrue (Object.ReferenceEquals(joined.IndexedAttributes.[scalar], source.IndexedAttributes.[scalar])) $"{context}: null-array passthrough"
+
+        let errorControls() =
+            let convert values = Array.map int32 values :> Array
+            let make() = create IndexedGeometryMode.PointList 2 0 100 false convert
+            let argument context expected action =
+                let error =
+                    try
+                        action()
+                        failtestf "%s: expected ArgumentException" context
+                    with :? ArgumentException as error -> error
+                Expect.equal error.Message expected $"{context}: diagnostic"
+                Expect.isNull error.InnerException $"{context}: unchanged wrapping"
+            let left, right = make(), make()
+            right.IndexedAttributes.[scalar] <- [| 1; 2 |]
+            argument "attribute element types" $"Invalid {scalar} attributes: Array element types must match to be concatenated (got {typeof<double>} and {typeof<int>})." (fun () -> left.Union right |> ignore)
+            right.IndexedAttributes.[scalar] <- [| 1.0; 2.0 |]
+            right.SingleAttributes.[DefaultSemantic.Material] <- "different material"
+            argument "conflicting single" $"Conflicting single value attribute {DefaultSemantic.Material}." (fun () -> left.Union right |> ignore)
+            right.SingleAttributes.[DefaultSemantic.Material] <- "same material"
+            left.IndexArray <- [| 0s; 1s |]
+            right.IndexArray <- [| 0us; 1us |]
+            argument "index element types" $"Invalid indices: Array element types must match to be concatenated (got {typeof<int16>} and {typeof<uint16>})." (fun () -> left.Union right |> ignore)
+            left.IndexArray <- [| 0uy; 1uy |]
+            right.IndexArray <- [| 0uy; 1uy |]
+            argument "unsupported index type" $"Invalid indices: Unsupported index type {typeof<byte>}." (fun () -> left.Union right |> ignore)
+            left.IndexArray <- null; right.IndexArray <- null
+            right.Mode <- IndexedGeometryMode.LineList
+            argument "different topology" "IndexedGeometryMode must match." (fun () -> left.Union right |> ignore)
+            for mode in [IndexedGeometryMode.LineStrip; IndexedGeometryMode.TriangleStrip; IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.TriangleAdjacencyList] do
+                left.Mode <- mode; right.Mode <- mode
+                let accepted = [IndexedGeometryMode.PointList; IndexedGeometryMode.LineList; IndexedGeometryMode.TriangleList; IndexedGeometryMode.QuadList]
+                argument $"unsupported {mode}" $"IndexedGeometryMode must be one of {accepted}." (fun () -> left.Union right |> ignore)
+
     module StripConversion =
 
         let private stripModes =
@@ -274,6 +498,12 @@ module Operations =
             "Union.non-indexed",                 Union.nonIndexed
             "Union.non-indexed & int16-indexed", Union.nonIndexedAndInt16
             "Union.non-indexed & int32-indexed", Union.nonIndexedAndInt32
+
+            "Union.Padded live attribute prefixes",        UnionPrefixes.padded
+            "Union.Chained live attribute prefixes",       UnionPrefixes.chained
+            "Union.Empty and exact-length attributes",     UnionPrefixes.emptyAndExact
+            "Union.Dictionary and single-value controls",  UnionPrefixes.dictionaryAndSingleControls
+            "Union.Type and topology error controls",      UnionPrefixes.errorControls
 
             "Strip conversion.Indexed conversion",               StripConversion.indexedConversion
             "Strip conversion.Non-indexed conversion",           StripConversion.nonIndexedConversion
