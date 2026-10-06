@@ -1,3 +1,4 @@
+- Fixed adaptive texture-attachment size metadata to track the selected mip level and texture changes rather than reporting the base-level extent.
 - Fixed geometry unions to concatenate only live per-vertex attribute prefixes, preventing trailing padding from becoming another operand's vertex data.
 - Made chunked-memory frees idempotent under contention, preventing duplicate waiters from retiring backing chunks that still contain live allocations.
 - Fixed struct-uniform property getters to use value-type addresses without boxing, while preserving reference getter dispatch and field access.
