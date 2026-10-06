@@ -2,6 +2,7 @@
 
 
 open System
+open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering
 
@@ -88,6 +89,38 @@ module SgPrimitives =
 
             geometry
 
+        let private wireSphereGeometry (geometry : IndexedGeometry) =
+            let positions = geometry.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]
+            let normals = geometry.IndexedAttributes.[DefaultSemantic.Normals] :?> V3f[]
+            let coords = geometry.IndexedAttributes.[DefaultSemantic.DiffuseColorCoordinates] :?> V2f[]
+            let seen = System.Collections.Generic.HashSet<struct (V3f * V3f)>()
+            let endpoints = ResizeArray<int>(positions.Length)
+
+            let addEdge a b =
+                let p0, p1 = positions.[a], positions.[b]
+                let forward =
+                    p0.X < p1.X || (p0.X = p1.X && (p0.Y < p1.Y || (p0.Y = p1.Y && p0.Z < p1.Z)))
+                let edge = if forward then struct (p0, p1) else struct (p1, p0)
+                if seen.Add edge then
+                    endpoints.Add a
+                    endpoints.Add b
+
+            for i in 0 .. 3 .. positions.Length - 1 do
+                addEdge i (i + 1)
+                addEdge (i + 1) (i + 2)
+                addEdge (i + 2) i
+
+            let remap (values : 'T[]) = Array.init endpoints.Count (fun i -> values.[endpoints.[i]])
+
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.LineList,
+                IndexedAttributes = SymDict.ofList [
+                    DefaultSemantic.Positions, remap positions :> Array
+                    DefaultSemantic.Normals, remap normals :> Array
+                    DefaultSemantic.DiffuseColorCoordinates, remap coords :> Array
+                ],
+                SingleAttributes = geometry.SingleAttributes
+            )
 
         let private spheres =
             Seq.initInfinite id
@@ -97,11 +130,6 @@ module SgPrimitives =
 
 
         let rec private sphere =
-//            seq {
-//                yield cube
-//                yield! sphere |> Seq.map subdivide
-//            } |> Seq.cache
-
             Seq.initInfinite id
                 |> Seq.scan (fun last _ -> subdivide last) cube
                 |> Seq.map sphereGeometry
@@ -115,6 +143,16 @@ module SgPrimitives =
 
         let getSg (level : int) =
             sgs |> Seq.item level
+
+        module Wire =
+            let private spheres = ConcurrentDictionary<int, Lazy<IndexedGeometry>>()
+            let private sgs = ConcurrentDictionary<int, Lazy<ISg>>()
+
+            let get (level : int) : IndexedGeometry =
+                spheres.GetOrAdd(level, fun level -> lazy (wireSphereGeometry <| get level)).Value
+
+            let getSg (level : int) : ISg =
+                sgs.GetOrAdd(level, fun level -> lazy (Sg.ofIndexedGeometry <| get level)).Value
 
     module private Cylinder =
         
@@ -563,6 +601,25 @@ module SgPrimitives =
         /// creates a subdivision sphere, where level is the subdivision level
         let sphere' (level : int) (color : C4b) (radius : float) =
             sphere level (AVal.constant color) (AVal.constant radius)
+
+        /// creates a subdivision sphere, where level is the subdivision level
+        let unitWireSphere (level : int) (color : aval<C4b>) =
+            Sphere.Wire.getSg level
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> AVal.map C4f)
+
+        /// creates a subdivision sphere, where level is the subdivision level
+        let wireSphere (level : int) (color : aval<C4b>) (radius : aval<float>)  =
+            Sphere.Wire.getSg level
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> AVal.map C4f)
+                |> Sg.trafo (radius |> AVal.map Trafo3d.Scale)
+
+        /// creates a subdivision sphere, where level is the subdivision level
+        let unitWireSphere' (level : int) (color : C4b) =
+            unitWireSphere level (AVal.constant color)
+
+        /// creates a subdivision sphere, where level is the subdivision level
+        let wireSphere' (level : int) (color : C4b) (radius : float) =
+            wireSphere level (AVal.constant color) (AVal.constant radius)
 
         let cylinder (tess : int) (color : aval<C4b>) (radius : aval<float>) (height : aval<float>) =
             let trafo = AVal.map2 (fun r h -> Trafo3d.Scale(r,r,h)) radius height
