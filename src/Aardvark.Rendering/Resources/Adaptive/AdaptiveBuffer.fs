@@ -27,6 +27,7 @@ type IAdaptiveBuffer =
     /// </summary>
     /// <param name="sizeInBytes">The new size in bytes.</param>
     /// <param name="forceImmediate">Indicates if the buffer is resized immediately or lazily.</param>
+    /// <remarks>A failed immediate resize retains the requested size; the next resource evaluation retries materialization.</remarks>
     abstract member Resize : sizeInBytes: uint64 *
                              [<Optional; DefaultParameterValue(false)>] forceImmediate: bool -> unit
 
@@ -169,17 +170,25 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : uint64,
         match handle with
         | ValueNone ->
             let h = x.CreateHandle(size, usage, storage)
-            h.Name <- name
+            try
+                h.Name <- name
+            with _ ->
+                h.Dispose()
+                reraise()
             handle <- ValueSome h
             h
 
         | ValueSome old ->
             if old.SizeInBytes <> size then
                 let resized = x.CreateHandle(size, usage, storage)
-                resized.Name <- name
+                try
+                    resized.Name <- name
 
-                if not discard then
-                    runtime.Copy(old, 0UL, resized, 0UL, min old.SizeInBytes size)
+                    if not discard then
+                        runtime.Copy(old, 0UL, resized, 0UL, min old.SizeInBytes size)
+                with _ ->
+                    resized.Dispose()
+                    reraise()
 
                 runtime.DeleteBuffer(old)
                 handle <- ValueSome resized
@@ -203,15 +212,17 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : uint64,
     /// </summary>
     /// <param name="sizeInBytes">The new size in bytes.</param>
     /// <param name="forceImmediate">Indicates if the buffer is resized immediately or lazily.</param>
+    /// <remarks>A failed immediate resize retains the requested size; the next resource evaluation retries materialization.</remarks>
     member x.Resize(sizeInBytes : uint64, [<Optional; DefaultParameterValue(false)>] forceImmediate : bool) =
         lock x (fun _ ->
             if sizeInBytes <> x.Size then
                 size <- sizeInBytes
 
-                if forceImmediate then
-                    x.ComputeHandle(discardOnResize) |> ignore
-
-                transact x.MarkOutdated
+                try
+                    if forceImmediate then
+                        x.ComputeHandle(discardOnResize) |> ignore
+                finally
+                    transact x.MarkOutdated
         )
 
     /// <summary>
