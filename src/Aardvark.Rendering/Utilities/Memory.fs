@@ -533,42 +533,43 @@ module Management =
         member x.Free(b : Block<'a>) =
             if not b.IsFree then
                 lock free (fun () ->
-                    let old = b
+                    if not b.IsFree then
+                        let old = b
 
-                    let b = Block(x, b.Memory, b.Offset, b.Size, b.IsFree, b.Prev, b.Next)
-                    if not (isNull b.Prev) then b.Prev.Next <- b
+                        let b = Block(x, b.Memory, b.Offset, b.Size, b.IsFree, b.Prev, b.Next)
+                        if not (isNull b.Prev) then b.Prev.Next <- b
 
-                    if not (isNull b.Next) then b.Next.Prev <- b
+                        if not (isNull b.Next) then b.Next.Prev <- b
 
-                    old.Next <- null
-                    old.Prev <- null
-                    old.IsFree <- true
-                    old.Offset <- -1n
-                    old.Size <- 0n
-
-
-                    let prev = b.Prev
-                    let next = b.Next
-                    if not (isNull prev) && prev.IsFree then
-                        free.Remove(prev) |> ignore
-
-                        b.Prev <- prev.Prev
-                        if not (isNull prev.Prev) then prev.Prev.Next <- b
-
-                        b.Offset <- prev.Offset
-                        b.Size <- b.Size + prev.Size
-
-                    if not (isNull next) && next.IsFree then
-                        free.Remove(next) |> ignore
-                        b.Next <- next.Next
-                        if not (isNull next.Next) then next.Next.Prev <- b
-                        b.Next <- next.Next
-
-                        b.Size <- b.Size + next.Size
+                        old.Next <- null
+                        old.Prev <- null
+                        old.IsFree <- true
+                        old.Offset <- -1n
+                        old.Size <- 0n
 
 
-                    b.IsFree <- true
-                    freed(b)
+                        let prev = b.Prev
+                        let next = b.Next
+                        if not (isNull prev) && prev.IsFree then
+                            free.Remove(prev) |> ignore
+
+                            b.Prev <- prev.Prev
+                            if not (isNull prev.Prev) then prev.Prev.Next <- b
+
+                            b.Offset <- prev.Offset
+                            b.Size <- b.Size + prev.Size
+
+                        if not (isNull next) && next.IsFree then
+                            free.Remove(next) |> ignore
+                            b.Next <- next.Next
+                            if not (isNull next.Next) then next.Next.Prev <- b
+                            b.Next <- next.Next
+
+                            b.Size <- b.Size + next.Size
+
+
+                        b.IsFree <- true
+                        freed(b)
 
                 )
 
