@@ -76,7 +76,11 @@ module private AdaptiveFramebufferTypes =
     type AdaptiveFramebufferCube(runtime : IFramebufferRuntime, signature : IFramebufferSignature, attachments : CubeMap<Map<Symbol, aval<IFramebufferOutput>>>) =
         inherit AdaptiveResource<CubeMap<IFramebuffer>>()
 
-        let mutable handles : CubeMap<IFramebuffer * Map<Symbol, IFramebufferOutput>> = CubeMap.empty
+        // Initial materialization publishes each slot only after creation succeeds.
+        // Failures retain completed slots and leave missing slots retryable; a cube
+        // is returned only after all slots succeed. Final destruction skips missing
+        // slots and resets storage for reacquisition.
+        let mutable handles : CubeMap<ValueOption<struct (IFramebuffer * Map<Symbol, IFramebufferOutput>)>> = CubeMap.empty
 
         let inputs =
             attachments
@@ -90,7 +94,7 @@ module private AdaptiveFramebufferTypes =
 
         let create face level signature att =
             let fbo = runtime.CreateFramebuffer(signature, att)
-            handles.[face, level] <- (fbo, att)
+            handles.[face, level] <- ValueSome(struct (fbo, att))
             fbo
 
         override x.Create() =
@@ -99,29 +103,27 @@ module private AdaptiveFramebufferTypes =
         override x.Destroy() =
             for att in inputs do att.Release()
 
-            for (fbo, _) in handles do
-                fbo.Dispose()
+            for handle in handles do
+                match handle with
+                | ValueSome(struct (fbo, _)) -> fbo.Dispose()
+                | ValueNone -> ()
 
             handles <- CubeMap.empty
 
         override x.Compute(t : AdaptiveToken, rt : RenderToken) =
-
-            let empty =
-                if handles.IsEmpty then
-                    handles <- CubeMap(attachments.Levels)
-                    true
-                else
-                    false
+            if handles.IsEmpty then
+                handles <- CubeMap(attachments.Levels)
 
             attachments |> CubeMap.mapi (fun face level attachments ->
                 let att =
                     attachments |> Map.map (fun _ att -> att.GetValue(t, rt))
 
-                if empty then
+                match handles.[face, level] with
+                | ValueNone ->
                     rt.CreatedResource(ResourceKind.Framebuffer)
                     create face level signature att
-                else
-                    let (h, att') = handles.[face, level]
+
+                | ValueSome(struct (h, att')) ->
                     if compare att att' then
                         h
                     else

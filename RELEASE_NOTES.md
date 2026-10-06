@@ -1,4 +1,5 @@
 - Fixed adaptive buffer resize failures to dispose uncommitted handles, retain previous storage, and retry changed sizes after failed immediate materialization.
+- Fixed adaptive framebuffer cubes to retain completed face/mip handles after initial materialization failures, retry missing slots, and release partially created cubes safely.
 
 ### 5.6.10
 - Fixed adaptive texture-attachment size metadata to track the selected mip level and texture changes rather than reporting the base-level extent.
