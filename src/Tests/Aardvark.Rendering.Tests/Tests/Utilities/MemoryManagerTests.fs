@@ -1,6 +1,9 @@
 ﻿namespace Aardvark.Rendering.Tests.Utilities
 
 open System
+open System.Collections.Concurrent
+open System.Reflection
+open System.Threading
 open Aardvark.Rendering.Management
 open Aardvark.Rendering.Tests
 open Expecto
@@ -184,13 +187,16 @@ module MemoryManager =
                 Array.sub memory.Data (int offset) (int size)
             )
 
-        let private release (manager : ChunkedMemoryManager<BackingAllocation>) viaRealloc alignment block context =
-            if viaRealloc then manager.Realloc(block, alignment, 0n)
-            else manager.Free block
+        let private detached (block : Block<BackingAllocation>) context =
             Expect.isTrue block.IsFree $"{context}: released handle"
             Expect.equal (block.Offset, block.Size) (-1n, 0n) $"{context}: released range"
             Expect.isNull block.Prev $"{context}: detached predecessor"
             Expect.isNull block.Next $"{context}: detached successor"
+
+        let private release (manager : ChunkedMemoryManager<BackingAllocation>) viaRealloc alignment block context =
+            if viaRealloc then manager.Realloc(block, alignment, 0n)
+            else manager.Free block
+            detached block context
 
         let private balanced (manager : ChunkedMemoryManager<BackingAllocation>) allocations expectedCount context =
             Expect.equal manager.Capactiy 0n $"{context}: final freeing releases all capacity"
@@ -274,6 +280,156 @@ module MemoryManager =
                         keeper |> Option.iter manager.Free
                         balanced manager allocations 2 context
 
+        let private freeMonitor (manager : ChunkedMemoryManager<BackingAllocation>) =
+            // Synchronize on the real allocator monitor without exposing a production test hook.
+            typeof<ChunkedMemoryManager<BackingAllocation>>.GetFields(BindingFlags.Instance ||| BindingFlags.NonPublic)
+            |> Array.filter (fun field -> field.FieldType = typeof<FreeList<BackingAllocation>>)
+            |> Array.exactlyOne
+            |> fun field -> field.GetValue manager
+
+        let private freeUnderMonitor (manager : ChunkedMemoryManager<BackingAllocation>)
+                                     (blocks : Block<BackingAllocation>[]) waitForMonitor owner context =
+            let gate = freeMonitor manager
+            let errors = ConcurrentQueue<exn>()
+            let ready = Array.zeroCreate<int> blocks.Length
+            let workers = blocks |> Array.mapi (fun index block ->
+                Thread(ThreadStart(fun () ->
+                    // No event waits or other blocking operations occur before Free.
+                    Volatile.Write(&ready.[index], 1)
+                    try manager.Free block
+                    with error -> errors.Enqueue error
+                ), IsBackground = true)
+            )
+            let started = ResizeArray<Thread>()
+            let timeout = TimeSpan.FromSeconds 10.0
+            let mutable drained = true
+            Monitor.Enter gate
+            try
+                for worker in workers do
+                    worker.Start()
+                    started.Add worker
+                if waitForMonitor then
+                    for index in 0 .. workers.Length - 1 do
+                        let worker = workers.[index]
+                        let blocked = SpinWait.SpinUntil((fun () ->
+                            Volatile.Read(&ready.[index]) = 1 &&
+                            (worker.ThreadState &&& ThreadState.WaitSleepJoin) <> enum<ThreadState> 0
+                        ), timeout)
+                        Expect.isTrue blocked $"{context}: worker {index} must pass the outer check and block on the free-list monitor"
+                    owner |> Option.iter manager.Free
+                else
+                    // Already-free callers must complete even while another thread holds the monitor.
+                    for index in 0 .. workers.Length - 1 do
+                        Expect.isTrue (workers.[index].Join timeout) $"{context}: duplicate {index} must retain the unlocked fast path"
+            finally
+                Monitor.Exit gate
+                for worker in started do
+                    if not (worker.Join timeout) then
+                        try worker.Interrupt() with :? ThreadStateException -> ()
+                        drained <- worker.Join(TimeSpan.FromSeconds 2.0) && drained
+            Expect.isTrue drained $"{context}: all workers must finish within the timeout"
+            errors.ToArray()
+
+        let private noFreeErrors (errors : exn[]) context =
+            if errors.Length > 0 then failtestf "%s: Free must complete without exceptions: %A" context errors
+
+        let private competingFree manager block context =
+            freeUnderMonitor manager [| block; block |] true (Some block) context
+
+        let private duplicateFree (manager : ChunkedMemoryManager<BackingAllocation>) block context =
+            manager.Free block
+            for _ in 1 .. 8 do manager.Free block
+            freeUnderMonitor manager [| block; block |] false None context
+
+        let private isolatedFree freeBlock chunkSize size context =
+            let memory, allocations = trackedMemory()
+            use manager = new ChunkedMemoryManager<_>(memory, chunkSize)
+            let block = manager.Alloc size
+            let reference = block.Memory
+            let storage = reference.Value
+            write manager block 0xB1uy
+            checkBlock manager block storage 0n size 1n context
+            let errors = freeBlock manager block context
+            noFreeErrors errors context
+            detached block context
+            same reference block.Memory $"{context}: old storage reference is retained"
+            Expect.equal storage.Frees 1 $"{context}: isolated backing is retired exactly once"
+            Expect.equal manager.Capactiy 0n $"{context}: isolated capacity is released"
+
+            let fresh = manager.Alloc chunkSize
+            Expect.isFalse (Object.ReferenceEquals(storage, fresh.Memory.Value)) $"{context}: released backing is not reused"
+            checkBlock manager fresh fresh.Memory.Value 0n chunkSize 1n context
+            Expect.equal manager.Capactiy chunkSize $"{context}: full range can be allocated again"
+            write manager fresh 0xD4uy
+            Expect.equal (read manager fresh) (Array.create (int chunkSize) 0xD4uy) $"{context}: fresh payload"
+            manager.Free fresh
+            balanced manager allocations 2 context
+
+        let private sharedFree freeBlock chunkSize position context =
+            let memory, allocations = trackedMemory()
+            use manager = new ChunkedMemoryManager<_>(memory, chunkSize)
+            let size = chunkSize / 4n
+            let blocks = Array.init 3 (fun _ -> manager.Alloc size)
+            let subject = blocks.[position]
+            let reference = subject.Memory
+            let storage = reference.Value
+            for index in 0 .. blocks.Length - 1 do
+                write manager blocks.[index] (byte (0xA0 + index))
+            let siblings = blocks |> Array.indexed |> Array.filter (fun (index, _) -> index <> position)
+            let checkSiblings() =
+                for index, block in siblings do
+                    let context = $"{context}, sibling={index}"
+                    checkBlock manager block storage (nativeint index * size) size 1n context
+                    Expect.equal (read manager block) (Array.create (int size) (byte (0xA0 + index))) $"{context}: intact sibling payload"
+            let errors = freeBlock manager subject context
+            Expect.equal storage.Frees 0 $"{context}: competing frees must not retire backing with live siblings"
+            noFreeErrors errors context
+            detached subject context
+            same reference subject.Memory $"{context}: released handle retains its storage reference"
+            Expect.equal manager.Capactiy chunkSize $"{context}: live chunk retains its capacity"
+            checkSiblings()
+
+            let reused = manager.Alloc size
+            same reference reused.Memory $"{context}: the freed range is reused in the same chunk"
+            checkBlock manager reused storage (nativeint position * size) size 1n context
+            Expect.equal manager.Capactiy chunkSize $"{context}: reusing the freed range needs no additional capacity"
+            write manager reused 0xD4uy
+            Expect.equal (read manager reused) (Array.create (int size) 0xD4uy) $"{context}: reused payload"
+            checkSiblings()
+            manager.Free reused
+            checkSiblings()
+            for _, block in siblings do manager.Free block
+            balanced manager allocations 1 context
+
+        let competingIsolatedFrees() =
+            for chunkSize in [16n; 64n; 256n] do
+                for size in [chunkSize / 4n; chunkSize] do
+                    isolatedFree competingFree chunkSize size $"competing isolated frees, chunk={chunkSize}, size={size}"
+
+        let competingSiblingFrees() =
+            for chunkSize in [16n; 64n; 256n] do
+                for position in [0; 1; 2] do
+                    sharedFree competingFree chunkSize position $"competing sibling frees, chunk={chunkSize}, position={position}"
+
+        let sequentialDuplicateFrees() =
+            for chunkSize in [16n; 64n; 256n] do
+                isolatedFree duplicateFree chunkSize (chunkSize / 4n) $"sequential isolated duplicates, chunk={chunkSize}"
+                for position in [0; 1; 2] do
+                    sharedFree duplicateFree chunkSize position $"sequential sibling duplicates, chunk={chunkSize}, position={position}"
+
+        let concurrentDistinctFrees() =
+            for chunkSize in [16n; 64n; 256n] do
+                let context = $"concurrent distinct frees, chunk={chunkSize}"
+                let memory, allocations = trackedMemory()
+                use manager = new ChunkedMemoryManager<_>(memory, chunkSize)
+                let blocks = Array.init 3 (fun _ -> manager.Alloc(chunkSize / 4n))
+                let storage = blocks.[0].Memory.Value
+                let errors = freeUnderMonitor manager blocks true None context
+                noFreeErrors errors context
+                for index, block in Array.indexed blocks do detached block $"{context}, block={index}"
+                Expect.equal storage.Frees 1 $"{context}: the final distinct free retires backing once"
+                balanced manager allocations 1 context
+
         let trackedActiveRealloc() =
             for alignment in [1n; 3n; 8n; 32n; 64n] do
                 let memory, allocations = trackedMemory()
@@ -309,5 +465,10 @@ module MemoryManager =
             "Chunked freed handles adopt fresh chunk storage",                    Cases.reviveFresh
             "Chunked freed handles adopt another live chunk's free space",        Cases.reviveShared
             "Chunked ordinary allocation and active reallocation retain storage", Cases.trackedActiveRealloc
+
+            "Chunked competing frees retire isolated backing once",        Cases.competingIsolatedFrees
+            "Chunked competing frees preserve live siblings",              Cases.competingSiblingFrees
+            "Chunked sequential duplicate frees retain the fast path",     Cases.sequentialDuplicateFrees
+            "Chunked concurrent distinct frees coalesce and retire once",  Cases.concurrentDistinctFrees
         ]
         |> prepareCasesCpu "MemoryManager" target
