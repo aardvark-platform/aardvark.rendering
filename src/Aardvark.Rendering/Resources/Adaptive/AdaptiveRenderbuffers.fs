@@ -81,7 +81,11 @@ module private AdaptiveRenderbufferTypes =
 
         let format = texture |> AVal.mapNonAdaptive _.Format
         let samples = texture |> AVal.mapNonAdaptive _.Samples
-        let size = texture |> AVal.mapNonAdaptive _.Size.XY
+        let size = AVal.custom (fun t ->
+            let texture = texture.GetValue t
+            let level = level.GetValue t
+            texture.GetSize(level).XY
+        )
 
         override x.Create() = texture.Acquire()
         override x.Destroy() = texture.Release()
