@@ -1,18 +1,16 @@
+### 5.6.10
 - Fixed adaptive texture-attachment size metadata to track the selected mip level and texture changes rather than reporting the base-level extent.
 - Fixed geometry unions to concatenate only live per-vertex attribute prefixes, preventing trailing padding from becoming another operand's vertex data.
-- Made chunked-memory frees idempotent under contention, preventing duplicate waiters from retiring backing chunks that still contain live allocations.
 - Fixed struct-uniform property getters to use value-type addresses without boxing, while preserving reference getter dispatch and field access.
 - Enforced overflow-safe logical bounds for buffer-range transfers and vector slices, including empty and reversed views.
-- [Application] Cancel held keyboard and mouse input on focus loss without generating click gestures or preserving double-click history.
 - Prevent signed-integer overflow from bypassing shared texture slice, mip-level, and window bounds validation ([#143](https://github.com/aardvark-platform/aardvark.rendering/issues/143)).
 - Fixed BC1/BC2/BC3 encoding to preserve color variation when the initial endpoint-estimation direction lies in the covariance matrix's nullspace.
+- Fixed BC2/BC3 decoding for ascending or equal RGB endpoints by always using the four-color palette.
+- Fixed BC volume layout and DDS mip payloads (#171)
 - Fixed adaptive texture and texture-array replacement failures to forget successfully disposed handles, preventing their reuse or repeated disposal during retries and release.
 - Fixed line and triangle strip conversion to preserve source geometries and handle empty or underfilled strips.
-- [Sg] Fixed automatic picking to honor `DrawCallInfo` ranges and indexed `BaseVertex` offsets.
-- [Sg] Made render-object bounding-box caching caller-scope aware, fixing reused render-object sets beneath distinct transforms while retaining weak, allocation-free cache hits.
 - Fixed orthographic picking to use parallel unit rays from pixel positions on the near plane rather than the camera location.
 - Fixed `BufferView.getCount` and automatic draw counts to honor byte strides, count only complete elements, and return zero for exhausted storage.
-- Fixed BC2/BC3 decoding for ascending or equal RGB endpoints by always using the four-color palette.
 - Fixed `Task.bind` to complete when its mapping function throws synchronously or returns a null task.
 - Made `ManagedBuffer` range filling overflow-safe.
 - Fixed `Trie` preorder links for prefix and sibling updates, while preserving comparer and insertion ordering. Replaced, removed, and cleared `Trie` values are now detached cleanly from their trie-owned links.
@@ -21,15 +19,18 @@
 - Fixed `Arr` uniform writes to truncate surplus values, zero-fill missing target storage, and remain within shader-array bounds.
 - Fixed phi/theta sphere tessellation to keep latitude rings between the explicit poles, eliminating degenerate triangles and zero-length wire segments without changing output counts.
 - Fixed `ChunkedMemoryManager` reallocation of freed handles to adopt replacement backing storage while preserving the caller's block identity.
+- Made `ChunkedMemoryManager` frees idempotent under contention, preventing duplicate waiters from retiring backing chunks that still contain live allocations.
 - Fixed `MemoryManager` and `ChunkedMemoryManager` shrinking to update the surviving block size before releasing its tail, preventing overlapping reported live ranges.
 - Made array-backed ray-tracing geometry subranges overflow-safe and restricted the all-remaining sentinel to -1; `Box3d` bounding-box subranges now convert only selected elements into compact storage.
-- Fixed BC volume layout and DDS mip payloads (#171)
-- Amortized ASet.compact storage resizing without retaining removed keys (#173)
+- Amortized `ASet.compact` storage resizing without retaining removed keys (#173)
+- [Sg] Build line and triangle attributes in one source pass without per-primitive temporary arrays (#177)
+- [Sg] Separate weak buffer-cache representations and atomically publish concurrent misses (#180)
+- [Sg] Correct tapered-cylinder and cone side normals while reducing normal-buffer allocation (#186)
+- [Sg] Fixed automatic picking to honor `DrawCallInfo` ranges and indexed `BaseVertex` offsets.
+- [Sg] Made render-object bounding-box caching caller-scope aware, fixing reused render-object sets beneath distinct transforms while retaining weak, allocation-free cache hits.
 - [Text] Make ShapeList.concat linear while preserving layout and enumeration semantics (#175)
-- [SceneGraph] Build line and triangle attributes in one source pass without per-primitive temporary arrays (#177)
-- [SceneGraph] Separate weak buffer-cache representations and atomically publish concurrent misses (#180)
-- [SceneGraph] Correct tapered-cylinder and cone side normals while reducing normal-buffer allocation (#186)
 - [Application] Fix camera orbiting around nonzero world-space centers and avoid an intermediate view (#42)
+- [Application] Cancel held keyboard and mouse input on focus loss without generating click gestures or preserving double-click history.
 - [GL] Explicitly disable GL_EXT_debug_printf
 
 ### 5.6.9
