@@ -301,6 +301,134 @@ module Operations =
                 let accepted = [IndexedGeometryMode.PointList; IndexedGeometryMode.LineList; IndexedGeometryMode.TriangleList; IndexedGeometryMode.QuadList]
                 argument $"unsupported {mode}" $"IndexedGeometryMode must be one of {accepted}." (fun () -> left.Union right |> ignore)
 
+    module private FlatConversion =
+
+        let private modes =
+            [ IndexedGeometryMode.PointList; IndexedGeometryMode.LineList
+              IndexedGeometryMode.TriangleList; IndexedGeometryMode.QuadList
+              IndexedGeometryMode.LineStrip; IndexedGeometryMode.TriangleStrip
+              IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.TriangleAdjacencyList ]
+
+        let private indexTypes : (string * (int[] -> Array)) list =
+            [ "int32",  fun indices -> Array.map int32 indices :> Array
+              "uint32", fun indices -> Array.map uint32 indices :> Array
+              "int16",  fun indices -> Array.map int16 indices :> Array
+              "uint16", fun indices -> Array.map uint16 indices :> Array ]
+
+        let private scalar = Symbol.Create "Flat scalar"
+        let private integer = Symbol.Create "Flat integer"
+        let private label = Symbol.Create "Flat label"
+        let private references = Symbol.Create "Flat references"
+        let private values (array : Array) = Array.init array.Length array.GetValue
+
+        let private create mode count indices =
+            let attributes = SymbolDict<Array>()
+            attributes.[DefaultSemantic.Positions] <- Array.init count (fun i -> V3f(float32 i, float32 (i * 2), -1.0f))
+            attributes.[DefaultSemantic.Normals] <- Array.init count (fun i -> V3f(float32 i, 1.0f, 0.0f))
+            attributes.[DefaultSemantic.Colors] <- Array.init count (fun i -> C4b(byte i, 17uy, 31uy, 255uy))
+            attributes.[DefaultSemantic.DiffuseColorCoordinates] <- Array.init count (fun i -> V2d(float i, 0.5))
+            attributes.[scalar] <- Array.init count (fun i -> float i + 0.25)
+            attributes.[integer] <- Array.init count (fun i -> int16 (i * 3))
+            attributes.[label] <- Array.init count (fun i -> $"vertex {i}")
+            attributes.[references] <- Array.init count (fun _ -> obj())
+            let singles = SymbolDict<obj>()
+            singles.[DefaultSemantic.Material] <- obj()
+            singles.[DefaultSemantic.Colors] <- box C4b.White
+            IndexedGeometry(mode, indices, attributes, singles)
+
+        let private flat context (source : IndexedGeometry) =
+            try source.Flat
+            with error -> failtestf "%s: %O" context error
+
+        let private check context (indices : int[]) (source : IndexedGeometry) =
+            let mode, indexArray = source.Mode, source.IndexArray
+            let originalIndices = values indexArray
+            let attributes, singles = source.IndexedAttributes, source.SingleAttributes
+            let arrays = [| for KeyValue(semantic, array) in attributes -> semantic, array, values array |]
+            let singleValues = [| for KeyValue(semantic, value) in singles -> semantic, value |]
+            let first, second = flat context source, flat context source
+            for result in [first; second] do
+                Expect.isFalse (obj.ReferenceEquals(result, source)) $"{context}: independent geometry"
+                Expect.equal result.Mode mode $"{context}: topology"
+                Expect.isNull result.IndexArray $"{context}: expanded indices"
+                Expect.equal result.VertexCount indices.Length $"{context}: expanded vertex count"
+                Expect.equal result.FaceVertexCount indices.Length $"{context}: face vertex count"
+                Expect.isTrue result.IsValid $"{context}: valid result"
+                Expect.isFalse (obj.ReferenceEquals(result.IndexedAttributes, attributes)) $"{context}: independent indexed dictionary"
+                Expect.isFalse (obj.ReferenceEquals(result.SingleAttributes, singles)) $"{context}: independent single dictionary"
+                Expect.equal result.IndexedAttributes.Count arrays.Length $"{context}: indexed keys"
+                for semantic, array, original in arrays do
+                    let expanded = result.IndexedAttributes.[semantic]
+                    Expect.equal (expanded.GetType()) (array.GetType()) $"{context}: {semantic} element type"
+                    Expect.equal (values expanded) (indices |> Array.map (fun i -> original.[i])) $"{context}: {semantic} reordered/repeated values"
+                    if indices.Length > 0 then
+                        Expect.isFalse (obj.ReferenceEquals(expanded, array)) $"{context}: independent {semantic} array"
+                Expect.equal result.SingleAttributes.Count singleValues.Length $"{context}: preserved single keys"
+                for semantic, value in singleValues do
+                    Expect.isTrue (obj.ReferenceEquals(result.SingleAttributes.[semantic], value)) $"{context}: single {semantic} object identity"
+            Expect.isFalse (obj.ReferenceEquals(first, second)) $"{context}: repeated geometry independence"
+            Expect.isFalse (obj.ReferenceEquals(first.IndexedAttributes, second.IndexedAttributes)) $"{context}: repeated indexed dictionary independence"
+            Expect.isFalse (obj.ReferenceEquals(first.SingleAttributes, second.SingleAttributes)) $"{context}: repeated single dictionary independence"
+            if indices.Length > 0 then
+                for semantic, _, _ in arrays do
+                    Expect.isFalse (obj.ReferenceEquals(first.IndexedAttributes.[semantic], second.IndexedAttributes.[semantic])) $"{context}: repeated {semantic} array independence"
+            Expect.equal source.Mode mode $"{context}: source topology"
+            Expect.isTrue (obj.ReferenceEquals(source.IndexArray, indexArray)) $"{context}: source index identity"
+            Expect.equal (values indexArray) originalIndices $"{context}: source index contents"
+            Expect.isTrue (obj.ReferenceEquals(source.IndexedAttributes, attributes)) $"{context}: source indexed dictionary identity"
+            Expect.isTrue (obj.ReferenceEquals(source.SingleAttributes, singles)) $"{context}: source single dictionary identity"
+            Expect.equal attributes.Count arrays.Length $"{context}: source indexed keys"
+            Expect.equal singles.Count singleValues.Length $"{context}: source single keys"
+            for semantic, array, original in arrays do
+                Expect.isTrue (obj.ReferenceEquals(attributes.[semantic], array)) $"{context}: source {semantic} array identity"
+                Expect.equal (values array) original $"{context}: source {semantic} contents"
+            for semantic, value in singleValues do
+                Expect.isTrue (obj.ReferenceEquals(singles.[semantic], value)) $"{context}: source single {semantic} identity"
+            first, second
+
+        let private expansion narrow =
+            for mode in modes do
+                for name, convert in indexTypes do
+                    if name.Contains("16") = narrow then
+                        for count, indices in [6, [| 5; 2; 5; 0; 4; 1; 3; 5; 0; 2; 2; 4 |]; 6, [||]; 0, [||]] do
+                            let context = $"{mode}, {name}, vertices={count}, indices={indices.Length}"
+                            check context indices (create mode count (convert indices)) |> ignore
+
+        let indexedAttributes() = expansion false
+        let narrowIndices() = expansion true
+
+        let isolation() =
+            for name, convert in indexTypes do
+                let context = $"isolation {name}"
+                let indices = [| 5; 2; 5; 0; 4; 1 |]
+                let source = create IndexedGeometryMode.TriangleList 6 (convert indices)
+                let first, second = check context indices source
+                let original = values source.IndexedAttributes.[DefaultSemantic.Positions]
+                let expected = values second.IndexedAttributes.[DefaultSemantic.Positions]
+                first.IndexedAttributes.[DefaultSemantic.Positions].SetValue(V3f(99.0f, 98.0f, 97.0f), 0)
+                first.IndexedAttributes.Remove DefaultSemantic.Normals |> ignore
+                first.SingleAttributes.Remove DefaultSemantic.Material |> ignore
+                Expect.equal (values source.IndexedAttributes.[DefaultSemantic.Positions]) original $"{context}: modifying result changed source bytes"
+                Expect.equal (values second.IndexedAttributes.[DefaultSemantic.Positions]) expected $"{context}: modifying result changed another result"
+                for geometry in [source; second] do
+                    Expect.isTrue (geometry.IndexedAttributes.ContainsKey DefaultSemantic.Normals) $"{context}: independent indexed dictionary removal"
+                    Expect.isTrue (geometry.SingleAttributes.ContainsKey DefaultSemantic.Material) $"{context}: independent single dictionary removal"
+
+        let nonIndexedIdentity() =
+            for mode in modes do
+                for count in [0; 6] do
+                    for nullDictionaries in [false; true] do
+                        let context = $"{mode}, non-indexed vertices={count}, null dictionaries={nullDictionaries}"
+                        let source = create mode count null
+                        if nullDictionaries then source.IndexedAttributes <- null; source.SingleAttributes <- null
+                        let attributes, singles = source.IndexedAttributes, source.SingleAttributes
+                        for _ in 1 .. 3 do
+                            Expect.isTrue (obj.ReferenceEquals(flat context source, source)) $"{context}: non-indexed identity"
+                        Expect.isNull source.IndexArray $"{context}: non-indexed source"
+                        Expect.equal source.Mode mode $"{context}: source topology"
+                        Expect.isTrue (obj.ReferenceEquals(source.IndexedAttributes, attributes)) $"{context}: indexed dictionary identity"
+                        Expect.isTrue (obj.ReferenceEquals(source.SingleAttributes, singles)) $"{context}: single dictionary identity"
+
     module StripConversion =
 
         let private stripModes =
@@ -504,6 +632,11 @@ module Operations =
             "Union.Empty and exact-length attributes",     UnionPrefixes.emptyAndExact
             "Union.Dictionary and single-value controls",  UnionPrefixes.dictionaryAndSingleControls
             "Union.Type and topology error controls",      UnionPrefixes.errorControls
+
+            "Flat.Indexed attributes and single-value objects", FlatConversion.indexedAttributes
+            "Flat.Sixteen-bit indices and empty expansions",    FlatConversion.narrowIndices
+            "Flat.Result isolation and source preservation",   FlatConversion.isolation
+            "Flat.Non-indexed identity",                        FlatConversion.nonIndexedIdentity
 
             "Strip conversion.Indexed conversion",               StripConversion.indexedConversion
             "Strip conversion.Non-indexed conversion",           StripConversion.nonIndexedConversion

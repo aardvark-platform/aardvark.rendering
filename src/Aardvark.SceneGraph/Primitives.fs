@@ -305,28 +305,12 @@ module SgPrimitives =
                 cache.GetOrCreate(tess, fun tess -> get tess |> Sg.ofIndexedGeometry)
             )
 
-    let private shuffle (index : int[]) (data : Array) : Array =
-        let t = data.GetType().GetElementType()
-        let res = Array.CreateInstance(t, index.Length)
-        for i in 0 .. index.Length - 1 do
-            res.SetValue(data.GetValue(index.[i]), i)
-        res
-
-
     type IndexedGeometry with
+        /// Expands indexed attributes while preserving single-value attributes and topology.
+        /// Returns an already non-indexed geometry unchanged.
         member x.Flat =
             if isNull x.IndexArray then x
-            else
-                let index = x.IndexArray |> unbox<int[]>
-                let attributes =
-                    x.IndexedAttributes |> SymDict.map (fun k v ->
-                        shuffle index v
-                    )
-
-                IndexedGeometry(
-                    Mode = x.Mode,
-                    IndexedAttributes = attributes
-                )
+            else x.ToNonIndexed()
 
     module Primitives = 
 
