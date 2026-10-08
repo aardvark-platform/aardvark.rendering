@@ -87,7 +87,7 @@ module ResizeBufferImplementation =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-
+[<Obsolete>]
 module ManagedBufferImplementation =
 
     module SparseBuffers =
