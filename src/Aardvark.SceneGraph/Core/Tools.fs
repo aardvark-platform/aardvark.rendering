@@ -8,10 +8,14 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open FSharp.Data.Traceable
 
+#nowarn "44"
+
+[<Obsolete>]
 [<ReferenceEquality; NoComparison>]
 type private Entry<'a> = { value : 'a; count : int }
 
 
+[<Obsolete>]
 type ConcurrentDeltaQueue<'a>() =
     let refCount = Dict<'a, ref<int>>()
     let queue = Queue<'a>()
@@ -110,6 +114,7 @@ type ConcurrentDeltaQueue<'a>() =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
+[<Obsolete>]
 module ConcurrentDeltaQueue =
     
     type AsyncReader<'a>(inner : IHashSetReader<'a>) =
@@ -164,6 +169,7 @@ module ConcurrentDeltaQueue =
         queue
 
 
+[<Obsolete>]
 type private DeltaHeapEntry<'a, 'b> =
     class
         val mutable public Priority : 'b
@@ -174,6 +180,7 @@ type private DeltaHeapEntry<'a, 'b> =
         new(v,p,i,r) = { Value = v; Priority = p; Index = i; RefCount = r }
     end
 
+[<Obsolete>]
 type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : SetOperation<'a> -> 'b) =
     
     let heap = List<DeltaHeapEntry<'a, 'b>>()
@@ -339,7 +346,7 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
         Monitor.Exit x
         e
 
-
+[<Obsolete>]
 [<AllowNullLiteral>]
 type private DeltaQueueEntry<'a> =
     class
@@ -351,6 +358,7 @@ type private DeltaQueueEntry<'a> =
         new(v,r,p,n) = { Value = v; RefCount = r; Prev = p; Next = n }
     end
 
+[<Obsolete>]
 type ConcurrentDeltaQueue2<'a>() =
     
     let mutable first : DeltaQueueEntry<'a> = null

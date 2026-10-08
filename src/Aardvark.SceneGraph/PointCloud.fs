@@ -8,6 +8,9 @@ open FSharp.Data.Adaptive
 open System.Threading
 open System.Collections.Concurrent
 
+#nowarn "44"
+
+[<Obsolete>]
 module StepwiseProgress =
     
 
@@ -151,6 +154,7 @@ module StepwiseProgress =
         printfn "%A" r
         ()
 
+[<Obsolete>]
 module StepwiseQueueExection =
     open StepwiseProgress
 
