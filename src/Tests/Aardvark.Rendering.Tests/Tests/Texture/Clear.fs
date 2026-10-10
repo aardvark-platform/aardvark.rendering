@@ -40,6 +40,40 @@ module TextureClear =
             let data = createAndClearColor runtime TextureFormat.Rgba32f <| V4i(-1)
             data.AsPixImage<float32>() |> PixImage.isColor (V4f(-1).ToArray())
 
+        let private rgb10A2uiColors = [V4i(0, 513, 1023, 0); V4i(1023, 1, 700, 1); V4i(257, 1023, 0, 2); V4i(1000, 511, 17, 3)]
+
+        let rgb10A2uiTexture (runtime : IRuntime) =
+            for size in [V2i(4, 3); V2i(7, 5)] do
+                use texture = runtime.CreateTexture2D(size, TextureFormat.Rgb10A2ui)
+                // Explicit uint32 storage avoids the unsupported default mapping.
+                let result = PixImage<uint32>(Col.Format.RGBA, size)
+                for color in rgb10A2uiColors do
+                    try
+                        result.Volume.Set UInt32.MaxValue |> ignore
+                        runtime.Clear(texture, color)
+                        runtime.Download(texture, result)
+                        PixImage.isColor (color.ToArray() |> Array.map uint32) result
+                    with error -> failtestf "Rgb10A2ui texture clear, size=%A, color=%A: %O" size color error
+
+        let rgb10A2uiFramebuffer (runtime : IRuntime) =
+            use signature = runtime.CreateFramebufferSignature [DefaultSemantic.Colors, TextureFormat.Rgb10A2ui]
+            for size in [V2i(4, 3); V2i(7, 5)] do
+                use texture = runtime.CreateTexture2D(size, TextureFormat.Rgb10A2ui)
+                use framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, texture.GetOutputView()])
+                let result = PixImage<uint32>(Col.Format.RGBA, size)
+                for api in ["direct"; "compiled"] do
+                    for clearColor in rgb10A2uiColors do
+                        try
+                            let values = clear { color clearColor }
+                            result.Volume.Set UInt32.MaxValue |> ignore
+                            if api = "direct" then runtime.Clear(framebuffer, values)
+                            else
+                                use task = runtime.CompileClear(signature, values)
+                                task.Run(RenderToken.Empty, framebuffer)
+                            runtime.Download(texture, result)
+                            PixImage.isColor (clearColor.ToArray() |> Array.map uint32) result
+                        with error -> failtestf "Rgb10A2ui framebuffer clear, api=%s, size=%A, color=%A: %O" api size clearColor error
+
         let private clearDepthStencilInternal (format : TextureFormat)
                                               (initialDepth : float) (initialStencil : int)
                                               (clearDepth : Option<float>) (clearStencil : Option<int>)
@@ -231,6 +265,10 @@ module TextureClear =
 
     let tests (target: TestTarget) =
         [
+            if target = TestTarget.GL then
+                "Packed unsigned integer texture",     Cases.rgb10A2uiTexture
+                "Packed unsigned integer framebuffer", Cases.rgb10A2uiFramebuffer
+
             "Color rgba8",                              Cases.rgba8
             "Color rgba32i",                            Cases.rgba32i
             "Color rgba16ui",                           Cases.rgba16ui

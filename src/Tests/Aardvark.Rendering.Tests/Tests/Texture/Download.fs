@@ -59,6 +59,31 @@ module TextureDownload =
             let data = PixImage.random16i <| V2i(256)
             data |> texture2DWithFormatNorm runtime TextureFormat.Rgba16Snorm
 
+        let rgb10A2uiRoundTrips (runtime : IRuntime) =
+            let colors = [|
+                [|0u; 513u; 1023u; 0u|]
+                [|1023u; 1u; 700u; 1u|]
+                [|257u; 1023u; 0u; 2u|]
+                [|1000u; 511u; 17u; 3u|]
+            |]
+            for level, offset, size in [0, V2i.Zero, V2i(8, 6); 1, V2i.Zero, V2i(4, 3); 0, V2i(2, 1), V2i(4, 3)] do
+                for uploadApi in ["runtime"; "texture"] do
+                    for downloadApi in ["runtime"; "texture"] do
+                        let context = $"Rgb10A2ui, level={level}, offset={offset}, size={size}, upload={uploadApi}, download={downloadApi}"
+                        use texture = runtime.CreateTexture2D(V2i(8, 6), TextureFormat.Rgb10A2ui, levels = 2)
+                        let data = PixImage<uint32>(Col.Format.RGBA, size)
+                        data.Volume.SetByCoord(fun (p : V3l) -> colors.[int (p.X + 3L * p.Y) % colors.Length].[int p.Z]) |> ignore
+                        // The default download-format mapping deliberately remains unchanged.
+                        let result = PixImage<uint32>(Col.Format.RGBA, size)
+                        result.Volume.Set UInt32.MaxValue |> ignore
+                        try
+                            if uploadApi = "runtime" then runtime.Upload(texture, data, level = level, offset = offset)
+                            else texture.Upload(data, level = level, offset = offset)
+                            if downloadApi = "runtime" then runtime.Download(texture, result, level = level, offset = offset)
+                            else texture.Download(result, level = level, offset = offset)
+                            PixImage.compare V2i.Zero data result
+                        with error -> failtestf "%s: %O" context error
+
         let texture2Drgba32ui (runtime : IRuntime) =
             let data = PixImage.random32ui <| V2i(256)
             data |> texture2DWithFormat runtime TextureFormat.Rgba32ui
@@ -514,6 +539,9 @@ module TextureDownload =
 
     let tests (target: TestTarget) =
         [
+            if target = TestTarget.GL then
+                "Packed unsigned integer round trips", Cases.rgb10A2uiRoundTrips
+
             "2D r8",                  Cases.texture2Dr8
             "2D rgba8",               Cases.texture2Drgba8
             "2D Srgba8",              Cases.texture2DSrgba8
