@@ -41,3 +41,11 @@ jobs:
           ${{ runner.os }}-nuget-
     - name: Build
       run: ${{ matrix.run-build }}
+    - name: Test CPU (Debug)
+      if: runner.os == 'Linux'
+      run: |
+        dotnet build src/Tests/Aardvark.Rendering.Tests/Aardvark.Rendering.Tests.fsproj --configuration Debug --no-restore
+        dotnet test bin/Debug/net8.0/Aardvark.Rendering.Tests.dll \
+          --Tests:.Cpu. \
+          --Settings:src/Tests/Aardvark.Rendering.Tests/test.runsettings \
+          -- RunConfiguration.TreatNoTestsAsError=true
