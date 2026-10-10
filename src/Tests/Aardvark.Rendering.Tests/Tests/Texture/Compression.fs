@@ -610,8 +610,121 @@ module TextureCompression =
                         for layout in layouts do
                             check mode channels layout offset size blocks "Mixed handcrafted blocks with distinct selector rows"
 
+    module private SignedDecoding =
+
+        // Literal RGTC palettes, including truncation toward zero. The raw
+        // (-127, -128) pair is implementation-dependent and is not an oracle.
+        let private minimumPalettes = [|
+            27, -128, [|27; -127; 5; -17; -39; -61; -83; -105|]
+            -128, 27, [|-127; 27; -96; -65; -34; -3; -127; 127|]
+            -128, -128, [|-127; -127; -127; -127; -127; -127; -127; 127|]
+            -128, -127, [|-127; -127; -127; -127; -127; -127; -127; 127|]
+            -1, -128, [|-1; -127; -19; -37; -55; -73; -91; -109|]
+            -128, -1, [|-127; -1; -101; -76; -51; -26; -127; 127|]
+        |]
+
+        let private canonicalPalettes = [|
+            27, -127, [|27; -127; 5; -17; -39; -61; -83; -105|]
+            -127, 27, [|-127; 27; -96; -65; -34; -3; -127; 127|]
+            127, -127, [|127; -127; 90; 54; 18; -18; -54; -90|]
+            -127, 127, [|-127; 127; -76; -25; 25; 76; -127; 127|]
+            -127, -127, [|-127; -127; -127; -127; -127; -127; -127; 127|]
+        |]
+
+        let private unsignedPalettes = [|
+            27, 128, [|27; 128; 47; 67; 87; 107; 0; 255|]
+            128, 27, [|128; 27; 113; 99; 84; 70; 55; 41|]
+            255, 0, [|255; 0; 218; 182; 145; 109; 72; 36|]
+            128, 128, [|128; 128; 128; 128; 128; 128; 0; 255|]
+        |]
+
+        let private block mode (palettes : (int * int * int[])[]) first variant =
+            let count = match mode with CompressionMode.BC5 _ -> 2 | _ -> 1
+            let blocks = Array.init count (fun channel ->
+                let r0, r1, palette = palettes.[(first + channel * 3) % palettes.Length]
+                let indices = Array.init 16 (fun i -> (i + channel * 3 + variant) % 8)
+                let mutable bits = 0UL
+                for i in 0 .. 15 do bits <- bits ||| (uint64 indices.[i] <<< (i * 3))
+                let data = Array.init 8 (fun i -> if i = 0 then byte r0 elif i = 1 then byte r1 else byte (bits >>> ((i - 2) * 8)))
+                data, Array.map (fun i -> byte palette.[i]) indices
+            )
+            let data = blocks |> Array.collect fst
+            let expected = Array.init 16 (fun i -> blocks |> Array.map (fun (_, values) -> values.[i]))
+            if mode = CompressionMode.BC3 then
+                // Equal white RGB endpoints isolate the unchanged unsigned alpha path.
+                Array.append data [|255uy; 255uy; 255uy; 255uy; 0uy; 0uy; 0uy; 0uy|],
+                expected |> Array.map (fun alpha -> [|255uy; 255uy; 255uy; alpha.[0]|])
+            else data, expected
+
+        let private check mode channels layout (offset : V2i) (size : V2i) palettes first =
+            let context = $"{mode}, channels={channels}, layout={layout}, offset={offset}, size={size}, firstPalette={first}"
+            let blocksX, blocksY = (offset.X + size.X + 3) / 4, (offset.Y + size.Y + 3) / 4
+            let blocks = Array.init (blocksX * blocksY) (fun i -> block mode palettes (first + i) i)
+            let payload = blocks |> Array.collect fst
+            let source = Array.create (payload.Length + 32) 0xD7uy
+            System.Array.Copy(payload, 0, source, 16, payload.Length)
+            let original = Array.copy source
+            let dx, dy, dc =
+                match layout with
+                | "packed" -> channels, size.X * channels, 1
+                | "padded" -> channels + 2, (size.X + 3) * (channels + 2) + 5, 1
+                | "planar" -> 1, size.X + 3, (size.Y + 2) * (size.X + 3) + 7
+                | "reversed rows" -> channels + 1, -((size.X + 3) * (channels + 1) + 5), 1
+                | _ -> failwith "Unexpected signed decoding layout"
+            let ey = (size.Y - 1) * dy
+            let origin = 32 - min 0 ey
+            let length = origin + (size.X - 1) * dx + max 0 ey + (channels - 1) * dc + 33
+            let destination = Array.create length 0xCDuy
+            let expected = Array.copy destination
+            for y in 0 .. size.Y - 1 do
+                for x in 0 .. size.X - 1 do
+                    let sx, sy = x + offset.X, y + offset.Y
+                    let _, values = blocks.[(sy / 4) * blocksX + sx / 4]
+                    let values = values.[(sy % 4) * 4 + sx % 4]
+                    for c in 0 .. values.Length - 1 do
+                        expected.[origin + x * dx + y * dy + c * dc] <- values.[c]
+            let info = VolumeInfo(int64 origin, V3l(size.X, size.Y, channels), V3l(dx, dy, dc))
+            source |> NativePtr.pinArr (fun src ->
+                destination |> NativePtr.pinArr (fun dst ->
+                    BlockCompression.decode mode offset size (src.Address + 16n) dst.Address info
+                )
+            )
+            Expect.equal source original $"{context}: source and guards changed"
+            for i in 0 .. destination.Length - 1 do
+                Expect.equal destination.[i] expected.[i] $"{context}: destination byte {i}, including guards and spare channels"
+
+        let private layouts = ["packed"; "padded"; "planar"; "reversed rows"]
+
+        let private checkPalettes modes palettes =
+            for mode in modes do
+                let channels = match mode with CompressionMode.BC4 _ -> [1; 3] | CompressionMode.BC5 _ -> [2; 4] | _ -> [4]
+                for first in 0 .. Array.length palettes - 1 do
+                    for channelCount in channels do
+                        for layout in layouts do
+                            check mode channelCount layout V2i.Zero (V2i(4)) palettes first
+
+        let minimumEndpoints() =
+            checkPalettes [CompressionMode.BC4 true; CompressionMode.BC5 true] minimumPalettes
+
+        let guardedWindows() =
+            for mode in [CompressionMode.BC4 true; CompressionMode.BC5 true] do
+                let channels = if mode = CompressionMode.BC4 true then 3 else 4
+                for offset, size in [V2i.Zero, V2i.One; V2i.Zero, V2i(3, 2); V2i(1, 1), V2i(2, 2);
+                                     V2i(3, 3), V2i.One; V2i.Zero, V2i(9, 7); V2i(1, 2), V2i(6, 5); V2i(3, 1), V2i(7, 7)] do
+                    for first in 0 .. minimumPalettes.Length - 1 do
+                        for layout in layouts do
+                            check mode channels layout offset size minimumPalettes first
+
+        let compatibility() =
+            checkPalettes [CompressionMode.BC4 true; CompressionMode.BC5 true] canonicalPalettes
+            checkPalettes [CompressionMode.BC4 false; CompressionMode.BC5 false; CompressionMode.BC3] unsignedPalettes
+
     let tests (target: TestTarget) =
         [
+            "Signed decoding.Minimum endpoint palettes",   SignedDecoding.minimumEndpoints
+            "Signed decoding.Guarded windows and strides", SignedDecoding.guardedWindows
+            "Signed decoding.Unchanged palette controls",  SignedDecoding.compatibility
+
             "Encoding.Chromatic endpoint variation",           EndpointEncoding.chromaticBlocks
             "Encoding.Partial and multiple chromatic blocks",  EndpointEncoding.partialAndMultipleBlocks
             "Encoding.Solid colors and grayscale",             EndpointEncoding.solidAndGrayscale
