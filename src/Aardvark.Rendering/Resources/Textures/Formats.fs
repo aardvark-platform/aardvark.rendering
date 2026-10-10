@@ -281,7 +281,8 @@ module TextureFormat =
         ]
 
     let private integerFormats =
-        HashSet.ofList [
+        // Populated once; concurrent queries only read this fixed set.
+        System.Collections.Generic.HashSet<TextureFormat>([
             TextureFormat.R8i
             TextureFormat.R8ui
             TextureFormat.R16i
@@ -306,10 +307,11 @@ module TextureFormat =
             TextureFormat.Rgb16i
             TextureFormat.Rgba8i
             TextureFormat.Rgb8i
-        ]
+            TextureFormat.Rgb10A2ui
+        ])
 
     let isIntegerFormat (format : TextureFormat) =
-        integerFormats |> HashSet.contains format
+        integerFormats.Contains format
 
     let private signedFormats =
         HashSet.ofList [

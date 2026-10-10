@@ -18,6 +18,7 @@ let tests =
         ]
 
         testAllTargets "Textures" [
+            Texture.TextureFormats.tests
             Texture.AdaptiveTexture.tests
             Texture.AdaptiveAttachment.tests
             Texture.TextureUpload.tests
