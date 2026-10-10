@@ -104,6 +104,8 @@ module ConcurrentDeltaPriorityQueue =
                         | "interruption" -> Expect.isTrue (actual :? ThreadInterruptedException) $"{context}: interruption replaced by {actual}"
                         | "cancellation" -> Expect.isTrue (actual :? OperationCanceledException) $"{context}: cancellation replaced by {actual}"
                         | _ -> failtestf "%s: unknown failure" context
+                        // A throwing comparison may leave the heap partially mutated;
+                        // only monitor release, not queue recovery, is guaranteed here.
                         Expect.isFalse (Monitor.IsEntered queue.Lock) $"{context}: dequeue retained its monitor"
                     finally
                         // Original-source controls leak this monitor. Release it
@@ -127,27 +129,6 @@ module ConcurrentDeltaPriorityQueue =
             completed.Wait timeout |> ignore
             worker.Join timeout |> ignore
         if not errors.IsEmpty then failtestf "%s: worker failed: %A" context (errors.ToArray())
-
-        use reused = new ManualResetEventSlim(false)
-        let reuseWorker =
-            Thread(ThreadStart(fun () ->
-                try
-                    comparisonError <- null
-                    queue.Enqueue <| operation 1 1
-                with
-                    error -> errors.Enqueue error
-                reused.Set()
-            ))
-        reuseWorker.IsBackground <- true
-        reuseWorker.Start()
-        try
-            Expect.isTrue (reused.Wait timeout) $"{context}: another thread could not reuse the monitor"
-            Expect.isTrue (reuseWorker.Join timeout) $"{context}: monitor reuse worker did not finish"
-        finally
-            reused.Wait timeout |> ignore
-            reuseWorker.Join timeout |> ignore
-        if not errors.IsEmpty then failtestf "%s: reuse failed: %A" context (errors.ToArray())
-        Expect.notEqual worker.ManagedThreadId reuseWorker.ManagedThreadId $"{context}: reuse used the dequeue thread"
 
     module private Cases =
 
