@@ -660,7 +660,9 @@ module BlockCompression =
                     dst.[x, y, 0] <- cast palette.[int indices.[x, y]]
 
         let decodeU = decode uint8 computePaletteU
-        let decodeS = decode int8 computePaletteS
+        // RGTC interprets the signed minimum endpoint -128 as -127
+        // before interpolation; leave encoder endpoint selection unchanged.
+        let decodeS = decode int8 (fun r0 r1 -> computePaletteS (max -127y r0) (max -127y r1))
 
     module private BC3 =
 
