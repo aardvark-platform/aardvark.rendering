@@ -153,13 +153,147 @@ module BufferView =
                         "Other draw parameters are unchanged"
             | _ -> failtest "Expected direct draw calls"
 
+    module private Download =
+
+        let private storage wrapped (data : Array) onUse : IBuffer =
+            let buffer = ArrayBuffer data
+            if wrapped then
+                let native = buffer :> INativeBuffer
+                { new INativeBuffer with
+                    member _.SizeInBytes = native.SizeInBytes
+                    member _.Use action = onUse(); native.Use action }
+            else buffer
+
+        let private suffix start count (values : int[]) =
+            values |> Array.skip (min (max start 0) values.Length)
+                   |> fun rest -> if count < 0 then rest else Array.truncate count rest
+
+        let private check context start count (view : BufferView) expected =
+            let result = BufferView.download start count view |> AVal.force
+            Expect.equal (result :?> int[]) expected $"{context}, start={start}, count={count}: logical values"
+
+        let logicalStarts() =
+            for offset, stride, data, values in [
+                0, 8, [|11; -901; 22; -902; 33|], [|11; 22; 33|]
+                4, 8, [|-800; 11; -901; 22; -902; 33|], [|11; 22; 33|]
+                8, 12, [|-800; -801; 11; -901; -902; 22; -903; -904; 33|], [|11; 22; 33|]
+                4, 8, [|-800; 11; -901; 22; -902|], [|11; 22|]
+            ] do
+                for wrapped in [false; true] do
+                    let view = BufferView(storage wrapped data ignore, typeof<int>, offset, stride)
+                    for start in [1; 2] do
+                        for count in [0; 1; 2; Int32.MaxValue; -1; -7; Int32.MinValue] do
+                            check $"wrapped={wrapped}, offset={offset}, stride={stride}, data=%A{data}"
+                                start count view (suffix start count values)
+
+        let overlappingElements() =
+            let data = Array.init 11 (fun i -> byte (7 + 13 * i))
+            for offset, stride, positions in [1, 1, [|1 .. 7|]; 1, 2, [|1; 3; 5; 7|]; 3, 2, [|3; 5; 7|]] do
+                // Read independently specified byte windows, not a second download.
+                let values = positions |> Array.map (fun p -> BitConverter.ToInt32(data, p))
+                for wrapped in [false; true] do
+                    let view = BufferView(storage wrapped data ignore, typeof<int>, offset, stride)
+                    for start in [1; 2] do
+                        for count in [0; 1; 2; -1; -11; Int32.MaxValue] do
+                            check $"wrapped={wrapped}, byte offset={offset}, overlapping stride={stride}"
+                                start count view (suffix start count values)
+
+        type private Resource(source : aval<IBuffer>) =
+            inherit AdaptiveResource<IBuffer>()
+            let mutable creates = 0
+            let mutable destroys = 0
+            member _.Creates = creates
+            member _.Destroys = destroys
+            override _.Create() = creates <- creates + 1
+            override _.Destroy() = destroys <- destroys + 1
+            override _.Compute(token, _) = source.GetValue token
+
+        let replacement() =
+            for wrapped in [false; true] do
+                for resourceBacked in [false; true] do
+                    for count in [2; -1; -9] do
+                        let mutable uses = 0
+                        let mutable evaluations = 0
+                        let make data = storage wrapped data (fun () -> uses <- uses + 1)
+                        let source = cval (make [|-800; 11; -901; 22; -902; 33|])
+                        let input = AVal.custom (fun token -> evaluations <- evaluations + 1; source.GetValue token)
+                        let resource = Resource input
+                        let buffer = if resourceBacked then resource :> aval<IBuffer> else input
+                        let result = BufferView(buffer, typeof<int>, 4, 8) |> BufferView.download 1 count
+                        let context = $"wrapped={wrapped}, resource={resourceBacked}, count={count}"
+                        Expect.equal evaluations 0 $"{context}: lazy construction"
+                        Expect.equal (result :? IAdaptiveResource) resourceBacked $"{context}: resource mapping preserved"
+                        result.Acquire()
+                        try
+                            Expect.equal resource.Creates (if resourceBacked then 1 else 0) $"{context}: acquire forwarded"
+                            for data, values in [
+                                [|-800; 11; -901; 22; -902; 33|], [|11; 22; 33|]
+                                [|-800; 71; -901; 83|], [|71; 83|]
+                                [|-800; 93|], [|93|]
+                                [|-800; 1; -901; 2; -902; 3; -903; 4|], [|1; 2; 3; 4|]
+                            ] do
+                                transact (fun () -> source.Value <- make data)
+                                let before = evaluations
+                                let downloaded = AVal.force result
+                                Expect.equal (downloaded :?> int[]) (suffix 1 count values) $"{context}: replacement=%A{data}"
+                                Expect.equal evaluations (before + 1) $"{context}: evaluates once"
+                                let used = uses
+                                for _ in 1 .. 3 do
+                                    Expect.isTrue (obj.ReferenceEquals(AVal.force result, downloaded)) $"{context}: cached array"
+                                Expect.equal evaluations (before + 1) $"{context}: cached input"
+                                Expect.equal uses used $"{context}: cached native storage"
+                        finally
+                            result.Release()
+                        Expect.equal resource.Destroys (if resourceBacked then 1 else 0) $"{context}: release forwarded"
+
+        let boundaries() =
+            let data = [|13; 27; 45; 88|]
+            for wrapped in [false; true] do
+                for stride in [0; 4] do
+                    for offset, values in [0, [|13; 27; 45; 88|]; 4, [|27; 45; 88|]] do
+                        let view = BufferView(storage wrapped data ignore, typeof<int>, offset, stride)
+                        for start in [Int32.MinValue; -1; 0; 1; values.Length] do
+                            for count in [0; 1; 2; -1; -17; Int32.MaxValue] do
+                                check $"wrapped={wrapped}, packed stride={stride}, offset={offset}"
+                                    start count view (suffix start count values)
+                        if offset = 0 then
+                            let result = BufferView.download 0 -1 view |> AVal.force
+                            Expect.equal (obj.ReferenceEquals(result, data)) (not wrapped)
+                                $"wrapped={wrapped}, stride={stride}: full packed-array identity"
+                let strided = BufferView(storage wrapped [|11; -901; 22; -902; 33|] ignore, typeof<int>, 0, 8)
+                for start in [0; -1; Int32.MinValue] do
+                    for count in [0; 1; -1; -7] do
+                        check $"wrapped={wrapped}, zero or clamped start" start count strided (suffix start count [|11; 22; 33|])
+                // A 32-bit stride/index product would wrap to zero and incorrectly return 41.
+                let wide = BufferView(storage wrapped [|41|] ignore, typeof<int>, 0, 65536)
+                for count in [0; 1; -1] do check $"wrapped={wrapped}, wide product" 65536 count wide [||]
+
+        let singleValues() =
+            let source = cval 17
+            let buffer = SingleValueBuffer<int>(source)
+            for view in [BufferView(buffer :> ISingleValueBuffer)
+                         BufferView(buffer :> aval<IBuffer>, typeof<V3f>, Int32.MaxValue, Int32.MaxValue, false)] do
+                for start in [Int32.MinValue; 0; 7; Int32.MaxValue] do
+                    for count in [0; 1; 5; -1; -7; Int32.MinValue] do
+                        let result = BufferView.download start count view
+                        for value in [19; 31] do
+                            transact (fun () -> source.Value <- value)
+                            let expected = Array.replicate (if count < 0 then 1 else count) value
+                            Expect.equal (AVal.force result :?> int[]) expected $"single value={value}, start={start}, count={count}"
+
     let tests (target: TestTarget) =
         [
-            "packed elements and exhausted storage",           Cases.packedElements
-            "strided elements and unpadded tails",             Cases.stridedElements
-            "native and backend metadata only",                Cases.metadataOnly
-            "adaptive replacement and cached evaluation",      Cases.adaptiveReplacement
-            "single values ignore layout and payload changes", Cases.singleValues
-            "automatic scene graph draw counts",               Cases.automaticDrawCounts
+            "Count.packed elements and exhausted storage",           Cases.packedElements
+            "Count.strided elements and unpadded tails",             Cases.stridedElements
+            "Count.native and backend metadata only",                Cases.metadataOnly
+            "Count.adaptive replacement and cached evaluation",      Cases.adaptiveReplacement
+            "Count.single values ignore layout and payload changes", Cases.singleValues
+            "Count.automatic scene graph draw counts",               Cases.automaticDrawCounts
+
+            "Download.Logical starts in interleaved layouts",   Download.logicalStarts
+            "Download.Overlapping elements and byte offsets",   Download.overlappingElements
+            "Download.Adaptive replacement and cached reads",   Download.replacement
+            "Download.Packed and boundary controls",            Download.boundaries
+            "Download.Single-value replication",               Download.singleValues
         ]
-        |> prepareCasesCpu "BufferView.Count" target
+        |> prepareCasesCpu "BufferView" target
