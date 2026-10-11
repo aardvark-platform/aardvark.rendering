@@ -163,8 +163,10 @@ module BufferView =
                     int (1UL + (sizeInBytes - firstEnd) / stride)
             )
 
-    /// Retrieves up to count elements from the given buffer view as an array starting at startIndex.
-    /// If count < 0, all available elements are retrieved.
+    /// Retrieves up to count elements starting at the logical startIndex, relative to the view's byte offset.
+    /// Negative starts are clamped to zero; consecutive indices advance by the view's stride,
+    /// or by the element size for a zero stride. If count < 0, all available elements are retrieved.
+    /// Single-value buffers ignore the start and replicate the value count times, or once for a negative count.
     let download (startIndex : int) (count : int) (view : BufferView) : aval<Array> =
         let startIndex = max startIndex 0
 
@@ -178,5 +180,6 @@ module BufferView =
             }
 
         | _ ->
-            let offset = uint64 view.Offset + uint64 view.ElementType.CLRSize * uint64 startIndex
+            let stride = if view.Stride = 0 then view.ElementType.CLRSize else view.Stride
+            let offset = uint64 view.Offset + uint64 stride * uint64 startIndex
             view.Buffer |> AdaptiveResource.map (_.ToArray(view.ElementType, uint64 count, offset, uint64 view.Stride))
