@@ -459,9 +459,9 @@ module Management =
 
         let grow (additional : nativeint) =
             let blockCap = max chunkSize additional
-            usedMemory <- usedMemory + blockCap
             let newMem = mem.malloc blockCap
             allocated.Add(newMem, blockCap) |> ignore
+            usedMemory <- usedMemory + blockCap
             free.Insert(Block<'a>(this, nref newMem, 0n, blockCap, true))
 
         let freed(block : Block<'a>) =
@@ -627,6 +627,7 @@ module Management =
         member x.Realloc(b : Block<'a>, size : nativeint) =
             x.Realloc(b, 1n, size)
 
+        /// Total capacity of successfully registered backing allocations.
         member x.Capactiy = lock free (fun () -> usedMemory)
 
         member x.Use(b : Block<'a>, action : 'a -> nativeint -> nativeint -> 'r) =
