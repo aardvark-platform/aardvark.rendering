@@ -430,6 +430,86 @@ module MemoryManager =
                 Expect.equal storage.Frees 1 $"{context}: the final distinct free retires backing once"
                 balanced manager allocations 1 context
 
+        let private growthRound keepLive failures alignment chunkSize size =
+            let baseMemory, allocations = trackedMemory()
+            let attempts = ResizeArray<nativeint>()
+            let mutable failuresLeft = 0
+            let error = InvalidOperationException("Backing allocation failed")
+            let memory =
+                { baseMemory with
+                    malloc = fun bytes ->
+                        if bytes > 0n then
+                            attempts.Add bytes
+                            if failuresLeft > 0 then
+                                failuresLeft <- failuresLeft - 1
+                                raise error
+                        baseMemory.malloc bytes }
+            use manager = new ChunkedMemoryManager<_>(memory, chunkSize)
+            let context = $"keeper={keepLive}, failures={failures}, ordinary={Option.isNone alignment}, alignment={defaultArg alignment 1n}, chunk={chunkSize}, request={size}"
+            let allocate() =
+                match alignment with
+                | Some alignment -> manager.Alloc(alignment, size)
+                | None -> manager.Alloc size
+            let keeper = if keepLive then Some (manager.Alloc chunkSize) else None
+            keeper |> Option.iter (fun block -> write manager block 0xC3uy)
+            let capacity = if keepLive then chunkSize else 0n
+            let checkKeeper() =
+                keeper |> Option.iter (fun block ->
+                    checkBlock manager block block.Memory.Value 0n chunkSize 1n context
+                    Expect.equal (read manager block) (Array.create (int chunkSize) 0xC3uy) $"{context}: keeper payload"
+                )
+            Expect.equal manager.Capactiy capacity $"{context}: initial capacity"
+            let allocationCount = allocations.Count
+            let attemptCount = attempts.Count
+            let chunkCapacity = max chunkSize size
+            failuresLeft <- failures
+            for attempt in 1 .. failures do
+                let thrown =
+                    try
+                        allocate() |> ignore
+                        None
+                    with caught -> Some caught
+                match thrown with
+                | Some caught -> same error caught $"{context}, attempt={attempt}: original exception"
+                | None -> failtestf "%s, attempt=%d: expected malloc failure" context attempt
+                Expect.equal attempts.Count (attemptCount + attempt) $"{context}: retries call malloc"
+                Expect.equal attempts.[attempts.Count - 1] chunkCapacity $"{context}: failed request size"
+                Expect.equal allocations.Count allocationCount $"{context}: no backing registered on failure"
+                Expect.equal manager.Capactiy capacity $"{context}, attempt={attempt}: failure leaves capacity unchanged"
+                checkKeeper()
+            Expect.equal failuresLeft 0 $"{context}: failure schedule consumed"
+            let retry = allocate()
+            let storage = retry.Memory.Value
+            checkBlock manager retry storage 0n size (defaultArg alignment 1n) context
+            Expect.equal manager.Capactiy (capacity + chunkCapacity) $"{context}: successful retry adds actual backing"
+            Expect.equal attempts.[attempts.Count - 1] chunkCapacity $"{context}: retry chunk sizing"
+            write manager retry 0xD4uy
+            Expect.equal (read manager retry) (Array.create (int size) 0xD4uy) $"{context}: retry payload"
+            checkKeeper()
+            manager.Free retry
+            Expect.equal storage.Frees 1 $"{context}: retry backing retired once"
+            Expect.equal manager.Capactiy capacity $"{context}: only keeper capacity remains"
+            checkKeeper()
+            let next = allocate()
+            Expect.isFalse (Object.ReferenceEquals(storage, next.Memory.Value)) $"{context}: retired backing is not reused"
+            Expect.equal manager.Capactiy (capacity + chunkCapacity) $"{context}: next growth counts once"
+            checkBlock manager next next.Memory.Value 0n size (defaultArg alignment 1n) context
+            manager.Free next
+            Expect.equal manager.Capactiy capacity $"{context}: next retirement"
+            checkKeeper()
+            keeper |> Option.iter manager.Free
+            balanced manager allocations (if keepLive then 3 else 2) context
+
+        let private growthLayouts keepLive failures =
+            for chunkSize in [16n; 64n; 256n] do
+                for size in [chunkSize / 4n; chunkSize - 1n; chunkSize; chunkSize + 5n] do
+                    for alignment in [None; Some 1n; Some 3n; Some 8n; Some 32n; Some 64n] do
+                        growthRound keepLive failures alignment chunkSize size
+
+        let failedEmptyGrowth() = growthLayouts false 3
+        let failedLiveGrowth() = growthLayouts true 3
+        let successfulGrowth() = growthLayouts true 0
+
         let trackedActiveRealloc() =
             for alignment in [1n; 3n; 8n; 32n; 64n] do
                 let memory, allocations = trackedMemory()
@@ -470,5 +550,9 @@ module MemoryManager =
             "Chunked competing frees preserve live siblings",              Cases.competingSiblingFrees
             "Chunked sequential duplicate frees retain the fast path",     Cases.sequentialDuplicateFrees
             "Chunked concurrent distinct frees coalesce and retire once",  Cases.concurrentDistinctFrees
+
+            "Chunked failed growth leaves an empty manager unchanged",  Cases.failedEmptyGrowth
+            "Chunked failed growth preserves a live full chunk",        Cases.failedLiveGrowth
+            "Chunked successful growth and retirement capacity",        Cases.successfulGrowth
         ]
         |> prepareCasesCpu "MemoryManager" target
