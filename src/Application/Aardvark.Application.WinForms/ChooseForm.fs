@@ -83,9 +83,9 @@ type private MainForm<'a>(devices : array<string * 'a>) as this =
 
     member x.Result = result
 
-    override x.OnClosed(e) =
-        base.OnClosed(e)
-            
+    override x.OnFormClosed(e) =
+        base.OnFormClosed(e)
+
         let index = popUp.SelectedIndex
         if index >= 0 && index < devices.Length then
             let (_, d) = devices.[index]

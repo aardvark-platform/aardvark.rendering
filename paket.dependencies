@@ -3,8 +3,8 @@ source https://api.nuget.org/v3/index.json
 
 storage: none
 
-nuget Aardvark.Build                                ~> 2.0.2
-nuget FSharp.Core                                   >= 8.0.300 lowest_matching: true
+nuget Aardvark.Build                                ~> 2.0.7
+nuget FSharp.Core                                   >= 10.0.100 lowest_matching: true
 nuget Microsoft.NETFramework.ReferenceAssemblies    >= 1.0.0 lowest_matching: true
 
 nuget FSharp.Data.Adaptive                          ~> 1.2.19
@@ -36,8 +36,8 @@ nuget Aardvark.Data.Assimp                          ~> 1.0.1
 nuget Offler                                        ~> 2.1.1
 nuget FSharp.Data                                   ~> 6.4.0
 
-nuget Unofficial.OpenTK                             ~> 3.0.21
-nuget Unofficial.OpenTK.GLControl                   ~> 3.0.21
+nuget Unofficial.OpenTK                             ~> 3.0.23
+nuget Unofficial.OpenTK.GLControl                   ~> 3.0.23
 nuget Silk.NET.GLFW                                 = 2.22.0
 nuget Silk.NET.Core                                 = 2.22.0
 nuget Silk.NET.Direct3D9                            = 2.22.0

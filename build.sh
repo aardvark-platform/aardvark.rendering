@@ -1,5 +1,7 @@
 #!/bin/sh
 
+CONFIG="${1:-Debug}"
+
 dotnet tool restore
 dotnet paket restore
-dotnet build src/Aardvark.Rendering.NonWindows.slnf
+dotnet build --configuration "${CONFIG}" src/Aardvark.Rendering.NonWindows.slnf

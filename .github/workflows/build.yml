@@ -9,7 +9,7 @@ on:
     paths-ignore:
     - '**/README.md'
     - 'docs/'
-    
+
 jobs:
   build:
 
@@ -20,18 +20,21 @@ jobs:
             os: [ubuntu-latest, windows-latest, macos-latest]
             include:
               - os: ubuntu-latest
-                run-build: sh ./build.sh
+                run-build: sh ./build.sh Release
               - os: windows-latest
-                run-build: .\build.cmd
+                run-build: .\build.cmd Release
               - os: macos-latest
-                run-build: bash ./build.sh
+                run-build: bash ./build.sh Release
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
+
     - name: Install Dotnet
       uses: actions/setup-dotnet@v4
       with:
         global-json-file: global.json
+
     - name: Restore NuGet cache
       uses: actions/cache@v4
       with:
@@ -39,5 +42,6 @@ jobs:
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/paket.lock') }}
         restore-keys: |
           ${{ runner.os }}-nuget-
+
     - name: Build
       run: ${{ matrix.run-build }}
