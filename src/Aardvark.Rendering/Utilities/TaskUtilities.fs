@@ -56,11 +56,14 @@ module Task =
             | _ ->
                 None
 
+    /// Returns None immediately if the task is not complete, without waiting.
+    /// Once completion is observed, returns the successful value, cancellation,
+    /// or the task's aggregate exception without unwrapping its contents.
     let pollResult (t : Task<'a>) =
-        if t.IsCanceled then Some Cancelled
+        if not t.IsCompleted then None
+        elif t.IsCanceled then Some Cancelled
         elif t.IsFaulted then Some (Faulted t.Exception)
-        elif t.IsCompleted then Some (Completed t.Result)
-        else None
+        else Some (Completed t.Result)
         
     let getResult (t : Task<'a>) =
         if t.IsCanceled then Cancelled
