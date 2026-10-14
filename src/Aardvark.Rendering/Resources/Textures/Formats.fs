@@ -596,7 +596,7 @@ module TextureFormat =
             TextureFormat.R16, 16
             TextureFormat.Rg8, 16
             TextureFormat.Rg16, 32
-            TextureFormat.R16f, 32
+            TextureFormat.R16f, 16
             TextureFormat.R32f, 32
             TextureFormat.Rg16f, 32
             TextureFormat.Rg32f, 64

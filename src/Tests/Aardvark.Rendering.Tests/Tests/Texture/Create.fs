@@ -201,6 +201,113 @@ module TextureCreate =
             memory <- 0L
             check()
 
+    module private MemoryEstimates =
+
+        let private formats = [
+            TextureFormat.R32f, 4L
+            TextureFormat.Rg16f, 4L
+            TextureFormat.R16, 2L
+            TextureFormat.R16ui, 2L
+            TextureFormat.R16f, 2L
+        ]
+
+        let private snapshot (context : GL.Context) =
+            struct (context.MemoryUsage.TextureCount, context.MemoryUsage.TextureMemory)
+
+        let private expectedBytes dimension (size : V3i) levels count samples bytesPerTexel =
+            let mutable texels = 0L
+            for level = 0 to levels - 1 do
+                let x = int64 (max 1 (size.X >>> level))
+                let y = int64 (max 1 (size.Y >>> level))
+                let z = int64 (max 1 (size.Z >>> level))
+                texels <- texels + x * y * z
+            let faces = if dimension = TextureDimension.TextureCube then 6L else 1L
+            texels * int64 count * faces * int64 samples * bytesPerTexel
+
+        let private check (runtime : IRuntime) context dimension size levels count samples isArray format bytesPerTexel =
+            let label = sprintf "format=%A, dimension=%A, size=%A, levels=%d, count=%d, samples=%d, array=%b"
+                                format dimension size levels count samples isArray
+            let before = snapshot context
+            let struct (beforeCount, beforeMemory) = before
+            let texture =
+                if isArray then runtime.CreateTextureArray(size, dimension, format, levels, samples, count)
+                else runtime.CreateTexture(size, dimension, format, levels, samples)
+            try
+                let actual = unbox<GL.Texture> texture
+                let expected = expectedBytes dimension size levels count samples bytesPerTexel
+                Expect.equal texture.Format format (label + ": format")
+                Expect.equal texture.Size size (label + ": size")
+                Expect.equal texture.Dimension dimension (label + ": dimension")
+                Expect.equal texture.MipMapLevels levels (label + ": mip levels")
+                Expect.equal texture.Count count (label + ": count")
+                Expect.equal texture.Samples samples (label + ": supported samples need no fallback")
+                Expect.equal actual.IsArray isArray (label + ": array layout")
+                Expect.equal actual.SizeInBytes expected (label + ": byte estimate")
+                Expect.equal (snapshot context) (struct (beforeCount + 1, beforeMemory + expected)) (label + ": accounting increment")
+            finally
+                texture.Dispose()
+            Expect.equal (snapshot context) before (label + ": disposal restores accounting")
+
+        let private withLiveControl (runtime : IRuntime) run =
+            let context = (unbox<GL.Runtime> runtime).Context
+            let before = snapshot context
+            let struct (beforeCount, beforeMemory) = before
+            let control = runtime.CreateTexture2D(V2i(2), TextureFormat.Rgba8)
+            try
+                Expect.equal (unbox<GL.Texture> control).SizeInBytes 16L "live control byte estimate"
+                Expect.equal (snapshot context) (struct (beforeCount + 1, beforeMemory + 16L)) "live control accounting"
+                run context
+            finally
+                control.Dispose()
+            Expect.equal (snapshot context) before "disposing the live control restores original accounting"
+
+        let ordinaryLayouts (runtime : IRuntime) =
+            withLiveControl runtime (fun context ->
+                for format, bytesPerTexel in formats do
+                    for dimension, size in [
+                        TextureDimension.Texture1D, V3i(13, 1, 1)
+                        TextureDimension.Texture2D, V3i(13, 7, 1)
+                        TextureDimension.Texture3D, V3i(9, 5, 3)
+                        TextureDimension.TextureCube, V3i(8, 8, 1)
+                    ] do
+                        for levels in [1; 4] do
+                            check runtime context dimension size levels 1 1 false format bytesPerTexel
+                            if dimension <> TextureDimension.Texture3D then
+                                for count in [1; 3] do
+                                    check runtime context dimension size levels count 1 true format bytesPerTexel
+            )
+
+        let private supportedSamples (context : GL.Context) format isArray =
+            use _lock = context.ResourceLock
+            let target =
+                if isArray then OpenTK.Graphics.OpenGL4.ImageTarget.Texture2DMultisampleArray
+                else OpenTK.Graphics.OpenGL4.ImageTarget.Texture2DMultisample
+            let internalFormat = enum<OpenTK.Graphics.OpenGL4.SizedInternalFormat> (int format)
+            let count = [|0|]
+            OpenTK.Graphics.OpenGL4.GL.GetInternalformat(target, internalFormat, OpenTK.Graphics.OpenGL4.InternalFormatParameter.NumSampleCounts, 1, count)
+            Expect.equal (OpenTK.Graphics.OpenGL4.GL.GetError()) OpenTK.Graphics.OpenGL4.ErrorCode.NoError (sprintf "format=%A, array=%b: sample-count query" format isArray)
+            let samples = Array.zeroCreate<int> count.[0]
+            if samples.Length > 0 then
+                OpenTK.Graphics.OpenGL4.GL.GetInternalformat(target, internalFormat, OpenTK.Graphics.OpenGL4.InternalFormatParameter.Samples, samples.Length, samples)
+                Expect.equal (OpenTK.Graphics.OpenGL4.GL.GetError()) OpenTK.Graphics.OpenGL4.ErrorCode.NoError (sprintf "format=%A, array=%b: supported-sample query" format isArray)
+            samples
+            |> Array.filter (fun samples -> samples > 1 && samples <= 8 && (samples &&& (samples - 1)) = 0)
+            |> Array.distinct
+            |> Array.sort
+            |> Array.truncate 2
+
+        let multisampleLayouts (runtime : IRuntime) =
+            withLiveControl runtime (fun context ->
+                for format, bytesPerTexel in formats do
+                    for isArray in [false; true] do
+                        let samples = supportedSamples context format isArray
+                        Expect.isNonEmpty samples (sprintf "format=%A, array=%b: supported multisample layouts" format isArray)
+                        // Only create layouts advertised by the real driver's internal-format query.
+                        for samples in samples do
+                            for count in (if isArray then [1; 3] else [1]) do
+                                check runtime context TextureDimension.Texture2D (V3i(7, 5, 1)) 1 count samples isArray format bytesPerTexel
+            )
+
     let tests (target: TestTarget) =
         [
             "Non-positive arguments",        Cases.nonPositiveArguments
@@ -209,6 +316,8 @@ module TextureCreate =
             "Unsupported multisample count", Cases.unsupportedMultisamples
 
             if target = TestTarget.GL then
-                "Memory usage",              Cases.memoryUsage
+                "Memory usage",                         Cases.memoryUsage
+                "Half-float memory estimates",          MemoryEstimates.ordinaryLayouts
+                "Half-float multisample estimates",     MemoryEstimates.multisampleLayouts
         ]
         |> prepareCasesGpu "Create" target

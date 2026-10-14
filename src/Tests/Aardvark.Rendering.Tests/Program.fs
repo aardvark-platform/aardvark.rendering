@@ -23,6 +23,7 @@ let tests =
             Texture.TextureUpload.tests
             Texture.TextureDownload.tests
             Texture.TextureCreate.tests
+            Texture.PixelSize.tests
             Texture.TextureCopy.tests
             Texture.TextureClear.tests
             Texture.TextureCompression.tests

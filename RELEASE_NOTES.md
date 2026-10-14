@@ -1,3 +1,4 @@
+- Corrected `R16f` pixel-size metadata to 16 bits (2 bytes) and OpenGL texture-memory estimates; physical GPU allocation is unchanged.
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
 - Fixed `ConcurrentDeltaPriorityQueue` to dequeue minimum priorities, ignore zero-count batches without evaluating priorities, preserve coalesced count partitions, and release its monitor when dequeue fails.
 - Fixed colored resource locks to balance lifecycle callbacks, restore nested ownership safely under contention ([#137](https://github.com/aardvark-platform/aardvark.rendering/issues/137))
