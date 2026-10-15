@@ -856,6 +856,7 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
     let mutable lastMousePosition = V2d.Zero
     let mutable enableVSync = enableVSync
     let mutable vsync = not enableVSync
+    let isOpenGL = glfw.GetWindowAttrib(win, WindowHintClientApi.ClientApi |> int |> enum) // workaround for determining if GL
     let mutable showFrameTime = true
 
     let transaction = new Transaction() // reusable transaction for update and redraw -> looks like they are not used concurrently
@@ -1696,7 +1697,7 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
                 sw.Restart()
 
                 requiresRedraw <- false
-                if vsync <> enableVSync then
+                if vsync <> enableVSync && isOpenGL then // TODO: Vulkan vsync is controlled via the swapchain
                     vsync <- enableVSync
                     let oldCurr = glfw.GetCurrentContext()
                     if oldCurr <> win then
