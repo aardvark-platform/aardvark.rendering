@@ -687,6 +687,9 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
         visibleWindows.Remove w |> ignore
         glfw.PostEmptyEvent()
 
+    member internal x.RemoveParentWindow(w : Window) =
+        if parentWindow |> Option.contains w.Handle then parentWindow <- None
+
     member x.AddVisibleWindow(w : Window) =
         visibleWindows.Add w |> ignore
         glfw.PostEmptyEvent()
@@ -813,7 +816,7 @@ type Instance(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, h
 
         for w in ws do w.IsVisible <- true
 
-        while existingWindows.Count > 0 do
+        while existingWindows.Count > 0 || not queue.IsEmpty do
             if wait then glfw.WaitEventsTimeout(0.01)
             else glfw.PollEvents()
 
@@ -1203,7 +1206,7 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
             start + sw.Elapsed
         )
 
-    let mutable isDisposed = false
+    let mutable isDisposed = 0
     let mutable beforeFullScreen = Box2i.FromMinAndSize(V2i.Zero, V2i(1024, 768))
     let mutable renderContinuous = false
 
@@ -1387,10 +1390,11 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
         member x.Run() = x.Run()
        
     member x.Dispose() =
-        if not isDisposed then
-            isDisposed <- true
+        if Interlocked.Exchange(&isDisposed, 1) = 0 then
             instance.RemoveExistingWindow x
             instance.Post (fun () ->
+                instance.RemoveParentWindow x
+
                 swapchain |> Option.iter Disposable.dispose
                 swapchain <- None
 

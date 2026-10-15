@@ -7,6 +7,7 @@
 - [Sg] Added primitives for wireframe spheres
 - [Application] Do not dispose application provided via `RenderConfig`
 - [GLFW] Only invoke `SwapInterval` for OpenGL windows
+- [GLFW] Remove window as parent when disposed
 
 ### 5.6.10
 - Fixed adaptive texture-attachment size metadata to track the selected mip level and texture changes rather than reporting the base-level extent.
