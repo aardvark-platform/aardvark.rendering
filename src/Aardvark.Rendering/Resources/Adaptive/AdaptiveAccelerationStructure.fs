@@ -50,6 +50,8 @@ type internal AdaptiveAccelerationStructure(runtime : IAccelerationStructureRunt
             else
                 rt.ReplacedResource(ResourceKind.AccelerationStructure)
                 h.Dispose()
+                // Successful retirement ends ownership even if replacement creation fails.
+                handle <- None
                 create data
 
         | None ->
