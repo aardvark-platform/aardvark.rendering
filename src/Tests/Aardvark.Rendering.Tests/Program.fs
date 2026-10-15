@@ -83,6 +83,7 @@ let tests =
             Other.ShapeListConcat.tests
             Other.UniformWriter.tests
             Other.AdaptiveResource.tests
+            Other.SceneGraphCSharpAttributes.tests
             Other.Input.tests
             Other.ContextCreation.tests
             Other.VulkanWrapper.tests

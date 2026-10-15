@@ -281,8 +281,12 @@ type SceneGraphExtensions =
     [<Extension>]
     static member VertexAttribute(sg : ISg, attribute : Symbol, data : aval<Array>) : ISg = Sg.VertexAttributeApplicator(attribute, BufferView(AVal.map (fun x -> (ArrayBuffer(x) :> IBuffer)) data, data.GetValue().GetType().GetElementType()), sg) :> ISg
 
+    /// Value-type arrays are not evaluated until the attribute buffer is requested.
+    /// Reference-element arrays are evaluated here to preserve runtime element-type inference.
     [<Extension>]
-    static member VertexAttribute<'a>(sg : ISg, attribute : Symbol, data : aval<'a[]>) : ISg = Sg.VertexAttributeApplicator(attribute, BufferView(AVal.map (fun x -> (ArrayBuffer(x) :> IBuffer)) data, data.GetValue().GetType().GetElementType()), sg) :> ISg
+    static member VertexAttribute<'a>(sg : ISg, attribute : Symbol, data : aval<'a[]>) : ISg =
+        Sg.VertexAttributeApplicator(attribute, BufferView(AVal.map (fun x -> (ArrayBuffer(x) :> IBuffer)) data,
+            (if typeof<'a>.IsValueType then typeof<'a> else data.GetValue().GetType().GetElementType())), sg) :> ISg
 
     [<Extension>]
     static member Pass(sg : ISg, renderPass : RenderPass) : ISg = Sg.PassApplicator(renderPass, sg) :> ISg
@@ -299,8 +303,12 @@ type SceneGraphExtensions =
     [<Extension>]
     static member InstanceAttribute(sg : ISg, attribute : Symbol, data : aval<Array>) : ISg = Sg.InstanceAttributeApplicator(attribute, BufferView(AVal.map (fun x -> (ArrayBuffer(x) :> IBuffer)) data, data.GetValue().GetType().GetElementType()), sg) :> ISg
 
+    /// Value-type arrays are not evaluated until the attribute buffer is requested.
+    /// Reference-element arrays are evaluated here to preserve runtime element-type inference.
     [<Extension>]
-    static member InstanceAttribute(sg : ISg, attribute : Symbol, data : aval<'a[]>) : ISg = Sg.InstanceAttributeApplicator(attribute, BufferView(AVal.map (fun x -> (ArrayBuffer(x) :> IBuffer)) data, data.GetValue().GetType().GetElementType()), sg) :> ISg
+    static member InstanceAttribute(sg : ISg, attribute : Symbol, data : aval<'a[]>) : ISg =
+        Sg.InstanceAttributeApplicator(attribute, BufferView(AVal.map (fun x -> (ArrayBuffer(x) :> IBuffer)) data,
+            (if typeof<'a>.IsValueType then typeof<'a> else data.GetValue().GetType().GetElementType())), sg) :> ISg
 
 
 [<Extension>]
