@@ -5,10 +5,11 @@ open FSharp.Data.Adaptive.Operators
 open System
 
 /// Interface for attribute buffers containing a single value that is repeated for all vertices or instances.
+/// Adaptive visitors receive the buffer wrapper as an adaptive IBuffer, not its contained scalar.
 type ISingleValueBuffer =
     inherit IAdaptiveValue<IBuffer>
 
-    /// The contained value.
+    /// The contained scalar. Accept a visitor on this value to visit the scalar rather than the buffer.
     abstract member Value : IAdaptiveValue
 
 /// Attribute buffer containing a single value that is repeated for all vertices or instances.
@@ -21,7 +22,7 @@ type SingleValueBuffer<'T when 'T : unmanaged>(value : aval<'T>) =
     /// Buffer containing zero as value.
     static member Zero = zero
 
-    /// The contained value.
+    /// The contained scalar. Accept a visitor on this value to visit the scalar rather than the buffer.
     member x.Value = value
 
     /// Returns the value wrapped in an ArrayBuffer.
@@ -55,7 +56,7 @@ type SingleValueBuffer<'T when 'T : unmanaged>(value : aval<'T>) =
         member x.Weak = value.Weak
         member x.GetValue(t) = x.GetValue(t)
         member x.GetValueUntyped(t) = x.GetValue(t)
-        member x.Accept(visitor) = value.Accept(visitor)
+        member x.Accept(visitor) = visitor.Visit (x :> aval<IBuffer>)
         member x.AllInputsProcessed(obj) = value.AllInputsProcessed(obj)
         member x.InputChanged(t, o) = value.InputChanged(t, o)
         member x.Mark() = value.Mark()

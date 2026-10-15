@@ -1,3 +1,4 @@
+- Fixed single-value buffer visitors and adaptive casts to use buffer payloads rather than their contained scalars; explicit scalar access remains available through `Value`.
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
 - Fixed `ConcurrentDeltaPriorityQueue` to dequeue minimum priorities, ignore zero-count batches without evaluating priorities, preserve coalesced count partitions, and release its monitor when dequeue fails.
 - Fixed colored resource locks to balance lifecycle callbacks, restore nested ownership safely under contention ([#137](https://github.com/aardvark-platform/aardvark.rendering/issues/137))
