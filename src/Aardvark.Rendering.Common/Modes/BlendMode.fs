@@ -67,7 +67,13 @@ type BlendMode =
     member x.Equals(other : BlendMode) =
         match x.Enabled, other.Enabled with
         | false, false -> true
-        | true, true -> x.Config = other.Config
+        | true, true ->
+            x.SourceColorFactor = other.SourceColorFactor &&
+            x.SourceAlphaFactor = other.SourceAlphaFactor &&
+            x.DestinationColorFactor = other.DestinationColorFactor &&
+            x.DestinationAlphaFactor = other.DestinationAlphaFactor &&
+            x.ColorOperation = other.ColorOperation &&
+            x.AlphaOperation = other.AlphaOperation
         | _ -> false
 
     override x.Equals(other : obj) =
