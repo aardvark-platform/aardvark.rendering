@@ -5,6 +5,7 @@
 - Fixed adaptive framebuffer cubes to retain completed face/mip handles after initial materialization failures, retry missing slots, and release partially created cubes safely.
 - Fixed subdivision-sphere wireframes to emit every undirected mesh edge exactly once.
 - [Sg] Added primitives for wireframe spheres
+- [Application] Do not dispose application provided via `RenderConfig`
 
 ### 5.6.10
 - Fixed adaptive texture-attachment size metadata to track the selected mip level and texture changes rather than reporting the base-level extent.

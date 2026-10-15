@@ -3,6 +3,7 @@
 
 
 open System
+open System.Threading
 open Aardvark.Base
 open FSharp.Data.Adaptive
 
@@ -135,6 +136,7 @@ module Utilities =
     [<AbstractClass>]
     type private SimpleRenderWindow(win : IRenderWindow, view : aval<Trafo3d[]>, proj : aval<Trafo3d[]>) =
         let mutable scene = Sg.empty
+        let mutable isDisposed = 0
 
         let controllers, isVr = 
             match win with
@@ -151,8 +153,9 @@ module Utilities =
         default x.Release() = ()
 
         member x.Dispose() =
-            win.Dispose()  // Disposes OpenTK.GameWindow and OpenTK.GraphicsContext (depending on backend)
-            x.Release() // Application.Dispose / Runtime.Dispose + Context.Dispose
+            if Interlocked.Exchange(&isDisposed, 1) = 0 then
+                win.Dispose()  // Disposes OpenTK.GameWindow and OpenTK.GraphicsContext (depending on backend)
+                x.Release() // Application.Dispose / Runtime.Dispose + Context.Dispose
 
         member x.Control = win :> IRenderControl
         member x.Runtime = win.Runtime
@@ -388,9 +391,8 @@ module Utilities =
 
     let private createMonoScreen (cfg : RenderConfig) =
         let app = createApplication cfg
-
         let win = createGameWindow app cfg
-        
+
         let initialView = 
             match cfg.initialCamera with
                 | None -> CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
@@ -426,9 +428,8 @@ module Utilities =
                 overlayTask.Name <- "Window Task (Overlay)"
                 RenderTask.ofList [mainTask; overlayTask]
 
-            override x.Release() = 
-               
-                app.Dispose()
+            override x.Release() =
+               if cfg.app.IsNone then app.Dispose()
 
         } :> ISimpleRenderWindow
 
@@ -584,8 +585,8 @@ module Utilities =
                     compile cfg sg
 
                 override x.Release() =
-                    signature.Dispose()     
-                    app.Dispose()
+                    signature.Dispose()
+                    if cfg.app.IsNone then app.Dispose()
 
             } :> ISimpleRenderWindow
 
