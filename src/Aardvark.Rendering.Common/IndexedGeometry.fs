@@ -19,7 +19,7 @@ module private IndexHelpers =
         let private indexOperations =
             let d = Dictionary<Type, obj * obj * obj>()
             d.[typeof<int32>]  <- (id<int32>,     id<int32>,     (fun (x: int32) (y: int32) -> x + y) :> obj)
-            d.[typeof<int16>]  <- (int32<int16>,  int16<int32>,  (fun (x: int16) (y: int32) -> x + int16 y) :> obj)
+            d.[typeof<int16>]  <- (box (fun (x: int16) -> int32 (uint16 x)), int16<int32>, (fun (x: int16) (y: int32) -> x + int16 y) :> obj)
             d.[typeof<uint32>] <- (int32<uint32>, uint32<int32>, (fun (x: uint32) (y: int32) -> x + uint32 y) :> obj)
             d.[typeof<uint16>] <- (int32<uint16>, uint16<int32>, (fun (x: uint16) (y: int32) -> x + uint16 y) :> obj)
             d
@@ -350,6 +350,7 @@ type IndexedGeometry =
             x.ToIndexed typeof<int32>
 
         /// Returns a non-indexed copy of the geometry.
+        /// Int16 index bit patterns are interpreted as unsigned values from 0 to 65535.
         /// If it is already non-indexed, it is returned unmodified.
         member x.ToNonIndexed() =
             if isNull x.IndexArray then
@@ -553,6 +554,7 @@ module IndexedGeometry =
     let inline toIndexed (g : IndexedGeometry) = g.ToIndexed()
 
     /// Returns a non-indexed copy of the geometry.
+    /// Int16 index bit patterns are interpreted as unsigned values from 0 to 65535.
     /// If it is already non-indexed, it is returned unmodified.
     let inline toNonIndexed (g : IndexedGeometry) = g.ToNonIndexed()
 

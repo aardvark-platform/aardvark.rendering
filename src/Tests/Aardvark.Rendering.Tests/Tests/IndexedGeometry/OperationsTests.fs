@@ -301,6 +301,171 @@ module Operations =
                 let accepted = [IndexedGeometryMode.PointList; IndexedGeometryMode.LineList; IndexedGeometryMode.TriangleList; IndexedGeometryMode.QuadList]
                 argument $"unsupported {mode}" $"IndexedGeometryMode must be one of {accepted}." (fun () -> left.Union right |> ignore)
 
+    module private IndexExpansion =
+
+        let private scalar = Symbol.Create "Expansion scalar"
+        let private integer = Symbol.Create "Expansion integer"
+        let private label = Symbol.Create "Expansion label"
+
+        let private modes = Enum.GetValues<IndexedGeometryMode>()
+        let private patterns =
+            [ [| 0; 32767; 32768; 65535 |]
+              [| 65535; 32768; 0; 32767 |]
+              [| 65535; 0; 32768; 32767; 0; 65535; 32767; 32768; 32768; 0; 65535; 32767 |] ]
+
+        let private attributes count padding =
+            let result = SymbolDict<Array>()
+            result.[DefaultSemantic.Positions] <- Array.init count (fun i -> V3f(float32 i, float32 (-i), float32 (i % 7)))
+            result.[DefaultSemantic.Colors] <- Array.init (count + padding) (fun i -> C4b(byte (i % 251), 17uy, 31uy, 255uy))
+            result.[scalar] <- Array.init (count + padding) (fun i -> float i + 0.25)
+            result.[integer] <- Array.init (count + padding) (fun i -> i * 3 + 7)
+            result.[label] <- Array.init (count + padding) (fun i -> $"vertex {i}")
+            result
+
+        let private create mode indices attributes =
+            let singles = SymbolDict<obj>()
+            singles.[DefaultSemantic.Material] <- obj()
+            singles.[DefaultSemantic.Colors] <- C4b.White
+            IndexedGeometry(mode, indices, attributes, singles)
+
+        let private same expected actual context =
+            Expect.isTrue (Object.ReferenceEquals(expected, actual)) context
+
+        let private bitPatterns (signed : int16[]) (unsigned : uint16[]) context =
+            let signedBytes, unsignedBytes = Array.zeroCreate<byte> (2 * signed.Length), Array.zeroCreate<byte> (2 * unsigned.Length)
+            Buffer.BlockCopy(signed, 0, signedBytes, 0, signedBytes.Length)
+            Buffer.BlockCopy(unsigned, 0, unsignedBytes, 0, unsignedBytes.Length)
+            Expect.equal signedBytes unsignedBytes $"{context}: identical 16-bit index representations"
+
+        let private expand context (logical : int[]) (source : IndexedGeometry) =
+            let mode = source.Mode
+            let indices, attributes, singles = source.IndexArray, source.IndexedAttributes, source.SingleAttributes
+            let indexCopy = indices.Clone() :?> Array
+            let arrays = [| for KeyValue(semantic, array) in attributes -> semantic, array, array.Clone() :?> Array |]
+            let singleValues = [| for KeyValue(semantic, value) in singles -> semantic, value |]
+            let result =
+                try source.ToNonIndexed()
+                with error -> failtestf "%s: %O" context error
+            Expect.isNull result.IndexArray $"{context}: expanded geometry is non-indexed"
+            Expect.equal result.Mode mode $"{context}: topology"
+            Expect.equal result.VertexCount logical.Length $"{context}: expanded vertex count"
+            Expect.equal result.FaceVertexCount source.FaceVertexCount $"{context}: face vertex count"
+            Expect.equal result.FaceCount source.FaceCount $"{context}: primitive count"
+            Expect.isFalse (Object.ReferenceEquals(result.IndexedAttributes, attributes)) $"{context}: independent attribute dictionary"
+            Expect.isFalse (Object.ReferenceEquals(result.SingleAttributes, singles)) $"{context}: independent single dictionary"
+            Expect.equal result.IndexedAttributes.Count attributes.Count $"{context}: attribute keys"
+            Expect.equal result.SingleAttributes.Count singles.Count $"{context}: single keys"
+            for semantic, array, original in arrays do
+                let expected = Array.CreateInstance(array.GetType().GetElementType(), logical.Length)
+                for i in 0 .. logical.Length - 1 do expected.SetValue(array.GetValue(logical.[i] % array.Length), i)
+                let actual = result.IndexedAttributes.[semantic]
+                Expect.equal (actual.GetType()) (array.GetType()) $"{context}, {semantic}: attribute type"
+                Expect.equal actual expected $"{context}, {semantic}: expanded values and modulo addressing"
+                if actual.Length > 0 then
+                    Expect.isFalse (Object.ReferenceEquals(actual, array)) $"{context}, {semantic}: expanded array ownership"
+                same array source.IndexedAttributes.[semantic] $"{context}, {semantic}: source array identity"
+                Expect.equal array original $"{context}, {semantic}: source values including padding"
+            for semantic, value in singleValues do
+                same value result.SingleAttributes.[semantic] $"{context}, {semantic}: shallow single value"
+                same value source.SingleAttributes.[semantic] $"{context}, {semantic}: unchanged source single"
+            Expect.equal source.Mode mode $"{context}: source topology"
+            Expect.equal source.IndexedAttributes.Count arrays.Length $"{context}: source attribute keys"
+            Expect.equal source.SingleAttributes.Count singleValues.Length $"{context}: source single keys"
+            same indices source.IndexArray $"{context}: source index identity"
+            Expect.equal indices indexCopy $"{context}: source index values"
+            same attributes source.IndexedAttributes $"{context}: source dictionary identity"
+            same singles source.SingleAttributes $"{context}: source single dictionary identity"
+            result
+
+        let unsignedBoundaries() =
+            for count in [17; 65536] do
+                for padding in [0; 1; 7] do
+                    let data = attributes count padding
+                    for mode in modes do
+                        for logical in patterns do
+                            let pattern = logical |> Array.map string |> String.concat ","
+                            let context = $"{mode}, count={count}, padding={padding}, indices={pattern}"
+                            let signed, unsigned = Array.map int16 logical, Array.map uint16 logical
+                            bitPatterns signed unsigned context
+                            let source = create mode (signed :> Array) data
+                            let unsignedSource = create mode (unsigned :> Array) data
+                            let control = expand $"{context}, UInt16" logical unsignedSource
+                            let first = expand $"{context}, Int16" logical source
+                            let second = expand $"{context}, repeated Int16" logical source
+                            for KeyValue(semantic, array) in first.IndexedAttributes do
+                                Expect.equal array control.IndexedAttributes.[semantic] $"{context}, {semantic}: signed/unsigned bit-pattern equivalence"
+                                Expect.isFalse (Object.ReferenceEquals(array, second.IndexedAttributes.[semantic])) $"{context}, {semantic}: repeated result arrays"
+                            Expect.isFalse (Object.ReferenceEquals(first.IndexedAttributes, second.IndexedAttributes)) $"{context}: repeated result dictionaries"
+                            Expect.isFalse (Object.ReferenceEquals(first.SingleAttributes, second.SingleAttributes)) $"{context}: repeated single dictionaries"
+                            first.IndexedAttributes.Remove label |> ignore
+                            first.SingleAttributes.Remove DefaultSemantic.Material |> ignore
+                            Expect.isTrue (data.ContainsKey label && second.IndexedAttributes.ContainsKey label) $"{context}: result dictionary mutation is isolated"
+                            Expect.isTrue (source.SingleAttributes.ContainsKey DefaultSemantic.Material && second.SingleAttributes.ContainsKey DefaultSemantic.Material) $"{context}: single dictionary mutation is isolated"
+
+        let generatedRoundTrips() =
+            for count in [32769; 32770; 65536; 65537] do
+                for mode in [IndexedGeometryMode.PointList; IndexedGeometryMode.TriangleList] do
+                    let context = $"{mode}, generated count={count}"
+                    let source = create mode null (attributes count 3)
+                    let indexed = source.ToIndexed typeof<int16>
+                    let unsigned = source.ToIndexed typeof<uint16>
+                    let expected = Array.init count (fun i -> i &&& 65535)
+                    bitPatterns (unbox indexed.IndexArray) (unbox unsigned.IndexArray) context
+                    Expect.equal (unbox<int16[]> indexed.IndexArray) (Array.map int16 expected) $"{context}: generated index values"
+                    let result = expand context expected indexed
+                    let control = expand $"{context}, UInt16" expected unsigned
+                    for KeyValue(semantic, array) in result.IndexedAttributes do
+                        Expect.equal array control.IndexedAttributes.[semantic] $"{context}, {semantic}: generated signed/unsigned round trip"
+                    Expect.isNull source.IndexArray $"{context}: original remains non-indexed"
+                    Expect.isFalse (Object.ReferenceEquals(source.IndexedAttributes, indexed.IndexedAttributes)) $"{context}: index generation copies the attribute dictionary"
+                    for KeyValue(semantic, array) in source.IndexedAttributes do
+                        same array indexed.IndexedAttributes.[semantic] $"{context}, {semantic}: index generation retains array ownership"
+                    same source (source.ToNonIndexed()) $"{context}: original non-indexed identity"
+
+        let indexControls() =
+            let factories : (string * (int[] -> Array)) list =
+                [ "Int16", fun values -> Array.map int16 values :> Array
+                  "UInt16", fun values -> Array.map uint16 values :> Array
+                  "Int32", fun values -> values :> Array
+                  "UInt32", fun values -> Array.map uint32 values :> Array ]
+            for count in [1; 2; 17; 32768] do
+                let data = attributes count 3
+                for name, convert in factories do
+                    for logical in [Array.empty; [| 0; 32767; 2; 17; 0; 127; 32767 |]] do
+                        let pattern = logical |> Array.map string |> String.concat ","
+                        let context = $"{name}, count={count}, control indices={pattern}"
+                        expand context logical (create IndexedGeometryMode.PointList (convert logical) data) |> ignore
+            for name, convert in factories |> List.tail do
+                let logical = [| 65535; 32768; 0; 32767; 65535 |]
+                expand $"{name}, high-bit control" logical (create IndexedGeometryMode.PointList (convert logical) (attributes 17 0)) |> ignore
+            for count in [0; 1; 32768] do
+                let source = create IndexedGeometryMode.PointList null (attributes count 0)
+                let indexed = source.ToIndexed typeof<int16>
+                let logical = Array.init count (fun i -> i &&& 65535)
+                expand $"generated control, count={count}" logical indexed |> ignore
+            for indices in [[| -1 |] :> Array; [| UInt32.MaxValue |] :> Array] do
+                let source = create IndexedGeometryMode.PointList indices (attributes 17 0)
+                Expect.throwsT<IndexOutOfRangeException> (fun () -> source.ToNonIndexed() |> ignore) $"{indices.GetType()}: unchanged signed 32-bit conversion behavior"
+
+        let identityAndAbsentAttributes() =
+            for mode in modes do
+                for absent in [false; true] do
+                    let source = create mode null (attributes 3 1)
+                    if absent then source.IndexedAttributes <- null; source.SingleAttributes <- null
+                    same source (source.ToNonIndexed()) $"{mode}, absent={absent}: non-indexed identity"
+                    same source (IndexedGeometry.toNonIndexed source) $"{mode}, absent={absent}: non-indexed alias identity"
+                    source.IndexArray <- [| 0s; 1s; 2s |]
+                    if absent then
+                        let result = source.ToNonIndexed()
+                        Expect.isNull result.IndexedAttributes $"{mode}: absent attributes remain null"
+                        Expect.isNull result.SingleAttributes $"{mode}: absent singles remain null"
+                        Expect.isNull result.IndexArray $"{mode}: absent-attribute result is non-indexed"
+                    else
+                        source.IndexedAttributes.[label] <- null
+                        let result = source.ToNonIndexed()
+                        Expect.isNull result.IndexedAttributes.[label] $"{mode}: null-array behavior"
+                        Expect.isNull source.IndexedAttributes.[label] $"{mode}: null source unchanged"
+
     module StripConversion =
 
         let private stripModes =
@@ -504,6 +669,11 @@ module Operations =
             "Union.Empty and exact-length attributes",     UnionPrefixes.emptyAndExact
             "Union.Dictionary and single-value controls",  UnionPrefixes.dictionaryAndSingleControls
             "Union.Type and topology error controls",      UnionPrefixes.errorControls
+
+            "Non-indexed expansion.Unsigned Int16 boundaries",                   IndexExpansion.unsignedBoundaries
+            "Non-indexed expansion.Generated Int16 round trips",                 IndexExpansion.generatedRoundTrips
+            "Non-indexed expansion.Modulo and index-type controls",              IndexExpansion.indexControls
+            "Non-indexed expansion.Non-indexed identity and absent attributes",  IndexExpansion.identityAndAbsentAttributes
 
             "Strip conversion.Indexed conversion",               StripConversion.indexedConversion
             "Strip conversion.Non-indexed conversion",           StripConversion.nonIndexedConversion
