@@ -69,6 +69,7 @@ let tests =
         ]
 
         testAllTargets "Utilities" [
+            Utilities.ArrayVisitorTests.tests
             Utilities.ConcurrentDeltaPriorityQueue.tests
             Utilities.CompactSet.tests
             Utilities.ColoredLock.tests
