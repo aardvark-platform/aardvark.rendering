@@ -72,6 +72,7 @@ let tests =
             Utilities.ConcurrentDeltaPriorityQueue.tests
             Utilities.CompactSet.tests
             Utilities.ColoredLock.tests
+            Utilities.RenderTaskLockTests.tests
             Utilities.MemoryManager.tests
             Utilities.Trie.tests
             Utilities.TaskUtilities.tests
