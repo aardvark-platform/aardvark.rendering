@@ -294,6 +294,7 @@ type IBufferRangeExtensions private() =
     ///<param name="dstIndex">Index at which copying to the data array begins.</param>
     ///<param name="count">Number of elements to copy.</param>
     ///<returns>A function that blocks until the download is complete.</returns>
+    ///<remarks>The destination stays pinned until completion succeeds or fails. The returned function must be invoked; cancellation and abandonment are not supported. Repeated or concurrent calls share one completion and its exception.</remarks>
     ///<exception cref="ArgumentException">Thrown if either the logical source or host-array range is invalid. A zero-count copy may start at any position through the exact end.</exception>
     [<Extension>]
     static member DownloadAsync(src : IBufferRange<'T>, dst : 'T[], srcIndex : int, dstIndex : int, count : int) =
@@ -303,9 +304,17 @@ type IBufferRangeExtensions private() =
         let srcOffset = getTransferOffset src srcIndex sizeInBytes
 
         if count > 0 then
-            (dstIndex, dst) ||> NativePtr.pinArri (fun pDst ->
-                src.Buffer.DownloadAsync(srcOffset, pDst.Address, sizeInBytes)
-            )
+            let pin = GCHandle.Alloc(dst, GCHandleType.Pinned)
+            try
+                let pDst = pin.AddrOfPinnedObject() + nativeint (byteSize<'T> dstIndex)
+                let mutable wait = Unchecked.defaultof<unit -> unit>
+                let completion = lazy (try wait() finally pin.Free())
+                let finish = fun () -> completion.Force()
+                wait <- src.Buffer.DownloadAsync(srcOffset, pDst, sizeInBytes)
+                finish
+            with _ ->
+                pin.Free()
+                reraise()
         else
             id
 
@@ -314,6 +323,7 @@ type IBufferRangeExtensions private() =
     ///<param name="dst">The data array to copy to.</param>
     ///<param name="count">Number of elements to copy.</param>
     ///<returns>A function that blocks until the download is complete.</returns>
+    ///<remarks>The destination stays pinned until completion succeeds or fails. The returned function must be invoked; cancellation and abandonment are not supported. Repeated or concurrent calls share one completion and its exception.</remarks>
     [<Extension>]
     static member inline DownloadAsync(src : IBufferRange<'T>, dst : 'T[], count : int) =
         src.DownloadAsync(dst, 0, 0, count)
@@ -322,6 +332,7 @@ type IBufferRangeExtensions private() =
     ///<param name="src">The buffer range to copy data from.</param>
     ///<param name="dst">The data array to copy to.</param>
     ///<returns>A function that blocks until the download is complete.</returns>
+    ///<remarks>The destination stays pinned until completion succeeds or fails. The returned function must be invoked; cancellation and abandonment are not supported. Repeated or concurrent calls share one completion and its exception.</remarks>
     [<Extension>]
     static member inline DownloadAsync(src : IBufferRange<'T>, dst : 'T[]) =
         src.DownloadAsync(dst, min src.Count dst.Length)
@@ -329,6 +340,7 @@ type IBufferRangeExtensions private() =
     ///<summary>Asynchronously copies elements from a buffer range to an array.</summary>
     ///<param name="src">The buffer range to copy data from.</param>
     ///<returns>A function that blocks until the download is complete.</returns>
+    ///<remarks>The allocated array stays pinned until completion succeeds or fails. The returned function must be invoked; cancellation and abandonment are not supported. Repeated or concurrent calls share one completion and its exception.</remarks>
     [<Extension>]
     static member DownloadAsync(src : IBufferRange<'T>) =
         let dst = Array.zeroCreate<'T> (int src.Count)

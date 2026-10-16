@@ -9,6 +9,7 @@ let tests =
             Buffer.BufferCopy.tests
             Buffer.BufferUpload.tests
             Buffer.BufferDownload.tests
+            Buffer.BufferDownloadAsync.tests
             Buffer.BufferToArray.tests
             Buffer.AttributeBuffer.tests
             Buffer.ManagedBuffer.tests

@@ -46,6 +46,7 @@
     <Compile Include="Tests\Buffer\Copy.fs" />
     <Compile Include="Tests\Buffer\Upload.fs" />
     <Compile Include="Tests\Buffer\Download.fs" />
+    <Compile Include="Tests\Buffer\DownloadAsync.fs" />
     <Compile Include="Tests\Buffer\ToArray.fs" />
     <Compile Include="Tests\Buffer\Attributes.fs" />
     <Compile Include="Tests\Buffer\ManagedBuffer.fs" />
