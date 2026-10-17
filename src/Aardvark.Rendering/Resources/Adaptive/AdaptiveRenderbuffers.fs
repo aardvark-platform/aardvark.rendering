@@ -58,9 +58,10 @@ module private AdaptiveRenderbufferTypes =
             | Some h when h.Size = size && h.Format = format && h.Samples = samples ->
                 h
 
-            | Some h ->
+            | Some _ ->
                 t.ReplacedResource(ResourceKind.Renderbuffer)
-                runtime.DeleteRenderbuffer(h)
+                // Forget retired ownership before creation, but retain it if deletion throws.
+                x.Destroy()
                 create size format samples
 
             | None ->
@@ -111,6 +112,7 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
     ///<param name="size">The size of the renderbuffer.</param>
     ///<param name="format">The desired renderbuffer format.</param>
     ///<param name="samples">The number of samples.</param>
+    ///<remarks>After successful retirement, failed replacement creation leaves no owned handle; later evaluation retries creation.</remarks>
     [<Extension>]
     static member CreateRenderbuffer(this : ITextureRuntime, size : aval<V2i>, format : TextureFormat, samples : aval<int>) =
         AdaptiveRenderbuffer(this, ~~format, samples, size) :> IAdaptiveRenderbuffer
@@ -120,6 +122,7 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
     ///<param name="size">The size of the renderbuffer.</param>
     ///<param name="format">The desired renderbuffer format.</param>
     ///<param name="samples">The number of samples. Default is 1.</param>
+    ///<remarks>After successful retirement, failed replacement creation leaves no owned handle; later evaluation retries creation.</remarks>
     [<Extension>]
     static member CreateRenderbuffer(this : ITextureRuntime, size : aval<V2i>, format : TextureFormat,
                                      [<Optional; DefaultParameterValue(1)>] samples : int) =
