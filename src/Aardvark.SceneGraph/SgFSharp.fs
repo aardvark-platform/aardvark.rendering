@@ -912,26 +912,43 @@ module SgFSharp =
                 let fromSize = src.Size
                 let toSize = dst.Size
                 let factor = toSize / fromSize
+                let factor =
+                    if (fromSize.X = 0.0 || fromSize.Y = 0.0 || fromSize.Z = 0.0) &&
+                       src.IsValid && dst.IsValid && fromSize.IsFinite && toSize.IsFinite then
+                        if fromSize = V3d.Zero then V3d.One
+                        else
+                            V3d((if fromSize.X = 0.0 then infinity else factor.X),
+                                (if fromSize.Y = 0.0 then infinity else factor.Y),
+                                (if fromSize.Z = 0.0 then infinity else factor.Z))
+                    else factor
 
                 factor.X |> min factor.Y |> min factor.Z
 
             Trafo3d.Translation(-src.Center) * Trafo3d.Scale(scale) * Trafo3d.Translation(dst.Center)
 
-        /// Adaptively transforms the scene so its bounding box aligns with the given box.
+        /// Adaptively centers and uniformly fits the scene's bounding box inside the given box.
+        /// For finite valid bounds, collapsed source axes do not constrain the scale;
+        /// point bounds are translated to the target center with unit scale.
         let normalizeToAdaptive (box : Box3d) (sg : ISg) =
             let bb = sg?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
             Sg.TrafoApplicator(bb |> AVal.map (transformBox box), sg) :> ISg
 
-        /// Transforms the scene so its bounding box aligns with the given box.
+        /// Centers and uniformly fits the scene's bounding box inside the given box at construction.
+        /// For finite valid bounds, collapsed source axes do not constrain the scale;
+        /// point bounds are translated to the target center with unit scale.
         let normalizeTo (box : Box3d) (sg : ISg) =
             let bb = sg?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
             Sg.TrafoApplicator(bb.GetValue() |> transformBox box |> AVal.constant, sg) :> ISg
 
-        /// Adaptively transforms the scene so its bounding box spans from -1 to 1 in all dimensions.
+        /// Adaptively centers and uniformly fits the scene's bounding box inside [-1, 1] on every axis.
+        /// For finite valid bounds, collapsed source axes do not constrain the scale;
+        /// point bounds are translated to the origin with unit scale.
         let normalizeAdaptive sg =
             sg |> normalizeToAdaptive ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) )
 
-        /// Transforms the scene so its bounding box spans from -1 to 1 in all dimensions.
+        /// Centers and uniformly fits the scene's bounding box inside [-1, 1] on every axis at construction.
+        /// For finite valid bounds, collapsed source axes do not constrain the scale;
+        /// point bounds are translated to the origin with unit scale.
         let normalize sg =
             sg |> normalizeTo ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) )
 

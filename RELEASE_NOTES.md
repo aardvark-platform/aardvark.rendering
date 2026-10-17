@@ -1,3 +1,4 @@
+- Fixed scene-graph normalization of planar, linear, and point bounds: collapsed source axes no longer constrain the uniform fit scale, and point bounds are centered using unit scale.
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
 - Fixed `ConcurrentDeltaPriorityQueue` to dequeue minimum priorities, ignore zero-count batches without evaluating priorities, preserve coalesced count partitions, and release its monitor when dequeue fails.
 - Fixed colored resource locks to balance lifecycle callbacks, restore nested ownership safely under contention ([#137](https://github.com/aardvark-platform/aardvark.rendering/issues/137))
