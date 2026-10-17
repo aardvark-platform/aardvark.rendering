@@ -1301,12 +1301,194 @@ module SceneGraph =
                         same liveView (C.bufferOfArray live) "unrelated live entry remains usable"
                         GC.KeepAlive live
 
+    module private Normalization =
+
+        let private cube = Box3d(-V3d.One, V3d.One)
+        let private origin = V3d(7.0, -11.0, 13.0)
+        let private targetOrigin = V3d(-17.0, 19.0, 23.0)
+        let private box (origin : V3d) (size : V3d) = Box3d(origin, origin + size)
+        let private volume = box origin (V3d(2.0, 4.0, 8.0))
+        let private target = box targetOrigin (V3d(12.0, 18.0, 24.0))
+
+        let private variants target =
+            [
+                "normalizeTo", false, target, Sg.normalizeTo target
+                "normalizeToAdaptive", true, target, Sg.normalizeToAdaptive target
+                "normalize", false, cube, Sg.normalize
+                "normalizeAdaptive", true, cube, Sg.normalizeAdaptive
+                "CSharp NormalizeToAdaptive", true, target, (fun sg -> CSharp.SceneGraphTools.NormalizeToAdaptive(sg, target))
+                "CSharp NormalizeAdaptive", true, cube, CSharp.SceneGraphTools.NormalizeAdaptive
+            ]
+
+        let private leaf (positions : aval<V3d[]>) =
+            Sg.draw IndexedGeometryMode.PointList
+            |> Sg.vertexAttribute DefaultSemantic.Positions positions
+
+        let private trafo (normalized : ISg) = (normalized :?> Sg.TrafoApplicator).Trafo
+        let private bounds (sg : ISg) = sg.GlobalBoundingBox(Ag.Scope.Root) |> AVal.force
+        let private corners (box : Box3d) = box.ComputeCorners()
+
+        let private expectedScale (src : Box3d) (dst : Box3d) =
+            let ratios = [for axis = 0 to 2 do if src.Size.[axis] > 0.0 then dst.Size.[axis] / src.Size.[axis]]
+            if List.isEmpty ratios then 1.0 else List.min ratios
+
+        let private checkMatrix context (actual : M44d) (expected : M44d) =
+            for row = 0 to 3 do
+                for col = 0 to 3 do
+                    let a, e = actual.[row, col], expected.[row, col]
+                    let equal = if Double.IsFinite e then abs (a - e) <= 1e-9 * max 1.0 (abs e) else a.Equals e
+                    Expect.isTrue equal (sprintf "%s, row=%d, col=%d: expected %g, actual %g" context row col e a)
+
+        let private expectedTrafo (src : Box3d) (dst : Box3d) =
+            Trafo3d.Translation(-src.Center) * Trafo3d.Scale(expectedScale src dst) * Trafo3d.Translation(dst.Center)
+
+        let private checkFit context (src : Box3d) (dst : Box3d) (actual : Trafo3d) =
+            let scale = expectedScale src dst
+            let expected = expectedTrafo src dst
+            checkMatrix (context + ": forward") actual.Forward expected.Forward
+            checkMatrix (context + ": inverse") actual.Backward expected.Backward
+            Expect.approxEquals (actual.TransformPos src.Center) dst.Center 1e-9 (context + ": centers coincide")
+            for point in corners src do
+                let mapped = actual.TransformPos point
+                let expected = dst.Center + scale * (point - src.Center)
+                Expect.approxEquals mapped expected 1e-9 (context + ": centered corner fit")
+                for axis = 0 to 2 do
+                    Expect.isTrue (mapped.[axis] >= dst.Min.[axis] - 1e-9 && mapped.[axis] <= dst.Max.[axis] + 1e-9) (sprintf "%s, point=%A, axis=%d: containment" context point axis)
+                if scale > 0.0 then
+                    Expect.approxEquals (Mat.transformPos actual.Backward mapped) point 1e-8 (context + ": inverse round trip")
+            if scale > 0.0 then
+                for row = 0 to 3 do
+                    for col = 0 to 3 do
+                        Expect.isTrue (Double.IsFinite actual.Forward.[row, col] && Double.IsFinite actual.Backward.[row, col]) (sprintf "%s, row=%d, col=%d: finite transform pair" context row col)
+
+        let translatedPoints _ =
+            for point in [V3d.Zero; origin; -origin; V3d(101.0, 37.0, -53.0)] do
+                let src = Box3d(point, point)
+                for dst in [target; box targetOrigin V3d.Zero; box targetOrigin (V3d(12.0, 0.0, 24.0))] do
+                    for name, _, dst, apply in variants dst do
+                        let scene = leaf (AVal.constant (corners src))
+                        let normalized = apply scene
+                        let context = sprintf "api=%s, point=%A, target=%A" name point dst
+                        checkFit context src dst (trafo normalized |> AVal.force)
+                        Expect.approxEquals (bounds normalized).Min dst.Center 1e-9 (context + ": point bounds translated")
+                        Expect.approxEquals (bounds normalized).Max dst.Center 1e-9 (context + ": point bounds retain zero size")
+
+        let planarAndLinearFits _ =
+            for dimension in [1; 2] do
+                for axis = 0 to 2 do
+                    let mutable size = if dimension = 1 then V3d.Zero else V3d(2.0, 4.0, 8.0)
+                    size.[axis] <- if dimension = 1 then 4.0 else 0.0
+                    let src = box origin size
+                    for factor in [0.5; 3.0] do
+                        let dst = box targetOrigin (size * V3d(factor, factor * 1.5, factor * 2.0))
+                        for name, _, dst, apply in variants dst do
+                            let scene = leaf (AVal.constant (corners src))
+                            let normalized = apply scene
+                            let context = sprintf "api=%s, dimension=%d, axis=%d, factor=%g, target=%A" name dimension axis factor dst
+                            checkFit context src dst (trafo normalized |> AVal.force)
+                            let actualBounds = bounds normalized
+                            let expected = Box3d(corners src |> Array.map (fun p -> dst.Center + expectedScale src dst * (p - src.Center)))
+                            Expect.approxEquals actualBounds expected 1e-9 (context + ": observable fitted bounds")
+
+        let volumeAndCompositionControls _ =
+            let inner = Trafo3d.Scale(2.0, 0.5, 3.0) * Trafo3d.Translation(5.0, -3.0, 7.0)
+            let outer = Trafo3d.RotationZ(0.7) * Trafo3d.Translation(-4.0, 8.0, 11.0)
+            let sizes = [V3d(2.0, 4.0, 8.0); V3d(0.0, 4.0, 8.0); V3d(2.0, 0.0, 8.0); V3d(2.0, 4.0, 0.0); V3d(2.0, 0.0, 0.0); V3d(0.0, 4.0, 0.0); V3d(0.0, 0.0, 8.0)]
+            for size in sizes do
+                let positions = box origin size |> corners
+                let src = Box3d(positions |> Array.map inner.TransformPos)
+                let scene = leaf (AVal.constant positions) |> Sg.trafo' inner
+                for name, _, dst, apply in variants target do
+                    let context = sprintf "api=%s, size=%A" name size
+                    let normalized = apply scene
+                    let fit = trafo normalized |> AVal.force
+                    checkFit context src dst fit
+                    let composed = normalized |> Sg.trafo' outer
+                    let ro = composed.RenderObjects(Ag.Scope.Root).Content.GetValue() |> Seq.exactlyOne :?> RenderObject
+                    let actual = ro.AttributeScope.ModelTrafo |> AVal.force
+                    let expected = inner * expectedTrafo src dst * outer
+                    checkMatrix (context + ": child then fit then parent") actual.Forward expected.Forward
+                    checkMatrix (context + ": composed inverse") actual.Backward expected.Backward
+
+        let adaptiveTransitions _ =
+            let shapes = [volume; box origin (V3d(0.0, 4.0, 8.0)); box (-origin) (V3d(2.0, 0.0, 0.0)); Box3d(origin, origin); box origin (V3d(2.0, 0.0, 8.0)); box (-origin) (V3d(0.0, 4.0, 0.0)); box origin (V3d(2.0, 4.0, 0.0)); box (-origin) (V3d(0.0, 0.0, 8.0)); volume; Box3d(-origin, -origin)]
+            for dst in [target; box targetOrigin (V3d(12.0, 0.0, 24.0)); box targetOrigin (V3d(0.0, 18.0, 0.0)); Box3d(targetOrigin, targetOrigin)] do
+                for name, adaptive, dst, apply in variants dst do
+                    if adaptive then
+                        let positions = cval (corners volume)
+                        let normalized = leaf positions |> apply
+                        let value = trafo normalized
+                        for frame, src in List.indexed shapes do
+                            transact (fun () -> positions.Value <- corners src)
+                            let context = sprintf "api=%s, frame=%d, source=%A, target=%A" name frame src dst
+                            let current = AVal.force value
+                            checkFit context src dst current
+                            let expectedBounds = Box3d(corners src |> Array.map (fun p -> dst.Center + expectedScale src dst * (p - src.Center)))
+                            Expect.approxEquals (bounds normalized) expectedBounds 1e-9 (context + ": adaptive fitted bounds")
+                            Expect.equal (AVal.force value) current (context + ": repeated read is stable")
+
+        let evaluationSemantics _ =
+            for name, adaptive, dst, apply in variants target do
+                let positions = cval (corners volume)
+                let mutable reads = 0
+                let data = AVal.custom (fun token -> reads <- reads + 1; positions.GetValue token)
+                let scene = leaf data
+                Expect.equal reads 0 (name + ": leaf construction does not evaluate positions")
+                let normalized = apply scene
+                Expect.equal reads (if adaptive then 0 else 1) (name + ": construction evaluation policy")
+                let value = trafo normalized
+                let initial = AVal.force value
+                checkFit name volume dst initial
+                for _ = 1 to 3 do AVal.force value |> ignore
+                Expect.equal reads 1 (name + ": repeated reads share evaluation")
+                Expect.equal value.IsConstant (not adaptive) (name + ": static snapshot versus adaptive dependency")
+                let next = box (-origin) (V3d(3.0, 6.0, 9.0))
+                transact (fun () -> positions.Value <- corners next)
+                Expect.equal reads 1 (name + ": updates do not force evaluation")
+                let updated = AVal.force value
+                if adaptive then checkFit name next dst updated
+                else Expect.equal updated initial (name + ": static normalization retains its construction snapshot")
+                Expect.equal reads (if adaptive then 2 else 1) (name + ": invalidated evaluation policy")
+                let error = InvalidOperationException(name)
+                let failing = leaf (AVal.custom (fun _ -> raise error))
+                let mutable result = None
+                let mutable failure = None
+                try result <- Some (apply failing) with e -> failure <- Some e
+                if adaptive then
+                    Expect.isNone failure (name + ": adaptive construction defers producer failures")
+                    try result.Value |> trafo |> AVal.force |> ignore with e -> failure <- Some e
+                Expect.isTrue (obj.ReferenceEquals(failure.Value, error)) (name + ": producer exception identity and evaluation phase")
+
+        let invalidAndNonfiniteControls _ =
+            let weirdTargets = [Box3d.Invalid; Box3d.Infinite; box targetOrigin (V3d(-1.0, 0.0, 2.0)); Box3d(V3d(Double.NaN, 0.0, 0.0), V3d.One); Box3d(V3d.Zero, V3d(Double.PositiveInfinity, 1.0, 1.0))]
+            let sources = [Array.empty<V3d>; corners Box3d.Infinite; [|V3d(Double.PositiveInfinity, 0.0, 0.0)|]; corners volume; [|origin|]]
+            for positions in sources do
+                let scene = leaf (AVal.constant positions)
+                let src = bounds scene
+                for requested in target :: weirdTargets do
+                    for name, _, dst, apply in variants requested do
+                        if not (src.IsValid && dst.IsValid && src.Size.IsFinite && dst.Size.IsFinite) then
+                            let factor = dst.Size / src.Size
+                            let scale = factor.X |> min factor.Y |> min factor.Z
+                            let expected = Trafo3d.Translation(-src.Center) * Trafo3d.Scale(scale) * Trafo3d.Translation(dst.Center)
+                            let actual = apply scene |> trafo |> AVal.force
+                            let context = sprintf "api=%s, source=%A, target=%A" name src dst
+                            checkMatrix (context + ": previous forward behavior") actual.Forward expected.Forward
+                            checkMatrix (context + ": previous inverse behavior") actual.Backward expected.Backward
+
     let tests (target: TestTarget) =
         [
             if target = TestTarget.Cpu then
                 "General.Check Completeness", General.checkCompleteness
 
                 "Sg.ModelTrafo", Sg.modelTrafo
+
+                "Normalization.Translated point bounds",          Normalization.translatedPoints
+                "Normalization.Planar and linear fitting",        Normalization.planarAndLinearFits
+                "Normalization.Volume and composition controls",  Normalization.volumeAndCompositionControls
+                "Normalization.Adaptive dimensional transitions", Normalization.adaptiveTransitions
+                "Normalization.Static and adaptive evaluation",   Normalization.evaluationSemantics
+                "Normalization.Invalid and nonfinite controls",   Normalization.invalidAndNonfiniteControls
 
                 "Bounding Box.RenderNode",        BoundingBox.renderNode
                 "Bounding Box.RenderObjectsNode", BoundingBox.renderObjectsNode

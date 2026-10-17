@@ -308,9 +308,15 @@ type SceneGraphExtensions =
 [<Sealed>]
 type SceneGraphTools =
 
+    /// Adaptively centers and uniformly fits the scene's bounding box inside the given box.
+    /// For finite valid bounds, collapsed source axes do not constrain the scale;
+    /// point bounds are translated to the target center with unit scale.
     [<Extension>]
     static member NormalizeToAdaptive (this : ISg, box : Box3d) = Sg.normalizeToAdaptive box this
 
+    /// Adaptively centers and uniformly fits the scene's bounding box inside [-1, 1] on every axis.
+    /// For finite valid bounds, collapsed source axes do not constrain the scale;
+    /// point bounds are translated to the origin with unit scale.
     [<Extension>]
     static member NormalizeAdaptive (this : ISg)  = Sg.normalizeAdaptive this
 
