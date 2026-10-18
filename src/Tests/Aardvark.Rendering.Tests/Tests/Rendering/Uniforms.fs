@@ -159,6 +159,13 @@ module Uniforms =
         let v3fArray : IRuntime -> unit = v3Array Shader.v3fArr id
         let v3dArray : IRuntime -> unit = v3Array Shader.v3dArr (Array.map V3d)
 
+        let interfaceSequence (runtime : IRuntime) =
+            let values : seq<V3f> = seq {
+                yield V3f(1.0f, 2.0f, 3.0f)
+                yield V3f(4.0f, 5.0f, 6.0f)
+            }
+            render (toEffect Shader.v3fArr) values [|5.0f; 7.0f; 9.0f|] runtime
+
         let record : IRuntime -> unit =
             let value = { V3f = V3f(1.0f, 2.0f, 3.0f); V2d = V2d(4.0, 5.0); M23d = M23d (Array.init 6 float) }
             let expected = V3f (MyRecord.toV3d value)
@@ -186,6 +193,8 @@ module Uniforms =
             "V2d array",    Cases.v2dArray
             "V3f array",    Cases.v3fArray
             "V3d array",    Cases.v3dArray
+
+            "Interface-typed vector sequence", Cases.interfaceSequence
 
             "Record",       Cases.record
             "Record array", Cases.recordArr
