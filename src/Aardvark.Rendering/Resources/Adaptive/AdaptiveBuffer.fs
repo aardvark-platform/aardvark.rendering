@@ -95,14 +95,15 @@ type AdaptiveBufferExtensions private() =
     /// <param name="this">The buffer to write to.</param>
     /// <param name="data">The array to write.</param>
     /// <param name="offset">The offset (in bytes) into the buffer.</param>
-    /// <param name="start">The first index of the data array to write.</param>
-    /// <param name="count">The number of elements to write.</param>
+    /// <param name="start">The first index of the data array to write. May equal the array length when count is zero.</param>
+    /// <param name="count">The non-negative number of elements to write.</param>
     /// <param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
+    /// <remarks>A valid zero-count write does not pin the array, materialize storage, or forward a write.</remarks>
+    /// <exception cref="T:System.ArgumentException">Thrown before pinning or forwarding if start or count is negative, or the source range exceeds the array bounds.</exception>
     [<Extension>]
     static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T[], offset : uint64, start : int, count : int,
                                                 [<Optional; DefaultParameterValue(false)>] discard : bool) =
-        assert (start >= 0 && start < data.Length)
-        assert (start + count <= data.Length)
+        BufferInternals.checkElements data.Length start count
 
         if count > 0 then
             (start, data) ||> NativePtr.pinArri (fun src ->
@@ -117,6 +118,7 @@ type AdaptiveBufferExtensions private() =
     /// <param name="data">The array to write.</param>
     /// <param name="offset">The offset (in bytes) into the buffer. Default is 0.</param>
     /// <param name="discard">Indicates whether the current content of the buffer may be discarded. Default is <c>false</c>.</param>
+    /// <remarks>Delegates the full source range to the typed-array overload. An empty array does not materialize storage or forward a write.</remarks>
     [<Extension>]
     static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T[],
                                                 [<Optional; DefaultParameterValue(0UL)>] offset : uint64,

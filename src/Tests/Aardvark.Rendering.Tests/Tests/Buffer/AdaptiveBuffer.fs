@@ -1,6 +1,8 @@
 namespace Aardvark.Rendering.Tests.Buffer
 
 open System
+open System.Runtime.InteropServices
+open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open FSharp.Data.Adaptive
@@ -15,6 +17,7 @@ module AdaptiveBufferTests =
             | Allocate of uint64 * BufferUsage * BufferStorage
             | Name of int * string
             | CopyPrefix of int * int * uint64
+            | Upload of int * uint64 * uint64 * uint64 * bool
             | Dispose of int
 
         type private Buffer(runtime : IBufferRuntime, id : int, size : uint64, events : ResizeArray<Event>, namingError : unit -> exn option) =
@@ -47,6 +50,7 @@ module AdaptiveBufferTests =
             let buffers = ResizeArray<Buffer>()
             member val Failure : (Site * exn) option = None with get, set
             member val DefaultCreates = 0 with get, set
+            member val SourceBounds : (nativeint * uint64) option = None with get, set
             member _.Events = events
             member _.Buffers = buffers
             member x.Error(site) =
@@ -64,7 +68,20 @@ module AdaptiveBufferTests =
                     x.DefaultCreates <- x.DefaultCreates + 1
                     x.Allocate(size, usage, storage)
                 member _.PrepareBuffer(_, _, _) = unexpected()
-                member _.Upload(_, _, _, _, _) = unexpected()
+                member x.Upload(src, dst, offset, count, discard) =
+                    let address, length =
+                        match x.SourceBounds with
+                        | Some (address, length) -> uint64 address, length
+                        | None -> unexpected()
+                    let relative = if uint64 src >= address then uint64 src - address else UInt64.MaxValue
+                    let buffer = dst :?> Buffer
+                    events.Add(Upload(buffer.Id, relative, offset, count, discard))
+                    // Original-source probes can forward invalid pointers. Refuse
+                    // every read unless it lies inside the independently pinned array.
+                    Expect.isTrue (relative <= length && count <= length - relative) "Refusing an invalid source-pointer read"
+                    Expect.equal buffer.Disposals 0 "Uploading to a disposed buffer"
+                    Expect.isTrue (offset <= dst.SizeInBytes && count <= dst.SizeInBytes - offset) "Upload destination bounds"
+                    Marshal.Copy(src, buffer.Data, int offset, int count)
                 member _.Download(_, _, _, _) = unexpected()
                 member _.DownloadAsync(_, _, _, _) = unexpected()
                 member x.Copy(src, srcOffset, dst, dstOffset, count, discard) =
@@ -296,6 +313,156 @@ module AdaptiveBufferTests =
                             fixture.Resource.Release()
                             balanced context fixture
 
+        type private ArrayMatrix =
+            abstract Run<'T when 'T : unmanaged> : 'T[] -> unit
+
+        let private arrayTypes (action : ArrayMatrix) =
+            action.Run(Array.init 17 (fun i -> byte (i * 11 + 3)))
+            action.Run(Array.init 17 (fun i -> int16 (i * 71 - 500)))
+            action.Run(Array.init 17 (fun i -> i * 313 - 2000))
+            action.Run(Array.init 17 (fun i -> int64 i * 100000003L - 2000000000L))
+            action.Run(Array.init 17 (fun i -> V3f(float32 i + 0.25f, -float32 i, 7.0f)))
+            action.Run(Array.init 17 (fun i -> V2d(float i + 0.5, -float i)))
+            action.Run(Array.init 17 (fun i -> V4d(float i, 0.125, -float i, 17.0)))
+
+        let private bytes<'T when 'T : unmanaged> (data : 'T[]) =
+            let result = Array.zeroCreate<byte> (data.Length * sizeof<'T>)
+            let pin = GCHandle.Alloc(data, GCHandleType.Pinned)
+            try
+                if result.Length > 0 then Marshal.Copy(pin.AddrOfPinnedObject(), result, 0, result.Length)
+                result
+            finally pin.Free()
+
+        let private withSource<'T when 'T : unmanaged> (runtime : Runtime) (data : 'T[]) action =
+            let pin = GCHandle.Alloc(data, GCHandleType.Pinned)
+            runtime.SourceBounds <- Some(pin.AddrOfPinnedObject(), uint64 data.Length * uint64 sizeof<'T>)
+            try action()
+            finally
+                runtime.SourceBounds <- None
+                pin.Free()
+
+        let private arrayState (fixture : Fixture) =
+            fixture.Runtime.DefaultCreates, fixture.Resource.Size,
+            (fixture.Runtime.Buffers |> Seq.map (fun b -> b, Array.copy b.Data, b.Disposals) |> Seq.toArray)
+
+        let private noArrayWrite context (fixture : Fixture) (state : int * uint64 * (Buffer * byte[] * int)[]) =
+            let creates, size, saved = state
+            Expect.equal fixture.Runtime.DefaultCreates creates (context + ": no storage allocation")
+            Expect.equal fixture.Runtime.Buffers.Count saved.Length (context + ": no new handles")
+            Expect.equal fixture.Runtime.Events.Count 0 (context + ": no upload or other backend operation")
+            Expect.equal fixture.Resource.Size size (context + ": logical size unchanged")
+            for buffer, data, disposals in saved do
+                Expect.equal buffer.Data data (context + ": live bytes unchanged")
+                Expect.equal buffer.Disposals disposals (context + ": live ownership unchanged")
+
+        let private invalidArrayRanges negative =
+            arrayTypes { new ArrayMatrix with
+                member _.Run<'T when 'T : unmanaged>(samples : 'T[]) =
+                    for length in (if negative then [1; 0; 7; 17] else [7; 0; 1; 17]) do
+                        let data = Array.take length samples
+                        let ranges =
+                            if negative then
+                                [0, -1; 0, Int32.MinValue; length, -1; -1, 0; -1, 1;
+                                 Int32.MinValue, 0; -1, Int32.MaxValue; Int32.MinValue, Int32.MaxValue]
+                            else
+                                [0, length + 1; length, 1; length + 1, 0; length + 1, 1;
+                                 Int32.MaxValue, 0; Int32.MaxValue, 1; 1, Int32.MaxValue;
+                                 Int32.MaxValue, Int32.MaxValue; length, Int32.MaxValue]
+                        for start, count in ranges do
+                            for live in [false; true] do
+                                for discard in [false; true] do
+                                    let context = sprintf "type=%s, length=%d, start=%d, count=%d, live=%b, discard=%b" typeof<'T>.Name length start count live discard
+                                    use fixture = new Fixture(uint64 (length * sizeof<'T> + 64), false)
+                                    if live then fixture.Seed() |> ignore
+                                    fixture.Runtime.Events.Clear()
+                                    let state = arrayState fixture
+                                    let actual =
+                                        try
+                                            withSource fixture.Runtime data (fun () ->
+                                                AdaptiveBufferExtensions.Write<'T>(fixture.Resource :> IAdaptiveBuffer, data, 0UL, start, count, discard))
+                                            None
+                                        with error -> Some error
+                                    noArrayWrite context fixture state
+                                    match actual with
+                                    | Some (:? ArgumentException as error) ->
+                                        Expect.equal (error.GetType()) typeof<ArgumentException> (context + ": ArgumentException convention")
+                                        Expect.isTrue (error.Message.StartsWith("[Buffer] ") && error.Message.EndsWith(".")) (context + ": buffer diagnostic convention")
+                                    | _ -> failtestf "%s: expected ArgumentException, got %A" context actual }
+
+        let negativeArrayRanges() = invalidArrayRanges true
+        let oversizedArrayRanges() = invalidArrayRanges false
+
+        let private arrayWrite<'T when 'T : unmanaged> (data : 'T[]) start count offset discard live route =
+            let context = sprintf "type=%s, length=%d, start=%d, count=%d, offset=%d, discard=%b, live=%b, route=%s" typeof<'T>.Name data.Length start count offset discard live route
+            let source = bytes data
+            let capacity = source.Length + 64
+            use fixture = new Fixture(uint64 capacity, false)
+            let saved = if live then Array.copy (fixture.Seed().Data) else Array.create capacity 0xCDuy
+            fixture.Runtime.Events.Clear()
+            let target = fixture.Resource :> IAdaptiveBuffer
+            withSource fixture.Runtime data (fun () ->
+                match route with
+                | "whole" -> AdaptiveBufferExtensions.Write<'T>(target, data, offset, discard)
+                | "default" -> AdaptiveBufferExtensions.Write<'T>(target, data)
+                | _ -> AdaptiveBufferExtensions.Write<'T>(target, data, offset, start, count, discard))
+            Expect.equal fixture.Runtime.DefaultCreates 1 (context + ": create only when storage is missing")
+            Expect.equal fixture.Runtime.Buffers.Count 1 (context + ": reuse live storage")
+            let result = fixture.Runtime.Buffers.[0]
+            let expected = Array.copy saved
+            Array.Copy(source, start * sizeof<'T>, expected, int offset, count * sizeof<'T>)
+            Expect.equal result.Data expected (context + ": exact payload, byte offset and untouched guards")
+            Expect.equal (bytes data) source (context + ": source not modified")
+            let uploads = fixture.Runtime.Events |> Seq.choose (function Upload(id, src, dst, size, flag) -> Some(id, src, dst, size, flag) | _ -> None) |> Seq.toArray
+            Expect.equal uploads [|result.Id, uint64 start * uint64 sizeof<'T>, offset, uint64 count * uint64 sizeof<'T>, discard|]
+                (context + ": source pointer, byte count and discard forwarding")
+            if not live then fixture.Resource.Acquire()
+            fixture.Resource.ReleaseAll()
+            balanced context fixture
+
+        let arrayPayloads() =
+            arrayTypes { new ArrayMatrix with
+                member _.Run<'T when 'T : unmanaged>(samples : 'T[]) =
+                    for length in [1; 7; 17] do
+                        let data = Array.take length samples
+                        for start, count in [0, length; 0, 1; length / 2, length - length / 2; length - 1, 1] do
+                            for offset in [0UL; 1UL; 7UL; 24UL] do
+                                for discard in [false; true] do
+                                    for live in [false; true] do
+                                        arrayWrite data start count offset discard live "range" }
+
+        let wholeArrays() =
+            arrayTypes { new ArrayMatrix with
+                member _.Run<'T when 'T : unmanaged>(samples : 'T[]) =
+                    for length in [1; 7; 17] do
+                        let data = Array.take length samples
+                        for live in [false; true] do
+                            arrayWrite data 0 length 0UL false live "default"
+                            for offset in [0UL; 3UL; 24UL] do
+                                for discard in [false; true] do
+                                    arrayWrite data 0 length offset discard live "whole" }
+
+        let zeroArrayWrites() =
+            arrayTypes { new ArrayMatrix with
+                member _.Run<'T when 'T : unmanaged>(samples : 'T[]) =
+                    for length in [0; 1; 17] do
+                        let data = Array.take length samples
+                        for live in [false; true] do
+                            use fixture = new Fixture(uint64 (length * sizeof<'T> + 64), false)
+                            if live then fixture.Seed() |> ignore
+                            fixture.Runtime.Events.Clear()
+                            let state = arrayState fixture
+                            for start = 0 to length do
+                                for offset in [0UL; 1UL; UInt64.MaxValue] do
+                                    for discard in [false; true] do
+                                        let context = sprintf "type=%s, length=%d, start=%d, offset=%d, discard=%b, live=%b" typeof<'T>.Name length start offset discard live
+                                        withSource fixture.Runtime data (fun () ->
+                                            AdaptiveBufferExtensions.Write<'T>(fixture.Resource :> IAdaptiveBuffer, data, offset, start, 0, discard))
+                                        noArrayWrite context fixture state
+                                        if length = 0 then
+                                            withSource fixture.Runtime data (fun () ->
+                                                AdaptiveBufferExtensions.Write<'T>(fixture.Resource :> IAdaptiveBuffer, data, offset, discard))
+                                            noArrayWrite (context + ": whole empty array") fixture state }
+
     let tests (target : TestTarget) =
         [
             "Initial allocation and name failures retry cleanly",  Cases.initialFailures
@@ -304,5 +471,11 @@ module AdaptiveBufferTests =
             "Final release after failure and reacquisition",       Cases.releaseAfterFailure
             "Successful preservation and discard ordering",        Cases.successfulResizes
             "Names flags caching and creation override controls",  Cases.controls
+
+            "Array sources.Negative ranges rejected",          Cases.negativeArrayRanges
+            "Array sources.Out-of-bounds ranges rejected",     Cases.oversizedArrayRanges
+            "Array sources.Valid payload and forwarding",      Cases.arrayPayloads
+            "Array sources.Whole-array delegation",            Cases.wholeArrays
+            "Array sources.Zero count does not materialize",   Cases.zeroArrayWrites
         ]
         |> prepareCasesCpu "AdaptiveBuffer" target
