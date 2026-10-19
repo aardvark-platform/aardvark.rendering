@@ -34,9 +34,9 @@ let main argv =
     // window { ... } is similar to show { ... } but instead
     // of directly showing the window we get the window-instance
     // and may show it later.
-    let win =
+    use win =
         window {
-            backend Backend.GL
+            backend Backend.Vulkan
             display Display.Mono
             debug false
             samples 8
@@ -80,7 +80,7 @@ let main argv =
             "https://de.wikipedia.org", Trafo3d.Scale(-1.0, 1.0, 1.0) * Trafo3d.Translation(V3d.OOI) * Trafo3d.RotationX(-Constant.PiHalf) * Trafo3d.RotationZ(Constant.PiHalf)
             "https://google.com", Trafo3d.Scale(-1.0, 1.0, 1.0) * Trafo3d.Translation(V3d.OOI) * Trafo3d.RotationX(-Constant.PiHalf) * Trafo3d.RotationZ(Constant.Pi)
 
-            "https://stackoverflow.com", Trafo3d.Translation(V3d.OOI)
+            "https://stackoverflow.com", Trafo3d.Scale(-1.0, 1.0, 1.0) * Trafo3d.Translation(V3d.OOI)
             "https://xkcd.com", Trafo3d.Translation(-V3d.OOI)
 
             //"https://", Trafo3d.Scale(-1.0, 1.0, 1.0) * Trafo3d.Translation(V3d.OOI) * Trafo3d.RotationX(-Constant.PiHalf) * Trafo3d.RotationZ(-Constant.PiHalf)

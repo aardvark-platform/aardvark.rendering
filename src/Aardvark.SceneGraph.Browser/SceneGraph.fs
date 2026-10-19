@@ -102,10 +102,19 @@ module Sg =
             action
 
         member x.Run(action : unit -> list<Browser.Property>) =
-            let mutable props = { Browser.offler = None; Browser.url = "https://aardvarkians.com"; Browser.size = AVal.constant (V2i(1024,768)); Browser.keyboard = None; Browser.mouse = None; Browser.focus = cval false; Browser.mipMaps = true }
+            let mutable props =
+                {
+                    Browser.offler = None
+                    Browser.url = "https://aardvarkians.com"
+                    Browser.size = AVal.constant <| V2i(1024, 768)
+                    Browser.keyboard = None
+                    Browser.mouse = None
+                    Browser.focus = cval false
+                    Browser.mipMaps = true
+                }
+
             for u in action() do
                 props <- u.update props
-            
 
             let config =
                 match props.offler with
@@ -115,17 +124,17 @@ module Sg =
                     let s = AVal.force props.size
                     let o = new Offler { url = props.url; width = s.X; height = s.Y; incremental = true }
 
-                    let subscriptions =
-                        if not props.size.IsConstant then
-                            [
+                    let dispose =
+                        [
+                            if not props.size.IsConstant then
                                 props.size.AddCallback (fun (s : V2i) ->
                                     o.Resize(s.X, s.Y)
                                 )
-                            ]
-                        else    
-                            []
 
-                    { offler = o; keyboard = props.keyboard; mouse = props.mouse; focus = props.focus; dispose = subscriptions; mipMaps = props.mipMaps }
+                            o
+                        ]
+
+                    { offler = o; keyboard = props.keyboard; mouse = props.mouse; focus = props.focus; dispose = dispose; mipMaps = props.mipMaps }
             BrowserNode(config) :> ISg
 
     let browser = BrowserBuilder()
@@ -454,6 +463,7 @@ type BrowserNodeSem() =
                         
             { new IDisposable with 
                 member x.Dispose() =
+                    for d in node.Info.dispose do d.Dispose()
                     mouse.Dispose()
                     keyboard.Dispose()
                     transact (fun () -> node.Info.focus.Value <- false)
