@@ -1,11 +1,27 @@
 ﻿namespace Aardvark.Rendering
 
 open Aardvark.Base
+open System
 open System.Collections
 open System.Collections.Generic
 
+module private CubeMapValidation =
+
+    let inline elementCount (levels : int) =
+        if uint levels > uint (Int32.MaxValue / 6) then
+            raise <| ArgumentOutOfRangeException("levels", levels, "The level count must be nonnegative and six times the count must fit in Int32.")
+        6 * levels
+
+    let inline contains (levels : int) (face : CubeSide) (level : int) =
+        uint (int face) < 6u && uint level < uint levels
+
+    let inline index levels face level =
+        if not (contains levels face level) then raise <| IndexOutOfRangeException()
+        level * 6 + int face
+
 /// Struct to manage data of a mipmapped cube, where each
 /// mip level on each face holds a data element.
+/// Default structs have null storage rather than representing an empty map.
 [<Struct>]
 type CubeMap<'a> =
 
@@ -15,13 +31,15 @@ type CubeMap<'a> =
     val Data : 'a[]
 
     /// Creates a new cube map with the given number of levels.
+    /// The count must be nonnegative and six times the count must fit in Int32.
     new(levels : int) =
-        { Data = Array.zeroCreate (6 * levels) }
+        { Data = Array.zeroCreate (CubeMapValidation.elementCount levels) }
 
     /// Creates a new cube map from an existing one, appending and removing levels
-    /// according to the new number of levels.
+    /// according to the new number of levels. Retained elements are copied and new elements are zero-filled.
+    /// The count must be nonnegative and six times the count must fit in Int32.
     new(other : CubeMap<'a>, levels : int) =
-        let data = Array.zeroCreate (6 * levels)
+        let data = Array.zeroCreate (CubeMapValidation.elementCount levels)
 
         if not other.IsEmpty then
             let n = min data.Length other.Data.Length
@@ -47,22 +65,33 @@ type CubeMap<'a> =
     /// Returns whether the cube map is empty.
     member x.IsEmpty = x.Data.Length = 0
 
+    /// Gets or sets an element. Faces must be 0 through 5 and levels must be 0 through Levels - 1.
+    /// Invalid coordinates raise IndexOutOfRangeException without changing the data.
     member x.Item
         with get(face : CubeSide, level : int) =
-            x.Data.[level * 6 + int face]
+            x.Data.[CubeMapValidation.index x.Levels face level]
         and set (face : CubeSide, level : int) (value : 'a) =
-            x.Data.[level * 6 + int face] <- value
+            x.Data.[CubeMapValidation.index x.Levels face level] <- value
 
+    /// Gets or sets a face at level zero. Faces must be 0 through 5 and the map must have a level.
+    /// Invalid coordinates raise IndexOutOfRangeException without changing the data.
     member x.Item
         with get(face : CubeSide) =
-            x.Data.[int face]
+            x.Data.[CubeMapValidation.index x.Levels face 0]
         and set (face : CubeSide) (value : 'a) =
-            x.Data.[int face] <- value
+            x.Data.[CubeMapValidation.index x.Levels face 0] <- value
 
+    /// Returns the element for faces 0 through 5 and levels 0 through Levels - 1, or None for invalid coordinates.
     member x.TryItem(face : CubeSide, level : int) =
-        let i = int face + level * 6
-        x.Data |> Array.tryItem i
+        if isNull x.Data then
+            // Retain the existing array helper's behavior for default structs with null storage.
+            x.Data |> Array.tryItem (int face + level * 6)
+        elif CubeMapValidation.contains x.Levels face level then
+            Some x.Data.[level * 6 + int face]
+        else
+            None
 
+    /// Returns the element at level zero for faces 0 through 5, or None for invalid coordinates and empty maps.
     member x.TryItem(face : CubeSide) =
         x.TryItem(face, 0)
 
@@ -88,12 +117,17 @@ module CubeMap =
     let data (c : CubeMap<'a>) = c.Data
 
     /// Creates a cube map given the number of levels and a generator function to compute the elements.
+    /// Validates that the count is nonnegative and six times the count fits in Int32 before invoking the generator.
+    /// Elements are generated in face order 0 through 5 within each level; zero levels invoke no callbacks.
     let init (levels : int) (f : CubeSide -> int -> 'a) =
-        let data = Array.init (6 * levels) (fun i -> f (unbox (i % 6)) (i / 6))
+        let data = Array.init (CubeMapValidation.elementCount levels) (fun i -> f (unbox (i % 6)) (i / 6))
         CubeMap(data)
 
     /// Creates a cube map given the number of levels and a single value.
+    /// The count must be nonnegative and six times the count must fit in Int32; zero levels produce an empty map.
     let single (levels : int) (value : 'a) =
+        // Validate before allocating the captured-value generator.
+        CubeMapValidation.elementCount levels |> ignore
         init levels (fun _ _ -> value)
 
     /// Builds a new cube map whose elements are the results of applying the given
