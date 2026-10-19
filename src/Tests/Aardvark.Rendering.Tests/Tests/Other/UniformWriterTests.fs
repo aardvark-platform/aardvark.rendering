@@ -252,6 +252,128 @@ module UniformWriter =
             verifyException "struct getter" { Padding = V4i.Zero; MorePadding = V4i.Zero }
             verifyException "reference getter" (ThrowingReference())
 
+    module private Sequences =
+
+        let private payload count stride elementSize encode (values : 'T[]) =
+            let size = (count - 1) * stride + elementSize
+            let bytes = Array.create size 0xC7uy
+            for index = 0 to min count values.Length - 1 do
+                let value = encode values.[index]
+                Buffer.BlockCopy(value, 0, bytes, index * stride, elementSize)
+            let firstMissing = min count values.Length * stride
+            if firstMissing < size then Array.Clear(bytes, firstMissing, size - firstMissing)
+            bytes
+
+        let private store context offset (expected : byte[]) (writer : UniformWriters.IWriter)
+                          (value : 'T) (adaptive : aval<'T>) mode =
+            let size, guard = expected.Length, 64
+            let memory = Array.create (guard + offset + size + guard) 0xA5uy
+            Array.fill memory (guard + offset) size 0xC7uy
+            let complete = Array.copy memory
+            Array.blit expected 0 complete (guard + offset) size
+            let pin = GCHandle.Alloc(memory, GCHandleType.Pinned)
+            try
+                let ptr = pin.AddrOfPinnedObject() + nativeint guard
+                match mode with
+                | "typed" -> (writer :?> UniformWriters.IWriter<'T>).WriteValue(value, ptr)
+                | "boxed" -> writer.WriteUnsafeValue(box value, ptr)
+                | "adaptive" -> writer.Write(AdaptiveToken.Top, adaptive, ptr)
+                | _ -> failtestf "Unknown mode: %s" mode
+            finally pin.Free()
+            Expect.sequenceEqual memory complete (context + ": values, padding, offset prefix and guards")
+            memory
+
+        let private verify<'T> context target (expected : byte[]) (value : 'T) =
+            let writer = UniformWriters.getWriter 0 target typeof<'T>
+            Expect.equal writer.ValueType typeof<'T> (context + ": declared source type")
+            Expect.equal writer.TargetSize (nativeint expected.Length) (context + ": target extent")
+            Expect.isTrue (obj.ReferenceEquals(writer, UniformWriters.getWriter 0 target typeof<'T>)) (context + ": cached writer identity")
+            let adaptive = cval value
+            [for offset in [8; 24] do
+                let writer = UniformWriters.getWriter offset target typeof<'T>
+                for mode in ["typed"; "boxed"; "adaptive"] do
+                    let context = sprintf "%s, offset=%d, mode=%s" context offset mode
+                    yield store context offset expected writer value adaptive mode]
+
+        let private matrix<'T> includeInterface elementType elementSize encode (values : 'T[]) =
+            for count in [2; 4] do
+                for stride in [16; 32] do
+                    let target = FShade.GLSL.Array(count, elementType, stride)
+                    for length in [0; 1; count; count + 2] do
+                        let values = values |> Array.take length
+                        let context = sprintf "element=%A, count=%d, stride=%d, length=%d" typeof<'T> count stride length
+                        let expected = payload count stride elementSize encode values
+                        let array = verify (context + ": array") target expected values
+                        let list = verify (context + ": list") target expected (Array.toList values)
+                        let resize = verify (context + ": resize array") target expected (ResizeArray values)
+                        Expect.equal list array (context + ": concrete list layout matches array")
+                        Expect.equal resize array (context + ": concrete collection layout matches array")
+                        if includeInterface then
+                            let source : seq<'T> = seq { yield! values }
+                            let actual = verify<seq<'T>> (context + ": interface") target expected source
+                            Expect.equal actual array (context + ": interface layout matches concrete controls")
+                    let value = values.[0]
+                    let repeated = Array.create count value
+                    verify (sprintf "element=%A, count=%d, stride=%d: scalar replication" typeof<'T> count stride)
+                           target (payload count stride elementSize encode repeated) value |> ignore
+
+        let private matrices includeInterface =
+            matrix includeInterface (FShade.GLSL.Int(true, 32)) 4 (fun (v : int) -> BitConverter.GetBytes v) [|17; -23; 0; 41; 101; 203|]
+            matrix includeInterface (FShade.GLSL.Float 32) 4 (fun (v : float32) -> BitConverter.GetBytes v) [|1.25f; -2.5f; 0.0f; 4.0f; 11.0f; 13.0f|]
+            matrix includeInterface (FShade.GLSL.Vec(2, FShade.GLSL.Float 32)) 8
+                   (fun (v : V2f) -> [|v.X; v.Y|] |> Array.collect BitConverter.GetBytes)
+                   (Array.init 6 (fun i -> V2f(float32 i + 0.25f, -float32 i - 0.5f)))
+            matrix includeInterface (FShade.GLSL.Vec(3, FShade.GLSL.Float 32)) 12
+                   (fun (v : V3f) -> [|v.X; v.Y; v.Z|] |> Array.collect BitConverter.GetBytes)
+                   (Array.init 6 (fun i -> V3f(float32 i + 0.25f, -float32 i - 0.5f, float32 i + 2.0f)))
+
+        let interfaceWrites() = matrices true
+        let concreteControls() = matrices false
+
+        let lazyEnumeration() =
+            let count, stride = 3, 16
+            let target = FShade.GLSL.Array(count, FShade.GLSL.Int(true, 32), stride)
+            for length in [0; 1; 3; 5] do
+                let mutable starts, produced, disposed = 0, 0, 0
+                let values = Array.init length (fun index -> index + 17)
+                let source : seq<int> = seq {
+                    starts <- starts + 1
+                    try
+                        for value in values do
+                            produced <- produced + 1
+                            yield value
+                    finally disposed <- disposed + 1
+                }
+                let adaptive = cval source
+                let writer = UniformWriters.getWriter 8 target typeof<seq<int>>
+                UniformWriters.getWriter 0 target typeof<seq<int>> |> ignore
+                Expect.equal (starts, produced, disposed) (0, 0, 0) (sprintf "length=%d: writer creation and lookup do not enumerate lazy inputs" length)
+                let expected = payload count stride 4 (fun (v : int) -> BitConverter.GetBytes v) values
+                for mode in ["typed"; "boxed"; "adaptive"] do
+                    let context = sprintf "length=%d, mode=%s" length mode
+                    let before = starts, produced, disposed
+                    store context 8 expected writer source adaptive mode |> ignore
+                    let a, b, c = before
+                    Expect.equal (starts, produced, disposed) (a + 1, b + min count length, c + 1) (context + ": one enumeration, bounded consumption and disposal")
+
+        let adaptiveReplacements() =
+            let count, stride, offset = 3, 32, 24
+            let target = FShade.GLSL.Array(count, FShade.GLSL.Vec(3, FShade.GLSL.Float 32), stride)
+            let writer = UniformWriters.getWriter offset target typeof<seq<V3f>>
+            let current = cval (Seq.empty<V3f>)
+            let mutable reads = 0
+            let adaptive = AVal.custom (fun token -> reads <- reads + 1; current.GetValue token)
+            for frame, length in List.indexed [3; 0; 1; 5; 3] do
+                let values = Array.init length (fun i -> V3f(float32 (i + frame), -1.0f, 2.5f))
+                let source : seq<V3f> = seq { yield! values }
+                transact (fun () -> current.Value <- source)
+                let before = reads
+                let expected = payload count stride 12 (fun (v : V3f) -> [|v.X; v.Y; v.Z|] |> Array.collect BitConverter.GetBytes) values
+                let context = sprintf "frame=%d, length=%d" frame length
+                for _ = 1 to 2 do store context offset expected writer source adaptive "adaptive" |> ignore
+                Expect.equal reads (before + 1) (context + ": source is reevaluated once per change")
+                Expect.equal adaptive.ContentType typeof<seq<V3f>> (context + ": adaptive interface type retained")
+
     let tests (target: TestTarget) =
         [
             "empty Arr stays inside target and zero-fills it",        Arr.emptyArr
@@ -266,5 +388,10 @@ module UniformWriter =
             "Arrays of struct properties",           Properties.structArrays
             "Reference and field dispatch controls", Properties.dispatchControls
             "Getter exception identity",             Properties.getterExceptions
+
+            "Interface sequence writes",                  Sequences.interfaceWrites
+            "Sequence writer creation and enumeration",   Sequences.lazyEnumeration
+            "Adaptive sequence replacements",             Sequences.adaptiveReplacements
+            "Concrete sequence and replication controls", Sequences.concreteControls
         ]
         |> prepareCasesCpu "UniformWriters" target

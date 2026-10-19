@@ -633,7 +633,9 @@ module UniformWriters =
                 None
 
         let (|SeqOf|_|) (t : Type) =
-            let iface = t.GetInterface(typedefof<seq<_>>.FullName)
+            let iface =
+                if t.IsConstructedGenericType && t.GetGenericTypeDefinition() = typedefof<seq<_>> then t
+                else t.GetInterface(typedefof<seq<_>>.FullName)
             if isNull iface then
                 None
             else
