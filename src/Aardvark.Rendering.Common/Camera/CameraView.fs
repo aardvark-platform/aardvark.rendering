@@ -37,11 +37,14 @@ type CameraView(sky : V3d, location : V3d, forward : V3d, up : V3d, right : V3d)
     static member LookAt(location : V3d, center : V3d) =
         CameraView.LookAt(location, center, V3d.OOI)
 
+    /// Creates a view in the given direction; the direction magnitude is ignored.
     static member Look(location : V3d, forward : V3d, sky : V3d) =
+        let forward = forward |> Vec.Normalized
         let right = Vec.Cross(forward, sky) |> Vec.Normalized
         let up = Vec.Cross(right, forward) |> Vec.Normalized
         CameraView(sky, location, forward, up, right)
 
+    /// Creates a view using the default sky; the direction magnitude is ignored.
     static member Look(location : V3d, forward : V3d) =
         CameraView.Look(location, forward, V3d.OOI)
 
@@ -55,6 +58,7 @@ type CameraView(sky : V3d, location : V3d, forward : V3d, up : V3d, right : V3d)
     member x.WithLocation(l : V3d) =
         CameraView(sky, l, forward, up, right)
 
+    /// Changes the forward direction; the direction magnitude is ignored.
     member x.WithForward(fw : V3d) =
         CameraView.Look(location, fw, sky)
 
@@ -68,6 +72,7 @@ type CameraView(sky : V3d, location : V3d, forward : V3d, up : V3d, right : V3d)
         let right = Vec.Cross(forward, up) |> Vec.Normalized
         CameraView(sky, location, forward, up, right)
 
+    /// Changes the backward direction; the direction magnitude is ignored.
     member x.WithBackward(bw : V3d) =
         x.WithForward (-bw)
 
@@ -87,6 +92,7 @@ module CameraView =
     let lookAt (location : V3d) (center : V3d) (sky : V3d) =
         CameraView.LookAt(location, center, sky)
 
+    /// Creates a view in the given direction; the direction magnitude is ignored.
     let look (location : V3d) (forward : V3d) (sky : V3d) =
         CameraView.Look(location, forward, sky)
 
@@ -96,6 +102,7 @@ module CameraView =
     let withLocation (location : V3d) (c : CameraView) =
         c.WithLocation location
 
+    /// Changes the forward direction; the direction magnitude is ignored.
     let withForward (forward : V3d) (c : CameraView) =
         c.WithForward forward
 
@@ -105,6 +112,7 @@ module CameraView =
     let withUp (up : V3d) (c : CameraView) =
         c.WithUp up
 
+    /// Changes the backward direction; the direction magnitude is ignored.
     let withBackward (backward : V3d) (c : CameraView) =
         c.WithBackward backward
 

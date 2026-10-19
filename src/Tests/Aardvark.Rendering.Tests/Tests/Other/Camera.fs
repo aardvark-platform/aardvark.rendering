@@ -266,6 +266,94 @@ module Camera =
                         checkOrbit center (initial.Location - center).Length initial.Sky actual
                 )
 
+    module private View =
+
+        let private vectorClose context (expected : V3d) (actual : V3d) =
+            Expect.isTrue (actual.IsFinite && (actual - expected).Length <= 1e-10)
+                (sprintf "%s: expected %A, actual %A" context expected actual)
+
+        let private legacyLook (location : V3d) (forward : V3d) (sky : V3d) =
+            let right = Vec.Cross(forward, sky) |> Vec.Normalized
+            let up = Vec.Cross(right, forward) |> Vec.Normalized
+            CameraView(sky, location, forward, up, right)
+
+        let private builders : (string * bool * (V3d -> V3d -> V3d -> CameraView)) list =
+            [
+                "Look", false, (fun location forward sky -> CameraView.Look(location, forward, sky))
+                "Look default sky", true, (fun location forward _ -> CameraView.Look(location, forward))
+                "look", false, CameraView.look
+                "WithForward", false, (fun location forward sky -> (legacyLook location forward.Normalized sky).WithForward forward)
+                "WithBackward", false, (fun location forward sky -> (legacyLook location forward.Normalized sky).WithBackward(-forward))
+                "withForward", false, (fun location forward sky -> legacyLook location forward.Normalized sky |> CameraView.withForward forward)
+                "withBackward", false, (fun location forward sky -> legacyLook location forward.Normalized sky |> CameraView.withBackward (-forward))
+            ]
+
+        let private forViews scales action =
+            let locations = [V3d.Zero; V3d(17.0, -11.0, 4.0); V3d(-23.0, 31.0, -19.0); V3d(0.125, -0.5, 1.75)]
+            let directions = [V3d.XAxis; V3d.YAxis; -V3d.YAxis; V3d.ZAxis; V3d(1.0, 2.0, -3.0).Normalized; V3d(-2.0, 3.0, 5.0).Normalized]
+            for name, defaultSky, build in builders do
+                for location in locations do
+                    for direction in directions do
+                        let skies = if defaultSky then [V3d.ZAxis] else [V3d.ZAxis; V3d.YAxis; V3d(2.0, -1.0, 4.0); V3d(-3.0, 2.0, 1.0)]
+                        for sky in skies do
+                            if Vec.Cross(direction, sky).Length > 1e-6 then
+                                for scale in scales do
+                                    let context = sprintf "api=%s, location=%A, direction=%A, sky=%A, scale=%g" name location direction sky scale
+                                    action context (legacyLook location direction sky) (build location (direction * scale) sky)
+
+        let private viewClose context (expected : CameraView) (actual : CameraView) =
+            Expect.equal actual.Location expected.Location (context + ": location retained")
+            Expect.equal actual.Sky expected.Sky (context + ": sky retained without normalization")
+            vectorClose (context + ": forward") expected.Forward actual.Forward
+            vectorClose (context + ": right") expected.Right actual.Right
+            vectorClose (context + ": up") expected.Up actual.Up
+
+        let directionScaleAndAliases() =
+            forViews [0.125; 0.5; 2.0; 3.0; 8.0; 64.0] viewClose
+
+        let orthonormalAndLookAt() =
+            forViews [0.125; 0.5; 2.0; 3.0; 8.0; 64.0] (fun context expected actual ->
+                for name, direction in ["forward", actual.Forward; "up", actual.Up; "right", actual.Right] do
+                    Expect.floatClose Accuracy.veryHigh direction.Length 1.0 (context + ": unit " + name)
+                Expect.floatClose Accuracy.veryHigh (Vec.Dot(actual.Forward, actual.Up)) 0.0 (context + ": forward/up perpendicular")
+                Expect.floatClose Accuracy.veryHigh (Vec.Dot(actual.Forward, actual.Right)) 0.0 (context + ": forward/right perpendicular")
+                Expect.floatClose Accuracy.veryHigh (Vec.Dot(actual.Up, actual.Right)) 0.0 (context + ": up/right perpendicular")
+                vectorClose (context + ": handed basis") actual.Up (Vec.Cross(actual.Right, actual.Forward))
+                vectorClose (context + ": backward alias") (-actual.Forward) actual.Backward
+                vectorClose (context + ": left alias") (-actual.Right) actual.Left
+                vectorClose (context + ": down alias") (-actual.Up) actual.Down
+                viewClose context (CameraView.LookAt(expected.Location, expected.Location + expected.Forward, expected.Sky)) actual)
+
+        let depthAndPointRoundTrips() =
+            forViews [0.25; 1.0; 2.0; 9.0] (fun context expected actual ->
+                let transform = actual.ViewTrafo
+                vectorClose (context + ": eye maps to origin") V3d.Zero (transform.Forward.TransformPos actual.Location)
+                for depth in [0.25; 1.0; 7.0] do
+                    let ahead = expected.Location + expected.Forward * depth
+                    vectorClose (context + ": unit-depth mapping") (V3d(0.0, 0.0, -depth)) (transform.Forward.TransformPos ahead)
+                    let world = ahead + expected.Right * 2.25 - expected.Up * 3.5
+                    vectorClose (context + ": lateral/depth mapping") (V3d(2.25, -3.5, -depth)) (transform.Forward.TransformPos world)
+                for point in [V3d.Zero; actual.Location; actual.Location + V3d(3.0, -5.0, 7.0); V3d(-4.0, 7.0, 2.0)] do
+                    let roundTrip = point |> transform.Forward.TransformPos |> transform.Backward.TransformPos
+                    vectorClose (context + ": world/view/world round trip") point roundTrip
+                for point in [V3d.Zero; V3d(1.0, -2.0, -3.0); V3d(-7.0, 5.0, 11.0)] do
+                    let roundTrip = point |> transform.Backward.TransformPos |> transform.Forward.TransformPos
+                    vectorClose (context + ": view/world/view round trip") point roundTrip
+                for row = 0 to 3 do
+                    for col = 0 to 3 do
+                        Expect.isTrue (Double.IsFinite transform.Forward.[row, col] && Double.IsFinite transform.Backward.[row, col]) (context + ": finite transform pair"))
+
+        let unitAndRawControls() =
+            forViews [1.0] (fun context expected actual ->
+                viewClose context expected actual
+                for point in [V3d.Zero; V3d(1.0, -2.0, -3.0)] do
+                    vectorClose (context + ": existing unit-direction transform")
+                        (expected.ViewTrafo.Forward.TransformPos point) (actual.ViewTrafo.Forward.TransformPos point))
+            let sky, location = V3d(2.0, -1.0, 4.0), V3d(17.0, -11.0, 4.0)
+            let forward, up, right = V3d(0.0, 3.0, 0.0), V3d(0.0, 0.0, 2.0), V3d(4.0, 0.0, 0.0)
+            let raw = CameraView(sky, location, forward, up, right)
+            Expect.equal (raw.Sky, raw.Location, raw.Forward, raw.Up, raw.Right) (sky, location, forward, up, right) "Raw constructor retains supplied basis magnitudes"
+
     module private Picking =
         let private vectorClose (expected : V3d) (actual : V3d) message =
             Expect.isTrue (actual.IsFinite && (actual - expected).Length <= 1e-9)
@@ -317,8 +405,9 @@ module Camera =
                 vectorClose cam.cameraView.Forward ray.Direction (context + " world direction")
                 Expect.floatClose Accuracy.high ray.Direction.Length 1.0 (context + " unit direction")
 
-            // CameraView also accepts a non-unit forward vector; the returned ray must still be unit length.
-            let view = CameraView.Look(V3d.Zero, V3d(0.0, 0.0, -3.0), V3d.YAxis)
+            // The raw constructor retains a non-unit forward vector; the returned ray must still be unit length.
+            let view = CameraView(V3d.YAxis, V3d.Zero, V3d(0.0, 0.0, -3.0), V3d.YAxis, V3d.XAxis)
+            Expect.equal view.Forward.Length 3.0 "The picking control must retain a non-unit stored forward"
             let cam = { cameraView = view; frustum = snd ortho.Head }
             let ray = Camera.pickRay cam (PixelPosition(149, 74, 200, 100))
             vectorClose (-V3d.ZAxis) ray.Direction "non-unit stored forward is normalized"
@@ -399,6 +488,11 @@ module Camera =
             "Orbit.center rebind retains existing mouse-step initialization",      Orbit.centerRebind
             "Orbit.forward is normalized before adding a large world translation", Orbit.largeWorldTranslation
             "Orbit.seeded drags",                                                  Orbit.seededDrags
+
+            "View.Direction magnitude and aliases",        View.directionScaleAndAliases
+            "View.Orthonormal bases and LookAt agreement", View.orthonormalAndLookAt
+            "View.Depth and inverse point round trips",    View.depthAndPointRoundTrips
+            "View.Unit directions and raw constructor",    View.unitAndRawControls
 
             "Picking.Orthographic near-plane origins and parallel unit directions",          Picking.orthographicRays
             "Picking.Orthographic projection round trips and plane hits at multiple depths", Picking.orthographicProjectionAndHits
