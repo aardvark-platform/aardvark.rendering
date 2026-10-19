@@ -1391,8 +1391,8 @@ and Window(instance : Instance, win : nativeptr<WindowHandle>, title : string, e
        
     member x.Dispose() =
         if Interlocked.Exchange(&isDisposed, 1) = 0 then
-            instance.RemoveExistingWindow x
-            instance.Post (fun () ->
+            instance.Invoke (fun () ->
+                instance.RemoveExistingWindow x
                 instance.RemoveParentWindow x
 
                 swapchain |> Option.iter Disposable.dispose
