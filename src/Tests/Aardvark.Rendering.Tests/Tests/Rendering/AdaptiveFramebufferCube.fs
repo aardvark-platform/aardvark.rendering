@@ -50,14 +50,19 @@ module AdaptiveFramebufferCube =
                 member x.Dispose() = x.Disposals <- x.Disposals + 1
 
         type private Framebuffer(signature : IFramebufferSignature, attachments : Map<Symbol, IFramebufferOutput>, id : int) =
+            let mutable retired = false
             member val Disposals = 0 with get, set
+            member val DisposalError : exn option = None with get, set
+            member _.Retired = retired
             member _.Slot = (attachments.[DefaultSemantic.Colors] :?> Output).Slot
             interface IFramebuffer with
                 member _.Signature = signature
                 member _.Size = attachments.[DefaultSemantic.Colors].Size
                 member _.Handle = uint64 id
                 member _.Attachments = attachments
-                member x.Dispose() = x.Disposals <- x.Disposals + 1
+                member x.Dispose() =
+                    x.Disposals <- x.Disposals + 1
+                    match x.DisposalError with Some error -> raise error | None -> retired <- true
 
         let private unexpected() = failwith "Unexpected runtime operation"
 
@@ -65,6 +70,7 @@ module AdaptiveFramebufferCube =
             let attempts = ResizeArray<int>()
             let frames = ResizeArray<Framebuffer>()
             member val Failure : (int * exn) option = None with get, set
+            member val RequireRetirement = false with get, set
             member _.Attempts = attempts
             member _.Frames = frames
             interface IFramebufferRuntime with
@@ -75,6 +81,9 @@ module AdaptiveFramebufferCube =
                 member x.CreateFramebuffer(signature, attachments) =
                     let slot = (attachments.[DefaultSemantic.Colors] :?> Output).Slot
                     attempts.Add slot
+                    if x.RequireRetirement then
+                        Expect.isTrue (frames |> Seq.forall (fun frame -> frame.Slot <> slot || frame.Retired))
+                            "Creation must follow successful retirement of the same slot"
                     match x.Failure with
                     | Some (failedSlot, error) when failedSlot = slot -> raise error
                     | _ ->
@@ -110,29 +119,41 @@ module AdaptiveFramebufferCube =
 
         type private FailureSite = Color | Depth | Framebuffer
 
-        type private Fixture(levels : int, shared : bool) =
+        type private Fixture(levels : int, shared : bool, ordinary : bool) =
             let runtime = Runtime()
             let signature = new Signature(runtime)
             let token = RenderToken.Zero
             let sources =
-                Array.init (if shared then 1 else 6 * levels) (fun slot ->
+                Array.init (if shared || ordinary then 1 else 6 * levels) (fun slot ->
                     [| Attachment(Output(runtime, slot, false)); Attachment(Output(runtime, slot, true)) |])
             let inputs =
                 CubeMap.init levels (fun face level ->
-                    let slot = if shared then 0 else level * 6 + int face
+                    let slot = if shared || ordinary then 0 else level * 6 + int face
                     Map.ofList [DefaultSemantic.Colors, sources.[slot].[0]; DefaultSemantic.DepthStencil, sources.[slot].[1]])
-            let resource = (runtime :> IFramebufferRuntime).CreateFramebufferCube(signature, inputs)
+            let resource, getCube, getFrames =
+                let runtime = runtime :> IFramebufferRuntime
+                if ordinary then
+                    let resource = runtime.CreateFramebuffer(signature, inputs.Data.[0])
+                    resource :> IAdaptiveResource, (fun () -> failwith "Ordinary fixture has no cube"),
+                    (fun () -> [|resource.GetValue(AdaptiveToken.Top, token)|])
+                else
+                    let resource = runtime.CreateFramebufferCube(signature, inputs)
+                    resource :> IAdaptiveResource, (fun () -> resource.GetValue(AdaptiveToken.Top, token)),
+                    (fun () -> resource.GetValue(AdaptiveToken.Top, token).Data)
             do resource.Acquire()
 
-            new(levels) = new Fixture(levels, false)
+            new(levels, shared) = new Fixture(levels, shared, false)
+            new(levels) = new Fixture(levels, false, false)
             member _.Runtime = runtime
             member _.Signature = signature
             member _.Token = token
             member _.Resource = resource
             member _.Sources = sources |> Array.collect id
-            member _.Count = 6 * levels
-            member _.Get() = resource.GetValue(AdaptiveToken.Top, token)
-            member _.Expected(slot, depth) = sources.[if shared then 0 else slot].[if depth then 1 else 0].Value
+            member _.Count = if ordinary then 1 else 6 * levels
+            member _.Get() = getCube()
+            member _.GetFrames() = getFrames()
+            member _.Expected(slot, depth) = sources.[if shared || ordinary then 0 else slot].[if depth then 1 else 0].Value
+            member _.SetOutput(slot, depth, output) = sources.[slot].[if depth then 1 else 0].Update(output)
             member _.SetFailure(slot, site, error) =
                 match site with
                 | Color -> sources.[slot].[0].Failure <- Some error
@@ -140,6 +161,7 @@ module AdaptiveFramebufferCube =
                 | Framebuffer -> runtime.Failure <- Some(slot, error)
             member _.ClearFailure() =
                 runtime.Failure <- None
+                for frame in runtime.Frames do frame.DisposalError <- None
                 for pair in sources do
                     for source in pair do source.Failure <- None
             member _.Update(slot, depth) =
@@ -153,7 +175,7 @@ module AdaptiveFramebufferCube =
                     try resource.ReleaseAll() with _ -> ()
                     for source in x.Sources do source.ReleaseAll()
                     for frame in runtime.Frames do
-                        if frame.Disposals = 0 then (frame :> IFramebuffer).Dispose()
+                        if not frame.Retired then (frame :> IFramebuffer).Dispose()
                     (signature :> IFramebufferSignature).Dispose()
 
         let private sites = [Color; Depth; Framebuffer]
@@ -347,6 +369,155 @@ module AdaptiveFramebufferCube =
                     fixture.Resource.Release()
                     released context fixture 2
 
+        let private replacementLayouts mode action =
+            for ordinary, levels in [true, 1; false, 1; false, 2; false, 3] do
+                if mode = None || mode = Some ordinary then
+                    let count = if ordinary then 1 else 6 * levels
+                    for slot = 0 to count - 1 do
+                        for depth in [false; true] do
+                            use fixture = new Fixture(levels, false, ordinary)
+                            fixture.Runtime.RequireRetirement <- true
+                            action (sprintf "ordinary=%b, levels=%d, slot=%d, depth=%b" ordinary levels slot depth) slot depth fixture
+
+        let private attachmentCounts context (fixture : Fixture) creates destroys =
+            for source in fixture.Sources do
+                Expect.equal source.Creates creates (context + ": attachment acquisition count")
+                Expect.equal source.Destroys destroys (context + ": attachment release count")
+            Expect.equal fixture.Signature.Disposals 0 (context + ": caller retains signature ownership")
+
+        let private liveFrames context (fixture : Fixture) =
+            let frames = fixture.GetFrames()
+            Expect.equal frames.Length fixture.Count (context + ": complete frame count")
+            for slot = 0 to frames.Length - 1 do
+                let frame = frames.[slot]
+                Expect.isFalse (frame :?> Framebuffer).Retired (sprintf "%s, index=%d: returned a retired handle" context slot)
+                Expect.isTrue (obj.ReferenceEquals(frame.Signature, fixture.Signature)) (context + ": signature identity")
+                for depth, semantic in [false, DefaultSemantic.Colors; true, DefaultSemantic.DepthStencil] do
+                    Expect.isTrue (obj.ReferenceEquals(frame.Attachments.[semantic], fixture.Expected(slot, depth)))
+                        (sprintf "%s, index=%d, depth=%b: attachment identity" context slot depth)
+            frames
+
+        let private replacementIdentities context slot (before : IFramebuffer[]) (after : IFramebuffer[]) =
+            for index = 0 to before.Length - 1 do
+                Expect.equal (obj.ReferenceEquals(before.[index], after.[index])) (index <> slot)
+                    (sprintf "%s, index=%d: only the target slot changes" context index)
+
+        let private failReplacement context slot depth (fixture : Fixture) =
+            let before = liveFrames context fixture
+            fixture.Update(slot, depth)
+            let error = InvalidOperationException("replacement creation")
+            fixture.Runtime.Failure <- Some(slot, error)
+            failure context error (fun () -> fixture.GetFrames() |> ignore)
+            before
+
+        let successfulReplacements() =
+            replacementLayouts None (fun context slot depth fixture ->
+                let before = liveFrames context fixture
+                for _ = 1 to 3 do
+                    let cached = liveFrames context fixture
+                    for index = 0 to fixture.Count - 1 do
+                        Expect.isTrue (obj.ReferenceEquals(before.[index], cached.[index])) (context + ": cached handle identity")
+                    transact fixture.Resource.MarkOutdated
+                    let unchanged = liveFrames context fixture
+                    for index = 0 to fixture.Count - 1 do
+                        Expect.isTrue (obj.ReferenceEquals(before.[index], unchanged.[index])) (context + ": invalidation with unchanged attachments")
+                Expect.equal fixture.Runtime.Frames.Count fixture.Count (context + ": unchanged evaluations do not create")
+                fixture.Update(slot, depth)
+                let after = liveFrames context fixture
+                replacementIdentities context slot before after
+                Expect.equal (before.[slot] :?> Framebuffer).Disposals 1 (context + ": successful replacement retires once")
+                Expect.equal fixture.Token.TotalCreatedResources fixture.Count (context + ": successful creation statistics")
+                Expect.equal fixture.Token.TotalReplacedResources 1 (context + ": successful replacement statistics")
+                attachmentCounts context fixture 1 0
+                fixture.Resource.Release()
+                released context fixture 1)
+
+        let replacementRetries ordinary () =
+            replacementLayouts (Some ordinary) (fun context slot depth fixture ->
+                let before = failReplacement context slot depth fixture
+                let retired = before.[slot] :?> Framebuffer
+                for attempt = 2 to 3 do
+                    let error = InvalidOperationException(sprintf "retry %d" attempt)
+                    fixture.Runtime.Failure <- Some(slot, error)
+                    failure (sprintf "%s, attempt=%d" context attempt) error (fun () -> fixture.GetFrames() |> ignore)
+                    Expect.equal retired.Disposals 1 (context + ": retry never disposes retired storage")
+                    Expect.equal fixture.Runtime.Frames.Count fixture.Count (context + ": failed retries publish no handles")
+                    attachmentCounts context fixture 1 0
+                fixture.ClearFailure()
+                let after = liveFrames context fixture
+                replacementIdentities context slot before after
+                Expect.equal retired.Disposals 1 (context + ": successful retry does not revisit retired storage")
+                Expect.equal fixture.Runtime.Frames.Count (fixture.Count + 1) (context + ": retry creates only missing storage")
+                attachmentCounts context fixture 1 0
+                fixture.Resource.ReleaseAll()
+                released context fixture 1)
+
+        let replacementRestoration ordinary () =
+            replacementLayouts (Some ordinary) (fun context slot depth fixture ->
+                let original = fixture.Expected(slot, depth)
+                let before = failReplacement context slot depth fixture
+                fixture.SetOutput(slot, depth, original)
+                fixture.ClearFailure()
+                let after = liveFrames context fixture
+                replacementIdentities context slot before after
+                Expect.equal fixture.Runtime.Frames.Count (fixture.Count + 1) (context + ": restored attachments require fresh storage")
+                Expect.equal (before.[slot] :?> Framebuffer).Disposals 1 (context + ": restored attachments never resurrect retired storage")
+                attachmentCounts context fixture 1 0
+                fixture.Resource.ReleaseAll()
+                released context fixture 1)
+
+        let replacementRelease ordinary () =
+            for owners in [1; 2] do
+                for releaseAll in [false; true] do
+                    replacementLayouts (Some ordinary) (fun context slot depth fixture ->
+                        let context = sprintf "%s, owners=%d, ReleaseAll=%b" context owners releaseAll
+                        for _ = 2 to owners do fixture.Resource.Acquire()
+                        let before = failReplacement context slot depth fixture
+                        if releaseAll then fixture.Resource.ReleaseAll()
+                        else
+                            for owner = 1 to owners do
+                                fixture.Resource.Release()
+                                if owner < owners then attachmentCounts context fixture 1 0
+                        fixture.Resource.ReleaseAll()
+                        for frame in before do
+                            Expect.equal (frame :?> Framebuffer).Disposals 1 (context + ": final release retires each owned handle once")
+                        attachmentCounts context fixture 1 1
+                        fixture.ClearFailure()
+                        fixture.Resource.Acquire()
+                        let after = liveFrames context fixture
+                        for index = 0 to fixture.Count - 1 do
+                            Expect.isFalse (obj.ReferenceEquals(before.[index], after.[index])) (context + ": reacquisition creates every slot")
+                        attachmentCounts context fixture 2 1
+                        fixture.Resource.ReleaseAll()
+                        attachmentCounts context fixture 2 2)
+
+        let replacementDisposalFailure() =
+            replacementLayouts None (fun context slot depth fixture ->
+                let original = fixture.Expected(slot, depth)
+                let before = liveFrames context fixture
+                let owned = before.[slot] :?> Framebuffer
+                fixture.Update(slot, depth)
+                let error = InvalidOperationException("replacement retirement")
+                owned.DisposalError <- Some error
+                failure context error (fun () -> fixture.GetFrames() |> ignore)
+                Expect.isFalse owned.Retired (context + ": failed disposal retains ownership")
+                Expect.equal fixture.Runtime.Frames.Count fixture.Count (context + ": no creation follows failed disposal")
+                attachmentCounts context fixture 1 0
+                fixture.SetOutput(slot, depth, original)
+                let restored = liveFrames context fixture
+                for index = 0 to fixture.Count - 1 do
+                    Expect.isTrue (obj.ReferenceEquals(before.[index], restored.[index])) (context + ": restored attachments retain still-live storage")
+                fixture.Update(slot, depth)
+                owned.DisposalError <- None
+                let after = liveFrames context fixture
+                replacementIdentities context slot before after
+                Expect.isTrue owned.Retired (context + ": disposal is retried before creation")
+                Expect.equal owned.Disposals 2 (context + ": failed then successful retirement")
+                attachmentCounts context fixture 1 0
+                fixture.Resource.ReleaseAll()
+                Expect.equal owned.Disposals 2 (context + ": final release does not revisit old ownership")
+                attachmentCounts context fixture 1 1)
+
     let tests (target : TestTarget) =
         [
             "Failed initial slots retry without losing the prefix", Cases.retry
@@ -355,5 +526,14 @@ module AdaptiveFramebufferCube =
             "Cached and unchanged invalidated evaluations",         Cases.cachedAndInvalidated
             "Single-slot updates preserve other handles",           Cases.singleSlotUpdates
             "Multiple owners and unmaterialized reacquisition",     Cases.ownershipAndReacquisition
+
+            "Replacement.Cached reads and successful accounting",   Cases.successfulReplacements
+            "Replacement.Ordinary creation failures retry",         Cases.replacementRetries true
+            "Replacement.Cube creation failures retry",             Cases.replacementRetries false
+            "Replacement.Ordinary attachment restoration",          Cases.replacementRestoration true
+            "Replacement.Cube attachment restoration",              Cases.replacementRestoration false
+            "Replacement.Ordinary final release and reacquisition", Cases.replacementRelease true
+            "Replacement.Cube final release and reacquisition",     Cases.replacementRelease false
+            "Replacement.Failed disposal retains ownership",        Cases.replacementDisposalFailure
         ]
         |> prepareCasesCpu "AdaptiveFramebufferCube" target
