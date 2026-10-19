@@ -86,6 +86,7 @@
     <Compile Include="Tests\Raytracing\TraceGeometryTests.fs" />
     <Compile Include="Tests\IndexedGeometry\OperationsTests.fs" />
     <Compile Include="Tests\IndexedGeometry\SphereTests.fs" />
+    <Compile Include="Tests\IndexedGeometry\QuadrangleTests.fs" />
     <Compile Include="Tests\IndexedGeometry\CylinderNormalsTests.fs" />
     <Compile Include="Tests\IndexedGeometry\PrimitiveSequencesTests.fs" />
     <Compile Include="Tests\Utilities\ConcurrentDeltaPriorityQueueTests.fs" />
