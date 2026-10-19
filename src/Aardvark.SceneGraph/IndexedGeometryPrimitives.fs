@@ -153,36 +153,52 @@ module IndexedGeometryPrimitives =
 
             let quadrangles mode hasNormals (p0p1p2p3 : seq<(V3d * C4b * V3d)*(V3d * C4b * V3d)*(V3d * C4b * V3d)*(V3d * C4b * V3d)>) =
                 let p0p1p2p3 = p0p1p2p3 |> Seq.toArray
-                let attribs =
-                    [|
-                        for i in 0..(p0p1p2p3.Length-1) do
-
-                            let ((p0,c0,n0),(p1,c1,n1),(p2,c2,n2),(p3,c3,n3)) = p0p1p2p3.[i]
-                            let pos = [| V3f p0; V3f p1; V3f p2; V3f p3 |]
-                            let col = [| c0; c1; c2; c3 |]
-                            let norm =[| V3f n0; V3f n1; V3f n2; V3f n3 |]
-                            let idx = 
-                                match mode with
-                                | Quadranglemode.Solid ->
-                                    [|0;1;2; 0;2;3|] |> Array.map (fun idx -> idx + i*4)
-                                | Quadranglemode.Wire ->
-                                    [|0;1; 1;2; 2;3; 3;0|] |> Array.map (fun idx -> idx + i*4)
-                            yield pos,col,norm,idx
-                    |]
-
-                let pos = attribs |> Array.map ( fun (v,_,_,_) -> v) |> Array.concat
-                let col = attribs |> Array.map ( fun (_,v,_,_) -> v) |> Array.concat
-                let nrm = attribs |> Array.map ( fun (_,_,v,_) -> v) |> Array.concat
-                let idx = attribs |> Array.map ( fun (_,_,_,v) -> v) |> Array.concat
-                let mode = 
+                let count = vertexCount p0p1p2p3.Length 4
+                let indexStride = if mode = Quadranglemode.Solid then 6 else 8
+                let indexCount = vertexCount p0p1p2p3.Length indexStride
+                let pos = Array.zeroCreate<V3f> count
+                let col = Array.zeroCreate<C4b> count
+                let nrm = if hasNormals then Array.zeroCreate<V3f> count else Array.create count V3f.OOI
+                let idx = Array.zeroCreate<int> indexCount
+                for i in 0 .. p0p1p2p3.Length - 1 do
+                    let ((p0,c0,n0),(p1,c1,n1),(p2,c2,n2),(p3,c3,n3)) = p0p1p2p3.[i]
+                    let j = 4 * i
+                    pos.[j] <- V3f p0
+                    pos.[j + 1] <- V3f p1
+                    pos.[j + 2] <- V3f p2
+                    pos.[j + 3] <- V3f p3
+                    col.[j] <- c0
+                    col.[j + 1] <- c1
+                    col.[j + 2] <- c2
+                    col.[j + 3] <- c3
+                    if hasNormals then
+                        nrm.[j] <- V3f n0
+                        nrm.[j + 1] <- V3f n1
+                        nrm.[j + 2] <- V3f n2
+                        nrm.[j + 3] <- V3f n3
+                    let k = indexStride * i
+                    match mode with
+                    | Quadranglemode.Solid ->
+                        idx.[k] <- j
+                        idx.[k + 1] <- j + 1
+                        idx.[k + 2] <- j + 2
+                        idx.[k + 3] <- j
+                        idx.[k + 4] <- j + 2
+                        idx.[k + 5] <- j + 3
+                    | Quadranglemode.Wire ->
+                        idx.[k] <- j
+                        idx.[k + 1] <- j + 1
+                        idx.[k + 2] <- j + 1
+                        idx.[k + 3] <- j + 2
+                        idx.[k + 4] <- j + 2
+                        idx.[k + 5] <- j + 3
+                        idx.[k + 6] <- j + 3
+                        idx.[k + 7] <- j
+                let mode =
                     match mode with
                     | Quadranglemode.Solid -> IndexedGeometryMode.TriangleList
                     | Quadranglemode.Wire -> IndexedGeometryMode.LineList
-                     
-                if hasNormals then
-                    IndexedGeometry.fromPosColNorm pos col nrm (Some idx) mode
-                else
-                    IndexedGeometry.fromPosCol pos col (Some idx) mode
+                IndexedGeometry.fromPosColNorm pos col nrm (Some idx) mode
 
             let quadrangle mode hasNormals (posColNorm0 : V3d * C4b * V3d) (posColNorm1 : V3d * C4b * V3d) (posColNorm2 : V3d * C4b * V3d) (posColNorm3 : V3d * C4b * V3d) =
                 quadrangles mode hasNormals [ posColNorm0, posColNorm1, posColNorm2, posColNorm3 ]

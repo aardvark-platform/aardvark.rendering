@@ -64,6 +64,7 @@ let tests =
         testAllTargets "IndexedGeometry" [
             IndexedGeometry.Operations.tests
             IndexedGeometry.Sphere.tests
+            IndexedGeometry.Quadrangles.tests
             IndexedGeometry.CylinderNormals.tests
             IndexedGeometry.PrimitiveSequences.tests
         ]
