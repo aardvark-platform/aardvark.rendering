@@ -60,6 +60,8 @@ module private AdaptiveFramebufferTypes =
                 else
                     t.ReplacedResource(ResourceKind.Framebuffer)
                     h.Dispose()
+                    // Retired storage must stay missing if creation fails; attachments remain acquired.
+                    handle <- None
                     create signature att
 
             | None ->
@@ -129,6 +131,8 @@ module private AdaptiveFramebufferTypes =
                     else
                         rt.ReplacedResource(ResourceKind.Framebuffer)
                         h.Dispose()
+                        // Clear only this successfully retired slot, retaining every other handle.
+                        handles.[face, level] <- ValueNone
                         create face level signature att
             )
 

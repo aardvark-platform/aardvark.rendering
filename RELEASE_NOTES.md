@@ -1,3 +1,4 @@
+- Fixed adaptive ordinary and cube framebuffers to recover after failed replacement creation without reusing or repeatedly disposing retired storage, including after restoring earlier attachments. Unaffected cube slots and attachment ownership are preserved.
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
 - Fixed `ConcurrentDeltaPriorityQueue` to dequeue minimum priorities, ignore zero-count batches without evaluating priorities, preserve coalesced count partitions, and release its monitor when dequeue fails.
 - Fixed colored resource locks to balance lifecycle callbacks, restore nested ownership safely under contention ([#137](https://github.com/aardvark-platform/aardvark.rendering/issues/137))
