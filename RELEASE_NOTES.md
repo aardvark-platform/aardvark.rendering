@@ -6,6 +6,7 @@
 - Fixed subdivision-sphere wireframes to emit every undirected mesh edge exactly once.
 - [Sg] Added primitives for wireframe spheres
 - [Application] Do not dispose application provided via `RenderConfig`
+- [Application] Reduce stereo rendering memory consumption
 - [GLFW] Only invoke `SwapInterval` for OpenGL windows
 - [GLFW] Remove window as parent when disposed
 - [GLFW] Make window disposal synchronous

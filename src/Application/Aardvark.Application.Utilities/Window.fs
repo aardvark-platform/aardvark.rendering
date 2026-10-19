@@ -88,7 +88,12 @@ module Utilities =
     module private Shader =
         open FShade
 
-        let stereoTexture =
+        type Fragment = {
+            [<FragCoord>] coord : V4f
+            [<SampleId>] sample : int
+        }
+
+        let private stereoTexture =
             sampler2dArray {
                 texture uniform?DiffuseColorTexture
                 filter Filter.MinMagLinear
@@ -96,17 +101,28 @@ module Utilities =
                 addressV WrapMode.Wrap
             }
 
-        let renderStereo (v : Effects.Vertex) =
+        let private stereoTextureMS =
+            sampler2dArrayMS {
+                texture uniform?DiffuseColorTexture
+                filter Filter.MinMagLinear
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            }
+
+        let copyStereo (samples : int) (f : Fragment) =
             fragment {
-                let index =
-                    if v.tc.X > 0.5f then 1
-                    else 0
+                let width =
+                    if samples > 1 then stereoTextureMS.Size.X
+                    else stereoTexture.Size.X
 
-                let tc =
-                    if v.tc.X > 0.5f then V2f((v.tc.X - 0.5f) * 2.0f, v.tc.Y)
-                    else V2f(v.tc.X * 2.0f, v.tc.Y)
+                let mutable tc = V2i f.coord.XY
+                let index = min 1 (tc.X / width)
+                tc.X <- tc.X - (index * width)
 
-                return stereoTexture.SampleLevel(tc, index, uniform?Dependent)
+                if samples > 1 then
+                    return stereoTextureMS.Read(tc, index, f.sample)
+                else
+                    return stereoTexture.Read(tc, index)
             }
 
 
@@ -463,22 +479,8 @@ module Utilities =
                 ]
             )
 
-        let s = win.Sizes |> AVal.map (fun s -> s / V2i(2,1))
-
-        let colors = runtime.CreateTexture2DArray(s, TextureFormat.Rgba8, samples = samples, count = 2)
-        colors.Name <- "Color Attachment (Window)"
-
-        let depth = runtime.CreateTexture2DArray(s, TextureFormat.Depth24Stencil8, samples = samples, count = 2)
-        depth.Name <- "Depth / Stencil Attachment (Window)"
-
-        let resolved = runtime.CreateTexture2DArray(s, TextureFormat.Rgba8, count = 2)
-        colors.Name <- "Resolved Color Attachment (Window)"
-
-        let framebuffer =
-            runtime.CreateFramebuffer(signature, [
-                DefaultSemantic.Colors, colors.GetOutputView()
-                DefaultSemantic.DepthStencil, depth.GetOutputView()
-            ])
+        let stereoSize = win.Sizes |> AVal.map (fun s -> s / V2i(2, 1))
+        let mutable stereoTask = RenderTask.empty
 
         let initialView = 
             match cfg.initialCamera with
@@ -519,65 +521,27 @@ module Utilities =
             )
 
         let compile (config : RenderConfig) (sg : ISg) =
-
-            framebuffer.Acquire()
-            resolved.Acquire()
-
             let sg, overlay = sg |> hookSg config.showHelp win
 
-            let stereoTask =
+            stereoTask <-
                 sg
                 |> Sg.uniform "ViewTrafo" views
                 |> Sg.uniform "ProjTrafo" projs
                 |> Sg.viewTrafo view
-                |> Sg.uniform "CameraLocation" (view |> AVal.map (fun t -> t.Backward.C3.XYZ))
-                |> Sg.uniform "LightLocation" (view |> AVal.map (fun t -> t.Backward.C3.XYZ))
+                |> Sg.uniform "CameraLocation" (view |> AVal.map _.Backward.C3.XYZ)
+                |> Sg.uniform "LightLocation" (view |> AVal.map _.Backward.C3.XYZ)
                 |> Sg.compile runtime signature
 
-            stereoTask.Name <- "Window Task (Scene)"
+            let stereoOutput =
+                stereoTask |> RenderTask.renderToColor stereoSize
 
-            let clearTask = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
-            clearTask.Name <- "Window Task (Clear)"
-
-            let task =
-                Sg.fullScreenQuad
-                    |> Sg.uniform "Dependent" (AVal.constant 0.0)
-                    |> Sg.diffuseTexture resolved
-                    |> Sg.shader {
-                        do! Shader.renderStereo
-                    }
-                    |> Sg.andAlso overlay
-                    |> Sg.compile runtime win.FramebufferSignature
-
-            task.Name <- "Window Task (Stereo Resolve)"
-
-            let dummy =
-                { new AbstractRenderTask() with
-                    member x.FramebufferSignature = Some win.FramebufferSignature
-                    member x.Runtime = Some win.Runtime
-                    member x.PerformUpdate (_,_) = ()
-                    member x.Perform (t,rt,_) = 
-                        let fbo = framebuffer.GetValue(t, rt)
-                        let output = OutputDescription.ofFramebuffer fbo
-
-                        let c = colors.GetValue t |> unbox<IBackendTexture>
-                        let r = resolved.GetValue t |> unbox<IBackendTexture>
-
-                        clearTask.Run(t, rt, output)
-                        stereoTask.Run(t, rt, output)
-
-                        runtime.Copy(c, 0, 0, r, 0, 0, 2, 1)
-
-                    member x.Release() =
-                        stereoTask.Dispose()
-                        clearTask.Dispose()
-                        framebuffer.Release()
-                        resolved.Release()
-                    member x.Use f = f()
+            Sg.fullScreenQuad
+                |> Sg.diffuseTexture stereoOutput
+                |> Sg.shader {
+                    do! Shader.copyStereo samples
                 }
-
-            RenderTask.ofList [dummy; task]
-
+                |> Sg.andAlso overlay
+                |> Sg.compile runtime win.FramebufferSignature
 
         let res =
             { new SimpleRenderWindow(win, views, projs) with
@@ -585,6 +549,8 @@ module Utilities =
                     compile cfg sg
 
                 override x.Release() =
+                    stereoTask.Dispose()
+                    stereoTask <- RenderTask.empty
                     signature.Dispose()
                     if cfg.app.IsNone then app.Dispose()
 
