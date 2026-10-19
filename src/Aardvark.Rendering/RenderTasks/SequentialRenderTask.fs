@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Rendering
 
+open System
+open System.Runtime.ExceptionServices
 open FSharp.Data.Adaptive
 
 module private FramebufferSignature =
@@ -18,6 +20,12 @@ module private FramebufferSignature =
             else
                 None
 
+/// <summary>A fixed sequence of render tasks.</summary>
+/// <remarks>
+/// Disposal attempts every child array entry in order, including duplicates, despite failures.
+/// A single failure retains its exception identity and stack; multiple failures are aggregated
+/// in disposal order without flattening existing aggregates. Parent disposal remains one-shot.
+/// </remarks>
 type SequentialRenderTask(tasks : IRenderTask[]) =
     inherit AbstractRenderTask()
 
@@ -41,7 +49,21 @@ type SequentialRenderTask(tasks : IRenderTask[]) =
         )
 
     override x.Release() =
-        for t in tasks do t.Dispose()
+        let mutable first : ExceptionDispatchInfo = null
+        let mutable errors : ResizeArray<exn> = null
+        for t in tasks do
+            try t.Dispose()
+            with error ->
+                if isNull first then
+                    first <- ExceptionDispatchInfo.Capture error
+                else
+                    if isNull errors then
+                        errors <- ResizeArray<exn>()
+                        errors.Add first.SourceException
+                    errors.Add error
+
+        if not (isNull errors) then raise (AggregateException(errors))
+        elif not (isNull first) then first.Throw()
 
     override x.PerformUpdate(token : AdaptiveToken, renderToken : RenderToken) =
         for t in tasks do
