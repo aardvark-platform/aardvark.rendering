@@ -51,6 +51,7 @@
     <Compile Include="Tests\Buffer\ManagedBuffer.fs" />
     <Compile Include="Tests\Buffer\IndirectBuffer.fs" />
     <Compile Include="Tests\Buffer\BufferView.fs" />
+    <Compile Include="Tests\Buffer\SingleValueBuffer.fs" />
     <Compile Include="Tests\Buffer\ViewBoundaries.fs" />
     <Compile Include="Tests\Texture\AdaptiveTexture.fs" />
     <Compile Include="Tests\Texture\AdaptiveAttachment.fs" />

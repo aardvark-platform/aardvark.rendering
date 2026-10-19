@@ -14,6 +14,7 @@ let tests =
             Buffer.ManagedBuffer.tests
             Buffer.IndirectBuffer.tests
             Buffer.BufferView.tests
+            Buffer.SingleValueBufferTests.tests
             Buffer.BufferViewBoundaries.tests
         ]
 
