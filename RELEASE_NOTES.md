@@ -1,3 +1,4 @@
+- Fixed typed-array adaptive-buffer writes to reject invalid source ranges before accessing storage, including negative or overflowing ranges, while allowing exact-end and empty zero-count writes.
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
 - Fixed `ConcurrentDeltaPriorityQueue` to dequeue minimum priorities, ignore zero-count batches without evaluating priorities, preserve coalesced count partitions, and release its monitor when dequeue fails.
 - Fixed colored resource locks to balance lifecycle callbacks, restore nested ownership safely under contention ([#137](https://github.com/aardvark-platform/aardvark.rendering/issues/137))
