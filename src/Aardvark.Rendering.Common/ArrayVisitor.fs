@@ -5,6 +5,8 @@ open System.Reflection
 open System.Reflection.Emit
 open System.Runtime.CompilerServices
 
+/// Dispatches .NET vector arrays (T[]), including jagged and covariant vectors,
+/// by runtime element type. Rectangular and non-vector rank-one arrays are unsupported.
 [<AbstractClass>]
 type ArrayVisitor<'r>() =
     static let cache = System.Collections.Concurrent.ConcurrentDictionary<Type, ArrayVisitor<'r> -> Array -> 'r>()
@@ -30,6 +32,7 @@ type ArrayVisitor<'r>() =
             let mRun = mRunGen.MakeGenericMethod [| t |]
             il.Emit(OpCodes.Ldarg_0)
             il.Emit(OpCodes.Ldarg_1)
+            il.Emit(OpCodes.Castclass, t.MakeArrayType())
             il.EmitCall(OpCodes.Callvirt, mRun, null)
             il.Emit(OpCodes.Ret)
 
@@ -39,6 +42,8 @@ type ArrayVisitor<'r>() =
 
         ))
 
+    /// <summary>Visits a .NET vector array using its runtime element type.</summary>
+    /// <exception cref="T:System.InvalidCastException">The array is rectangular or a non-vector rank-one array.</exception>
     member x.Run(a : Array) =
         let t = a.GetType().GetElementType()
         get t x a
@@ -48,5 +53,6 @@ type ArrayVisitor<'r>() =
 [<AbstractClass; Sealed; Extension>]
 type ArrayVisitorExtensions private() =
 
+    /// Visits a .NET vector array (T[]) using its runtime element type.
     [<Extension>]
     static member inline Visit (x : Array, v : ArrayVisitor<'r>) = v.Run x
