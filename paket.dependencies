@@ -43,8 +43,7 @@ nuget Silk.NET.Core                                 = 2.23.0
 nuget Silk.NET.Direct3D9                            = 2.23.0
 
 // Examples
-nuget Aardvark.PixImage.DevIL                       ~> 5.2.33
-nuget Aardvark.PixImage.ImageSharp                  ~> 3.0.2
+nuget Aardvark.PixImage.PixCodec                    ~> 1.0.0
 nuget Aardvark.Data.GLTF                            ~> 1.0.0
 nuget Aardvark.Data.Opc                             ~> 0.9.0
 
