@@ -59,6 +59,7 @@ let tests =
 
         testAllTargets "Raytracing" [
             Raytracing.TraceGeometry.tests
+            Raytracing.TraceTo.tests
         ]
 
         testAllTargets "IndexedGeometry" [

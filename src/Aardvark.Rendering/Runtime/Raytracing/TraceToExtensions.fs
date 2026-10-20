@@ -36,6 +36,8 @@ type CompileTraceToExtensions() =
 [<AutoOpen>]
 module AdaptiveTraceToTypes =
 
+    /// <summary>Adaptively traces into a target retained for each active result lifetime.</summary>
+    /// <remarks>Adaptive-resource targets are acquired until the compiled task is disposed. Plain aval targets retain caller-managed texture ownership. Target release is attempted even if task disposal fails, without masking the task exception.</remarks>
     type AdaptiveTraceResult(runtime : IRaytracingRuntime, pipeline : RaytracingPipelineState, target : aval<IBackendTexture>) =
         inherit AdaptiveResource<IBackendTexture>()
 
@@ -45,10 +47,15 @@ module AdaptiveTraceToTypes =
                 Disposable.dispose
 
         override x.Create() =
+            target.Acquire()
             task.Acquire()
 
         override x.Destroy() =
-            task.Release()
+            try task.Release()
+            with _ ->
+                try target.Release() with _ -> ()
+                reraise()
+            target.Release()
 
         override x.Compute(t : AdaptiveToken, rt : RenderToken) =
             use __ = rt.Use()
@@ -64,11 +71,12 @@ type TraceToExtensions() =
 
     ///<summary>Adaptively runs a raytracing task that dispatches rays based on the size of the given target texture.</summary>
     ///<param name="runtime">The runtime.</param>
-    ///<param name="target">The target texture.</param>
+    ///<param name="target">The target texture. An adaptive resource is retained for the active result lifetime; a plain aval remains caller-owned.</param>
     ///<param name="pipeline">The pipeline description of the raytracing task.</param>
+    ///<remarks>Final result release disposes the compiled task before releasing its target reference, including when task disposal throws.</remarks>
     [<Extension>]
     static member TraceTo(runtime : IRaytracingRuntime, target : aval<#IBackendTexture>, pipeline : RaytracingPipelineState) =
-        AdaptiveTraceResult(runtime, pipeline, target |> AVal.cast)
+        AdaptiveTraceResult(runtime, pipeline, target |> AdaptiveResource.cast<IBackendTexture>)
 
     ///<summary>Adaptively runs a raytracing task that dispatches rays based on the size of a target texture.</summary>
     ///<param name="runtime">The runtime.</param>

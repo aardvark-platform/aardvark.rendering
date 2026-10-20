@@ -84,6 +84,7 @@
     <Compile Include="Tests\Compute\Jpeg.fs" />
     <Compile Include="Tests\Compute\MutableInputBinding.fs" />
     <Compile Include="Tests\Raytracing\TraceGeometryTests.fs" />
+    <Compile Include="Tests\Raytracing\TraceTo.fs" />
     <Compile Include="Tests\IndexedGeometry\OperationsTests.fs" />
     <Compile Include="Tests\IndexedGeometry\SphereTests.fs" />
     <Compile Include="Tests\IndexedGeometry\CylinderNormalsTests.fs" />

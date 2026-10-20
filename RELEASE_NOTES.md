@@ -1,3 +1,5 @@
+- Fixed raytracing `TraceTo` results to retain adaptive target textures for their active lifetime and release them after task disposal, including when disposal throws. Plain adaptive-value targets remain caller-owned.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
