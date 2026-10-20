@@ -1,3 +1,4 @@
+### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
 - Fixed `ConcurrentDeltaPriorityQueue` to dequeue minimum priorities, ignore zero-count batches without evaluating priorities, preserve coalesced count partitions, and release its monitor when dequeue fails.
