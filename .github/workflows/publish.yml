@@ -61,6 +61,10 @@ jobs:
     runs-on: windows-latest
     needs: release-check
     if: needs.release-check.outputs.should-skip != 'true'
+    permissions:
+      id-token: write # enable GitHub OIDC token issuance for this job
+      contents: write
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -93,8 +97,12 @@ jobs:
         shell: cmd
         run: dotnet nuget push "bin\pack\*.nupkg" -k %NUGET_KEY% -s "https://nuget.pkg.github.com/aardvark-platform/index.json" --skip-duplicate
 
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: NuGet
-        env:
-          NUGET_KEY: ${{ secrets.NUGET_KEY }}
         shell: cmd
-        run: dotnet nuget push "bin\pack\*.nupkg" -k %NUGET_KEY% -s "https://api.nuget.org/v3/index.json" --skip-duplicate
+        run: dotnet nuget push "bin\pack\*.nupkg" -k ${{steps.login.outputs.NUGET_API_KEY}} -s "https://api.nuget.org/v3/index.json" --skip-duplicate
