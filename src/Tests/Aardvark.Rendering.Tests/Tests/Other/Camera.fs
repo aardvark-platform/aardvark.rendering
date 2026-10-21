@@ -382,6 +382,109 @@ module Camera =
                     vectorClose (ndc pp projected.Z) projected $"{context}, distance={distance}, projected pixel"
                     expectHit expected cam (Plane3d(worldDir, expected)) pp $"{context}, distance={distance}, plane hit"
 
+    module private Projection =
+        let private projections = [
+            "identity", Trafo3d.Identity
+            "symmetric perspective", Aardvark.Rendering.Frustum.perspective 67.0 0.25 100.0 1.7 |> Aardvark.Rendering.Frustum.projTrafo
+            "asymmetric perspective", { left = -0.4; right = 0.8; bottom = -0.3; top = 0.6; near = 0.5; far = 75.0; isOrtho = false } |> Aardvark.Rendering.Frustum.projTrafo
+            "symmetric orthographic", Aardvark.Rendering.Frustum.ortho (Box3d(-4.0, -3.0, 0.25, 4.0, 3.0, 75.0)) |> Aardvark.Rendering.Frustum.projTrafo
+            "asymmetric orthographic", Aardvark.Rendering.Frustum.ortho (Box3d(2.0, -7.0, 0.5, 10.0, -1.0, 100.0)) |> Aardvark.Rendering.Frustum.projTrafo
+        ]
+        let private views = [
+            "identity", Trafo3d.Identity
+            "translated", Trafo3d.Translation(V3d(-17.0, 11.0, -4.0))
+            "rotated and translated", CameraView.LookAt(V3d(4.0, -7.0, 3.0), V3d(-2.0, 5.0, -9.0), V3d.ZAxis).ViewTrafo
+        ]
+        let private transforms = [
+            for projectionName, projection in projections do
+                for viewName, view in views do
+                    yield $"projection={projectionName}, view={viewName}", view * projection
+        ]
+
+        let namedBoundariesAndSigns() =
+            for context, transform in transforms do
+                for side, boundary, inward, plane in ["left", -1.0, 1.0, ViewProjection.leftPlane transform; "right", 1.0, -1.0, ViewProjection.rightPlane transform] do
+                    for y in [-0.75; 0.0; 0.75] do
+                        for z in [-1.0; 0.0; 1.0] do
+                            for offset, sign in [0.0, 0; 0.25, 1; -0.25, -1; 2.0, 1] do
+                                let clip = V3d(boundary + inward * offset, y, z)
+                                let world = transform.Backward.TransformPosProj clip
+                                let point = V4d(world, 1.0)
+                                let height = Vec.Dot(plane, point)
+                                let tolerance = 1e-10 * max 1.0 (abs (plane.X * point.X) + abs (plane.Y * point.Y) + abs (plane.Z * point.Z) + abs plane.W)
+                                let message = $"{context}, side={side}, clip={clip}, coefficients={plane}, height={height}, tolerance={tolerance}"
+                                Expect.isTrue (world.IsFinite && Double.IsFinite height) (message + ": finite inverse projection")
+                                if sign = 0 then Expect.isTrue (abs height <= tolerance) (message + ": named boundary is zero")
+                                elif sign > 0 then Expect.isTrue (height > tolerance) (message + ": inward half-space is positive")
+                                else Expect.isTrue (height < -tolerance) (message + ": outward half-space is negative")
+                                if z = 0.0 && abs offset = 0.25 then
+                                    Expect.equal (ViewProjection.contains world transform) (sign > 0) (message + ": containment control")
+
+        let homogeneousCoefficients() =
+            for context, transform in transforms do
+                for scale in [0.25; 1.0; 4.0] do
+                    let matrix = transform.Forward * scale
+                    let scaled = Trafo3d(matrix, matrix.Inverse)
+                    let message = $"{context}, homogeneous scale={scale}"
+                    Expect.equal (ViewProjection.leftPlane scaled) ((transform.Forward.R3 + transform.Forward.R0) * scale) (message + ": raw left coefficients, not a normalized plane")
+                    Expect.equal (ViewProjection.rightPlane scaled) ((transform.Forward.R3 - transform.Forward.R0) * scale) (message + ": raw right coefficients, not a normalized plane")
+
+        let private corners = [|
+            V3d(-1.0, -1.0, -1.0); V3d(1.0, -1.0, -1.0)
+            V3d(1.0, 1.0, -1.0); V3d(-1.0, 1.0, -1.0)
+            V3d(-1.0, -1.0, 1.0); V3d(1.0, -1.0, 1.0)
+            V3d(1.0, 1.0, 1.0); V3d(-1.0, 1.0, 1.0)
+        |]
+
+        // Previous mergeStereo row formulas, independent of the renamed helpers.
+        let private previousStereo context (left : Trafo3d) (right : Trafo3d) =
+            let plane (v : V4d) = Plane3d(v.XYZ, -v.W)
+            let l = plane (left.Forward.R3 + left.Forward.R0)
+            let r = plane (right.Forward.R3 - right.Forward.R0)
+            let mutable location = V3d.Zero
+            Expect.isTrue (l.Intersects(r, Plane3d.YPlane, &location)) (context + ": finite stereo plane intersection")
+            let view = Trafo3d.Translation(-location)
+            let points = Array.concat [|
+                corners |> Array.map left.Backward.TransformPosProj
+                corners |> Array.map right.Backward.TransformPosProj
+            |]
+            let project (p : V3d) = V3d(p.XY / -p.Z, -p.Z)
+            let bounds = points |> Array.map (view.Forward.TransformPos >> project) |> Box3d
+            let near = bounds.Min.Z
+            let frustum = {
+                left = bounds.Min.X * near; right = bounds.Max.X * near
+                top = bounds.Max.Y * near; bottom = bounds.Min.Y * near
+                near = near; far = bounds.Max.Z; isOrtho = false
+            }
+            view * Aardvark.Rendering.Frustum.projTrafo frustum
+
+        let private matrixBits context (expected : M44d) (actual : M44d) =
+            for row in 0 .. 3 do
+                for column in 0 .. 3 do
+                    let a, b = expected.[row, column], actual.[row, column]
+                    let message = $"{context}, row={row}, column={column}, previous={a}, actual={b}"
+                    Expect.isTrue (Double.IsFinite a && Double.IsFinite b) (message + ": finite stereo transform")
+                    Expect.equal (BitConverter.DoubleToInt64Bits b) (BitConverter.DoubleToInt64Bits a) (message + ": exact previous transform bits")
+
+        let stereoCompatibility() =
+            for near, far in [0.1, 10.0; 0.5, 100.0; 2.0, 500.0] do
+                for separation in [0.0; 0.064; 0.5] do
+                    for asymmetric in [false; true] do
+                        for toeIn in [false; true] do
+                            for center in [V3d.Zero; V3d(3.0, 0.0, -2.0)] do
+                                let context = $"near={near}, far={far}, separation={separation}, asymmetric={asymmetric}, toeIn={toeIn}, center={center}"
+                                let leftEye, rightEye = center - V3d(0.5 * separation, 0.0, 0.0), center + V3d(0.5 * separation, 0.0, 0.0)
+                                let view eye = CameraView.LookAt(eye, (if toeIn then center else eye) - V3d(0.0, 0.0, 10.0), V3d.YAxis).ViewTrafo
+                                let symmetric = Aardvark.Rendering.Frustum.perspective 67.0 near far 1.7
+                                let leftFrustum = if asymmetric then { symmetric with left = -0.8 * near; right = 1.1 * near; bottom = -0.7 * near; top = 0.9 * near } else symmetric
+                                let rightFrustum = if asymmetric then { symmetric with left = -1.0 * near; right = 0.7 * near; bottom = -0.6 * near; top = 0.8 * near; near = 1.25 * near; far = 1.5 * far } else symmetric
+                                let left = view leftEye * Aardvark.Rendering.Frustum.projTrafo leftFrustum
+                                let right = view rightEye * Aardvark.Rendering.Frustum.projTrafo rightFrustum
+                                let expected = previousStereo context left right
+                                let actual = ViewProjection.mergeStereo left right
+                                matrixBits (context + ": forward") expected.Forward actual.Forward
+                                matrixBits (context + ": backward") expected.Backward actual.Backward
+
     let tests (target: TestTarget) =
         [
             "Frustum.aspect",          Frustum.aspect
@@ -405,5 +508,9 @@ module Camera =
             "Picking.Orthographic rays are independent of the far plane",                    Picking.farPlaneIndependence
             "Picking.Plane picking uses the forward half-ray without far clipping",          Picking.forwardHalfRay
             "Picking.Perspective rays and plane hits retain the original calculation",       Picking.perspectiveCompatibility
+
+            "ViewProjection.Named side boundaries and inward signs", Projection.namedBoundariesAndSigns
+            "ViewProjection.Unnormalized homogeneous coefficients",  Projection.homogeneousCoefficients
+            "ViewProjection.Stereo retains previous transform bits", Projection.stereoCompatibility
         ]
         |> prepareCasesCpu "Camera" target
