@@ -351,6 +351,8 @@ module DdsTexture =
 
                 let compressionMode = format.CompressionMode
                 let bytesPerBlock = compressionMode |> CompressionMode.bytesPerBlock |> uint64
+                // CLR byte-array length limit; Array.MaxLength is unavailable in netstandard2.0.
+                let maxDataSize = 0x7FFFFFC7UL
                 let mutable totalSize = 0UL
 
                 let metaData =
@@ -358,7 +360,13 @@ module DdsTexture =
                         Array.init levels (fun level ->
                             let size = Fun.MipmapLevelSize(size, level)
                             let blocks = CompressionMode.numberOfBlocks size compressionMode
-                            let sizeInBytes = uint64 blocks.X * uint64 blocks.Y * uint64 blocks.Z * bytesPerBlock
+                            // Positive Int32 block counts have an XY product that fits UInt64.
+                            // Bound the remaining factors before multiplying or accumulating.
+                            let planeBlocks = uint64 blocks.X * uint64 blocks.Y
+                            if planeBlocks > (maxDataSize - totalSize) / uint64 blocks.Z / bytesPerBlock then
+                                raise <| DdsParseException("Texture payload exceeds the managed byte-array limit")
+
+                            let sizeInBytes = planeBlocks * uint64 blocks.Z * bytesPerBlock
                             let offset = totalSize
                             totalSize <- totalSize + sizeInBytes
 
@@ -396,12 +404,20 @@ module DdsTexture =
         | _ ->
             None
 
+    /// <summary>Loads a compressed DDS texture from the current stream position.</summary>
+    /// <param name="wantMipmap">Whether the texture requests mipmaps. All stored mip levels are read regardless.</param>
+    /// <param name="stream">The stream to read, which remains open.</param>
+    /// <exception cref="T:Aardvark.Rendering.DdsTexture.DdsParseException">Required DDS data cannot be read, or the payload byte count overflows or exceeds the maximum contiguous managed byte-array length.</exception>
     let loadCompressedFromStream (wantMipmap : bool) (stream : Stream) =
         match tryLoadCompressedFromStreamImpl wantMipmap stream with
         | Some texture -> texture
         | _ ->
             raise <| DdsParseException()
 
+    /// <summary>Tries to load a compressed DDS texture from the current stream position.</summary>
+    /// <param name="wantMipmap">Whether the texture requests mipmaps. All stored mip levels are read regardless.</param>
+    /// <param name="stream">The stream to read, which remains open.</param>
+    /// <returns>The texture, or None if loading fails, including when its payload overflows or exceeds the maximum contiguous managed byte-array length.</returns>
     let tryLoadCompressedFromStream (wantMipmap : bool) (stream : Stream) =
         try
             tryLoadCompressedFromStreamImpl wantMipmap stream
