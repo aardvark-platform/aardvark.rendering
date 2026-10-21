@@ -1,5 +1,6 @@
 namespace Aardvark.Rendering.Tests.Texture
 
+open System
 open System.IO
 open System.Runtime.InteropServices
 open System.Text
@@ -9,6 +10,29 @@ open Aardvark.Rendering.Tests
 open Expecto
 
 module TextureDds =
+
+    type private PayloadStream(bytes : byte[], headerSize : int, seekable : bool) =
+        inherit MemoryStream(bytes, false)
+        let mutable payloadReads = 0
+        member _.BytesRead = base.Position
+        member _.PayloadReads = payloadReads
+        member private _.RecordRead count =
+            if count > 0 && base.Position >= int64 headerSize then payloadReads <- payloadReads + 1
+        override _.CanSeek = seekable
+        override _.Length = if seekable then base.Length else raise (NotSupportedException())
+        override _.Position
+            with get() = if seekable then base.Position else raise (NotSupportedException())
+            and set value = if seekable then base.Position <- value else raise (NotSupportedException())
+        override _.Seek(offset, origin) = if seekable then base.Seek(offset, origin) else raise (NotSupportedException())
+        override x.Read(buffer : byte[], offset, count) =
+            x.RecordRead count
+            base.Read(buffer, offset, count)
+        override x.Read(buffer : Span<byte>) =
+            x.RecordRead buffer.Length
+            base.Read buffer
+        override x.ReadByte() =
+            x.RecordRead 1
+            base.ReadByte()
 
     type private Header =
         | Legacy of fourCC : string
@@ -86,32 +110,35 @@ module TextureDds =
         // Trailing data catches overreads; exact Position catches underreads.
         let suffix = [| 0xDEuy; 0xADuy; 0xBEuy; 0xEFuy |]
         for tryLoad in [false; true] do
-            use stream = new MemoryStream(Array.append fixture.Bytes suffix, false)
-            let texture =
-                if tryLoad then
-                    let result = DdsTexture.tryLoadCompressedFromStream wantMipMaps stream
-                    Expect.isSome result "Valid DDS must load"
-                    Option.get result
-                else
-                    DdsTexture.loadCompressedFromStream wantMipMaps stream
+            for seekable in [false; true] do
+                use stream = new PayloadStream(Array.append fixture.Bytes suffix, fixture.HeaderSize, seekable)
+                let context = $"format={fixture.Format}, dimension={fixture.Dimension}, count={fixture.Count}, tryLoad={tryLoad}, wantMipMaps={wantMipMaps}, seekable={seekable}"
+                let texture =
+                    if tryLoad then
+                        let result = DdsTexture.tryLoadCompressedFromStream wantMipMaps stream
+                        Expect.isSome result (context + ": valid DDS must load")
+                        Option.get result
+                    else
+                        DdsTexture.loadCompressedFromStream wantMipMaps stream
 
-            Expect.equal texture.Dimension fixture.Dimension "Texture dimension"
-            Expect.equal texture.Format fixture.Format "Texture format"
-            Expect.equal texture.Count fixture.Count "Array/cube count"
-            Expect.equal texture.MipMapLevels fixture.Sizes.Length "Stored mip count is independent of WantMipMaps"
-            Expect.equal texture.WantMipMaps wantMipMaps "Requested mip policy"
-            for slice = 0 to fixture.Payloads.Length - 1 do
-                for level = 0 to fixture.Sizes.Length - 1 do
-                    let data = texture.[slice, level]
-                    let expected = fixture.Payloads.[slice].[level]
-                    Expect.equal data.Size fixture.Sizes.[level] $"Size of slice {slice}, mip {level}"
-                    Expect.equal data.SizeInBytes (uint64 expected.Length) $"Bytes in slice {slice}, mip {level}"
-                    let actual = Array.zeroCreate<byte> expected.Length
-                    data.Use(fun ptr -> Marshal.Copy(ptr, actual, 0, actual.Length))
-                    Expect.sequenceEqual actual expected $"Payload of slice {slice}, mip {level}"
-            Expect.equal stream.Position (int64 fixture.Bytes.Length) "Exactly the complete DDS payload is consumed"
-            for value in suffix do
-                Expect.equal (stream.ReadByte()) (int value) "Trailing bytes remain unread"
+                Expect.equal texture.Dimension fixture.Dimension (context + ": texture dimension")
+                Expect.equal texture.Format fixture.Format (context + ": texture format")
+                Expect.equal texture.Count fixture.Count (context + ": array/cube count")
+                Expect.equal texture.MipMapLevels fixture.Sizes.Length (context + ": stored mip count is independent of WantMipMaps")
+                Expect.equal texture.WantMipMaps wantMipMaps (context + ": requested mip policy")
+                for slice = 0 to fixture.Payloads.Length - 1 do
+                    for level = 0 to fixture.Sizes.Length - 1 do
+                        let data = texture.[slice, level]
+                        let expected = fixture.Payloads.[slice].[level]
+                        Expect.equal data.Size fixture.Sizes.[level] $"{context}: size of slice {slice}, mip {level}"
+                        Expect.equal data.SizeInBytes (uint64 expected.Length) $"{context}: bytes in slice {slice}, mip {level}"
+                        let actual = Array.zeroCreate<byte> expected.Length
+                        data.Use(fun ptr -> Marshal.Copy(ptr, actual, 0, actual.Length))
+                        Expect.sequenceEqual actual expected $"{context}: payload of slice {slice}, mip {level}"
+                Expect.equal stream.BytesRead (int64 fixture.Bytes.Length) (context + ": exactly the complete DDS payload is consumed")
+                Expect.isTrue stream.CanRead (context + ": loader leaves the stream open")
+                for value in suffix do
+                    Expect.equal (stream.ReadByte()) (int value) (context + ": trailing bytes remain unread")
 
     let private verifyTruncated (fixture : Fixture) =
         let payloadSize = fixture.Bytes.Length - fixture.HeaderSize
@@ -125,7 +152,81 @@ module TextureDds =
             use stream = new MemoryStream(fixture.Bytes, 0, fixture.Bytes.Length - 1, false)
             Expect.isNone (DdsTexture.tryLoadCompressedFromStream wantMipMaps stream) "Try-load rejects a missing final byte"
 
+    let private rejectOversized header format dimension (count : int) (size : V3i) (levels : int) (bytesPerBlock : int) (expectedSize : bigint) =
+        // Generate only a tiny template, never a payload proportional to the hostile dimensions.
+        let templateSize = V3i(4, 4, if dimension = TextureDimension.Texture3D then 4 else 1)
+        let template = fixture header format dimension 1 templateSize levels bytesPerBlock
+        let bytes = Array.sub template.Bytes 0 template.HeaderSize
+        use headerStream = new MemoryStream(bytes, true)
+        use writer = new BinaryWriter(headerStream, Encoding.ASCII, true)
+        let put offset (value : uint32) =
+            headerStream.Position <- int64 offset
+            writer.Write value
+        put 12 (uint32 size.Y)
+        put 16 (uint32 size.X)
+        put 20 0u // The parser does not use the header's pitch/linear-size hint.
+        put 24 (if dimension = TextureDimension.Texture3D then uint32 size.Z else 0u)
+        match header with DX10 _ -> put 140 (uint32 count) | _ -> ()
+
+        // Independent mathematical size and original low-32-bit length establish that
+        // original-source runs can allocate at most 320 payload bytes, even after UInt64 wrap.
+        let mutable mathematicalSize = 0I
+        for level = 0 to levels - 1 do
+            let x, y, z = max 1 (size.X >>> level), max 1 (size.Y >>> level), max 1 (size.Z >>> level)
+            let blocksX, blocksY = (bigint x + 3I) / 4I, (bigint y + 3I) / 4I
+            mathematicalSize <- mathematicalSize + blocksX * blocksY * bigint z * bigint bytesPerBlock * bigint count
+        Expect.equal mathematicalSize expectedSize "Independent oversized payload oracle"
+        Expect.isTrue (mathematicalSize > bigint Int32.MaxValue) "Fixture must exceed the managed payload capacity"
+        let wrappedLength = mathematicalSize % (1I <<< 32)
+        Expect.isTrue (wrappedLength >= 0I && wrappedLength <= 320I) "Original payload allocation must remain bounded"
+        let input = Array.append bytes (Array.create (int wrappedLength) 0xA5uy)
+        for wantMipMaps in [false; true] do
+            for tryLoad in [false; true] do
+                for seekable in [false; true] do
+                    use stream = new PayloadStream(input, bytes.Length, seekable)
+                    let context = $"header={header}, size={size}, count={count}, levels={levels}, mathematical bytes={mathematicalSize}, old wrapped bytes={wrappedLength}, tryLoad={tryLoad}, wantMipMaps={wantMipMaps}, seekable={seekable}"
+                    let mutable published = false
+                    let mutable failure : exn option = None
+                    let allocated = GC.GetAllocatedBytesForCurrentThread()
+                    try
+                        if tryLoad then
+                            published <- DdsTexture.tryLoadCompressedFromStream wantMipMaps stream |> Option.isSome
+                        else
+                            DdsTexture.loadCompressedFromStream wantMipMaps stream |> ignore
+                            published <- true
+                    with error -> failure <- Some error
+                    let allocated = GC.GetAllocatedBytesForCurrentThread() - allocated
+                    // Never inspect or dereference an invalid texture returned by the original.
+                    Expect.isTrue (allocated < 4L * 1024L * 1024L) (context + ": no large allocation")
+                    if tryLoad then Expect.isNone failure (context + ": try-loader does not throw")
+                    else Expect.isTrue (failure |> Option.exists (fun error -> error :? DdsTexture.DdsParseException)) (context + ": throwing loader raises DdsParseException")
+                    Expect.isFalse published (context + ": no native texture is published")
+                    Expect.equal stream.BytesRead (int64 bytes.Length) (context + ": reject immediately after the complete header")
+                    Expect.equal stream.PayloadReads 0 (context + ": no payload read")
+                    Expect.isTrue stream.CanRead (context + ": rejected stream remains open")
+
     module private Cases =
+        let oversizedArrays() =
+            for header, format, blockBytes, counts in [
+                DX10 71u, TextureFormat.CompressedRgbaS3tcDxt1, 8, [32; 64]
+                DX10 77u, TextureFormat.CompressedRgbaS3tcDxt5, 16, [16; 32]
+            ] do
+                for count in counts do
+                    let expected = bigint count * bigint blockBytes * (1I <<< 24)
+                    rejectOversized header format TextureDimension.Texture2D count (V3i(16384, 16384, 1)) 1 blockBytes expected
+
+        let nonzeroWrappedPayloads() =
+            for header, format, blockBytes, count in [
+                DX10 71u, TextureFormat.CompressedRgbaS3tcDxt1, 8, 24
+                DX10 77u, TextureFormat.CompressedRgbaS3tcDxt5, 16, 12
+            ] do
+                for levels, remainder in [14, 128; 15, 320] do
+                    rejectOversized header format TextureDimension.Texture2D count (V3i(16384, 16384, 1)) levels blockBytes ((1I <<< 32) + bigint remainder)
+
+        let overflowingVolume() =
+            for header in [Legacy "DXT1"; DX10 71u] do
+                rejectOversized header TextureFormat.CompressedRgbaS3tcDxt1 TextureDimension.Texture3D 1 (V3i(4194304, 4194304, 8388608)) 1 8 (1I <<< 66)
+
         let volumeMipPayloads4x4x4 header format bytesPerBlock () =
             let fixture = fixture header format TextureDimension.Texture3D 1 (V3i 4) 3 bytesPerBlock
             let expected = if bytesPerBlock = 8 then [|32; 16; 8|] else [|64; 32; 16|]
@@ -175,6 +276,10 @@ module TextureDds =
               "DX10 BC7", DX10 98u, TextureFormat.CompressedRgbaBptcUnorm, 16 ]
 
         [
+            "Payload.Oversized arrays rejected",               Cases.oversizedArrays
+            "Payload.Nonzero wrapped byte counts rejected",    Cases.nonzeroWrappedPayloads
+            "Payload.Volume multiplication overflow rejected", Cases.overflowingVolume
+
             for name, header, format, bytesPerBlock in formats do
                 $"{name}.4x4x4 volume mip payloads",         Cases.volumeMipPayloads4x4x4 header format bytesPerBlock
                 $"{name}.Unaligned XY and depth boundaries", Cases.unalignedXYDepthBoundaries header format bytesPerBlock

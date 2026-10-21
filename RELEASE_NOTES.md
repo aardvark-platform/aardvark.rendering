@@ -1,3 +1,5 @@
+- Compressed DDS loading now rejects overflowing or oversized payload byte counts before allocating or reading texture data, rather than returning native-data views backed by an undersized buffer. The throwing loader raises `DdsParseException`; the try-loader returns `None`.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
