@@ -511,6 +511,6 @@ module Camera =
 
             "ViewProjection.Named side boundaries and inward signs", Projection.namedBoundariesAndSigns
             "ViewProjection.Unnormalized homogeneous coefficients",  Projection.homogeneousCoefficients
-            "ViewProjection.Stereo retains previous transform bits",  Projection.stereoCompatibility
+            "ViewProjection.Stereo retains previous transform bits", Projection.stereoCompatibility
         ]
         |> prepareCasesCpu "Camera" target
