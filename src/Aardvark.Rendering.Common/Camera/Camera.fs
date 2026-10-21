@@ -161,15 +161,19 @@ module ViewProjection =
             IndexedAttributes = attributes
         )
 
+    /// <summary>Returns the unnormalized homogeneous coefficients of the left clipping plane.</summary>
+    /// <remarks>Dotting the coefficients with an input homogeneous point is zero on the clip-space x = -w boundary and positive on its inward side. The value is not Euclidean distance.</remarks>
     let leftPlane (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0
         let r3 = viewProj.Forward.R3
-        r3 - r0
+        r3 + r0
 
+    /// <summary>Returns the unnormalized homogeneous coefficients of the right clipping plane.</summary>
+    /// <remarks>Dotting the coefficients with an input homogeneous point is zero on the clip-space x = w boundary and positive on its inward side. The value is not Euclidean distance.</remarks>
     let rightPlane (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0
         let r3 = viewProj.Forward.R3
-        r3 + r0
+        r3 - r0
 
     let toHull3d (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0
@@ -239,8 +243,8 @@ module ViewProjection =
     let mergeStereo (lProj : Trafo3d) (rProj : Trafo3d) =
         let p (v : V4d) = Plane3d(v.XYZ, -v.W)
 
-        let lPlane = rightPlane lProj |> p
-        let rPlane = leftPlane rProj |> p
+        let lPlane = leftPlane lProj |> p
+        let rPlane = rightPlane rProj |> p
 
         let location = intersect lPlane rPlane Plane3d.YPlane
         let view = Trafo3d.Translation(-location)

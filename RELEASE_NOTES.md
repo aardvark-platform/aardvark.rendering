@@ -1,3 +1,5 @@
+- Corrected `ViewProjection.leftPlane` and `rightPlane` to return their named clipping planes instead of the opposite sides. `mergeStereo` results are unchanged.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
