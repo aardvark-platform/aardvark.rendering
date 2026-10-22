@@ -539,23 +539,23 @@ module UniformWriters =
                 let ctor = tWriter.GetConstructor [| f.GetType(); inner.GetType() |]
                 ctor.Invoke [| f; inner :> obj |] |> unbox<IWriter>
             
-        let private newFieldWriter (fi : FieldInfo) (inner : IWriter) =
+        let private newFieldWriter (tSource : Type) (fi : FieldInfo) (inner : IWriter) =
             if fi.FieldType.IsBlittable && inner.IsPrimitive then
-                let tWriter = typedefof<PrimitiveFieldWriter<int, int>>.MakeGenericType [| fi.DeclaringType; fi.FieldType |]
+                let tWriter = typedefof<PrimitiveFieldWriter<int, int>>.MakeGenericType [| tSource; fi.FieldType |]
                 let ctor = tWriter.GetConstructor [| typeof<FieldInfo> |]
                 ctor.Invoke [| fi :> obj |] |> unbox<IWriter>
             else
-                let tWriter = typedefof<FieldWriter<_,_>>.MakeGenericType [| fi.DeclaringType; fi.FieldType |]
+                let tWriter = typedefof<FieldWriter<_,_>>.MakeGenericType [| tSource; fi.FieldType |]
                 let ctor = tWriter.GetConstructor [| typeof<FieldInfo>; inner.GetType() |]
                 ctor.Invoke [| fi :> obj; inner :> obj |] |> unbox<IWriter>
             
-        let private newPropertyWriter (pi : PropertyInfo) (inner : IWriter) =
+        let private newPropertyWriter (tSource : Type) (pi : PropertyInfo) (inner : IWriter) =
             if pi.PropertyType.IsBlittable && inner.IsPrimitive then
-                let tWriter = typedefof<PrimitivePropertyWriter<int, int>>.MakeGenericType [| pi.DeclaringType; pi.PropertyType |]
+                let tWriter = typedefof<PrimitivePropertyWriter<int, int>>.MakeGenericType [| tSource; pi.PropertyType |]
                 let ctor = tWriter.GetConstructor [| typeof<PropertyInfo> |]
                 ctor.Invoke [| pi :> obj |] |> unbox<IWriter>
             else
-                let tWriter = typedefof<PropertyWriter<_,_>>.MakeGenericType [| pi.DeclaringType; pi.PropertyType |]
+                let tWriter = typedefof<PropertyWriter<_,_>>.MakeGenericType [| tSource; pi.PropertyType |]
                 let ctor = tWriter.GetConstructor [| typeof<PropertyInfo>; inner.GetType() |]
                 ctor.Invoke [| pi :> obj; inner :> obj |] |> unbox<IWriter>
                 
@@ -572,8 +572,8 @@ module UniformWriters =
                 
         let private newMemberWriter (mi : MemberInfo) (inner : IWriter) =
             match mi with
-                | :? FieldInfo as fi -> newFieldWriter fi inner
-                | :? PropertyInfo as pi -> newPropertyWriter pi inner
+                | :? FieldInfo as fi -> newFieldWriter fi.DeclaringType fi inner
+                | :? PropertyInfo as pi -> newPropertyWriter pi.DeclaringType pi inner
                 | :? MethodInfo as mi -> newCallWriter mi inner
                 | _ -> failwith "sadasdasdd"
 
@@ -689,14 +689,14 @@ module UniformWriters =
                                     else
                                         match tryCreateWriterInternal typ pi.PropertyType with
                                             | Some inner -> 
-                                                Some (nativeint offset, newPropertyWriter pi inner)
+                                                Some (nativeint offset, newPropertyWriter tSource pi inner)
                                             | None ->
                                                 None
                             
                                 else
                                     match tryCreateWriterInternal typ fi.FieldType with
                                         | Some inner -> 
-                                            Some (nativeint offset, newFieldWriter fi inner)
+                                            Some (nativeint offset, newFieldWriter tSource fi inner)
                                         | None ->
                                             None
                             )
