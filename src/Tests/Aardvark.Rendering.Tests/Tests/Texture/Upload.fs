@@ -44,6 +44,201 @@ module TextureUpload =
                 return diffuseSampler.SampleLevel(v.tc, level)
             }
 
+    module private SliceAssignment =
+        let private background = C4b(17uy, 29uy, 43uy, 251uy)
+        let private volume (size : V3i) (color : C4b) =
+            let data = PixVolume<byte>(Col.Format.RGBA, size)
+            for channel, value in [0L, color.R; 1L, color.G; 2L, color.B; 3L, color.A] do
+                data.GetChannel(channel).SetByIndex(fun _ -> value) |> ignore
+            data
+
+        type private Images(runtime : IRuntime) =
+            let texture = runtime.CreateTexture2DArray(V2i(16), TextureFormat.Rgba8, levels = 3, count = 2)
+            let baseline = [|
+                for level in 0 .. 2 do
+                    for slice in 0 .. 1 do
+                        let color = if level = 1 && slice = 1 then background else C4b.Blue
+                        yield level, slice, PixImage.solid (texture.GetSize(level).XY) color
+            |]
+            let reset() = for level, slice, data in baseline do texture.Upload(data, level = level, slice = slice)
+            do reset()
+            member _.Target = texture.[TextureAspect.Color, 1, 1]
+            member _.Reset() = reset()
+            member _.Expected() = PixImage.solid (V2i(8)) background
+            member _.Matches(selected : PixImage<byte>) =
+                baseline |> Array.forall (fun (level, slice, data) ->
+                    let expected = if level = 1 && slice = 1 then selected else data
+                    let actual = PixImage<byte>(Col.Format.RGBA, expected.Size)
+                    texture.Download(actual, level = level, slice = slice)
+                    Array.forall2 (=) expected.Volume.Data actual.Volume.Data)
+            interface IDisposable with member _.Dispose() = texture.Dispose()
+
+        type private Volumes(runtime : IRuntime) =
+            let texture = runtime.CreateTexture3D(V3i(16), TextureFormat.Rgba8, levels = 3)
+            let baseline = Array.init 3 (fun level -> volume (texture.GetSize level) (if level = 1 then background else C4b.Blue))
+            let reset() = baseline |> Array.iteri (fun level data -> texture.Upload(data, level = level))
+            do reset()
+            member _.Target = texture.[TextureAspect.Color, 1, 0]
+            member _.Reset() = reset()
+            member _.Expected() = volume (V3i(8)) background
+            member _.Matches(selected : PixVolume<byte>) =
+                baseline |> Array.mapi (fun level data ->
+                    let expected = if level = 1 then selected else data
+                    let actual = PixVolume<byte>(Col.Format.RGBA, expected.Size)
+                    texture.Download(actual, level = level)
+                    Array.forall2 (=) expected.Tensor4.Data actual.Tensor4.Data)
+                |> Array.forall id
+            interface IDisposable with member _.Dispose() = texture.Dispose()
+
+        let private imageSource (size : V2i) =
+            let data = PixImage<byte>(Col.Format.RGBA, size)
+            data.GetMatrix<C4b>().SetByCoord(fun (p : V2l) -> C4b(byte (90L + p.X), byte (20L + p.Y), 7uy, 255uy)) |> ignore
+            data
+
+        let private volumeSource (size : V3i) =
+            let data = PixVolume<byte>(Col.Format.RGBA, size)
+            for channel in 0 .. 3 do
+                data.GetChannel(int64 channel).SetByCoord(fun (p : V3l) -> byte (10L + int64 channel * 40L + p.X + p.Y * 3L + p.Z * 7L)) |> ignore
+            data
+
+        let private assignImage scalar (target : ITextureSubResource) (lo : V2i option) (hi : V2i option) (source : PixImage) =
+            if scalar then target.SetSlice(Option.map (fun (p : V2i) -> p.X) lo, Option.map (fun (p : V2i) -> p.X) hi,
+                                           Option.map (fun (p : V2i) -> p.Y) lo, Option.map (fun (p : V2i) -> p.Y) hi, source)
+            else target.SetSlice(lo, hi, source)
+
+        let private assignVolume scalar (target : ITextureSubResource) (lo : V3i option) (hi : V3i option) (source : PixVolume) =
+            if scalar then target.SetSlice(Option.map (fun (p : V3i) -> p.X) lo, Option.map (fun (p : V3i) -> p.X) hi,
+                                           Option.map (fun (p : V3i) -> p.Y) lo, Option.map (fun (p : V3i) -> p.Y) hi,
+                                           Option.map (fun (p : V3i) -> p.Z) lo, Option.map (fun (p : V3i) -> p.Z) hi, source)
+            else target.SetSlice(lo, hi, source)
+
+        let private reversed dimensions =
+            let one = if dimensions = 2 then V3i(1, 1, 0) else V3i.III
+            let lo = 2 * one
+            let hi = 3 * one
+            let axes = if dimensions = 2 then [V3i.IOO; V3i.OIO] else [V3i.IOO; V3i.OIO; V3i.OOI]
+            [
+                for axis in axes do
+                    yield Some lo, Some (hi - 2 * axis)
+                    yield Some lo, Some (hi - 3 * axis)
+                    yield Some lo, Some (hi - hi * axis + Int32.MinValue * axis)
+                yield Some lo, Some (lo - one) // Every extent becomes zero: the old full-source sentinel.
+                yield Some lo, Some (lo - 2 * one)
+                yield Some lo, Some (Int32.MinValue * one)
+                yield Some (3 * one), Some ((Int32.MinValue + 1) * one)
+                yield None, Some (-one)
+            ]
+
+        // On the original implementation a positive upload is at most the bounded
+        // source size; all other windows are rejected by existing runtime validation.
+        let private safeOriginal dimensions (lo : V3i option) (hi : V3i option) =
+            let lo = defaultArg lo V3i.Zero
+            let hi = defaultArg hi (V3i(7))
+            let values = [lo.X, hi.X; lo.Y, hi.Y; if dimensions = 3 then lo.Z, hi.Z]
+            let sizes = values |> List.map (fun (l, h) -> min 2 (1 + h - l))
+            let sizes = if List.forall ((=) 0) sizes then List.map (fun _ -> 2) sizes else sizes
+            if List.forall (fun n -> n > 0) sizes then
+                for (offset, _), size in List.zip values sizes do
+                    Expect.isTrue (offset >= 0 && size <= 2 && int64 offset + int64 size <= 8L) "Original-source upload must remain inside its small source and target"
+
+        let rejectImages (runtime : IRuntime) =
+            use fixture = new Images(runtime)
+            let source = imageSource (V2i(2))
+            let failures = ResizeArray<string>()
+            for scalar in [false; true] do
+                for lo, hi in reversed 2 do
+                    safeOriginal 2 lo hi
+                    fixture.Reset()
+                    let context = $"2D scalar={scalar}, min={lo}, max={hi}, mip=1, array slice=1"
+                    let error =
+                        try assignImage scalar fixture.Target (Option.map (fun (p : V3i) -> p.XY) lo) (Option.map (fun (p : V3i) -> p.XY) hi) source; None
+                        with error -> Some error
+                    let unchanged = fixture.Matches(fixture.Expected())
+                    let argument = error |> Option.exists (fun e -> e :? ArgumentException)
+                    if not (argument && unchanged) then
+                        failures.Add $"{context}: ArgumentException={argument}, all destination mips/slices unchanged={unchanged}"
+            Expect.isEmpty failures (String.concat Environment.NewLine failures)
+
+        let rejectVolumes (runtime : IRuntime) =
+            use fixture = new Volumes(runtime)
+            let source = volumeSource (V3i(2))
+            let failures = ResizeArray<string>()
+            for scalar in [false; true] do
+                for lo, hi in reversed 3 do
+                    safeOriginal 3 lo hi
+                    fixture.Reset()
+                    let context = $"3D scalar={scalar}, min={lo}, max={hi}, mip=1"
+                    let error =
+                        try assignVolume scalar fixture.Target lo hi source; None
+                        with error -> Some error
+                    let unchanged = fixture.Matches(fixture.Expected())
+                    let argument = error |> Option.exists (fun e -> e :? ArgumentException)
+                    if not (argument && unchanged) then
+                        failures.Add $"{context}: ArgumentException={argument}, all destination mips unchanged={unchanged}"
+            Expect.isEmpty failures (String.concat Environment.NewLine failures)
+
+        let private checkImage (fixture : Images) context (source : PixImage<byte>) (offset : V2i) (size : V2i) action =
+            fixture.Reset()
+            action()
+            let expected = fixture.Expected()
+            let src = source.GetMatrix<C4b>()
+            let mutable dst = expected.GetMatrix<C4b>()
+            for y in 0 .. size.Y - 1 do
+                for x in 0 .. size.X - 1 do dst.[offset.X + x, offset.Y + y] <- src.[x, y]
+            Expect.isTrue (fixture.Matches expected) (context + ": exact assigned footprint/payload and untouched neighboring subresources")
+
+        let private checkVolume (fixture : Volumes) context (source : PixVolume<byte>) (offset : V3i) (size : V3i) action =
+            fixture.Reset()
+            action()
+            let expected = fixture.Expected()
+            for c in 0L .. 3L do
+                let src = source.GetChannel(c)
+                let mutable dst = expected.GetChannel(c)
+                for z in 0 .. size.Z - 1 do
+                    for y in 0 .. size.Y - 1 do
+                        for x in 0 .. size.X - 1 do dst.[offset.X + x, offset.Y + y, offset.Z + z] <- src.[x, y, z]
+            Expect.isTrue (fixture.Matches expected) (context + ": exact assigned footprint/payload and untouched neighboring mips")
+
+        let validImages (runtime : IRuntime) =
+            use fixture = new Images(runtime)
+            let windows = [
+                Some (V2i(3, 4)), Some (V2i(3, 4)), V2i(2), V2i(3, 4), V2i.II
+                Some (V2i(6, 5)), Some (V2i(7)), V2i(2, 3), V2i(6, 5), V2i(2, 3)
+                None, None, V2i(2, 3), V2i.Zero, V2i(2, 3)
+                Some (V2i(5, 4)), None, V2i(3, 2), V2i(5, 4), V2i(3, 2)
+                None, Some (V2i(1, 2)), V2i(3, 4), V2i.Zero, V2i(2, 3)
+                Some (V2i(2, 1)), Some (V2i(6)), V2i(2, 3), V2i(2, 1), V2i(2, 3)
+                Some (V2i(2, 3)), Some (V2i(3, 3)), V2i(4), V2i(2, 3), V2i(2, 1)
+            ]
+            for scalar in [false; true] do
+                for lo, hi, inputSize, offset, size in windows do
+                    let source = imageSource inputSize
+                    checkImage fixture $"2D scalar={scalar}, min={lo}, max={hi}, source={inputSize}" source offset size (fun () -> assignImage scalar fixture.Target lo hi source)
+            let source = imageSource (V2i(3, 2))
+            checkImage fixture "2D independently omitted scalar endpoints" source (V2i(0, 3)) (V2i(2)) (fun () -> fixture.Target.SetSlice(None, Some 1, Some 3, None, source))
+            let source = imageSource (V2i(2, 3))
+            checkImage fixture "2D direct Upload retains full-source zero sentinel" source (V2i(4, 2)) source.Size (fun () -> fixture.Target.Upload(source, V2i(4, 2), V2i.Zero))
+
+        let validVolumes (runtime : IRuntime) =
+            use fixture = new Volumes(runtime)
+            let windows = [
+                Some (V3i(3, 4, 2)), Some (V3i(3, 4, 2)), V3i(2), V3i(3, 4, 2), V3i.III
+                Some (V3i(6, 5, 4)), Some (V3i(7)), V3i(2, 3, 4), V3i(6, 5, 4), V3i(2, 3, 4)
+                None, None, V3i(2, 3, 2), V3i.Zero, V3i(2, 3, 2)
+                Some (V3i(5, 4, 3)), None, V3i(3, 2, 4), V3i(5, 4, 3), V3i(3, 2, 4)
+                None, Some (V3i(1, 2, 1)), V3i(3, 4, 3), V3i.Zero, V3i(2, 3, 2)
+                Some (V3i(2, 1, 2)), Some (V3i(6)), V3i(2, 3, 2), V3i(2, 1, 2), V3i(2, 3, 2)
+                Some (V3i(1, 2, 3)), Some (V3i(2, 2, 4)), V3i(4), V3i(1, 2, 3), V3i(2, 1, 2)
+            ]
+            for scalar in [false; true] do
+                for lo, hi, inputSize, offset, size in windows do
+                    let source = volumeSource inputSize
+                    checkVolume fixture $"3D scalar={scalar}, min={lo}, max={hi}, source={inputSize}" source offset size (fun () -> assignVolume scalar fixture.Target lo hi source)
+            let source = volumeSource (V3i(3, 2, 3))
+            checkVolume fixture "3D independently omitted scalar endpoints" source (V3i(0, 3, 2)) (V3i(2)) (fun () -> fixture.Target.SetSlice(None, Some 1, Some 3, None, Some 2, Some 3, source))
+            let source = volumeSource (V3i(2, 3, 2))
+            checkVolume fixture "3D direct Upload retains full-source zero sentinel" source (V3i(4, 2, 3)) source.Size (fun () -> fixture.Target.Upload(source, V3i(4, 2, 3), V3i.Zero))
+
     module Cases =
 
         let private expectArgument context message action =
@@ -1409,6 +1604,11 @@ module TextureUpload =
 
             "Cube PixTexture mipmapped wrong size",      Cases.pixTextureCubeMipmappedInvalid true
             "Cube PixTexture mipmapped wrong format",    Cases.pixTextureCubeMipmappedInvalid false
+
+            "Slice assignment rejects reversed image bounds",  SliceAssignment.rejectImages
+            "Slice assignment rejects reversed volume bounds", SliceAssignment.rejectVolumes
+            "Slice assignment preserves image clipping",       SliceAssignment.validImages
+            "Slice assignment preserves volume clipping",      SliceAssignment.validVolumes
 
             "Volume window validation",                Cases.windowValidation
             "Volume window boundary and default size", Cases.windowBoundary

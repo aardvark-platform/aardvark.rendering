@@ -1,3 +1,5 @@
+- Texture slice assignments now reject reversed inclusive bounds with `ArgumentException`, rather than interpreting zero or overflowing extents as full-source uploads. Valid clipping, defaults, and direct `Upload` zero-size behavior are unchanged.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.

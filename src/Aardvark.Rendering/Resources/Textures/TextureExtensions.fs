@@ -842,15 +842,24 @@ type ITextureSubResourceExtensions private() =
     // Set slice 2D
     // ================================================================================================================
 
-    [<Extension>]
-    static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, value : PixImage) =
-        let minC = defaultArg minC V2i.Zero
-        let maxC = defaultArg maxC (this.Size.XY - V2i.II)
+    static member private SetSliceImpl(this : ITextureSubResource, minC : V2i, maxC : V2i, value : PixImage) =
+        if Vec.anySmaller maxC minC then
+            invalidArg "maxC" "An inclusive maximum cannot be below its minimum."
         let size = V2i.II + maxC - minC
         let imgSize = value.Size
         let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
         this.Texture.Runtime.Upload(this, value, minC, size)
 
+    /// <summary>Assigns an inclusive texture window, clipped to the source image size.</summary>
+    /// <exception cref="T:System.ArgumentException">An inclusive maximum is below its corresponding minimum.</exception>
+    [<Extension>]
+    static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, value : PixImage) =
+        let minC = defaultArg minC V2i.Zero
+        let maxC = defaultArg maxC (this.Size.XY - V2i.II)
+        ITextureSubResourceExtensions.SetSliceImpl(this, minC, maxC, value)
+
+    /// <summary>Assigns an inclusive texture window, clipped to the source image size.</summary>
+    /// <exception cref="T:System.ArgumentException">An inclusive maximum is below its corresponding minimum.</exception>
     [<Extension>]
     static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, value : PixImage) =
         let minX = defaultArg minX 0
@@ -859,25 +868,30 @@ type ITextureSubResourceExtensions private() =
         let maxY = defaultArg maxY (this.Size.Y - 1)
         let minC = V2i(minX, minY)
         let maxC = V2i(maxX, maxY)
-
-        let size = V2i.II + maxC - minC
-        let imgSize = value.Size
-        let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
-        this.Texture.Runtime.Upload(this, value, minC, size)
+        ITextureSubResourceExtensions.SetSliceImpl(this, minC, maxC, value)
 
     // ================================================================================================================
     // Set slice 3D
     // ================================================================================================================
 
-    [<Extension>]
-    static member SetSlice(this : ITextureSubResource, minC : Option<V3i>, maxC : Option<V3i>, value : PixVolume) =
-        let minC = defaultArg minC V3i.Zero
-        let maxC = defaultArg maxC (this.Size - V3i.III)
+    static member private SetSliceImpl(this : ITextureSubResource, minC : V3i, maxC : V3i, value : PixVolume) =
+        if Vec.anySmaller maxC minC then
+            invalidArg "maxC" "An inclusive maximum cannot be below its minimum."
         let size = V3i.III + maxC - minC
         let imgSize = value.Size
         let size = V3i(min size.X imgSize.X, min size.Y imgSize.Y, min size.Z imgSize.Z)
         this.Texture.Runtime.Upload(this, value, minC, size)
 
+    /// <summary>Assigns an inclusive texture window, clipped to the source volume size.</summary>
+    /// <exception cref="T:System.ArgumentException">An inclusive maximum is below its corresponding minimum.</exception>
+    [<Extension>]
+    static member SetSlice(this : ITextureSubResource, minC : Option<V3i>, maxC : Option<V3i>, value : PixVolume) =
+        let minC = defaultArg minC V3i.Zero
+        let maxC = defaultArg maxC (this.Size - V3i.III)
+        ITextureSubResourceExtensions.SetSliceImpl(this, minC, maxC, value)
+
+    /// <summary>Assigns an inclusive texture window, clipped to the source volume size.</summary>
+    /// <exception cref="T:System.ArgumentException">An inclusive maximum is below its corresponding minimum.</exception>
     [<Extension>]
     static member SetSlice(this : ITextureSubResource,
                            minX : Option<int>, maxX : Option<int>,
@@ -892,10 +906,7 @@ type ITextureSubResourceExtensions private() =
         let maxZ = defaultArg maxZ (this.Size.Z - 1)
         let minC = V3i(minX, minY, minZ)
         let maxC = V3i(maxX, maxY, maxZ)
-        let size = V3i.III + maxC - minC
-        let imgSize = value.Size
-        let size = V3i(min size.X imgSize.X, min size.Y imgSize.Y, min size.Z imgSize.Z)
-        this.Texture.Runtime.Upload(this, value, minC, size)
+        ITextureSubResourceExtensions.SetSliceImpl(this, minC, maxC, value)
 
 
 [<AbstractClass; Sealed; Extension>]
