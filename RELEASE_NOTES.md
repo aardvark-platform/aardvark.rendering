@@ -1,3 +1,5 @@
+- Fixed zero-sized chunked allocations to return independent handles, so growing or freeing one allocation cannot change another empty handle or alias its live storage.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
