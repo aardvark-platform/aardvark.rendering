@@ -206,6 +206,140 @@ module MemoryManager =
             for allocation in positive do
                 Expect.equal allocation.Frees 1 $"{context}: allocation {allocation.Id} must be released exactly once"
 
+        let private allocEmpty (manager : ChunkedMemoryManager<BackingAllocation>) aligned alignment =
+            if aligned then manager.Alloc(alignment, 0n) else manager.Alloc 0n
+
+        let private checkEmpty (manager : ChunkedMemoryManager<BackingAllocation>) (reference : nref<BackingAllocation>)
+                               (block : Block<BackingAllocation>) context =
+            same manager block.Parent $"{context}: empty parent"
+            same reference block.Memory $"{context}: shared zero-sized memory reference"
+            Expect.equal (block.Offset, block.Size, block.IsFree) (0n, 0n, true) $"{context}: initial empty metadata"
+            Expect.isNull block.Prev $"{context}: empty predecessor"
+            Expect.isNull block.Next $"{context}: empty successor"
+            let storage, offset, size = manager.Use(block, fun m o s -> m, o, s)
+            same reference.Value storage $"{context}: Use receives zero-sized storage"
+            Expect.equal (storage.Data.Length, storage.Frees, offset, size) (0, 0, 0n, 0n) $"{context}: empty Use range and lifetime"
+
+        let independentEmptyHandles() =
+            for firstAligned in [false; true] do
+                for secondAligned in [false; true] do
+                    for alignment in [1n; 3n; 8n; 32n] do
+                        let context = $"empty handles, first aligned={firstAligned}, second aligned={secondAligned}, alignment={alignment}"
+                        let memory, allocations = trackedMemory()
+                        use manager = new ChunkedMemoryManager<_>(memory, 32n)
+                        Expect.equal allocations.Count 1 $"{context}: constructor creates zero-sized metadata once"
+                        let blocks = [| allocEmpty manager firstAligned alignment; allocEmpty manager secondAligned alignment
+                                        allocEmpty manager (not firstAligned) alignment; allocEmpty manager (not secondAligned) alignment |]
+                        let reference = blocks.[0].Memory
+                        for index, block in Array.indexed blocks do
+                            checkEmpty manager reference block $"{context}, handle={index}"
+                            for previous in blocks.[0 .. index - 1] do
+                                Expect.isFalse (Object.ReferenceEquals(previous, block)) $"{context}: each request owns its handle"
+                            manager.Free block
+                            manager.Realloc(block, 0n)
+                            manager.Realloc(block, alignment, 0n)
+                            manager.Free block
+                            checkEmpty manager reference block $"{context}, handle={index}, after empty frees"
+                        Expect.equal allocations.Count 1 $"{context}: empty requests/frees add no backing callbacks"
+                        balanced manager allocations 0 context
+
+        let emptySharedGrowth() =
+            for firstAligned in [false; true] do
+                for secondAligned in [false; true] do
+                    for alignment in [1n; 3n; 8n; 32n] do
+                        for size in [1n; 7n; 31n; 65n] do
+                            let context = $"shared empty growth, first aligned={firstAligned}, second aligned={secondAligned}, alignment={alignment}, size={size}"
+                            let memory, allocations = trackedMemory()
+                            use manager = new ChunkedMemoryManager<_>(memory, 256n)
+                            let first = allocEmpty manager firstAligned alignment
+                            let second = allocEmpty manager secondAligned alignment
+                            let spare = allocEmpty manager (not firstAligned) alignment
+                            let reference = first.Memory
+                            let keeper = manager.Alloc 5n
+                            let storage = keeper.Memory.Value
+                            write manager keeper 0xC3uy
+                            manager.Realloc(first, alignment, size)
+                            checkBlock manager first storage first.Offset size alignment context
+                            write manager first 0xA1uy
+                            checkEmpty manager reference second $"{context}: first growth must not activate the second handle"
+                            checkEmpty manager reference spare $"{context}: first growth must not activate a spare handle"
+                            let later = allocEmpty manager (not secondAligned) alignment
+                            checkEmpty manager reference later $"{context}: requests after growth remain empty"
+                            manager.Free spare
+                            manager.Free later
+                            Expect.equal storage.Frees 0 $"{context}: empty frees cannot retire live backing"
+                            let secondSize = size + 3n
+                            let secondAlignment = if secondAligned then alignment else 1n
+                            if secondAligned then manager.Realloc(second, alignment, secondSize)
+                            else manager.Realloc(second, secondSize)
+                            checkBlock manager second storage second.Offset secondSize secondAlignment context
+                            checkBlock manager first storage first.Offset size alignment context
+                            Expect.isTrue (first.Offset + first.Size <= second.Offset || second.Offset + second.Size <= first.Offset)
+                                $"{context}: independently grown live ranges must not overlap"
+                            write manager second 0xB2uy
+                            Expect.equal (read manager first) (Array.create (int size) 0xA1uy) $"{context}: second growth/write preserves first payload"
+                            Expect.equal (read manager second) (Array.create (int secondSize) 0xB2uy) $"{context}: second payload"
+                            Expect.equal (read manager keeper) (Array.create 5 0xC3uy) $"{context}: positive keeper payload"
+                            checkEmpty manager reference spare $"{context}: second growth preserves spare metadata"
+                            checkEmpty manager reference later $"{context}: second growth preserves later metadata"
+                            Expect.equal (allocations.Count, manager.Capactiy) (2, 256n) $"{context}: both lives reuse existing capacity"
+                            release manager firstAligned alignment first context
+                            Expect.equal (read manager second) (Array.create (int secondSize) 0xB2uy) $"{context}: first release preserves second owner"
+                            Expect.equal storage.Frees 0 $"{context}: live siblings retain backing"
+                            manager.Free spare
+                            release manager secondAligned secondAlignment second context
+                            Expect.equal (read manager keeper) (Array.create 5 0xC3uy) $"{context}: keeper survives both releases"
+                            manager.Free keeper
+                            balanced manager allocations 1 context
+                            checkEmpty manager reference later $"{context}: positive retirement preserves empty metadata"
+
+        let emptySeparateRetirement() =
+            for firstAligned in [false; true] do
+                for secondAligned in [false; true] do
+                    for alignment in [1n; 3n; 8n; 32n] do
+                        for size in [32n; 97n] do
+                            let context = $"separate empty lives, first aligned={firstAligned}, second aligned={secondAligned}, alignment={alignment}, size={size}"
+                            let memory, allocations = trackedMemory()
+                            use manager = new ChunkedMemoryManager<_>(memory, 32n)
+                            let first = allocEmpty manager firstAligned alignment
+                            let second = allocEmpty manager secondAligned alignment
+                            let spare = allocEmpty manager (not firstAligned) alignment
+                            let reference = first.Memory
+                            manager.Realloc(first, alignment, size)
+                            let oldReference = first.Memory
+                            let oldStorage = oldReference.Value
+                            write manager first 0xA1uy
+                            checkEmpty manager reference second $"{context}: second owner starts empty"
+                            if secondAligned then manager.Realloc(second, alignment, size)
+                            else manager.Realloc(second, size)
+                            let secondStorage = second.Memory.Value
+                            Expect.isFalse (Object.ReferenceEquals(first, second)) $"{context}: caller handles remain independent"
+                            Expect.isFalse (Object.ReferenceEquals(oldStorage, secondStorage)) $"{context}: full chunks need distinct backing"
+                            checkBlock manager first oldStorage 0n size alignment context
+                            checkBlock manager second secondStorage 0n size alignment context
+                            write manager second 0xB2uy
+                            Expect.equal (read manager first) (Array.create (int size) 0xA1uy) $"{context}: separate payloads"
+                            Expect.equal manager.Capactiy (2n * size) $"{context}: two live chunks"
+                            release manager firstAligned alignment first context
+                            Expect.equal (oldStorage.Frees, secondStorage.Frees, manager.Capactiy) (1, 0, size) $"{context}: release retires only the first backing"
+                            let later = allocEmpty manager (not secondAligned) alignment
+                            for block in [spare; later] do
+                                checkEmpty manager reference block $"{context}: empty handles survive retirement"
+                                manager.Free block
+                            manager.Realloc(first, alignment, size)
+                            let revived = first.Memory.Value
+                            Expect.isFalse (Object.ReferenceEquals(oldStorage, revived)) $"{context}: released caller revives on new backing"
+                            same oldStorage oldReference.Value $"{context}: old memory reference is not retargeted"
+                            checkBlock manager first revived 0n size alignment context
+                            write manager first 0xD4uy
+                            Expect.equal (read manager second) (Array.create (int size) 0xB2uy) $"{context}: revival preserves the other owner's payload"
+                            manager.Free second
+                            Expect.equal (read manager first) (Array.create (int size) 0xD4uy) $"{context}: other release preserves revived payload"
+                            manager.Free first
+                            balanced manager allocations 3 context
+                            checkEmpty manager reference (allocEmpty manager firstAligned alignment) $"{context}: requests after all retirement remain empty"
+                            Expect.equal allocations.Count 4 $"{context}: no per-empty backing allocation"
+
         let reviveFresh() =
             for viaRealloc in [false; true] do
                 for alignment in [1n; 3n; 8n; 32n; 64n] do
@@ -470,5 +604,9 @@ module MemoryManager =
             "Chunked competing frees preserve live siblings",              Cases.competingSiblingFrees
             "Chunked sequential duplicate frees retain the fast path",     Cases.sequentialDuplicateFrees
             "Chunked concurrent distinct frees coalesce and retire once",  Cases.concurrentDistinctFrees
+
+            "Chunked empty requests own independent handles",       Cases.independentEmptyHandles
+            "Chunked empty handles grow into isolated live ranges", Cases.emptySharedGrowth
+            "Chunked empty lives retire and revive independently",  Cases.emptySeparateRetirement
         ]
         |> prepareCasesCpu "MemoryManager" target

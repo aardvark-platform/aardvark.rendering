@@ -439,7 +439,7 @@ module Management =
 
     and ChunkedMemoryManager<'a>(mem : Memory<'a>, chunkSize : nativeint) as this =
 
-        let empty = Block<'a>(this, nref (mem.malloc 0n), 0n, 0n, true)
+        let emptyMemory = nref (mem.malloc 0n)
 
         let free = FreeList<'a>()
         let allocated = Dict<'a, nativeint>()
@@ -475,9 +475,10 @@ module Management =
             else
                 free.Insert(block)
 
+        /// <summary>Allocates an aligned block. Zero-sized requests return independent free handles sharing zero-sized backing metadata.</summary>
         member x.Alloc(align : nativeint, size : nativeint) =
             if size = 0n then
-                empty
+                Block<'a>(x, emptyMemory, 0n, 0n, true)
             else
                 lock free (fun () ->
                     match free.TryGetAlignedV(align, size) with
@@ -507,9 +508,10 @@ module Management =
 
                 )
 
+        /// <summary>Allocates a block. Zero-sized requests return independent free handles sharing zero-sized backing metadata.</summary>
         member x.Alloc(size : nativeint) =
             if size = 0n then
-                empty
+                Block<'a>(x, emptyMemory, 0n, 0n, true)
             else
                 lock free (fun () ->
                     match free.TryGetGreaterOrEqualV size with
