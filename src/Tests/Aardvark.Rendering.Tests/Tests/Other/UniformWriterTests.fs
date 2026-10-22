@@ -97,6 +97,40 @@ module UniformWriter =
             override _.Value = value + 17
             override _.Scale = scale * 2.0
 
+        type private FieldBase(value : int, converted : int, child : Multiple) as this =
+            [<DefaultValue>] val mutable Value : int
+            [<DefaultValue>] val mutable Converted : int
+            [<DefaultValue>] val mutable Child : Multiple
+            do this.Value <- value; this.Converted <- converted; this.Child <- child
+
+        type private FieldDerived(value, converted, child) =
+            inherit FieldBase(value, converted, child)
+
+        type private FieldLeaf(value, converted, child) =
+            inherit FieldDerived(value, converted, child)
+
+        type private PropertyBase(value : int, converted : int, child : Multiple) =
+            member _.Value = value
+            member _.Converted = converted
+            member _.Child = child
+
+        type private PropertyDerived(value, converted, child) =
+            inherit PropertyBase(value, converted, child)
+
+        type private PropertyLeaf(value, converted, child) =
+            inherit PropertyDerived(value, converted, child)
+
+        type private InheritedVirtual(value, scale) =
+            inherit Virtual(value, scale)
+
+        type private OverrideLeaf(value, scale) =
+            inherit Derived(value, scale)
+
+        type private MemberUnion =
+            | Missing
+            | Number of Value : int
+            | Nested of Child : Multiple
+
         let private getterError = InvalidOperationException("Uniform getter failure")
 
         [<Struct>]
@@ -229,6 +263,62 @@ module UniformWriter =
                 V2i(-13, -7), [0, BitConverter.GetBytes -13; 16, BitConverter.GetBytes -7]
             ]
 
+        let private verifyMembers<'T> context (create : int -> int -> Multiple -> 'T) =
+            let target =
+                FShade.GLSL.Struct("InheritedMembers",
+                    ["Value", intType, 0; "Converted", doubleType, 16; "Child", multipleType, 32], 80)
+            verify context target 80 [
+                create 23 -7 { Value = 41; Scale = 1.25; Stamp = 91L },
+                    [0, BitConverter.GetBytes 23; 16, BitConverter.GetBytes -7.0
+                     32, BitConverter.GetBytes 41; 40, BitConverter.GetBytes 1.25; 56, BitConverter.GetBytes 91L]
+                create -13 31 { Value = -19; Scale = -7.5; Stamp = -123L },
+                    [0, BitConverter.GetBytes -13; 16, BitConverter.GetBytes 31.0
+                     32, BitConverter.GetBytes -19; 40, BitConverter.GetBytes -7.5; 56, BitConverter.GetBytes -123L]
+            ]
+
+        let private memberFlags =
+            System.Reflection.BindingFlags.Instance ||| System.Reflection.BindingFlags.Public ||| System.Reflection.BindingFlags.NonPublic
+
+        let inheritedFields() =
+            Expect.equal (typeof<FieldDerived>.GetField("Value", memberFlags).DeclaringType) typeof<FieldBase> "fixture must use an inherited field"
+            verifyMembers "inherited primitive, converted and nested fields" (fun v c n -> FieldDerived(v, c, n))
+
+        let inheritedProperties() =
+            Expect.equal (typeof<PropertyDerived>.GetProperty("Value", memberFlags).DeclaringType) typeof<PropertyBase> "fixture must use an inherited property"
+            verifyMembers "inherited primitive, converted and nested properties" (fun v c n -> PropertyDerived(v, c, n))
+
+        let inheritedDispatch() =
+            verifyMembers "multilevel inherited fields" (fun v c n -> FieldLeaf(v, c, n))
+            verifyMembers "multilevel inherited properties" (fun v c n -> PropertyLeaf(v, c, n))
+            verify<InheritedVirtual> "inherited virtual getters" pairType 32 [
+                InheritedVirtual(23, 1.25), [0, BitConverter.GetBytes 23; 16, BitConverter.GetBytes 1.25]
+                InheritedVirtual(-13, -7.5), [0, BitConverter.GetBytes -13; 16, BitConverter.GetBytes -7.5]
+            ]
+            verify<OverrideLeaf> "inherited overridden virtual getters" pairType 32 [
+                OverrideLeaf(23, 1.25), [0, BitConverter.GetBytes 40; 16, BitConverter.GetBytes 2.5]
+                OverrideLeaf(-13, -7.5), [0, BitConverter.GetBytes 4; 16, BitConverter.GetBytes -15.0]
+            ]
+            verify<Virtual> "base receiver dispatches through multiple inheritance levels" pairType 32 [
+                OverrideLeaf(23, 1.25), [0, BitConverter.GetBytes 40; 16, BitConverter.GetBytes 2.5]
+                OverrideLeaf(-13, -7.5), [0, BitConverter.GetBytes 4; 16, BitConverter.GetBytes -15.0]
+            ]
+
+        let baseAndUnionControls() =
+            verifyMembers "base-class fields" (fun v c n -> FieldBase(v, c, n))
+            verifyMembers "base-class properties" (fun v c n -> PropertyBase(v, c, n))
+            verifyMembers<FieldBase> "base-declared fields with a derived value" (fun v c n -> FieldLeaf(v, c, n))
+            verifyMembers<PropertyBase> "base-declared properties with a derived value" (fun v c n -> PropertyLeaf(v, c, n))
+            let target =
+                FShade.GLSL.Struct("MemberUnion",
+                    ["tag", intType, 0; "Number_Value", intType, 16; "Nested_Child", multipleType, 32], 64)
+            verify "union tag, case subtype and inactive member clearing" target 64 [
+                Missing, [0, BitConverter.GetBytes 0; 16, Array.zeroCreate 4; 32, Array.zeroCreate 32]
+                Number 23, [0, BitConverter.GetBytes 1; 16, BitConverter.GetBytes 23; 32, Array.zeroCreate 32]
+                Nested { Value = -19; Scale = -7.5; Stamp = -123L },
+                    [0, BitConverter.GetBytes 2; 16, Array.zeroCreate 4
+                     32, BitConverter.GetBytes -19; 40, BitConverter.GetBytes -7.5; 56, BitConverter.GetBytes -123L]
+            ]
+
         let private verifyException<'T> (context : string) (value : 'T) =
             let adaptive = AVal.init value
             for offset in [8; 24] do
@@ -266,5 +356,10 @@ module UniformWriter =
             "Arrays of struct properties",           Properties.structArrays
             "Reference and field dispatch controls", Properties.dispatchControls
             "Getter exception identity",             Properties.getterExceptions
+
+            "Inherited fields and conversions",         Properties.inheritedFields
+            "Inherited properties and nested results",   Properties.inheritedProperties
+            "Multilevel inheritance and virtual calls",  Properties.inheritedDispatch
+            "Base receivers and union subtype controls", Properties.baseAndUnionControls
         ]
         |> prepareCasesCpu "UniformWriters" target

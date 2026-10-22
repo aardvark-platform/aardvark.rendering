@@ -1,3 +1,5 @@
+- Fixed uniform struct binding through derived classes to serialize inherited fields and properties, including converted values and nested members, while preserving virtual getter dispatch.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
