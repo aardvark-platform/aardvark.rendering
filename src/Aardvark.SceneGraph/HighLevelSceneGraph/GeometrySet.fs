@@ -28,11 +28,17 @@ module GeometrySetSgExtensions =
             member x.Mode = mode
             member x.Geometries = geometries
 
+        /// <summary>
         /// Draws an adaptive set of indexed geometries with instance attributes.
+        /// Bounding boxes support V3f[], V4f[], V3d[] and V4d[] positions, using only XYZ for four-component positions.
+        /// </summary>
         let geometrySetInstanced (signature : GeometrySignature) (mode : IndexedGeometryMode) (geometries : aset<GeometryInstance>) =
             GeometrySetNode(signature, mode, geometries) :> ISg
 
+        /// <summary>
         /// Draws an adaptive set of indexed geometries.
+        /// Bounding boxes support V3f[], V4f[], V3d[] and V4d[] positions, using only XYZ for four-component positions.
+        /// </summary>
         let geometrySet (mode : IndexedGeometryMode) (attributeTypes : Map<Symbol, Type>) (geometries : aset<IndexedGeometry>) =
             let signature =
                 { IndexType              = typeof<int>
@@ -70,6 +76,8 @@ module GeometrySetSemantics =
                 match arr with
                 | :? array<V3f> as arr -> Box3f(arr) |> Box3d.op_Explicit
                 | :? array<V4f> as arr -> Box3f(arr |> Array.map Vec.xyz) |> Box3d.op_Explicit
+                | :? array<V3d> as arr -> Box3d(arr)
+                | :? array<V4d> as arr -> Box3d(arr |> Array.map Vec.xyz)
                 | _ -> failwithf "unknown position-type: %A" arr
             | _ ->
                 Box3d.Invalid

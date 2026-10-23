@@ -578,6 +578,127 @@ module SceneGraph =
                 RuntimeCommand.Ordered
                 unorderedCmd
 
+    module private GeometrySets =
+
+        let private geometry (positions : Array option) =
+            let attributes = SymbolDict<Array>()
+            positions |> Option.iter (fun data -> attributes.[DefaultSemantic.Positions] <- data)
+            IndexedGeometry(Mode = IndexedGeometryMode.PointList, IndexedAttributes = attributes)
+
+        let private graph instanced positionType (geometries : aset<IndexedGeometry>) =
+            let attributes = Map.ofList [DefaultSemantic.Positions, positionType]
+            if instanced then
+                let signature =
+                    { IndexType = typeof<int>; VertexAttributeTypes = attributes; InstanceAttributeTypes = Map.empty }
+                geometries |> ASet.map (GeometryInstance.ofIndexedGeometry Map.empty)
+                |> Sg.geometrySetInstanced signature IndexedGeometryMode.PointList
+            else
+                Sg.geometrySet IndexedGeometryMode.PointList attributes geometries
+
+        let private doublePositions dimensions (points : V3d[]) : Array =
+            if dimensions = 3 then points :> Array
+            else
+                let weights = [| 0.0; -3.0; Double.NaN; Double.PositiveInfinity |]
+                points |> Array.mapi (fun i p -> V4d(p, weights.[i % weights.Length])) :> Array
+
+        let private local (sg : ISg) = sg.LocalBoundingBox Ag.Scope.Root |> AVal.force
+        let private globalBox (sg : ISg) = sg.GlobalBoundingBox Ag.Scope.Root |> AVal.force
+
+        let doublePrecision _ =
+            for instanced in [false; true] do
+                for dimensions in [3; 4] do
+                    for origin in [V3d.Zero; V3d(16777216.0, -33554432.0, 67108864.0); V3d(1099511627776.0, -549755813888.0, 2199023255552.0)] do
+                        for scale in [0.125; 1.0; 4.0] do
+                            let points = [|
+                                origin + V3d(-3.0, 4.0, 6.0) * scale
+                                origin + V3d(2.0, -5.0, 1.0) * scale
+                                origin + V3d(0.5, 3.0, -7.0) * scale
+                                origin + V3d(0.25) * scale
+                            |]
+                            let positions = doublePositions dimensions points
+                            let sg = graph instanced (positions.GetType().GetElementType()) (ASet.single (geometry (Some positions)))
+                            let expected = Box3d(origin + V3d(-3.0, -5.0, -7.0) * scale, origin + V3d(2.0, 4.0, 6.0) * scale)
+                            let context = $"instanced={instanced}, dimensions={dimensions}, origin={origin}, scale={scale}"
+                            Expect.equal (local sg) expected $"{context}: exact double local bounds without float narrowing or W division"
+                            Expect.equal (globalBox sg) expected $"{context}: identity global bounds"
+                    let positions = doublePositions dimensions [||]
+                    let sg = graph instanced (positions.GetType().GetElementType()) (ASet.single (geometry (Some positions)))
+                    Expect.equal (local sg) Box3d.Invalid $"instanced={instanced}, dimensions={dimensions}: empty double positions"
+
+        let adaptiveMembership _ =
+            for instanced in [false; true] do
+                for dimensions in [3; 4] do
+                    let boxes = [|
+                        Box3d(V3d(-2.125, 1.25, 0.5), V3d(1.5, 3.25, 2.5))
+                        Box3d(V3d(-1.0, 1.5, 0.75), V3d(0.5, 2.5, 1.5))
+                        Box3d(V3d(16777216.125, -7.5, -3.25), V3d(16777217.5, 1.0, 6.75))
+                        Box3d.Invalid
+                    |]
+                    let sources = boxes |> Array.mapi (fun i box ->
+                        let points = if i = 3 then [||] else box.ComputeCorners()
+                        geometry (Some (doublePositions dimensions points)))
+                    let positionType = if dimensions = 3 then typeof<V3d> else typeof<V4d>
+                    let membership = cset<IndexedGeometry>()
+                    let sg = graph instanced positionType membership
+                    let bounds = sg.LocalBoundingBox Ag.Scope.Root
+                    let globalBounds = sg.GlobalBoundingBox Ag.Scope.Root
+                    let states = [ []; [0]; [0; 1]; [0; 1; 2]; [0; 2]; [1; 2]; [1]; [1; 3]; [3]; []; [0; 2]; [0]; [] ]
+                    for step, indices in List.indexed states do
+                        transact (fun () -> membership.Value <- indices |> List.map (fun i -> sources.[i]) |> HashSet.ofList)
+                        let expected = indices |> List.fold (fun box i -> Box.Union(box, boxes.[i])) Box3d.Invalid
+                        let context = $"instanced={instanced}, dimensions={dimensions}, step={step}, members={indices}"
+                        Expect.equal (AVal.force bounds) expected $"{context}: additions, interior/extreme removals, empty and refill"
+                        Expect.equal (AVal.force globalBounds) expected $"{context}: global membership propagation"
+
+        let transformedBounds _ =
+            for instanced in [false; true] do
+                for dimensions in [3; 4] do
+                    let expected = Box3d(V3d(16777216.125, -8.5, 0.25), V3d(16777218.5, 4.25, 3.75))
+                    let positions = doublePositions dimensions (expected.ComputeCorners())
+                    let leaf = graph instanced (positions.GetType().GetElementType()) (ASet.single (geometry (Some positions)))
+                    let inner = cval (Trafo3d.Scale(-2.0, 0.5, 4.0) * Trafo3d.Translation(1.25, -3.5, 7.0))
+                    let outer = cval (Trafo3d.Translation(8.0, -2.0, 4.0))
+                    let sg = leaf |> Sg.trafo inner |> Sg.trafo outer
+                    let bounds = sg.GlobalBoundingBox Ag.Scope.Root
+                    let check step =
+                        let trafo = inner.Value * outer.Value
+                        let transformed = expected.ComputeCorners() |> Array.map trafo.TransformPos |> Box3d
+                        Expect.equal (AVal.force bounds) transformed $"instanced={instanced}, dimensions={dimensions}, step={step}: transformed global bounds"
+                        Expect.equal (local leaf) expected $"instanced={instanced}, dimensions={dimensions}, step={step}: object-space bounds unchanged"
+                    check 0
+                    transact (fun () -> outer.Value <- Trafo3d.Scale(0.5, -4.0, 2.0) * Trafo3d.Translation(-16.0, 2.5, -1.0))
+                    check 1
+                    transact (fun () -> inner.Value <- Trafo3d.Scale(4.0, 2.0, -0.5) * Trafo3d.Translation(0.25, 8.0, -4.0))
+                    check 2
+
+        let compatibility _ =
+            let points = [| V3f(-8.0f, 0.5f, 2.0f); V3f(3.0f, -4.0f, 0.125f); V3f(1.0f, 7.0f, -6.0f) |]
+            let expected = Box3d(V3d(-8.0, -4.0, -6.0), V3d(3.0, 7.0, 2.0))
+            let positions : Array list = [
+                points :> Array
+                points |> Array.mapi (fun i p -> V4f(p, [| 0.0f; Single.NaN; Single.PositiveInfinity |].[i])) :> Array
+            ]
+            for instanced in [false; true] do
+                for data in positions do
+                    let sg = graph instanced (data.GetType().GetElementType()) (ASet.single (geometry (Some data)))
+                    Expect.equal (local sg) expected $"instanced={instanced}, type={data.GetType()}: float compatibility and XYZ-only bounds"
+                    Expect.equal (globalBox sg) expected $"instanced={instanced}, type={data.GetType()}: float global bounds"
+                for data in [Array.empty<V3f> :> Array; Array.empty<V4f> :> Array] do
+                    let sg = graph instanced (data.GetType().GetElementType()) (ASet.single (geometry (Some data)))
+                    Expect.isTrue (local sg).IsInvalid $"instanced={instanced}, type={data.GetType()}: empty float bounds stay invalid"
+                let empty = graph instanced typeof<V3d> ASet.empty
+                Expect.equal (local empty) Box3d.Invalid $"instanced={instanced}: empty geometry set"
+                let missing = graph instanced typeof<V3f> (ASet.single (geometry None))
+                Expect.equal (local missing) Box3d.Invalid $"instanced={instanced}: missing positions"
+                for data in [[| V2d(1.0, 2.0) |] :> Array; [| 1; 2; 3 |] :> Array] do
+                    let mutable caught = None
+                    try
+                        graph instanced (data.GetType().GetElementType()) (ASet.single (geometry (Some data))) |> local |> ignore
+                    with error -> caught <- Some error
+                    match caught with
+                    | Some error -> Expect.equal error.Message (sprintf "unknown position-type: %A" data) $"instanced={instanced}: unsupported position error"
+                    | None -> failtestf "instanced=%b, type=%O: unsupported position array was accepted" instanced (data.GetType())
+
     module Picking =
 
         type private CountingBuffer(data : Array) =
@@ -1319,6 +1440,11 @@ module SceneGraph =
                 "Bounding Box.Scope-aware cache root and invalid bounds",   BoundingBox.rootAndInvalid
                 "Bounding Box.Scope-aware cache concurrent first lookup",   BoundingBox.concurrentSameScope
                 "Bounding Box.Scope-aware cache concurrent warmed lookup",  BoundingBox.concurrentWarmedScopes
+
+                "Bounding Box.Geometry sets.Double precision and XYZ",         GeometrySets.doublePrecision
+                "Bounding Box.Geometry sets.Adaptive double membership",       GeometrySets.adaptiveMembership
+                "Bounding Box.Geometry sets.Transformed double global bounds", GeometrySets.transformedBounds
+                "Bounding Box.Geometry sets.Float empty and error controls",    GeometrySets.compatibility
 
                 "Picking.DrawCallInfo subranges",                    Picking.drawCallRanges
                 "Picking.Automatic FaceVertexCount",                 Picking.automaticFaceVertexCount
