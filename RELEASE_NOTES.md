@@ -1,3 +1,5 @@
+- Geometry-set bounds now support double-precision `V3d[]` and `V4d[]` positions without narrowing coordinates to float. Four-component positions use XYZ only, matching the existing float behavior.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
