@@ -1,3 +1,5 @@
+- Query scopes now end every successfully begun query after a Begin failure and continue ending queries after an End failure. Lone callback failures retain their identity and stack; simultaneous failures are reported in callback order, with a startup failure first.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
