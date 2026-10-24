@@ -35,6 +35,7 @@ let tests =
             Rendering.ColorMasks.tests
             Rendering.Culling.tests
             Rendering.RenderTasks.tests
+            Rendering.RenderTokens.tests
             Rendering.FramebufferSignature.tests
             Rendering.IntegerAttachments.tests
             Rendering.Samplers.tests

@@ -63,6 +63,7 @@
     <Compile Include="Tests\Texture\DdsTexture.fs" />
     <Compile Include="Tests\Rendering\AdaptiveFramebufferCube.fs" />
     <Compile Include="Tests\Rendering\Tasks.fs" />
+    <Compile Include="Tests\Rendering\RenderToken.fs" />
     <Compile Include="Tests\Rendering\Culling.fs" />
     <Compile Include="Tests\Rendering\ColorMasks.fs" />
     <Compile Include="Tests\Rendering\Blending.fs" />

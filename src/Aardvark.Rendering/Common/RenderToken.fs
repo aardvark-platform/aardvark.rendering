@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering
 
 open System
+open System.Runtime.ExceptionServices
 open Aardvark.Base
 
 /// Token for gathering and querying statistics about the rendering process.
@@ -28,11 +29,33 @@ type RenderToken =
     /// Returns whether the token has statistics, i.e. Statistics is not null.
     member inline this.HasStatistics = not <| obj.ReferenceEquals(this.Statistics, null)
 
-    /// Begins the queries of the token and returns an IDisposable that
-    /// ends the queries when disposed.
+    /// <summary>
+    /// Captures and begins the queries in list order, returning a scope that ends them in the same order.
+    /// If Begin fails, ends only successfully begun entries. A lone failure is rethrown unchanged;
+    /// simultaneous failures are aggregated without flattening, Begin first and cleanup failures in list order.
+    /// Partial effects inside a failing Begin remain the query's responsibility.
+    /// </summary>
     member inline this.Use() : QueryUseDisposable =
-        for q in this.Queries do q.Begin()
-        new QueryUseDisposable(this.Queries)
+        let queries = this.Queries
+        let mutable begun = 0
+        try
+            for q in queries do
+                q.Begin()
+                begun <- begun + 1
+            new QueryUseDisposable(queries)
+        with beginError ->
+            let mutable remaining = queries
+            let mutable errors = Unchecked.defaultof<ResizeArray<exn>>
+            for _ in 1 .. begun do
+                try remaining.Head.End()
+                with endError ->
+                    if isNull errors then
+                        errors <- ResizeArray<exn>()
+                        errors.Add beginError
+                    errors.Add endError
+                remaining <- remaining.Tail
+            if isNull errors then reraise()
+            else raise <| AggregateException(errors)
 
     member inline private this.GetStatistic(fallback: 'T, [<InlineIfLambda>] mapping: FrameStatistics -> 'T) =
         if this.HasStatistics then mapping this.Statistics
@@ -87,7 +110,25 @@ and [<Sealed; AbstractClass>] private RenderTokenEmpty =
 
 and [<Struct>] QueryUseDisposable (queries: IQuery list) =
     member _.Queries = queries
-    member _.Dispose() = for q in queries do q.End()
+    /// <summary>
+    /// Attempts End once per list entry in list order, including duplicate entries and repeated disposals.
+    /// A lone failure retains its identity and stack; multiple failures are aggregated in order without flattening.
+    /// </summary>
+    member _.Dispose() =
+        let mutable firstError = Unchecked.defaultof<ExceptionDispatchInfo>
+        let mutable errors = Unchecked.defaultof<ResizeArray<exn>>
+        for q in queries do
+            try q.End()
+            with error ->
+                if isNull firstError then
+                    firstError <- ExceptionDispatchInfo.Capture error
+                else
+                    if isNull errors then
+                        errors <- ResizeArray<exn>()
+                        errors.Add firstError.SourceException
+                    errors.Add error
+        if not (isNull errors) then raise <| AggregateException(errors)
+        elif not (isNull firstError) then firstError.Throw()
 
     interface IDisposable with
         member this.Dispose() = this.Dispose()
