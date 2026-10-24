@@ -50,6 +50,67 @@ module Camera =
             let c = a |> Frustum.withHorizontalFieldOfViewInDegrees 90.0
             Expect.frustumClose Accuracy.high b c "Frustums do not match"
 
+        let private extractionFrusta far = seq {
+            for near in [0.001; 0.125; 1.0; 16.0; 1000.0] do
+                for aspect in [0.5; 1.0; 16.0 / 9.0; 4.0] do
+                    for fov in [30.0; 75.0; 120.0] do
+                        for shift in [V2d.Zero; V2d(0.25, -0.375); V2d(1.25, -0.75)] do
+                            let f = Aardvark.Rendering.Frustum.perspective fov near (far near) aspect
+                            let offset = shift * V2d(f.right - f.left, f.top - f.bottom)
+                            let expected = { f with left = f.left + offset.X; right = f.right + offset.X;
+                                                    bottom = f.bottom + offset.Y; top = f.top + offset.Y }
+                            yield $"near={near}, far={f.far}, aspect={aspect}, fov={fov}, shift={shift}", expected
+        }
+
+        let private scalarClose tolerance expected actual context =
+            Expect.isTrue (Double.IsFinite actual && abs (actual - expected) <= tolerance * max 1e-100 (abs expected))
+                $"{context}: expected {expected}, got {actual}"
+
+        let private nearSidesClose (expected : Frustum) (actual : Frustum) context =
+            Expect.isFalse actual.isOrtho $"{context}: perspective classification"
+            for name, expected, actual in ["near", expected.near, actual.near; "left", expected.left, actual.left;
+                                           "right", expected.right, actual.right; "bottom", expected.bottom, actual.bottom;
+                                           "top", expected.top, actual.top] do
+                scalarClose 2e-12 expected actual $"{context}: {name}"
+
+        let private matrixClose (expected : M44d) (actual : M44d) context =
+            for row in 0 .. 3 do
+                for column in 0 .. 3 do
+                    let e, a = expected.[row, column], actual.[row, column]
+                    Expect.isTrue (Double.IsFinite a && abs (a - e) <= 2e-11 * max 1.0 (abs e))
+                        $"{context}, row={row}, column={column}: expected {e}, got {a}"
+
+        let private roundTrip (projection : Trafo3d) actual context =
+            let rebuilt = Aardvark.Rendering.Frustum.projTrafo actual
+            matrixClose projection.Forward rebuilt.Forward $"{context}: forward projection round trip"
+            matrixClose projection.Backward rebuilt.Backward $"{context}: backward projection round trip"
+            matrixClose M44d.Identity (projection.Forward * rebuilt.Backward) $"{context}: forward/backward composition"
+            matrixClose M44d.Identity (rebuilt.Forward * projection.Backward) $"{context}: rebuilt/original composition"
+
+        let infiniteExtraction() =
+            for context, expected in extractionFrusta (fun _ -> Double.PositiveInfinity) do
+                let projection = Aardvark.Rendering.Frustum.projTrafo expected
+                Expect.equal projection.Forward.M22 -1.0 $"{context}: exact infinite depth coefficient"
+                let actual = Aardvark.Rendering.Frustum.ofTrafo projection
+                nearSidesClose expected actual context
+                Expect.equal actual.far Double.PositiveInfinity $"{context}: positive-infinite far distance"
+                roundTrip projection actual context
+
+        let finiteExtractionCompatibility() =
+            for ratio in [2.0; 8.0; 128.0; 4096.0] do
+                for context, expected in extractionFrusta (fun near -> near * ratio) do
+                    let projection = Aardvark.Rendering.Frustum.projTrafo expected
+                    let actual = Aardvark.Rendering.Frustum.ofTrafo projection
+                    nearSidesClose expected actual context
+                    scalarClose 2e-11 expected.far actual.far $"{context}: finite far distance"
+                    // Independent legacy calculation protects finite-depth compatibility.
+                    let m = projection.Forward
+                    let r = (1.0 + m.M22) / (m.M22 - 1.0)
+                    let far = (r - 1.0) * m.M23 / (2.0 * r)
+                    scalarClose 2e-12 far actual.far $"{context}: legacy far distance"
+                    scalarClose 2e-12 (r * far) actual.near $"{context}: legacy near distance"
+                    roundTrip projection actual context
+
     module Orbit =
         let private vectorClose tolerance (expected : V3d) (actual : V3d) message =
             Expect.isTrue (actual.IsFinite && (actual - expected).Length <= tolerance)
@@ -389,6 +450,9 @@ module Camera =
             "Frustum.withAspect",      Frustum.withAspect
             "Frustum.withNear",        Frustum.withNear
             "Frustum.withFieldOfView", Frustum.withFieldOfView
+
+            "Frustum.Infinite-far projection extraction",           Frustum.infiniteExtraction
+            "Frustum.Finite perspective extraction compatibility",  Frustum.finiteExtractionCompatibility
 
             "Orbit.drags",                                                         Orbit.dragCases
             "Orbit.translation equivariance",                                      Orbit.translationEquivariance

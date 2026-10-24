@@ -1,3 +1,5 @@
+- Fixed `Frustum.ofTrafo` for infinite-far GL perspective projections: near and lateral bounds remain finite, and the far distance is positive infinity. Finite perspective behavior and orthographic extraction are preserved.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
