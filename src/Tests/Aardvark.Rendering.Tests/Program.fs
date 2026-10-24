@@ -41,6 +41,7 @@ let tests =
             Rendering.Uniforms.tests
             Rendering.Surfaces.tests
             Rendering.DrawCalls.tests
+            Rendering.GeometryConversion.tests
             Rendering.Viewport.tests
             Rendering.ResourceManagement.tests
             Rendering.Commands.tests

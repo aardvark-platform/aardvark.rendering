@@ -1,3 +1,5 @@
+- Fixed non-indexed geometry conversion to size draws from the positions array when present, preventing padded custom attributes from extending the draw beyond its vertices. Indexed counts and positionless fallback behavior are unchanged.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
