@@ -40,13 +40,16 @@ module Frustum =
     let private isTrafoOrtho (t : Trafo3d) =
         t.Forward.M30.IsTiny() && t.Forward.M31.IsTiny() && t.Forward.M32.IsTiny()
 
+    /// <summary>
+    /// Extracts a GL projection frustum, including perspective projections with an infinite far plane.
+    /// Infinite-far perspective projections retain finite near and lateral bounds and have positive-infinite far distance.
+    /// </summary>
     let ofTrafo (t : Trafo3d) =
         let isOrtho = isTrafoOrtho t
         let m = t.Forward
         if not isOrtho then
-            let r = (1.0 + m.M22) / (m.M22 - 1.0)
-            let far     = (r - 1.0) * m.M23 / (2.0 * r)
-            let near    = r * far
+            let near    = m.M23 / (m.M22 - 1.0)
+            let far     = if m.M22 = -1.0 then System.Double.PositiveInfinity else m.M23 / (m.M22 + 1.0)
             let top     = (1.0 + m.M12) * near / m.M11
             let bottom  = (m.M12 - 1.0) * near / m.M11
             let left    = (m.M02 - 1.0) * near / m.M00
