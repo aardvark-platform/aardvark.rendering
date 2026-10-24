@@ -10,6 +10,54 @@ module TextureCreate =
 
     module Cases =
 
+        // Limits are explicit, independent of the production mip utility.
+        let private mipSizes = [
+            TextureDimension.Texture1D, V3i(1, 1, 1), 1
+            TextureDimension.Texture1D, V3i(2, 1, 1), 2
+            TextureDimension.Texture1D, V3i(7, 1, 1), 3
+            TextureDimension.Texture1D, V3i(8, 1, 1), 4
+            TextureDimension.Texture1D, V3i(9, 1, 1), 4
+            TextureDimension.Texture1D, V3i(16, 1, 1), 5
+            TextureDimension.Texture2D, V3i(1, 1, 1), 1
+            TextureDimension.Texture2D, V3i(1, 8, 1), 4
+            TextureDimension.Texture2D, V3i(8, 1, 1), 4
+            TextureDimension.Texture2D, V3i(3, 5, 1), 3
+            TextureDimension.Texture2D, V3i(5, 3, 1), 3
+            TextureDimension.Texture2D, V3i(2, 16, 1), 5
+            TextureDimension.Texture2D, V3i(17, 9, 1), 5
+            TextureDimension.Texture3D, V3i(1, 1, 1), 1
+            TextureDimension.Texture3D, V3i(8, 1, 1), 4
+            TextureDimension.Texture3D, V3i(1, 8, 1), 4
+            TextureDimension.Texture3D, V3i(1, 1, 8), 4
+            TextureDimension.Texture3D, V3i(3, 5, 9), 4
+            TextureDimension.Texture3D, V3i(9, 3, 5), 4
+            TextureDimension.Texture3D, V3i(5, 9, 3), 4
+            TextureDimension.Texture3D, V3i(16, 2, 3), 5
+            TextureDimension.TextureCube, V3i(1, 1, 1), 1
+            TextureDimension.TextureCube, V3i(2, 2, 1), 2
+            TextureDimension.TextureCube, V3i(7, 7, 1), 3
+            TextureDimension.TextureCube, V3i(8, 8, 1), 4
+            TextureDimension.TextureCube, V3i(9, 9, 1), 4
+            TextureDimension.TextureCube, V3i(16, 16, 1), 5
+        ]
+
+        let private mipCounts dimension =
+            if dimension = TextureDimension.Texture3D then [None]
+            else [None; Some 1; Some 3; Some 8]
+
+        let private createMipTexture (runtime : IRuntime) typed dimension (size : V3i) levels count =
+            match typed, dimension, count with
+            | false, _, None -> runtime.CreateTexture(size, dimension, TextureFormat.Rgba8, levels, 1)
+            | false, _, Some count -> runtime.CreateTextureArray(size, dimension, TextureFormat.Rgba8, levels, 1, count)
+            | true, TextureDimension.Texture1D, None -> runtime.CreateTexture1D(size.X, TextureFormat.Rgba8, levels)
+            | true, TextureDimension.Texture1D, Some count -> runtime.CreateTexture1DArray(size.X, TextureFormat.Rgba8, levels, count)
+            | true, TextureDimension.Texture2D, None -> runtime.CreateTexture2D(size.XY, TextureFormat.Rgba8, levels)
+            | true, TextureDimension.Texture2D, Some count -> runtime.CreateTexture2DArray(size.XY, TextureFormat.Rgba8, levels, count = count)
+            | true, TextureDimension.Texture3D, None -> runtime.CreateTexture3D(size, TextureFormat.Rgba8, levels)
+            | true, TextureDimension.TextureCube, None -> runtime.CreateTextureCube(size.X, TextureFormat.Rgba8, levels)
+            | true, TextureDimension.TextureCube, Some count -> runtime.CreateTextureCubeArray(size.X, TextureFormat.Rgba8, levels, count)
+            | _ -> failtest "Unsupported mip fixture"
+
         let nonPositiveArguments (runtime : IRuntime) =
             let create (size : V3i) (dimension : TextureDimension) (levels : int) (samples : int) () =
                 let t = runtime.CreateTexture(size, dimension, TextureFormat.Rgba32f, levels, samples)
@@ -64,6 +112,19 @@ module TextureCreate =
             Expect.throwsT<ArgumentException> (create TextureDimension.TextureCube 1 8) "Expected ArgumentException"
             Expect.throwsT<ArgumentException> (createArray TextureDimension.TextureCube 1 8 4) "Expected ArgumentException"
 
+            for dimension, size, limit in mipSizes do
+                for count in mipCounts dimension do
+                    for typed in [false; true] do
+                        for levels in [limit + 1; 32; Int32.MaxValue; Int32.MinValue] do
+                            let context = $"dimension={dimension}, size={size}, levels={levels}, limit={limit}, count={count}, typed={typed}"
+                            try
+                                use texture = createMipTexture runtime typed dimension size levels count
+                                failtestf "%s: invalid mip count was accepted" context
+                            with :? ArgumentException as error ->
+                                Expect.equal (error.GetType()) typeof<ArgumentException> $"{context}: validation exception type"
+                                let message = if levels < 1 then "levels must be greater than 0" else $"levels must not exceed {limit} "
+                                Expect.stringContains error.Message message $"{context}: rejected by creation validation before allocation"
+
 
         let validUsage (runtime : IRuntime) =
             let size = function
@@ -106,6 +167,24 @@ module TextureCreate =
             createArray TextureDimension.TextureCube 3 1 1 ()
             createArray TextureDimension.TextureCube 1 1 4 ()
             createArray TextureDimension.TextureCube 3 1 4 ()
+
+            for dimension, size, limit in mipSizes do
+                for count in mipCounts dimension do
+                    for typed in [false; true] do
+                        for levels in [1; max 1 (limit - 1); limit] |> List.distinct do
+                            let context = $"dimension={dimension}, size={size}, levels={levels}, limit={limit}, count={count}, typed={typed}"
+                            use texture = createMipTexture runtime typed dimension size levels count
+                            Expect.equal texture.Dimension dimension $"{context}: dimension"
+                            Expect.equal texture.Size size $"{context}: base spatial size"
+                            Expect.equal texture.MipMapLevels levels $"{context}: requested partial or full chain retained"
+                            Expect.equal texture.Count (defaultArg count 1) $"{context}: array count independent of mip levels"
+                            Expect.equal texture.Samples 1 $"{context}: sample count"
+                            Expect.equal texture.Format TextureFormat.Rgba8 $"{context}: format"
+                            for level in 0 .. levels - 1 do
+                                let expected = V3i(max 1 (size.X >>> level), max 1 (size.Y >>> level), max 1 (size.Z >>> level))
+                                Expect.equal (texture.GetSize level) expected $"{context}, level={level}: mip spatial extent"
+                            if levels = limit then
+                                Expect.equal (texture.GetSize(levels - 1)) V3i.III $"{context}: full chain ends at a singleton"
 
         let unsupportedMultisamples (runtime : IRuntime) =
             let t = runtime.CreateTexture2D(V2i(245), TextureFormat.Rgba8, samples = 64)

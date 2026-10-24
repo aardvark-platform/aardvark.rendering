@@ -174,7 +174,8 @@ type ITextureRuntimeExtensions private() =
     ///<param name="this">The runtime.</param>
     ///<param name="size">The size of the texture.</param>
     ///<param name="format">The desired texture format.</param>
-    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="levels">The number of mip levels, from 1 through 1 + floor(log2(size)). Default is 1.</param>
+    ///<exception cref="T:System.ArgumentException">The mip count exceeds the full spatial chain or another creation parameter is invalid.</exception>
     [<Extension>]
     static member CreateTexture1D(this : ITextureRuntime, size : int, format : TextureFormat,
                                   [<Optional; DefaultParameterValue(1)>] levels : int) =
@@ -184,8 +185,9 @@ type ITextureRuntimeExtensions private() =
     ///<param name="this">The runtime.</param>
     ///<param name="size">The size of the texture.</param>
     ///<param name="format">The desired texture format.</param>
-    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="levels">The number of mip levels, from 1 through 1 + floor(log2(size)), independent of the array count. Default is 1.</param>
     ///<param name="count">The number of texture slices.</param>
+    ///<exception cref="T:System.ArgumentException">The mip count exceeds the full spatial chain or another creation parameter is invalid.</exception>
     [<Extension>]
     static member CreateTexture1DArray(this : ITextureRuntime, size : int, format : TextureFormat,
                                        [<Optional; DefaultParameterValue(1)>] levels : int,
@@ -196,8 +198,9 @@ type ITextureRuntimeExtensions private() =
     ///<param name="this">The runtime.</param>
     ///<param name="size">The size of the texture.</param>
     ///<param name="format">The desired texture format.</param>
-    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="levels">The number of mip levels, from 1 through 1 + floor(log2(max(size.X, size.Y))). Default is 1.</param>
     ///<param name="samples">the number of samples. Default is 1.</param>
+    ///<exception cref="T:System.ArgumentException">The mip count exceeds the full spatial chain or another creation parameter is invalid.</exception>
     [<Extension>]
     static member CreateTexture2D(this : ITextureRuntime, size : V2i, format : TextureFormat,
                                   [<Optional; DefaultParameterValue(1)>] levels : int,
@@ -208,9 +211,10 @@ type ITextureRuntimeExtensions private() =
     ///<param name="this">The runtime.</param>
     ///<param name="size">The size of the texture.</param>
     ///<param name="format">The desired texture format.</param>
-    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="levels">The number of mip levels, from 1 through 1 + floor(log2(max(size.X, size.Y))), independent of the array count. Default is 1.</param>
     ///<param name="samples">the number of samples. Default is 1.</param>
     ///<param name="count">The number of texture slices.</param>
+    ///<exception cref="T:System.ArgumentException">The mip count exceeds the full spatial chain or another creation parameter is invalid.</exception>
     [<Extension>]
     static member CreateTexture2DArray(this : ITextureRuntime, size : V2i, format : TextureFormat,
                                        [<Optional; DefaultParameterValue(1)>] levels : int,
@@ -222,7 +226,8 @@ type ITextureRuntimeExtensions private() =
     ///<param name="this">The runtime.</param>
     ///<param name="size">The size of the texture.</param>
     ///<param name="format">The desired texture format.</param>
-    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="levels">The number of mip levels, from 1 through 1 + floor(log2(max(size.X, size.Y, size.Z))). Default is 1.</param>
+    ///<exception cref="T:System.ArgumentException">The mip count exceeds the full spatial chain or another creation parameter is invalid.</exception>
     [<Extension>]
     static member CreateTexture3D(this : ITextureRuntime, size : V3i, format : TextureFormat,
                                   [<Optional; DefaultParameterValue(1)>] levels : int) =
@@ -232,7 +237,8 @@ type ITextureRuntimeExtensions private() =
     ///<param name="this">The runtime.</param>
     ///<param name="size">The size of the texture.</param>
     ///<param name="format">The desired texture format.</param>
-    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="levels">The number of mip levels, from 1 through 1 + floor(log2(size)), independent of the six faces. Default is 1.</param>
+    ///<exception cref="T:System.ArgumentException">The mip count exceeds the full spatial chain or another creation parameter is invalid.</exception>
     [<Extension>]
     static member CreateTextureCube(this : ITextureRuntime, size : int, format : TextureFormat,
                                     [<Optional; DefaultParameterValue(1)>] levels : int) =
@@ -242,8 +248,9 @@ type ITextureRuntimeExtensions private() =
     ///<param name="this">The runtime.</param>
     ///<param name="size">The size of the texture.</param>
     ///<param name="format">The desired texture format.</param>
-    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="levels">The number of mip levels, from 1 through 1 + floor(log2(size)), independent of the array count and six faces. Default is 1.</param>
     ///<param name="count">The number of texture slices.</param>
+    ///<exception cref="T:System.ArgumentException">The mip count exceeds the full spatial chain or another creation parameter is invalid.</exception>
     [<Extension>]
     static member CreateTextureCubeArray(this : ITextureRuntime, size : int, format : TextureFormat,
                                        [<Optional; DefaultParameterValue(1)>] levels : int,

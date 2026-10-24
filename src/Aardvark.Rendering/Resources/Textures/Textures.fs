@@ -109,19 +109,19 @@ and ITextureRuntime =
     ///<param name="size">The size of the texture.</param>
     ///<param name="dimension">The dimension of the texture.</param>
     ///<param name="format">The desired texture format.</param>
-    ///<param name="levels">The number of mip levels.</param>
+    ///<param name="levels">The number of mip levels, from 1 through 1 + floor(log2(max(size.X, size.Y, size.Z))). Cube faces do not increase the limit.</param>
     ///<param name="samples">The number of samples.</param>
-    ///<exception cref="ArgumentException">if the combination of parameters is invalid.</exception>
+    ///<exception cref="T:System.ArgumentException">if the combination of parameters is invalid.</exception>
     abstract member CreateTexture : size : V3i * dimension : TextureDimension * format : TextureFormat * levels : int * samples : int -> IBackendTexture
 
     ///<summary>Creates a texture array.</summary>
     ///<param name="size">The size of the texture.</param>
     ///<param name="dimension">The dimension of the texture.</param>
     ///<param name="format">The desired texture format.</param>
-    ///<param name="levels">The number of mip levels.</param>
+    ///<param name="levels">The number of mip levels, from 1 through 1 + floor(log2(max(size.X, size.Y, size.Z))). Array layers and cube faces do not increase the limit.</param>
     ///<param name="samples">The number of samples.</param>
     ///<param name="count">The number of texture slices.</param>
-    ///<exception cref="ArgumentException">if the combination of parameters is invalid.</exception>
+    ///<exception cref="T:System.ArgumentException">if the combination of parameters is invalid.</exception>
     abstract member CreateTextureArray : size : V3i * dimension : TextureDimension * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
 
     ///<summary>Prepares a texture by uploading the data to the device.</summary>

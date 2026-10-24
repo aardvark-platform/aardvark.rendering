@@ -1,3 +1,5 @@
+- Texture creation now rejects mip counts beyond the full chain supported by the spatial size with `ArgumentException`. Array layers and cube faces do not increase this limit; valid partial and full chains are unchanged.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.

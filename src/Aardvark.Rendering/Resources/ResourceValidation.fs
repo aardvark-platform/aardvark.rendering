@@ -243,6 +243,9 @@ module ResourceValidation =
                 if not <| validSampleCounts.Contains samples then
                     Utils.failf dimension "samples must be one of %A but got %d" validSampleCounts samples
 
+            let maxLevels = Fun.MipmapLevels size
+            if levels > maxLevels then failf "levels must not exceed %d for size %A (is %d)" maxLevels size levels
+
         /// Raises an ArgumentException if the combination of parameters is invalid.
         let validateCreationParamsArray (dimension : TextureDimension) (size : V3i) (levels : int) (samples : int) (count : int) =
             let fail = Utils.fail dimension
