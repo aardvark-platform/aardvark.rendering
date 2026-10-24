@@ -14,12 +14,19 @@ type Geometry =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Geometry =
+    /// <summary>
+    /// Converts an indexed geometry, preferring the positions array length for non-indexed draw counts.
+    /// Without positions, the first vertex attribute determines the non-indexed count.
+    /// </summary>
     let ofIndexedGeometry (uniforms : Map<string, IAdaptiveValue>) (g : IndexedGeometry) =
         let index, fvc =
             match g.IndexArray with
                 | null ->
-                    let anyAtt = g.IndexedAttributes.Values |> Seq.head
-                    None, anyAtt.Length
+                    let attribute =
+                        match g.IndexedAttributes.TryGetValue DefaultSemantic.Positions with
+                        | true, positions -> positions
+                        | _ -> g.IndexedAttributes.Values |> Seq.head
+                    None, attribute.Length
                 | index ->
                     let buffer = AVal.constant (ArrayBuffer(index) :> IBuffer)
                     let view = BufferView(buffer, index.GetType().GetElementType())
