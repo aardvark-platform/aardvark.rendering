@@ -1,3 +1,5 @@
+- Reduced triangle-array picking allocations by selecting the nearest intersection without temporary hit arrays. Intersection ordering, clipping, transforms and results are preserved.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.

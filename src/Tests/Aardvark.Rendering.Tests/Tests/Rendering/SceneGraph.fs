@@ -580,6 +580,134 @@ module SceneGraph =
 
     module Picking =
 
+        let private arrayTriangle x z =
+            Triangle3d(V3d(x - 1.0, -1.0, z), V3d(x + 1.0, -1.0, z), V3d(x, 1.0, z))
+
+        let private arrayPart (ray : Ray3d) tmin tmax = RayPart(FastRay3d ray, tmin, tmax)
+
+        let private arrayReference part trafo (triangles : Triangle3d[]) =
+            let hits = triangles |> Array.chooseV (fun triangle -> Pickable.intersectV part { trafo = trafo; shape = PickShape.Triangle triangle })
+            if hits.Length = 0 then ValueNone else ValueSome (Array.min hits)
+
+        let private arrayHitClose exact expected actual context =
+            match expected, actual with
+            | ValueNone, ValueNone -> ()
+            | ValueSome expected, ValueSome actual ->
+                if Double.IsNaN expected then Expect.isTrue (Double.IsNaN actual) $"{context}: NaN result retained"
+                elif exact || Double.IsInfinity expected then
+                    Expect.equal (BitConverter.DoubleToInt64Bits actual) (BitConverter.DoubleToInt64Bits expected) $"{context}: exact hit bits"
+                else
+                    Expect.isTrue (Double.IsFinite actual && abs (actual - expected) <= 1e-10 * max 1.0 (abs expected))
+                        $"{context}: expected {expected}, got {actual}"
+            | _ -> failtestf "%s: expected %A, got %A" context expected actual
+
+        let private checkArray exact part trafo triangles context =
+            let expected = arrayReference part trafo triangles
+            let pickable = { trafo = trafo; shape = PickShape.TriangleArray triangles }
+            arrayHitClose exact expected (Pickable.intersectV part pickable) $"{context}: intersectV"
+            arrayHitClose exact expected (Pickable.intersect part pickable |> Option.toValueOption) $"{context}: intersect"
+
+        let triangleArrayResults _ =
+            let hit = arrayTriangle 0.0 0.0
+            let miss = arrayTriangle 10.0 0.0
+            let degenerate = Triangle3d(V3d(-1.0, 0.0, 0.0), V3d.Zero, V3d.XAxis)
+            let nan = Triangle3d(V3d.NaN, V3d.Zero, V3d.III)
+            let infinite = Triangle3d(V3d(Double.PositiveInfinity, 0.0, 0.0), V3d.Zero, V3d.III)
+            let arrays = [
+                "empty", [||]
+                "miss", Array.create 32 miss
+                "single", [|hit|]
+                "sparse", Array.init 128 (fun i -> if i = 7 || i = 111 then arrayTriangle 0.0 (if i = 7 then 3.0 else 0.0) else miss)
+                "dense", Array.init 64 (fun i -> arrayTriangle 0.0 (float (63 - i)))
+                "equal distances", [|hit; Triangle3d(hit.P2, hit.P1, hit.P0); hit|]
+                "degenerate", [|degenerate; Triangle3d(V3d.Zero, V3d.Zero, V3d.Zero)|]
+                "mixed degenerates", [|degenerate; miss; hit; degenerate|]
+                "NaN first", [|nan; hit|]
+                "NaN later", [|hit; nan|]
+                "NaN before dense hits", Array.append [|nan|] (Array.create 64 hit)
+                "NaN after dense hits", Array.append (Array.create 64 hit) [|nan|]
+                "infinity first", [|infinite; hit|]
+                "infinity later", [|hit; infinite|]
+            ]
+            for name, triangles in arrays do
+                for order in ["original"; "reversed"; "rotated"] do
+                    let triangles =
+                        match order with
+                        | "reversed" -> Array.rev triangles
+                        | "rotated" when triangles.Length > 0 -> Array.init triangles.Length (fun i -> triangles.[(i + 1) % triangles.Length])
+                        | _ -> triangles
+                    for ray in [Ray3d(V3d(0.0, 0.0, -2.0), V3d.ZAxis); Ray3d(V3d(0.0, 0.0, 2.0), -3.0 * V3d.ZAxis);
+                                Ray3d(V3d.Zero, V3d.ZAxis); Ray3d(V3d(0.0, 0.0, -2.0), V3d.XAxis)] do
+                        checkArray true (arrayPart ray 0.0 infinity) Trafo3d.Identity triangles $"array={name}, order={order}, ray={ray}"
+            for valueApi in [false; true] do
+                let pickable = Pickable.ofShape (PickShape.TriangleArray null)
+                let part = arrayPart (Ray3d(V3d.Zero, V3d.ZAxis)) 0.0 infinity
+                try
+                    if valueApi then Pickable.intersectV part pickable |> ignore else Pickable.intersect part pickable |> ignore
+                    failtestf "value API=%b: null triangle array must retain its ArgumentNullException" valueApi
+                with :? ArgumentNullException as error -> Expect.equal error.ParamName "array" "Original null-array argument retained"
+
+        let triangleArrayTransforms _ =
+            let hit, miss = arrayTriangle 0.0 0.0, arrayTriangle 10.0 0.0
+            let degenerate = Triangle3d(V3d.Zero, V3d.Zero, V3d.Zero)
+            let arrays = ["empty", [||]; "miss", [|miss|]; "single", [|hit|];
+                          "sparse", [|miss; arrayTriangle 0.0 1.0; miss; hit|];
+                          "dense", [|arrayTriangle 0.0 3.0; hit; arrayTriangle 0.0 1.0|];
+                          "degenerate", [|degenerate; hit; degenerate|]]
+            let trafos = [Trafo3d.Identity; Trafo3d.Translation(13.0, -7.0, 11.0);
+                          Trafo3d.RotationEuler(0.2, -0.4, 0.6) * Trafo3d.Translation(-3.0, 5.0, 7.0);
+                          Trafo3d.Scale(-2.0, 0.5, 3.0) * Trafo3d.RotationEuler(-0.3, 0.1, 0.7) * Trafo3d.Translation(4.0, -9.0, 2.0)]
+            for transform, trafo in List.indexed trafos do
+                for speed in [0.125; 1.0; 3.0] do
+                    let ray = Ray3d(trafo.Forward.TransformPos(V3d(0.0, 0.0, -2.0)), trafo.Forward.TransformDir(speed * V3d.ZAxis))
+                    let expected = ValueSome (2.0 / speed)
+                    let single = Pickable.ofShape (PickShape.TriangleArray [|hit|]) |> Pickable.transform trafo
+                    let part = arrayPart ray 0.0 infinity
+                    arrayHitClose false expected (Pickable.intersectV part single) $"transform={transform}, speed={speed}: analytic world parameter"
+                    arrayHitClose false expected (Pickable.intersect part single |> Option.toValueOption) $"transform={transform}, speed={speed}: analytic option parameter"
+                    for tmin, tmax in [-10.0, 100.0; 0.0, infinity; 0.0, 2.0 / speed; 2.0 / speed, 3.0 / speed;
+                                       3.0 / speed, 5.0 / speed; 5.0 / speed, 5.0 / speed; 6.0 / speed, 9.0 / speed] do
+                        for name, triangles in arrays do
+                            checkArray false (arrayPart ray tmin tmax) trafo triangles $"array={name}, transform={transform}, speed={speed}, interval=[{tmin},{tmax})"
+            let ray = Ray3d(V3d(0.0, 0.0, -2.0), V3d.ZAxis)
+            let pickable = Pickable.ofShape (PickShape.TriangleArray [|hit|])
+            for tmin, tmax, expected in [0.0, 2.0, ValueNone; 2.0, 3.0, ValueSome 2.0; 2.0, 2.0, ValueNone] do
+                let part = arrayPart ray tmin tmax
+                arrayHitClose true expected (Pickable.intersectV part pickable) "Inclusive lower/exclusive upper clipping"
+                arrayHitClose true expected (Pickable.intersect part pickable |> Option.toValueOption) "Option clipping"
+
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
+        let private arrayQueryLoop part pickable iterations =
+            let mutable sum = 0.0
+            for _ in 1 .. iterations do
+                match Pickable.intersectV part pickable with
+                | ValueSome t -> sum <- sum + t
+                | ValueNone -> failtest "Expected an allocation-probe hit"
+            sum
+
+        let triangleArrayAllocation _ =
+            let part = arrayPart (Ray3d(V3d(0.0, 0.0, -2.0), V3d.ZAxis)) 0.0 infinity
+            let control = Pickable.ofShape (PickShape.Triangle (arrayTriangle 0.0 0.0))
+            arrayQueryLoop part control 512 |> ignore
+            let controlBefore = GC.GetAllocatedBytesForCurrentThread()
+            let controlSum = arrayQueryLoop part control 512
+            let controlAllocated = GC.GetAllocatedBytesForCurrentThread() - controlBefore
+            Expect.equal controlSum 1024.0 "Single-triangle control result"
+            let measurements = ResizeArray<int * bool * int64>()
+            for count in [1; 8; 128; 4096] do
+                for dense in [false; true] do
+                    let triangles = Array.init count (fun i -> if dense then arrayTriangle 0.0 (float (count - 1 - i)) elif i = count / 2 then arrayTriangle 0.0 0.0 else arrayTriangle 10.0 0.0)
+                    let pickable = Pickable.ofShape (PickShape.TriangleArray triangles)
+                    Expect.equal (arrayQueryLoop part pickable 512) 1024.0 "Allocation fixture result"
+                    let before = GC.GetAllocatedBytesForCurrentThread()
+                    let sum = arrayQueryLoop part pickable 512
+                    let allocated = GC.GetAllocatedBytesForCurrentThread() - before
+                    Expect.equal sum 1024.0 $"count={count}, dense={dense}: query results"
+                    measurements.Add(count, dense, allocated)
+                    GC.KeepAlive pickable
+            for count, dense, allocated in measurements |> Seq.sortByDescending (fun (_, _, allocated) -> allocated) do
+                Expect.equal allocated controlAllocated $"count={count}, dense={dense}, calls=512: hit storage must stay at the unchanged single-triangle allocation profile"
+
         type private CountingBuffer(data : Array) =
             let buffer = ArrayBuffer data
             let mutable downloadCount = 0
@@ -1325,6 +1453,10 @@ module SceneGraph =
                 "Picking.Adaptive DrawCallInfo range",               Picking.adaptiveDrawCallRange
                 "Picking.Empty and underfilled DrawCallInfo ranges", Picking.emptyAndUnderfilledDrawCalls
                 "Picking.DrawCallInfo range overflow",               Picking.drawCallRangeOverflow
+
+                "Picking.Triangle arrays preserve nearest-hit ordering", Picking.triangleArrayResults
+                "Picking.Triangle arrays retain transformed clipping",   Picking.triangleArrayTransforms
+                "Picking.Triangle array hit storage stays constant",     Picking.triangleArrayAllocation
 
                 "Picking.RenderNode (triangle strip, non-indexed)", Picking.renderNode false false
                 "Picking.RenderNode (triangle strip, indexed)",     Picking.renderNode false true
