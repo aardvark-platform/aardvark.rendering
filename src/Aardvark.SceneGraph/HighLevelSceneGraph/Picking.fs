@@ -58,6 +58,19 @@ module ``Sg Picking Extensions`` =
         let bounds (p : Pickable) =
             PickShape.bounds(p.shape) |> transformBounds p.trafo
 
+        let private intersectTriangleArray (part : RayPart) (triangles : Triangle3d[]) =
+            if isNull triangles then nullArg "array"
+            let mutable found = false
+            let mutable nearest = 0.0
+            for triangle in triangles do
+                match RayPart.IntersectsV(part, triangle) with
+                // Strict comparison retains the first hit on ties and preserves Array.min's NaN ordering.
+                | ValueSome t when not found || t < nearest ->
+                    found <- true
+                    nearest <- t
+                | _ -> ()
+            if found then ValueSome nearest else ValueNone
+
         let private intersectTriangle (part : RayPart) (tri : Triangle3d) =
             match RayPart.Intersects(part, tri) with
             | Some t -> Some (RayHit(t, ()))
@@ -83,11 +96,9 @@ module ``Sg Picking Extensions`` =
             | Triangle t -> RayPart.Intersects(local, t) |> getRealT
             | Triangles kdtree -> KdTree.intersect intersectTriangle local kdtree |> Option.map _.T |> getRealT
             | TriangleArray arr ->
-                let hits = arr |> Array.chooseV (fun t -> RayPart.IntersectsV(local, t))
-                if hits.Length > 0 then
-                    hits |> Array.min |> Some |> getRealT
-                else
-                    None
+                match intersectTriangleArray local arr with
+                | ValueSome t -> getRealT (Some t)
+                | ValueNone -> None
             | Custom(_, intersect) -> intersect local |> getRealT
 
         let private intersectTriangleV (part : RayPart) (tri : Triangle3d) =
@@ -114,12 +125,7 @@ module ``Sg Picking Extensions`` =
             | Cylinder c -> RayPart.IntersectsV(local, c) |> getRealT
             | Triangle t -> RayPart.IntersectsV(local, t) |> getRealT
             | Triangles kdtree -> KdTree.intersectV intersectTriangleV local kdtree |> ValueOption.map _.T |> getRealT
-            | TriangleArray arr ->
-                let hits = arr |> Array.chooseV (fun t -> RayPart.IntersectsV(local, t))
-                if hits.Length > 0 then
-                    hits |> Array.min |> ValueSome |> getRealT
-                else
-                    ValueNone
+            | TriangleArray arr -> intersectTriangleArray local arr |> getRealT
             | Custom(_, intersect) -> intersect local |> Option.toValueOption |> getRealT
 
     type PickObject(scope : Scope, pickable : aval<Pickable>) =
