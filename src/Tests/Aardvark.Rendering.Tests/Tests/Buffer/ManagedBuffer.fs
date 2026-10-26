@@ -70,6 +70,58 @@ module ManagedBuffer =
 
             member _.Copy(_, _, _, _, _, _) = ()
 
+    type private CheckedRuntime() as this =
+        let data = Array.create 2048 233uy
+        let uploads = ResizeArray<uint64 * uint64>()
+        let mutable windows = []
+        let mutable context = ""
+
+        member _.Data = data
+        member _.Uploads = uploads.Count
+        member _.Allow(label, ranges : (uint64 * uint64) list) =
+            context <- label
+            windows <- ranges
+
+        interface IBufferRuntime with
+            member _.PrepareBuffer(_, _, _) = failwith "Unexpected PrepareBuffer"
+            member _.CreateBuffer(size, _, _) =
+                Expect.isLessThanOrEqual size (uint64 data.Length) "Checked backing size"
+                new MockBuffer(this, size) :> IBackendBuffer
+            member _.Upload(source, target, offset, size, _) =
+                Expect.isTrue (List.contains (offset, size) windows) $"{context}: unexpected upload offset={offset}, size={size}, allowed={windows}"
+                Expect.isTrue (offset <= target.SizeInBytes && size <= target.SizeInBytes - offset) $"{context}: upload exceeds backing storage"
+                Marshal.Copy(source, data, int offset, int size)
+                uploads.Add(offset, size)
+            member _.Download(_, _, _, _) = failwith "Unexpected Download"
+            member _.DownloadAsync(_, _, _, _) = failwith "Unexpected DownloadAsync"
+            member _.Copy(_, _, _, _, size, _) = Expect.equal size 0UL "Only initial empty backing may be copied"
+
+    type private CountedSource(input : aval<IBuffer>) =
+        inherit AdaptiveObject()
+        let mutable references = 0
+        member _.References = references
+        member x.GetValue(token : AdaptiveToken) =
+            x.EvaluateAlways token (fun token ->
+                Expect.isGreaterThan references 0 "Source evaluated without a live writer reference"
+                input.GetValue token
+            )
+        interface IAdaptiveValue with
+            member _.IsConstant = false
+            member _.ContentType = typeof<IBuffer>
+            member x.GetValueUntyped(token) = x.GetValue token :> obj
+            member x.Accept visitor = visitor.Visit (x :> aval<IBuffer>)
+        interface IAdaptiveValue<IBuffer> with
+            member x.GetValue(token) = x.GetValue token
+        interface IAdaptiveResource with
+            member _.Acquire() = references <- references + 1
+            member _.Release() =
+                Expect.isGreaterThan references 0 "Source reference released twice"
+                references <- references - 1
+            member _.ReleaseAll() = references <- 0
+            member x.GetValue(token, _) = x.GetValue token :> obj
+        interface IAdaptiveResource<IBuffer> with
+            member x.GetValue(token, _) = x.GetValue token
+
     module private Helpers =
 
         let test<'T when 'T : unmanaged> (runtime: IRuntime) (action: IManagedBuffer<'T> -> unit) =
@@ -99,6 +151,146 @@ module ManagedBuffer =
             Expect.equal upload.Offset offset "Unexpected upload offset"
             Expect.equal upload.Size size "Unexpected upload size"
             Expect.sequenceEqual upload.Data data "Unexpected upload data"
+
+    module private WriterCounts =
+        open Helpers
+
+        let private bytes<'T when 'T : unmanaged> (values : 'T[]) =
+            values |> NativePtr.pinArr (fun pointer ->
+                let result = Array.zeroCreate<byte> (values.Length * sizeof<'T>)
+                Marshal.Copy(pointer.Address, result, 0, result.Length)
+                result
+            )
+
+        let private run<'S, 'T when 'S : unmanaged and 'T : unmanaged>
+                       (sourceValue : int -> 'S) (targetValue : int -> 'T)
+                       (firstCount, secondCount) equalView strided lifetime =
+            let context = $"{typeof<'S>.Name}->{typeof<'T>.Name}, counts={firstCount}/{secondCount}, equalView={equalView}, strided={strided}, lifetime={lifetime}"
+            let runtime = CheckedRuntime()
+            let buffer = ManagedBuffer.create<'T> runtime BufferUsage.All BufferStorage.Host
+            let mutable seed = 17
+            let values () = Array.init 96 (fun i -> sourceValue (seed + i))
+            let source = cval (ArrayBuffer(values()) :> IBuffer)
+            let counted = CountedSource(source)
+            let input = if lifetime then counted :> aval<IBuffer> else source :> aval<IBuffer>
+            let offset, step = if strided then 1, 2 else 0, 1
+            let makeView () = BufferView(input, typeof<'S>, offset * sizeof<'S>, (if strided then step * sizeof<'S> else 0))
+            let view = makeView()
+            let other = if equalView then makeView() else view
+            Expect.equal other view $"{context}: equivalent view identity"
+            Expect.equal (obj.ReferenceEquals(view, other)) (not equalView) $"{context}: reference identity"
+            let first = Range1ul(3UL, uint64 (2 + firstCount))
+            let second = Range1ul(80UL, uint64 (79 + secondCount))
+            let expected = Array.copy runtime.Data
+            let tokens = Dictionary<int, IDisposable>()
+            let size = uint64 sizeof<'T>
+            let window (range : Range1ul) = range.Min * size, (range.Size + 1UL) * size
+            let references count = if lifetime then Expect.equal counted.References count $"{context}: writer ownership"
+            let add id (targetView : BufferView) (range : Range1ul) = tokens.Add(id, buffer.Add(targetView, range))
+            let remove id =
+                tokens.[id].Dispose()
+                tokens.Remove id |> ignore
+            let check label ranges =
+                let label = $"{context}, {label}"
+                runtime.Allow(label, ranges |> List.map window)
+                let before = runtime.Uploads
+                force buffer
+                Expect.equal (runtime.Uploads - before) ranges.Length $"{label}: upload count"
+                for range in ranges do
+                    let content = Array.init (int range.Size + 1) (fun i -> targetValue (seed + offset + i * step)) |> bytes
+                    Array.Copy(content, 0, expected, int (range.Min * size), content.Length)
+                Expect.sequenceEqual runtime.Data expected $"{label}: target bytes and neighboring sentinels"
+                runtime.Allow(label, [])
+                force buffer
+                Expect.equal (runtime.Uploads - before) ranges.Length $"{label}: unchanged read uploaded again"
+            let update () =
+                seed <- seed + 19
+                transact (fun () -> source.Value <- ArrayBuffer(values()) :> IBuffer)
+
+            buffer.Acquire()
+            try
+                buffer.Resize(uint64 runtime.Data.Length, true)
+                add 0 view first
+                add 1 other second
+                references (if firstCount = secondCount then 1 else 2)
+                check "initial" [first; second]
+                update()
+                check "updated" [first; second]
+
+                if lifetime then
+                    add 2 other first
+                    check "duplicate target does not upload" []
+                    remove 0
+                    update()
+                    check "duplicate retains first target" [first; second]
+                    remove 2
+                    references 1
+                    update()
+                    check "first count retired" [second]
+                    add 3 view first
+                    references (if firstCount = secondCount then 1 else 2)
+                    check "first count readded" (if firstCount = secondCount then [first; second] else [first])
+                    remove 1
+                    references 1
+                    update()
+                    check "second count retired" [first]
+                    add 4 other second
+                    check "second count readded" (if firstCount = secondCount then [first; second] else [second])
+                    remove 3
+                    remove 4
+                    references 0
+                    update()
+                    check "all writers retired" []
+                    add 5 other second
+                    references 1
+                    check "new active life" [second]
+                    remove 5
+                    references 0
+            finally
+                for token in tokens.Values do token.Dispose()
+                buffer.Release()
+
+        let private matrix counts lifetime =
+            for pair in counts do
+                for equalView in [false; true] do
+                    for strided in [false; true] do
+                        run<byte, byte> byte byte pair equalView strided lifetime
+                        run<int, int64> (fun i -> -1000000 - i) (fun i -> int64 (-1000000 - i)) pair equalView strided lifetime
+
+        let mixedLengths _ =
+            matrix [1, 2; 2, 1; 1, 7; 7, 1; 3, 5; 5, 3; 2, 33; 33, 2] false
+
+        let independentLives _ =
+            matrix [1, 7; 7, 1; 3, 5; 5, 3; 2, 33; 33, 2] true
+
+        let sharingControls _ =
+            matrix [1, 1; 3, 3; 7, 7; 33, 33] true
+            let runtime = CheckedRuntime()
+            let buffer = ManagedBuffer.create<int64> runtime BufferUsage.All BufferStorage.Host
+            buffer.Acquire()
+            try
+                buffer.Resize(uint64 runtime.Data.Length, true)
+                let expected = Array.copy runtime.Data
+                runtime.Allow("constant and scalar controls", [16UL, 16UL; 80UL, 8UL])
+                use constant = buffer.Add(BufferView([| 5; 6 |]), Range1ul(2UL, 3UL))
+                let source = cval 7
+                use scalar = buffer.Add(source :> IAdaptiveValue, 10UL)
+                force buffer
+                Expect.equal runtime.Uploads 2 "Constant view and converted adaptive scalar initial uploads"
+                Array.Copy(bytes [|5L; 6L|], 0, expected, 16, 16)
+                Array.Copy(bytes [|7L|], 0, expected, 80, 8)
+                Expect.sequenceEqual runtime.Data expected "Constant/scalar conversion bytes"
+                runtime.Allow("unchanged scalar", [])
+                force buffer
+                Expect.equal runtime.Uploads 2 "Unchanged scalar uploaded again"
+                runtime.Allow("updated scalar", [80UL, 8UL])
+                transact (fun () -> source.Value <- 11)
+                force buffer
+                Array.Copy(bytes [|11L|], 0, expected, 80, 8)
+                Expect.sequenceEqual runtime.Data expected "Adaptive scalar updated without changing constant bytes or neighbors"
+                Expect.equal runtime.Uploads 3 "Scalar update uploaded once"
+            finally
+                buffer.Release()
 
     module Cases =
         open Helpers
@@ -389,6 +581,10 @@ module ManagedBuffer =
                 "Unrepresentable ranges are rejected before mutation", Cases.unrepresentableRangesRejectedBeforeMutation
                 "Oversized BufferView Add rolls back",                 Cases.oversizedBufferViewDoesNotSubscribe
                 "Overflowing value Add rolls back",                    Cases.overflowingValueAddDoesNotSubscribe
+
+                "Adaptive views respect each target length",           WriterCounts.mixedLengths
+                "Writer lengths retire and revive independently",      WriterCounts.independentLives
+                "Equal-length sharing and scalar controls",            WriterCounts.sharingControls
 
             elif target.IsGpu then
                 "Set",        Cases.set

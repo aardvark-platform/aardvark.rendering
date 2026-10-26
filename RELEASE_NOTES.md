@@ -1,3 +1,5 @@
+- Fixed adaptive managed-buffer writes that reused a buffer view for different target lengths, preventing neighboring-data corruption and incomplete writes after source changes.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
