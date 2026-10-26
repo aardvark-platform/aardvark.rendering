@@ -19,9 +19,20 @@ type UniformProvider private() =
 
     static member Empty = empty
 
+    /// <summary>
+    /// Combines providers with left-biased lookup.
+    /// Every disposal attempts left then right, including duplicate providers and repeated calls.
+    /// A lone failure retains its identity and throwing stack; two failures are aggregated in order without flattening.
+    /// </summary>
     static member union (l : IUniformProvider) (r : IUniformProvider) =
         { new IUniformProvider with
-            member x.Dispose() = l.Dispose(); r.Dispose()
+            member x.Dispose() =
+                try l.Dispose()
+                with first ->
+                    try r.Dispose()
+                    with second -> raise (AggregateException([| first; second |]))
+                    reraise()
+                r.Dispose()
             member x.TryGetUniform(scope : Ag.Scope, name : Symbol) =
                 match l.TryGetUniform(scope, name) with
                 | ValueSome m -> ValueSome m

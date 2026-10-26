@@ -82,6 +82,7 @@ let tests =
             Other.Camera.tests
             Other.ShapeListConcat.tests
             Other.UniformWriter.tests
+            Other.ProviderDisposal.tests
             Other.AdaptiveResource.tests
             Other.Input.tests
             Other.ContextCreation.tests
