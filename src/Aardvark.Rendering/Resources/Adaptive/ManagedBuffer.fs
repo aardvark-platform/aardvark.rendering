@@ -31,6 +31,7 @@ type IManagedBuffer =
     /// Adds a writer that adaptively writes the values in the buffer view to the buffer. The buffer is resized if necessary.
     /// The values are automatically converted if they are not of the buffer element type and there is a known conversion.
     /// Invalid ranges are ignored without observing the buffer view.
+    /// Adaptive writers are shared only for equivalent views with the same target element count.
     /// </summary>
     /// <param name="view">The buffer view to write.</param>
     /// <param name="range">The inclusive range (i.e. min and max element offsets) in the buffer to write to.</param>
@@ -210,14 +211,15 @@ module internal ManagedBufferImplementation =
                         raise <| ArgumentOutOfRangeException(nameof range, range, "The target range exceeds the buffer-view download limit.")
 
                     lock writers (fun _ ->
+                        let input = box (struct (view, count))
                         let writer =
-                            writers.GetOrCreate(view, fun _ ->
+                            writers.GetOrCreate(input, fun _ ->
                                 let data = BufferView.download 0 (int count) view
                                 let converted : aval<'T[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
                                 new ArrayWriter<'T>(x, converted)
                             )
 
-                        x.AddRange(writer, view, range)
+                        x.AddRange(writer, input, range)
                     )
 
         member x.Add(value : IAdaptiveValue, index : uint64) =
