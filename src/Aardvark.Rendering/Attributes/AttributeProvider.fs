@@ -20,9 +20,20 @@ type AttributeProvider private() =
 
     static member Empty = empty
 
+    /// <summary>
+    /// Combines providers with left-biased lookup and enumeration.
+    /// Every disposal attempts left then right, including duplicate providers and repeated calls.
+    /// A lone failure retains its identity and throwing stack; two failures are aggregated in order without flattening.
+    /// </summary>
     static member union (l : IAttributeProvider) (r : IAttributeProvider) =
         { new IAttributeProvider with
-            member x.Dispose() = l.Dispose(); r.Dispose()
+            member x.Dispose() =
+                try l.Dispose()
+                with first ->
+                    try r.Dispose()
+                    with second -> raise (AggregateException([| first; second |]))
+                    reraise()
+                r.Dispose()
             member x.All = Seq.append l.All r.All |> Seq.distinctBy fst
             member x.TryGetAttribute(name : Symbol) =
                 match l.TryGetAttribute(name) with
@@ -30,9 +41,20 @@ type AttributeProvider private() =
                 | ValueNone -> r.TryGetAttribute(name)
         }
 
+    /// <summary>
+    /// Runs the callback then disposes the wrapped provider on every disposal, even if the callback fails.
+    /// A lone failure retains its identity and throwing stack; two failures are aggregated in order without flattening.
+    /// Repeated calls repeat both stages.
+    /// </summary>
     static member onDispose (callback : unit -> unit) (a : IAttributeProvider) =
         { new IAttributeProvider with
-            member x.Dispose() = callback(); a.Dispose()
+            member x.Dispose() =
+                try callback()
+                with first ->
+                    try a.Dispose()
+                    with second -> raise (AggregateException([| first; second |]))
+                    reraise()
+                a.Dispose()
             member x.All = a.All
             member x.TryGetAttribute(name : Symbol) = a.TryGetAttribute name
         }

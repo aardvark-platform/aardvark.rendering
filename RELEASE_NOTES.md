@@ -1,3 +1,5 @@
+- Fixed composed attribute/uniform provider disposal to finish ordered cleanup after callback failures, preserving lone exceptions and reporting simultaneous failures without flattening existing aggregates.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
