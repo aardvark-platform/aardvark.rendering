@@ -1,3 +1,5 @@
+- Reduced per-block CPU allocations when decoding BC1/BC2/BC3 textures while preserving pixel output, transparency and alpha.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
