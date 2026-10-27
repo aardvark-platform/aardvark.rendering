@@ -814,14 +814,11 @@ module IndexedGeometryPrimitives =
     module Torus =
         
         module private Impl = 
-            let private triIndices (indices : List<int>) c =
-                indices.AddRange [|c; c + 1; c + 2; c; c + 2; c + 3|]
-
-            let private lineIndices (indices : List<int>) c =
-                indices.AddRange [|c; c + 1; c + 1; c + 2; c + 2; c + 3; c + 3; c|]
-
             let torusWithMode (torus : Torus3d) (majorTessellation : int) (minorTessellation : int) (mode : IndexedGeometryMode) =
-            
+                let cellCount = Checked.(*) (max 0 majorTessellation) (max 0 minorTessellation)
+                let vertexCount = Checked.(*) cellCount 4
+                let indexCount = Checked.(*) cellCount (if mode = IndexedGeometryMode.TriangleList then 6 else 8)
+
                 let majorCircle = torus.GetMajorCircle()
 
                 let tPoints = [| 0..majorTessellation |]
@@ -838,26 +835,50 @@ module IndexedGeometryPrimitives =
                                             )
                                     )
                                 
-                let indices = List<int>()
-                let positions = List<V3d>()
-                let normals = List<V3d>()
+                let indices = Array.zeroCreate<int> indexCount
+                let positions = Array.zeroCreate<V3f> vertexCount
+                let normals = Array.zeroCreate<V3f> vertexCount
+                let mutable c = 0
+                let mutable k = 0
 
                 for i in 1..tPoints.Length-1 do
                     for j in 1..tPoints.[i].Length-1 do
-                        let c = positions.Count
                         match mode with
-                        | IndexedGeometryMode.TriangleList -> triIndices indices c
-                        | IndexedGeometryMode.LineList -> lineIndices indices c
+                        | IndexedGeometryMode.TriangleList ->
+                            indices.[k] <- c
+                            indices.[k + 1] <- c + 1
+                            indices.[k + 2] <- c + 2
+                            indices.[k + 3] <- c
+                            indices.[k + 4] <- c + 2
+                            indices.[k + 5] <- c + 3
+                            k <- k + 6
+                        | IndexedGeometryMode.LineList ->
+                            indices.[k] <- c
+                            indices.[k + 1] <- c + 1
+                            indices.[k + 2] <- c + 1
+                            indices.[k + 3] <- c + 2
+                            indices.[k + 4] <- c + 2
+                            indices.[k + 5] <- c + 3
+                            indices.[k + 6] <- c + 3
+                            indices.[k + 7] <- c
+                            k <- k + 8
                         | _ -> failwith "implement me"
-                        let quad = [| tPoints.[i].[j]; tPoints.[i].[j - 1]; tPoints.[i - 1].[j - 1]; tPoints.[i - 1].[j] |]
-                        positions.AddRange quad
-                        normals.AddRange (Triangle3d(quad).Normal |> Array.replicate 4)
-            
-                let pos = positions |> Seq.map V3f |> Seq.toArray
-                let idx = indices   |> Seq.toArray
-                let norm = normals |> Seq.map V3f |> Seq.toArray
+                        let p0 = tPoints.[i].[j]
+                        let p1 = tPoints.[i].[j - 1]
+                        let p2 = tPoints.[i - 1].[j - 1]
+                        let p3 = tPoints.[i - 1].[j]
+                        positions.[c] <- V3f p0
+                        positions.[c + 1] <- V3f p1
+                        positions.[c + 2] <- V3f p2
+                        positions.[c + 3] <- V3f p3
+                        let normal = V3f(Triangle3d(p0, p1, p2).Normal)
+                        normals.[c] <- normal
+                        normals.[c + 1] <- normal
+                        normals.[c + 2] <- normal
+                        normals.[c + 3] <- normal
+                        c <- c + 4
 
-                idx,pos,norm
+                indices,positions,normals
         
             let torus (torus : Torus3d) (color : C4b) (majorTessellation : int) (minorTessellation : int) (mode : IndexedGeometryMode) =
                 let (idx,pos,norm) = torusWithMode torus majorTessellation minorTessellation mode

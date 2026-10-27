@@ -1,3 +1,5 @@
+- Reduced torus mesh construction allocations while preserving topology, flat normals, colors and aliases. Unrepresentable output counts are rejected with `OverflowException`.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
