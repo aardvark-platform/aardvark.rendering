@@ -1,3 +1,5 @@
+- Fixed adaptive managed-buffer writes to retry failed and unattempted live writers after source-evaluation or upload failures without requiring another input change, while retaining newly scheduled updates and completed writes.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.
