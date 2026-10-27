@@ -445,25 +445,31 @@ module BlockCompression =
             let pColors = src |> NativePtr.ofNativeInt<uint16>
             let pIndices = (src + 4n) |> NativePtr.ofNativeInt<uint8>
 
-            let colors = Array.zeroCreate 4
-
-            colors.[0] <- R5G6B5(pColors.[0]).ToC4b()
-            colors.[1] <- R5G6B5(pColors.[1]).ToC4b()
+            let color0 = R5G6B5(pColors.[0]).ToC4b()
+            let color1 = R5G6B5(pColors.[1]).ToC4b()
+            let mutable color2 = C4b.Zero
+            let mutable color3 = C4b.Zero
 
             // Only BC1 selects three colors plus transparency by endpoint order; BC2/BC3 always use four RGB colors.
             if forceFourColors || pColors.[0] > pColors.[1] then
-                colors.[2] <- lerp colors.[0] colors.[1] (1.0f / 3.0f)
-                colors.[3] <- lerp colors.[0] colors.[1] (2.0f / 3.0f)
+                color2 <- lerp color0 color1 (1.0f / 3.0f)
+                color3 <- lerp color0 color1 (2.0f / 3.0f)
             else
-                colors.[2] <- lerp colors.[0] colors.[1] 0.5f
-                colors.[3] <- C4b.Zero
+                color2 <- lerp color0 color1 0.5f
+                color3 <- C4b.Zero
 
             for y = offset.Y to size.Y - 1 do
                 let row = int pIndices.[y]
 
                 for x = offset.X to size.X - 1 do
                     let index = (row >>> (2 * x)) &&& 0x03
-                    dst.SetC4b(x, y, colors.[index])
+                    let color =
+                        match index with
+                        | 0 -> color0
+                        | 1 -> color1
+                        | 2 -> color2
+                        | _ -> color3
+                    dst.SetC4b(x, y, color)
 
         let decode offset src dst dstInfo =
             decodeRgb false offset src dst dstInfo

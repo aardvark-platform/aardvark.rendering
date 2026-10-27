@@ -610,6 +610,48 @@ module TextureCompression =
                         for layout in layouts do
                             check mode channels layout offset size blocks "Mixed handcrafted blocks with distinct selector rows"
 
+        let consecutive() =
+            for mode in [CompressionMode.BC1; CompressionMode.BC2; CompressionMode.BC3] do
+                for channels in (if mode = CompressionMode.BC1 then [3; 4] else [4]) do
+                    for layout in layouts do
+                        let dx, dy, dc =
+                            match layout with
+                            | "packed" -> channels, 4 * channels, 1
+                            | "padded" -> channels + 2, 7 * (channels + 2) + 5, 1
+                            | "planar" -> 1, 7, 49
+                            | _ -> channels + 1, -(7 * (channels + 1) + 5), 1
+                        let origin = 32 - min 0 (3 * dy)
+                        let length = origin + 3 * dx + max 0 (3 * dy) + (channels - 1) * dc + 33
+                        let destination = Array.create length 0xCDuy
+                        let expected = Array.copy destination
+                        let first, _ = block mode 0 0 false
+                        let source = Array.create (first.Length + 32) 0xD7uy
+                        source |> NativePtr.pinArr (fun src ->
+                            destination |> NativePtr.pinArr (fun dst ->
+                                for step in 0 .. palettes.Length * 4 - 1 do
+                                    let palette = if step % 2 = 0 then (step / 2) % palettes.Length else palettes.Length - 1 - (step / 2) % palettes.Length
+                                    let payload, colors = block mode palette (step % (alphaCases mode).Length) (step % 2 = 0)
+                                    System.Array.Copy(payload, 0, source, 16, payload.Length)
+                                    let original = Array.copy source
+                                    let offset, size =
+                                        match step % 4 with
+                                        | 0 -> V2i.Zero, V2i(4, 4)
+                                        | 1 -> V2i(1, 1), V2i(2, 2)
+                                        | 2 -> V2i(3, 3), V2i(1, 1)
+                                        | _ -> V2i.Zero, V2i(3, 2)
+                                    for y in 0 .. size.Y - 1 do
+                                        for x in 0 .. size.X - 1 do
+                                            let color = colors.[(y + offset.Y) * 4 + x + offset.X]
+                                            for c in 0 .. channels - 1 do
+                                                expected.[origin + x * dx + y * dy + c * dc] <- color.[c]
+                                    let info = VolumeInfo(int64 origin, V3l(size.X, size.Y, channels), V3l(dx, dy, dc))
+                                    BlockCompression.decode mode offset size (src.Address + 16n) dst.Address info
+                                    let context = $"{mode}, channels={channels}, {layout}, step={step}, palette={palette}, offset={offset}, size={size}"
+                                    Expect.sequenceEqual source original (context + ": source and guards")
+                                    Expect.sequenceEqual destination expected (context + ": reused destination pixels, untouched bytes and guards")
+                            )
+                        )
+
     let tests (target: TestTarget) =
         [
             "Encoding.Chromatic endpoint variation",           EndpointEncoding.chromaticBlocks
@@ -622,6 +664,7 @@ module TextureCompression =
             "BC2 handcrafted four-color and explicit alpha",     Handcrafted.palette CompressionMode.BC2
             "BC3 handcrafted four-color and interpolated alpha", Handcrafted.palette CompressionMode.BC3
             "Handcrafted partial blocks and guarded windows",    Handcrafted.windows
+            "Handcrafted palettes in reused guarded storage",    Handcrafted.consecutive
 
             "BC1 encode",           Cases.encodeBC1
             "BC1a encode",          Cases.encodeBC1a
