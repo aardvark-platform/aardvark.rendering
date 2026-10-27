@@ -245,8 +245,19 @@ module internal ManagedBufferImplementation =
             base.Destroy()
 
         override x.Compute(t, rt) =
-            for w in pending.GetAndClear() do
-                w.Write(t)
+            let batch = pending.GetAndClear()
+            try
+                for w in batch do
+                    w.Write(t)
+            with _ ->
+                // Failed and unattempted evaluations remain dirty. Merge only live writers,
+                // retaining updates scheduled while this detached batch was processed.
+                lock writers (fun _ ->
+                    for w in batch do
+                        if w.OutOfDate && writers.ContainsValue w then
+                            pending.Add w |> ignore
+                )
+                reraise()
 
             base.Compute(t, rt)
 

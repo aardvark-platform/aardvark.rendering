@@ -12,6 +12,7 @@ let tests =
             Buffer.BufferToArray.tests
             Buffer.AttributeBuffer.tests
             Buffer.ManagedBuffer.tests
+            Buffer.ManagedBufferRecovery.tests
             Buffer.IndirectBuffer.tests
             Buffer.BufferView.tests
             Buffer.BufferViewBoundaries.tests

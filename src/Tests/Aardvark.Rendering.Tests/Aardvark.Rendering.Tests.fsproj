@@ -49,6 +49,7 @@
     <Compile Include="Tests\Buffer\ToArray.fs" />
     <Compile Include="Tests\Buffer\Attributes.fs" />
     <Compile Include="Tests\Buffer\ManagedBuffer.fs" />
+    <Compile Include="Tests\Buffer\ManagedBufferRecovery.fs" />
     <Compile Include="Tests\Buffer\IndirectBuffer.fs" />
     <Compile Include="Tests\Buffer\BufferView.fs" />
     <Compile Include="Tests\Buffer\ViewBoundaries.fs" />
