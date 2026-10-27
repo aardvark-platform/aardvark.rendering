@@ -65,6 +65,7 @@ let tests =
             IndexedGeometry.Operations.tests
             IndexedGeometry.Sphere.tests
             IndexedGeometry.CylinderNormals.tests
+            IndexedGeometry.Torus.tests
             IndexedGeometry.PrimitiveSequences.tests
         ]
 
