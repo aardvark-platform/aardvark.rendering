@@ -520,14 +520,10 @@ module ShapeList =
     let translate (shift : V2d) (l : ShapeList) =
         let renderTrafo = l.renderTrafo * Trafo3d.Translation(V3d(shift, 0.0))
         
-        { 
+        { l with
             bounds = l.bounds.Translated shift
             textBounds = l.textBounds.Translated shift
             renderTrafo = renderTrafo
-            concreteShapes = l.concreteShapes
-            zRange = l.zRange
-            flipViewDependent = l.flipViewDependent
-            renderStyle = RenderStyle.Normal
         }
         
     /// Scales the ShapeList (around its zero position)
@@ -536,14 +532,10 @@ module ShapeList =
         let textBounds = Box2d(l.textBounds.Min * scale, l.textBounds.Max * scale)
         let renderTrafo = l.renderTrafo * Trafo3d.Scale(V3d(scale, 1.0))
         
-        { 
+        { l with
             bounds = bounds
             textBounds = textBounds
             renderTrafo = renderTrafo
-            concreteShapes = l.concreteShapes
-            zRange = l.zRange
-            flipViewDependent = l.flipViewDependent
-            renderStyle = RenderStyle.Normal
         }
 
     /// Appends two ShapeLists.

@@ -1,3 +1,5 @@
+- Fixed `ShapeList.translate` and `ShapeList.scale` to retain `Billboard` and `NoBoundary` rendering modes, including identity transformations.
+
 ### 5.6.11
 - Update to .NET 10
 - Fixed `LockedSet.Clear` to clear the current backing store after acquiring its monitor without modifying batches detached by `GetAndClear`.

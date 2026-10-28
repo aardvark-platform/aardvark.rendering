@@ -97,6 +97,7 @@
     <Compile Include="Tests\Utilities\LockedSetTests.fs" />
     <Compile Include="Tests\Other\ShapeList\ShapeListBenchmarks.fs" />
     <Compile Include="Tests\Other\ShapeList\ShapeListConcatTests.fs" />
+    <Compile Include="Tests\Other\ShapeList\ShapeListTransformTests.fs" />
     <Compile Include="Tests\Other\Camera.fs" />
     <Compile Include="Tests\Other\UniformWriterTests.fs" />
     <Compile Include="Tests\Other\AdaptiveResourceTest.fs" />
