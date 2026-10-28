@@ -1,3 +1,4 @@
+- Reduced scene-graph bounds-recalculation allocations for large vertex and index buffers while preserving per-vertex transformed bounds.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 
 ### 5.6.11
