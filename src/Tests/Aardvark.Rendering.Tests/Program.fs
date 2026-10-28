@@ -81,6 +81,7 @@ let tests =
         testAllTargets "Other" [
             Other.Camera.tests
             Other.ShapeListConcat.tests
+            Other.ShapeListTransforms.tests
             Other.UniformWriter.tests
             Other.AdaptiveResource.tests
             Other.Input.tests
