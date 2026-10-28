@@ -100,14 +100,18 @@ module BoundingBoxExtensions =
                     |> PrimitiveValueConverter.convertArray indexBuffer.ElementType
 
                 (positions, indices, trafo) |||> AVal.map3 (fun positions indices trafo ->
-                    let vertices = indices |> Array.map (fun i -> positions.[i] |> Mat.transformPos trafo.Forward)
-                    Box3d vertices
+                    let mutable bounds = Box3d.Invalid
+                    for i in indices do
+                        bounds.ExtendBy(positions.[i] |> Mat.transformPos trafo.Forward)
+                    bounds
                 )
 
             | _ ->
                 (positions, trafo) ||> AVal.map2 (fun positions trafo ->
-                    let vertices = positions |> Array.map (Mat.transformPos trafo.Forward)
-                    Box3d vertices
+                    let mutable bounds = Box3d.Invalid
+                    for position in positions do
+                        bounds.ExtendBy(position |> Mat.transformPos trafo.Forward)
+                    bounds
                 )
 
     type RenderObject with

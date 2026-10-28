@@ -384,6 +384,142 @@ module SceneGraph =
             // Lost recent hits may persist after contention; fallback must still preserve bounds and identity.
             for iteration in 0 .. 95 do check $"after contention, iteration={iteration}" (iteration % scopes.Length)
 
+        type private BoundsBuffer(data: Array) =
+            let buffer = ArrayBuffer data
+            let mutable downloads = 0
+            member _.Downloads = downloads
+            interface INativeBuffer with
+                member _.SizeInBytes = buffer.SizeInBytes
+                member _.Use action =
+                    downloads <- downloads + 1
+                    buffer.Use action
+
+        let private sameBounds context (actual: Box3d) (expected: Box3d) =
+            for axis in 0 .. 2 do
+                Expect.equal (BitConverter.DoubleToInt64Bits actual.Min.[axis]) (BitConverter.DoubleToInt64Bits expected.Min.[axis]) $"{context}: min axis={axis}"
+                Expect.equal (BitConverter.DoubleToInt64Bits actual.Max.[axis]) (BitConverter.DoubleToInt64Bits expected.Max.[axis]) $"{context}: max axis={axis}"
+
+        let private legacyBounds (positions: V3d[]) (indices: int[] option) (trafo: Trafo3d) =
+            match indices with
+            | Some indices -> indices |> Array.map (fun i -> Mat.transformPos trafo.Forward positions.[i]) |> Box3d
+            | None -> positions |> Array.map (Mat.transformPos trafo.Forward) |> Box3d
+
+        let private accumulationQuery viaObject elementType (positions: aval<IBuffer>) indices local outer =
+            let leaf =
+                Sg.draw IndexedGeometryMode.TriangleList
+                |> Sg.vertexBuffer DefaultSemantic.Positions (BufferView(positions, elementType))
+                |> (fun sg -> match indices with Some view -> Sg.indexBuffer view sg | None -> sg)
+                |> Sg.trafo local
+            if viaObject then
+                let ro = getSingleRenderObject leaf
+                let scope = scopeWithModelTrafo outer
+                ro.GetBoundingBox scope, (fun () -> AVal.force ro.AttributeScope.ModelTrafo * AVal.force scope.ModelTrafo)
+            else
+                let scene = leaf |> Sg.trafo outer
+                let ro = getSingleRenderObject scene
+                scene.GlobalBoundingBox Ag.Scope.Root, (fun () -> AVal.force ro.AttributeScope.ModelTrafo)
+
+        let accumulationCompatibility _ =
+            let datasets =
+                [ [||]
+                  [| V3d(-3.0, 2.0, 1.0); V3d(4.0, -5.0, 2.0); V3d(0.25, 7.0, -9.0); V3d(1000.0) |]
+                  [| V3d(-0.0, 0.0, -0.0); V3d(0.0, -0.0, 0.0); V3d(-0.0) |]
+                  [| V3d(Double.NaN, 2.0, -1.0); V3d(3.0, Double.NaN, 4.0); V3d(-2.0, 5.0, Double.NaN) |]
+                  [| V3d(Double.PositiveInfinity, -1.0, 2.0); V3d(Double.NegativeInfinity, 3.0, -4.0); V3d.Zero |]
+                  [| V3d(Double.NaN); V3d(Double.NaN) |]
+                  [| V3d(Double.MinValue, Double.MaxValue, 0.0); V3d(1e30, -1e30, Double.Epsilon) |] ]
+            let frames = [Trafo3d.Identity; Trafo3d.RotationZ(0.37) * Trafo3d.Scale(2.0, -0.5, 1.25) * Trafo3d.Translation(3.0, -7.0, 11.0)]
+            for viaObject in [false; true] do
+                for single in [false; true] do
+                    for dataIndex, data in List.indexed datasets do
+                        let data : Array = if single then data |> Array.map V3f :> Array else Array.copy data :> Array
+                        let expected = if single then (data :?> V3f[]) |> Array.map V3d else data :?> V3d[]
+                        let selections =
+                            [ None; Some [||]
+                              if expected.Length > 0 then
+                                Some (Array.init expected.Length id)
+                                Some (Array.init expected.Length (fun i -> expected.Length - i - 1))
+                                Some [|expected.Length - 1; 0; expected.Length - 1; 0; 0|] ]
+                        for selection in selections do
+                            for convertedIndex in (if selection.IsSome then [false; true] else [false]) do
+                                for frame in frames do
+                                    let source = BoundsBuffer data
+                                    let indexData = selection |> Option.map (fun indices -> if convertedIndex then Array.map uint16 indices :> Array else indices :> Array)
+                                    let indexSource = indexData |> Option.map BoundsBuffer
+                                    let indexView = (indexSource, indexData) ||> Option.map2 (fun b a -> BufferView(AVal.constant (b :> IBuffer), a.GetType().GetElementType()))
+                                    let value, effective = accumulationQuery viaObject (data.GetType().GetElementType()) (AVal.constant (source :> IBuffer)) indexView (AVal.constant frame) (AVal.constant Trafo3d.Identity)
+                                    let context = $"object={viaObject}, single={single}, dataset={dataIndex}, selection={selection}, convertedIndex={convertedIndex}, frame={frame.Forward}"
+                                    let actual = AVal.force value
+                                    sameBounds context actual (legacyBounds expected selection (effective()))
+                                    sameBounds (context + ": cached") (AVal.force value) actual
+                                    Expect.equal source.Downloads 1 (context + ": positions downloaded once")
+                                    indexSource |> Option.iter (fun b -> Expect.equal b.Downloads 1 (context + ": indices downloaded once"))
+
+        let accumulationAdaptiveInputs _ =
+            for viaObject in [false; true] do
+                for indexed in [false; true] do
+                    let data = cval ([| V3f(-2.0f, 1.0f, 0.0f); V3f(4.0f, -3.0f, 2.0f); V3f(0.5f, 5.0f, -1.0f) |])
+                    let selection = cval [|2; 0; 2|]
+                    let positions = data |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
+                    let indices = selection |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
+                    let local, outer = cval Trafo3d.Identity, cval Trafo3d.Identity
+                    let view = if indexed then Some(BufferView(indices, typeof<int>)) else None
+                    let value, effective = accumulationQuery viaObject typeof<V3f> positions view local outer
+                    let check stage =
+                        let actual = AVal.force value
+                        let expected = legacyBounds (data.Value |> Array.map V3d) (if indexed then Some selection.Value else None) (effective())
+                        sameBounds $"{stage}, object={viaObject}, indexed={indexed}" actual expected
+                    check "initial"
+                    transact (fun () -> data.Value <- [|V3f(8.0f, -4.0f, 1.0f); V3f(-6.0f, 2.0f, 7.0f); V3f(1.0f, 9.0f, -3.0f)|])
+                    check "positions"
+                    transact (fun () -> selection.Value <- [|1; 1; 1; 0|])
+                    check "repeated indices"
+                    transact (fun () -> local.Value <- Trafo3d.RotationZ(0.41) * Trafo3d.Scale(2.0, 0.5, 1.25))
+                    check "local transform"
+                    transact (fun () -> outer.Value <- Trafo3d.Translation(13.0, -17.0, 19.0))
+                    check "outer transform"
+                    if indexed then
+                        for invalid in [[|0; -1|]; [|2; 3|]; [|Int32.MaxValue|]] do
+                            transact (fun () -> selection.Value <- invalid)
+                            Expect.throwsT<IndexOutOfRangeException> (fun () -> AVal.force value |> ignore) $"invalid indices={invalid}"
+                            transact (fun () -> selection.Value <- [|2; 0; 2|])
+                            check "valid after invalid"
+                        transact (fun () -> selection.Value <- [||])
+                        check "empty selection"
+                    transact (fun () -> data.Value <- [||]; selection.Value <- [||])
+                    check "empty positions"
+                    transact (fun () -> data.Value <- [|V3f(1.0f, 2.0f, 3.0f)|]; selection.Value <- [|0; 0|])
+                    check "repopulated"
+
+        let transformOnlyStorage _ =
+            for indexed in [false; true] do
+                let measure count =
+                    let data = Array.init count (fun i -> V3d(float i, float (i % 13), float (i % 7)))
+                    let source = BoundsBuffer data
+                    let indices = BoundsBuffer(Array.init count (fun i -> count - i - 1))
+                    let view = if indexed then Some(BufferView(AVal.constant (indices :> IBuffer), typeof<int>)) else None
+                    let local = cval Trafo3d.Identity
+                    let value, effective = accumulationQuery true typeof<V3d> (AVal.constant (source :> IBuffer)) view local (AVal.constant Trafo3d.Identity)
+                    let frames = [|Trafo3d.Identity; Trafo3d.Translation(1.0, -2.0, 3.0)|]
+                    let run i =
+                        transact (fun () -> local.Value <- frames.[i % 2])
+                        value.GetValue()
+                    for i in 0 .. 15 do run i |> ignore
+                    let mutable result = Box3d.Invalid
+                    let before = GC.GetAllocatedBytesForCurrentThread()
+                    for i in 0 .. 15 do result <- run i
+                    let allocated = (GC.GetAllocatedBytesForCurrentThread() - before) / 16L
+                    sameBounds $"count={count}, indexed={indexed}" result (legacyBounds data (if indexed then Some(Array.init count (fun i -> count - i - 1)) else None) (effective()))
+                    Expect.equal source.Downloads 1 "Transform-only recalculation reused downloaded positions"
+                    Expect.equal indices.Downloads (if indexed then 1 else 0) "Transform-only recalculation reused downloaded indices"
+                    let cached = value.GetValue()
+                    sameBounds "cached after recalculation" cached result
+                    allocated
+                let small = measure 1
+                for count in [4096; 65536] do
+                    let large = measure count
+                    Expect.isLessThanOrEqual large (small + 16384L) $"count={count}, indexed={indexed}: transform-only allocation must not grow with selected vertices; small={small}, large={large} B/recalculation"
+
         let renderNode _ =
             let positions = [| V3f(-0.5f, -0.25f, 0.0f); V3f(0.0f, -10.0f, 5.0f); V3f(3.0f, 7.0f, -7.0f) |]
 
@@ -1319,6 +1455,10 @@ module SceneGraph =
                 "Bounding Box.Scope-aware cache root and invalid bounds",   BoundingBox.rootAndInvalid
                 "Bounding Box.Scope-aware cache concurrent first lookup",   BoundingBox.concurrentSameScope
                 "Bounding Box.Scope-aware cache concurrent warmed lookup",  BoundingBox.concurrentWarmedScopes
+
+                "Bounding Box.Transformed accumulation compatibility",  BoundingBox.accumulationCompatibility
+                "Bounding Box.Accumulation adaptive inputs",            BoundingBox.accumulationAdaptiveInputs
+                "Bounding Box.Transform-only recalculation storage",    BoundingBox.transformOnlyStorage
 
                 "Picking.DrawCallInfo subranges",                    Picking.drawCallRanges
                 "Picking.Automatic FaceVertexCount",                 Picking.automaticFaceVertexCount
