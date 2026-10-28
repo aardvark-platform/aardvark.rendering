@@ -21,8 +21,8 @@ type ClearColor =
     new (value : V4d) = { Float = V4f value; Integer = V4i value }
     new (value : C3f) = { Float = V4f value; Integer = V4i (V4f value) }
     new (value : C4f) = { Float = V4f value; Integer = V4i (V4f value) }
-    new (value : C3d) = { Float = V4f value; Integer = V4i (V4f value) }
-    new (value : C4d) = { Float = V4f value; Integer = V4i (V4f value) }
+    new (value : C3d) = { Float = V4f value; Integer = V4i (V4d value) }
+    new (value : C4d) = { Float = V4f value; Integer = V4i (V4d value) }
 
     static member inline op_Implicit(value : V2f) = ClearColor(value)
     static member inline op_Implicit(value : V3f) = ClearColor(value)

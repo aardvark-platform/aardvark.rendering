@@ -1,3 +1,4 @@
+- Fixed integer clears from double-precision `C3d` and `C4d` colors to avoid rounding channels through single precision; floating-point clear values and the implicit alpha of `C3d` remain unchanged.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 
 ### 5.6.11
