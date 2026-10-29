@@ -1,3 +1,4 @@
+- Fixed instance placement at large coordinates by composing double-precision instance and child transforms before converting the resulting forward and inverse matrices to float.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 
 ### 5.6.11

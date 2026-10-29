@@ -46,6 +46,7 @@ let tests =
             Rendering.Commands.tests
             Rendering.LodRenderer.tests
             Rendering.SceneGraph.tests
+            Rendering.InstancingPrecision.tests
         ]
 
         testAllTargets "Compute" [
