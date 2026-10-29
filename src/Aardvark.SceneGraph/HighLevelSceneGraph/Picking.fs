@@ -45,8 +45,15 @@ module ``Sg Picking Extensions`` =
                 |> Box3d
 
         let private transformRay (trafo : Trafo3d) (ray : Ray3d) =
-            let o = trafo.Forward.TransformPosProj ray.Origin
-            let d = trafo.Forward.TransformPosProj (ray.Origin + ray.Direction) - o
+            let m = trafo.Forward
+            let o = m.TransformPosProj ray.Origin
+            // Affine directions use only the linear component: subtracting transformed
+            // points can erase small directions at large coordinates. Keep their length.
+            let d =
+                if m.M30 = 0.0 && m.M31 = 0.0 && m.M32 = 0.0 && m.M33 = 1.0 then
+                    m.TransformDir ray.Direction
+                else
+                    m.TransformPosProj (ray.Origin + ray.Direction) - o
             Ray3d(o, d)
 
         let ofShape (shape : PickShape) =

@@ -46,6 +46,7 @@ let tests =
             Rendering.Commands.tests
             Rendering.LodRenderer.tests
             Rendering.SceneGraph.tests
+            Rendering.PickingRayTransform.tests
         ]
 
         testAllTargets "Compute" [

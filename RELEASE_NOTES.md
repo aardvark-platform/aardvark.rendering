@@ -1,3 +1,4 @@
+- Fixed affine picking to preserve ray directions at large world or local coordinates, including non-unit directions and finite ray intervals.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 
 ### 5.6.11
