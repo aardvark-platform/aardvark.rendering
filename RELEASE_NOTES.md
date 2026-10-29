@@ -1,3 +1,4 @@
+- Typed buffer creation now rejects negative element counts with `ArgumentOutOfRangeException` for `count` before requesting backend allocation. Zero and valid counts retain their existing behavior.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 
 ### 5.6.11
