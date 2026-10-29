@@ -6,6 +6,7 @@ let tests =
     Test.ofList [
         testAllTargets "Buffers" [
             Buffer.AdaptiveBufferTests.tests
+            Buffer.BufferCreate.tests
             Buffer.BufferCopy.tests
             Buffer.BufferUpload.tests
             Buffer.BufferDownload.tests
