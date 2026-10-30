@@ -11,7 +11,150 @@ open Expecto
 
 module TextureDownload =
 
+    module private DefaultDownload =
+        let private formats =
+            [| TextureFormat.R8, PixFormat.ByteGray
+               TextureFormat.R16, PixFormat.UShortGray
+               TextureFormat.Rgb8, PixFormat.ByteRGB
+               TextureFormat.Rgb16, PixFormat.UShortRGB
+               TextureFormat.Rgba8, PixFormat.ByteRGBA
+               TextureFormat.Rgba16, PixFormat.UShortRGBA
+               TextureFormat.Rg8Snorm, PixFormat(typeof<int8>, Col.Format.RG)
+               TextureFormat.Rg16Snorm, PixFormat(typeof<int16>, Col.Format.RG)
+               TextureFormat.Rg8ui, PixFormat(typeof<byte>, Col.Format.RG)
+               TextureFormat.Rg16ui, PixFormat(typeof<uint16>, Col.Format.RG)
+               TextureFormat.Rg8i, PixFormat(typeof<int8>, Col.Format.RG)
+               TextureFormat.Rg16i, PixFormat(typeof<int16>, Col.Format.RG)
+               TextureFormat.Rg16f, PixFormat(typeof<float16>, Col.Format.RG)
+               TextureFormat.Rg32f, PixFormat(typeof<float32>, Col.Format.RG)
+               TextureFormat.CompressedRgRgtc2, PixFormat.ByteRGB
+               TextureFormat.CompressedSignedRgRgtc2, PixFormat.SByteRGB
+               TextureFormat.Rg8, PixFormat(typeof<byte>, Col.Format.RG)
+               TextureFormat.Rg16, PixFormat(typeof<uint16>, Col.Format.RG) |]
+
+        type private RecordingRuntime() =
+            inherit System.Reflection.DispatchProxy()
+            let requests = ResizeArray<Type * ITextureSubResource * V4l * Col.Format * V3i * V3i>()
+            member _.Requests = requests
+            override _.Invoke(method, args) =
+                if method.Name <> "Download" || not method.IsGenericMethod || args.Length <> 5 then
+                    failwithf "Unexpected runtime operation: %s" method.Name
+                let tensorSize = args.[1].GetType().GetProperty("Size").GetValue(args.[1]) :?> V4l
+                requests.Add(method.GetGenericArguments().[0], args.[0] :?> ITextureSubResource,
+                             tensorSize, unbox args.[2], unbox args.[3], unbox args.[4])
+                null
+
+        type private Texture(runtime : ITextureRuntime, format : TextureFormat) =
+            let mutable disposed = 0
+            let mutable name = null
+            member _.Disposals = disposed
+            interface IBackendTexture with
+                member _.Runtime = runtime
+                member _.Dimension = TextureDimension.Texture2D
+                member _.Format = format
+                member _.Size = V3i(32, 24, 1)
+                member _.MipMapLevels = 3
+                member _.Count = 4
+                member _.Samples = 1
+                member _.Handle = 0UL
+                member _.WantMipMaps = true
+                member _.Name with get() = name and set value = name <- value
+                member _.Dispose() = disposed <- disposed + 1
+
+        let mappings _ =
+            for format, expected in formats do
+                let actual = TextureFormat.toDownloadFormat format
+                Expect.equal actual.Type expected.Type $"{format}: element type"
+                Expect.equal actual.Format expected.Format $"{format}: channel semantics"
+                Expect.equal actual.ChannelCount expected.ChannelCount $"{format}: channel count"
+
+        let delegation _ =
+            let runtime = System.Reflection.DispatchProxy.Create<ITextureRuntime, RecordingRuntime>()
+            let recorder = box runtime :?> RecordingRuntime
+            for format, expected in formats do
+                let owner = new Texture(runtime, format)
+                use texture = owner :> IBackendTexture
+                for level in [0; 1; 2] do
+                    for slice in [0; 1; 3] do
+                        for region in [Box2i(); Box2i.Infinite; Box2i.FromMinAndSize(V2i(1, 1), V2i(3, 2))] do
+                            let window =
+                                if region.IsEmpty || region.IsInfinite then
+                                    Box2i.FromMinAndSize(V2i.Zero, V2i(32, 24) >>> level)
+                                else region
+                            for convenience in [false; true] do
+                                recorder.Requests.Clear()
+                                let result =
+                                    if level = 0 && slice = 0 && region = Box2i() then
+                                        if convenience then texture.Download() else runtime.Download(texture)
+                                    elif convenience then texture.Download(level, slice, region)
+                                    else runtime.Download(texture, level, slice, region)
+                                let context = $"{format}, level={level}, slice={slice}, region={region}, convenience={convenience}"
+                                Expect.equal result.PixFormat expected (context + ": image format")
+                                Expect.equal result.ChannelCount expected.ChannelCount (context + ": image channels")
+                                Expect.equal result.Size window.Size (context + ": image size")
+                                Expect.equal recorder.Requests.Count 1 (context + ": one backend download")
+                                let typ, subresource, tensorSize, col, offset, size = recorder.Requests.[0]
+                                Expect.equal typ expected.Type (context + ": backend element type")
+                                Expect.equal col expected.Format (context + ": backend color format")
+                                Expect.equal tensorSize (V4l(int64 window.SizeX, int64 window.SizeY, 1L, int64 expected.ChannelCount)) (context + ": XY and channel layout")
+                                Expect.isTrue (obj.ReferenceEquals(subresource.Texture, texture)) (context + ": texture identity")
+                                Expect.equal (subresource.Aspect, subresource.Level, subresource.Slice) (TextureAspect.Color, level, slice) (context + ": subresource")
+                                Expect.equal offset window.Min.XYO (context + ": offset")
+                                Expect.equal size window.Size.XYI (context + ": extent")
+                                Expect.equal owner.Disposals 0 (context + ": caller retains ownership")
+
     module Cases =
+
+        let private normalizedImage<'T> (convert : int -> 'T) modulus (size : V2i) level slice =
+            let image = PixImage<'T>(Col.Format.RG, size)
+            for y in 0 .. size.Y - 1 do
+                for x in 0 .. size.X - 1 do
+                    let red = (17 * x + 31 * y + 43 * level + 61 * slice) % modulus
+                    let green = (red + modulus / 2 + 13) % modulus
+                    image.Volume.[int64 x, int64 y, 0L] <- convert red
+                    image.Volume.[int64 x, int64 y, 1L] <- convert green
+            image
+
+        let private compareNormalized<'T when 'T : equality> context (expected : PixImage<'T>) (actual : PixImage) =
+            Expect.equal actual.PixFormat (PixFormat(typeof<'T>, Col.Format.RG)) (context + ": image format")
+            Expect.equal actual.ChannelCount 2 (context + ": channel count")
+            Expect.equal actual.Size expected.Size (context + ": image size")
+            try PixImage.compare V2i.Zero expected (actual.AsPixImage<'T>())
+            with error -> failtestf "%s: %O" context error
+
+        let private normalizedWhole<'T when 'T : equality> (runtime : IRuntime) format convert modulus =
+            let image = normalizedImage<'T> convert modulus (V2i(17, 11)) 0 0
+            use texture = runtime.CreateTexture2D(image.Size, format, 1, 1)
+            runtime.Upload(texture, image)
+            compareNormalized $"{format}, runtime whole image" image (runtime.Download(texture))
+            compareNormalized $"{format}, texture whole image" image (texture.Download())
+
+        let normalizedRGWhole (runtime : IRuntime) =
+            normalizedWhole<byte> runtime TextureFormat.Rg8 byte 256
+            normalizedWhole<uint16> runtime TextureFormat.Rg16 uint16 65536
+
+        let private normalizedSubresources<'T when 'T : equality> (runtime : IRuntime) format convert modulus =
+            let size = V2i(32, 24)
+            let levels, slices = 3, 3
+            let images = Array.init slices (fun slice ->
+                Array.init levels (fun level -> normalizedImage<'T> convert modulus (size >>> level) level slice))
+            use texture = runtime.CreateTexture2DArray(size, format, levels = levels, count = slices)
+            for slice in 0 .. slices - 1 do
+                for level in 0 .. levels - 1 do
+                    texture.Upload(images.[slice].[level], level, slice)
+            for slice in 0 .. slices - 1 do
+                for level in 0 .. levels - 1 do
+                    let image = images.[slice].[level]
+                    let crop = Box2i.FromMinAndSize(V2i(1, 2), V2i(3, 2))
+                    for region in [Box2i.FromMinAndSize(V2i.Zero, image.Size); crop] do
+                        let expected = image.SubImage(region)
+                        let context = $"{format}, level={level}, slice={slice}, region={region}"
+                        compareNormalized (context + ", runtime") expected (runtime.Download(texture, level, slice, region))
+                        compareNormalized (context + ", texture") expected (texture.Download(level, slice, region))
+
+        let normalizedRGSubresources (runtime : IRuntime) =
+            normalizedSubresources<byte> runtime TextureFormat.Rg8 byte 256
+            normalizedSubresources<uint16> runtime TextureFormat.Rg16 uint16 65536
 
         let private texture2DWithFormatWithComparer<'T> (runtime : IRuntime)
                                                         (comparer : 'T -> 'T -> string-> unit)
@@ -514,42 +657,50 @@ module TextureDownload =
 
     let tests (target: TestTarget) =
         [
-            "2D r8",                  Cases.texture2Dr8
-            "2D rgba8",               Cases.texture2Drgba8
-            "2D Srgba8",              Cases.texture2DSrgba8
-            "2D rgba16",              Cases.texture2Drgba16
-            "2D rgba16snorm",         Cases.texture2Drgba16snorm
-            "2D rgba32ui",            Cases.texture2Drgba32ui
-            "2D rgba32f",             Cases.texture2Drgba32f
-            "2D mulitsampled",        Cases.texture2DMultisampled
-            "2D level subwindow",     Cases.texture2DSubwindow
-            "2D array mipmapped",     Cases.texture2DArrayMipmapped
+            if target = TestTarget.Cpu then
+                "Default format mappings",     DefaultDownload.mappings
+                "Default download delegation", DefaultDownload.delegation
 
-            "2D compressed BC1",            Cases.texture2DCompressedBC1
-            "2D compressed BC1 subwindow",  Cases.texture2DCompressedBC1Subwindow
-            "2D compressed BC2",            Cases.texture2DCompressedBC2
-            "2D compressed BC2 subwindow",  Cases.texture2DCompressedBC2Subwindow
-            "2D compressed BC3",            Cases.texture2DCompressedBC3
-            "2D compressed BC3 subwindow",  Cases.texture2DCompressedBC3Subwindow
-            "2D compressed BC4u",           Cases.texture2DCompressedBC4u
-            "2D compressed BC4u subwindow", Cases.texture2DCompressedBC4uSubwindow
-            "2D compressed BC5u",           Cases.texture2DCompressedBC5u
-            "2D compressed BC5u subwindow", Cases.texture2DCompressedBC5uSubwindow
+            if target.IsGpu then
+                "Normalized RG whole images",                  Cases.normalizedRGWhole
+                "Normalized RG selected mip slice and region", Cases.normalizedRGSubresources
 
-            "Cube mipmapped",         Cases.textureCubeMipmapped
-            "Cube array mipmapped",   Cases.textureCubeArrayMipmapped
-            "Cube subwindow",         Cases.textureCubeSubwindow
-            "Cube array subwindow",   Cases.textureCubeArraySubwindow
+                "2D r8",                  Cases.texture2Dr8
+                "2D rgba8",               Cases.texture2Drgba8
+                "2D Srgba8",              Cases.texture2DSrgba8
+                "2D rgba16",              Cases.texture2Drgba16
+                "2D rgba16snorm",         Cases.texture2Drgba16snorm
+                "2D rgba32ui",            Cases.texture2Drgba32ui
+                "2D rgba32f",             Cases.texture2Drgba32f
+                "2D mulitsampled",        Cases.texture2DMultisampled
+                "2D level subwindow",     Cases.texture2DSubwindow
+                "2D array mipmapped",     Cases.texture2DArrayMipmapped
 
-            "DepthComponent16",         Cases.textureDepthComponent16
-            "DepthComponent24",         Cases.textureDepthComponent24
-            "DepthComponent32",         Cases.textureDepthComponent32
-            "DepthComponent32f",        Cases.textureDepthComponent32f
-            "Depth24Stencil8",          Cases.textureDepth24Stencil8
-            "Depth32fStencil8",         Cases.textureDepth32fStencil8
-            "StencilIndex8",            Cases.textureStencilIndex8
+                "2D compressed BC1",            Cases.texture2DCompressedBC1
+                "2D compressed BC1 subwindow",  Cases.texture2DCompressedBC1Subwindow
+                "2D compressed BC2",            Cases.texture2DCompressedBC2
+                "2D compressed BC2 subwindow",  Cases.texture2DCompressedBC2Subwindow
+                "2D compressed BC3",            Cases.texture2DCompressedBC3
+                "2D compressed BC3 subwindow",  Cases.texture2DCompressedBC3Subwindow
+                "2D compressed BC4u",           Cases.texture2DCompressedBC4u
+                "2D compressed BC4u subwindow", Cases.texture2DCompressedBC4uSubwindow
+                "2D compressed BC5u",           Cases.texture2DCompressedBC5u
+                "2D compressed BC5u subwindow", Cases.texture2DCompressedBC5uSubwindow
 
-            "Arguments out of range",   Cases.argumentsOutOfRange
-            "Volume window validation", Cases.windowValidation
+                "Cube mipmapped",         Cases.textureCubeMipmapped
+                "Cube array mipmapped",   Cases.textureCubeArrayMipmapped
+                "Cube subwindow",         Cases.textureCubeSubwindow
+                "Cube array subwindow",   Cases.textureCubeArraySubwindow
+
+                "DepthComponent16",         Cases.textureDepthComponent16
+                "DepthComponent24",         Cases.textureDepthComponent24
+                "DepthComponent32",         Cases.textureDepthComponent32
+                "DepthComponent32f",        Cases.textureDepthComponent32f
+                "Depth24Stencil8",          Cases.textureDepth24Stencil8
+                "Depth32fStencil8",         Cases.textureDepth32fStencil8
+                "StencilIndex8",            Cases.textureStencilIndex8
+
+                "Arguments out of range",   Cases.argumentsOutOfRange
+                "Volume window validation", Cases.windowValidation
         ]
-        |> prepareCasesGpu "Download" target
+        |> prepareCases "Download" target

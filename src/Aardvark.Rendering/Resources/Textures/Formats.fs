@@ -399,6 +399,7 @@ module TextureFormat =
     let toDownloadFormat =
         LookupTable.lookup [
             TextureFormat.R8, PixFormat.ByteGray
+            TextureFormat.Rg8, PixFormat(typeof<byte>, Col.Format.RG)
             TextureFormat.Bgr8, PixFormat.ByteBGR
             TextureFormat.Bgra8, PixFormat.ByteBGRA
             TextureFormat.Rgba8, PixFormat.ByteRGBA
@@ -408,6 +409,7 @@ module TextureFormat =
             TextureFormat.Srgb8Alpha8, PixFormat.ByteRGBA
 
             TextureFormat.R16, PixFormat.UShortGray
+            TextureFormat.Rg16, PixFormat(typeof<uint16>, Col.Format.RG)
             TextureFormat.Rgba16, PixFormat.UShortRGBA
             TextureFormat.Rgb16, PixFormat.UShortRGB
 
