@@ -1,3 +1,4 @@
+- Reduced CPU allocations when constructing and updating adaptive line and triangle primitives; draw counts now reject integer overflow.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 
 ### 5.6.11

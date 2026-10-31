@@ -1026,6 +1026,213 @@ module SceneGraph =
             GC.KeepAlive short
             GC.KeepAlive long
 
+    module private AdaptivePrimitives =
+        let private lineData count phase =
+            let random = Random(907 + phase)
+            let point() = V3d(random.NextDouble() * 40.0 - 20.0, random.NextDouble(), float phase)
+            Array.init count (fun _ -> Line3d(point(), point()))
+
+        let private triangleData count phase =
+            let random = Random(1709 + phase)
+            let point() = V3d(random.NextDouble() * 40.0 - 20.0, random.NextDouble(), random.NextDouble() + float phase)
+            Array.init count (fun _ -> Triangle3d(point(), point(), point()))
+
+        let private lineReference (values : Line3d[]) =
+            values |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1|]), None
+
+        let private triangleReference (values : Triangle3d[]) =
+            let positions = values |> Array.collect (fun t -> [|V3f t.P0; V3f t.P1; V3f t.P2|])
+            let normals = values |> Array.collect (fun t -> [|V3f t.Normal; V3f t.Normal; V3f t.Normal|])
+            positions, Some normals
+
+        let private bytes<'T when 'T : unmanaged and 'T : struct and 'T : (new : unit -> 'T) and 'T :> ValueType> (values : 'T[]) =
+            System.Runtime.InteropServices.MemoryMarshal.AsBytes(ReadOnlySpan<'T>(values)).ToArray()
+
+        let private renderObject (sg : ISg) =
+            sg.RenderObjects(Ag.Scope.Root).Content |> AVal.force |> Seq.exactlyOne :?> RenderObject
+
+        let private attribute semantic (ro : RenderObject) =
+            match ro.VertexAttributes.TryGetAttribute semantic with
+            | ValueSome view -> view
+            | _ -> failwithf "Missing attribute %A" semantic
+
+        let private array (view : BufferView) = (AVal.force view.Buffer :?> ArrayBuffer).Data :?> V3f[]
+
+        let private calls (ro : RenderObject) =
+            match ro.DrawCalls with
+            | DrawCalls.Direct value -> value
+            | _ -> failwith "Expected direct draw calls"
+
+        let private vectors context (expected : V3f[]) (actual : V3f[]) =
+            Expect.equal actual.Length expected.Length (context + ": length")
+            for i in 0 .. expected.Length - 1 do
+                for channel, e, a in ["x", expected.[i].X, actual.[i].X; "y", expected.[i].Y, actual.[i].Y; "z", expected.[i].Z, actual.[i].Z] do
+                    Expect.equal (BitConverter.SingleToInt32Bits a) (BitConverter.SingleToInt32Bits e) $"{context}, vertex={i}, channel={channel}"
+
+        let private check context mode (color : C4b) ((positions, normals) : V3f[] * V3f[] option) (ro : RenderObject) =
+            Expect.equal ro.Mode mode (context + ": topology")
+            let inspect semantic expected =
+                let view = attribute semantic ro
+                Expect.equal (view.ElementType, view.Offset, view.Stride, view.Normalized) (typeof<V3f>, 0, 0, true) (context + ": layout")
+                Expect.isFalse view.IsSingleValue (context + ": array attribute")
+                vectors context expected (array view)
+                let buffer = AVal.force view.Buffer
+                Expect.isTrue (obj.ReferenceEquals(buffer, AVal.force view.Buffer)) (context + ": cached buffer")
+                Expect.isTrue (obj.ReferenceEquals(array view, array view)) (context + ": cached array")
+            inspect DefaultSemantic.Positions positions
+            match normals with
+            | Some values -> inspect DefaultSemantic.Normals values
+            | None -> ()
+            let draw = AVal.force (calls ro)
+            Expect.equal draw.Length 1 (context + ": draw-call count")
+            let d = draw.[0]
+            Expect.equal (d.FaceVertexCount, d.InstanceCount, d.FirstIndex, d.BaseVertex, d.FirstInstance)
+                         (positions.Length, 1, 0, 0, 0) (context + ": draw fields")
+            Expect.isTrue (obj.ReferenceEquals(draw, AVal.force (calls ro))) (context + ": cached draw array")
+            let colorView = attribute DefaultSemantic.Colors ro
+            Expect.isTrue colorView.IsSingleValue (context + ": scalar color")
+            Expect.equal colorView.ElementType typeof<C4f> (context + ": color type")
+            let colorValue = colorView.SingleValue.Value :?> aval<C4f> |> AVal.force
+            Expect.equal colorValue (C4f color) (context + ": color conversion")
+
+        let private compatibility<'T when 'T : unmanaged and 'T : struct and 'T : (new : unit -> 'T) and 'T :> ValueType> name mode build alias reference (values : 'T[]) =
+            let snapshot = bytes values
+            let expected = reference values
+            for color in [C4b.Red; C4b(17uy, 91uy, 203uy, 7uy)] do
+                let mutable reads = 0
+                let delayed = AVal.delay (fun () -> reads <- reads + 1; values)
+                let scenes = [build (AVal.constant color) (AVal.constant values); alias color values; build (AVal.constant color) delayed]
+                Expect.equal reads 0 (name + ": constant producer remains deferred")
+                for route, scene in List.indexed scenes do
+                    check $"{name}, count={values.Length}, route={route}, color={color}" mode color expected (renderObject scene)
+                    Expect.equal reads (if route = 2 then 1 else 0) (name + ": constant producer evaluated once")
+                    Expect.sequenceEqual (bytes values) snapshot "Source bytes unchanged"
+
+        let contents _ =
+            for count in [0; 1; 17; 257] do
+                compatibility "lines" IndexedGeometryMode.LineList Sg.lines Sg.lines' lineReference (lineData count 0)
+                compatibility "triangles" IndexedGeometryMode.TriangleList Sg.triangles Sg.triangles' triangleReference (triangleData count 0)
+            let nan = BitConverter.Int64BitsToDouble 0x7FF8000000000033L
+            let points = [|V3d(-0.0, 0.0, nan); V3d.PositiveInfinity; V3d.NegativeInfinity; V3d(Double.MaxValue); V3d(1E-300); V3d(16777219.0, -16777219.0, 0.25)|]
+            compatibility "nonfinite lines" IndexedGeometryMode.LineList Sg.lines Sg.lines' lineReference (points |> Array.map (fun p -> Line3d(p, -p)))
+            let triangles =
+                [| Triangle3d(V3d.Zero, V3d.Zero, V3d.Zero)
+                   Triangle3d(V3d.Zero, V3d.One, V3d(2.0))
+                   Triangle3d(V3d.Zero, V3d.YAxis, V3d.XAxis)
+                   Triangle3d(V3d(-0.0, 0.0, -0.0), V3d.XAxis, V3d.YAxis)
+                   Triangle3d(V3d.Zero, V3d(1E-300, 0.0, 0.0), V3d(0.0, 1E-300, 0.0))
+                   Triangle3d(V3d(1E16), V3d(1E16) + V3d(8.0, 0.0, 0.0), V3d(1E16) + V3d(0.0, 8.0, 0.0))
+                   for p in points do Triangle3d(p, V3d.XAxis, V3d.YAxis) |]
+            compatibility "degenerate and nonfinite normals" IndexedGeometryMode.TriangleList Sg.triangles Sg.triangles' triangleReference triangles
+
+        let private adaptive<'T when 'T : unmanaged and 'T : struct and 'T : (new : unit -> 'T) and 'T :> ValueType> name mode build reference makeData hasNormals =
+            let source = cval (makeData 2 0 : 'T[])
+            let mutable reads = 0
+            let producer = AVal.custom (fun token -> reads <- reads + 1; source.GetValue token)
+            let color = cval C4b.Red
+            let ro = build color producer |> renderObject
+            Expect.equal reads 0 (name + ": construction is lazy")
+            let views = [attribute DefaultSemantic.Positions ro] @ (if hasNormals then [attribute DefaultSemantic.Normals ro] else [])
+            let retained = ResizeArray<V3f[] * V3f[]>()
+            for frame, count in List.indexed [0; 1; 1; 7; 0; 257; 3] do
+                let values = makeData count (frame + 1)
+                let snapshot = bytes values
+                let before = reads
+                transact (fun () -> source.Value <- values)
+                check $"{name}, frame={frame}" mode color.Value (reference values) ro
+                Expect.equal reads (before + 1) (name + ": one source read for separate projections")
+                let buffers = views |> List.map (fun v -> AVal.force v.Buffer)
+                let arrays = views |> List.map array
+                let draw = AVal.force (calls ro)
+                for a in arrays do retained.Add(a, Array.copy a)
+                let geometryReads = reads
+                transact (fun () -> color.Value <- (if frame % 2 = 0 then C4b.Green else C4b.Blue))
+                check $"{name}, color-only frame={frame}" mode color.Value (reference values) ro
+                Expect.equal reads geometryReads (name + ": color does not evaluate geometry")
+                for view, buffer, data in List.zip3 views buffers arrays do
+                    Expect.isTrue (obj.ReferenceEquals(buffer, AVal.force view.Buffer) && obj.ReferenceEquals(data, array view)) (name + ": color preserves geometry identity")
+                Expect.isTrue (obj.ReferenceEquals(draw, AVal.force (calls ro))) (name + ": color preserves draw identity")
+                Expect.sequenceEqual (bytes values) snapshot (name + ": adaptive source unchanged")
+                for old, snapshot in retained do vectors (name + ": retained output unchanged") snapshot old
+
+        let updates _ =
+            adaptive "lines" IndexedGeometryMode.LineList Sg.lines lineReference lineData false
+            adaptive "triangles" IndexedGeometryMode.TriangleList Sg.triangles triangleReference triangleData true
+
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
+        let private throwInjected (error : exn) = raise error
+
+        let private failures<'T> name build makeData hasNormals =
+            for projection in ["positions"; "draw"] @ (if hasNormals then ["normals"] else []) do
+                let mutable fail = true
+                let mutable reads = 0
+                let error = InvalidOperationException(name + ": producer")
+                let values = makeData 1 0 : 'T[]
+                let producer = AVal.custom (fun _ -> reads <- reads + 1; if fail then throwInjected error else values)
+                let ro = build (AVal.constant C4b.Red) producer |> renderObject
+                let force () =
+                    match projection with
+                    | "draw" -> AVal.force (calls ro) |> ignore
+                    | "normals" -> attribute DefaultSemantic.Normals ro |> array |> ignore
+                    | _ -> attribute DefaultSemantic.Positions ro |> array |> ignore
+                Expect.equal reads 0 (name + ": producer remains deferred")
+                for _ in 1 .. 2 do
+                    let thrown = try force(); None with e -> Some e
+                    Expect.isTrue (thrown |> Option.exists (fun e -> obj.ReferenceEquals(e, error) && e.StackTrace.Contains "throwInjected")) (name + ": original producer error and stack")
+                fail <- false
+                force()
+                Expect.equal reads 3 (name + ": retry without a new input change")
+                force()
+                Expect.equal reads 3 (name + ": successful result cached")
+            for projection in ["positions"; "draw"] @ (if hasNormals then ["normals"] else []) do
+                let source = cval (null : 'T[])
+                let ro = build (AVal.constant C4b.Red) source |> renderObject
+                let force () =
+                    match projection with
+                    | "draw" -> AVal.force (calls ro) |> ignore
+                    | "normals" -> attribute DefaultSemantic.Normals ro |> array |> ignore
+                    | _ -> attribute DefaultSemantic.Positions ro |> array |> ignore
+                let error = try force(); None with e -> Some e
+                match error with
+                | Some (:? ArgumentNullException as e) when projection <> "draw" -> Expect.equal e.ParamName "array" (name + ": null projection parameter")
+                | Some (:? NullReferenceException) when projection = "draw" -> ()
+                | _ -> failtestf "%s, projection=%s: unexpected null-source outcome %A" name projection error
+                transact (fun () -> source.Value <- makeData 1 1)
+                force()
+
+        let deferredFailures _ =
+            failures "lines" Sg.lines lineData false
+            failures "triangles" Sg.triangles triangleData true
+
+        let private storage<'T> name vertices build makeData hasNormals =
+            for count in [1; 4096] do
+                let inputs = [|makeData count 0; makeData count 1|] : 'T[][]
+                let source = cval inputs.[0]
+                let ro = build (AVal.constant C4b.Red) source |> renderObject
+                let p = attribute DefaultSemantic.Positions ro
+                let projections =
+                    ["positions", int64 (12 * vertices * count), (fun () -> array p |> GC.KeepAlive)
+                     "draw", 0L, (fun () -> AVal.force (calls ro) |> GC.KeepAlive)] @
+                    (if hasNormals then
+                        let n = attribute DefaultSemantic.Normals ro
+                        ["normals", int64 (12 * vertices * count), (fun () -> array n |> GC.KeepAlive)]
+                     else [])
+                for projection, payload, force in projections do
+                    let mutable index = 0
+                    let update () =
+                        index <- 1 - index
+                        transact (fun () -> source.Value <- inputs.[index])
+                        force()
+                    for _ in 1 .. 16 do update()
+                    let before = GC.GetAllocatedBytesForCurrentThread()
+                    for _ in 1 .. 32 do update()
+                    let allocated = (GC.GetAllocatedBytesForCurrentThread() - before) / 32L
+                    Expect.isLessThanOrEqual allocated (payload + 8192L) $"{name}, projection={projection}, count={count}: output={payload} B, allocated={allocated} B/rebuild"
+
+        let projectionStorage _ =
+            storage "lines" 2 Sg.lines lineData false
+            storage "triangles" 3 Sg.triangles triangleData true
+
     module Caching =
         module C = SgFSharpHelpers.Caching
 
@@ -1307,6 +1514,11 @@ module SceneGraph =
                 "General.Check Completeness", General.checkCompleteness
 
                 "Sg.ModelTrafo", Sg.modelTrafo
+
+                "Adaptive primitives.Layouts and aliases",          AdaptivePrimitives.contents
+                "Adaptive primitives.Updates and retained data",    AdaptivePrimitives.updates
+                "Adaptive primitives.Deferred producer failures",   AdaptivePrimitives.deferredFailures
+                "Adaptive primitives.Selective projection storage", AdaptivePrimitives.projectionStorage
 
                 "Bounding Box.RenderNode",        BoundingBox.renderNode
                 "Bounding Box.RenderObjectsNode", BoundingBox.renderObjectsNode
