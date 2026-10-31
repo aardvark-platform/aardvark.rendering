@@ -1,3 +1,4 @@
+- Reduced phi/theta sphere construction allocations while preserving index order and topology; unrepresentable levels now raise OverflowException before geometry allocation.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 
 ### 5.6.11

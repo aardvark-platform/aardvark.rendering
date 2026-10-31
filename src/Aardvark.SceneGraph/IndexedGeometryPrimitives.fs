@@ -481,69 +481,90 @@ module IndexedGeometryPrimitives =
                 )
 
             let indicesTriangles horizontalSegments verticalSegments =
-                let vertexCount = horizontalSegments * verticalSegments + 2
-                let indices =  List<int>()
+                let ringVertices = Checked.(*) horizontalSegments verticalSegments
+                let vertexCount = Checked.(+) ringVertices 2
+                let indices = Array.zeroCreate<int> (Checked.(*) 6 ringVertices)
+                let mutable offset = 0
                 // indices bottom
                 for i in 0.. horizontalSegments-1 do
-                    indices.Add(0)
-                    indices.Add(1 + i)
-                    indices.Add(1 + (i + 1) % horizontalSegments)
+                    indices.[offset] <- 0
+                    indices.[offset + 1] <- 1 + i
+                    indices.[offset + 2] <- 1 + (i + 1) % horizontalSegments
+                    offset <- offset + 3
 
                 // indices rings
                 for i in 0.. verticalSegments - 2 do
                     for j in 0 .. horizontalSegments - 1 do
-
                         let bl = 1 + i * horizontalSegments + j
                         let br = 1 + i * horizontalSegments + (j + 1) % horizontalSegments
                         let tl = bl + horizontalSegments
                         let tr = br + horizontalSegments
-                    
-                        indices.AddRange [tl; br; bl]
-                        indices.AddRange [tl; tr; br]
+                        indices.[offset] <- tl
+                        indices.[offset + 1] <- br
+                        indices.[offset + 2] <- bl
+                        indices.[offset + 3] <- tl
+                        indices.[offset + 4] <- tr
+                        indices.[offset + 5] <- br
+                        offset <- offset + 6
 
                 // indices top
                 for i in 0 .. horizontalSegments-1 do
-                    indices.Add(vertexCount - 1)
-                    indices.Add(vertexCount - 2 - i)
-                    indices.Add(vertexCount - 2 - (i + 1) % horizontalSegments)
-            
+                    indices.[offset] <- vertexCount - 1
+                    indices.[offset + 1] <- vertexCount - 2 - i
+                    indices.[offset + 2] <- vertexCount - 2 - (i + 1) % horizontalSegments
+                    offset <- offset + 3
                 indices
 
             let indicesLines horizontalSegments verticalSegments =
-                let vertexCount = horizontalSegments * verticalSegments + 2
-                let indices =  List<int>()
+                let ringVertices = Checked.(*) horizontalSegments verticalSegments
+                let vertexCount = Checked.(+) ringVertices 2
+                let indices = Array.zeroCreate<int> (Checked.(*) 8 ringVertices)
+                let mutable offset = 0
                 // indices bottom
                 for i in 0.. horizontalSegments-1 do
-                    indices.Add(1 + (i + 1) % horizontalSegments)
-                    indices.Add(1 + i)
-                    indices.Add(1 + i)
-                    indices.Add(0)
+                    indices.[offset] <- 1 + (i + 1) % horizontalSegments
+                    indices.[offset + 1] <- 1 + i
+                    indices.[offset + 2] <- 1 + i
+                    indices.[offset + 3] <- 0
+                    offset <- offset + 4
 
                 // indices rings
                 for i in 0.. verticalSegments - 2 do
                     for j in 0 .. horizontalSegments - 1 do
-
                         let bl = 1 + i * horizontalSegments + j
                         let br = 1 + i * horizontalSegments + (j + 1) % horizontalSegments
                         let tl = bl + horizontalSegments
                         let tr = br + horizontalSegments
-                    
-                        indices.AddRange [bl; br; br; tr; tr; tl; tl; bl]
+                        indices.[offset] <- bl
+                        indices.[offset + 1] <- br
+                        indices.[offset + 2] <- br
+                        indices.[offset + 3] <- tr
+                        indices.[offset + 4] <- tr
+                        indices.[offset + 5] <- tl
+                        indices.[offset + 6] <- tl
+                        indices.[offset + 7] <- bl
+                        offset <- offset + 8
 
                 // indices top
                 for i in 0 .. horizontalSegments-1 do
-                    indices.Add(vertexCount - 2 - (i + 1) % horizontalSegments)
-                    indices.Add(vertexCount - 2 - i)
-                    indices.Add(vertexCount - 2 - i)
-                    indices.Add(vertexCount - 1)
-            
+                    indices.[offset] <- vertexCount - 2 - (i + 1) % horizontalSegments
+                    indices.[offset + 1] <- vertexCount - 2 - i
+                    indices.[offset + 2] <- vertexCount - 2 - i
+                    indices.[offset + 3] <- vertexCount - 1
+                    offset <- offset + 4
                 indices
 
             let tessellated tess (mode : IndexedGeometryMode) =
                 if tess < 3 then failwithf "Tessellation too small (%A), must be at least 3." tess
 
                 let verticalSegments = tess
-                let horizontalSegments = tess * 2
+                let horizontalSegments = Checked.(*) tess 2
+                let ringVertices = Checked.(*) horizontalSegments verticalSegments
+                Checked.(+) ringVertices 2 |> ignore
+                match mode with
+                | IndexedGeometryMode.LineList -> Checked.(*) 8 ringVertices |> ignore
+                | IndexedGeometryMode.TriangleList -> Checked.(*) 6 ringVertices |> ignore
+                | _ -> failwith "implement me"
 
                 let vertices = List<V3d>()
                 let normals =  List<V3d>()
@@ -587,10 +608,9 @@ module IndexedGeometryPrimitives =
                 normals.Add(V3d.YAxis)
 
                 let pos = vertices |> Seq.toArray
-                let idx = indices  |> Seq.toArray
                 let norm = normals |> Seq.toArray
 
-                idx,pos,norm
+                indices,pos,norm
 
             let phiThetaWithMode (sphere : Sphere3d) (level:int) (color:C4b) (mode : IndexedGeometryMode) =
                 let tess = if level < 3 then 3 else level
