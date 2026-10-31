@@ -113,6 +113,166 @@ module Sphere =
             validateGeometry sphere 8 false |> ignore
             validateGeometry sphere 8 true |> ignore
 
+    module private PhiTheta =
+        let private builders =
+            [| "solid module", false, IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere
+               "solid alias", false, IndexedGeometryPrimitives.solidPhiThetaSphere
+               "wire module", true, IndexedGeometryPrimitives.Sphere.wireframePhiThetaSphere
+               "wire alias", true, IndexedGeometryPrimitives.wireframePhiThetaSphere |]
+
+        let private indices (g : IndexedGeometry) = g.IndexArray :?> int[]
+        let private positions (g : IndexedGeometry) = g.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]
+        let private normals (g : IndexedGeometry) = g.IndexedAttributes.[DefaultSemantic.Normals] :?> V3f[]
+        let private colors (g : IndexedGeometry) = g.IndexedAttributes.[DefaultSemantic.Colors] :?> C4b[]
+
+        let private referenceIndices level wire =
+            let v = max 3 level
+            let h = 2 * v
+            let last = h * v + 1
+            [|
+                for j in 0 .. h - 1 do
+                    if wire then
+                        yield 1 + (j + 1) % h
+                        yield 1 + j
+                        yield 1 + j
+                        yield 0
+                    else
+                        yield 0
+                        yield 1 + j
+                        yield 1 + (j + 1) % h
+                for ring in 0 .. v - 2 do
+                    for j in 0 .. h - 1 do
+                        let bl = 1 + ring * h + j
+                        let br = 1 + ring * h + (j + 1) % h
+                        let tl, tr = bl + h, br + h
+                        if wire then
+                            yield bl
+                            yield br
+                            yield br
+                            yield tr
+                            yield tr
+                            yield tl
+                            yield tl
+                            yield bl
+                        else
+                            yield tl
+                            yield br
+                            yield bl
+                            yield tl
+                            yield tr
+                            yield br
+                for j in 0 .. h - 1 do
+                    if wire then
+                        yield last - 1 - (j + 1) % h
+                        yield last - 1 - j
+                        yield last - 1 - j
+                        yield last
+                    else
+                        yield last
+                        yield last - 1 - j
+                        yield last - 1 - (j + 1) % h
+            |]
+
+        let private referenceAttributes (sphere : Sphere3d) level =
+            let v = max 3 level
+            let h = 2 * v
+            let step = Constant.Pi / float (v + 1)
+            let unit = Array.init (h * v + 2) (fun index ->
+                if index = 0 then -V3d.YAxis
+                elif index = h * v + 1 then V3d.YAxis
+                else
+                    let ring, j = (index - 1) / h, (index - 1) % h
+                    let latitude = (float ring + 1.0) * step - Constant.PiHalf
+                    let longitude = float j * Constant.PiTimesTwo / float h
+                    let dxz = Fun.Cos latitude
+                    V3d(Fun.Cos(longitude) * dxz, Fun.Sin latitude, Fun.Sin(longitude) * dxz))
+            let scale, translation = Trafo3d.Scale sphere.Radius, Trafo3d.Translation sphere.Center
+            unit |> Array.map (scale.Forward.TransformPos >> translation.Forward.TransformPos >> V3f),
+            unit |> Array.map V3f
+
+        let private vectors context (expected : V3f[]) (actual : V3f[]) =
+            Expect.equal actual.Length expected.Length (context + ": count")
+            let bits = BitConverter.SingleToInt32Bits
+            for i in 0 .. expected.Length - 1 do
+                let e, a = expected.[i], actual.[i]
+                if bits e.X <> bits a.X || bits e.Y <> bits a.Y || bits e.Z <> bits a.Z then
+                    failtestf "%s, vertex=%d: expected %A, got %A" context i e a
+
+        let private check context sphere level color wire (g : IndexedGeometry) =
+            let p, n = referenceAttributes sphere level
+            let expected = referenceIndices level wire
+            Expect.equal g.Mode (if wire then IndexedGeometryMode.LineList else IndexedGeometryMode.TriangleList) (context + ": mode")
+            Expect.sequenceEqual (indices g) expected (context + ": exact bottom/ring/top traversal, including repeated edges")
+            Expect.equal g.FaceVertexCount expected.Length (context + ": draw count")
+            Expect.equal g.VertexCount p.Length (context + ": vertex count")
+            Expect.isTrue (indices g |> Array.forall (fun i -> i >= 0 && i < p.Length)) (context + ": index bounds")
+            vectors (context + ": positions") p (positions g)
+            vectors (context + ": normals") n (normals g)
+            Expect.equal (colors g) (Array.create p.Length color) (context + ": colors")
+            Expect.equal (g.IndexedAttributes.Keys |> Set.ofSeq)
+                         (Set.ofList [DefaultSemantic.Positions; DefaultSemantic.Normals; DefaultSemantic.Colors]) (context + ": attribute set")
+
+        let traversalAndAttributes () =
+            let sphere = Sphere3d(V3d(1.25, -2.5, 3.75), 4.5)
+            let color = C4b(17uy, 63uy, 129uy, 93uy)
+            for level in [Int32.MinValue; -4; 0; 1; 2; 3; 4; 8; 32; 128] do
+                for name, wire, build in builders do
+                    check $"{name}, level={level}" sphere level color wire (build sphere level color)
+            for sphere in [Sphere3d(V3d.Zero, 1.0); Sphere3d(V3d(-8.0, 3.0, 0.5), 0.0); Sphere3d(V3d.Zero, -2.0)] do
+                for name, wire, build in builders do
+                    check $"{name}, sphere={sphere}" sphere 8 C4b.Blue wire (build sphere 8 C4b.Blue)
+
+        let independentStorage () =
+            let sphere = Sphere3d(V3d(1.25, -2.5, 3.75), 4.5)
+            for level in [3; 8] do
+                for name, wire, build in builders do
+                    let context = $"{name}, level={level}"
+                    let first = build sphere level C4b.Red
+                    let second = build sphere level C4b.Red
+                    Expect.isFalse (obj.ReferenceEquals(first.IndexArray, second.IndexArray)) (context + ": independent indices")
+                    Expect.isFalse (obj.ReferenceEquals(first.IndexedAttributes, second.IndexedAttributes)) (context + ": independent attribute dictionaries")
+                    for key in [DefaultSemantic.Positions; DefaultSemantic.Normals; DefaultSemantic.Colors] do
+                        Expect.isFalse (obj.ReferenceEquals(first.IndexedAttributes.[key], second.IndexedAttributes.[key])) $"{context}: independent {key}"
+                    (indices first).[0] <- -7
+                    (positions first).[0] <- V3f(99.0f)
+                    (normals first).[0] <- V3f.Zero
+                    (colors first).[0] <- C4b.Green
+                    check (context + ": earlier output unaffected by mutation of sibling") sphere level C4b.Red wire second
+                    check (context + ": later output unaffected by mutation of predecessor") sphere level C4b.Blue wire (build sphere level C4b.Blue)
+
+        let constructionStorage () =
+            let level = 32
+            let sphere = Sphere3d(V3d(1.25, -2.5, 3.75), 4.5)
+            let vertexCount = 2 * level * level + 2
+            for name, wire, build in builders do
+                build sphere level C4b.Red |> GC.KeepAlive
+                let indexBytes = int64 ((if wire then 8 else 6) * 2 * level * level * sizeof<int>)
+                // Leave room for the unchanged vertex/normal lists and final attributes.
+                let budget = indexBytes + 288L * int64 vertexCount + 16384L
+                for repetition in 1 .. 2 do
+                    let before = GC.GetAllocatedBytesForCurrentThread()
+                    let geometry = build sphere level C4b.Red
+                    let allocated = GC.GetAllocatedBytesForCurrentThread() - before
+                    Expect.isLessThanOrEqual allocated budget $"{name}, level={level}, repeat={repetition}: {allocated} B/construction, budget={budget} B"
+                    GC.KeepAlive geometry
+
+        let checkedCounts () =
+            let sphere = Sphere3d(V3d.Zero, 1.0)
+            for name, wire, build in builders do
+                build sphere 3 C4b.Red |> GC.KeepAlive
+                let firstIndexOverflow = if wire then 11586 else 13378
+                for level in [firstIndexOverflow; 16384; 32768; 1073741824; Int32.MaxValue] do
+                    let h, v = 2I * bigint level, bigint level
+                    let vertexCount, indexCount = h * v + 2I, (if wire then 8I else 6I) * h * v
+                    Expect.isTrue (h > bigint Int32.MaxValue || vertexCount > bigint Int32.MaxValue || indexCount > bigint Int32.MaxValue) $"{name}, level={level}: unrepresentable fixture"
+                    let before = GC.GetAllocatedBytesForCurrentThread()
+                    let error = try build sphere level C4b.Red |> ignore; None with e -> Some e
+                    let allocated = GC.GetAllocatedBytesForCurrentThread() - before
+                    match error with
+                    | Some (:? OverflowException) -> ()
+                    | _ -> failtestf "%s, level=%d: expected early OverflowException, got %A" name level error
+                    Expect.isLessThanOrEqual allocated 65536L $"{name}, level={level}: reject before vertex construction ({allocated} B)"
+
     module private Subdivision =
 
         let private levels = [0; 1; 2; 5]
@@ -246,6 +406,11 @@ module Sphere =
         [
             "Phi/theta sphere clamps low levels without malformed poles",       Cases.clampedLow
             "Phi/theta sphere has symmetric interior rings and valid topology", Cases.translatedAndScaled
+
+            "Phi/theta.Exact traversal and unchanged attributes", PhiTheta.traversalAndAttributes
+            "Phi/theta.Independent output storage",               PhiTheta.independentStorage
+            "Phi/theta.Construction allocation",                  PhiTheta.constructionStorage
+            "Phi/theta.Checked counts reject oversized levels",   PhiTheta.checkedCounts
 
             "Subdivision.Complete unique wire edges and aligned attributes", Subdivision.completeEdges
             "Subdivision.Zero-radius count compatibility",                   Subdivision.zeroRadius
