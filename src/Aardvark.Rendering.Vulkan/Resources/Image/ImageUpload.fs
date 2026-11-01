@@ -53,8 +53,11 @@ module ImageUploadExtensions =
                     let buffer = device.ReadbackMemory.CreateImageBuffer(textureFormat, size, alignedSize.XY, sizeInBytes)
 
                     buffer.Memory.Mapped (fun dst ->
-                        let srcInfo = src.Info.SubXYWVolume(0L).Transformed(ImageTrafo.MirrorY)
-                        BlockCompression.encode compression src.Address srcInfo dst
+                        let sliceBytes = CompressionMode.sizeInBytes (V3i(int src.SX, int src.SY, 1)) compression
+                        for z in 0 .. int src.SZ - 1 do
+                            let srcInfo = src.Info.SubXYWVolume(src.Info.FZ + int64 z)
+                            let srcInfo = if mirrorY then srcInfo.Transformed(ImageTrafo.MirrorY) else srcInfo
+                            BlockCompression.encode compression src.Address srcInfo (dst + nativeint z * sliceBytes)
                     )
 
                     buffer

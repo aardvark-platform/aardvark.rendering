@@ -1286,6 +1286,178 @@ module TextureUpload =
 
             runtime |> renderQuadWithNullTexture shader randomTexture
 
+    module private CompressedVolumes =
+        let private colors =
+            [| C4b(255uy, 0uy, 0uy, 255uy); C4b(0uy, 255uy, 0uy, 255uy)
+               C4b(0uy, 0uy, 255uy, 255uy); C4b(255uy, 255uy, 0uy, 255uy)
+               C4b(0uy, 255uy, 255uy, 255uy); C4b(255uy, 0uy, 255uy, 255uy)
+               C4b(255uy, 255uy, 255uy, 255uy); C4b(0uy, 0uy, 0uy, 255uy) |]
+
+        let private color asymmetric x y z =
+            colors.[(z + x / 4 + (if asymmetric then 3 * (y / 4) else 0)) % colors.Length]
+
+        let private volume format (size : V3i) strided asymmetric =
+            let storageSize = if strided then 2 * size + V3i(3) else size
+            let storage = PixVolume<byte>(format, storageSize)
+            Array.fill storage.Data 0 storage.Data.Length 93uy
+            let data =
+                if strided then
+                    let tensor = storage.Tensor4
+                    let view = tensor.SubTensor4(V4l(1L, 1L, 1L, 0L), V4l(V3l size, int64 storage.ChannelCount),
+                                                 tensor.Delta * V4l(2L, 2L, 2L, 1L))
+                    Expect.isGreaterThan view.Origin 0L "Strided fixture has a nonzero source origin"
+                    PixVolume<byte>(format, view)
+                else storage
+            let mutable pixels = data.GetVolume<C4b>()
+            for z in 0 .. size.Z - 1 do
+                for y in 0 .. size.Y - 1 do
+                    for x in 0 .. size.X - 1 do
+                        pixels.[x, y, z] <- color asymmetric x y z
+            data
+
+        let private sampler3D =
+            sampler3d {
+                texture uniform?DiffuseColorTexture
+                filter Filter.MinMagPoint
+                addressU WrapMode.Clamp
+                addressV WrapMode.Clamp
+                addressW WrapMode.Clamp
+            }
+
+        let private sample3D (v : Effects.Vertex) =
+            fragment {
+                let z : float32 = uniform?VolumeSlice
+                // A volume's Y coordinate is not flipped on upload, unlike the 2D render target.
+                return sampler3D.SampleLevel(V3f(v.tc.X, 1.0f - v.tc.Y, z), 0.0f)
+            }
+
+        let private sampler2D =
+            sampler2d {
+                texture uniform?DiffuseColorTexture
+                filter Filter.MinMagPoint
+                addressU WrapMode.Clamp
+                addressV WrapMode.Clamp
+            }
+
+        let private sample2D (v : Effects.Vertex) =
+            fragment { return sampler2D.SampleLevel(v.tc, 0.0f) }
+
+        let private checkPlane context (errors : ResizeArray<string>) asymmetric z (actual : PixImage<byte>) =
+            let pixels = actual.GetMatrix<C4b>()
+            let mutable mismatch = None
+            for y in 0 .. actual.Size.Y - 1 do
+                for x in 0 .. actual.Size.X - 1 do
+                    let expected = color asymmetric x y z
+                    if mismatch.IsNone && pixels.[x, y] <> expected then
+                        mismatch <- Some $"{context}, z={z}, pixel=({x},{y}): expected {expected}, got {pixels.[x, y]}"
+            mismatch |> Option.iter errors.Add
+
+        let private sampleVolume (runtime : IRuntime) context errors asymmetric (texture : IBackendTexture) =
+            use signature = runtime.CreateFramebufferSignature [DefaultSemantic.Colors, TextureFormat.Rgba8]
+            use output = runtime.CreateTexture2D(texture.Size.XY, TextureFormat.Rgba8)
+            use framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, output.GetOutputView()])
+            let slice = cval 0.0f
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.diffuseTexture' texture
+                |> Sg.uniform "VolumeSlice" slice
+                |> Sg.shader { do! sample3D }
+                |> Sg.compile runtime signature
+            for z in 0 .. texture.Size.Z - 1 do
+                transact (fun () -> slice.Value <- (float32 z + 0.5f) / float32 texture.Size.Z)
+                task.Run framebuffer
+                // Only the uncompressed 2D render target is downloaded, never the compressed volume.
+                let actual = output.Download().AsPixImage<byte>()
+                Expect.equal actual.Size texture.Size.XY (context + ": rendered plane size")
+                checkPlane context errors asymmetric z actual
+
+        let private checkSource context (saved : byte[]) (data : PixVolume<byte>) =
+            Expect.equal data.Data saved (context + ": source and strided padding remain unchanged")
+
+        let private shapes = [V2i(8, 8); V2i(6, 12)]
+        let private depths = [1, true; 2, false; 5, true]
+        let private formats =
+            [TextureFormat.CompressedRgbaS3tcDxt1; TextureFormat.CompressedRgbaS3tcDxt3; TextureFormat.CompressedRgbaS3tcDxt5]
+
+        let prepared (runtime : IRuntime) =
+            let errors = ResizeArray<string>()
+            for xy in shapes do
+                for depth, asymmetric in depths do
+                    for strided in [false; true] do
+                        for format in [Col.Format.RGB; Col.Format.RGBA] do
+                            let size = V3i(xy, depth)
+                            let context = $"PixTexture3d, size={size}, format={format}, strided={strided}, asymmetricY={asymmetric}"
+                            let data = volume format size strided asymmetric
+                            let saved = Array.copy data.Data
+                            use texture = runtime.PrepareTexture(PixTexture3d(data, TextureParams.Compress))
+                            Expect.equal texture.Dimension TextureDimension.Texture3D (context + ": dimension")
+                            Expect.equal texture.Size size (context + ": size")
+                            Expect.equal texture.MipMapLevels 1 (context + ": no mipmap generation")
+                            let expectedFormat = if format = Col.Format.RGB then TextureFormat.CompressedRgbS3tcDxt1 else TextureFormat.CompressedRgbaS3tcDxt5
+                            Expect.equal texture.Format expectedFormat (context + ": compression selection")
+                            sampleVolume runtime context errors asymmetric texture
+                            checkSource context saved data
+            Expect.isEmpty errors (String.concat "\n" errors)
+
+        let uploaded (runtime : IRuntime) =
+            let errors = ResizeArray<string>()
+            for xy in shapes do
+                for depth, asymmetric in depths do
+                    for strided in [false; true] do
+                        for format in formats do
+                            let size = V3i(xy, depth)
+                            let context = $"runtime upload, size={size}, format={format}, strided={strided}, asymmetricY={asymmetric}"
+                            let data = volume Col.Format.RGBA size strided asymmetric
+                            let saved = Array.copy data.Data
+                            use texture = runtime.CreateTexture3D(size, format)
+                            runtime.Upload(texture, data)
+                            sampleVolume runtime context errors asymmetric texture
+                            checkSource context saved data
+            Expect.isEmpty errors (String.concat "\n" errors)
+
+        let uncompressed (runtime : IRuntime) =
+            let errors = ResizeArray<string>()
+            for xy in shapes do
+                for depth, asymmetric in depths do
+                    for strided in [false; true] do
+                        let size = V3i(xy, depth)
+                        let context = $"uncompressed, size={size}, strided={strided}, asymmetricY={asymmetric}"
+                        let data = volume Col.Format.RGBA size strided asymmetric
+                        let saved = Array.copy data.Data
+                        use prepared = runtime.PrepareTexture(PixTexture3d(data, TextureParams.None))
+                        Expect.equal prepared.Format TextureFormat.Rgba8 (context + ": format")
+                        sampleVolume runtime (context + ": prepared") errors asymmetric prepared
+                        use uploaded = runtime.CreateTexture3D(size, TextureFormat.Rgba8)
+                        runtime.Upload(uploaded, data)
+                        sampleVolume runtime (context + ": uploaded") errors asymmetric uploaded
+                        checkSource context saved data
+            Expect.isEmpty errors (String.concat "\n" errors)
+
+        let mirroredPlane (runtime : IRuntime) =
+            let errors = ResizeArray<string>()
+            for xy in shapes do
+                let data = PixImage<byte>(Col.Format.RGBA, xy)
+                let mutable pixels = data.GetMatrix<C4b>()
+                for y in 0 .. xy.Y - 1 do
+                    for x in 0 .. xy.X - 1 do pixels.[x, y] <- color true x y 0
+                let saved = Array.copy data.Data
+                use signature = runtime.CreateFramebufferSignature [DefaultSemantic.Colors, TextureFormat.Rgba8]
+                use output = runtime.CreateTexture2D(xy, TextureFormat.Rgba8)
+                use framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, output.GetOutputView()])
+                for format in TextureFormat.Rgba8 :: formats do
+                    let context = $"single-plane mirrored, size={xy}, format={format}"
+                    use texture = runtime.CreateTexture2D(xy, format)
+                    runtime.Upload(texture, data)
+                    use task =
+                        Sg.fullScreenQuad
+                        |> Sg.diffuseTexture' texture
+                        |> Sg.shader { do! sample2D }
+                        |> Sg.compile runtime signature
+                    task.Run framebuffer
+                    checkPlane context errors true 0 (output.Download().AsPixImage<byte>())
+                Expect.equal data.Data saved $"single-plane mirrored, size={xy}: source unchanged"
+            Expect.isEmpty errors (String.concat "\n" errors)
+
     let tests (target: TestTarget) =
         [
             "1D",                        Cases.texture1D
@@ -1413,5 +1585,11 @@ module TextureUpload =
             "Volume window validation",                Cases.windowValidation
             "Volume window boundary and default size", Cases.windowBoundary
             "Compressed upload alignment",             Cases.compressedAlignment
+
+            if target = TestTarget.Vulkan then
+                "Compressed volumes.PixTexture preparation", CompressedVolumes.prepared
+                "Compressed volumes.Full runtime upload",    CompressedVolumes.uploaded
+                "Compressed volumes.Uncompressed controls",  CompressedVolumes.uncompressed
+                "Compressed volumes.Mirrored plane controls", CompressedVolumes.mirroredPlane
         ]
         |> prepareCasesGpu "Upload" target

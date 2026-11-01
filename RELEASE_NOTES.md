@@ -1,3 +1,4 @@
+- Fixed Vulkan compressed-volume uploads to populate every depth slice with the correct Y orientation.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 
 ### 5.6.11
