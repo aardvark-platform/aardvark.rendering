@@ -1,6 +1,7 @@
 namespace Aardvark.Rendering.Tests.Texture
 
 open System
+open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
@@ -11,6 +12,9 @@ module AdaptiveTexture =
 
     module private Cases =
 
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
+        let private throwNaming (error : exn) : unit = raise error
+
         type private Parameters =
             { IsArray : bool
               Size : V3i
@@ -20,14 +24,19 @@ module AdaptiveTexture =
               Samples : int
               Count : int }
 
-        type private Texture(runtime : ITextureRuntime, id : int, parameters : Parameters, onDispose : unit -> unit) =
+        type private Texture(runtime : ITextureRuntime, id : int, parameters : Parameters,
+                             onName : unit -> unit, onDispose : bool -> unit) =
             let mutable disposed = false
             let mutable disposalCalls = 0
             let mutable name = null
+            let mutable named = false
+            let mutable namingCalls = 0
 
             member _.Parameters = parameters
             member _.IsDisposed = disposed
             member _.DisposalCalls = disposalCalls
+            member _.WasNamed = named
+            member _.NamingCalls = namingCalls
 
             interface IBackendTexture with
                 member _.Runtime = runtime
@@ -43,10 +52,13 @@ module AdaptiveTexture =
                     with get() = name
                     and set value =
                         Expect.isFalse disposed "Naming a retired texture"
+                        namingCalls <- namingCalls + 1
+                        onName()
                         name <- value
+                        named <- true
                 member _.Dispose() =
                     disposalCalls <- disposalCalls + 1
-                    onDispose()
+                    onDispose named
                     disposed <- true
 
         let private unexpected() = failwith "Unexpected runtime operation"
@@ -57,21 +69,29 @@ module AdaptiveTexture =
 
             member val CreationError : exn option = None with get, set
             member val DisposalError : exn option = None with get, set
+            member val NamingError : exn option = None with get, set
+            member val NamingCleanupError : exn option = None with get, set
             member _.Requests = requests
             member _.Textures = textures
 
             member private this.Create(parameters : Parameters) =
                 requests.Add parameters
-                Expect.isTrue (textures |> Seq.forall (fun t -> t.IsDisposed))
-                    "Replacement creation was attempted before retiring the previous texture"
+                Expect.isTrue (textures |> Seq.forall (fun t -> not t.WasNamed || t.IsDisposed))
+                    "Replacement creation was attempted before retiring the previously published texture"
                 match this.CreationError with
                 | Some error -> raise error
                 | None ->
                     let texture =
-                        new Texture(this, textures.Count + 1, parameters, fun () ->
-                            match this.DisposalError with
-                            | Some error -> raise error
-                            | None -> ())
+                        new Texture(this, textures.Count + 1, parameters,
+                            (fun () ->
+                                match this.NamingError with
+                                | Some error -> throwNaming error
+                                | None -> ()),
+                            (fun named ->
+                                let error = if not named && this.NamingCleanupError.IsSome then this.NamingCleanupError else this.DisposalError
+                                match error with
+                                | Some error -> raise error
+                                | None -> ()))
                     textures.Add texture
                     texture :> IBackendTexture
 
@@ -152,6 +172,8 @@ module AdaptiveTexture =
                 member _.Dispose() =
                     runtime.CreationError <- None
                     runtime.DisposalError <- None
+                    runtime.NamingError <- None
+                    runtime.NamingCleanupError <- None
                     resource.ReleaseAll()
 
         let private checkLive context (fixture : Fixture) (handle : IBackendTexture) =
@@ -168,7 +190,23 @@ module AdaptiveTexture =
                 with error -> Some error
             match actual with
             | Some error -> Expect.isTrue (obj.ReferenceEquals(error, expected)) $"{context}: exception identity changed ({error})"
-            | None -> failtestf "%s: expected creation/disposal failure" context
+            | None -> failtestf "%s: expected resource failure" context
+
+        let private expectNamingFailure context (expected : exn) action =
+            expectFailure context expected action
+            Expect.stringContains expected.StackTrace "throwNaming" (context + ": original naming stack retained")
+
+        let private prepareReplacement context replacement (fixture : Fixture) =
+            if replacement then
+                let previous = fixture.Get() |> checkLive context fixture
+                fixture.Change()
+                Some previous
+            else None
+
+        let private checkRetired context previous =
+            previous |> Option.iter (fun (texture : Texture) ->
+                Expect.isTrue texture.IsDisposed (context + ": published predecessor retired")
+                Expect.equal texture.DisposalCalls 1 (context + ": predecessor retired exactly once"))
 
         let normalReplacement() =
             for isArray in [false; true] do
@@ -332,6 +370,131 @@ module AdaptiveTexture =
                 Expect.equal previous.DisposalCalls 2 $"{context}: failed disposal was forgotten"
                 Expect.equal fixture.Runtime.Requests.Count 2 $"{context}: replacement creation was not retried"
 
+        let namingFailureRetry() =
+            for isArray in [false; true] do
+                for replacement in [false; true] do
+                    for failures in [1; 3] do
+                        for name in [null; "named resource"] do
+                            let context = $"array={isArray}, replacement={replacement}, failures={failures}, named={not (isNull name)}"
+                            use fixture = new Fixture(isArray)
+                            fixture.Resource.Name <- name
+                            let previous = prepareReplacement context replacement fixture
+                            for attempt in 1 .. failures do
+                                let context = $"{context}, attempt={attempt}"
+                                let error = InvalidOperationException($"name attempt {attempt}")
+                                fixture.Runtime.NamingError <- Some error
+                                expectNamingFailure context error (fun () -> fixture.Get() |> ignore)
+                                let failed = fixture.Runtime.Textures |> Seq.last
+                                Expect.equal failed.NamingCalls 1 (context + ": naming attempted once")
+                                Expect.isFalse failed.WasNamed (context + ": failed name not accepted")
+                                Expect.equal failed.DisposalCalls 1 (context + ": unpublished texture cleaned once")
+                                Expect.isTrue failed.IsDisposed (context + ": unpublished texture leaked")
+                                Expect.isTrue fixture.Resource.OutOfDate (context + ": failed evaluation permits retry")
+                                checkRetired context previous
+                                Expect.equal fixture.Token.TotalCreatedResources attempt (context + ": creation statistics retain attempt semantics")
+                                Expect.equal fixture.Token.TotalReplacedResources (if replacement then 1 else 0) (context + ": replacement statistics")
+
+                            fixture.Runtime.NamingError <- None
+                            let handle = fixture.Get()
+                            let current = checkLive context fixture handle
+                            Expect.equal current.NamingCalls 1 (context + ": name assigned before publication")
+                            let attempts = failures + (if replacement then 2 else 1)
+                            Expect.equal fixture.Runtime.Requests.Count attempts (context + ": retry without input change creates a fresh handle")
+                            Expect.equal fixture.Runtime.Textures.Count attempts (context + ": each naming failure had an allocated handle")
+                            for _ in 1 .. 8 do
+                                Expect.isTrue (obj.ReferenceEquals(fixture.Get(), handle)) (context + ": successful retry remains cached")
+                            Expect.equal current.NamingCalls 1 (context + ": cached reads do not rename")
+                            Expect.equal fixture.Token.TotalCreatedResources (failures + 1) (context + ": successful retry creation statistics")
+                            fixture.Resource.Release()
+                            Expect.isTrue (fixture.Runtime.Textures |> Seq.forall (fun t -> t.IsDisposed && t.DisposalCalls = 1))
+                                (context + ": every allocated texture retired exactly once")
+
+        let releaseAfterNamingFailure() =
+            for isArray in [false; true] do
+                for replacement in [false; true] do
+                    for releaseAll in [false; true] do
+                        for owners in [1; 2] do
+                            let context = $"array={isArray}, replacement={replacement}, ReleaseAll={releaseAll}, owners={owners}"
+                            use fixture = new Fixture(isArray)
+                            for _ in 2 .. owners do fixture.Resource.Acquire()
+                            fixture.Resource.Name <- "release after failure"
+                            let previous = prepareReplacement context replacement fixture
+                            for attempt in 1 .. 2 do
+                                let context = $"{context}, attempt={attempt}"
+                                let error = InvalidOperationException($"name attempt {attempt}")
+                                fixture.Runtime.NamingError <- Some error
+                                expectNamingFailure context error (fun () -> fixture.Get() |> ignore)
+                            let requests = fixture.Runtime.Requests.Count
+                            let stats = fixture.Token.TotalCreatedResources, fixture.Token.TotalReplacedResources
+                            if releaseAll then fixture.Resource.ReleaseAll()
+                            else for _ in 1 .. owners do fixture.Resource.Release()
+                            fixture.Resource.ReleaseAll()
+                            fixture.Resource.ReleaseAll()
+                            checkRetired context previous
+                            Expect.equal fixture.Runtime.Requests.Count requests (context + ": release does not allocate")
+                            Expect.equal (fixture.Token.TotalCreatedResources, fixture.Token.TotalReplacedResources) stats (context + ": release statistics unchanged")
+                            Expect.isTrue (fixture.Runtime.Textures |> Seq.forall (fun t -> t.IsDisposed && t.DisposalCalls = 1))
+                                (context + ": release does not revisit unpublished or retired handles")
+                            fixture.Runtime.NamingError <- None
+                            fixture.Resource.Acquire()
+                            let current = fixture.Get() |> checkLive context fixture
+                            fixture.Resource.Release()
+                            Expect.equal current.DisposalCalls 1 (context + ": reacquired resource releases normally")
+                            Expect.isTrue (fixture.Runtime.Textures |> Seq.forall (fun t -> t.DisposalCalls = 1)) (context + ": no duplicate cleanup after reacquisition")
+
+        let namingAndCleanupFailure() =
+            for isArray in [false; true] do
+                for replacement in [false; true] do
+                    for failures in [1; 3] do
+                        let context = $"array={isArray}, replacement={replacement}, failures={failures}, cleanup throws"
+                        use fixture = new Fixture(isArray)
+                        fixture.Resource.Name <- "secondary cleanup failure"
+                        let previous = prepareReplacement context replacement fixture
+                        fixture.Runtime.NamingCleanupError <- Some (ApplicationException("cleanup"))
+                        for attempt in 1 .. failures do
+                            let context = $"{context}, attempt={attempt}"
+                            let error = InvalidOperationException($"primary name attempt {attempt}")
+                            fixture.Runtime.NamingError <- Some error
+                            expectNamingFailure context error (fun () -> fixture.Get() |> ignore)
+                            let failed = fixture.Runtime.Textures |> Seq.last
+                            Expect.equal failed.DisposalCalls 1 (context + ": failing cleanup attempted exactly once")
+                            Expect.isFalse failed.IsDisposed (context + ": backend cleanup failure is not successful disposal")
+                            checkRetired context previous
+                        let abandoned = fixture.Runtime.Textures |> Seq.filter (fun t -> not t.WasNamed) |> Seq.toArray
+                        fixture.Runtime.NamingError <- None
+                        fixture.Runtime.NamingCleanupError <- None
+                        let current = fixture.Get() |> checkLive context fixture
+                        Expect.equal current.NamingCalls 1 (context + ": retry publishes only the newly named handle")
+                        fixture.Resource.ReleaseAll()
+                        fixture.Resource.ReleaseAll()
+                        Expect.equal current.DisposalCalls 1 (context + ": successful retry released once")
+                        for failed in abandoned do
+                            Expect.equal failed.DisposalCalls 1 (context + ": unpublished failing cleanup is not retried by release")
+
+        let liveNamingFailure() =
+            for isArray in [false; true] do
+                let context = $"array={isArray}, live rename"
+                use fixture = new Fixture(isArray)
+                fixture.Resource.Name <- "initial"
+                let handle = fixture.Get()
+                let texture = checkLive context fixture handle
+                let error = InvalidOperationException("live rename")
+                fixture.Runtime.NamingError <- Some error
+                expectNamingFailure context error (fun () -> fixture.Resource.Name <- "attempted")
+                Expect.equal fixture.Resource.Name "attempted" (context + ": requested name retained")
+                Expect.equal handle.Name "initial" (context + ": backend retains its previous name")
+                Expect.isTrue (obj.ReferenceEquals(fixture.Get(), handle)) (context + ": published handle remains cached")
+                Expect.equal texture.DisposalCalls 0 (context + ": live naming failure does not delete published ownership")
+                fixture.Runtime.NamingError <- None
+                fixture.Resource.Name <- "recovered"
+                checkLive context fixture handle |> ignore
+                Expect.equal texture.NamingCalls 3 (context + ": initial, failed and recovered assignments")
+                Expect.equal fixture.Runtime.Requests.Count 1 (context + ": rename does not recreate")
+                Expect.equal fixture.Token.TotalCreatedResources 1 (context + ": creation statistics")
+                Expect.equal fixture.Token.TotalReplacedResources 0 (context + ": replacement statistics")
+                fixture.Resource.Release()
+                Expect.equal texture.DisposalCalls 1 (context + ": final release retains ownership")
+
     let tests (target : TestTarget) =
         [
             "Normal replacement and cached reads",       Cases.normalReplacement
@@ -341,5 +504,10 @@ module AdaptiveTexture =
             "Initial failure and reacquisition",         Cases.initialFailure
             "Multiple owners and reacquisition",         Cases.ownershipAndReacquisition
             "Failed disposal retains ownership",         Cases.disposalFailure
+
+            "Naming failures clean unpublished handles",   Cases.namingFailureRetry
+            "Release after failed naming",                 Cases.releaseAfterNamingFailure
+            "Naming errors survive cleanup failures",      Cases.namingAndCleanupFailure
+            "Live naming failure retains published owner", Cases.liveNamingFailure
         ]
         |> prepareCasesCpu "AdaptiveTexture" target
