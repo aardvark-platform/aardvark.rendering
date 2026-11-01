@@ -1587,9 +1587,9 @@ module TextureUpload =
             "Compressed upload alignment",             Cases.compressedAlignment
 
             if target = TestTarget.Vulkan then
-                "Compressed volumes.PixTexture preparation", CompressedVolumes.prepared
-                "Compressed volumes.Full runtime upload",    CompressedVolumes.uploaded
-                "Compressed volumes.Uncompressed controls",  CompressedVolumes.uncompressed
+                "Compressed volumes.PixTexture preparation",  CompressedVolumes.prepared
+                "Compressed volumes.Full runtime upload",     CompressedVolumes.uploaded
+                "Compressed volumes.Uncompressed controls",   CompressedVolumes.uncompressed
                 "Compressed volumes.Mirrored plane controls", CompressedVolumes.mirroredPlane
         ]
         |> prepareCasesGpu "Upload" target
