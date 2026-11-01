@@ -56,7 +56,10 @@ module private AdaptiveTextureTypes =
 
         member private x.CreateHandle(runtime : ITextureRuntime, textureParams : 'Params) =
             let tex = x.CreateTexture(runtime, textureParams)
-            tex.Name <- name
+            try tex.Name <- name
+            with _ ->
+                try runtime.DeleteTexture tex with _ -> ()
+                reraise()
             handle <- Some (tex, textureParams)
             tex
 

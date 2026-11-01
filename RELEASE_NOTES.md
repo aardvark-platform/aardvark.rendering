@@ -1,3 +1,4 @@
+- Fixed adaptive textures and texture arrays to clean up newly created handles when assigning their debug name fails.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 - [Vulkan] Update to VMA 3.5.0
 
