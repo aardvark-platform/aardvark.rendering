@@ -1,3 +1,4 @@
+- Array and COM task-memory allocators now reject out-of-Int32 allocation and resize sizes instead of silently truncating them.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 
 ### 5.6.11
