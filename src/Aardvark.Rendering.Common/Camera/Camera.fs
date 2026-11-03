@@ -60,39 +60,36 @@ module ViewProjection =
         let inline proj (pt : V3d) = V3d(pt.XY / -pt.Z, -pt.Z)
 
     let containing (viewPos : V3d) (bounds : Box3d) =
-        let angularRange =
-            bounds.ComputeCorners()
-                |> Array.map (fun world ->
-                    let dir = world - viewPos
-                    dir.SphericalFromCartesian()
-                    )
-                |> Box2d
+        let corners = bounds.ComputeCorners()
+        let mutable angularRange = Box2d.Invalid
+        for world in corners do
+            angularRange.ExtendBy((world - viewPos).SphericalFromCartesian())
 
         let forward = angularRange.Center.CartesianFromSpherical()
-
-        let mutable closest = V3d.Zero
-        let mutable farthest = V3d.Zero
-        bounds.GetMinMaxInDirection(forward, &closest, &farthest)
-        let near = Vec.Distance(viewPos, closest)
-        let far = Vec.Distance(viewPos, farthest)
-
-        let halfAngularSize = angularRange.Size * 0.5
-        let l = -near * Fun.Tan(halfAngularSize.X)
-        let r = -l
-        let t = near * Fun.Tan(halfAngularSize.Y)
-        let b = -t
 
         let sky =
             if Fun.ApproximateEquals(abs forward.Z, 1.0, Constant.PositiveTinyValue) then V3d.OIO
             else V3d.OOI
 
         let view = CameraView.lookAt viewPos (viewPos + forward) sky
+        let mutable near = Double.PositiveInfinity
+        let mutable far = Double.NegativeInfinity
+        let mutable horizontal = 0.0
+        let mutable vertical = 0.0
+        for world in corners do
+            let relative = world - viewPos
+            let depth = Vec.Dot(relative, view.Forward)
+            near <- min near depth
+            far <- max far depth
+            horizontal <- max horizontal (abs (Vec.Dot(relative, view.Right) / depth))
+            vertical <- max vertical (abs (Vec.Dot(relative, view.Up) / depth))
+
         let proj =
             {
-                left = l
-                right = r
-                top = t
-                bottom = b
+                left = -near * horizontal
+                right = near * horizontal
+                top = near * vertical
+                bottom = -near * vertical
                 near = near
                 far = far
                 isOrtho = false
