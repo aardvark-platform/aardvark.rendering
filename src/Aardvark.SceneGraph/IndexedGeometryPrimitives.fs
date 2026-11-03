@@ -682,7 +682,10 @@ module IndexedGeometryPrimitives =
 
             let cylinder (center : V3d) (axis : V3d) (height : float) (radius : float) (radiusTop : float) (tessellation : int) (mode : IndexedGeometryMode) =
             
-                let vertices = List<V3d>()
+                let tessellation = max 0 tessellation
+                let vertexCount = Checked.(+) (Checked.(*) 4 tessellation) 2
+                let pos = Array.zeroCreate<V3f> vertexCount
+                let translation = Trafo3d.Translation(center).Forward
                 // Store the final format directly, without a double-precision normal buffer
                 // and a separate sequence conversion for every duplicated side/cap vertex.
                 let normals = List<V3f>()
@@ -720,10 +723,10 @@ module IndexedGeometryPrimitives =
                     let radial = getCirclePos i tessellation trafo
                     let normal = V3f (if tapered then radial * radialScale + axialNormal else radial)
 
-                    vertices.Add(radial * radiusTop + displacement)
+                    pos.[i * 2] <- V3f (translation.TransformPos(radial * radiusTop + displacement))
                     normals.Add(normal)
 
-                    vertices.Add(radial * radius)
+                    pos.[i * 2 + 1] <- V3f (translation.TransformPos(radial * radius))
                     normals.Add(normal)
 
                     match mode with
@@ -737,11 +740,11 @@ module IndexedGeometryPrimitives =
                 // different normals
                 for i in 0 .. tessellation - 1 do
                     // top
-                    vertices.Add(vertices.[i * 2])
+                    pos.[i * 2 + tessellation * 2] <- pos.[i * 2]
                     normals.Add(V3f axisNormalized)
 
                     // bottom
-                    vertices.Add(vertices.[i * 2 + 1])
+                    pos.[i * 2 + 1 + tessellation * 2] <- pos.[i * 2 + 1]
                     normals.Add(V3f -axisNormalized)
                 
                     match mode with
@@ -752,14 +755,13 @@ module IndexedGeometryPrimitives =
                     | _ -> failwith "implement me"
 
                 // top cap center
-                vertices.Add(displacement)
+                pos.[vertexCount - 2] <- V3f (translation.TransformPos displacement)
                 normals.Add(V3f axisNormalized)
 
                 // bottom cap center
-                vertices.Add(V3d.OOO)
+                pos.[vertexCount - 1] <- V3f (translation.TransformPos V3d.OOO)
                 normals.Add(V3f -axisNormalized)
 
-                let pos = vertices |> Seq.toArray |> Array.map (Trafo3d.Translation(center).Forward.TransformPos >> V3f)
                 let norm = normals.ToArray()
                 let idx = indices  |> Seq.toArray
 

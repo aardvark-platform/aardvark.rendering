@@ -287,6 +287,103 @@ module CylinderNormals =
                         // but not a double-precision normal list plus per-element sequence conversion.
                         Expect.isLessThanOrEqual allocated (1000L * int64 tess + 8192L) "bounded normal-path allocation"
 
+        let private positionRoutes mode p =
+            let cylinder = if mode = IndexedGeometryMode.TriangleList then P.solidCylinder else P.wireframeCylinder
+            let cone = if mode = IndexedGeometryMode.TriangleList then P.Cone.solidCone else P.Cone.wireframeCone
+            let coneAlias = if mode = IndexedGeometryMode.TriangleList then P.solidCone else P.wireframeCone
+            [
+                "cylinder module", fun () -> build mode p
+                "cylinder alias", fun () -> cylinder p.Center p.Axis p.Height p.Bottom p.Top p.Tessellation color
+                if p.Top = 0.0 then
+                    "cone module", fun () -> cone p.Center p.Axis p.Height p.Bottom p.Tessellation color
+                    "cone alias", fun () -> coneAlias p.Center p.Axis p.Height p.Bottom p.Tessellation color
+            ]
+
+        let positionBits () =
+            for bottom, top in [1.5, 1.5; 2.5, 0.75; 1.0, 0.0; 0.0, 1.0] do
+                for mode in modes do
+                    for tess in [-4; 0; 1; 2; 3; 8; 32; 257] do
+                        for center in [V3d.Zero; V3d(13.5, -7.25, 19.0); V3d(16777217.0, -33554431.0, 67108865.0); V3d(1e16, -1e16, 1e16); V3d(1e20, -1e20, 3e20)] do
+                            for axis in [V3d.ZAxis; V3d(1.25, -2.5, 0.75); V3d(-4.0, 3.0, -2.0)] do
+                                for height in [-2.5; 0.0; 1.125] do
+                                    let p = { Center = center; Axis = axis; Height = height; Bottom = bottom; Top = top; Tessellation = tess }
+                                    let expected = legacy mode p
+                                    for name, create in positionRoutes mode p do
+                                        let context = $"route={name}, mode={mode}, parameters={p}"
+                                        withContext context (fun () ->
+                                            let actual = create()
+                                            layout expected actual
+                                            caps p expected actual
+                                            let n = max 0 tess
+                                            let data = positions actual
+                                            Expect.equal data.Length (4 * n + 2) "exact position count"
+                                            for i in 0 .. 2 * n - 1 do
+                                                sameVector data.[i] data.[2 * n + i] $"cap copy, position={i}"
+                                        )
+
+        let independentPositionStorage () =
+            for bottom, top in [1.5, 1.5; 2.5, 0.75; 1.0, 0.0] do
+                for mode in modes do
+                    for tess in [-4; 0; 1; 2; 7; 32] do
+                        let p = { defaults with Center = V3d(16777217.0, -33554431.0, 67108865.0); Axis = V3d(1.25, -2.5, 0.75)
+                                                Height = -2.5; Bottom = bottom; Top = top; Tessellation = tess }
+                        for name, create in positionRoutes mode p do
+                            withContext $"route={name}, mode={mode}, parameters={p}" (fun () ->
+                                let first, second = create(), create()
+                                let a, b = positions first, positions second
+                                let saved = Array.copy b
+                                let ns = Array.copy (normals first)
+                                let colors = Array.copy (second.IndexedAttributes.[DefaultSemantic.Colors] :?> C4b[])
+                                let indices = Array.copy (second.IndexArray :?> int[])
+                                Expect.isFalse (obj.ReferenceEquals(first.IndexedAttributes, second.IndexedAttributes)) "independent attribute maps"
+                                Expect.isFalse (obj.ReferenceEquals(a, b)) "independent position arrays"
+                                Expect.isFalse (obj.ReferenceEquals(a, normals first)) "positions do not alias normals"
+                                Expect.isFalse (obj.ReferenceEquals(normals first, normals second)) "independent normal arrays"
+                                Expect.isFalse (obj.ReferenceEquals(first.IndexedAttributes.[DefaultSemantic.Colors], second.IndexedAttributes.[DefaultSemantic.Colors])) "independent color arrays"
+                                if indices.Length > 0 then Expect.isFalse (obj.ReferenceEquals(first.IndexArray, second.IndexArray)) "independent nonempty indices"
+                                let capIndex = if tess > 0 then 2 * tess else 1
+                                let cap = a.[capIndex]
+                                a.[0] <- V3f(713.0f, -217.0f, 991.0f)
+                                sameVector cap a.[capIndex] "changing a side value does not change its cap copy"
+                                Array.iter2 (fun e v -> sameVector e v "retained positions") saved b
+                                Array.iter2 (fun e v -> sameVector e v "separate normal storage") ns (normals first)
+                                (normals first).[0] <- V3f(11.0f, 22.0f, 33.0f)
+                                (first.IndexedAttributes.[DefaultSemantic.Colors] :?> C4b[]).[0] <- C4b.White
+                                if indices.Length > 0 then (first.IndexArray :?> int[]).[0] <- -123
+                                Expect.equal (second.IndexArray :?> int[]) indices "retained index values"
+                                Expect.equal (second.IndexedAttributes.[DefaultSemantic.Colors] :?> C4b[]) colors "retained colors"
+                                layout second (create())
+                            )
+
+        let positionStorageAllocation () =
+            for mode in modes do
+                for bottom, top in [1.0, 1.0; 1.0, 0.25; 1.0, 0.0] do
+                    for tess in [32; 1024] do
+                        let p = { defaults with Bottom = bottom; Top = top; Tessellation = tess }
+                        for name, create in positionRoutes mode p do
+                            let mutable result = create()
+                            for _ in 1 .. 5 do result <- create()
+                            let start = GC.GetAllocatedBytesForCurrentThread()
+                            for _ in 1 .. 5 do result <- create()
+                            let allocated = (GC.GetAllocatedBytesForCurrentThread() - start) / 5L
+                            GC.KeepAlive result
+                            // Includes unchanged normal/index list growth and final geometry storage,
+                            // but excludes a double-position list and its intermediate copied array.
+                            let budget = 600L * int64 tess + 8192L
+                            Expect.isLessThanOrEqual allocated budget
+                                $"route={name}, mode={mode}, tessellation={tess}, bottom={bottom}, top={top}: allocated={allocated} B/construction, budget={budget}"
+
+        let checkedPositionCounts () =
+            for mode in modes do
+                for tess in [(Int32.MaxValue - 2) / 4 + 1; Int32.MaxValue] do
+                    let p = { defaults with Tessellation = tess; Top = 0.0 }
+                    for name, create in positionRoutes mode p do
+                        Expect.throwsT<OverflowException> (fun () -> create() |> ignore)
+                            $"route={name}, mode={mode}, tessellation={tess}: reject unrepresentable vertex count before allocation"
+                // The nonpositive output consists of the two cap centers, even at the native loop-bound edge.
+                let p = { defaults with Tessellation = Int32.MinValue }
+                layout (legacy mode { p with Tessellation = 0 }) (build mode p)
+
         let randomized () =
             for seed in 0 .. 9 do
                 let random = Random(50173 + seed)
@@ -342,5 +439,10 @@ module CylinderNormals =
             "cylinder and cone aliases",           Cases.cylinderConeAliases
             "randomized geometry and normals",     Cases.randomized
             "arrow inherits cone correction",      Cases.arrowConeCorrection
+
+            "position bits and cap duplication",   Cases.positionBits
+            "independent output storage",          Cases.independentPositionStorage
+            "position storage allocation",         Cases.positionStorageAllocation
+            "checked position counts",             Cases.checkedPositionCounts
         ]
         |> prepareCasesCpu "Cylinder normals" target
