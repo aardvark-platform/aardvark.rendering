@@ -1,3 +1,4 @@
+- Correct fitted camera projections so bounding boxes in front of the selected view are not clipped by incorrect depth or lateral bounds.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 - [Vulkan] Update to VMA 3.5.0
 

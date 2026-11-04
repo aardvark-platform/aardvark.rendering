@@ -80,6 +80,7 @@ let tests =
 
         testAllTargets "Other" [
             Other.Camera.tests
+            Other.ViewProjectionContaining.tests
             Other.ShapeListConcat.tests
             Other.UniformWriter.tests
             Other.AdaptiveResource.tests
