@@ -30,7 +30,12 @@ module private AdaptiveRenderToTypes =
             target.Acquire()
 
         override x.Destroy() =
-            target.Release()
+            try target.Release()
+            with targetError ->
+                try task.Release()
+                with taskError ->
+                    raise <| System.AggregateException([| targetError; taskError |])
+                reraise()
             task.Release()
 
     type AdaptiveOutputTexture(semantic : Symbol, res : IAdaptiveResource<IFramebuffer>) =
@@ -78,7 +83,12 @@ module private AdaptiveRenderToTypes =
             targets.Acquire()
 
         override x.Destroy() =
-            targets.Release()
+            try targets.Release()
+            with targetError ->
+                try tasks.Release()
+                with taskError ->
+                    raise <| System.AggregateException([| targetError; taskError |])
+                reraise()
             tasks.Release()
 
     type AdaptiveOutputTextureCube(semantic : Symbol, res : IAdaptiveResource<CubeMap<IFramebuffer>>) =

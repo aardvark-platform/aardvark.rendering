@@ -1,3 +1,4 @@
+- Prevent compiled-clear-task leaks when framebuffer cleanup fails while releasing render-to results, including cube results.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 - [Vulkan] Update to VMA 3.5.0
 
