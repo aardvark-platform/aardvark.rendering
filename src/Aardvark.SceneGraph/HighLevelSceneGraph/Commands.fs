@@ -29,12 +29,12 @@ type RenderCommand =
     static member Clear(values : aval<ClearValues>) = RClear values
     static member Clear(values : ClearValues)       = RenderCommand.Clear(~~values)
 
-    static member Unordered(scenes : seq<ISg>) = if Seq.isEmpty scenes then REmpty else RUnorderedScenes(ASet.ofSeq scenes)
+    static member Unordered(scenes : seq<ISg>) = RenderCommand.Unordered(ASet.ofSeq scenes)
     static member Unordered(scenes : list<ISg>) = match scenes with [] -> REmpty | _  -> RUnorderedScenes(ASet.ofList scenes)
     static member Unordered(scenes : aset<ISg>) = if scenes.IsConstant && scenes.Content.GetValue().IsEmpty then REmpty else RUnorderedScenes(scenes)
     static member Render(scene : ISg) = RUnorderedScenes(ASet.single scene)
 
-    static member Ordered(commands : seq<RenderCommand>) = if Seq.isEmpty commands then REmpty else ROrdered(AList.ofSeq commands)
+    static member Ordered(commands : seq<RenderCommand>) = RenderCommand.Ordered(AList.ofSeq commands)
     static member Ordered(commands : list<RenderCommand>) = match commands with [] -> REmpty | _ -> ROrdered(AList.ofList commands)
     static member Ordered(commands : alist<RenderCommand>) = if commands.IsConstant && commands.Content.GetValue().Count = 0 then REmpty else ROrdered commands
 
