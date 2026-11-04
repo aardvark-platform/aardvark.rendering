@@ -25,6 +25,7 @@ type VmaAllocatorCreateFlags =
     | KhrMaintenance4Bit = 0x00000080
     | KhrMaintenance5Bit = 0x00000100
     | KhrExternalMemoryWin32Bit = 0x00000200
+    | KhrExtendedFlagsBit = 0x00000400
     | MaxEnum = 0x7FFFFFFF
 
 type VmaMemoryUsage =
@@ -167,6 +168,7 @@ type VmaVulkanFunctions =
         mutable vkGetDeviceBufferMemoryRequirements : nativeint
         mutable vkGetDeviceImageMemoryRequirements : nativeint
         mutable vkGetMemoryWin32HandleKHR : nativeint
+        mutable vkGetPhysicalDeviceProperties2KHR : nativeint
     }
 
     static member Empty : VmaVulkanFunctions =
@@ -198,6 +200,7 @@ type VmaVulkanFunctions =
             vkGetDeviceBufferMemoryRequirements = Unchecked.defaultof<nativeint>
             vkGetDeviceImageMemoryRequirements = Unchecked.defaultof<nativeint>
             vkGetMemoryWin32HandleKHR = Unchecked.defaultof<nativeint>
+            vkGetPhysicalDeviceProperties2KHR = Unchecked.defaultof<nativeint>
         }
 
 [<Struct; StructLayout(LayoutKind.Sequential)>]
@@ -369,6 +372,7 @@ type VmaAllocationCreateInfo =
         mutable pool : VmaPool
         mutable pUserData : nativeint
         mutable priority : float32
+        mutable minAlignment : VkDeviceSize
     }
 
     static member Empty : VmaAllocationCreateInfo =
@@ -381,6 +385,7 @@ type VmaAllocationCreateInfo =
             pool = Unchecked.defaultof<VmaPool>
             pUserData = Unchecked.defaultof<nativeint>
             priority = Unchecked.defaultof<float32>
+            minAlignment = Unchecked.defaultof<VkDeviceSize>
         }
 
 [<Struct; StructLayout(LayoutKind.Sequential)>]
@@ -570,6 +575,9 @@ module Vma =
         Debug.Assert(sizeof<VmaDetailedStatistics_16> = sizeof<VmaDetailedStatistics> * 16, $"Unexpected size for VmaDetailedStatistics_16, expected {sizeof<VmaDetailedStatistics> * 16} but got {sizeof<VmaDetailedStatistics_16>}.")
     #endif
 
+    [<DllImport(lib, EntryPoint = "vmaImportVulkanFunctionsFromVolk")>]
+    extern VkResult importVulkanFunctionsFromVolk(VmaAllocatorCreateInfo* pAllocatorCreateInfo, VmaVulkanFunctions* pDstVulkanFunctions)
+
     [<DllImport(lib, EntryPoint = "vmaCreateAllocator")>]
     extern VkResult createAllocator(VmaAllocatorCreateInfo* pCreateInfo, VmaAllocator* pAllocator)
 
@@ -630,6 +638,9 @@ module Vma =
     [<DllImport(lib, EntryPoint = "vmaAllocateMemory")>]
     extern VkResult allocateMemory(VmaAllocator allocator, VkMemoryRequirements* pVkMemoryRequirements, VmaAllocationCreateInfo* pCreateInfo, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo)
 
+    [<DllImport(lib, EntryPoint = "vmaAllocateDedicatedMemory")>]
+    extern VkResult allocateDedicatedMemory(VmaAllocator allocator, VkMemoryRequirements* pVkMemoryRequirements, VmaAllocationCreateInfo* pCreateInfo, nativeint pMemoryAllocateNext, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo)
+
     [<DllImport(lib, EntryPoint = "vmaAllocateMemoryPages")>]
     extern VkResult allocateMemoryPages(VmaAllocator allocator, VkMemoryRequirements* pVkMemoryRequirements, VmaAllocationCreateInfo* pCreateInfo, uint64 allocationCount, VmaAllocation* pAllocations, VmaAllocationInfo* pAllocationInfo)
 
@@ -662,6 +673,9 @@ module Vma =
 
     [<DllImport(lib, EntryPoint = "vmaGetMemoryWin32Handle")>]
     extern VkResult getMemoryWin32Handle(VmaAllocator allocator, VmaAllocation allocation, nativeint hTargetProcess, nativeint* pHandle)
+
+    [<DllImport(lib, EntryPoint = "vmaGetMemoryWin32Handle2")>]
+    extern VkResult getMemoryWin32Handle2(VmaAllocator allocator, VmaAllocation allocation, VkExternalMemoryHandleTypeFlags handleType, nativeint hTargetProcess, nativeint* pHandle)
 
     [<DllImport(lib, EntryPoint = "vmaMapMemory")>]
     extern VkResult mapMemory(VmaAllocator allocator, VmaAllocation allocation, void* * ppData)
@@ -720,6 +734,9 @@ module Vma =
     [<DllImport(lib, EntryPoint = "vmaCreateBufferWithAlignment")>]
     extern VkResult createBufferWithAlignment(VmaAllocator allocator, VkBufferCreateInfo* pBufferCreateInfo, VmaAllocationCreateInfo* pAllocationCreateInfo, VkDeviceSize minAlignment, VkBuffer* pBuffer, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo)
 
+    [<DllImport(lib, EntryPoint = "vmaCreateDedicatedBuffer")>]
+    extern VkResult createDedicatedBuffer(VmaAllocator allocator, VkBufferCreateInfo* pBufferCreateInfo, VmaAllocationCreateInfo* pAllocationCreateInfo, nativeint pMemoryAllocateNext, VkBuffer* pBuffer, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo)
+
     [<DllImport(lib, EntryPoint = "vmaCreateAliasingBuffer")>]
     extern VkResult createAliasingBuffer(VmaAllocator allocator, VmaAllocation allocation, VkBufferCreateInfo* pBufferCreateInfo, VkBuffer* pBuffer)
 
@@ -731,6 +748,9 @@ module Vma =
 
     [<DllImport(lib, EntryPoint = "vmaCreateImage")>]
     extern VkResult createImage(VmaAllocator allocator, VkImageCreateInfo* pImageCreateInfo, VmaAllocationCreateInfo* pAllocationCreateInfo, VkImage* pImage, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo)
+
+    [<DllImport(lib, EntryPoint = "vmaCreateDedicatedImage")>]
+    extern VkResult createDedicatedImage(VmaAllocator allocator, VkImageCreateInfo* pImageCreateInfo, VmaAllocationCreateInfo* pAllocationCreateInfo, nativeint pMemoryAllocateNext, VkImage* pImage, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo)
 
     [<DllImport(lib, EntryPoint = "vmaCreateAliasingImage")>]
     extern VkResult createAliasingImage(VmaAllocator allocator, VmaAllocation allocation, VkImageCreateInfo* pImageCreateInfo, VkImage* pImage)

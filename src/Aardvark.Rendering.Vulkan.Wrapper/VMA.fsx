@@ -1,4 +1,4 @@
-﻿#r @"..\..\bin\Debug\netstandard2.0\Aardvark.Rendering.Vulkan.Wrapper.dll"
+﻿#r @"..\..\bin\Release\netstandard2.0\Aardvark.Rendering.Vulkan.Wrapper.dll"
 
 open System
 open System.Collections.Generic
@@ -89,6 +89,7 @@ module Type =
             "DWORD", "uint32"
 
             "VkExternalMemoryHandleTypeFlagsKHR", "VkExternalMemoryHandleTypeFlags"
+            "VkExternalMemoryHandleTypeFlagBits", "VkExternalMemoryHandleTypeFlags"
         ]
 
     let private (|StartsWith|_|) (prefix: string) (str: string) =
@@ -346,18 +347,8 @@ type VmaHeader =
       functions : Function[] }
 
 module VmaHeader =
-    let private vulkanSdkEnv =
-        [ "VULKAN_SDK"; "VK_SDK_PATH" ]
-
-    let private getVulkanSdk() =
-        vulkanSdkEnv |> List.pick (fun v ->
-            let p = Environment.GetEnvironmentVariable v
-            if String.IsNullOrWhiteSpace p then None else Some p
-        )
-
     let read() : VmaHeader =
-        let sdk = getVulkanSdk()
-        let path = Path.Combine(sdk, "Include", "vma", "vk_mem_alloc.h")
+        let path = Path.Combine(__SOURCE_DIRECTORY__, "..", "VKVM", "vma", "vk_mem_alloc.h")
 
         let getSection =
             let data = File.ReadAllLines path

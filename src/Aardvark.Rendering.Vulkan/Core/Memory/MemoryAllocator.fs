@@ -78,13 +78,13 @@ type internal MemoryAllocator (device: IDevice) =
             lazy (new ExternalMemoryPool(allocator, index))
         ).Value
 
-    let tryCreateBuffer pBufferCreateInfo pAllocationCreateInfo hostVisible alignment export =
+    let tryCreateBuffer pBufferCreateInfo pAllocationCreateInfo hostVisible export =
         let mutable buffer = VkBuffer.Null
         let mutable allocation = VmaAllocation.Zero
 
         let result =
-            Vma.createBufferWithAlignment(
-                allocator, pBufferCreateInfo, pAllocationCreateInfo, alignment,
+            Vma.createBuffer(
+                allocator, pBufferCreateInfo, pAllocationCreateInfo,
                 &&buffer, &&allocation, NativePtr.zero
             )
 
@@ -110,7 +110,7 @@ type internal MemoryAllocator (device: IDevice) =
         else
             Result.Error result
 
-    let rec createExternalBuffer pBufferCreateInfo (allocationCreateInfo: _ byref) hostVisible alignment =
+    let rec createExternalBuffer pBufferCreateInfo (allocationCreateInfo: _ byref) hostVisible =
         let mutable memoryTypeIndex = 0u
         Vma.findMemoryTypeIndexForBufferInfo(allocator, pBufferCreateInfo, &&allocationCreateInfo, &&memoryTypeIndex)
             |> checkf "could not find memory type for buffer"
@@ -118,11 +118,11 @@ type internal MemoryAllocator (device: IDevice) =
         let pool = getExternalMemoryPool memoryTypeIndex
         allocationCreateInfo.pool <- pool.Handle
 
-        match tryCreateBuffer pBufferCreateInfo &&allocationCreateInfo hostVisible alignment true with
+        match tryCreateBuffer pBufferCreateInfo &&allocationCreateInfo hostVisible true with
         | Result.Ok result -> result
         | Result.Error _ ->
             &allocationCreateInfo.memoryTypeBits &&&= ~~~(1u <<< int32 memoryTypeIndex)
-            createExternalBuffer pBufferCreateInfo &allocationCreateInfo hostVisible alignment
+            createExternalBuffer pBufferCreateInfo &allocationCreateInfo hostVisible
 
     let rec createExternalImage pImageCreateInfo (allocationCreateInfo: _ byref) hostVisible =
         let mutable memoryTypeIndex = 0u
@@ -138,7 +138,7 @@ type internal MemoryAllocator (device: IDevice) =
             &allocationCreateInfo.memoryTypeBits &&&= ~~~(1u <<< int32 memoryTypeIndex)
             createExternalImage pImageCreateInfo &allocationCreateInfo hostVisible
 
-    let getAllocationInfo (preferDevice: bool) (hostAccess: HostAccess) (priority: float) (bind: bool) (mayAlias: bool) =
+    let getAllocationInfo (preferDevice: bool) (hostAccess: HostAccess) (alignment: uint64) (priority: float) (bind: bool) (mayAlias: bool) =
         let usage =
             if preferDevice then VmaMemoryUsage.AutoPreferDevice
             else VmaMemoryUsage.AutoPreferHost
@@ -158,6 +158,7 @@ type internal MemoryAllocator (device: IDevice) =
         { VmaAllocationCreateInfo.Empty with
             flags          = flags
             usage          = usage
+            minAlignment   = alignment
             priority       = float32 priority
             memoryTypeBits = ~~~0u }
 
@@ -169,12 +170,12 @@ type internal MemoryAllocator (device: IDevice) =
             let hostVisible =
                 hostAccess <> HostAccess.None
 
-            let mutable allocationCreateInfo = getAllocationInfo preferDevice hostAccess priority bind mayAlias
+            let mutable allocationCreateInfo = getAllocationInfo preferDevice hostAccess alignment priority bind mayAlias
 
             if export then
-                createExternalBuffer &&bufferCreateInfo &allocationCreateInfo hostVisible alignment
+                createExternalBuffer &&bufferCreateInfo &allocationCreateInfo hostVisible
             else
-                match tryCreateBuffer &&bufferCreateInfo &&allocationCreateInfo hostVisible alignment false with
+                match tryCreateBuffer &&bufferCreateInfo &&allocationCreateInfo hostVisible false with
                 | Result.Ok result -> result
                 | Result.Error error ->
                     error |> checkf "could not allocate memory for buffer"
@@ -190,7 +191,7 @@ type internal MemoryAllocator (device: IDevice) =
             let hostVisible =
                 hostAccess <> HostAccess.None
 
-            let mutable allocationCreateInfo = getAllocationInfo preferDevice hostAccess priority bind mayAlias
+            let mutable allocationCreateInfo = getAllocationInfo preferDevice hostAccess 0UL priority bind mayAlias
 
             if export then
                 createExternalImage &&imageCreateInfo &allocationCreateInfo hostVisible

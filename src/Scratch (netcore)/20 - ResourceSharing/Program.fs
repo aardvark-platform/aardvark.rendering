@@ -118,7 +118,7 @@ let main argv =
     // window { ... } is similar to show { ... } but instead
     // of directly showing the window we get the window-instance
     // and may show it later.
-    let win =
+    use win =
         window {
             backend Backend.GL
             display Display.Mono

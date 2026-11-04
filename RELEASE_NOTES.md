@@ -1,4 +1,5 @@
 - [VR] Update to Unofficial.OpenVR 2.0.0
+- [Vulkan] Update to VMA 3.5.0
 
 ### 5.6.11
 - Update to .NET 10
