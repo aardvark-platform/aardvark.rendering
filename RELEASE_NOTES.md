@@ -1,3 +1,4 @@
+- Reduce cylinder and cone construction allocations; reject unrepresentable vertex counts before allocating geometry.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 - [Vulkan] Update to VMA 3.5.0
 
