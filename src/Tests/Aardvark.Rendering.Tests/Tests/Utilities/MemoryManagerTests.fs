@@ -457,6 +457,204 @@ module MemoryManager =
                 manager.Free prefix
                 balanced manager allocations 1 context
 
+    module private Reallocation =
+        type private Handle = Live | Empty | Freed | Zeroed
+
+        [<System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)>]
+        let private throwAllocator (error : exn) = raise error
+
+        let private withAllocator chunked aligned capacity onCall action =
+            let calls = Array.zeroCreate<int> 4
+            let mark index = calls.[index] <- calls.[index] + 1; onCall index
+            let source = Memory.array<byte>
+            let memory =
+                { malloc = fun size ->
+                    mark 0
+                    // Original-source probes must remain bounded managed allocations.
+                    if size < 0n || size > 4096n then failtestf "Unexpected backing allocation %d" size
+                    source.malloc size
+                  mfree = fun data size -> mark 1; source.mfree data size
+                  mcopy = fun src srcOffset dst dstOffset size -> mark 2; source.mcopy src srcOffset dst dstOffset size
+                  mrealloc = fun data oldSize newSize ->
+                    mark 3
+                    if newSize < 0n || newSize > 4096n then failtestf "Unexpected backing resize %d" newSize
+                    source.mrealloc data oldSize newSize }
+            let counts() = Array.toList calls
+            if chunked then
+                use manager = new ChunkedMemoryManager<byte[]>(memory, capacity)
+                action
+                    { Alloc = fun align size -> manager.Alloc(align, size)
+                      Realloc = fun block align size -> if aligned then manager.Realloc(block, align, size) else manager.Realloc(block, size)
+                      Free = manager.Free
+                      Use = fun block callback -> manager.Use(block, callback)
+                      Capacity = fun () -> manager.Capactiy }
+                    counts
+            else
+                use manager = new MemoryManager<byte[]>(memory, capacity)
+                action
+                    { Alloc = fun align size -> manager.Alloc(align, size)
+                      Realloc = fun block align size -> if aligned then manager.Realloc(block, align, size) else manager.Realloc(block, size)
+                      Free = manager.Free
+                      Use = fun block callback -> manager.Use(block, callback)
+                      Capacity = fun () -> manager.Capactiy }
+                    counts
+
+        let private same expected actual context =
+            Expect.isTrue (Object.ReferenceEquals(expected, actual)) context
+
+        let private snapshot (block : Block<byte[]>) =
+            let parent, memory, previous, next = block.Parent, block.Memory, block.Prev, block.Next
+            let offset, size, isFree = block.Offset, block.Size, block.IsFree
+            let backing = memory.Value
+            let payload = Array.copy backing
+            fun context ->
+                same parent block.Parent (context + ": parent identity")
+                same memory block.Memory (context + ": storage reference identity")
+                same backing block.Memory.Value (context + ": backing array identity")
+                same previous block.Prev (context + ": predecessor identity")
+                same next block.Next (context + ": successor identity")
+                Expect.equal (block.Offset, block.Size, block.IsFree) (offset, size, isFree) (context + ": range and liveness")
+                Expect.equal backing payload (context + ": complete backing payload")
+
+        let private neighborhood (blocks : Block<byte[]>[]) =
+            blocks |> Array.collect (fun b -> [| b; b.Prev; b.Next |])
+            |> Array.filter (isNull >> not) |> Array.distinct |> Array.map snapshot
+
+        let private read (allocator : TestAllocator) block =
+            let mutable result = Array.empty<byte>
+            allocator.Use block (fun data offset size ->
+                Expect.isGreaterThanOrEqual offset 0n "Bounded managed read offset"
+                Expect.isGreaterThanOrEqual size 0n "Bounded managed read size"
+                Expect.isLessThanOrEqual (offset + size) (nativeint data.Length) "Bounded managed read endpoint"
+                result <- Array.sub data (int offset) (int size))
+            result
+
+        let private fill (allocator : TestAllocator) block value =
+            allocator.Use block (fun data offset size ->
+                Expect.isGreaterThanOrEqual offset 0n "Bounded managed write offset"
+                Expect.isGreaterThanOrEqual size 0n "Bounded managed write size"
+                Expect.isLessThanOrEqual (offset + size) (nativeint data.Length) "Bounded managed write endpoint"
+                Array.Fill(data, value, int offset, int size))
+
+        let private collect (failures : ResizeArray<string>) context action =
+            try action() with error -> failures.Add($"{context}: {error.Message}")
+
+        let private negative handles =
+            let failures = ResizeArray<string>()
+            for chunked in [false; true] do
+                for aligned in [false; true] do
+                    for alignment in [1n; 3n; 8n] do
+                        for handle in handles do
+                            for size in [-1n; -4n; -17n; nativeint Int32.MinValue; IntPtr.MinValue] |> List.distinct do
+                                let context = $"chunked={chunked}, aligned overload={aligned}, alignment={alignment}, handle={handle}, size={size}"
+                                withAllocator chunked aligned 64n ignore (fun allocator counts ->
+                                    let prefix = allocator.Alloc 1n 8n
+                                    let block = allocator.Alloc alignment (if handle = Empty then 0n else 4n)
+                                    let suffix = allocator.Alloc 1n 8n
+                                    if handle = Freed then allocator.Free block
+                                    if handle = Zeroed then allocator.Realloc block alignment 0n
+                                    fill allocator prefix 0xA1uy
+                                    fill allocator suffix 0xB2uy
+                                    if handle = Live then fill allocator block 0xC3uy
+                                    let state = neighborhood [| prefix; block; suffix |]
+                                    let capacity, callbacks = allocator.Capacity(), counts()
+                                    let error = try allocator.Realloc block alignment size; None with error -> Some error
+                                    collect failures (context + ": rejection") (fun () ->
+                                        match error with
+                                        | Some (:? ArgumentOutOfRangeException as error) -> Expect.equal error.ParamName "size" "Negative size parameter"
+                                        | _ -> failtestf "Expected ArgumentOutOfRangeException(size), got %A" error)
+                                    collect failures (context + ": unchanged") (fun () ->
+                                        Expect.equal (allocator.Capacity()) capacity "Capacity after rejection"
+                                        Expect.equal (counts()) callbacks "No allocator callback after rejection"
+                                        for check in state do check context)
+                                    // The concrete -4 bug creates a reusable range overlapping a live guard.
+                                    // Its original-source addresses remain within the 64-byte managed backing.
+                                    if size = -4n then
+                                        collect failures (context + ": subsequent allocation") (fun () ->
+                                            let fresh = allocator.Alloc 1n 8n
+                                            fill allocator fresh 0xD4uy
+                                            Expect.equal (read allocator prefix) (Array.create 8 0xA1uy) "Allocation after rejection preserves the preceding live guard"
+                                            Expect.equal (read allocator suffix) (Array.create 8 0xB2uy) "Allocation after rejection preserves the following live guard"
+                                            if handle = Live then Expect.equal (read allocator block) (Array.create 4 0xC3uy) "Allocation after rejection preserves the live owner"))
+            Expect.isEmpty failures (String.concat "\n" failures)
+
+        let negativeLive() = negative [Live]
+        let negativeInactive() = negative [Empty; Freed; Zeroed]
+
+        let successfulResizes() =
+            for chunked in [false; true] do
+                for aligned in [false; true] do
+                    for alignment in [1n; 3n; 8n; 32n] do
+                        for size in [4n; 17n; 32n] do
+                            let context = $"chunked={chunked}, aligned overload={aligned}, alignment={alignment}, initial size={size}"
+                            withAllocator chunked aligned 256n ignore (fun allocator counts ->
+                                let prefix = allocator.Alloc 1n alignment
+                                let block = allocator.Alloc alignment size
+                                let holeSize = size + 8n
+                                let hole = allocator.Alloc 1n holeSize
+                                let suffix = allocator.Alloc 1n 7n
+                                allocator.Free hole
+                                fill allocator prefix 0xA1uy
+                                fill allocator suffix 0xB2uy
+                                fill allocator block 0xC3uy
+                                let reference, storage, offset = block.Memory, block.Memory.Value, block.Offset
+                                let capacity, callbacks = allocator.Capacity(), counts()
+                                let unchanged = neighborhood [| prefix; block; suffix |]
+                                allocator.Realloc block alignment size
+                                for check in unchanged do check (context + ": same size")
+                                for requested in [size / 2n; size + 4n; size + holeSize] do
+                                    let retained = read allocator block |> Array.take (int (min block.Size requested))
+                                    allocator.Realloc block alignment requested
+                                    same reference block.Memory (context + ": in-place storage reference")
+                                    same storage block.Memory.Value (context + ": in-place backing identity")
+                                    Expect.equal (block.Offset, block.Size, block.IsFree) (offset, requested, false) (context + ": retained handle range")
+                                    Expect.equal (offset % alignment) 0n (context + ": alignment")
+                                    Expect.equal (read allocator block |> Array.take retained.Length) retained (context + ": retained prefix")
+                                    fill allocator block 0xC3uy
+                                same block suffix.Prev (context + ": in-place growth consumes the free neighbor")
+                                allocator.Realloc block alignment 0n
+                                Expect.equal (block.Offset, block.Size, block.IsFree) (-1n, 0n, true) (context + ": zero frees the handle")
+                                Expect.isNull block.Prev (context + ": detached predecessor")
+                                Expect.isNull block.Next (context + ": detached successor")
+                                same reference block.Memory (context + ": zero retains the storage reference")
+                                let zero = neighborhood [| prefix; block; suffix |]
+                                allocator.Realloc block alignment 0n
+                                for check in zero do check (context + ": repeated zero")
+                                Expect.equal (allocator.Capacity()) capacity (context + ": capacity")
+                                Expect.equal (counts()) callbacks (context + ": same-size, shrink, in-place growth and zero need no backing callbacks")
+                                let reused = allocator.Alloc alignment (size + holeSize)
+                                Expect.equal reused.Offset offset (context + ": freed range is reusable with the original alignment")
+                                fill allocator reused 0xD4uy
+                                Expect.equal (read allocator prefix) (Array.create (int alignment) 0xA1uy) (context + ": preceding guard")
+                                Expect.equal (read allocator suffix) (Array.create 7 0xB2uy) (context + ": following guard"))
+
+        let failurePropagation() =
+            for aligned in [false; true] do
+                for callback in [2; 3] do
+                    let context = $"aligned overload={aligned}, copy/realloc callback={callback}"
+                    let expected = ApplicationException(context)
+                    let mutable armed = false
+                    withAllocator false aligned 64n (fun index -> if armed && index = callback then throwAllocator expected) (fun allocator _ ->
+                        let block = allocator.Alloc 1n 4n
+                        allocator.Alloc 1n 8n |> ignore
+                        armed <- true
+                        let actual = try allocator.Realloc block 8n (if callback = 2 then 16n else 128n); None with error -> Some error
+                        match actual with
+                        | Some error ->
+                            same expected error (context + ": original callback error")
+                            Expect.stringContains error.StackTrace "throwAllocator" (context + ": original throw site")
+                        | None -> failtest (context + ": callback failure was lost"))
+                withAllocator true aligned 64n ignore (fun allocator counts ->
+                    let block = allocator.Alloc 1n 4n
+                    let suffix = allocator.Alloc 1n 8n
+                    let unchanged, callbacks = neighborhood [| block; suffix |], counts()
+                    let actual = try allocator.Realloc block 8n 16n; None with error -> Some error
+                    match actual with
+                    | Some error -> Expect.equal error.Message "[MemoryManager] cannot realloc when no mcopy given" "Existing chunked relocation error"
+                    | None -> failtest "Blocked chunked growth must retain its existing failure"
+                    for check in unchanged do check "Blocked chunked growth"
+                    Expect.equal (counts()) callbacks "Blocked chunked growth does not call the allocator")
+
     let tests (target: TestTarget) =
         [
             "Contiguous manager updates size when shrinking", Cases.contiguous
@@ -470,5 +668,10 @@ module MemoryManager =
             "Chunked competing frees preserve live siblings",              Cases.competingSiblingFrees
             "Chunked sequential duplicate frees retain the fast path",     Cases.sequentialDuplicateFrees
             "Chunked concurrent distinct frees coalesce and retire once",  Cases.concurrentDistinctFrees
+
+            "Reallocation.Negative live sizes preserve owners",    Reallocation.negativeLive
+            "Reallocation.Negative inactive sizes preserve state", Reallocation.negativeInactive
+            "Reallocation.Successful resizes retain behavior",     Reallocation.successfulResizes
+            "Reallocation.Valid failures retain their errors",     Reallocation.failurePropagation
         ]
         |> prepareCasesCpu "MemoryManager" target
