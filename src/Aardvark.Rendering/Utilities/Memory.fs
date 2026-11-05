@@ -26,17 +26,21 @@ module Management =
                 mrealloc = fun ptr _ n -> Marshal.ReAllocHGlobal(ptr, n)
             }
 
+        /// Uses COM task memory with Int32 byte counts.
+        /// Allocation and resize sizes outside the Int32 range throw OverflowException before touching storage.
         let cotask =
             {
-                malloc = fun s -> Marshal.AllocCoTaskMem(int s)
+                malloc = fun s -> Marshal.AllocCoTaskMem(Checked.int s)
                 mfree = fun ptr _ -> Marshal.FreeCoTaskMem ptr
                 mcopy = fun src srcOff dst dstOff size -> Marshal.Copy(src + srcOff, dst + dstOff, size)
-                mrealloc = fun ptr _ n -> Marshal.ReAllocCoTaskMem(ptr, int n)
+                mrealloc = fun ptr _ n -> Marshal.ReAllocCoTaskMem(ptr, Checked.int n)
             }
 
+        /// Uses zero-initialized arrays with Int32 element counts, not byte counts.
+        /// Allocation and resize sizes outside the Int32 range throw OverflowException before touching storage.
         let array<'a> =
             {
-                malloc = fun s -> Array.zeroCreate<'a> (int s)
+                malloc = fun s -> Array.zeroCreate<'a> (Checked.int s)
 
                 mfree = fun a s ->
                     ()
@@ -46,7 +50,7 @@ module Management =
 
                 mrealloc = fun ptr o n ->
                     let mutable ptr = ptr
-                    Array.Resize(&ptr, int n)
+                    Array.Resize(&ptr, Checked.int n)
                     ptr
             }
 

@@ -3,7 +3,9 @@
 open System
 open System.Collections.Concurrent
 open System.Reflection
+open System.Runtime.InteropServices
 open System.Threading
+open Aardvark.Base
 open Aardvark.Rendering.Management
 open Aardvark.Rendering.Tests
 open Expecto
@@ -457,6 +459,156 @@ module MemoryManager =
                 manager.Free prefix
                 balanced manager allocations 1 context
 
+    module private Adapters =
+        let private overflowRequests () =
+            if IntPtr.Size = 8 then
+                [ for high in [1L <<< 32; -(1L <<< 32); 1L <<< 62; Int64.MinValue] do
+                    for low in [0; 1; 7; 65] do
+                        let requested = nativeint (high + int64 low)
+                        // Even an unchecked original can only allocate/resize to these small low bits.
+                        Expect.equal (int64 requested &&& 0xFFFFFFFFL) (int64 low) $"requested={requested}: bounded original fixture"
+                        Expect.isTrue (int64 requested > int64 Int32.MaxValue || int64 requested < int64 Int32.MinValue)
+                            $"requested={requested}: outside Int32"
+                        yield requested, low ]
+            else []
+
+        let private overflow (errors : ResizeArray<string>) context action =
+            try
+                action()
+                errors.Add(context + ": request was silently truncated")
+                false
+            with
+            | :? OverflowException -> true
+            | error ->
+                errors.Add($"{context}: expected OverflowException, got {error.GetType().FullName}")
+                false
+
+        let private rejectArray<'T when 'T : equality> (pattern : 'T[]) errors =
+            let memory = Memory.array<'T>
+            for requested, low in overflowRequests() do
+                let context = $"array<{typeof<'T>.Name}>, requested={requested}, unchecked size={low}"
+                overflow errors (context + ": allocation") (fun () ->
+                    let data = memory.malloc requested
+                    memory.mfree data (nativeint data.Length)) |> ignore
+                let original = Array.init 17 (fun i -> pattern.[i % pattern.Length])
+                let saved = Array.copy original
+                if overflow errors (context + ": resize") (fun () ->
+                    let resized = memory.mrealloc original 17n requested
+                    memory.mfree resized (nativeint resized.Length)) then
+                    Expect.equal original saved (context + ": rejected resize preserves the original array")
+                    let grown = memory.mrealloc original 17n 65n
+                    Expect.equal grown.[0..16] saved (context + ": original remains usable for growth")
+                    Expect.equal grown.[17..] (Array.create 48 Unchecked.defaultof<'T>) (context + ": grown suffix is initialized")
+                    memory.mfree grown 65n
+
+        let arraysReject () =
+            let errors = ResizeArray<string>()
+            rejectArray [|0uy; 7uy; 255uy|] errors
+            rejectArray [|Int64.MinValue; 17L; Int64.MaxValue|] errors
+            rejectArray [|V3f.Zero; V3f(1.25f, -2.5f, 3.75f)|] errors
+            rejectArray [|null; "retained"; "prefix"|] errors
+            Expect.isEmpty errors (String.concat "\n" errors)
+
+        let private readNative (pointer : nativeint) count =
+            let result = Array.zeroCreate<byte> count
+            if count > 0 then Marshal.Copy(pointer, result, 0, count)
+            result
+
+        let private writeNative (pointer : nativeint) (data : byte[]) =
+            if data.Length > 0 then Marshal.Copy(data, 0, pointer, data.Length)
+
+        let nativeReject () =
+            let memory = Memory.cotask
+            let errors = ResizeArray<string>()
+            let pattern = Array.init 17 (fun i -> byte (13 * i + 3))
+            for requested, low in overflowRequests() do
+                let context = $"CoTaskMem, requested={requested}, unchecked size={low}"
+                let mutable owned = 0n
+                try
+                    overflow errors (context + ": allocation") (fun () -> owned <- memory.malloc requested) |> ignore
+                finally
+                    if owned <> 0n then memory.mfree owned (nativeint low)
+
+                let mutable owned = memory.malloc 17n
+                let mutable ownedSize = 17n
+                try
+                    writeNative owned pattern
+                    let before = owned
+                    if overflow errors (context + ": resize") (fun () ->
+                        // Original ReAlloc can move the pointer or free it when its truncated size is zero.
+                        owned <- memory.mrealloc owned ownedSize requested
+                        ownedSize <- nativeint low) then
+                        Expect.equal owned before (context + ": rejected resize retains ownership")
+                        Expect.equal (readNative owned 17) pattern (context + ": rejected resize retains every byte")
+                        owned <- memory.mrealloc owned ownedSize 65n
+                        ownedSize <- 65n
+                        Expect.equal (readNative owned 17) pattern (context + ": retained allocation can still grow")
+                finally
+                    // Free the returned pointer after unexpected original success, never a stale predecessor.
+                    if owned <> 0n then memory.mfree owned ownedSize
+            Expect.isEmpty errors (String.concat "\n" errors)
+
+        let private boundedArray<'T when 'T : equality> (pattern : 'T[]) =
+            let memory = Memory.array<'T>
+            for initial in [0; 1; 7; 64; 4096] do
+                let mutable data = memory.malloc (nativeint initial)
+                try
+                    Expect.equal data (Array.create initial Unchecked.defaultof<'T>) $"array<{typeof<'T>.Name}>, requested={initial}: zero initialization"
+                    for size in [initial; initial + 5; initial / 2; 0; 17] do
+                        let context = $"array<{typeof<'T>.Name}>, old={data.Length}, requested={size}"
+                        let original, saved = data, Array.copy data
+                        data <- memory.mrealloc data (nativeint data.Length) (nativeint size)
+                        Expect.equal data.Length size (context + ": length")
+                        Expect.equal original saved (context + ": resize does not mutate caller's array")
+                        let retained = min saved.Length size
+                        Expect.equal data.[0..retained - 1] saved.[0..retained - 1] (context + ": retained prefix")
+                        if size > saved.Length then
+                            Expect.equal data.[saved.Length..] (Array.create (size - saved.Length) Unchecked.defaultof<'T>) (context + ": initialized growth")
+                        if size = saved.Length then
+                            Expect.isTrue (obj.ReferenceEquals(data, original)) (context + ": unchanged size retains identity")
+                        for i in 0 .. size - 1 do data.[i] <- pattern.[i % pattern.Length]
+                finally
+                    memory.mfree data (nativeint data.Length)
+
+        let bounded () =
+            boundedArray [|0uy; 7uy; 255uy|]
+            boundedArray [|Int64.MinValue; 17L; Int64.MaxValue|]
+            boundedArray [|V3f.Zero; V3f(1.25f, -2.5f, 3.75f)|]
+            boundedArray [|null; "retained"; "prefix"|]
+            let memory = Memory.cotask
+            for initial in [0; 1; 7; 64; 4096] do
+                let mutable owned = memory.malloc (nativeint initial)
+                let mutable size = initial
+                let mutable expected = Array.init initial (fun i -> byte ((i * 13 + 3) % 256))
+                try
+                    writeNative owned expected
+                    for requested in [initial; initial + 5; initial / 2; 0; 17] do
+                        let context = $"CoTaskMem, old={size}, requested={requested}"
+                        let retained = min size requested
+                        owned <- memory.mrealloc owned (nativeint size) (nativeint requested)
+                        size <- requested
+                        // CoTaskMem growth is not required to initialize the new suffix.
+                        Expect.equal (readNative owned retained) expected.[0..retained - 1] (context + ": retained prefix")
+                        expected <- Array.init size (fun i -> byte ((i * 29 + 7) % 256))
+                        writeNative owned expected
+                        Expect.equal (readNative owned size) expected (context + ": allocation remains writable")
+                finally
+                    if owned <> 0n then memory.mfree owned (nativeint size)
+
+        let private rejectManager<'T> (errors : ResizeArray<string>) =
+            for requested, low in overflowRequests() do
+                let context = $"MemoryManager<{typeof<'T>.Name}[]>, requested={requested}, unchecked capacity={low}"
+                overflow errors context (fun () ->
+                    use manager = new MemoryManager<'T[]>(Memory.array<'T>, requested)
+                    // Do not use the incorrectly sized original manager's allocation/copy algorithms.
+                    GC.KeepAlive manager) |> ignore
+
+        let managerReject () =
+            let errors = ResizeArray<string>()
+            rejectManager<byte> errors
+            rejectManager<int64> errors
+            Expect.isEmpty errors (String.concat "\n" errors)
+
     let tests (target: TestTarget) =
         [
             "Contiguous manager updates size when shrinking", Cases.contiguous
@@ -470,5 +622,10 @@ module MemoryManager =
             "Chunked competing frees preserve live siblings",              Cases.competingSiblingFrees
             "Chunked sequential duplicate frees retain the fast path",     Cases.sequentialDuplicateFrees
             "Chunked concurrent distinct frees coalesce and retire once",  Cases.concurrentDistinctFrees
+
+            "Adapters.Array sizes reject truncation",             Adapters.arraysReject
+            "Adapters.CoTaskMem sizes reject truncation",         Adapters.nativeReject
+            "Adapters.Bounded allocation and resizing",           Adapters.bounded
+            "Adapters.Array manager capacity rejects truncation", Adapters.managerReject
         ]
         |> prepareCasesCpu "MemoryManager" target
