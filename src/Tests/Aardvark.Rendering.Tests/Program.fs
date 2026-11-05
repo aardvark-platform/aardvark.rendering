@@ -1,8 +1,16 @@
 ﻿open Aardvark.Rendering.Tests
 open Expecto
 
-[<Tests>]
-let tests =
+let tests (targets: TestTarget list) =
+    let testAllTargets  =
+        if targets.IsEmpty then
+            testAllTargets
+        else
+            fun group tests ->
+                targets
+                |> List.map (fun target -> testTarget target tests)
+                |> testList group
+
     Test.ofList [
         testAllTargets "Buffers" [
             Buffer.AdaptiveBufferTests.tests
@@ -90,11 +98,35 @@ let tests =
         ]
     ]
 
+[<Tests>]
+let allTests = tests []
+
 [<EntryPoint>]
 let main argv =
-    let runManuallyInMain = true
+    let switches =
+        Map.ofList [
+            "cpu-only",     "Only run CPU tests."
+            "stop-on-fail", "Stop as soon as a test fails."
+            "help",         "Show this help text."
+        ]
 
-    if runManuallyInMain then
-        runTestsSynchronously true tests
+    let switch name =
+        switches.ContainsKey name && argv |> Array.contains $"--{name}"
+
+    if switch "help" then
+        printfn "Run tests"
+        printfn ""
+        printfn "OPTIONS"
+        let n = switches.Keys |> Seq.map _.Length |> Seq.max
+        for KeyValue(name, desc) in switches do
+            printfn $"    --{name.PadRight n}    {desc}"
+        0
     else
-        runTestsWithCLIArgs [ CLIArguments.No_Spinner ] argv tests
+        let tests =
+            if switch "cpu-only" then
+                tests [TestTarget.Cpu]
+            else
+                allTests
+
+        let stopOnFail = switch "stop-on-fail"
+        runTestsSynchronously stopOnFail tests
