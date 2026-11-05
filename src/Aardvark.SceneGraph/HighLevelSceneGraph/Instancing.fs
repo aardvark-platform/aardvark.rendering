@@ -123,39 +123,39 @@ module Instancing =
     [<Rule>]
     type InstancingSem() =
 
-        static let bufferToM44f (inverse : bool) (b : IBuffer) =
-            match b with
-            | :? ArrayBuffer as b ->
-                match b.Data with
-                | :? array<M44f> as arr -> 
-                    if inverse then arr |> Array.map (fun m -> m.Inverse)
-                    else arr
-                | :? array<M44d> as arr ->
-                    if inverse then arr |> Array.map (fun m -> m.Inverse |> M44f.op_Explicit)
-                    else arr |> Array.map M44f.op_Explicit
-                | :? array<Trafo3d> as arr ->
-                    if inverse then arr |> Array.map (fun m -> m.Backward |> M44f.op_Explicit)
-                    else arr |> Array.map (fun m -> m.Forward |> M44f.op_Explicit)
-                | arr ->
-                    failwithf "unknown trafo type: %A" (arr.GetType().GetElementType())
-            | _ ->
-                failwithf "unknown buffer type: %A" b
-
         static let mergeFW (inner : Trafo3d) (instances : IBuffer) =
-            bufferToM44f false instances
-            |> Array.map (fun i ->
-                M44d.op_Explicit i * inner.Forward |> M44f.op_Explicit
-            ) 
-            |> ArrayBuffer 
-            :> IBuffer
+            let data =
+                match instances with
+                | :? ArrayBuffer as b ->
+                    match b.Data with
+                    | :? array<M44f> as arr ->
+                        arr |> Array.map (fun m -> M44d.op_Explicit m * inner.Forward |> M44f.op_Explicit)
+                    | :? array<M44d> as arr ->
+                        arr |> Array.map (fun m -> m * inner.Forward |> M44f.op_Explicit)
+                    | :? array<Trafo3d> as arr ->
+                        arr |> Array.map (fun m -> m.Forward * inner.Forward |> M44f.op_Explicit)
+                    | arr ->
+                        failwithf "unknown trafo type: %A" (arr.GetType().GetElementType())
+                | _ ->
+                    failwithf "unknown buffer type: %A" instances
+            ArrayBuffer data :> IBuffer
 
         static let mergeBW (inner : Trafo3d) (instances : IBuffer) =
-            bufferToM44f true instances 
-            |> Array.map (fun i ->
-                inner.Backward * M44d.op_Explicit i |> M44f.op_Explicit
-            ) 
-            |> ArrayBuffer 
-            :> IBuffer
+            let data =
+                match instances with
+                | :? ArrayBuffer as b ->
+                    match b.Data with
+                    | :? array<M44f> as arr ->
+                        arr |> Array.map (fun m -> inner.Backward * M44d.op_Explicit m.Inverse |> M44f.op_Explicit)
+                    | :? array<M44d> as arr ->
+                        arr |> Array.map (fun m -> inner.Backward * m.Inverse |> M44f.op_Explicit)
+                    | :? array<Trafo3d> as arr ->
+                        arr |> Array.map (fun m -> inner.Backward * m.Backward |> M44f.op_Explicit)
+                    | arr ->
+                        failwithf "unknown trafo type: %A" (arr.GetType().GetElementType())
+                | _ ->
+                    failwithf "unknown buffer type: %A" instances
+            ArrayBuffer data :> IBuffer
 
         static let instanceTrafoCache = 
             BinaryCache<aval<Trafo3d>, aval<IBuffer>, BufferView * BufferView>(fun inner instances ->
