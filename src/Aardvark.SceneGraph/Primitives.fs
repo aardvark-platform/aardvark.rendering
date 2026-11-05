@@ -539,14 +539,21 @@ module SgPrimitives =
             let call = 
                 lines |> AVal.map (fun lines ->
                     DrawCallInfo(
-                        FaceVertexCount = 2 * lines.Length,
+                        FaceVertexCount = Checked.(*) 2 lines.Length,
                         InstanceCount = 1
                     )
                 )
 
             let positions =
                 lines |> AVal.map (fun l ->
-                    l |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1|])
+                    if isNull l then nullArg "array"
+                    let positions = Array.zeroCreate<V3f> (Checked.(*) 2 l.Length)
+                    for i = 0 to l.Length - 1 do
+                        let line = l.[i]
+                        let j = 2 * i
+                        positions.[j] <- V3f line.P0
+                        positions.[j + 1] <- V3f line.P1
+                    positions
                 )
             
             Sg.RenderNode(call, IndexedGeometryMode.LineList)
@@ -560,19 +567,35 @@ module SgPrimitives =
             let call = 
                 triangles |> AVal.map (fun triangles ->
                     DrawCallInfo(
-                        FaceVertexCount = 3 * triangles.Length,
+                        FaceVertexCount = Checked.(*) 3 triangles.Length,
                         InstanceCount = 1
                     )
                 )
 
             let positions =
                 triangles |> AVal.map (fun l ->
-                    l |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1; V3f l.P2|])
+                    if isNull l then nullArg "array"
+                    let positions = Array.zeroCreate<V3f> (Checked.(*) 3 l.Length)
+                    for i = 0 to l.Length - 1 do
+                        let triangle = l.[i]
+                        let j = 3 * i
+                        positions.[j] <- V3f triangle.P0
+                        positions.[j + 1] <- V3f triangle.P1
+                        positions.[j + 2] <- V3f triangle.P2
+                    positions
                 )
 
             let normals =
                 triangles |> AVal.map (fun l ->
-                    l |> Array.collect (fun l -> [|V3f l.Normal; V3f l.Normal; V3f l.Normal|])
+                    if isNull l then nullArg "array"
+                    let normals = Array.zeroCreate<V3f> (Checked.(*) 3 l.Length)
+                    for i = 0 to l.Length - 1 do
+                        let normal = V3f l.[i].Normal
+                        let j = 3 * i
+                        normals.[j] <- normal
+                        normals.[j + 1] <- normal
+                        normals.[j + 2] <- normal
+                    normals
                 )
             
             Sg.RenderNode(call, IndexedGeometryMode.TriangleList)
