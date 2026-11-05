@@ -1,4 +1,4 @@
-[![Build](https://github.com/aardvark-platform/aardvark.rendering/actions/workflows/build.yml/badge.svg)](https://github.com/aardvark-platform/aardvark.rendering/actions/workflows/build.yml)
+[![Test](https://github.com/aardvark-platform/aardvark.rendering/actions/workflows/test.yml/badge.svg)](https://github.com/aardvark-platform/aardvark.rendering/actions/workflows/testyml)
 [![Publish](https://github.com/aardvark-platform/aardvark.rendering/actions/workflows/publish.yml/badge.svg)](https://github.com/aardvark-platform/aardvark.rendering/actions/workflows/publish.yml)
 [![License](https://img.shields.io/github/license/aardvark-platform/aardvark.base.svg?label=License)](https://github.com/aardvark-platform/aardvark.rendering/blob/master/LICENSE)
 [![Discord](https://img.shields.io/discord/611129394764840960?label=Discord)](https://discord.gg/UyecnhM)
