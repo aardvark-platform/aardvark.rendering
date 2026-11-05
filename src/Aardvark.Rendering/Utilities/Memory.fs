@@ -341,7 +341,9 @@ module Management =
 
                 )
 
+        /// <exception cref="ArgumentOutOfRangeException">The requested size is negative.</exception>
         member x.Realloc(b : Block<'a>, align : nativeint, size : nativeint) =
+            if size < 0n then raise (ArgumentOutOfRangeException(nameof size, "The size must not be negative."))
             if b.Size <> size then
                 lock free (fun () ->
                     if b.IsFree then
@@ -406,6 +408,7 @@ module Management =
 
                 )
 
+        /// <exception cref="ArgumentOutOfRangeException">The requested size is negative.</exception>
         member x.Realloc(b : Block<'a>, size : nativeint) =
             x.Realloc(b, 1n, size)
 
@@ -573,7 +576,9 @@ module Management =
 
                 )
 
+        /// <exception cref="ArgumentOutOfRangeException">The requested size is negative.</exception>
         member x.Realloc(b : Block<'a>, align : nativeint, size : nativeint) =
+            if size < 0n then raise (ArgumentOutOfRangeException(nameof size, "The size must not be negative."))
             if b.Size <> size then
                 lock free (fun () ->
                     if size = 0n then
@@ -624,6 +629,7 @@ module Management =
                             failwithf "[MemoryManager] cannot realloc when no mcopy given"
                 )
 
+        /// <exception cref="ArgumentOutOfRangeException">The requested size is negative.</exception>
         member x.Realloc(b : Block<'a>, size : nativeint) =
             x.Realloc(b, 1n, size)
 
