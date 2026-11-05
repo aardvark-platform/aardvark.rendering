@@ -77,6 +77,7 @@
     <Compile Include="Tests\Rendering\Commands.fs" />
     <Compile Include="Tests\Rendering\LodRenderer.fs" />
     <Compile Include="Tests\Rendering\SceneGraph.fs" />
+    <Compile Include="Tests\Rendering\PickingRayTransform.fs" />
     <Compile Include="Tests\Compute\Images.fs" />
     <Compile Include="Tests\Compute\Buffers.fs" />
     <Compile Include="Tests\Compute\Primitives.fs" />
