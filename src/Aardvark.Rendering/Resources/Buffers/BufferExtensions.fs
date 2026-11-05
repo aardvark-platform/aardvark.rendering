@@ -489,13 +489,16 @@ type IBufferRuntimeExtensions private() =
 
     ///<summary>Creates a typed buffer.</summary>
     ///<param name="this">The runtime.</param>
-    ///<param name="count">The number of elements in the buffer.</param>
+    ///<param name="count">The nonnegative number of elements in the buffer. Zero creates an empty buffer.</param>
     ///<param name="usage">The usage flags of the buffer. Default is BufferUsage.All.</param>
     ///<param name="storage">The type of storage that is preferred. Default is BufferStorage.Device.</param>
+    ///<exception cref="ArgumentOutOfRangeException">Thrown before allocation if <paramref name="count"/> is negative.</exception>
     [<Extension>]
     static member CreateBuffer<'T when 'T : unmanaged>(this : IBufferRuntime, count : int,
                                                        [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                                                        [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
+        if count < 0 then
+            raise <| ArgumentOutOfRangeException(nameof count, "The element count must not be negative.")
         let buffer = this.CreateBuffer(byteSize<'T> count, usage, storage)
         new Buffer<'T>(buffer) :> IBuffer<'T>
 
