@@ -127,6 +127,32 @@ module ContextCreation =
                 for t in threads do
                     t.Join()
 
+        // MakeCurrent on a disposed handle throws, and must not leave the handle's lock entered: another thread's
+        // MakeCurrent would then block forever instead of throwing too.
+        let makeCurrentAfterDispose (runtime : IRuntime) =
+            let ctx = (unbox<Runtime> runtime).Context
+
+            let h = ctx.CreateContext()
+            h.Dispose()
+
+            let throws() =
+                try
+                    h.MakeCurrent()
+                    false
+                with :? System.ObjectDisposedException ->
+                    true
+
+            if not (throws()) then
+                failwith "MakeCurrent on a disposed handle did not throw"
+
+            let other = System.Threading.Tasks.Task.Run(fun () -> throws())
+
+            if not (other.Wait(System.TimeSpan.FromSeconds 5.0)) then
+                failwith "MakeCurrent on another thread blocked on the disposed handle's lock"
+
+            if not other.Result then
+                failwith "MakeCurrent on another thread did not throw"
+
     let tests (target: TestTarget) =
         [
             // Tests context sharing and demonstrates that using the
@@ -137,5 +163,7 @@ module ContextCreation =
 
             // Worst case scenario in which all contexts are currently used.
             "Create after make current all",    Cases.createAfterMakeCurrentAll
+
+            "Make current after dispose",       Cases.makeCurrentAfterDispose
         ]
         |> prepareCasesFor "Context" target [TestTarget.GLFW; TestTarget.OpenTK]
