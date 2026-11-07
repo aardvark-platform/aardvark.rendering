@@ -1,6 +1,7 @@
 - Fixed adaptive textures and texture arrays to clean up newly created handles when assigning their debug name fails.
 - Reject negative memory-manager resize sizes before changing allocations, preserving live blocks and neighboring payloads.
 - Preserve all scenes and commands from consumable sequences by snapshotting render-command inputs eagerly in a single pass.
+- Prevent screenshot captures from leaking temporary renderbuffers and resolve textures, including when capture fails.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 - [Vulkan] Update to VMA 3.5.0
 

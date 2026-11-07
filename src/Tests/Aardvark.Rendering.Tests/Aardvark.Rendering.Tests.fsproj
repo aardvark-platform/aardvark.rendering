@@ -74,6 +74,7 @@
     <Compile Include="Tests\Rendering\DrawCalls.fs" />
     <Compile Include="Tests\Rendering\Viewport.fs" />
     <Compile Include="Tests\Rendering\ResourceManagement.fs" />
+    <Compile Include="Tests\Rendering\Screenshots.fs" />
     <Compile Include="Tests\Rendering\Commands.fs" />
     <Compile Include="Tests\Rendering\LodRenderer.fs" />
     <Compile Include="Tests\Rendering\SceneGraph.fs" />

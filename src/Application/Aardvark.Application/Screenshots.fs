@@ -20,8 +20,8 @@ module Screenshot =
             signature.DepthStencilAttachment |> Option.defaultValue TextureFormat.DepthComponent32
 
         //use lock = runtime.ContextLock
-        let color = runtime.CreateRenderbuffer(size, color.Format, samples)
-        let depth = runtime.CreateRenderbuffer(size, depth, samples)
+        use color = runtime.CreateRenderbuffer(size, color.Format, samples)
+        use depth = runtime.CreateRenderbuffer(size, depth, samples)
         use clear = runtime.CompileClear(signature, ~~C4f(0.0f,0.0f,0.0f,0.0f), ~~1.0)
 
         use fbo = 
@@ -38,7 +38,7 @@ module Screenshot =
         task.Run(AdaptiveToken.Top, RenderToken.Empty, desc) |> ignore
 
 
-        let colorTexture = runtime.CreateTexture2D(size, TextureFormat.Rgba8, 1, 1)
+        use colorTexture = runtime.CreateTexture2D(size, TextureFormat.Rgba8, 1, 1)
         runtime.ResolveMultisamples(color, colorTexture)
 
         runtime.Download(colorTexture, PixFormat.ByteRGBA)

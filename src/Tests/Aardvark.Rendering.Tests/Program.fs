@@ -51,6 +51,7 @@ let tests (targets: TestTarget list) =
             Rendering.DrawCalls.tests
             Rendering.Viewport.tests
             Rendering.ResourceManagement.tests
+            Rendering.Screenshots.tests
             Rendering.Commands.tests
             Rendering.LodRenderer.tests
             Rendering.SceneGraph.tests
