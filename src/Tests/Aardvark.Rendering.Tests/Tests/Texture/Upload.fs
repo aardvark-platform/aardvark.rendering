@@ -44,6 +44,154 @@ module TextureUpload =
                 return diffuseSampler.SampleLevel(v.tc, level)
             }
 
+    module private SliceAssignments =
+        type private Route = ImageVector | ImageScalar | VolumeVector | VolumeScalar
+        type private Problem = Reversed | Outside | Extreme
+
+        let private isImage = function ImageVector | ImageScalar -> true | _ -> false
+        let private routes = [ImageVector; ImageScalar; VolumeVector; VolumeScalar]
+        let private sentinel = C4b(101uy, 35uy, 219uy, 255uy)
+        let private pixel (p : V3i) = C4b(byte (17 + p.X * 3), byte (41 + p.Y * 5), byte (67 + p.Z * 7), 255uy)
+
+        let private volume (size : V3i) (color : V3i -> C4b) =
+            let value = PixVolume<byte>(Col.Format.RGBA, size)
+            let mutable pixels = value.GetVolume<C4b>()
+            for z in 0 .. size.Z - 1 do
+                for y in 0 .. size.Y - 1 do
+                    for x in 0 .. size.X - 1 do pixels.[x, y, z] <- color (V3i(x, y, z))
+            value
+
+        let private source route (size : V3i) =
+            if isImage route then
+                let image = PixImage<byte>(Col.Format.RGBA, size.XY)
+                let mutable pixels = image.GetMatrix<C4b>()
+                for y in 0 .. size.Y - 1 do
+                    for x in 0 .. size.X - 1 do pixels.[x, y] <- pixel (V3i(x, y, 0))
+                Choice1Of2 image
+            else
+                Choice2Of2 (volume size pixel)
+
+        let private assign route (target : ITextureSubResource) (low : V3i option) (high : V3i option) data =
+            match route, data with
+            | ImageVector, Choice1Of2 image -> target.SetSlice(low |> Option.map _.XY, high |> Option.map _.XY, image :> PixImage)
+            | ImageScalar, Choice1Of2 image -> target.SetSlice(low |> Option.map _.X, high |> Option.map _.X, low |> Option.map _.Y, high |> Option.map _.Y, image :> PixImage)
+            | VolumeVector, Choice2Of2 value -> target.SetSlice(low, high, value :> PixVolume)
+            | VolumeScalar, Choice2Of2 value -> target.SetSlice(low |> Option.map _.X, high |> Option.map _.X, low |> Option.map _.Y, high |> Option.map _.Y, low |> Option.map _.Z, high |> Option.map _.Z, value :> PixVolume)
+            | _ -> failtest "Source and assignment overload disagree"
+
+        let private invalid problem route (dimensions : V3i) =
+            let axes = if isImage route then [V3i.IOO; V3i.OIO] else [V3i.IOO; V3i.OIO; V3i.OOI]
+            let one = if isImage route then V3i(1, 1, 0) else V3i.III
+            match problem with
+            | Reversed ->
+                [ yield one, V3i.Zero
+                  yield 2 * one, V3i.Zero
+                  for axis in axes do
+                      yield axis, V3i.Zero
+                      yield 2 * axis, V3i.Zero ]
+            | Outside ->
+                [ yield V3i.Zero, dimensions
+                  yield -one, V3i.Zero
+                  for axis in axes do
+                      yield V3i.Zero, dimensions - V3i.III + axis
+                      yield -axis, V3i.Zero
+                      yield dimensions * axis, dimensions * axis ]
+            | Extreme ->
+                [ for axis in axes do
+                      // Every old native transfer admitted by backend validation fits the one-pixel source.
+                      yield axis, Int32.MaxValue * axis
+                      yield V3i.Zero, Int32.MaxValue * axis
+                      yield Int32.MinValue * axis, Int32.MinValue * axis
+                      yield Int32.MaxValue * axis, Int32.MaxValue * axis
+                      yield Int32.MinValue * axis, Int32.MaxValue * axis
+                  yield Int32.MinValue * one, Int32.MaxValue * one ]
+
+        let private withTexture (runtime : IRuntime) route action =
+            use texture =
+                if isImage route then runtime.CreateTexture2DArray(V2i(8, 6), TextureFormat.Rgba8, levels = 2, count = 2)
+                else runtime.CreateTexture3D(V3i(8, 6, 4), TextureFormat.Rgba8, levels = 2)
+            let slots =
+                [| for level in [0; 1] do
+                       for slice in (if isImage route then [0; 1] else [0]) do
+                           yield texture.[TextureAspect.Color, level, slice] |]
+            for target in slots do target.Upload(volume target.Size (fun _ -> sentinel))
+            action slots
+
+        let private checkPixels (target : ITextureSubResource) expected context =
+            let data = PixVolume<byte>(Col.Format.RGBA, target.Size)
+            target.Download(data)
+            let actual = data.GetVolume<C4b>()
+            for z in 0 .. target.Size.Z - 1 do
+                for y in 0 .. target.Size.Y - 1 do
+                    for x in 0 .. target.Size.X - 1 do
+                        let p = V3i(x, y, z)
+                        Expect.equal actual.[x, y, z] (expected p) $"{context}, pixel={p}"
+
+        let private rejected problem (runtime : IRuntime) =
+            let failures = ResizeArray<string>()
+            for route in routes do
+                withTexture runtime route (fun slots ->
+                    for target in slots |> Array.filter (fun t -> not (isImage route) || t.Slice = 1) do
+                        let data = source route V3i.III
+                        for low, high in invalid problem route target.Size do
+                            let context = $"route={route}, level={target.Level}, slice={target.Slice}, min={low}, max={high}"
+                            target.Upload(volume target.Size (fun _ -> sentinel))
+                            let error = try assign route target (Some low) (Some high) data; None with error -> Some error
+                            match error with
+                            | Some (:? ArgumentException) -> ()
+                            | _ -> failures.Add($"{context}: expected ArgumentException, got {error}")
+                            try checkPixels target (fun _ -> sentinel) context
+                            with error -> failures.Add(context + ": " + error.Message)
+                    // Unselected array slices are guards for subresource addressing.
+                    for target in slots |> Array.filter (fun t -> isImage route && t.Slice = 0) do
+                        checkPixels target (fun _ -> sentinel) $"route={route}, guard level={target.Level}, slice={target.Slice}")
+            Expect.isEmpty failures (String.concat "\n" failures)
+
+        let reversed runtime = rejected Reversed runtime
+        let outside runtime = rejected Outside runtime
+        let extreme runtime = rejected Extreme runtime
+
+        let valid (runtime : IRuntime) =
+            for route in routes do
+                withTexture runtime route (fun slots ->
+                    for target in slots |> Array.filter (fun t -> not (isImage route) || t.Slice = 1) do
+                        let dims = target.Size
+                        let one = if isImage route then V3i(1, 1, 0) else V3i.III
+                        let variants =
+                            [ "omitted", None, None, V3i(2, 2, if isImage route then 1 else 2)
+                              "omitted minimum", None, Some(dims - V3i.III), V3i.III
+                              "omitted maximum", Some one, None, dims + V3i(2, 2, if isImage route then 0 else 2)
+                              "exact end", Some(dims - V3i.III), Some(dims - V3i.III), V3i(2, 2, if isImage route then 1 else 2)
+                              "smaller source", Some one, Some(dims - V3i.III), V3i.III
+                              "mixed scalar omissions", Some(V3i(0, 1, 0)), None, V3i(2, 2, if isImage route then 1 else 2) ]
+                        for name, low, high, sourceSize in variants do
+                            let context = $"route={route}, level={target.Level}, slice={target.Slice}, case={name}, source={sourceSize}"
+                            for slot in slots do slot.Upload(volume slot.Size (fun _ -> sentinel))
+                            let data = source route sourceSize
+                            if name = "mixed scalar omissions" then
+                                match route, data with
+                                | ImageScalar, Choice1Of2 image -> target.SetSlice(None, Some(dims.X - 1), Some 1, None, image :> PixImage)
+                                | VolumeScalar, Choice2Of2 value -> target.SetSlice(None, Some(dims.X - 1), Some 1, None, None, Some(dims.Z - 1), value :> PixVolume)
+                                | _ -> assign route target low high data
+                            else assign route target low high data
+                            let minimum = defaultArg low V3i.Zero
+                            let maximum = defaultArg high (dims - V3i.III)
+                            let extent = maximum - minimum + V3i.III
+                            let copied = V3i(min sourceSize.X extent.X, min sourceSize.Y extent.Y, min sourceSize.Z extent.Z)
+                            let expected p =
+                                let q = p - minimum
+                                if Vec.allGreaterOrEqual q 0 && Vec.allSmaller q copied then pixel q else sentinel
+                            for slot in slots do
+                                checkPixels slot (if obj.ReferenceEquals(slot, target) then expected else fun _ -> sentinel) context
+                        // Direct Upload's zero-size sentinel must continue to mean source size.
+                        for slot in slots do slot.Upload(volume slot.Size (fun _ -> sentinel))
+                        let data = source route V3i.III
+                        match data with
+                        | Choice1Of2 image -> target.Upload(image, V2i.Zero, V2i.Zero)
+                        | Choice2Of2 value -> target.Upload(value, V3i.Zero, V3i.Zero)
+                        for slot in slots do
+                            checkPixels slot (fun p -> if obj.ReferenceEquals(slot, target) && p = V3i.Zero then pixel p else sentinel) $"route={route}, level={target.Level}, direct Upload zero default")
+
     module Cases =
 
         let private expectArgument context message action =
@@ -1413,5 +1561,10 @@ module TextureUpload =
             "Volume window validation",                Cases.windowValidation
             "Volume window boundary and default size", Cases.windowBoundary
             "Compressed upload alignment",             Cases.compressedAlignment
+
+            "Slice assignments.Reversed intervals leave pixels unchanged", SliceAssignments.reversed
+            "Slice assignments.Out-of-view bounds leave pixels unchanged", SliceAssignments.outside
+            "Slice assignments.Extreme bounds leave pixels unchanged",     SliceAssignments.extreme
+            "Slice assignments.Inclusive bounds and source clamping",      SliceAssignments.valid
         ]
         |> prepareCasesGpu "Upload" target

@@ -842,60 +842,65 @@ type ITextureSubResourceExtensions private() =
     // Set slice 2D
     // ================================================================================================================
 
+    static member private SetSliceImpl(this : ITextureSubResource, minC : V2i, maxC : V2i, dimensions : V2i, value : PixImage) =
+        if Vec.anySmaller minC 0 || Vec.anyGreater minC maxC || Vec.anyGreaterOrEqual maxC dimensions then
+            raise (ArgumentException("Inclusive slice bounds must satisfy 0 <= min <= max < subresource size."))
+        let size = V2i.II + maxC - minC
+        let imgSize = value.Size
+        let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
+        this.Texture.Runtime.Upload(this, value, minC, size)
+
+    /// <summary>Assigns an inclusive subresource region, clamped to the source size. Omitted endpoints select the subresource boundary.</summary>
+    /// <exception cref="ArgumentException">The bounds are reversed, negative, or outside the selected subresource.</exception>
     [<Extension>]
     static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, value : PixImage) =
+        let dimensions = this.Size.XY
         let minC = defaultArg minC V2i.Zero
-        let maxC = defaultArg maxC (this.Size.XY - V2i.II)
-        let size = V2i.II + maxC - minC
-        let imgSize = value.Size
-        let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
-        this.Texture.Runtime.Upload(this, value, minC, size)
+        let maxC = defaultArg maxC (dimensions - V2i.II)
+        ITextureSubResourceExtensions.SetSliceImpl(this, minC, maxC, dimensions, value)
 
+    /// <summary>Assigns an inclusive subresource region, clamped to the source size. Omitted endpoints select the subresource boundary.</summary>
+    /// <exception cref="ArgumentException">The bounds are reversed, negative, or outside the selected subresource.</exception>
     [<Extension>]
     static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, value : PixImage) =
-        let minX = defaultArg minX 0
-        let maxX = defaultArg maxX (this.Size.X - 1)
-        let minY = defaultArg minY 0
-        let maxY = defaultArg maxY (this.Size.Y - 1)
-        let minC = V2i(minX, minY)
-        let maxC = V2i(maxX, maxY)
-
-        let size = V2i.II + maxC - minC
-        let imgSize = value.Size
-        let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
-        this.Texture.Runtime.Upload(this, value, minC, size)
+        let dimensions = this.Size.XY
+        let minC = V2i(defaultArg minX 0, defaultArg minY 0)
+        let maxC = V2i(defaultArg maxX (dimensions.X - 1), defaultArg maxY (dimensions.Y - 1))
+        ITextureSubResourceExtensions.SetSliceImpl(this, minC, maxC, dimensions, value)
 
     // ================================================================================================================
     // Set slice 3D
     // ================================================================================================================
 
-    [<Extension>]
-    static member SetSlice(this : ITextureSubResource, minC : Option<V3i>, maxC : Option<V3i>, value : PixVolume) =
-        let minC = defaultArg minC V3i.Zero
-        let maxC = defaultArg maxC (this.Size - V3i.III)
+    static member private SetSliceImpl(this : ITextureSubResource, minC : V3i, maxC : V3i, dimensions : V3i, value : PixVolume) =
+        if Vec.anySmaller minC 0 || Vec.anyGreater minC maxC || Vec.anyGreaterOrEqual maxC dimensions then
+            raise (ArgumentException("Inclusive slice bounds must satisfy 0 <= min <= max < subresource size."))
         let size = V3i.III + maxC - minC
         let imgSize = value.Size
         let size = V3i(min size.X imgSize.X, min size.Y imgSize.Y, min size.Z imgSize.Z)
         this.Texture.Runtime.Upload(this, value, minC, size)
 
+    /// <summary>Assigns an inclusive subresource region, clamped to the source size. Omitted endpoints select the subresource boundary.</summary>
+    /// <exception cref="ArgumentException">The bounds are reversed, negative, or outside the selected subresource.</exception>
+    [<Extension>]
+    static member SetSlice(this : ITextureSubResource, minC : Option<V3i>, maxC : Option<V3i>, value : PixVolume) =
+        let dimensions = this.Size
+        let minC = defaultArg minC V3i.Zero
+        let maxC = defaultArg maxC (dimensions - V3i.III)
+        ITextureSubResourceExtensions.SetSliceImpl(this, minC, maxC, dimensions, value)
+
+    /// <summary>Assigns an inclusive subresource region, clamped to the source size. Omitted endpoints select the subresource boundary.</summary>
+    /// <exception cref="ArgumentException">The bounds are reversed, negative, or outside the selected subresource.</exception>
     [<Extension>]
     static member SetSlice(this : ITextureSubResource,
                            minX : Option<int>, maxX : Option<int>,
                            minY : Option<int>, maxY : Option<int>,
                            minZ : Option<int>, maxZ : Option<int>,
                            value : PixVolume) =
-        let minX = defaultArg minX 0
-        let maxX = defaultArg maxX (this.Size.X - 1)
-        let minY = defaultArg minY 0
-        let maxY = defaultArg maxY (this.Size.Y - 1)
-        let minZ = defaultArg minZ 0
-        let maxZ = defaultArg maxZ (this.Size.Z - 1)
-        let minC = V3i(minX, minY, minZ)
-        let maxC = V3i(maxX, maxY, maxZ)
-        let size = V3i.III + maxC - minC
-        let imgSize = value.Size
-        let size = V3i(min size.X imgSize.X, min size.Y imgSize.Y, min size.Z imgSize.Z)
-        this.Texture.Runtime.Upload(this, value, minC, size)
+        let dimensions = this.Size
+        let minC = V3i(defaultArg minX 0, defaultArg minY 0, defaultArg minZ 0)
+        let maxC = V3i(defaultArg maxX (dimensions.X - 1), defaultArg maxY (dimensions.Y - 1), defaultArg maxZ (dimensions.Z - 1))
+        ITextureSubResourceExtensions.SetSliceImpl(this, minC, maxC, dimensions, value)
 
 
 [<AbstractClass; Sealed; Extension>]
