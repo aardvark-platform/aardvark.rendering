@@ -33,6 +33,7 @@ let tests =
             Rendering.AdaptiveFramebufferCube.tests
             Rendering.Blending.tests
             Rendering.ColorMasks.tests
+            Rendering.ClearValueTests.tests
             Rendering.Culling.tests
             Rendering.RenderTasks.tests
             Rendering.FramebufferSignature.tests
