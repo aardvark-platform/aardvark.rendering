@@ -11,6 +11,17 @@ module EXT_memory_object =
         static let supported = ExtensionHelpers.isSupported (Version(999,999)) "GL_EXT_memory_object"
         static member EXT_memory_object = supported
 
+    let private DriverUuid = unbox<OpenGL4.GetPName> All.DriverUuidExt
+    let private NumDeviceUuids = unbox<OpenGL4.GetPName> All.NumDeviceUuidsExt
+    let private DeviceUuid = unbox<OpenGL4.GetIndexedPName> All.DeviceUuidExt
+
+    type OpenGL4.GetPName with
+        static member DriverUuid = DriverUuid
+        static member NumDeviceUuids = NumDeviceUuids
+
+    type OpenGL4.GetIndexedPName with
+        static member DeviceUuid = DeviceUuid
+
     type GL.Dispatch with
 
         static member CreateMemoryObject() =

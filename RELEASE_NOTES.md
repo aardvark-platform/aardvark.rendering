@@ -4,6 +4,7 @@
 - [VR] Update to Unofficial.OpenVR 2.0.0
 - [Vulkan] Update to VMA 3.5.0
 - [GL] Properly handle dedicated allocations when importing external memory
+- [GL] Add `Context.DriverUUID` and `Context.DeviceUUIDs`
 
 ### 5.6.11
 - Update to .NET 10

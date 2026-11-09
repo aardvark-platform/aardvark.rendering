@@ -216,6 +216,8 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
     let mutable isDisposed = 0
 
     let mutable driverInfo : Option<Driver> = None
+    let mutable driverUUID : Option<Guid> = None
+    let mutable deviceUUIDs : Option<Guid[]> = None
 
     let mutable packAlignment : Option<int> = None
 
@@ -293,6 +295,44 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     member x.Driver =
         getOrQuery "driver info" &driverInfo Driver.readInfo
+
+    /// <summary>
+    /// Driver ID of the context.
+    /// </summary>
+    /// <remarks>
+    /// Requires GL_EXT_memory_object.
+    /// </remarks>
+    member x.DriverUUID =
+        getOrQuery "driver UUID" &driverUUID (fun _ ->
+            if GL.EXT_memory_object then
+                let data = Array.zeroCreate<int> 16
+                GL.GetInteger(GetPName.DriverUuid, data)
+                Guid(data |> Array.map uint8)
+            else
+                Log.warn "[GL] Cannot determine driver UUID because GL_EXT_memory_object is not supported."
+                Guid()
+        )
+
+    /// <summary>
+    /// IDs of the devices used by the context.
+    /// </summary>
+    /// <remarks>
+    /// Requires GL_EXT_memory_object.
+    /// </remarks>
+    member x.DeviceUUIDs =
+        getOrQuery "device UUIDs" &deviceUUIDs (fun _ ->
+            if GL.EXT_memory_object then
+                let n = GL.GetInteger(GetPName.NumDeviceUuids)
+
+                Array.init n (fun i ->
+                    let data = Array.zeroCreate<int> 16
+                    GL.GetInteger(GetIndexedPName.DeviceUuid, i, data)
+                    Guid(data |> Array.map uint8)
+                )
+            else
+                Log.warn "[GL] Cannot determine device UUIDs because GL_EXT_memory_object is not supported."
+                Array.empty
+        )
 
     member x.PackAlignment =
         getOrQuery "pack alignment" &packAlignment (fun _ ->
