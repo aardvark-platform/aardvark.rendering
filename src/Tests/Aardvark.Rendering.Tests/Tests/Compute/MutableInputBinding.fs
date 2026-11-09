@@ -20,6 +20,7 @@ module MutableInputBinding =
               storageBuffers = MapExt.empty
               uniformBuffers = MapExt.empty
               accelerationStructures = MapExt.empty
+              specializationConstants = MapExt.empty
               shaders = Unchecked.defaultof<_>
               samplerStates = MapExt.empty
               textures = MapExt.empty }
