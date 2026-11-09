@@ -534,6 +534,6 @@ let converter = WinFormEventConverter(
 
 ## See Also
 
-- **RENDERING.md**: `IRuntime`, `IRenderTask`, resource management
+- **RENDER-CORE.md**: `IRuntime`, `IRenderTask`, resource management
 - **BACKENDS.md**: OpenGL and Vulkan runtime implementations
-- **SCENEGRAPH.md**: Scene graph composition for render tasks
+- **SG-CORE.md**: Scene graph composition for render tasks

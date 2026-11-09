@@ -637,7 +637,8 @@ RuntimeConfig.SuppressSparseBuffers <- true
 
 ## 13. See Also
 
-- **RENDERING.md** — Core `IRuntime`, `IBuffer`, `ITexture`, `RenderObject` interfaces
+- **RENDER-CORE.md** — Core `IRuntime`, `IBuffer`, `ITexture`, `RenderObject` interfaces
 - **NATIVE.md** — GLVM/VKVM internals, P/Invoke patterns, native build process
 - **APPLICATION.md** — Windowed app integration, context creation, GLFW/WPF/WinForms
-- **SCENEGRAPH.md** — Scene composition with Sg.*, effects in AST form
+- **SG-CORE.md** — Scene composition with Sg.*
+- **SG-SEMANTICS.md** — FShade effect composition
