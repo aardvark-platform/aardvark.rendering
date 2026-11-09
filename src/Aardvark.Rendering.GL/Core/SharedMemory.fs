@@ -38,7 +38,8 @@ module internal SharedMemory =
         member x.Lock = blocks :> obj
 
         member x.Free(block : SharedMemoryBlock) =
-            lock (useContext()) (fun _ ->
+            lock blocks (fun _ ->
+                use _ = useContext()
                 blocks.Remove block.External.Handle |> ignore
                 GL.Dispatch.DeleteMemoryObject block.Handle
                 GL.Check "DeleteMemoryObject"
@@ -47,7 +48,7 @@ module internal SharedMemory =
         member x.Import(external : IExternalMemoryBlock) =
             lock blocks (fun _ ->
                 match blocks.TryGetValue external.Handle with
-                | (true, shared) ->
+                | true, shared ->
                     if external.SizeInBytes <> shared.SizeInBytes then
                         failwithf "[GL] Cannot import the same memory block with varying sizes"
 
@@ -55,24 +56,30 @@ module internal SharedMemory =
                     shared
 
                 | _ ->
-                    using (useContext()) (fun _ ->
-                        let mo = GL.Dispatch.CreateMemoryObject()
-                        GL.Check "CreateMemoryObjects"
+                    use _ = useContext()
 
-                        match external.Handle with
-                        | :? Win32Handle as h ->
-                            GL.Dispatch.ImportMemoryWin32Handle(mo, int64 external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueWin32Ext, h.Handle)
-                        | :? PosixHandle as h ->
-                            h.UseHandle (fun fd -> // Importing into the memory object invalidates the fd
-                                GL.Dispatch.ImportMemoryFd(mo, int64 external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueFdExt, fd)
-                            )
-                        | h ->
-                            failwithf "[GL] Unknown memory handle %A" <| h.GetType()
+                    let mo = GL.Dispatch.CreateMemoryObject()
+                    GL.Check "CreateMemoryObjects"
 
-                        GL.Check "ImportMemory"
+                    let dedicated = if external.IsDedicated then 1 else 0
+                    GL.Dispatch.MemoryObjectParameter(mo, MemoryObjectParameterName.DedicatedMemoryObjectExt, dedicated)
+                    GL.Check "MemoryObjectParameter"
 
-                        let shared = new SharedMemoryBlock(x, mo, external)
-                        blocks.[external.Handle] <- shared
-                        shared
-                    )
+                    match external.Handle with
+                    | :? Win32Handle as h ->
+                        GL.Dispatch.ImportMemoryWin32Handle(mo, int64 external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueWin32Ext, h.Handle)
+
+                    | :? PosixHandle as h ->
+                        h.UseHandle (fun fd -> // Importing into the memory object invalidates the fd
+                            GL.Dispatch.ImportMemoryFd(mo, int64 external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueFdExt, fd)
+                        )
+
+                    | h ->
+                        failwithf "[GL] Unknown memory handle %A" <| h.GetType()
+
+                    GL.Check "ImportMemory"
+
+                    let shared = new SharedMemoryBlock(x, mo, external)
+                    blocks.[external.Handle] <- shared
+                    shared
             )

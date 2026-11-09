@@ -3,6 +3,7 @@
 - Preserve all scenes and commands from consumable sequences by snapshotting render-command inputs eagerly in a single pass.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 - [Vulkan] Update to VMA 3.5.0
+- [GL] Properly handle dedicated allocations when importing external memory
 
 ### 5.6.11
 - Update to .NET 10

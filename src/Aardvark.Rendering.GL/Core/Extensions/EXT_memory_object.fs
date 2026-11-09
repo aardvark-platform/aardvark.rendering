@@ -21,6 +21,13 @@ module EXT_memory_object =
             else
                 failwith "glCreateMemoryObjects is not available!"
 
+        static member MemoryObjectParameter(memoryObject : int, pname : MemoryObjectParameterName, value : int) =
+            if GL.EXT_memory_object then
+                let mutable value = value
+                GL.Ext.MemoryObjectParameter(memoryObject, pname, &value)
+            else
+                failwith "glMemoryObjectParameter is not available!"
+
         static member DeleteMemoryObject(memoryObject : int) =
             if GL.EXT_memory_object then
                 GL.Ext.DeleteMemoryObject memoryObject

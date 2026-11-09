@@ -8,10 +8,11 @@ open Vulkan11
 #nowarn "51"
 
 [<AllowNullLiteral>]
-type internal ExternalMemoryBlock(handle: IExternalMemoryHandle, memory: VkDeviceMemory, sizeInBytes: uint64) =
+type internal ExternalMemoryBlock(handle: IExternalMemoryHandle, memory: VkDeviceMemory, sizeInBytes: uint64, dedicated: bool) =
     member _.Handle = handle
     member _.Memory = memory
     member _.SizeInBytes = sizeInBytes
+    member _.IsDedicated = dedicated
 
     member _.Dispose() =
         handle.Dispose()
@@ -30,9 +31,10 @@ type internal ExternalMemoryBlock(handle: IExternalMemoryHandle, memory: VkDevic
     interface IEquatable<ExternalMemoryBlock> with
         member this.Equals(other) = this.Equals(other)
 
-    interface IExternalMemoryBlock with
+    interface IExternalMemoryBlock2 with
         member this.Handle = this.Handle
         member this.SizeInBytes = this.SizeInBytes
+        member this.IsDedicated = this.IsDedicated
         member this.Dispose() = this.Dispose()
 
 module internal ExternalMemory =

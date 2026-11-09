@@ -17,6 +17,20 @@ type IExternalMemoryBlock =
     abstract member Handle : IExternalMemoryHandle
     abstract member SizeInBytes : uint64
 
+[<AllowNullLiteral>]
+type IExternalMemoryBlock2 =
+    inherit IExternalMemoryBlock
+    abstract member IsDedicated : bool
+
+[<AutoOpen>]
+module ``IExternalMemoryBlock extensions`` =
+
+    type IExternalMemoryBlock with
+        member inline this.IsDedicated =
+            match this with
+            | :? IExternalMemoryBlock2 as b -> b.IsDedicated
+            | _ -> false
+
 [<AutoOpen>]
 module NativePlatformHandles =
 

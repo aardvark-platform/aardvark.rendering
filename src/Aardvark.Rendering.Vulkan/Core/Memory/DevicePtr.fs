@@ -29,7 +29,7 @@ type DevicePtr =
                     else
                         ExternalMemory.Posix.getHandle device.Handle info.allocationInfo.deviceMemory
 
-                new ExternalMemoryBlock(handle, info.allocationInfo.deviceMemory, info.blockSize)
+                new ExternalMemoryBlock(handle, info.allocationInfo.deviceMemory, info.blockSize, info.dedicatedMemory = VkTrue)
             else
                 null
 
