@@ -303,6 +303,7 @@ The environment variable `AARDVARK_VULKAN_LIBRARY` names the Vulkan library to l
 | Async Compute | ✗ | ✓ |
 | Bindless Rendering | ✗ | ✓ (VK_EXT_descriptor_indexing) |
 | Indirect Rendering | ✓ | ✓ |
+| Fragment Shader Interlock | ✓ (GL_ARB_fragment_shader_interlock) | ✓ (VK_EXT_fragment_shader_interlock, `DeviceFeatures.Shaders.FragmentShader*Interlock`) |
 
 ---
 
