@@ -81,14 +81,25 @@ type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits 
                         | _ -> None  
 
     let presentModeScore (mode : VkPresentModeKHR) =
-        
-        match mode with
-            | VkPresentModeKHR.Mailbox -> 16
-            | VkPresentModeKHR.Fifo -> 4
-            | VkPresentModeKHR.Immediate when not vsync -> 400
-            | VkPresentModeKHR.Immediate -> 2
-            | VkPresentModeKHR.FifoRelaxed -> 8
-            | _ -> 0
+        if vsync then
+            // vsync means vsync: synchronize to the refresh, cap the frame rate, no tearing.
+            // That is FIFO. Mailbox does not tear either but renders uncapped, which burns
+            // GPU time and power and, on MoltenVK, saturates the GPU into a hang. Low-latency
+            // uncapped rendering is what vsync=false (Immediate) is for.
+            match mode with
+                | VkPresentModeKHR.Fifo        -> 16
+                | VkPresentModeKHR.FifoRelaxed -> 8
+                | VkPresentModeKHR.Mailbox     -> 4
+                | VkPresentModeKHR.Immediate   -> 2
+                | _ -> 0
+        else
+            // vsync off: lowest latency, uncapped -> Immediate, then Mailbox.
+            match mode with
+                | VkPresentModeKHR.Immediate   -> 400
+                | VkPresentModeKHR.Mailbox     -> 16
+                | VkPresentModeKHR.FifoRelaxed -> 8
+                | VkPresentModeKHR.Fifo        -> 4
+                | _ -> 0
 
     member x.Format = format
     member x.Bits = bits

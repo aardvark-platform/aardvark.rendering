@@ -49,6 +49,8 @@ type private EnvVarCell(name : string) =
 [<AbstractClass; Sealed>]
 type EnvVar private () =
 
+    static let vulkanInlineCommands = EnvVarCell "AARDVARK_VULKAN_INLINE_COMMANDS"
+
     /// Returns whether a switch value enables it: "1", "on", "true" and "yes" (ignoring case
     /// and surrounding whitespace) do, everything else, including null, does not.
     static member IsEnabled (value : string) =
@@ -61,3 +63,13 @@ type EnvVar private () =
     /// Returns whether the value is neither null nor empty.
     static member IsSet (value : string) =
         not (String.IsNullOrEmpty value)
+
+    // Aardvark.Rendering.Vulkan
+
+    /// Set to 1 to replay Vulkan command streams inline into the primary command buffer instead of
+    /// recording them into secondary command buffers, which MoltenVK (portability subset) devices do
+    /// unconditionally because vkCmdExecuteCommands crashes there. For testing that path on a
+    /// conformant driver. Read by the Vulkan render and compute tasks when they are created.
+    static member AARDVARK_VULKAN_INLINE_COMMANDS
+        with get () = vulkanInlineCommands.Value
+        and set (value : string) = vulkanInlineCommands.Value <- value

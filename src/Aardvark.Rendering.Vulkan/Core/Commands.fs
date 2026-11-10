@@ -145,6 +145,13 @@ module ``Common Commands`` =
             else
                 Command.Nop
 
+        static member inline Run(vkvm: VKVM, stream: VKVM.CommandStream) =
+            { new Command() with
+                member _.Compatible = QueueFlags.Graphics
+                member _.Enqueue (c : CommandBuffer) =
+                    c.AppendCommand()
+                    vkvm.Run(c.Handle, stream) }
+
         static member Reset(event: Event) =
             { new Command() with
                 member x.Compatible = QueueFlags.All

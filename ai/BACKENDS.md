@@ -282,6 +282,14 @@ let device = Device.Create(physicalDevice, enableValidation = true)
 | Geometry Shaders | ✓ | ✗ |
 | Compute Shaders | ✗ | ✓ |
 
+### MoltenVK Workarounds
+
+On portability-subset devices (MoltenVK) the Vulkan backend behaves differently in three places, all no-ops on conformant drivers:
+
+- Command streams are replayed inline into the primary command buffer every frame instead of being recorded into a secondary command buffer, because `vkCmdExecuteCommands` crashes in MoltenVK (`src/Aardvark.Rendering.Vulkan/Runtime/CommandTask.fs`, `ComputeTask.fs`). The environment variable `AARDVARK_VULKAN_INLINE_COMMANDS=1` forces the inline replay on any device for testing.
+- spirv-opt is skipped even when `OptimizeShaders` is set: it strips unreferenced buffer declarations and the holes break MoltenVK's argument-buffer layout (`Resources/Shaders/ShaderModule.fs`).
+- With vsync the swapchain prefers FIFO over Mailbox presentation; Mailbox renders uncapped and can saturate the GPU into a hang on MoltenVK (`Swapchain/SwapchainDescription.fs`).
+
 ### Feature Comparison
 
 | Feature | GL | Vulkan |
