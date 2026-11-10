@@ -13,7 +13,6 @@ open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 
 #nowarn "9"
-#nowarn "51"
 
 [<AutoOpen>]
 module Constants =
@@ -261,12 +260,10 @@ type uint32_32 =
         member x.Item
             with get (i : int) : uint32 =
                 if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.get ptr i
+                Unsafe.Add(&x.First, i)
             and set (i : int) (value : uint32) =
                 if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.set ptr i value
+                Unsafe.Add(&x.First, i) <- value
 
         member x.Length = 32
 
@@ -290,12 +287,10 @@ type int32_7 =
         member x.Item
             with get (i : int) : int32 =
                 if i < 0 || i > 6 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.get ptr i
+                Unsafe.Add(&x.First, i)
             and set (i : int) (value : int32) =
                 if i < 0 || i > 6 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.set ptr i value
+                Unsafe.Add(&x.First, i) <- value
 
         member x.Length = 7
 
@@ -319,12 +314,10 @@ type byte_32 =
         member x.Item
             with get (i : int) : byte =
                 if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.get ptr i
+                Unsafe.Add(&x.First, i)
             and set (i : int) (value : byte) =
                 if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.set ptr i value
+                Unsafe.Add(&x.First, i) <- value
 
         member x.Length = 32
 
@@ -348,12 +341,10 @@ type byte_8 =
         member x.Item
             with get (i : int) : byte =
                 if i < 0 || i > 7 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.get ptr i
+                Unsafe.Add(&x.First, i)
             and set (i : int) (value : byte) =
                 if i < 0 || i > 7 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.set ptr i value
+                Unsafe.Add(&x.First, i) <- value
 
         member x.Length = 8
 
@@ -377,12 +368,10 @@ type float32_6 =
         member x.Item
             with get (i : int) : float32 =
                 if i < 0 || i > 5 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.get ptr i
+                Unsafe.Add(&x.First, i)
             and set (i : int) (value : float32) =
                 if i < 0 || i > 5 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.set ptr i value
+                Unsafe.Add(&x.First, i) <- value
 
         member x.Length = 6
 
@@ -619,12 +608,10 @@ type VkPhysicalDevice_32 =
         member x.Item
             with get (i : int) : VkPhysicalDevice =
                 if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.get ptr i
+                Unsafe.Add(&x.First, i)
             and set (i : int) (value : VkPhysicalDevice) =
                 if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.set ptr i value
+                Unsafe.Add(&x.First, i) <- value
 
         member x.Length = 32
 
@@ -654,12 +641,10 @@ type VkDeviceSize_16 =
         member x.Item
             with get (i : int) : VkDeviceSize =
                 if i < 0 || i > 15 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.get ptr i
+                Unsafe.Add(&x.First, i)
             and set (i : int) (value : VkDeviceSize) =
                 if i < 0 || i > 15 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.set ptr i value
+                Unsafe.Add(&x.First, i) <- value
 
         member x.Length = 16
 
@@ -2030,12 +2015,10 @@ type VkOffset3D_2 =
         member x.Item
             with get (i : int) : VkOffset3D =
                 if i < 0 || i > 1 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.get ptr i
+                Unsafe.Add(&x.First, i)
             and set (i : int) (value : VkOffset3D) =
                 if i < 0 || i > 1 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.set ptr i value
+                Unsafe.Add(&x.First, i) <- value
 
         member x.Length = 2
 
@@ -4970,12 +4953,10 @@ type VkMemoryHeap_16 =
         member x.Item
             with get (i : int) : VkMemoryHeap =
                 if i < 0 || i > 15 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.get ptr i
+                Unsafe.Add(&x.First, i)
             and set (i : int) (value : VkMemoryHeap) =
                 if i < 0 || i > 15 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.set ptr i value
+                Unsafe.Add(&x.First, i) <- value
 
         member x.Length = 16
 
@@ -5051,12 +5032,10 @@ type VkMemoryType_32 =
         member x.Item
             with get (i : int) : VkMemoryType =
                 if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.get ptr i
+                Unsafe.Add(&x.First, i)
             and set (i : int) (value : VkMemoryType) =
                 if i < 0 || i > 31 then raise <| IndexOutOfRangeException()
-                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                NativePtr.set ptr i value
+                Unsafe.Add(&x.First, i) <- value
 
         member x.Length = 32
 
@@ -14107,12 +14086,10 @@ module Vulkan14 =
             member x.Item
                 with get (i : int) : VkQueueGlobalPriority =
                     if i < 0 || i > 15 then raise <| IndexOutOfRangeException()
-                    let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                    NativePtr.get ptr i
+                    Unsafe.Add(&x.First, i)
                 and set (i : int) (value : VkQueueGlobalPriority) =
                     if i < 0 || i > 15 then raise <| IndexOutOfRangeException()
-                    let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                    NativePtr.set ptr i value
+                    Unsafe.Add(&x.First, i) <- value
 
             member x.Length = 16
 
@@ -32060,12 +32037,10 @@ module rec Extensions =
                 member x.Item
                     with get (i : int) : VkFragmentShadingRateCombinerOpKHR =
                         if i < 0 || i > 1 then raise <| IndexOutOfRangeException()
-                        let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                        NativePtr.get ptr i
+                        Unsafe.Add(&x.First, i)
                     and set (i : int) (value : VkFragmentShadingRateCombinerOpKHR) =
                         if i < 0 || i > 1 then raise <| IndexOutOfRangeException()
-                        let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-                        NativePtr.set ptr i value
+                        Unsafe.Add(&x.First, i) <- value
 
                 member x.Length = 2
 

@@ -10,7 +10,6 @@ open Vulkan11
 open Aardvark.Rendering.Tests.Other.VulkanWrapper
 
 #nowarn "9"
-#nowarn "51"
 
 // Before wrapper rework (Core functions via P/Invoke, extensions via Marshal.GetDelegateForPointer)
 // | Method                    | Mean          | Error        | StdDev       | Allocated |
@@ -41,7 +40,8 @@ type VulkanBench() =
         physicalDevice <- VkInstance.getPhysicalDevice instance
         let mutable timelineFeatures = VkPhysicalDeviceTimelineSemaphoreFeaturesKHR.Empty
         timelineFeatures.timelineSemaphore <- 1u
-        device <- VkDevice.createWithFeatures physicalDevice [ KHRTimelineSemaphore.Name; EXTSampleLocations.Name ] (NativePtr.toNativeInt &&timelineFeatures)
+        use pTimelineFeatures = fixed &timelineFeatures
+        device <- VkDevice.createWithFeatures physicalDevice [ KHRTimelineSemaphore.Name; EXTSampleLocations.Name ] (NativePtr.toNativeInt pTimelineFeatures)
 
     [<GlobalCleanup>]
     member _.Cleanup() =
@@ -53,21 +53,25 @@ type VulkanBench() =
     [<Benchmark>]
     member _.GlobalFunction() =
         let mutable version = 0u
-        VkRaw.vkEnumerateInstanceVersion(&&version) |> VkResult.check
+        use pVersion = fixed &version
+        VkRaw.vkEnumerateInstanceVersion(pVersion) |> VkResult.check
         version
 
     [<Benchmark>]
     member _.DeviceFunction() =
         let mutable pool = VkCommandPool.Null
         let mutable info = VkCommandPoolCreateInfo.Empty
-        VkRaw.vkCreateCommandPool(device, &&info, NativePtr.zero, &&pool) |> VkResult.check
+        use pInfo = fixed &info
+        use pPool = fixed &pool
+        VkRaw.vkCreateCommandPool(device, pInfo, NativePtr.zero, pPool) |> VkResult.check
         VkRaw.vkDestroyCommandPool(device, pool, NativePtr.zero)
         pool.Handle
 
     [<Benchmark>]
     member _.ExtensionInstanceFunction() =
         let mutable properties = VkMultisamplePropertiesEXT.Empty
-        VkRaw.vkGetPhysicalDeviceMultisamplePropertiesEXT(physicalDevice, VkSampleCountFlags.D4Bit, &&properties)
+        use pProperties = fixed &properties
+        VkRaw.vkGetPhysicalDeviceMultisamplePropertiesEXT(physicalDevice, VkSampleCountFlags.D4Bit, pProperties)
         properties.maxSampleLocationGridSize.width
 
     [<Benchmark>]
@@ -77,13 +81,17 @@ type VulkanBench() =
         typeCreateInfo.semaphoreType <- VkSemaphoreTypeKHR.Timeline
 
         let mutable createInfo = VkSemaphoreCreateInfo.Empty
-        createInfo.pNext <- NativePtr.toNativeInt &&typeCreateInfo
+        use pTypeCreateInfo = fixed &typeCreateInfo
+        createInfo.pNext <- NativePtr.toNativeInt pTypeCreateInfo
 
         let mutable semaphore = VkSemaphore.Null
-        VkRaw.vkCreateSemaphore(device, &&createInfo, NativePtr.zero, &&semaphore) |> VkResult.check
+        use pCreateInfo = fixed &createInfo
+        use pSemaphore = fixed &semaphore
+        VkRaw.vkCreateSemaphore(device, pCreateInfo, NativePtr.zero, pSemaphore) |> VkResult.check
 
         let mutable value = 0UL
-        VkRaw.vkGetSemaphoreCounterValueKHR(device, semaphore, &&value) |> VkResult.check
+        use pValue = fixed &value
+        VkRaw.vkGetSemaphoreCounterValueKHR(device, semaphore, pValue) |> VkResult.check
 
         VkRaw.vkDestroySemaphore(device, semaphore, NativePtr.zero)
 

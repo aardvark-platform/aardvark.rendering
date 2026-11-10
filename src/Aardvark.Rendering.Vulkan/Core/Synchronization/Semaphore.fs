@@ -3,14 +3,16 @@
 open Aardvark.Base
 open System
 
-#nowarn "51"
+#nowarn "9"
 
 type Semaphore internal (device: IDevice) =
     let mutable handle = VkSemaphore.Null
 
     do
         let mutable createInfo = VkSemaphoreCreateInfo.Empty
-        VkRaw.vkCreateSemaphore(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+        use pCreateInfo = fixed &createInfo
+        use pHandle = fixed &handle
+        VkRaw.vkCreateSemaphore(device.Handle, pCreateInfo, NativePtr.zero, pHandle)
             |> check "could not create semaphore"
 
         device.Instance.RegisterDebugTrace(handle.Handle)

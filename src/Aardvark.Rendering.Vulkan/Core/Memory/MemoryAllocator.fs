@@ -7,7 +7,6 @@ open System.Runtime.InteropServices
 open System.Collections.Concurrent
 
 #nowarn "9"
-#nowarn "51"
 
 type internal HostAccess =
     | None = 0
@@ -63,16 +62,19 @@ type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativein
                 vkGetDeviceProcAddr   = pVkGetDeviceProcAddr
                 vkGetInstanceProcAddr = pVkGetInstanceProcAddr  }
 
+        use pVulkanFunctions = fixed &vulkanFunctions
         let mutable createInfo =
             { VmaAllocatorCreateInfo.Empty with
                 instance         = device.Instance.Handle
                 physicalDevice   = device.PhysicalDevice.Handle
                 device           = device.Handle
                 vulkanApiVersion = device.Instance.APIVersion.ToVulkan()
-                pVulkanFunctions = &&vulkanFunctions
+                pVulkanFunctions = pVulkanFunctions
                 flags            = flags }
 
-        Vma.createAllocator(&&createInfo, &&allocator)
+        use pCreateInfo = fixed &createInfo
+        use pAllocator = fixed &allocator
+        Vma.createAllocator(pCreateInfo, pAllocator)
             |> check "could not create allocator"
 
     let nullPtr = new DevicePtr(device)
@@ -88,10 +90,12 @@ type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativein
         let mutable buffer = VkBuffer.Null
         let mutable allocation = VmaAllocation.Zero
 
+        use pBuffer = fixed &buffer
+        use pAllocation = fixed &allocation
         let result =
             Vma.createBuffer(
                 allocator, pBufferCreateInfo, pAllocationCreateInfo,
-                &&buffer, &&allocation, NativePtr.zero
+                pBuffer, pAllocation, NativePtr.zero
             )
 
         if result = VkResult.Success then
@@ -104,10 +108,12 @@ type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativein
         let mutable image = VkImage.Null
         let mutable allocation = VmaAllocation.Zero
 
+        use pImage = fixed &image
+        use pAllocation = fixed &allocation
         let result =
             Vma.createImage(
                 allocator, pImageCreateInfo, pAllocationCreateInfo,
-                &&image, &&allocation, NativePtr.zero
+                pImage, pAllocation, NativePtr.zero
             )
 
         if result = VkResult.Success then
@@ -118,13 +124,15 @@ type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativein
 
     let rec createExternalBuffer pBufferCreateInfo (allocationCreateInfo: _ byref) hostVisible =
         let mutable memoryTypeIndex = 0u
-        Vma.findMemoryTypeIndexForBufferInfo(allocator, pBufferCreateInfo, &&allocationCreateInfo, &&memoryTypeIndex)
+        use pAllocationCreateInfo = fixed &allocationCreateInfo
+        use pMemoryTypeIndex = fixed &memoryTypeIndex
+        Vma.findMemoryTypeIndexForBufferInfo(allocator, pBufferCreateInfo, pAllocationCreateInfo, pMemoryTypeIndex)
             |> checkf "could not find memory type for buffer"
 
         let pool = getExternalMemoryPool memoryTypeIndex
         allocationCreateInfo.pool <- pool.Handle
 
-        match tryCreateBuffer pBufferCreateInfo &&allocationCreateInfo hostVisible true with
+        match tryCreateBuffer pBufferCreateInfo pAllocationCreateInfo hostVisible true with
         | Result.Ok result -> result
         | Result.Error _ ->
             &allocationCreateInfo.memoryTypeBits &&&= ~~~(1u <<< int32 memoryTypeIndex)
@@ -132,13 +140,15 @@ type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativein
 
     let rec createExternalImage pImageCreateInfo (allocationCreateInfo: _ byref) hostVisible =
         let mutable memoryTypeIndex = 0u
-        Vma.findMemoryTypeIndexForImageInfo(allocator, pImageCreateInfo, &&allocationCreateInfo, &&memoryTypeIndex)
+        use pAllocationCreateInfo = fixed &allocationCreateInfo
+        use pMemoryTypeIndex = fixed &memoryTypeIndex
+        Vma.findMemoryTypeIndexForImageInfo(allocator, pImageCreateInfo, pAllocationCreateInfo, pMemoryTypeIndex)
             |> checkf "could not find memory type for image"
 
         let pool = getExternalMemoryPool memoryTypeIndex
         allocationCreateInfo.pool <- pool.Handle
 
-        match tryCreateImage pImageCreateInfo &&allocationCreateInfo hostVisible true with
+        match tryCreateImage pImageCreateInfo pAllocationCreateInfo hostVisible true with
         | Result.Ok result -> result
         | Result.Error _ ->
             &allocationCreateInfo.memoryTypeBits &&&= ~~~(1u <<< int32 memoryTypeIndex)
@@ -178,10 +188,12 @@ type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativein
 
             let mutable allocationCreateInfo = getAllocationInfo preferDevice hostAccess alignment priority bind mayAlias
 
+            use pBufferCreateInfo = fixed &bufferCreateInfo
             if export then
-                createExternalBuffer &&bufferCreateInfo &allocationCreateInfo hostVisible
+                createExternalBuffer pBufferCreateInfo &allocationCreateInfo hostVisible
             else
-                match tryCreateBuffer &&bufferCreateInfo &&allocationCreateInfo hostVisible false with
+                use pAllocationCreateInfo = fixed &allocationCreateInfo
+                match tryCreateBuffer pBufferCreateInfo pAllocationCreateInfo hostVisible false with
                 | Result.Ok result -> result
                 | Result.Error error ->
                     error |> checkf "could not allocate memory for buffer"
@@ -199,10 +211,12 @@ type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativein
 
             let mutable allocationCreateInfo = getAllocationInfo preferDevice hostAccess 0UL priority bind mayAlias
 
+            use pImageCreateInfo = fixed &imageCreateInfo
             if export then
-                createExternalImage &&imageCreateInfo &allocationCreateInfo hostVisible
+                createExternalImage pImageCreateInfo &allocationCreateInfo hostVisible
             else
-                match tryCreateImage &&imageCreateInfo &&allocationCreateInfo hostVisible false with
+                use pAllocationCreateInfo = fixed &allocationCreateInfo
+                match tryCreateImage pImageCreateInfo pAllocationCreateInfo hostVisible false with
                 | Result.Ok result -> result
                 | Result.Error error ->
                     error |> checkf "could not allocate memory for image"

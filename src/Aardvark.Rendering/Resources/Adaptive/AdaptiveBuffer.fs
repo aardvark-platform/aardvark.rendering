@@ -7,7 +7,7 @@ open System
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 
-#nowarn "51"
+#nowarn "9"
 
 /// Interface for adaptive buffers, which can be resized and written to in an imperative fashion.
 type IAdaptiveBuffer =
@@ -72,7 +72,8 @@ type AdaptiveBufferExtensions private() =
                                                 [<Optional; DefaultParameterValue(0UL)>] offset : uint64,
                                                 [<Optional; DefaultParameterValue(1)>] count : int,
                                                 [<Optional; DefaultParameterValue(false)>] discard : bool) =
-        this.Write(&&data, offset, count, discard)
+        use pData = fixed &data
+        this.Write(pData, offset, count, discard)
 
     /// <summary>
     /// Writes an array to the buffer.

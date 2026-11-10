@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan.Raytracing
 
 #nowarn "9"
-#nowarn "51"
 
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
@@ -105,9 +104,11 @@ module RaytracingPipeline =
                 )
 
             let mutable handle = VkPipeline.Null
+            use pCreateInfo = fixed &createInfo
+            use pHandle = fixed &handle
             VkRaw.vkCreateRayTracingPipelinesKHR(
                 device.Handle, VkDeferredOperationKHR.Null, device.PipelineCache.Handle,
-                1u, &&createInfo, NativePtr.zero, &&handle
+                1u, pCreateInfo, NativePtr.zero, pHandle
             )
             |> check "Failed to create raytracing pipeline"
 

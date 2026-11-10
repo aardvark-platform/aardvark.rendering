@@ -5,7 +5,7 @@ open Aardvark.Rendering.Vulkan
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 
-#nowarn "51"
+#nowarn "9"
 
 type QueryPool =
     class
@@ -33,7 +33,9 @@ module QueryPool =
             )
 
         let mutable handle = VkQueryPool.Null
-        VkRaw.vkCreateQueryPool(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+        use pCreateInfo = fixed &createInfo
+        use pHandle = fixed &handle
+        VkRaw.vkCreateQueryPool(device.Handle, pCreateInfo, NativePtr.zero, pHandle)
             |> check "could not create query pool"
 
         new QueryPool(device, handle, typ, count)

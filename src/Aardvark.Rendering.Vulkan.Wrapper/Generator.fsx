@@ -1505,7 +1505,6 @@ module FSharpWriter =
         printfn "open Aardvark.Rendering.Vulkan"
         printfn ""
         printfn "#nowarn \"9\""
-        printfn "#nowarn \"51\""
 
     let emptyBitfields (enums : List<string>) =
         enums |> List.iter (fun e ->
@@ -1537,12 +1536,10 @@ module FSharpWriter =
             printfn "        member x.Item"
             printfn "            with get (i : int) : %s =" typ.baseType
             printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (typ.count - 1)
-            printfn "                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt"
-            printfn "                NativePtr.get ptr i"
+            printfn "                Unsafe.Add(&x.First, i)"
             printfn "            and set (i : int) (value : %s) =" typ.baseType
             printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (typ.count - 1)
-            printfn "                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt"
-            printfn "                NativePtr.set ptr i value"
+            printfn "                Unsafe.Add(&x.First, i) <- value"
             printfn ""
             printfn "        member x.Length = %d" typ.count
             printfn ""

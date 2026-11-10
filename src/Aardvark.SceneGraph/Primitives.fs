@@ -9,7 +9,6 @@ open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
 #nowarn "9"
-#nowarn "51"
 
 [<AutoOpen>]
 module SgPrimitives =

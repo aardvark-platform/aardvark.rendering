@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 #nowarn "9"
-#nowarn "51"
 
 open System
 open System.IO
@@ -319,6 +318,7 @@ module private DebugReportHelpers =
                         VkObjectType.Instance, uint64 instance.Handle, pObjectName
                     )
 
+                use pObjectNameInfo = fixed &objectNameInfo
                 let mutable callbackData =
                     VkDebugUtilsMessengerCallbackDataEXT(
                         VkDebugUtilsMessengerCallbackDataFlagsEXT.None,
@@ -326,14 +326,15 @@ module private DebugReportHelpers =
                         pMessage,
                         0u, NativePtr.zero,
                         0u, NativePtr.zero,
-                        1u, &&objectNameInfo
+                        1u, pObjectNameInfo
                     )
 
+                use pCallbackData = fixed &callbackData
                 VkRaw.vkSubmitDebugUtilsMessageEXT(
                     instance.Handle,
                     flags,
                     VkDebugUtilsMessageTypeFlagsEXT.GeneralBit,
-                    &&callbackData
+                    pCallbackData
                 )
             finally
                 CStr.free pMessage

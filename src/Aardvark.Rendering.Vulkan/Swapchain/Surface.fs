@@ -17,7 +17,6 @@ open KHRXcbSurface
 open KHRWaylandSurface
 
 #nowarn "9"
-// #nowarn "51"
 
 //static member XLibSurfaceCreateInfo = unbox<VkStructureType> 1000004000
 //static member XcbSurfaceCreateInfo = unbox<VkStructureType> 1000005000

@@ -1,5 +1,4 @@
 ﻿#nowarn "9"
-#nowarn "51"
 (*
 Render2TexturePrimitive.fsx
 

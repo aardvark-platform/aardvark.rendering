@@ -10,7 +10,6 @@ open EXTDebugUtils
 open KHRSynchronization2
 
 #nowarn "9"
-#nowarn "51"
 
 /// Represents a command that can be enqueued in a command buffer.
 [<AbstractClass>]
@@ -75,14 +74,18 @@ module ``Common Commands`` =
                     let mutable memoryBarrier =
                         VkMemoryBarrier(srcAccess, dstAccess)
 
-                    VkRaw.vkCmdPipelineBarrier(
-                        cmd.Handle,
-                        srcStage, dstStage,
-                        VkDependencyFlags.None,
-                        1u, &&memoryBarrier,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero
-                    )
+                    use pMemoryBarrier = fixed &memoryBarrier
+                    // try/finally keeps the native call out of tail position (dotnet/fsharp#18689)
+                    try
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle,
+                            srcStage, dstStage,
+                            VkDependencyFlags.None,
+                            1u, pMemoryBarrier,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero
+                        )
+                    finally ()
             }
 
         static member MemoryBarrier(srcStage: VkPipelineStageFlags2KHR, srcAccess: VkAccessFlags2KHR, dstStage: VkPipelineStageFlags2KHR, dstAccess: VkAccessFlags2KHR) =
@@ -94,15 +97,19 @@ module ``Common Commands`` =
                     let mutable memoryBarrier =
                         VkMemoryBarrier2KHR(srcStage, srcAccess, dstStage, dstAccess)
 
+                    use pMemoryBarrier = fixed &memoryBarrier
                     let mutable dependencyInfo =
                         VkDependencyInfoKHR(
                             VkDependencyFlags.None,
-                            1u, &&memoryBarrier,
+                            1u, pMemoryBarrier,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero
                         )
 
-                    VkRaw.vkCmdPipelineBarrier2KHR(cmd.Handle, &&dependencyInfo)
+                    use pDependencyInfo = fixed &dependencyInfo
+                    // try/finally keeps the native call out of tail position (dotnet/fsharp#18689)
+                    try VkRaw.vkCmdPipelineBarrier2KHR(cmd.Handle, pDependencyInfo)
+                    finally ()
             }
 
         static member Execute(inner: CommandBuffer[]) =
@@ -120,7 +127,9 @@ module ``Common Commands`` =
                     member x.Enqueue buffer =
                         buffer.AppendCommand()
                         use pHandles = fixed handles
-                        VkRaw.vkCmdExecuteCommands(buffer.Handle, uint32 handles.Length, pHandles)
+                        // try/finally keeps the native call out of tail position (dotnet/fsharp#18689)
+                        try VkRaw.vkCmdExecuteCommands(buffer.Handle, uint32 handles.Length, pHandles)
+                        finally ()
                 }
 
         static member Execute(inner: CommandBuffer) =
@@ -203,7 +212,10 @@ module ``Common Commands`` =
                         buffer.AppendCommand()
                         CStr.using name (fun pName ->
                             let mutable labelInfo = VkDebugUtilsLabelEXT(pName, v4f color)
-                            VkRaw.vkCmdInsertDebugUtilsLabelEXT(buffer.Handle, &&labelInfo)
+                            use pLabelInfo = fixed &labelInfo
+                            // try/finally keeps the native call out of tail position (dotnet/fsharp#18689)
+                            try VkRaw.vkCmdInsertDebugUtilsLabelEXT(buffer.Handle, pLabelInfo)
+                            finally ()
                         )
             }
 
@@ -215,7 +227,10 @@ module ``Common Commands`` =
                         buffer.AppendCommand()
                         CStr.using name (fun pName ->
                             let mutable labelInfo = VkDebugUtilsLabelEXT(pName, v4f color)
-                            VkRaw.vkCmdBeginDebugUtilsLabelEXT(buffer.Handle, &&labelInfo)
+                            use pLabelInfo = fixed &labelInfo
+                            // try/finally keeps the native call out of tail position (dotnet/fsharp#18689)
+                            try VkRaw.vkCmdBeginDebugUtilsLabelEXT(buffer.Handle, pLabelInfo)
+                            finally ()
                         )
             }
 

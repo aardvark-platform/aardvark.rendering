@@ -7,7 +7,6 @@ open FSharp.NativeInterop
 open Aardvark.Base
 
 #nowarn "9"
-#nowarn "51"
 
 module DdsTexture =
 
@@ -51,8 +50,11 @@ module DdsTexture =
               C3 : uint8 }
 
             member x.Item(index : int) =
-                let ptr = &&x.C0
-                char (NativePtr.get ptr index)
+                match index with
+                | 0 -> char x.C0
+                | 1 -> char x.C1
+                | 2 -> char x.C2
+                | _ -> char x.C3
 
             override x.ToString() =
                 string x.[0] +

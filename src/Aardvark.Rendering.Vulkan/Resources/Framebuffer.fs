@@ -8,7 +8,6 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-// #nowarn "51"
 
 type Framebuffer =
     class

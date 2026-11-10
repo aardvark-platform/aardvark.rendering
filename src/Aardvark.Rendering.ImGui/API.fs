@@ -5,7 +5,6 @@ open FSharp.Data.Adaptive
 open FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
 
 type INativeContext = HexaGen.Runtime.INativeContext
 type ImColor = Hexa.NET.ImGui.ImColor
@@ -561,7 +560,8 @@ type ImGui =
         Hexa.NET.ImGui.ImGui.AddText(self, System.Numerics.Vector2.FromV2f(pos), col, textBegin)
 
     static member AddText(self: ImDrawListPtr, font: ImFontPtr, fontSize: float32, pos: V2f, col: uint32, textBegin: string, textEnd: string, wrapWidth: float32, cpuFineClipRect: byref<V4f>) : unit =
-        Hexa.NET.ImGui.ImGui.AddText(self, font, fontSize, System.Numerics.Vector2.FromV2f(pos), col, textBegin, textEnd, wrapWidth, NativePtr.cast<_, System.Numerics.Vector4> &&cpuFineClipRect)
+        use cpuFineClipRectPinned = fixed &cpuFineClipRect
+        Hexa.NET.ImGui.ImGui.AddText(self, font, fontSize, System.Numerics.Vector2.FromV2f(pos), col, textBegin, textEnd, wrapWidth, NativePtr.cast<_, System.Numerics.Vector4> cpuFineClipRectPinned)
 
     static member AddText(self: ImDrawListPtr, font: ImFontPtr, fontSize: float32, pos: V2f, col: uint32, textBegin: string, textEnd: string, wrapWidth: float32) : unit =
         Hexa.NET.ImGui.ImGui.AddText(self, font, fontSize, System.Numerics.Vector2.FromV2f(pos), col, textBegin, textEnd, wrapWidth)
@@ -576,13 +576,16 @@ type ImGui =
         Hexa.NET.ImGui.ImGui.AddText(self, font, fontSize, System.Numerics.Vector2.FromV2f(pos), col, textBegin, wrapWidth)
 
     static member AddText(self: ImDrawListPtr, font: ImFontPtr, fontSize: float32, pos: V2f, col: uint32, textBegin: string, textEnd: string, cpuFineClipRect: byref<V4f>) : unit =
-        Hexa.NET.ImGui.ImGui.AddText(self, font, fontSize, System.Numerics.Vector2.FromV2f(pos), col, textBegin, textEnd, NativePtr.cast<_, System.Numerics.Vector4> &&cpuFineClipRect)
+        use cpuFineClipRectPinned = fixed &cpuFineClipRect
+        Hexa.NET.ImGui.ImGui.AddText(self, font, fontSize, System.Numerics.Vector2.FromV2f(pos), col, textBegin, textEnd, NativePtr.cast<_, System.Numerics.Vector4> cpuFineClipRectPinned)
 
     static member AddText(self: ImDrawListPtr, font: ImFontPtr, fontSize: float32, pos: V2f, col: uint32, textBegin: string, cpuFineClipRect: byref<V4f>) : unit =
-        Hexa.NET.ImGui.ImGui.AddText(self, font, fontSize, System.Numerics.Vector2.FromV2f(pos), col, textBegin, NativePtr.cast<_, System.Numerics.Vector4> &&cpuFineClipRect)
+        use cpuFineClipRectPinned = fixed &cpuFineClipRect
+        Hexa.NET.ImGui.ImGui.AddText(self, font, fontSize, System.Numerics.Vector2.FromV2f(pos), col, textBegin, NativePtr.cast<_, System.Numerics.Vector4> cpuFineClipRectPinned)
 
     static member AddText(self: ImDrawListPtr, font: ImFontPtr, fontSize: float32, pos: V2f, col: uint32, textBegin: string, wrapWidth: float32, cpuFineClipRect: byref<V4f>) : unit =
-        Hexa.NET.ImGui.ImGui.AddText(self, font, fontSize, System.Numerics.Vector2.FromV2f(pos), col, textBegin, wrapWidth, NativePtr.cast<_, System.Numerics.Vector4> &&cpuFineClipRect)
+        use cpuFineClipRectPinned = fixed &cpuFineClipRect
+        Hexa.NET.ImGui.ImGui.AddText(self, font, fontSize, System.Numerics.Vector2.FromV2f(pos), col, textBegin, wrapWidth, NativePtr.cast<_, System.Numerics.Vector4> cpuFineClipRectPinned)
 
     static member AddText(self: ImFontGlyphRangesBuilderPtr, text: string, textEnd: string) : unit =
         Hexa.NET.ImGui.ImGui.AddText(self, text, textEnd)
@@ -618,20 +621,24 @@ type ImGui =
 
 
     static member Begin(name: string, pOpen: byref<bool>, flags: ImGuiWindowFlags) : bool =
-        Hexa.NET.ImGui.ImGui.Begin(name, &&pOpen, flags)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.Begin(name, pOpenPinned, flags)
 
     static member Begin(name: string, pOpen: cval<bool>, flags: ImGuiWindowFlags) : unit =
         let mutable pOpenState = pOpen.Value
-        let result = Hexa.NET.ImGui.ImGui.Begin(name, &&pOpenState, flags)
+        use pOpenStatePinned = fixed &pOpenState
+        let result = Hexa.NET.ImGui.ImGui.Begin(name, pOpenStatePinned, flags)
         if result then
             pOpen.Value <- pOpenState
 
     static member Begin(name: string, pOpen: byref<bool>) : bool =
-        Hexa.NET.ImGui.ImGui.Begin(name, &&pOpen)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.Begin(name, pOpenPinned)
 
     static member Begin(name: string, pOpen: cval<bool>) : unit =
         let mutable pOpenState = pOpen.Value
-        let result = Hexa.NET.ImGui.ImGui.Begin(name, &&pOpenState)
+        use pOpenStatePinned = fixed &pOpenState
+        let result = Hexa.NET.ImGui.ImGui.Begin(name, pOpenStatePinned)
         if result then
             pOpen.Value <- pOpenState
 
@@ -809,20 +816,24 @@ type ImGui =
 
 
     static member BeginPopupModal(name: string, pOpen: byref<bool>, flags: ImGuiWindowFlags) : bool =
-        Hexa.NET.ImGui.ImGui.BeginPopupModal(name, &&pOpen, flags)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.BeginPopupModal(name, pOpenPinned, flags)
 
     static member BeginPopupModal(name: string, pOpen: cval<bool>, flags: ImGuiWindowFlags) : unit =
         let mutable pOpenState = pOpen.Value
-        let result = Hexa.NET.ImGui.ImGui.BeginPopupModal(name, &&pOpenState, flags)
+        use pOpenStatePinned = fixed &pOpenState
+        let result = Hexa.NET.ImGui.ImGui.BeginPopupModal(name, pOpenStatePinned, flags)
         if result then
             pOpen.Value <- pOpenState
 
     static member BeginPopupModal(name: string, pOpen: byref<bool>) : bool =
-        Hexa.NET.ImGui.ImGui.BeginPopupModal(name, &&pOpen)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.BeginPopupModal(name, pOpenPinned)
 
     static member BeginPopupModal(name: string, pOpen: cval<bool>) : unit =
         let mutable pOpenState = pOpen.Value
-        let result = Hexa.NET.ImGui.ImGui.BeginPopupModal(name, &&pOpenState)
+        use pOpenStatePinned = fixed &pOpenState
+        let result = Hexa.NET.ImGui.ImGui.BeginPopupModal(name, pOpenStatePinned)
         if result then
             pOpen.Value <- pOpenState
 
@@ -841,20 +852,24 @@ type ImGui =
 
 
     static member BeginTabItem(label: string, pOpen: byref<bool>, flags: ImGuiTabItemFlags) : bool =
-        Hexa.NET.ImGui.ImGui.BeginTabItem(label, &&pOpen, flags)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.BeginTabItem(label, pOpenPinned, flags)
 
     static member BeginTabItem(label: string, pOpen: cval<bool>, flags: ImGuiTabItemFlags) : unit =
         let mutable pOpenState = pOpen.Value
-        let result = Hexa.NET.ImGui.ImGui.BeginTabItem(label, &&pOpenState, flags)
+        use pOpenStatePinned = fixed &pOpenState
+        let result = Hexa.NET.ImGui.ImGui.BeginTabItem(label, pOpenStatePinned, flags)
         if result then
             pOpen.Value <- pOpenState
 
     static member BeginTabItem(label: string, pOpen: byref<bool>) : bool =
-        Hexa.NET.ImGui.ImGui.BeginTabItem(label, &&pOpen)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.BeginTabItem(label, pOpenPinned)
 
     static member BeginTabItem(label: string, pOpen: cval<bool>) : unit =
         let mutable pOpenState = pOpen.Value
-        let result = Hexa.NET.ImGui.ImGui.BeginTabItem(label, &&pOpenState)
+        use pOpenStatePinned = fixed &pOpenState
+        let result = Hexa.NET.ImGui.ImGui.BeginTabItem(label, pOpenStatePinned)
         if result then
             pOpen.Value <- pOpenState
 
@@ -899,7 +914,8 @@ type ImGui =
 
 
     static member BuildRanges(self: ImFontGlyphRangesBuilderPtr, outRanges: byref<ImVector<uint32>>) : unit =
-        Hexa.NET.ImGui.ImGui.BuildRanges(self, &&outRanges)
+        use outRangesPinned = fixed &outRanges
+        Hexa.NET.ImGui.ImGui.BuildRanges(self, outRangesPinned)
 
 
     static member BuildSortByKey(self: ImGuiStoragePtr) : unit =
@@ -938,7 +954,8 @@ type ImGui =
         result.ToV2f()
 
     static member CalcTextSize(pOut: byref<V2f>, text: string) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, text)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, text)
 
     static member CalcTextSize(text: string, hideTextAfterDoubleHash: bool) : V2f =
         let result = Hexa.NET.ImGui.ImGui.CalcTextSize(text, hideTextAfterDoubleHash)
@@ -949,7 +966,8 @@ type ImGui =
         result.ToV2f()
 
     static member CalcTextSize(pOut: byref<V2f>, text: string, textEnd: string) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, text, textEnd)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, text, textEnd)
 
     static member CalcTextSize(text: string, wrapWidth: float32) : V2f =
         let result = Hexa.NET.ImGui.ImGui.CalcTextSize(text, wrapWidth)
@@ -960,10 +978,12 @@ type ImGui =
         result.ToV2f()
 
     static member CalcTextSize(pOut: byref<V2f>, text: string, hideTextAfterDoubleHash: bool) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, text, hideTextAfterDoubleHash)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, text, hideTextAfterDoubleHash)
 
     static member CalcTextSize(pOut: byref<V2f>, text: string, wrapWidth: float32) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, text, wrapWidth)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, text, wrapWidth)
 
     static member CalcTextSize(text: string, hideTextAfterDoubleHash: bool, wrapWidth: float32) : V2f =
         let result = Hexa.NET.ImGui.ImGui.CalcTextSize(text, hideTextAfterDoubleHash, wrapWidth)
@@ -974,16 +994,20 @@ type ImGui =
         result.ToV2f()
 
     static member CalcTextSize(pOut: byref<V2f>, text: string, textEnd: string, hideTextAfterDoubleHash: bool, wrapWidth: float32) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, text, textEnd, hideTextAfterDoubleHash, wrapWidth)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, text, textEnd, hideTextAfterDoubleHash, wrapWidth)
 
     static member CalcTextSize(pOut: byref<V2f>, text: string, textEnd: string, hideTextAfterDoubleHash: bool) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, text, textEnd, hideTextAfterDoubleHash)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, text, textEnd, hideTextAfterDoubleHash)
 
     static member CalcTextSize(pOut: byref<V2f>, text: string, textEnd: string, wrapWidth: float32) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, text, textEnd, wrapWidth)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, text, textEnd, wrapWidth)
 
     static member CalcTextSize(pOut: byref<V2f>, text: string, hideTextAfterDoubleHash: bool, wrapWidth: float32) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, text, hideTextAfterDoubleHash, wrapWidth)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.CalcTextSize(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, text, hideTextAfterDoubleHash, wrapWidth)
 
 
     static member CalcTextSizeA(self: ImFontPtr, size: float32, maxWidth: float32, wrapWidth: float32, textBegin: string) : V2f =
@@ -995,24 +1019,32 @@ type ImGui =
         result.ToV2f()
 
     static member CalcTextSizeA(pOut: byref<V2f>, self: ImFontPtr, size: float32, maxWidth: float32, wrapWidth: float32, textBegin: string) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSizeA(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, self, size, maxWidth, wrapWidth, textBegin)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.CalcTextSizeA(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, self, size, maxWidth, wrapWidth, textBegin)
 
     static member CalcTextSizeA(self: ImFontPtr, size: float32, maxWidth: float32, wrapWidth: float32, textBegin: string, remaining: byref<nativeptr<uint8>>) : V2f =
-        let result = Hexa.NET.ImGui.ImGui.CalcTextSizeA(self, size, maxWidth, wrapWidth, textBegin, &&remaining)
+        use remainingPinned = fixed &remaining
+        let result = Hexa.NET.ImGui.ImGui.CalcTextSizeA(self, size, maxWidth, wrapWidth, textBegin, remainingPinned)
         result.ToV2f()
 
     static member CalcTextSizeA(self: ImFontPtr, size: float32, maxWidth: float32, wrapWidth: float32, textBegin: string, textEnd: string, remaining: byref<nativeptr<uint8>>) : V2f =
-        let result = Hexa.NET.ImGui.ImGui.CalcTextSizeA(self, size, maxWidth, wrapWidth, textBegin, textEnd, &&remaining)
+        use remainingPinned = fixed &remaining
+        let result = Hexa.NET.ImGui.ImGui.CalcTextSizeA(self, size, maxWidth, wrapWidth, textBegin, textEnd, remainingPinned)
         result.ToV2f()
 
     static member CalcTextSizeA(pOut: byref<V2f>, self: ImFontPtr, size: float32, maxWidth: float32, wrapWidth: float32, textBegin: string, textEnd: string, remaining: byref<nativeptr<uint8>>) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSizeA(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, self, size, maxWidth, wrapWidth, textBegin, textEnd, &&remaining)
+        use pOutPinned = fixed &pOut
+        use remainingPinned = fixed &remaining
+        Hexa.NET.ImGui.ImGui.CalcTextSizeA(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, self, size, maxWidth, wrapWidth, textBegin, textEnd, remainingPinned)
 
     static member CalcTextSizeA(pOut: byref<V2f>, self: ImFontPtr, size: float32, maxWidth: float32, wrapWidth: float32, textBegin: string, textEnd: string) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSizeA(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, self, size, maxWidth, wrapWidth, textBegin, textEnd)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.CalcTextSizeA(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, self, size, maxWidth, wrapWidth, textBegin, textEnd)
 
     static member CalcTextSizeA(pOut: byref<V2f>, self: ImFontPtr, size: float32, maxWidth: float32, wrapWidth: float32, textBegin: string, remaining: byref<nativeptr<uint8>>) : unit =
-        Hexa.NET.ImGui.ImGui.CalcTextSizeA(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, self, size, maxWidth, wrapWidth, textBegin, &&remaining)
+        use pOutPinned = fixed &pOut
+        use remainingPinned = fixed &remaining
+        Hexa.NET.ImGui.ImGui.CalcTextSizeA(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, self, size, maxWidth, wrapWidth, textBegin, remainingPinned)
 
 
     static member CalcWordWrapPosition(self: ImFontPtr, size: float32, text: string, textEnd: string, wrapWidth: float32) : string =
@@ -1032,30 +1064,36 @@ type ImGui =
 
 
     static member Checkbox(label: string, v: byref<bool>) : bool =
-        Hexa.NET.ImGui.ImGui.Checkbox(label, &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.Checkbox(label, vPinned)
 
     static member Checkbox(label: string, v: cval<bool>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.Checkbox(label, &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.Checkbox(label, vStatePinned)
         if result then
             v.Value <- vState
 
 
     static member CheckboxFlags(label: string, flags: byref<int32>, flagsValue: int32) : bool =
-        Hexa.NET.ImGui.ImGui.CheckboxFlags(label, &&flags, flagsValue)
+        use flagsPinned = fixed &flags
+        Hexa.NET.ImGui.ImGui.CheckboxFlags(label, flagsPinned, flagsValue)
 
     static member CheckboxFlags(label: string, flags: cval<int32>, flagsValue: int32) : unit =
         let mutable flagsState = flags.Value
-        let result = Hexa.NET.ImGui.ImGui.CheckboxFlags(label, &&flagsState, flagsValue)
+        use flagsStatePinned = fixed &flagsState
+        let result = Hexa.NET.ImGui.ImGui.CheckboxFlags(label, flagsStatePinned, flagsValue)
         if result then
             flags.Value <- flagsState
 
     static member CheckboxFlags(label: string, flags: byref<uint32>, flagsValue: uint32) : bool =
-        Hexa.NET.ImGui.ImGui.CheckboxFlags(label, &&flags, flagsValue)
+        use flagsPinned = fixed &flags
+        Hexa.NET.ImGui.ImGui.CheckboxFlags(label, flagsPinned, flagsValue)
 
     static member CheckboxFlags(label: string, flags: cval<uint32>, flagsValue: uint32) : unit =
         let mutable flagsState = flags.Value
-        let result = Hexa.NET.ImGui.ImGui.CheckboxFlags(label, &&flagsState, flagsValue)
+        use flagsStatePinned = fixed &flagsState
+        let result = Hexa.NET.ImGui.ImGui.CheckboxFlags(label, flagsStatePinned, flagsValue)
         if result then
             flags.Value <- flagsState
 
@@ -1139,20 +1177,24 @@ type ImGui =
         Hexa.NET.ImGui.ImGui.CollapsingHeader(label)
 
     static member CollapsingHeader(label: string, pVisible: byref<bool>, flags: ImGuiTreeNodeFlags) : bool =
-        Hexa.NET.ImGui.ImGui.CollapsingHeader(label, &&pVisible, flags)
+        use pVisiblePinned = fixed &pVisible
+        Hexa.NET.ImGui.ImGui.CollapsingHeader(label, pVisiblePinned, flags)
 
     static member CollapsingHeader(label: string, pVisible: cval<bool>, flags: ImGuiTreeNodeFlags) : unit =
         let mutable pVisibleState = pVisible.Value
-        let result = Hexa.NET.ImGui.ImGui.CollapsingHeader(label, &&pVisibleState, flags)
+        use pVisibleStatePinned = fixed &pVisibleState
+        let result = Hexa.NET.ImGui.ImGui.CollapsingHeader(label, pVisibleStatePinned, flags)
         if result then
             pVisible.Value <- pVisibleState
 
     static member CollapsingHeader(label: string, pVisible: byref<bool>) : bool =
-        Hexa.NET.ImGui.ImGui.CollapsingHeader(label, &&pVisible)
+        use pVisiblePinned = fixed &pVisible
+        Hexa.NET.ImGui.ImGui.CollapsingHeader(label, pVisiblePinned)
 
     static member CollapsingHeader(label: string, pVisible: cval<bool>) : unit =
         let mutable pVisibleState = pVisible.Value
-        let result = Hexa.NET.ImGui.ImGui.CollapsingHeader(label, &&pVisibleState)
+        use pVisibleStatePinned = fixed &pVisibleState
+        let result = Hexa.NET.ImGui.ImGui.CollapsingHeader(label, pVisibleStatePinned)
         if result then
             pVisible.Value <- pVisibleState
 
@@ -1235,11 +1277,17 @@ type ImGui =
 
 
     static member ColorConvertHSVtoRGB(h: float32, s: float32, v: float32, outR: byref<float32>, outG: byref<float32>, outB: byref<float32>) : unit =
-        Hexa.NET.ImGui.ImGui.ColorConvertHSVtoRGB(h, s, v, &&outR, &&outG, &&outB)
+        use outRPinned = fixed &outR
+        use outGPinned = fixed &outG
+        use outBPinned = fixed &outB
+        Hexa.NET.ImGui.ImGui.ColorConvertHSVtoRGB(h, s, v, outRPinned, outGPinned, outBPinned)
 
 
     static member ColorConvertRGBtoHSV(r: float32, g: float32, b: float32, outH: byref<float32>, outS: byref<float32>, outV: byref<float32>) : unit =
-        Hexa.NET.ImGui.ImGui.ColorConvertRGBtoHSV(r, g, b, &&outH, &&outS, &&outV)
+        use outHPinned = fixed &outH
+        use outSPinned = fixed &outS
+        use outVPinned = fixed &outV
+        Hexa.NET.ImGui.ImGui.ColorConvertRGBtoHSV(r, g, b, outHPinned, outSPinned, outVPinned)
 
 
     static member ColorConvertU32ToFloat4(input: uint32) : V4f =
@@ -1247,445 +1295,524 @@ type ImGui =
         result.ToV4f()
 
     static member ColorConvertU32ToFloat4(pOut: byref<V4f>, input: uint32) : unit =
-        Hexa.NET.ImGui.ImGui.ColorConvertU32ToFloat4(NativePtr.cast<_, System.Numerics.Vector4> &&pOut, input)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.ColorConvertU32ToFloat4(NativePtr.cast<_, System.Numerics.Vector4> pOutPinned, input)
 
 
     static member ColorEdit3(label: string, col: byref<V3f>, flags: ImGuiColorEditFlags) : bool =
-        Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned, flags)
 
     static member ColorEdit3(label: string, col: cval<V3f>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState
 
     static member ColorEdit3(label: string, col: byref<C3b>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC3b()
         result
 
     static member ColorEdit3(label: string, col: cval<C3b>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC3b()
 
     static member ColorEdit3(label: string, col: byref<C3us>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC3us()
         result
 
     static member ColorEdit3(label: string, col: cval<C3us>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC3us()
 
     static member ColorEdit3(label: string, col: byref<C3ui>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC3ui()
         result
 
     static member ColorEdit3(label: string, col: cval<C3ui>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC3ui()
 
     static member ColorEdit3(label: string, col: byref<C3f>, flags: ImGuiColorEditFlags) : bool =
-        Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned, flags)
 
     static member ColorEdit3(label: string, col: cval<C3f>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState
 
     static member ColorEdit3(label: string, col: byref<C3d>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC3d()
         result
 
     static member ColorEdit3(label: string, col: cval<C3d>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC3d()
 
     static member ColorEdit3(label: string, col: byref<V3f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned)
 
     static member ColorEdit3(label: string, col: cval<V3f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState
 
     static member ColorEdit3(label: string, col: byref<C3b>) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC3b()
         result
 
     static member ColorEdit3(label: string, col: cval<C3b>) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC3b()
 
     static member ColorEdit3(label: string, col: byref<C3us>) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC3us()
         result
 
     static member ColorEdit3(label: string, col: cval<C3us>) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC3us()
 
     static member ColorEdit3(label: string, col: byref<C3ui>) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC3ui()
         result
 
     static member ColorEdit3(label: string, col: cval<C3ui>) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC3ui()
 
     static member ColorEdit3(label: string, col: byref<C3f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned)
 
     static member ColorEdit3(label: string, col: cval<C3f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState
 
     static member ColorEdit3(label: string, col: byref<C3d>) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC3d()
         result
 
     static member ColorEdit3(label: string, col: cval<C3d>) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC3d()
 
 
     static member ColorEdit4(label: string, col: byref<V4f>, flags: ImGuiColorEditFlags) : bool =
-        Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned, flags)
 
     static member ColorEdit4(label: string, col: cval<V4f>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState
 
     static member ColorEdit4(label: string, col: byref<C4b>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC4b()
         result
 
     static member ColorEdit4(label: string, col: cval<C4b>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC4b()
 
     static member ColorEdit4(label: string, col: byref<C4us>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC4us()
         result
 
     static member ColorEdit4(label: string, col: cval<C4us>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC4us()
 
     static member ColorEdit4(label: string, col: byref<C4ui>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC4ui()
         result
 
     static member ColorEdit4(label: string, col: cval<C4ui>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC4ui()
 
     static member ColorEdit4(label: string, col: byref<C4f>, flags: ImGuiColorEditFlags) : bool =
-        Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned, flags)
 
     static member ColorEdit4(label: string, col: cval<C4f>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState
 
     static member ColorEdit4(label: string, col: byref<C4d>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC4d()
         result
 
     static member ColorEdit4(label: string, col: cval<C4d>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC4d()
 
     static member ColorEdit4(label: string, col: byref<V4f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned)
 
     static member ColorEdit4(label: string, col: cval<V4f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState
 
     static member ColorEdit4(label: string, col: byref<C4b>) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC4b()
         result
 
     static member ColorEdit4(label: string, col: cval<C4b>) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC4b()
 
     static member ColorEdit4(label: string, col: byref<C4us>) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC4us()
         result
 
     static member ColorEdit4(label: string, col: cval<C4us>) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC4us()
 
     static member ColorEdit4(label: string, col: byref<C4ui>) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC4ui()
         result
 
     static member ColorEdit4(label: string, col: cval<C4ui>) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC4ui()
 
     static member ColorEdit4(label: string, col: byref<C4f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned)
 
     static member ColorEdit4(label: string, col: cval<C4f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState
 
     static member ColorEdit4(label: string, col: byref<C4d>) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC4d()
         result
 
     static member ColorEdit4(label: string, col: cval<C4d>) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorEdit4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC4d()
 
 
     static member ColorPicker3(label: string, col: byref<V3f>, flags: ImGuiColorEditFlags) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned, flags)
 
     static member ColorPicker3(label: string, col: cval<V3f>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState
 
     static member ColorPicker3(label: string, col: byref<C3b>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC3b()
         result
 
     static member ColorPicker3(label: string, col: cval<C3b>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC3b()
 
     static member ColorPicker3(label: string, col: byref<C3us>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC3us()
         result
 
     static member ColorPicker3(label: string, col: cval<C3us>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC3us()
 
     static member ColorPicker3(label: string, col: byref<C3ui>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC3ui()
         result
 
     static member ColorPicker3(label: string, col: cval<C3ui>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC3ui()
 
     static member ColorPicker3(label: string, col: byref<C3f>, flags: ImGuiColorEditFlags) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned, flags)
 
     static member ColorPicker3(label: string, col: cval<C3f>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState
 
     static member ColorPicker3(label: string, col: byref<C3d>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC3d()
         result
 
     static member ColorPicker3(label: string, col: cval<C3d>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC3d()
 
     static member ColorPicker3(label: string, col: byref<V3f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned)
 
     static member ColorPicker3(label: string, col: cval<V3f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState
 
     static member ColorPicker3(label: string, col: byref<C3b>) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC3b()
         result
 
     static member ColorPicker3(label: string, col: cval<C3b>) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC3b()
 
     static member ColorPicker3(label: string, col: byref<C3us>) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC3us()
         result
 
     static member ColorPicker3(label: string, col: cval<C3us>) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC3us()
 
     static member ColorPicker3(label: string, col: byref<C3ui>) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC3ui()
         result
 
     static member ColorPicker3(label: string, col: cval<C3ui>) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC3ui()
 
     static member ColorPicker3(label: string, col: byref<C3f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned)
 
     static member ColorPicker3(label: string, col: cval<C3f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState
 
     static member ColorPicker3(label: string, col: byref<C3d>) : bool =
         let mutable colState = col.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC3d()
         result
 
     static member ColorPicker3(label: string, col: cval<C3d>) : unit =
         let mutable colState = col.Value.ToC3f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker3(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC3d()
 
 
     static member ColorPicker4(label: string, col: byref<V4f>, flags: ImGuiColorEditFlags, refCol: byref<V4f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags, NativePtr.cast<_, float32> refColPinned)
 
     static member ColorPicker4(label: string, col: cval<V4f>, flags: ImGuiColorEditFlags, refCol: byref<V4f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState
 
     static member ColorPicker4(label: string, col: byref<C4b>, flags: ImGuiColorEditFlags, refCol: byref<C4b>) : bool =
         let mutable colState = col.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags, NativePtr.cast<_, float32> refColPinned)
         if result then
             col <- colState.ToC4b()
             refCol <- refColState.ToC4b()
@@ -1694,7 +1821,9 @@ type ImGui =
     static member ColorPicker4(label: string, col: cval<C4b>, flags: ImGuiColorEditFlags, refCol: byref<C4b>) : unit =
         let mutable colState = col.Value.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState.ToC4b()
             refCol <- refColState.ToC4b()
@@ -1702,7 +1831,9 @@ type ImGui =
     static member ColorPicker4(label: string, col: byref<C4us>, flags: ImGuiColorEditFlags, refCol: byref<C4us>) : bool =
         let mutable colState = col.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags, NativePtr.cast<_, float32> refColPinned)
         if result then
             col <- colState.ToC4us()
             refCol <- refColState.ToC4us()
@@ -1711,7 +1842,9 @@ type ImGui =
     static member ColorPicker4(label: string, col: cval<C4us>, flags: ImGuiColorEditFlags, refCol: byref<C4us>) : unit =
         let mutable colState = col.Value.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState.ToC4us()
             refCol <- refColState.ToC4us()
@@ -1719,7 +1852,9 @@ type ImGui =
     static member ColorPicker4(label: string, col: byref<C4ui>, flags: ImGuiColorEditFlags, refCol: byref<C4ui>) : bool =
         let mutable colState = col.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags, NativePtr.cast<_, float32> refColPinned)
         if result then
             col <- colState.ToC4ui()
             refCol <- refColState.ToC4ui()
@@ -1728,24 +1863,32 @@ type ImGui =
     static member ColorPicker4(label: string, col: cval<C4ui>, flags: ImGuiColorEditFlags, refCol: byref<C4ui>) : unit =
         let mutable colState = col.Value.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState.ToC4ui()
             refCol <- refColState.ToC4ui()
 
     static member ColorPicker4(label: string, col: byref<C4f>, flags: ImGuiColorEditFlags, refCol: byref<C4f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags, NativePtr.cast<_, float32> refColPinned)
 
     static member ColorPicker4(label: string, col: cval<C4f>, flags: ImGuiColorEditFlags, refCol: byref<C4f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState
 
     static member ColorPicker4(label: string, col: byref<C4d>, flags: ImGuiColorEditFlags, refCol: byref<C4d>) : bool =
         let mutable colState = col.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags, NativePtr.cast<_, float32> refColPinned)
         if result then
             col <- colState.ToC4d()
             refCol <- refColState.ToC4d()
@@ -1754,164 +1897,196 @@ type ImGui =
     static member ColorPicker4(label: string, col: cval<C4d>, flags: ImGuiColorEditFlags, refCol: byref<C4d>) : unit =
         let mutable colState = col.Value.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState.ToC4d()
             refCol <- refColState.ToC4d()
 
     static member ColorPicker4(label: string, col: byref<V4f>, flags: ImGuiColorEditFlags) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags)
 
     static member ColorPicker4(label: string, col: cval<V4f>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState
 
     static member ColorPicker4(label: string, col: byref<C4b>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC4b()
         result
 
     static member ColorPicker4(label: string, col: cval<C4b>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC4b()
 
     static member ColorPicker4(label: string, col: byref<C4us>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC4us()
         result
 
     static member ColorPicker4(label: string, col: cval<C4us>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC4us()
 
     static member ColorPicker4(label: string, col: byref<C4ui>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC4ui()
         result
 
     static member ColorPicker4(label: string, col: cval<C4ui>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC4ui()
 
     static member ColorPicker4(label: string, col: byref<C4f>, flags: ImGuiColorEditFlags) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags)
 
     static member ColorPicker4(label: string, col: cval<C4f>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState
 
     static member ColorPicker4(label: string, col: byref<C4d>, flags: ImGuiColorEditFlags) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, flags)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, flags)
         if result then
             col <- colState.ToC4d()
         result
 
     static member ColorPicker4(label: string, col: cval<C4d>, flags: ImGuiColorEditFlags) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, flags)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, flags)
         if result then
             col.Value <- colState.ToC4d()
 
     static member ColorPicker4(label: string, col: byref<V4f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned)
 
     static member ColorPicker4(label: string, col: cval<V4f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState
 
     static member ColorPicker4(label: string, col: byref<C4b>) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC4b()
         result
 
     static member ColorPicker4(label: string, col: cval<C4b>) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC4b()
 
     static member ColorPicker4(label: string, col: byref<C4us>) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC4us()
         result
 
     static member ColorPicker4(label: string, col: cval<C4us>) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC4us()
 
     static member ColorPicker4(label: string, col: byref<C4ui>) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC4ui()
         result
 
     static member ColorPicker4(label: string, col: cval<C4ui>) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC4ui()
 
     static member ColorPicker4(label: string, col: byref<C4f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned)
 
     static member ColorPicker4(label: string, col: cval<C4f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState
 
     static member ColorPicker4(label: string, col: byref<C4d>) : bool =
         let mutable colState = col.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col)
+        use colPinned = fixed &col
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned)
         if result then
             col <- colState.ToC4d()
         result
 
     static member ColorPicker4(label: string, col: cval<C4d>) : unit =
         let mutable colState = col.Value.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState)
+        use colStatePinned = fixed &colState
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned)
         if result then
             col.Value <- colState.ToC4d()
 
     static member ColorPicker4(label: string, col: byref<V4f>, refCol: byref<V4f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, NativePtr.cast<_, float32> refColPinned)
 
     static member ColorPicker4(label: string, col: cval<V4f>, refCol: byref<V4f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState
 
     static member ColorPicker4(label: string, col: byref<C4b>, refCol: byref<C4b>) : bool =
         let mutable colState = col.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, NativePtr.cast<_, float32> refColPinned)
         if result then
             col <- colState.ToC4b()
             refCol <- refColState.ToC4b()
@@ -1920,7 +2095,9 @@ type ImGui =
     static member ColorPicker4(label: string, col: cval<C4b>, refCol: byref<C4b>) : unit =
         let mutable colState = col.Value.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState.ToC4b()
             refCol <- refColState.ToC4b()
@@ -1928,7 +2105,9 @@ type ImGui =
     static member ColorPicker4(label: string, col: byref<C4us>, refCol: byref<C4us>) : bool =
         let mutable colState = col.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, NativePtr.cast<_, float32> refColPinned)
         if result then
             col <- colState.ToC4us()
             refCol <- refColState.ToC4us()
@@ -1937,7 +2116,9 @@ type ImGui =
     static member ColorPicker4(label: string, col: cval<C4us>, refCol: byref<C4us>) : unit =
         let mutable colState = col.Value.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState.ToC4us()
             refCol <- refColState.ToC4us()
@@ -1945,7 +2126,9 @@ type ImGui =
     static member ColorPicker4(label: string, col: byref<C4ui>, refCol: byref<C4ui>) : bool =
         let mutable colState = col.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, NativePtr.cast<_, float32> refColPinned)
         if result then
             col <- colState.ToC4ui()
             refCol <- refColState.ToC4ui()
@@ -1954,24 +2137,32 @@ type ImGui =
     static member ColorPicker4(label: string, col: cval<C4ui>, refCol: byref<C4ui>) : unit =
         let mutable colState = col.Value.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState.ToC4ui()
             refCol <- refColState.ToC4ui()
 
     static member ColorPicker4(label: string, col: byref<C4f>, refCol: byref<C4f>) : bool =
-        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, NativePtr.cast<_, float32> refColPinned)
 
     static member ColorPicker4(label: string, col: cval<C4f>, refCol: byref<C4f>) : unit =
         let mutable colState = col.Value
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState
 
     static member ColorPicker4(label: string, col: byref<C4d>, refCol: byref<C4d>) : bool =
         let mutable colState = col.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&col, NativePtr.cast<_, float32> &&refCol)
+        use colPinned = fixed &col
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colPinned, NativePtr.cast<_, float32> refColPinned)
         if result then
             col <- colState.ToC4d()
             refCol <- refColState.ToC4d()
@@ -1980,7 +2171,9 @@ type ImGui =
     static member ColorPicker4(label: string, col: cval<C4d>, refCol: byref<C4d>) : unit =
         let mutable colState = col.Value.ToC4f()
         let mutable refColState = refCol.ToC4f()
-        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> &&colState, NativePtr.cast<_, float32> &&refCol)
+        use colStatePinned = fixed &colState
+        use refColPinned = fixed &refCol
+        let result = Hexa.NET.ImGui.ImGui.ColorPicker4(label, NativePtr.cast<_, float32> colStatePinned, NativePtr.cast<_, float32> refColPinned)
         if result then
             col.Value <- colState.ToC4d()
             refCol <- refColState.ToC4d()
@@ -2012,56 +2205,68 @@ type ImGui =
 
 
     static member Combo(label: string, currentItem: byref<int32>, items: string[], popupMaxHeightInItems: int32) : bool =
-        Hexa.NET.ImGui.ImGui.Combo(label, &&currentItem, items, items.Length, popupMaxHeightInItems)
+        use currentItemPinned = fixed &currentItem
+        Hexa.NET.ImGui.ImGui.Combo(label, currentItemPinned, items, items.Length, popupMaxHeightInItems)
 
     static member Combo(label: string, currentItem: cval<int32>, items: string[], popupMaxHeightInItems: int32) : unit =
         let mutable currentItemState = currentItem.Value
-        let result = Hexa.NET.ImGui.ImGui.Combo(label, &&currentItemState, items, items.Length, popupMaxHeightInItems)
+        use currentItemStatePinned = fixed &currentItemState
+        let result = Hexa.NET.ImGui.ImGui.Combo(label, currentItemStatePinned, items, items.Length, popupMaxHeightInItems)
         if result then
             currentItem.Value <- currentItemState
 
     static member Combo(label: string, currentItem: byref<int32>, items: string[]) : bool =
-        Hexa.NET.ImGui.ImGui.Combo(label, &&currentItem, items, items.Length)
+        use currentItemPinned = fixed &currentItem
+        Hexa.NET.ImGui.ImGui.Combo(label, currentItemPinned, items, items.Length)
 
     static member Combo(label: string, currentItem: cval<int32>, items: string[]) : unit =
         let mutable currentItemState = currentItem.Value
-        let result = Hexa.NET.ImGui.ImGui.Combo(label, &&currentItemState, items, items.Length)
+        use currentItemStatePinned = fixed &currentItemState
+        let result = Hexa.NET.ImGui.ImGui.Combo(label, currentItemStatePinned, items, items.Length)
         if result then
             currentItem.Value <- currentItemState
 
     static member Combo(label: string, currentItem: byref<int32>, itemsSeparatedByZeros: string, popupMaxHeightInItems: int32) : bool =
-        Hexa.NET.ImGui.ImGui.Combo(label, &&currentItem, itemsSeparatedByZeros, popupMaxHeightInItems)
+        use currentItemPinned = fixed &currentItem
+        Hexa.NET.ImGui.ImGui.Combo(label, currentItemPinned, itemsSeparatedByZeros, popupMaxHeightInItems)
 
     static member Combo(label: string, currentItem: cval<int32>, itemsSeparatedByZeros: string, popupMaxHeightInItems: int32) : unit =
         let mutable currentItemState = currentItem.Value
-        let result = Hexa.NET.ImGui.ImGui.Combo(label, &&currentItemState, itemsSeparatedByZeros, popupMaxHeightInItems)
+        use currentItemStatePinned = fixed &currentItemState
+        let result = Hexa.NET.ImGui.ImGui.Combo(label, currentItemStatePinned, itemsSeparatedByZeros, popupMaxHeightInItems)
         if result then
             currentItem.Value <- currentItemState
 
     static member Combo(label: string, currentItem: byref<int32>, itemsSeparatedByZeros: string) : bool =
-        Hexa.NET.ImGui.ImGui.Combo(label, &&currentItem, itemsSeparatedByZeros)
+        use currentItemPinned = fixed &currentItem
+        Hexa.NET.ImGui.ImGui.Combo(label, currentItemPinned, itemsSeparatedByZeros)
 
     static member Combo(label: string, currentItem: cval<int32>, itemsSeparatedByZeros: string) : unit =
         let mutable currentItemState = currentItem.Value
-        let result = Hexa.NET.ImGui.ImGui.Combo(label, &&currentItemState, itemsSeparatedByZeros)
+        use currentItemStatePinned = fixed &currentItemState
+        let result = Hexa.NET.ImGui.ImGui.Combo(label, currentItemStatePinned, itemsSeparatedByZeros)
         if result then
             currentItem.Value <- currentItemState
 
     static member Combo(label: string, currentItem: byref<int32>, getter: nativeint, userData: voidptr, itemsCount: int32, popupMaxHeightInItems: int32) : bool =
-        Hexa.NET.ImGui.ImGui.Combo(label, &&currentItem, getter, userData, itemsCount, popupMaxHeightInItems)
+        use currentItemPinned = fixed &currentItem
+        Hexa.NET.ImGui.ImGui.Combo(label, currentItemPinned, getter, userData, itemsCount, popupMaxHeightInItems)
 
     static member Combo(label: string, currentItem: cval<int32>, getter: nativeint, userData: voidptr, itemsCount: int32, popupMaxHeightInItems: int32) : unit =
         let mutable currentItemState = currentItem.Value
-        let result = Hexa.NET.ImGui.ImGui.Combo(label, &&currentItemState, getter, userData, itemsCount, popupMaxHeightInItems)
+        use currentItemStatePinned = fixed &currentItemState
+        let result = Hexa.NET.ImGui.ImGui.Combo(label, currentItemStatePinned, getter, userData, itemsCount, popupMaxHeightInItems)
         if result then
             currentItem.Value <- currentItemState
 
     static member Combo(label: string, currentItem: byref<int32>, getter: nativeint, userData: voidptr, itemsCount: int32) : bool =
-        Hexa.NET.ImGui.ImGui.Combo(label, &&currentItem, getter, userData, itemsCount)
+        use currentItemPinned = fixed &currentItem
+        Hexa.NET.ImGui.ImGui.Combo(label, currentItemPinned, getter, userData, itemsCount)
 
     static member Combo(label: string, currentItem: cval<int32>, getter: nativeint, userData: voidptr, itemsCount: int32) : unit =
         let mutable currentItemState = currentItem.Value
-        let result = Hexa.NET.ImGui.ImGui.Combo(label, &&currentItemState, getter, userData, itemsCount)
+        use currentItemStatePinned = fixed &currentItemState
+        let result = Hexa.NET.ImGui.ImGui.Combo(label, currentItemStatePinned, getter, userData, itemsCount)
         if result then
             currentItem.Value <- currentItemState
 
@@ -2126,7 +2331,8 @@ type ImGui =
 
 
     static member Destroy(self: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.Destroy(NativePtr.cast<_, System.Numerics.Vector2> &&self)
+        use selfPinned = fixed &self
+        Hexa.NET.ImGui.ImGui.Destroy(NativePtr.cast<_, System.Numerics.Vector2> selfPinned)
 
     static member Destroy(self: ImTextureRefPtr) : unit =
         Hexa.NET.ImGui.ImGui.Destroy(self)
@@ -2318,1991 +2524,2431 @@ type ImGui =
 
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, vMin, vMax, format, flags)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, vMin: float32, vMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, vMin, vMax, format)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, vMin: float32, vMax: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, vMin: float32, vMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, vMin, vMax)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, vMin: float32, vMax: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, vMin: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, vMin)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, vMin: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, vMin)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned)
 
     static member DragFloat(label: string, v: cval<float32>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, vMin: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, vMin, format)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, vMin: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, format)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, format)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, format)
 
     static member DragFloat(label: string, v: cval<float32>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, vMin, vMax, flags)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, vMin: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, vMin, flags)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, vMin: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, flags)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, flags)
 
     static member DragFloat(label: string, v: cval<float32>, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, vMin: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, vMin, format, flags)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, vMin: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, vSpeed, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, vSpeed, format, flags)
 
     static member DragFloat(label: string, v: cval<float32>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, vSpeed, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, vSpeed, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat(label: string, v: byref<float32>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat(label, &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat(label, vPinned, format, flags)
 
     static member DragFloat(label: string, v: cval<float32>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat(label, vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax, format, flags)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, vMin: float32, vMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax, format)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, vMin: float32, vMax: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, vMin: float32, vMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, vMin: float32, vMax: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, vMin: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, vMin: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned)
 
     static member DragFloat2(label: string, v: cval<V2f>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, vMin: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, format)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, vMin: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, format)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, format)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, format)
 
     static member DragFloat2(label: string, v: cval<V2f>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax, flags)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, vMin: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, flags)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, vMin: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, flags)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, flags)
 
     static member DragFloat2(label: string, v: cval<V2f>, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, vMin: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, format, flags)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, vMin: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, vSpeed, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, vSpeed, format, flags)
 
     static member DragFloat2(label: string, v: cval<V2f>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, vSpeed, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat2(label: string, v: byref<V2f>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vPinned, format, flags)
 
     static member DragFloat2(label: string, v: cval<V2f>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat2(label, NativePtr.cast<_, float32> vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax, format, flags)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, vMin: float32, vMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax, format)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, vMin: float32, vMax: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, vMin: float32, vMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, vMin: float32, vMax: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, vMin: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, vMin: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned)
 
     static member DragFloat3(label: string, v: cval<V3f>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, vMin: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, format)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, vMin: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, format)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, format)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, format)
 
     static member DragFloat3(label: string, v: cval<V3f>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax, flags)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, vMin: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, flags)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, vMin: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, flags)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, flags)
 
     static member DragFloat3(label: string, v: cval<V3f>, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, vMin: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, format, flags)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, vMin: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, vSpeed, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, vSpeed, format, flags)
 
     static member DragFloat3(label: string, v: cval<V3f>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, vSpeed, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat3(label: string, v: byref<V3f>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vPinned, format, flags)
 
     static member DragFloat3(label: string, v: cval<V3f>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat3(label, NativePtr.cast<_, float32> vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax, format, flags)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, vMin: float32, vMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax, format)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, vMin: float32, vMax: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, vMin: float32, vMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, vMin: float32, vMax: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, vMin: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, vMin: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned)
 
     static member DragFloat4(label: string, v: cval<V4f>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, vMin: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, format)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, vMin: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, format)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, format)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, format)
 
     static member DragFloat4(label: string, v: cval<V4f>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, vMax, flags)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, vMin: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, flags)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, vMin: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, flags)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, flags)
 
     static member DragFloat4(label: string, v: cval<V4f>, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, vMin: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, vMin, format, flags)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, vMin: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, vSpeed, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, vSpeed, format, flags)
 
     static member DragFloat4(label: string, v: cval<V4f>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, vSpeed, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, vSpeed, format, flags)
         if result then
             v.Value <- vState
 
     static member DragFloat4(label: string, v: byref<V4f>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vPinned, format, flags)
 
     static member DragFloat4(label: string, v: cval<V4f>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragFloat4(label, NativePtr.cast<_, float32> vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, formatMax: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, vMax, format, formatMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, vMax, format, formatMax, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, formatMax: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, vMax, format, formatMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, vMax, format, formatMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, formatMax: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, vMax, format, formatMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, vMax, format, formatMax)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, formatMax: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, vMax, format, formatMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, vMax, format, formatMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, vMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, vMax, format)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, vMax, format)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, vMax: float32, format: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, vMax, format)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, vMax, format)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, vMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, vMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, vMax)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, vMax: float32) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, vMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, vMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent))
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned))
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState))
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned))
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, format)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, format)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, format: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, format)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, format)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, format)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, format)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, format: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, format)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, format)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), format)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), format)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, format: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), format)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), format)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, format: string, formatMax: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, format, formatMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, format, formatMax)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, format: string, formatMax: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, format, formatMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, format, formatMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, format: string, formatMax: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, format, formatMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, format, formatMax)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, format: string, formatMax: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, format, formatMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, format, formatMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, format: string, formatMax: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), format, formatMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), format, formatMax)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, format: string, formatMax: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), format, formatMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), format, formatMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, vMax, format, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, vMax, format, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, vMax, format, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, vMax, format, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, vMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, vMax, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, vMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, vMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, format, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, format, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, format, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, format, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, format, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, format, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, format, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, format, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), format, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), format, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), format, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), format, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, vMin: float32, format: string, formatMax: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, vMin, format, formatMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, vMin, format, formatMax, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, vMin: float32, format: string, formatMax: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, vMin, format, formatMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, vMin, format, formatMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, vSpeed: float32, format: string, formatMax: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), vSpeed, format, formatMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), vSpeed, format, formatMax, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, vSpeed: float32, format: string, formatMax: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), vSpeed, format, formatMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), vSpeed, format, formatMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragFloatRange2(label: string, vCurrent: byref<Range1f>, format: string, formatMax: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrent), format, formatMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentPinned), format, formatMax, flags)
 
     static member DragFloatRange2(label: string, vCurrent: cval<Range1f>, format: string, formatMax: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, float32> &&vCurrentState), format, formatMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragFloatRange2(label, NativePtr.cast<_, float32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, float32> vCurrentStatePinned), format, formatMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, vMin, vMax, format, flags)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, vMin, vMax, format)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, vMin, vMax)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, vMin: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, vMin)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, vMin: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, vMin)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned)
 
     static member DragInt(label: string, v: cval<int32>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vMin: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vMin)
 
     static member DragInt(label: string, v: cval<int32>, vMin: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vMin)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vMin, vMax)
 
     static member DragInt(label: string, v: cval<int32>, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, vMin: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, vMin, format)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, vMin: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, format)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, format)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, format)
 
     static member DragInt(label: string, v: cval<int32>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vMin: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vMin, format)
 
     static member DragInt(label: string, v: cval<int32>, vMin: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vMin, vMax, format)
 
     static member DragInt(label: string, v: cval<int32>, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, vMin, vMax, flags)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, vMin: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, vMin, flags)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, vMin: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, flags)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, flags)
 
     static member DragInt(label: string, v: cval<int32>, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vMin: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vMin, flags)
 
     static member DragInt(label: string, v: cval<int32>, vMin: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vMin, vMax, flags)
 
     static member DragInt(label: string, v: cval<int32>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, vMin: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, vMin, format, flags)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, vMin: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vSpeed, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vSpeed, format, flags)
 
     static member DragInt(label: string, v: cval<int32>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vSpeed, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vSpeed, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, format, flags)
 
     static member DragInt(label: string, v: cval<int32>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vMin: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vMin, format, flags)
 
     static member DragInt(label: string, v: cval<int32>, vMin: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt(label: string, v: byref<int32>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt(label, &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt(label, vPinned, vMin, vMax, format, flags)
 
     static member DragInt(label: string, v: cval<int32>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt(label, &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt(label, vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax, format, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax, format)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, vMin: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, vMin: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned)
 
     static member DragInt2(label: string, v: cval<V2i>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vMin: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vMin)
 
     static member DragInt2(label: string, v: cval<V2i>, vMin: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vMin, vMax)
 
     static member DragInt2(label: string, v: cval<V2i>, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, vMin: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, format)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, vMin: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, format)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, format)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, format)
 
     static member DragInt2(label: string, v: cval<V2i>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vMin: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vMin, format)
 
     static member DragInt2(label: string, v: cval<V2i>, vMin: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format)
 
     static member DragInt2(label: string, v: cval<V2i>, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, vMin: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, vMin: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vMin: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vMin, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, vMin: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, vMin: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, format, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, vMin: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vSpeed, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vSpeed, format, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vSpeed, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, format, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vMin: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vMin, format, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, vMin: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt2(label: string, v: byref<V2i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format, flags)
 
     static member DragInt2(label: string, v: cval<V2i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax, format, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax, format)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, vMin: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, vMin: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned)
 
     static member DragInt3(label: string, v: cval<V3i>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vMin: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vMin)
 
     static member DragInt3(label: string, v: cval<V3i>, vMin: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vMin, vMax)
 
     static member DragInt3(label: string, v: cval<V3i>, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, vMin: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, format)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, vMin: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, format)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, format)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, format)
 
     static member DragInt3(label: string, v: cval<V3i>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vMin: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vMin, format)
 
     static member DragInt3(label: string, v: cval<V3i>, vMin: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format)
 
     static member DragInt3(label: string, v: cval<V3i>, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, vMin: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, vMin: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vMin: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vMin, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, vMin: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, vMin: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, format, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, vMin: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vSpeed, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vSpeed, format, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vSpeed, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, format, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vMin: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vMin, format, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, vMin: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt3(label: string, v: byref<V3i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format, flags)
 
     static member DragInt3(label: string, v: cval<V3i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax, format, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax, format)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, vMin: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, vMin: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned)
 
     static member DragInt4(label: string, v: cval<V4i>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vMin: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vMin)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vMin)
 
     static member DragInt4(label: string, v: cval<V4i>, vMin: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vMin)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vMin, vMax)
 
     static member DragInt4(label: string, v: cval<V4i>, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, vMin: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, format)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, vMin: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, format)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, format)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, format)
 
     static member DragInt4(label: string, v: cval<V4i>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vMin: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vMin, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vMin, format)
 
     static member DragInt4(label: string, v: cval<V4i>, vMin: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vMin, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, format)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format)
 
     static member DragInt4(label: string, v: cval<V4i>, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, vMax, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, vMin: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, vMin: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vMin: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vMin, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vMin, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, vMin: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vMin, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, vMin: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, vMin, format, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, vMin: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vSpeed, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vSpeed, format, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vSpeed, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vSpeed, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, format, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vMin: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vMin, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vMin, format, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, vMin: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vMin, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, format, flags)
         if result then
             v.Value <- vState
 
     static member DragInt4(label: string, v: byref<V4i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format, flags)
 
     static member DragInt4(label: string, v: cval<V4i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.DragInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, formatMax: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, vMax, format, formatMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, vMax, format, formatMax, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, formatMax: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, vMax, format, formatMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, vMax, format, formatMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, formatMax: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, vMax, format, formatMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, vMax, format, formatMax)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, formatMax: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, vMax, format, formatMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, vMax, format, formatMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, vMax, format)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, vMax, format)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, vMax, format)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, vMax, format)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, vMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, vMax)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, vMax: int32) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, vMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, vMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent))
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned))
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState))
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned))
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, vMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, vMax)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, vMax: int32) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, vMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, vMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, format)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, format)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, format: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, format)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, format)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, format)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, format)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, format: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, format)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, format)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), format)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), format)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, format: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), format)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), format)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, format)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, format)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, format: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, format)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, format)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, vMax, format)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, vMax, format)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, vMax, format)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, vMax, format)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, format: string, formatMax: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, format, formatMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, format, formatMax)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, format: string, formatMax: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, format, formatMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, format, formatMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, format: string, formatMax: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, format, formatMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, format, formatMax)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, format: string, formatMax: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, format, formatMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, format, formatMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, format: string, formatMax: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), format, formatMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), format, formatMax)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, format: string, formatMax: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), format, formatMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), format, formatMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, format: string, formatMax: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, format, formatMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, format, formatMax)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, format: string, formatMax: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, format, formatMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, format, formatMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, vMax: int32, format: string, formatMax: string) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, vMax, format, formatMax)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, vMax, format, formatMax)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, vMax: int32, format: string, formatMax: string) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, vMax, format, formatMax)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, vMax, format, formatMax)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, vMax, format, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, vMax, format, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, vMax, format, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, vMax, format, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, vMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, vMax, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, vMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, vMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, vMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, vMax, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, vMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, vMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, format, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, format, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, format, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, format, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, format, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, format, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, format, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, format, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), format, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), format, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), format, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), format, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, format, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, format, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, format, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, format, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, vMax, format, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, vMax, format, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, vMax, format, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, vMax, format, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, vMin: int32, format: string, formatMax: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, vMin, format, formatMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, vMin, format, formatMax, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, vMin: int32, format: string, formatMax: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, vMin, format, formatMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, vMin, format, formatMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vSpeed: float32, format: string, formatMax: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vSpeed, format, formatMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vSpeed, format, formatMax, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vSpeed: float32, format: string, formatMax: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vSpeed, format, formatMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vSpeed, format, formatMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, format: string, formatMax: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), format, formatMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), format, formatMax, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, format: string, formatMax: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), format, formatMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), format, formatMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, format: string, formatMax: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, format, formatMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, format, formatMax, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, format: string, formatMax: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, format, formatMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, format, formatMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
     static member DragIntRange2(label: string, vCurrent: byref<Range1i>, vMin: int32, vMax: int32, format: string, formatMax: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrent, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrent), vMin, vMax, format, formatMax, flags)
+        use vCurrentPinned = fixed &vCurrent
+        Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentPinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentPinned), vMin, vMax, format, formatMax, flags)
 
     static member DragIntRange2(label: string, vCurrent: cval<Range1i>, vMin: int32, vMax: int32, format: string, formatMax: string, flags: ImGuiSliderFlags) : unit =
         let mutable vCurrentState = vCurrent.Value
-        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> &&vCurrentState, NativePtr.step 1 (NativePtr.cast<_, int32> &&vCurrentState), vMin, vMax, format, formatMax, flags)
+        use vCurrentStatePinned = fixed &vCurrentState
+        let result = Hexa.NET.ImGui.ImGui.DragIntRange2(label, NativePtr.cast<_, int32> vCurrentStatePinned, NativePtr.step 1 (NativePtr.cast<_, int32> vCurrentStatePinned), vMin, vMax, format, formatMax, flags)
         if result then
             vCurrent.Value <- vCurrentState
 
@@ -4607,7 +5253,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetCenter(pOut: byref<V2f>, self: ImGuiViewportPtr) : unit =
-        Hexa.NET.ImGui.ImGui.GetCenter(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, self)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetCenter(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, self)
 
 
     static member GetCharAdvance(self: ImFontBakedPtr, c: uint32) : float32 =
@@ -4619,7 +5266,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetClipRectMax(pOut: byref<V2f>, self: ImDrawListPtr) : unit =
-        Hexa.NET.ImGui.ImGui.GetClipRectMax(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, self)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetClipRectMax(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, self)
 
 
     static member GetClipRectMin(self: ImDrawListPtr) : V2f =
@@ -4627,7 +5275,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetClipRectMin(pOut: byref<V2f>, self: ImDrawListPtr) : unit =
-        Hexa.NET.ImGui.ImGui.GetClipRectMin(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, self)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetClipRectMin(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, self)
 
 
     static member GetClipboardText() : string =
@@ -4677,7 +5326,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetContentRegionAvail(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetContentRegionAvail(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetContentRegionAvail(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetCurrentContext() : ImGuiContextPtr =
@@ -4689,7 +5339,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetCursorPos(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetCursorPos(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetCursorPos(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetCursorPosX() : float32 =
@@ -4705,7 +5356,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetCursorScreenPos(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetCursorScreenPos(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetCursorScreenPos(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetCursorStartPos() : V2f =
@@ -4713,7 +5365,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetCursorStartPos(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetCursorStartPos(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetCursorStartPos(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetCustomRect(self: ImFontAtlasPtr, id: int32, outR: ImFontAtlasRectPtr) : bool =
@@ -4777,7 +5430,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetFontTexUvWhitePixel(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetFontTexUvWhitePixel(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetFontTexUvWhitePixel(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetForegroundDrawList(viewport: ImGuiViewportPtr) : ImDrawListPtr =
@@ -4843,7 +5497,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetItemRectMax(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetItemRectMax(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetItemRectMax(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetItemRectMin() : V2f =
@@ -4851,7 +5506,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetItemRectMin(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetItemRectMin(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetItemRectMin(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetItemRectSize() : V2f =
@@ -4859,7 +5515,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetItemRectSize(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetItemRectSize(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetItemRectSize(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetKeyChordName(keyChord: int32) : string =
@@ -4899,7 +5556,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetMouseDragDelta(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetMouseDragDelta(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetMouseDragDelta(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
     static member GetMouseDragDelta(lockThreshold: float32) : V2f =
         let result = Hexa.NET.ImGui.ImGui.GetMouseDragDelta(lockThreshold)
@@ -4910,13 +5568,16 @@ type ImGui =
         result.ToV2f()
 
     static member GetMouseDragDelta(pOut: byref<V2f>, button: ImGuiMouseButton, lockThreshold: float32) : unit =
-        Hexa.NET.ImGui.ImGui.GetMouseDragDelta(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, button, lockThreshold)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetMouseDragDelta(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, button, lockThreshold)
 
     static member GetMouseDragDelta(pOut: byref<V2f>, button: ImGuiMouseButton) : unit =
-        Hexa.NET.ImGui.ImGui.GetMouseDragDelta(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, button)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetMouseDragDelta(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, button)
 
     static member GetMouseDragDelta(pOut: byref<V2f>, lockThreshold: float32) : unit =
-        Hexa.NET.ImGui.ImGui.GetMouseDragDelta(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, lockThreshold)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetMouseDragDelta(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, lockThreshold)
 
 
     static member GetMousePos() : V2f =
@@ -4924,7 +5585,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetMousePos(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetMousePos(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetMousePos(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetMousePosOnOpeningCurrentPopup() : V2f =
@@ -4932,7 +5594,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetMousePosOnOpeningCurrentPopup(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetMousePosOnOpeningCurrentPopup(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetMousePosOnOpeningCurrentPopup(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetNextSelectedItem(self: ImGuiSelectionBasicStoragePtr, opaqueIt: nativeptr<voidptr>, outId: nativeptr<uint32>) : bool =
@@ -5065,7 +5728,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetWindowPos(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetWindowPos(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetWindowPos(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetWindowSize() : V2f =
@@ -5073,7 +5737,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetWindowSize(pOut: byref<V2f>) : unit =
-        Hexa.NET.ImGui.ImGui.GetWindowSize(NativePtr.cast<_, System.Numerics.Vector2> &&pOut)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetWindowSize(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned)
 
 
     static member GetWindowViewport() : ImGuiViewportPtr =
@@ -5089,7 +5754,8 @@ type ImGui =
         result.ToV2f()
 
     static member GetWorkCenter(pOut: byref<V2f>, self: ImGuiViewportPtr) : unit =
-        Hexa.NET.ImGui.ImGui.GetWorkCenter(NativePtr.cast<_, System.Numerics.Vector2> &&pOut, self)
+        use pOutPinned = fixed &pOut
+        Hexa.NET.ImGui.ImGui.GetWorkCenter(NativePtr.cast<_, System.Numerics.Vector2> pOutPinned, self)
 
 
     static member HSV(h: float32, s: float32, v: float32) : ImColor =
@@ -5188,7 +5854,9 @@ type ImGui =
 
 
     static member ImFormatStringToTempBuffer(outBuf: byref<nativeptr<uint8>>, outBufEnd: byref<nativeptr<uint8>>, fmt: string) : unit =
-        Hexa.NET.ImGui.ImGui.ImFormatStringToTempBuffer(&&outBuf, &&outBufEnd, fmt)
+        use outBufPinned = fixed &outBuf
+        use outBufEndPinned = fixed &outBufEnd
+        Hexa.NET.ImGui.ImGui.ImFormatStringToTempBuffer(outBufPinned, outBufEndPinned, fmt)
 
 
     static member ImFormatStringV(buf: nativeptr<uint8>, bufSize: unativeint, fmt: string, args: unativeint) : int32 =
@@ -5288,14 +5956,16 @@ type ImGui =
 
 
     static member ImTextStrFromUtf8(outBuf: nativeptr<uint32>, outBufSize: int32, inText: string, inTextEnd: string, inRemaining: byref<nativeptr<uint8>>) : int32 =
-        Hexa.NET.ImGui.ImGui.ImTextStrFromUtf8(outBuf, outBufSize, inText, inTextEnd, &&inRemaining)
+        use inRemainingPinned = fixed &inRemaining
+        Hexa.NET.ImGui.ImGui.ImTextStrFromUtf8(outBuf, outBufSize, inText, inTextEnd, inRemainingPinned)
 
     static member ImTextStrFromUtf8(outBuf: nativeptr<uint32>, outBufSize: int32, inText: string, inTextEnd: string) : int32 =
         Hexa.NET.ImGui.ImGui.ImTextStrFromUtf8(outBuf, outBufSize, inText, inTextEnd)
 
 
     static member ImTextStrToUtf8(outBuf: byref<uint8>, outBufSize: int32, inText: nativeptr<uint32>, inTextEnd: nativeptr<uint32>) : int32 =
-        Hexa.NET.ImGui.ImGui.ImTextStrToUtf8(&&outBuf, outBufSize, inText, inTextEnd)
+        use outBufPinned = fixed &outBuf
+        Hexa.NET.ImGui.ImGui.ImTextStrToUtf8(outBufPinned, outBufSize, inText, inTextEnd)
 
 
     static member ImTextureData() : ImTextureDataPtr =
@@ -5332,15 +6002,18 @@ type ImGui =
 
 
     static member ImVectorImWcharDestroy(self: byref<ImVector<uint32>>) : unit =
-        Hexa.NET.ImGui.ImGui.ImVectorImWcharDestroy(&&self)
+        use selfPinned = fixed &self
+        Hexa.NET.ImGui.ImGui.ImVectorImWcharDestroy(selfPinned)
 
 
     static member ImVectorImWcharInit(p: byref<ImVector<uint32>>) : unit =
-        Hexa.NET.ImGui.ImGui.ImVectorImWcharInit(&&p)
+        use pPinned = fixed &p
+        Hexa.NET.ImGui.ImGui.ImVectorImWcharInit(pPinned)
 
 
     static member ImVectorImWcharUnInit(p: byref<ImVector<uint32>>) : unit =
-        Hexa.NET.ImGui.ImGui.ImVectorImWcharUnInit(&&p)
+        use pPinned = fixed &p
+        Hexa.NET.ImGui.ImGui.ImVectorImWcharUnInit(pPinned)
 
 
     static member Image(texRef: ImTextureRef, imageSize: V2f, uv0: V2f, uv1: V2f) : unit =
@@ -5429,442 +6102,538 @@ type ImGui =
 
 
     static member InputDouble(label: string, v: byref<float>, step: float, stepFast: float, format: string, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, step, stepFast, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, step, stepFast, format, flags)
 
     static member InputDouble(label: string, v: cval<float>, step: float, stepFast: float, format: string, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, step, stepFast, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, step, stepFast, format, flags)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>, step: float, stepFast: float, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, step, stepFast, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, step, stepFast, format)
 
     static member InputDouble(label: string, v: cval<float>, step: float, stepFast: float, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, step, stepFast, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, step, stepFast, format)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>, step: float, stepFast: float) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, step, stepFast)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, step, stepFast)
 
     static member InputDouble(label: string, v: cval<float>, step: float, stepFast: float) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, step, stepFast)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, step, stepFast)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>, step: float) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, step)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, step)
 
     static member InputDouble(label: string, v: cval<float>, step: float) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, step)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, step)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned)
 
     static member InputDouble(label: string, v: cval<float>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>, step: float, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, step, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, step, format)
 
     static member InputDouble(label: string, v: cval<float>, step: float, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, step, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, step, format)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, format)
 
     static member InputDouble(label: string, v: cval<float>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>, step: float, stepFast: float, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, step, stepFast, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, step, stepFast, flags)
 
     static member InputDouble(label: string, v: cval<float>, step: float, stepFast: float, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, step, stepFast, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, step, stepFast, flags)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>, step: float, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, step, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, step, flags)
 
     static member InputDouble(label: string, v: cval<float>, step: float, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, step, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, step, flags)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, flags)
 
     static member InputDouble(label: string, v: cval<float>, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>, step: float, format: string, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, step, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, step, format, flags)
 
     static member InputDouble(label: string, v: cval<float>, step: float, format: string, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, step, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, step, format, flags)
         if result then
             v.Value <- vState
 
     static member InputDouble(label: string, v: byref<float>, format: string, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputDouble(label, &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputDouble(label, vPinned, format, flags)
 
     static member InputDouble(label: string, v: cval<float>, format: string, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputDouble(label, vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
 
     static member InputFloat(label: string, v: byref<float32>, step: float32, stepFast: float32, format: string, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, step, stepFast, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, step, stepFast, format, flags)
 
     static member InputFloat(label: string, v: cval<float32>, step: float32, stepFast: float32, format: string, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, step, stepFast, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, step, stepFast, format, flags)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>, step: float32, stepFast: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, step, stepFast, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, step, stepFast, format)
 
     static member InputFloat(label: string, v: cval<float32>, step: float32, stepFast: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, step, stepFast, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, step, stepFast, format)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>, step: float32, stepFast: float32) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, step, stepFast)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, step, stepFast)
 
     static member InputFloat(label: string, v: cval<float32>, step: float32, stepFast: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, step, stepFast)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, step, stepFast)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>, step: float32) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, step)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, step)
 
     static member InputFloat(label: string, v: cval<float32>, step: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, step)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, step)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned)
 
     static member InputFloat(label: string, v: cval<float32>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>, step: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, step, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, step, format)
 
     static member InputFloat(label: string, v: cval<float32>, step: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, step, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, step, format)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, format)
 
     static member InputFloat(label: string, v: cval<float32>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>, step: float32, stepFast: float32, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, step, stepFast, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, step, stepFast, flags)
 
     static member InputFloat(label: string, v: cval<float32>, step: float32, stepFast: float32, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, step, stepFast, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, step, stepFast, flags)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>, step: float32, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, step, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, step, flags)
 
     static member InputFloat(label: string, v: cval<float32>, step: float32, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, step, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, step, flags)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, flags)
 
     static member InputFloat(label: string, v: cval<float32>, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>, step: float32, format: string, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, step, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, step, format, flags)
 
     static member InputFloat(label: string, v: cval<float32>, step: float32, format: string, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, step, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, step, format, flags)
         if result then
             v.Value <- vState
 
     static member InputFloat(label: string, v: byref<float32>, format: string, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat(label, &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat(label, vPinned, format, flags)
 
     static member InputFloat(label: string, v: cval<float32>, format: string, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat(label, vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
 
     static member InputFloat2(label: string, v: byref<V2f>, format: string, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> vPinned, format, flags)
 
     static member InputFloat2(label: string, v: cval<V2f>, format: string, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
     static member InputFloat2(label: string, v: byref<V2f>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> vPinned, format)
 
     static member InputFloat2(label: string, v: cval<V2f>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member InputFloat2(label: string, v: byref<V2f>) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> vPinned)
 
     static member InputFloat2(label: string, v: cval<V2f>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> vStatePinned)
         if result then
             v.Value <- vState
 
     static member InputFloat2(label: string, v: byref<V2f>, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> vPinned, flags)
 
     static member InputFloat2(label: string, v: cval<V2f>, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat2(label, NativePtr.cast<_, float32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
 
     static member InputFloat3(label: string, v: byref<V3f>, format: string, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> vPinned, format, flags)
 
     static member InputFloat3(label: string, v: cval<V3f>, format: string, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
     static member InputFloat3(label: string, v: byref<V3f>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> vPinned, format)
 
     static member InputFloat3(label: string, v: cval<V3f>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member InputFloat3(label: string, v: byref<V3f>) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> vPinned)
 
     static member InputFloat3(label: string, v: cval<V3f>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> vStatePinned)
         if result then
             v.Value <- vState
 
     static member InputFloat3(label: string, v: byref<V3f>, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> vPinned, flags)
 
     static member InputFloat3(label: string, v: cval<V3f>, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat3(label, NativePtr.cast<_, float32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
 
     static member InputFloat4(label: string, v: byref<V4f>, format: string, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> &&v, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> vPinned, format, flags)
 
     static member InputFloat4(label: string, v: cval<V4f>, format: string, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> &&vState, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> vStatePinned, format, flags)
         if result then
             v.Value <- vState
 
     static member InputFloat4(label: string, v: byref<V4f>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> &&v, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> vPinned, format)
 
     static member InputFloat4(label: string, v: cval<V4f>, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> &&vState, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> vStatePinned, format)
         if result then
             v.Value <- vState
 
     static member InputFloat4(label: string, v: byref<V4f>) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> vPinned)
 
     static member InputFloat4(label: string, v: cval<V4f>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> vStatePinned)
         if result then
             v.Value <- vState
 
     static member InputFloat4(label: string, v: byref<V4f>, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> vPinned, flags)
 
     static member InputFloat4(label: string, v: cval<V4f>, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputFloat4(label, NativePtr.cast<_, float32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
 
     static member InputInt(label: string, v: byref<int32>, step: int32, stepFast: int32, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt(label, &&v, step, stepFast, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt(label, vPinned, step, stepFast, flags)
 
     static member InputInt(label: string, v: cval<int32>, step: int32, stepFast: int32, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt(label, &&vState, step, stepFast, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt(label, vStatePinned, step, stepFast, flags)
         if result then
             v.Value <- vState
 
     static member InputInt(label: string, v: byref<int32>, step: int32, stepFast: int32) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt(label, &&v, step, stepFast)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt(label, vPinned, step, stepFast)
 
     static member InputInt(label: string, v: cval<int32>, step: int32, stepFast: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt(label, &&vState, step, stepFast)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt(label, vStatePinned, step, stepFast)
         if result then
             v.Value <- vState
 
     static member InputInt(label: string, v: byref<int32>, step: int32) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt(label, &&v, step)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt(label, vPinned, step)
 
     static member InputInt(label: string, v: cval<int32>, step: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt(label, &&vState, step)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt(label, vStatePinned, step)
         if result then
             v.Value <- vState
 
     static member InputInt(label: string, v: byref<int32>) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt(label, &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt(label, vPinned)
 
     static member InputInt(label: string, v: cval<int32>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt(label, &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt(label, vStatePinned)
         if result then
             v.Value <- vState
 
     static member InputInt(label: string, v: byref<int32>, step: int32, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt(label, &&v, step, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt(label, vPinned, step, flags)
 
     static member InputInt(label: string, v: cval<int32>, step: int32, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt(label, &&vState, step, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt(label, vStatePinned, step, flags)
         if result then
             v.Value <- vState
 
     static member InputInt(label: string, v: byref<int32>, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt(label, &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt(label, vPinned, flags)
 
     static member InputInt(label: string, v: cval<int32>, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt(label, &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt(label, vStatePinned, flags)
         if result then
             v.Value <- vState
 
 
     static member InputInt2(label: string, v: byref<V2i>, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt2(label, NativePtr.cast<_, int32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt2(label, NativePtr.cast<_, int32> vPinned, flags)
 
     static member InputInt2(label: string, v: cval<V2i>, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt2(label, NativePtr.cast<_, int32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt2(label, NativePtr.cast<_, int32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member InputInt2(label: string, v: byref<V2i>) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt2(label, NativePtr.cast<_, int32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt2(label, NativePtr.cast<_, int32> vPinned)
 
     static member InputInt2(label: string, v: cval<V2i>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt2(label, NativePtr.cast<_, int32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt2(label, NativePtr.cast<_, int32> vStatePinned)
         if result then
             v.Value <- vState
 
 
     static member InputInt3(label: string, v: byref<V3i>, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt3(label, NativePtr.cast<_, int32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt3(label, NativePtr.cast<_, int32> vPinned, flags)
 
     static member InputInt3(label: string, v: cval<V3i>, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt3(label, NativePtr.cast<_, int32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt3(label, NativePtr.cast<_, int32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member InputInt3(label: string, v: byref<V3i>) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt3(label, NativePtr.cast<_, int32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt3(label, NativePtr.cast<_, int32> vPinned)
 
     static member InputInt3(label: string, v: cval<V3i>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt3(label, NativePtr.cast<_, int32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt3(label, NativePtr.cast<_, int32> vStatePinned)
         if result then
             v.Value <- vState
 
 
     static member InputInt4(label: string, v: byref<V4i>, flags: ImGuiInputTextFlags) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt4(label, NativePtr.cast<_, int32> &&v, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt4(label, NativePtr.cast<_, int32> vPinned, flags)
 
     static member InputInt4(label: string, v: cval<V4i>, flags: ImGuiInputTextFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt4(label, NativePtr.cast<_, int32> &&vState, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt4(label, NativePtr.cast<_, int32> vStatePinned, flags)
         if result then
             v.Value <- vState
 
     static member InputInt4(label: string, v: byref<V4i>) : bool =
-        Hexa.NET.ImGui.ImGui.InputInt4(label, NativePtr.cast<_, int32> &&v)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.InputInt4(label, NativePtr.cast<_, int32> vPinned)
 
     static member InputInt4(label: string, v: cval<V4i>) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.InputInt4(label, NativePtr.cast<_, int32> &&vState)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.InputInt4(label, NativePtr.cast<_, int32> vStatePinned)
         if result then
             v.Value <- vState
 
@@ -6680,7 +7449,8 @@ type ImGui =
 
 
     static member IsMousePosValid(mousePos: byref<V2f>) : bool =
-        Hexa.NET.ImGui.ImGui.IsMousePosValid(NativePtr.cast<_, System.Numerics.Vector2> &&mousePos)
+        use mousePosPinned = fixed &mousePos
+        Hexa.NET.ImGui.ImGui.IsMousePosValid(NativePtr.cast<_, System.Numerics.Vector2> mousePosPinned)
 
     static member IsMousePosValid() : bool =
         Hexa.NET.ImGui.ImGui.IsMousePosValid()
@@ -6747,38 +7517,46 @@ type ImGui =
 
 
     static member ListBox(label: string, currentItem: byref<int32>, items: string[], heightInItems: int32) : bool =
-        Hexa.NET.ImGui.ImGui.ListBox(label, &&currentItem, items, items.Length, heightInItems)
+        use currentItemPinned = fixed &currentItem
+        Hexa.NET.ImGui.ImGui.ListBox(label, currentItemPinned, items, items.Length, heightInItems)
 
     static member ListBox(label: string, currentItem: cval<int32>, items: string[], heightInItems: int32) : unit =
         let mutable currentItemState = currentItem.Value
-        let result = Hexa.NET.ImGui.ImGui.ListBox(label, &&currentItemState, items, items.Length, heightInItems)
+        use currentItemStatePinned = fixed &currentItemState
+        let result = Hexa.NET.ImGui.ImGui.ListBox(label, currentItemStatePinned, items, items.Length, heightInItems)
         if result then
             currentItem.Value <- currentItemState
 
     static member ListBox(label: string, currentItem: byref<int32>, items: string[]) : bool =
-        Hexa.NET.ImGui.ImGui.ListBox(label, &&currentItem, items, items.Length)
+        use currentItemPinned = fixed &currentItem
+        Hexa.NET.ImGui.ImGui.ListBox(label, currentItemPinned, items, items.Length)
 
     static member ListBox(label: string, currentItem: cval<int32>, items: string[]) : unit =
         let mutable currentItemState = currentItem.Value
-        let result = Hexa.NET.ImGui.ImGui.ListBox(label, &&currentItemState, items, items.Length)
+        use currentItemStatePinned = fixed &currentItemState
+        let result = Hexa.NET.ImGui.ImGui.ListBox(label, currentItemStatePinned, items, items.Length)
         if result then
             currentItem.Value <- currentItemState
 
     static member ListBox(label: string, currentItem: byref<int32>, getter: nativeint, userData: voidptr, itemsCount: int32, heightInItems: int32) : bool =
-        Hexa.NET.ImGui.ImGui.ListBox(label, &&currentItem, getter, userData, itemsCount, heightInItems)
+        use currentItemPinned = fixed &currentItem
+        Hexa.NET.ImGui.ImGui.ListBox(label, currentItemPinned, getter, userData, itemsCount, heightInItems)
 
     static member ListBox(label: string, currentItem: cval<int32>, getter: nativeint, userData: voidptr, itemsCount: int32, heightInItems: int32) : unit =
         let mutable currentItemState = currentItem.Value
-        let result = Hexa.NET.ImGui.ImGui.ListBox(label, &&currentItemState, getter, userData, itemsCount, heightInItems)
+        use currentItemStatePinned = fixed &currentItemState
+        let result = Hexa.NET.ImGui.ImGui.ListBox(label, currentItemStatePinned, getter, userData, itemsCount, heightInItems)
         if result then
             currentItem.Value <- currentItemState
 
     static member ListBox(label: string, currentItem: byref<int32>, getter: nativeint, userData: voidptr, itemsCount: int32) : bool =
-        Hexa.NET.ImGui.ImGui.ListBox(label, &&currentItem, getter, userData, itemsCount)
+        use currentItemPinned = fixed &currentItem
+        Hexa.NET.ImGui.ImGui.ListBox(label, currentItemPinned, getter, userData, itemsCount)
 
     static member ListBox(label: string, currentItem: cval<int32>, getter: nativeint, userData: voidptr, itemsCount: int32) : unit =
         let mutable currentItemState = currentItem.Value
-        let result = Hexa.NET.ImGui.ImGui.ListBox(label, &&currentItemState, getter, userData, itemsCount)
+        use currentItemStatePinned = fixed &currentItemState
+        let result = Hexa.NET.ImGui.ImGui.ListBox(label, currentItemStatePinned, getter, userData, itemsCount)
         if result then
             currentItem.Value <- currentItemState
 
@@ -6864,20 +7642,24 @@ type ImGui =
         Hexa.NET.ImGui.ImGui.MenuItem(label, selected, enabled)
 
     static member MenuItem(label: string, shortcut: string, pSelected: byref<bool>, enabled: bool) : bool =
-        Hexa.NET.ImGui.ImGui.MenuItem(label, shortcut, &&pSelected, enabled)
+        use pSelectedPinned = fixed &pSelected
+        Hexa.NET.ImGui.ImGui.MenuItem(label, shortcut, pSelectedPinned, enabled)
 
     static member MenuItem(label: string, shortcut: string, pSelected: cval<bool>, enabled: bool) : unit =
         let mutable pSelectedState = pSelected.Value
-        let result = Hexa.NET.ImGui.ImGui.MenuItem(label, shortcut, &&pSelectedState, enabled)
+        use pSelectedStatePinned = fixed &pSelectedState
+        let result = Hexa.NET.ImGui.ImGui.MenuItem(label, shortcut, pSelectedStatePinned, enabled)
         if result then
             pSelected.Value <- pSelectedState
 
     static member MenuItem(label: string, shortcut: string, pSelected: byref<bool>) : bool =
-        Hexa.NET.ImGui.ImGui.MenuItem(label, shortcut, &&pSelected)
+        use pSelectedPinned = fixed &pSelected
+        Hexa.NET.ImGui.ImGui.MenuItem(label, shortcut, pSelectedPinned)
 
     static member MenuItem(label: string, shortcut: string, pSelected: cval<bool>) : unit =
         let mutable pSelectedState = pSelected.Value
-        let result = Hexa.NET.ImGui.ImGui.MenuItem(label, shortcut, &&pSelectedState)
+        use pSelectedStatePinned = fixed &pSelectedState
+        let result = Hexa.NET.ImGui.ImGui.MenuItem(label, shortcut, pSelectedStatePinned)
         if result then
             pSelected.Value <- pSelectedState
 
@@ -7720,11 +8502,13 @@ type ImGui =
         Hexa.NET.ImGui.ImGui.RadioButton(label, active)
 
     static member RadioButton(label: string, v: byref<int32>, vButton: int32) : bool =
-        Hexa.NET.ImGui.ImGui.RadioButton(label, &&v, vButton)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.RadioButton(label, vPinned, vButton)
 
     static member RadioButton(label: string, v: cval<int32>, vButton: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.RadioButton(label, &&vState, vButton)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.RadioButton(label, vStatePinned, vButton)
         if result then
             v.Value <- vState
 
@@ -7742,7 +8526,8 @@ type ImGui =
 
 
     static member RenderChar(self: ImFontPtr, drawList: ImDrawListPtr, size: float32, pos: V2f, col: uint32, c: uint32, cpuFineClip: byref<V4f>) : unit =
-        Hexa.NET.ImGui.ImGui.RenderChar(self, drawList, size, System.Numerics.Vector2.FromV2f(pos), col, c, NativePtr.cast<_, System.Numerics.Vector4> &&cpuFineClip)
+        use cpuFineClipPinned = fixed &cpuFineClip
+        Hexa.NET.ImGui.ImGui.RenderChar(self, drawList, size, System.Numerics.Vector2.FromV2f(pos), col, c, NativePtr.cast<_, System.Numerics.Vector4> cpuFineClipPinned)
 
     static member RenderChar(self: ImFontPtr, drawList: ImDrawListPtr, size: float32, pos: V2f, col: uint32, c: uint32) : unit =
         Hexa.NET.ImGui.ImGui.RenderChar(self, drawList, size, System.Numerics.Vector2.FromV2f(pos), col, c)
@@ -7840,38 +8625,46 @@ type ImGui =
         Hexa.NET.ImGui.ImGui.Selectable(label, flags, System.Numerics.Vector2.FromV2f(size))
 
     static member Selectable(label: string, pSelected: byref<bool>, flags: ImGuiSelectableFlags, size: V2f) : bool =
-        Hexa.NET.ImGui.ImGui.Selectable(label, &&pSelected, flags, System.Numerics.Vector2.FromV2f(size))
+        use pSelectedPinned = fixed &pSelected
+        Hexa.NET.ImGui.ImGui.Selectable(label, pSelectedPinned, flags, System.Numerics.Vector2.FromV2f(size))
 
     static member Selectable(label: string, pSelected: cval<bool>, flags: ImGuiSelectableFlags, size: V2f) : unit =
         let mutable pSelectedState = pSelected.Value
-        let result = Hexa.NET.ImGui.ImGui.Selectable(label, &&pSelectedState, flags, System.Numerics.Vector2.FromV2f(size))
+        use pSelectedStatePinned = fixed &pSelectedState
+        let result = Hexa.NET.ImGui.ImGui.Selectable(label, pSelectedStatePinned, flags, System.Numerics.Vector2.FromV2f(size))
         if result then
             pSelected.Value <- pSelectedState
 
     static member Selectable(label: string, pSelected: byref<bool>, flags: ImGuiSelectableFlags) : bool =
-        Hexa.NET.ImGui.ImGui.Selectable(label, &&pSelected, flags)
+        use pSelectedPinned = fixed &pSelected
+        Hexa.NET.ImGui.ImGui.Selectable(label, pSelectedPinned, flags)
 
     static member Selectable(label: string, pSelected: cval<bool>, flags: ImGuiSelectableFlags) : unit =
         let mutable pSelectedState = pSelected.Value
-        let result = Hexa.NET.ImGui.ImGui.Selectable(label, &&pSelectedState, flags)
+        use pSelectedStatePinned = fixed &pSelectedState
+        let result = Hexa.NET.ImGui.ImGui.Selectable(label, pSelectedStatePinned, flags)
         if result then
             pSelected.Value <- pSelectedState
 
     static member Selectable(label: string, pSelected: byref<bool>) : bool =
-        Hexa.NET.ImGui.ImGui.Selectable(label, &&pSelected)
+        use pSelectedPinned = fixed &pSelected
+        Hexa.NET.ImGui.ImGui.Selectable(label, pSelectedPinned)
 
     static member Selectable(label: string, pSelected: cval<bool>) : unit =
         let mutable pSelectedState = pSelected.Value
-        let result = Hexa.NET.ImGui.ImGui.Selectable(label, &&pSelectedState)
+        use pSelectedStatePinned = fixed &pSelectedState
+        let result = Hexa.NET.ImGui.ImGui.Selectable(label, pSelectedStatePinned)
         if result then
             pSelected.Value <- pSelectedState
 
     static member Selectable(label: string, pSelected: byref<bool>, size: V2f) : bool =
-        Hexa.NET.ImGui.ImGui.Selectable(label, &&pSelected, System.Numerics.Vector2.FromV2f(size))
+        use pSelectedPinned = fixed &pSelected
+        Hexa.NET.ImGui.ImGui.Selectable(label, pSelectedPinned, System.Numerics.Vector2.FromV2f(size))
 
     static member Selectable(label: string, pSelected: cval<bool>, size: V2f) : unit =
         let mutable pSelectedState = pSelected.Value
-        let result = Hexa.NET.ImGui.ImGui.Selectable(label, &&pSelectedState, System.Numerics.Vector2.FromV2f(size))
+        use pSelectedStatePinned = fixed &pSelectedState
+        let result = Hexa.NET.ImGui.ImGui.Selectable(label, pSelectedStatePinned, System.Numerics.Vector2.FromV2f(size))
         if result then
             pSelected.Value <- pSelectedState
 
@@ -8244,11 +9037,13 @@ type ImGui =
 
 
     static member ShowAboutWindow(pOpen: byref<bool>) : unit =
-        Hexa.NET.ImGui.ImGui.ShowAboutWindow(&&pOpen)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.ShowAboutWindow(pOpenPinned)
 
     static member ShowAboutWindow(pOpen: cval<bool>) : unit =
         let mutable pOpenState = pOpen.Value
-        Hexa.NET.ImGui.ImGui.ShowAboutWindow(&&pOpenState)
+        use pOpenStatePinned = fixed &pOpenState
+        Hexa.NET.ImGui.ImGui.ShowAboutWindow(pOpenStatePinned)
         pOpen.Value <- pOpenState
 
     static member ShowAboutWindow() : unit =
@@ -8256,11 +9051,13 @@ type ImGui =
 
 
     static member ShowDebugLogWindow(pOpen: byref<bool>) : unit =
-        Hexa.NET.ImGui.ImGui.ShowDebugLogWindow(&&pOpen)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.ShowDebugLogWindow(pOpenPinned)
 
     static member ShowDebugLogWindow(pOpen: cval<bool>) : unit =
         let mutable pOpenState = pOpen.Value
-        Hexa.NET.ImGui.ImGui.ShowDebugLogWindow(&&pOpenState)
+        use pOpenStatePinned = fixed &pOpenState
+        Hexa.NET.ImGui.ImGui.ShowDebugLogWindow(pOpenStatePinned)
         pOpen.Value <- pOpenState
 
     static member ShowDebugLogWindow() : unit =
@@ -8268,11 +9065,13 @@ type ImGui =
 
 
     static member ShowDemoWindow(pOpen: byref<bool>) : unit =
-        Hexa.NET.ImGui.ImGui.ShowDemoWindow(&&pOpen)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.ShowDemoWindow(pOpenPinned)
 
     static member ShowDemoWindow(pOpen: cval<bool>) : unit =
         let mutable pOpenState = pOpen.Value
-        Hexa.NET.ImGui.ImGui.ShowDemoWindow(&&pOpenState)
+        use pOpenStatePinned = fixed &pOpenState
+        Hexa.NET.ImGui.ImGui.ShowDemoWindow(pOpenStatePinned)
         pOpen.Value <- pOpenState
 
     static member ShowDemoWindow() : unit =
@@ -8284,11 +9083,13 @@ type ImGui =
 
 
     static member ShowIDStackToolWindow(pOpen: byref<bool>) : unit =
-        Hexa.NET.ImGui.ImGui.ShowIDStackToolWindow(&&pOpen)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.ShowIDStackToolWindow(pOpenPinned)
 
     static member ShowIDStackToolWindow(pOpen: cval<bool>) : unit =
         let mutable pOpenState = pOpen.Value
-        Hexa.NET.ImGui.ImGui.ShowIDStackToolWindow(&&pOpenState)
+        use pOpenStatePinned = fixed &pOpenState
+        Hexa.NET.ImGui.ImGui.ShowIDStackToolWindow(pOpenStatePinned)
         pOpen.Value <- pOpenState
 
     static member ShowIDStackToolWindow() : unit =
@@ -8296,11 +9097,13 @@ type ImGui =
 
 
     static member ShowMetricsWindow(pOpen: byref<bool>) : unit =
-        Hexa.NET.ImGui.ImGui.ShowMetricsWindow(&&pOpen)
+        use pOpenPinned = fixed &pOpen
+        Hexa.NET.ImGui.ImGui.ShowMetricsWindow(pOpenPinned)
 
     static member ShowMetricsWindow(pOpen: cval<bool>) : unit =
         let mutable pOpenState = pOpen.Value
-        Hexa.NET.ImGui.ImGui.ShowMetricsWindow(&&pOpenState)
+        use pOpenStatePinned = fixed &pOpenState
+        Hexa.NET.ImGui.ImGui.ShowMetricsWindow(pOpenStatePinned)
         pOpen.Value <- pOpenState
 
     static member ShowMetricsWindow() : unit =
@@ -8323,406 +9126,494 @@ type ImGui =
 
 
     static member SliderAngle(label: string, vRad: byref<float32>, vDegreesMin: float32, vDegreesMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, vDegreesMin, vDegreesMax, format, flags)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, vDegreesMin, vDegreesMax, format, flags)
 
     static member SliderAngle(label: string, vRad: cval<float32>, vDegreesMin: float32, vDegreesMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, vDegreesMin, vDegreesMax, format, flags)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, vDegreesMin, vDegreesMax, format, flags)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>, vDegreesMin: float32, vDegreesMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, vDegreesMin, vDegreesMax, format)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, vDegreesMin, vDegreesMax, format)
 
     static member SliderAngle(label: string, vRad: cval<float32>, vDegreesMin: float32, vDegreesMax: float32, format: string) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, vDegreesMin, vDegreesMax, format)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, vDegreesMin, vDegreesMax, format)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>, vDegreesMin: float32, vDegreesMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, vDegreesMin, vDegreesMax)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, vDegreesMin, vDegreesMax)
 
     static member SliderAngle(label: string, vRad: cval<float32>, vDegreesMin: float32, vDegreesMax: float32) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, vDegreesMin, vDegreesMax)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, vDegreesMin, vDegreesMax)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>, vDegreesMin: float32) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, vDegreesMin)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, vDegreesMin)
 
     static member SliderAngle(label: string, vRad: cval<float32>, vDegreesMin: float32) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, vDegreesMin)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, vDegreesMin)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned)
 
     static member SliderAngle(label: string, vRad: cval<float32>) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>, vDegreesMin: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, vDegreesMin, format)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, vDegreesMin, format)
 
     static member SliderAngle(label: string, vRad: cval<float32>, vDegreesMin: float32, format: string) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, vDegreesMin, format)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, vDegreesMin, format)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, format)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, format)
 
     static member SliderAngle(label: string, vRad: cval<float32>, format: string) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, format)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, format)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>, vDegreesMin: float32, vDegreesMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, vDegreesMin, vDegreesMax, flags)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, vDegreesMin, vDegreesMax, flags)
 
     static member SliderAngle(label: string, vRad: cval<float32>, vDegreesMin: float32, vDegreesMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, vDegreesMin, vDegreesMax, flags)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, vDegreesMin, vDegreesMax, flags)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>, vDegreesMin: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, vDegreesMin, flags)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, vDegreesMin, flags)
 
     static member SliderAngle(label: string, vRad: cval<float32>, vDegreesMin: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, vDegreesMin, flags)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, vDegreesMin, flags)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, flags)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, flags)
 
     static member SliderAngle(label: string, vRad: cval<float32>, flags: ImGuiSliderFlags) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, flags)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, flags)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>, vDegreesMin: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, vDegreesMin, format, flags)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, vDegreesMin, format, flags)
 
     static member SliderAngle(label: string, vRad: cval<float32>, vDegreesMin: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, vDegreesMin, format, flags)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, vDegreesMin, format, flags)
         if result then
             vRad.Value <- vRadState
 
     static member SliderAngle(label: string, vRad: byref<float32>, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRad, format, flags)
+        use vRadPinned = fixed &vRad
+        Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadPinned, format, flags)
 
     static member SliderAngle(label: string, vRad: cval<float32>, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vRadState = vRad.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, &&vRadState, format, flags)
+        use vRadStatePinned = fixed &vRadState
+        let result = Hexa.NET.ImGui.ImGui.SliderAngle(label, vRadStatePinned, format, flags)
         if result then
             vRad.Value <- vRadState
 
 
     static member SliderFloat(label: string, v: byref<float32>, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat(label, &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat(label, vPinned, vMin, vMax, format, flags)
 
     static member SliderFloat(label: string, v: cval<float32>, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat(label, &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat(label, vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member SliderFloat(label: string, v: byref<float32>, vMin: float32, vMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat(label, &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat(label, vPinned, vMin, vMax, format)
 
     static member SliderFloat(label: string, v: cval<float32>, vMin: float32, vMax: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat(label, &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat(label, vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member SliderFloat(label: string, v: byref<float32>, vMin: float32, vMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat(label, &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat(label, vPinned, vMin, vMax)
 
     static member SliderFloat(label: string, v: cval<float32>, vMin: float32, vMax: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat(label, &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat(label, vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member SliderFloat(label: string, v: byref<float32>, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat(label, &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat(label, vPinned, vMin, vMax, flags)
 
     static member SliderFloat(label: string, v: cval<float32>, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat(label, &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat(label, vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
 
     static member SliderFloat2(label: string, v: byref<V2f>, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> vPinned, vMin, vMax, format, flags)
 
     static member SliderFloat2(label: string, v: cval<V2f>, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member SliderFloat2(label: string, v: byref<V2f>, vMin: float32, vMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> vPinned, vMin, vMax, format)
 
     static member SliderFloat2(label: string, v: cval<V2f>, vMin: float32, vMax: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member SliderFloat2(label: string, v: byref<V2f>, vMin: float32, vMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> vPinned, vMin, vMax)
 
     static member SliderFloat2(label: string, v: cval<V2f>, vMin: float32, vMax: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member SliderFloat2(label: string, v: byref<V2f>, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> vPinned, vMin, vMax, flags)
 
     static member SliderFloat2(label: string, v: cval<V2f>, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat2(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
 
     static member SliderFloat3(label: string, v: byref<V3f>, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> vPinned, vMin, vMax, format, flags)
 
     static member SliderFloat3(label: string, v: cval<V3f>, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member SliderFloat3(label: string, v: byref<V3f>, vMin: float32, vMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> vPinned, vMin, vMax, format)
 
     static member SliderFloat3(label: string, v: cval<V3f>, vMin: float32, vMax: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member SliderFloat3(label: string, v: byref<V3f>, vMin: float32, vMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> vPinned, vMin, vMax)
 
     static member SliderFloat3(label: string, v: cval<V3f>, vMin: float32, vMax: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member SliderFloat3(label: string, v: byref<V3f>, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> vPinned, vMin, vMax, flags)
 
     static member SliderFloat3(label: string, v: cval<V3f>, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat3(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
 
     static member SliderFloat4(label: string, v: byref<V4f>, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> vPinned, vMin, vMax, format, flags)
 
     static member SliderFloat4(label: string, v: cval<V4f>, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member SliderFloat4(label: string, v: byref<V4f>, vMin: float32, vMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> vPinned, vMin, vMax, format)
 
     static member SliderFloat4(label: string, v: cval<V4f>, vMin: float32, vMax: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member SliderFloat4(label: string, v: byref<V4f>, vMin: float32, vMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> vPinned, vMin, vMax)
 
     static member SliderFloat4(label: string, v: cval<V4f>, vMin: float32, vMax: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member SliderFloat4(label: string, v: byref<V4f>, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> vPinned, vMin, vMax, flags)
 
     static member SliderFloat4(label: string, v: cval<V4f>, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderFloat4(label, NativePtr.cast<_, float32> vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
 
     static member SliderInt(label: string, v: byref<int32>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt(label, &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt(label, vPinned, vMin, vMax, format, flags)
 
     static member SliderInt(label: string, v: cval<int32>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt(label, &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt(label, vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member SliderInt(label: string, v: byref<int32>, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt(label, &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt(label, vPinned, vMin, vMax, format)
 
     static member SliderInt(label: string, v: cval<int32>, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt(label, &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt(label, vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member SliderInt(label: string, v: byref<int32>, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt(label, &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt(label, vPinned, vMin, vMax)
 
     static member SliderInt(label: string, v: cval<int32>, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt(label, &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt(label, vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member SliderInt(label: string, v: byref<int32>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt(label, &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt(label, vPinned, vMin, vMax, flags)
 
     static member SliderInt(label: string, v: cval<int32>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt(label, &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt(label, vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
 
     static member SliderInt2(label: string, v: byref<V2i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format, flags)
 
     static member SliderInt2(label: string, v: cval<V2i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member SliderInt2(label: string, v: byref<V2i>, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format)
 
     static member SliderInt2(label: string, v: cval<V2i>, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member SliderInt2(label: string, v: byref<V2i>, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> vPinned, vMin, vMax)
 
     static member SliderInt2(label: string, v: cval<V2i>, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member SliderInt2(label: string, v: byref<V2i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, flags)
 
     static member SliderInt2(label: string, v: cval<V2i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt2(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
 
     static member SliderInt3(label: string, v: byref<V3i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format, flags)
 
     static member SliderInt3(label: string, v: cval<V3i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member SliderInt3(label: string, v: byref<V3i>, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format)
 
     static member SliderInt3(label: string, v: cval<V3i>, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member SliderInt3(label: string, v: byref<V3i>, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> vPinned, vMin, vMax)
 
     static member SliderInt3(label: string, v: cval<V3i>, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member SliderInt3(label: string, v: byref<V3i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, flags)
 
     static member SliderInt3(label: string, v: cval<V3i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt3(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
 
     static member SliderInt4(label: string, v: byref<V4i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format, flags)
 
     static member SliderInt4(label: string, v: cval<V4i>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member SliderInt4(label: string, v: byref<V4i>, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, format)
 
     static member SliderInt4(label: string, v: cval<V4i>, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member SliderInt4(label: string, v: byref<V4i>, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> vPinned, vMin, vMax)
 
     static member SliderInt4(label: string, v: cval<V4i>, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member SliderInt4(label: string, v: byref<V4i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> vPinned, vMin, vMax, flags)
 
     static member SliderInt4(label: string, v: cval<V4i>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.SliderInt4(label, NativePtr.cast<_, int32> vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
@@ -9056,75 +9947,91 @@ type ImGui =
 
 
     static member VSliderFloat(label: string, size: V2f, v: byref<float32>, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), vPinned, vMin, vMax, format, flags)
 
     static member VSliderFloat(label: string, size: V2f, v: cval<float32>, vMin: float32, vMax: float32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member VSliderFloat(label: string, size: V2f, v: byref<float32>, vMin: float32, vMax: float32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), vPinned, vMin, vMax, format)
 
     static member VSliderFloat(label: string, size: V2f, v: cval<float32>, vMin: float32, vMax: float32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member VSliderFloat(label: string, size: V2f, v: byref<float32>, vMin: float32, vMax: float32) : bool =
-        Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), vPinned, vMin, vMax)
 
     static member VSliderFloat(label: string, size: V2f, v: cval<float32>, vMin: float32, vMax: float32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member VSliderFloat(label: string, size: V2f, v: byref<float32>, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), vPinned, vMin, vMax, flags)
 
     static member VSliderFloat(label: string, size: V2f, v: cval<float32>, vMin: float32, vMax: float32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.VSliderFloat(label, System.Numerics.Vector2.FromV2f(size), vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 
 
     static member VSliderInt(label: string, size: V2f, v: byref<int32>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), &&v, vMin, vMax, format, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), vPinned, vMin, vMax, format, flags)
 
     static member VSliderInt(label: string, size: V2f, v: cval<int32>, vMin: int32, vMax: int32, format: string, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), &&vState, vMin, vMax, format, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), vStatePinned, vMin, vMax, format, flags)
         if result then
             v.Value <- vState
 
     static member VSliderInt(label: string, size: V2f, v: byref<int32>, vMin: int32, vMax: int32, format: string) : bool =
-        Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), &&v, vMin, vMax, format)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), vPinned, vMin, vMax, format)
 
     static member VSliderInt(label: string, size: V2f, v: cval<int32>, vMin: int32, vMax: int32, format: string) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), &&vState, vMin, vMax, format)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), vStatePinned, vMin, vMax, format)
         if result then
             v.Value <- vState
 
     static member VSliderInt(label: string, size: V2f, v: byref<int32>, vMin: int32, vMax: int32) : bool =
-        Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), &&v, vMin, vMax)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), vPinned, vMin, vMax)
 
     static member VSliderInt(label: string, size: V2f, v: cval<int32>, vMin: int32, vMax: int32) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), &&vState, vMin, vMax)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), vStatePinned, vMin, vMax)
         if result then
             v.Value <- vState
 
     static member VSliderInt(label: string, size: V2f, v: byref<int32>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : bool =
-        Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), &&v, vMin, vMax, flags)
+        use vPinned = fixed &v
+        Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), vPinned, vMin, vMax, flags)
 
     static member VSliderInt(label: string, size: V2f, v: cval<int32>, vMin: int32, vMax: int32, flags: ImGuiSliderFlags) : unit =
         let mutable vState = v.Value
-        let result = Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), &&vState, vMin, vMax, flags)
+        use vStatePinned = fixed &vState
+        let result = Hexa.NET.ImGui.ImGui.VSliderInt(label, System.Numerics.Vector2.FromV2f(size), vStatePinned, vMin, vMax, flags)
         if result then
             v.Value <- vState
 

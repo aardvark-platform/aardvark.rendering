@@ -12,7 +12,6 @@ open KHRBufferDeviceAddress
 open KHRSynchronization2
 
 #nowarn "9"
-#nowarn "51"
 
 type internal Micromap(device: Device, handle: VkMicromapEXT, buffer: Buffer) =
     inherit Resource<VkMicromapEXT>(device, handle)
@@ -69,8 +68,9 @@ module internal Micromap =
                         cmd.AppendCommand()
 
                         let mutable handle = micromap.Handle
+                        use pHandle = fixed &handle
                         VkRaw.vkCmdWriteMicromapsPropertiesEXT(
-                            cmd.Handle, 1u, &&handle, queryPool.Type, queryPool.Handle, 0u
+                            cmd.Handle, 1u, pHandle, queryPool.Type, queryPool.Handle, 0u
                         )
 
                         cmd.AddResource micromap
@@ -84,7 +84,8 @@ module internal Micromap =
                         cmd.AppendCommand()
 
                         let mutable info = VkCopyMicromapInfoEXT(src.Handle, dst.Handle, mode)
-                        VkRaw.vkCmdCopyMicromapEXT(cmd.Handle, &&info)
+                        use pInfo = fixed &info
+                        VkRaw.vkCmdCopyMicromapEXT(cmd.Handle, pInfo)
 
                         cmd.AddResource src
                         cmd.AddResource dst
@@ -109,7 +110,9 @@ module internal Micromap =
             )
 
         let mutable result = VkMicromapEXT.Null
-        VkRaw.vkCreateMicromapEXT(device.Handle, &&createInfo, NativePtr.zero, &&result)
+        use pCreateInfo = fixed &createInfo
+        use pResult = fixed &result
+        VkRaw.vkCreateMicromapEXT(device.Handle, pCreateInfo, NativePtr.zero, pResult)
             |> check "failed to create micromap"
 
         new Micromap(device, result, buffer)
@@ -132,7 +135,9 @@ module internal Micromap =
             )
 
         let mutable buildSizesInfo = VkMicromapBuildSizesInfoEXT.Empty
-        VkRaw.vkGetMicromapBuildSizesEXT(device.Handle, VkAccelerationStructureBuildTypeKHR.Device, &&buildInfo, &&buildSizesInfo)
+        use pBuildInfo = fixed &buildInfo
+        use pBuildSizesInfo = fixed &buildSizesInfo
+        VkRaw.vkGetMicromapBuildSizesEXT(device.Handle, VkAccelerationStructureBuildTypeKHR.Device, pBuildInfo, pBuildSizesInfo)
 
         let mutable result = createHandle device buildSizesInfo.micromapSize
 

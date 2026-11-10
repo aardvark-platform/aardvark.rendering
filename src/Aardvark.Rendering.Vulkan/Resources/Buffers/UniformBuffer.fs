@@ -11,7 +11,6 @@ open Microsoft.FSharp.NativeInterop
 open Microsoft.FSharp.Reflection
 
 #nowarn "9"
-// #nowarn "51"
 
 type UnmanagedStruct(ptr : nativeint, size : int) =
     let mutable ptr = ptr

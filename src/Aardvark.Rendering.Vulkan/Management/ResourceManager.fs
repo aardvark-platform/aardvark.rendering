@@ -15,7 +15,6 @@ open Microsoft.FSharp.NativeInterop
 open EXTConservativeRasterization
 
 #nowarn "9"
-#nowarn "51"
 
 type ResourceInfo<'T> =
     {
@@ -1011,7 +1010,23 @@ module Resources =
         inherit AbstractPointerResource<VkPipelineRasterizationStateCreateInfo>(owner, key)
 
         let supportsConservativeRaster = owner.Device.IsExtensionEnabled EXTConservativeRasterization.Name
-        let mutable conservativeState = VkPipelineRasterizationConservativeStateCreateInfoEXT.Empty
+        // The conservative-raster pNext sub-struct must live in GC-stable (unmanaged) memory: its
+        // address is stored in this resource's long-lived rasterization-state struct's pNext and
+        // read later by vkCreateGraphicsPipelines. A managed field would dangle if the GC moved
+        // this resource object in between (latent use-after-move, hit only when conservative raster
+        // is actually enabled). Mirror the base AbstractPointerResource's own NativePtr.alloc pattern.
+        let mutable pConservative = NativePtr.zero<VkPipelineRasterizationConservativeStateCreateInfoEXT>
+
+        override x.Create() =
+            base.Create()
+            if supportsConservativeRaster then
+                pConservative <- NativePtr.alloc 1
+
+        override x.Destroy() =
+            if not (NativePtr.isNull pConservative) then
+                NativePtr.free pConservative
+                pConservative <- NativePtr.zero
+            base.Destroy()
 
         override x.Update(handle, user, token, renderToken) =
             let depthClamp = depthClamp.GetValue(user, token, renderToken)
@@ -1022,22 +1037,22 @@ module Resources =
             let conservativeRaster = conservativeRaster.GetValue(user, token, renderToken)
             let state = RasterizerState.create conservativeRaster depthClamp bias cull front fill
 
-            let pConservativeState =
+            let pNext =
                 if supportsConservativeRaster && conservativeRaster then
-                    conservativeState <-
+                    NativePtr.write pConservative (
                         VkPipelineRasterizationConservativeStateCreateInfoEXT(
                             VkPipelineRasterizationConservativeStateCreateFlagsEXT.None,
                             VkConservativeRasterizationModeEXT.Overestimate,
                             0.0f
                         )
-
-                    &&conservativeState
+                    )
+                    NativePtr.toNativeInt pConservative
                 else
-                    NativePtr.zero
+                    0n
 
             handle <-
                 VkPipelineRasterizationStateCreateInfo(
-                    pConservativeState.Address,
+                    pNext,
                     VkPipelineRasterizationStateCreateFlags.None,
                     VkBool32.ofBool state.depthClampEnable,
                     VkBool32.ofBool state.rasterizerDiscardEnable,
@@ -1322,8 +1337,9 @@ module Resources =
                     uint32 prog.TessellationPatchSize
                 )
 
+            use pTessStateInfo = fixed &tessStateInfo
             let pTessState =
-                if prog.HasTessellation then &&tessStateInfo
+                if prog.HasTessellation then pTessStateInfo
                 else NativePtr.zero
 
             let mutable dynamicStateCreateInfo =
@@ -1349,6 +1365,8 @@ module Resources =
                     handle, VkPipelineCreateFlags.DerivativeBit
 
             let mutable result = VkPipeline.Null
+            use pViewportState = fixed &viewportState
+            use pDynamicStateCreateInfo = fixed &dynamicStateCreateInfo
             let mutable createInfo =
                 VkGraphicsPipelineCreateInfo(
                     VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
@@ -1357,12 +1375,12 @@ module Resources =
                     inputState,
                     inputAssembly,
                     pTessState,
-                    &&viewportState,
+                    pViewportState,
                     rasterizerState,
                     multisample,
                     depthStencil,
                     colorBlendState,
-                    &&dynamicStateCreateInfo, //dynamic
+                    pDynamicStateCreateInfo, //dynamic
                     prog.PipelineLayout.Handle,
                     renderPass.Handle,
                     0u,
@@ -1370,7 +1388,9 @@ module Resources =
                     -1
                 )
 
-            VkRaw.vkCreateGraphicsPipelines(device.Handle, device.PipelineCache.Handle, 1u, &&createInfo, NativePtr.zero, &&result)
+            use pCreateInfo = fixed &createInfo
+            use pResult = fixed &result
+            VkRaw.vkCreateGraphicsPipelines(device.Handle, device.PipelineCache.Handle, 1u, pCreateInfo, NativePtr.zero, pResult)
                 |> check "could not create pipeline"
 
             if x.HasHandle then

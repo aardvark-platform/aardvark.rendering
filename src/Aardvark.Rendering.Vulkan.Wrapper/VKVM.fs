@@ -9,7 +9,6 @@ open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
 
 [<AutoOpen>]
 module IndirectCommands =
@@ -817,7 +816,8 @@ module VKVM =
 
         [<MethodImpl(MethodImplOptions.NoInlining)>]
         member private x.Append<'a when 'a : unmanaged>(data : byref<'a>) =
-            let size : uint32 = NativePtr.read (NativePtr.cast &&data)
+            use pData = fixed &data
+            let size : uint32 = NativePtr.read (NativePtr.cast pData)
             let data = data
             x.Append(int size, fun ptr ->
                 NativeInt.write ptr data
@@ -1671,8 +1671,10 @@ module VKVM =
 
 type VKVM(device: VkDevice, pVkGetDeviceProcAddr: nativeint) =
     let mutable handle = 0n
-    do if not <| VKVM.Native.vmInit(device, pVkGetDeviceProcAddr, &&handle) then
-        failwith "[Vulkan] Failed to initialize VKVM."
+    do
+        use pHandle = fixed &handle
+        if not <| VKVM.Native.vmInit(device, pVkGetDeviceProcAddr, pHandle) then
+            failwith "[Vulkan] Failed to initialize VKVM."
 
     member _.Run(buffer: VkCommandBuffer, stream: VKVM.CommandStream) =
         VKVM.Native.vmRun(handle, buffer, stream.Handle)

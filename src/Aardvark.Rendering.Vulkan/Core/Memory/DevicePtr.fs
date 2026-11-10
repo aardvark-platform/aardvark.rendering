@@ -6,7 +6,7 @@ open Aardvark.Rendering.Vulkan.Memory
 open System
 open System.Runtime.InteropServices
 
-#nowarn "51"
+#nowarn "9"
 
 /// Represents a memory allocation.
 type DevicePtr =
@@ -19,7 +19,8 @@ type DevicePtr =
 
     internal new (device: IDevice, allocator: VmaAllocator, allocation: VmaAllocation, hostVisible: bool, export: bool) =
         let mutable info = VmaAllocationInfo2.Empty
-        Vma.getAllocationInfo2(allocator, allocation, &&info)
+        use pInfo = fixed &info
+        Vma.getAllocationInfo2(allocator, allocation, pInfo)
 
         let externalBlock =
             if export then

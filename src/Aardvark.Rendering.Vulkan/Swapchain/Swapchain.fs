@@ -9,7 +9,6 @@ open KHRSwapchain
 open KHRSurface
 
 #nowarn "9"
-#nowarn "51"
 
 [<AutoOpen>]
 module ImageTrafoExtensions =
@@ -212,7 +211,8 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
 
     member private x.TryAcquireNextImage() =
         fence.Reset()
-        let result = VkRaw.vkAcquireNextImageKHR(device.Handle, handle, ~~~0UL, VkSemaphore.Null, fence.Handle, &&currentBuffer)
+        use pCurrentBuffer = fixed &currentBuffer
+        let result = VkRaw.vkAcquireNextImageKHR(device.Handle, handle, ~~~0UL, VkSemaphore.Null, fence.Handle, pCurrentBuffer)
 
         if VkResult.isSwapFailure result then false
         else
@@ -221,14 +221,17 @@ type Swapchain(device : Device, initialSize : V2i, description : SwapchainDescri
             true
 
     member private x.TryPresent(queue: DeviceQueue) =
+        use pHandle = fixed &handle
+        use pCurrentBuffer = fixed &currentBuffer
         let mutable presentInfo =
             VkPresentInfoKHR(
                 0u, NativePtr.zero,
-                1u, &&handle,
-                &&currentBuffer, NativePtr.zero
+                1u, pHandle,
+                pCurrentBuffer, NativePtr.zero
             )
 
-        let result = VkRaw.vkQueuePresentKHR(queue.Handle, &&presentInfo)
+        use pPresentInfo = fixed &presentInfo
+        let result = VkRaw.vkQueuePresentKHR(queue.Handle, pPresentInfo)
 
         if VkResult.isSwapFailure result then false
         else

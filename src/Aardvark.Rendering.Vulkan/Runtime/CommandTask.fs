@@ -14,7 +14,6 @@ open FSharp.Data.Adaptive
 open System.Collections.Generic
 
 #nowarn "9"
-// #nowarn "51"
 
 // ===========================================================================================
 // ResourceManager stuff

@@ -224,6 +224,8 @@ module GLVM =
 - `FragmentPtr = nativeint`: Platform-sized pointer (32-bit or 64-bit)
 - `VMStats& stats`: Pass-by-reference for output parameters
 
+**Pointers to locals:** never pass the address of a local taken with `&&` to a native call in tail position. With tail calls enabled the compiler may tear down the frame before the native code reads the memory (dotnet/fsharp#18689); this produced garbage copy regions on MoltenVK. Pin with `use p = fixed &x` instead and keep native calls that would end a function inside `try ... finally` (see `src/Aardvark.Rendering.Vulkan/Core/Commands.fs`). Warning 51 is only raised by `&&`, so no `#nowarn "51"` is needed.
+
 **Library Loading:**
 - Windows: `glvm.dll` → `lib/Native/Aardvark.Rendering.GL/windows/AMD64/glvm.dll`
 - Linux: `libglvm.so` → `lib/Native/Aardvark.Rendering.GL/linux/AMD64/libglvm.so`

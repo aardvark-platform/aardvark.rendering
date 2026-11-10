@@ -7,7 +7,7 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Rendering.GL
 
-#nowarn "51"
+#nowarn "9"
 
 type OpenGLException =
     inherit Exception
@@ -242,7 +242,8 @@ type internal DebugOutput private (context: OpenTK.ContextHandle) =
         let mutable length = 0
         let mutable result = String.Empty
 
-        GL.GetObjectLabel(id, name, maxLabelLength - 1, &&length, &result)
+        use pLength = fixed &length
+        GL.GetObjectLabel(id, name, maxLabelLength - 1, pLength, &result)
         GL.Check "cannot get object label length"
 
         if length > 0 then result.Substring(0, length)

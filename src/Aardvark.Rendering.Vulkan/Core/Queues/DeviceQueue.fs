@@ -6,12 +6,13 @@ open System
 open Vulkan11
 
 #nowarn "9"
-#nowarn "51"
 
 type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
     let device = family.DeviceInterface
     let mutable handle = VkQueue.Zero
-    do VkRaw.vkGetDeviceQueue(device.Handle, uint32 family.Info.index, uint32 index, &&handle)
+    do
+        use pHandle = fixed &handle
+        VkRaw.vkGetDeviceQueue(device.Handle, uint32 family.Info.index, uint32 index, pHandle)
 
     let fence = device.CreateFence()
 
@@ -98,15 +99,17 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
                     signalCount, pSignalIndices
                 )
 
+            use pGroupSubmitInfo = fixed &groupSubmitInfo
             let mutable submitInfo =
                 VkSubmitInfo(
-                    NativePtr.toNativeInt &&groupSubmitInfo,
+                    NativePtr.toNativeInt pGroupSubmitInfo,
                     uint32 waitFor.Length, pWaitFor, pWaitDstFlags,
                     uint32 buffers.Length, pCommandBuffers,
                     uint32 signal.Length, pSignal
                 )
 
-            VkRaw.vkQueueSubmit(handle, 1u, &&submitInfo, fence)
+            use pSubmitInfo = fixed &submitInfo
+            VkRaw.vkQueueSubmit(handle, 1u, pSubmitInfo, fence)
                 |> checkForFault device "could not submit command buffer"
 
         | _ ->
@@ -117,7 +120,8 @@ type DeviceQueue internal (family: IDeviceQueueFamily, index: int) =
                     uint32 signal.Length, pSignal
                 )
 
-            VkRaw.vkQueueSubmit(handle, 1u, &&submitInfo, fence)
+            use pSubmitInfo = fixed &submitInfo
+            VkRaw.vkQueueSubmit(handle, 1u, pSubmitInfo, fence)
                 |> checkForFault device "could not submit command buffer"
 
     member x.RunSynchronously(buffers: CommandBuffer[], waitFor: Semaphore[], signal: Semaphore[]) =

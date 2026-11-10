@@ -7,9 +7,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 
 #nowarn "9"
-#nowarn "51"
 
-   
 [<StructuredFormatDisplay("{AsString}")>]
 type Quantization =
     {

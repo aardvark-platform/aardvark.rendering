@@ -6,11 +6,11 @@ open FSharp.NativeInterop
 open System
 open System.Diagnostics
 open System.Security
+open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Vulkan11
 
 #nowarn "9"
-#nowarn "51"
 
 [<Flags>]
 type VmaAllocatorCreateFlags =
@@ -290,15 +290,16 @@ type VmaDetailedStatistics =
 [<StructLayout(LayoutKind.Explicit, Size = 32 * 64)>]
 type VmaDetailedStatistics_32 =
     struct
+        [<FieldOffset(0)>]
+        val mutable public First : VmaDetailedStatistics
+
         member x.Item
             with get (index: int) : VmaDetailedStatistics =
                 if index < 0 || index > 31 then raise <| IndexOutOfRangeException()
-                let ptr = NativePtr.cast &&x
-                ptr.[index]
+                Unsafe.Add(&x.First, index)
             and set (index: int) (value: VmaDetailedStatistics) =
                 if index < 0 || index > 31 then raise <| IndexOutOfRangeException()
-                let ptr = NativePtr.cast &&x
-                ptr.[index] <- value
+                Unsafe.Add(&x.First, index) <- value
 
         member x.Length = 32
 
@@ -312,15 +313,16 @@ type VmaDetailedStatistics_32 =
 [<StructLayout(LayoutKind.Explicit, Size = 16 * 64)>]
 type VmaDetailedStatistics_16 =
     struct
+        [<FieldOffset(0)>]
+        val mutable public First : VmaDetailedStatistics
+
         member x.Item
             with get (index: int) : VmaDetailedStatistics =
                 if index < 0 || index > 15 then raise <| IndexOutOfRangeException()
-                let ptr = NativePtr.cast &&x
-                ptr.[index]
+                Unsafe.Add(&x.First, index)
             and set (index: int) (value: VmaDetailedStatistics) =
                 if index < 0 || index > 15 then raise <| IndexOutOfRangeException()
-                let ptr = NativePtr.cast &&x
-                ptr.[index] <- value
+                Unsafe.Add(&x.First, index) <- value
 
         member x.Length = 16
 

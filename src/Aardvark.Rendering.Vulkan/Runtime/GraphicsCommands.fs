@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 
 #nowarn "9"
-#nowarn "51"
 
 [<AutoOpen>]
 module ``Graphics Commands`` =
@@ -36,7 +35,8 @@ module ``Graphics Commands`` =
                         else VkSubpassContents.SecondaryCommandBuffers
 
                     cmd.AppendCommand()
-                    VkRaw.vkCmdBeginRenderPass(cmd.Handle, &&beginInfo, contents)
+                    use pBeginInfo = fixed &beginInfo
+                    VkRaw.vkCmdBeginRenderPass(cmd.Handle, pBeginInfo, contents)
 
                     cmd.AddResource renderPass
                     cmd.AddResource framebuffer

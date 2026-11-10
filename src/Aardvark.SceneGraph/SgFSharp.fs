@@ -10,7 +10,6 @@ open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 
 #nowarn "9"
-#nowarn "51"
 
 [<RequireQualifiedAccess>]
 type WriteBuffer =

@@ -699,7 +699,6 @@ module Generator =
         fn "open FSharp.NativeInterop"
         ln()
         fn "#nowarn \"9\""
-        fn "#nowarn \"51\""
         ln()
 
         for t in result.Types |> Seq.sortBy _.Name do
@@ -746,7 +745,7 @@ module Generator =
                 for KeyValue(signature, overload) in api.Overloads do
                     let parameters = signature.Parameters
 
-                    let fixedArrays  = ResizeArray<string>()
+                    let fixedVars    = ResizeArray<string * string>()
                     let arguments    = ResizeArray<string>()
                     let localState   = ResizeArray<{| Name: string; Setter: string; ToState: string; FromState: string |}>()
                     let mutable isAdaptive = false
@@ -798,7 +797,7 @@ module Generator =
                             arguments.Add $"{n}.Length"
 
                         | Arr t ->
-                            fixedArrays.Add n
+                            fixedVars.Add (n, n)
                             arguments.Add $"{getPtrCast t}{n}Pinned"
                             arguments.Add $"{n}.Length"
 
@@ -818,21 +817,25 @@ module Generator =
                             addFlagsAndCallback()
 
                         | Ref (Range _ as t) ->
-                            arguments.Add $"{getPtrCast t}&&{n}"
-                            arguments.Add $"NativePtr.step 1 ({getPtrCast t}&&{n})"
+                            fixedVars.Add (n, $"&{n}")
+                            arguments.Add $"{getPtrCast t}{n}Pinned"
+                            arguments.Add $"NativePtr.step 1 ({getPtrCast t}{n}Pinned)"
 
                         | Ref t ->
                             let t = addLocalState t n
-                            arguments.Add $"{getPtrCast t}&&{n}"
+                            fixedVars.Add (n, $"&{n}")
+                            arguments.Add $"{getPtrCast t}{n}Pinned"
 
                         | CVal (Range _ as t) ->
                             let t = addAdaptiveState t n
-                            arguments.Add $"{getPtrCast t}&&{n}State"
-                            arguments.Add $"NativePtr.step 1 ({getPtrCast t}&&{n}State)"
+                            fixedVars.Add ($"{n}State", $"&{n}State")
+                            arguments.Add $"{getPtrCast t}{n}StatePinned"
+                            arguments.Add $"NativePtr.step 1 ({getPtrCast t}{n}StatePinned)"
 
                         | CVal t ->
                             let t = addAdaptiveState t n
-                            arguments.Add $"{getPtrCast t}&&{n}State"
+                            fixedVars.Add ($"{n}State", $"&{n}State")
+                            arguments.Add $"{getPtrCast t}{n}StatePinned"
 
                         | _ ->
                             arguments.Add n
@@ -845,11 +848,11 @@ module Generator =
 
                     ln()
                     blk $"static member {api.Name}{outerSignature} =" (fun _ ->
-                        for n in fixedArrays do
-                            fn $"use {n}Pinned = fixed {n}"
-
                         for s in localState do
                             fn $"let mutable {s.Name}State = {s.Name}{s.ToState}"
+
+                        for var, value in fixedVars do
+                            fn $"use {var}Pinned = fixed {value}"
 
                         if overload.IsInputText then
                             if hasParam overload.InputText.Callback then

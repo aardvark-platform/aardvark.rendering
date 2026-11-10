@@ -11,7 +11,6 @@
 // open Microsoft.FSharp.NativeInterop
 //
 // #nowarn "9"
-// // #nowarn "51"
 // #nowarn "44" // 0044 obsolete
 //
 // type SparseImageBind =

@@ -11,7 +11,6 @@ open System
 open FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
 
 // Tests for the loading of Vulkan entry points. They assert on the loader's state and
 // must therefore run without a test application.
@@ -70,8 +69,7 @@ module VulkanEntryPoints =
                 Expect.equal VkRaw.EntryPoints.LoadedInstanceVersion (version.ToVulkan()) "unexpected LoadedInstanceVersion"
                 Expect.isEmpty VkRaw.EntryPoints.LoadedDevices "unexpected LoadedDevices"
 
-                let mutable features = VkPhysicalDeviceFeatures2KHR.Empty
-                VkRaw.vkGetPhysicalDeviceFeatures2KHR(physicalDevice, &&features)
+                VkInstance.getPhysicalDeviceFeatures2 physicalDevice |> ignore
 
                 VkRaw.vkDestroyInstance(instance, NativePtr.zero)
 
@@ -100,9 +98,7 @@ module VulkanEntryPoints =
                 Expect.sequenceEqual VkRaw.EntryPoints.LoadedDevices [ device ] "unexpected LoadedDevices"
                 Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) (version.ToVulkan()) "unexpected GetDeviceVersion"
 
-                let mutable pool = VkCommandPool.Null
-                let mutable info = VkCommandPoolCreateInfo.Empty
-                VkRaw.vkCreateCommandPool(device, &&info, NativePtr.zero, &&pool) |> VkResult.check
+                let pool = VkDevice.createCommandPool device
                 VkRaw.vkDestroyCommandPool(device, pool, NativePtr.zero)
 
                 VkRaw.vkDestroyDevice(device, NativePtr.zero)
@@ -128,9 +124,10 @@ module VulkanEntryPoints =
 
             let mutable timelineFeatures = VkPhysicalDeviceTimelineSemaphoreFeaturesKHR.Empty
             timelineFeatures.timelineSemaphore <- 1u
+            use pTimelineFeatures = fixed &timelineFeatures
 
             for _ = 1 to 2 do
-                let device = VkDevice.createWithFeatures physicalDevice [ KHRTimelineSemaphore.Name ] (NativePtr.toNativeInt &&timelineFeatures)
+                let device = VkDevice.createWithFeatures physicalDevice [ KHRTimelineSemaphore.Name ] (NativePtr.toNativeInt pTimelineFeatures)
 
                 Expect.isTrue VkRaw.EntryPoints.LoadedGlobal "unexpected LoadedGlobal"
                 Expect.equal VkRaw.EntryPoints.LoadedInstance instance "unexpected LoadedInstance"
@@ -138,19 +135,8 @@ module VulkanEntryPoints =
                 Expect.sequenceEqual VkRaw.EntryPoints.LoadedDevices [ device ] "unexpected LoadedDevices"
                 Expect.equal (VkRaw.EntryPoints.GetDeviceVersion device) (version.ToVulkan()) "unexpected GetDeviceVersion"
 
-                let mutable typeCreateInfo = VkSemaphoreTypeCreateInfoKHR.Empty
-                typeCreateInfo.initialValue <- 42UL
-                typeCreateInfo.semaphoreType <- VkSemaphoreTypeKHR.Timeline
-
-                let mutable createInfo = VkSemaphoreCreateInfo.Empty
-                createInfo.pNext <- NativePtr.toNativeInt &&typeCreateInfo
-
-                let mutable semaphore = VkSemaphore.Null
-                VkRaw.vkCreateSemaphore(device, &&createInfo, NativePtr.zero, &&semaphore) |> VkResult.check
-
-                let mutable value = 0UL
-                VkRaw.vkGetSemaphoreCounterValueKHR(device, semaphore, &&value) |> VkResult.check
-
+                let semaphore = VkDevice.createTimelineSemaphore device 42UL
+                VkDevice.getSemaphoreCounterValue device semaphore |> ignore
                 VkRaw.vkDestroySemaphore(device, semaphore, NativePtr.zero)
 
                 VkRaw.vkDestroyDevice(device, NativePtr.zero)

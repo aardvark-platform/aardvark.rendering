@@ -12,7 +12,6 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 
 #nowarn "9"
-#nowarn "51"
 
 
 [<AutoOpen>]

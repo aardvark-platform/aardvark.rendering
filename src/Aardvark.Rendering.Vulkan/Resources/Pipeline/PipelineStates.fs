@@ -7,7 +7,6 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 
 #nowarn "9"
-// #nowarn "51"
 
 type InputAssemblyState =
     {

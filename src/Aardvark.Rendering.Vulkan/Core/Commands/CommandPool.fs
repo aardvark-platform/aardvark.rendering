@@ -6,7 +6,7 @@ open System
 open System.Collections.Generic
 open Microsoft.FSharp.Core
 
-#nowarn "51"
+#nowarn "9"
 
 [<Flags>]
 type CommandPoolFlags =
@@ -25,7 +25,9 @@ type CommandPool internal(queueFamily: IDeviceQueueFamily, [<Optional; DefaultPa
                 flags |> int |> unbox,
                 uint32 queueFamily.Info.index
             )
-        VkRaw.vkCreateCommandPool(device.Handle, &&createInfo, NativePtr.zero, &&handle)
+        use pCreateInfo = fixed &createInfo
+        use pHandle = fixed &handle
+        VkRaw.vkCreateCommandPool(device.Handle, pCreateInfo, NativePtr.zero, pHandle)
             |> check "could not create command pool"
 
         device.Instance.RegisterDebugTrace(handle.Handle)

@@ -1,6 +1,6 @@
 ﻿namespace Aardvark.Rendering.GL
 
-#nowarn "51"
+#nowarn "9"
 
 open System
 open Aardvark.Base
@@ -161,7 +161,8 @@ module ARB_direct_state_access =
 
         static member GetNamedBufferParameter(buffer : int, pname : BufferParameterName, res : byref<int64>) =
             if GL.ARB_direct_state_access then
-                GL.GetNamedBufferParameter(buffer, pname, &&res)
+                use pRes = fixed &res
+                GL.GetNamedBufferParameter(buffer, pname, pRes)
             else
                 let mutable r = res
                 bindBuffer buffer (fun t ->

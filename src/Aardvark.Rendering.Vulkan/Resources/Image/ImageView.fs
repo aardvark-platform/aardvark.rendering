@@ -6,7 +6,6 @@ open Aardvark.Rendering.Vulkan
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 #nowarn "9"
-// #nowarn "51"
 
 type ImageView =
     class

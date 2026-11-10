@@ -8,12 +8,13 @@ open Aardvark.Rendering.Vulkan.Vulkan14
 open KHRAccelerationStructure
 open KHRFragmentShadingRate
 open NVClusterAccelerationStructure
+open KHRTimelineSemaphore
+open KHRGetPhysicalDeviceProperties2
 open Expecto
 open System
 open FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
 
 module VulkanWrapper =
 
@@ -36,12 +37,15 @@ module VulkanWrapper =
                 use ppExtensions = fixed pExtensions
 
                 let mutable createInfo = VkInstanceCreateInfo.Empty
-                createInfo.pApplicationInfo <- &&appInfo
+                use pAppInfo = fixed &appInfo
+                createInfo.pApplicationInfo <- pAppInfo
                 createInfo.enabledExtensionCount <- uint32 pExtensions.Length
                 createInfo.ppEnabledExtensionNames <- ppExtensions
 
                 let mutable instance = VkInstance.Zero
-                VkRaw.vkCreateInstance(&&createInfo, NativePtr.zero, &&instance) |> VkResult.check
+                use pCreateInfo = fixed &createInfo
+                use pInstance = fixed &instance
+                VkRaw.vkCreateInstance(pCreateInfo, NativePtr.zero, pInstance) |> VkResult.check
 
                 pExtensions |> Array.iter CStr.free
                 CStr.free appInfo.pEngineName
@@ -51,13 +55,20 @@ module VulkanWrapper =
 
             let getPhysicalDevice (instance: VkInstance) =
                 let mutable count = 0u
-                VkRaw.vkEnumeratePhysicalDevices(instance, &&count, NativePtr.zero) |> VkResult.check
+                use pCount = fixed &count
+                VkRaw.vkEnumeratePhysicalDevices(instance, pCount, NativePtr.zero) |> VkResult.check
 
                 let physicalDevices = Array.zeroCreate (int count)
                 use pPhysicalDevices = fixed physicalDevices
-                VkRaw.vkEnumeratePhysicalDevices(instance, &&count, pPhysicalDevices) |> VkResult.check
+                VkRaw.vkEnumeratePhysicalDevices(instance, pCount, pPhysicalDevices) |> VkResult.check
 
                 pPhysicalDevices.[0]
+
+            let getPhysicalDeviceFeatures2 (physicalDevice: VkPhysicalDevice) =
+                let mutable features = VkPhysicalDeviceFeatures2KHR.Empty
+                use pFeatures = fixed &features
+                VkRaw.vkGetPhysicalDeviceFeatures2KHR(physicalDevice, pFeatures)
+                features
 
         module VkDevice =
 
@@ -68,21 +79,26 @@ module VulkanWrapper =
                 use ppExtensions = fixed pExtensions
 
                 let mutable priority = 1.0f
+                use pPriority = fixed &priority
                 let mutable queueInfo = VkDeviceQueueCreateInfo.Empty
                 queueInfo.queueCount <- 1u
-                queueInfo.pQueuePriorities <- &&priority
+                queueInfo.pQueuePriorities <- pPriority
+                use pQueueInfo = fixed &queueInfo
 
                 let mutable features = VkPhysicalDeviceFeatures.Empty
+                use pFeatures = fixed &features
                 let mutable createInfo = VkDeviceCreateInfo.Empty
                 createInfo.pNext <- pNext
                 createInfo.queueCreateInfoCount <- 1u
-                createInfo.pQueueCreateInfos <- &&queueInfo
+                createInfo.pQueueCreateInfos <- pQueueInfo
                 createInfo.enabledExtensionCount <- uint32 <| pExtensions.Length
-                createInfo.pEnabledFeatures <- &&features
+                createInfo.pEnabledFeatures <- pFeatures
                 createInfo.ppEnabledExtensionNames <- ppExtensions
 
                 let mutable device = VkDevice.Zero
-                VkRaw.vkCreateDevice(physicalDevice, &&createInfo, NativePtr.zero, &&device) |> VkResult.check
+                use pCreateInfo = fixed &createInfo
+                use pDevice = fixed &device
+                VkRaw.vkCreateDevice(physicalDevice, pCreateInfo, NativePtr.zero, pDevice) |> VkResult.check
 
                 pExtensions |> Array.iter CStr.free
 
@@ -91,84 +107,107 @@ module VulkanWrapper =
             let create (physicalDevice: VkPhysicalDevice) (extensions: string seq) =
                 createWithFeatures physicalDevice extensions 0n
 
+            let createCommandPool (device: VkDevice) =
+                let mutable pool = VkCommandPool.Null
+                let mutable info = VkCommandPoolCreateInfo.Empty
+                use pInfo = fixed &info
+                use pPool = fixed &pool
+                VkRaw.vkCreateCommandPool(device, pInfo, NativePtr.zero, pPool) |> VkResult.check
+                pool
+
+            let createTimelineSemaphore (device: VkDevice) (initialValue: uint64) =
+                let mutable typeCreateInfo = VkSemaphoreTypeCreateInfoKHR.Empty
+                typeCreateInfo.initialValue <- initialValue
+                typeCreateInfo.semaphoreType <- VkSemaphoreTypeKHR.Timeline
+                use pTypeCreateInfo = fixed &typeCreateInfo
+
+                let mutable createInfo = VkSemaphoreCreateInfo.Empty
+                createInfo.pNext <- NativePtr.toNativeInt pTypeCreateInfo
+
+                let mutable semaphore = VkSemaphore.Null
+                use pCreateInfo = fixed &createInfo
+                use pSemaphore = fixed &semaphore
+                VkRaw.vkCreateSemaphore(device, pCreateInfo, NativePtr.zero, pSemaphore) |> VkResult.check
+                semaphore
+
+            let getSemaphoreCounterValue (device: VkDevice) (semaphore: VkSemaphore) =
+                let mutable value = 0UL
+                use pValue = fixed &value
+                VkRaw.vkGetSemaphoreCounterValueKHR(device, semaphore, pValue) |> VkResult.check
+                value
     module Arrays =
 
         let uint32_32 () =
             let mutable array = uint32_32()
-            array.[array.Length - 1] <- 42u
-            Expect.equal array.[array.Length - 1] 42u ""
+            for i = 0 to array.Length - 1 do array.[i] <- 42u + uint32 i
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (42u + uint32 i) $"Index {i} mismatch"
 
         let int32_7 () =
             let mutable array = int32_7()
-            array.[array.Length - 1] <- 42
-            Expect.equal array.[array.Length - 1] 42 ""
+            for i = 0 to array.Length - 1 do array.[i] <- 42 + i
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (42 + i) $"Index {i} mismatch"
 
         let byte_32 () =
             let mutable array = byte_32()
-            array.[array.Length - 1] <- 42uy
-            Expect.equal array.[array.Length - 1] 42uy ""
+            for i = 0 to array.Length - 1 do array.[i] <- 42uy + uint8 i
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (42uy + uint8 i) $"Index {i} mismatch"
 
         let byte_8 () =
             let mutable array = byte_8()
-            array.[array.Length - 1] <- 42uy
-            Expect.equal array.[array.Length - 1] 42uy ""
+            for i = 0 to array.Length - 1 do array.[i] <- 42uy + uint8 i
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (42uy + uint8 i) $"Index {i} mismatch"
 
         let float32_6 () =
             let mutable array = float32_6()
-            array.[array.Length - 1] <- 42.0f
-            Expect.equal array.[array.Length - 1] 42.0f ""
+            for i = 0 to array.Length - 1 do array.[i] <- 42.0f + float32 i
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (42.0f + float32 i) $"Index {i} mismatch"
 
         let VkPhysicalDevice_32 () =
             let mutable array = VkPhysicalDevice_32()
-            array.[array.Length - 1] <- 42n
-            Expect.equal array.[array.Length - 1] 42n ""
+            for i = 0 to array.Length - 1 do array.[i] <- 42n + nativeint i
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (42n + nativeint i) $"Index {i} mismatch"
 
         let VkDeviceSize_16 () =
             let mutable array = VkDeviceSize_16()
-            array.[array.Length - 1] <- 42UL
-            Expect.equal array.[array.Length - 1] 42UL ""
+            for i = 0 to array.Length - 1 do array.[i] <- 42UL + uint64 i
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (42UL + uint64 i) $"Index {i} mismatch"
 
         let VkOffset3D_2 () =
             let mutable array = VkOffset3D_2()
-            let value = VkOffset3D(1, 2, 3)
-            array.[array.Length - 1] <- value
-            Expect.equal array.[array.Length - 1] value ""
+            for i = 0 to array.Length - 1 do array.[i] <- VkOffset3D(1 + i, 2 + i, 3 + i)
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (VkOffset3D(1 + i, 2 + i, 3 + i)) $"Index {i} mismatch"
 
         let VkMemoryHeap_16 () =
             let mutable array = VkMemoryHeap_16()
-            let value = VkMemoryHeap(42UL, VkMemoryHeapFlags.DeviceLocalBit)
-            array.[array.Length - 1] <- value
-            Expect.equal array.[array.Length - 1] value ""
+            for i = 0 to array.Length - 1 do array.[i] <- VkMemoryHeap(42UL + uint64 i, VkMemoryHeapFlags.DeviceLocalBit + enum i)
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (VkMemoryHeap(42UL + uint64 i, VkMemoryHeapFlags.DeviceLocalBit + enum i)) $"Index {i} mismatch"
 
         let VkMemoryType_32 () =
             let mutable array = VkMemoryType_32()
-            let value = VkMemoryType(VkMemoryPropertyFlags.HostVisibleBit, 42u)
-            array.[array.Length - 1] <- value
-            Expect.equal array.[array.Length - 1] value ""
+            for i = 0 to array.Length - 1 do array.[i] <- VkMemoryType(VkMemoryPropertyFlags.HostVisibleBit + enum i, 42u + uint32 i)
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (VkMemoryType(VkMemoryPropertyFlags.HostVisibleBit + enum i, 42u + uint32 i)) $"Index {i} mismatch"
 
         let VkQueueGlobalPriority_16 () =
             let mutable array = VkQueueGlobalPriority_16()
-            let value = VkQueueGlobalPriority.Medium
-            array.[array.Length - 1] <- value
-            Expect.equal array.[array.Length - 1] value ""
+            for i = 0 to array.Length - 1 do array.[i] <- VkQueueGlobalPriority.Medium + enum i
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (VkQueueGlobalPriority.Medium + enum i) $"Index {i} mismatch"
 
         let VkFragmentShadingRateCombinerOpKHR_2 () =
             let mutable array = VkFragmentShadingRateCombinerOpKHR_2()
-            let value = VkFragmentShadingRateCombinerOpKHR.Mul
-            array.[array.Length - 1] <- value
-            Expect.equal array.[array.Length - 1] value ""
+            for i = 0 to array.Length - 1 do array.[i] <- VkFragmentShadingRateCombinerOpKHR.Mul + enum i
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] (VkFragmentShadingRateCombinerOpKHR.Mul + enum i) $"Index {i} mismatch"
 
         let VmaDetailedStatistics_16 () =
             let mutable array = VmaDetailedStatistics_16()
             let value = { VmaDetailedStatistics.Empty with statistics = { VmaStatistics.Empty with blockBytes = 42UL } }
-            array.[array.Length - 1] <- value
-            Expect.equal array.[array.Length - 1] value ""
+            for i = 0 to array.Length - 1 do array.[i] <- value
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] value $"Index {i} mismatch"
 
         let VmaDetailedStatistics_32 () =
             let mutable array = VmaDetailedStatistics_32()
             let value = { VmaDetailedStatistics.Empty with allocationSizeMax = 42UL }
-            array.[array.Length - 1] <- value
-            Expect.equal array.[array.Length - 1] value ""
+            for i = 0 to array.Length - 1 do array.[i] <- value
+            for i = 0 to array.Length - 1 do Expect.equal array.[i] value $"Index {i} mismatch"
 
     module Bitfields =
 

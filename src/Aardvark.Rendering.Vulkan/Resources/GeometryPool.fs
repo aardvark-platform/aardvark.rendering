@@ -13,7 +13,6 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
 
 module GeometryPoolUtilities =
 
@@ -63,7 +62,10 @@ module GeometryPoolUtilities =
                                 member x.Enqueue(cmd) =
                                     cmd.AppendCommand()
                                     let mutable copyInfo = VkBufferCopy(offset, offset, size)
-                                    VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer.Handle, handle, 1u, &&copyInfo)
+                                    use pCopyInfo = fixed &copyInfo
+                                    // try/finally keeps the native call out of tail position (dotnet/fsharp#18689)
+                                    try VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer.Handle, handle, 1u, pCopyInfo)
+                                    finally ()
                             }
                         )
             )

@@ -16,7 +16,6 @@ type private GamepadButton = Aardvark.Application.GamepadButton
 type private Cursor = Aardvark.Application.Cursor
 
 #nowarn "9"
-#nowarn "51"
 
 module Translations =
 

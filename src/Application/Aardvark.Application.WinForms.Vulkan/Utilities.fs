@@ -14,7 +14,6 @@ open System.Reflection
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
 
 [<AutoOpen>]
 module private Utilities =

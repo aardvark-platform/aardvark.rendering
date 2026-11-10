@@ -9,7 +9,6 @@ open System.Runtime.CompilerServices
 open KHRSurface
 
 #nowarn "9"
-// #nowarn "51"
 
 [<AbstractClass>]
 type AbstractGraphicsMode() =

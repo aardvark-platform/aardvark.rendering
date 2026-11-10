@@ -7,7 +7,6 @@ open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-#nowarn "51"
 
 type ExtensionType =
     | Device = 0
@@ -33,8 +32,9 @@ type DeviceVendor =
 type String256 =
     struct
         member x.Value =
-            let ptr = &&x |> NativePtr.toNativeInt //NativePtr.stackalloc 1
-            Marshal.PtrToStringAnsi(ptr)
+            let mutable copy = x
+            use ptr = fixed &copy
+            Marshal.PtrToStringAnsi(NativePtr.toNativeInt ptr)
 
         override x.ToString() = x.Value
     end

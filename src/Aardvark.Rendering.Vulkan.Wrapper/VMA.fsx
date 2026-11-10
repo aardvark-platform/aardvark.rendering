@@ -402,11 +402,11 @@ module Writer =
         fn "open System"
         fn "open System.Diagnostics"
         fn "open System.Security"
+        fn "open System.Runtime.CompilerServices"
         fn "open System.Runtime.InteropServices"
         fn "open Vulkan11"
         ln()
         fn "#nowarn \"9\""
-        fn "#nowarn \"51\""
 
         for e in header.enums do
             ln()
@@ -461,16 +461,18 @@ module Writer =
                 fn $"[<StructLayout(LayoutKind.Explicit, Size = {count} * {Type.getSizeInBytes typ})>]"
                 blk $"type {Type.fsharpName count typ} =" (fun _ ->
                     blk "struct" (fun _ ->
+                        fn "[<FieldOffset(0)>]"
+                        fn $"val mutable public First : {baseName}"
+                        ln()
+
                         blk "member x.Item" (fun _ ->
                             blk $"with get (index: int) : {baseName} =" (fun _ ->
                                 fn $"if index < 0 || index > {count - 1} then raise <| IndexOutOfRangeException()"
-                                fn $"let ptr = NativePtr.cast &&x"
-                                fn $"ptr.[index]"
+                                fn $"Unsafe.Add(&x.First, index)"
                             )
                             blk $"and set (index: int) (value: {baseName}) =" (fun _ ->
                                 fn $"if index < 0 || index > {count - 1} then raise <| IndexOutOfRangeException()"
-                                fn $"let ptr = NativePtr.cast &&x"
-                                fn $"ptr.[index] <- value"
+                                fn $"Unsafe.Add(&x.First, index) <- value"
                             )
                         )
 

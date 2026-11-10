@@ -15,7 +15,6 @@ open KHRRayTracingPositionFetch
 open EXTOpacityMicromap
 
 #nowarn "9"
-#nowarn "51"
 
 [<RequireQualifiedAccess>]
 type AccelerationStructureData =
@@ -71,9 +70,11 @@ type internal PreparedAccelerationStructureData(
             use pMaxPrimitiveCounts = fixed primitives
             let mutable info = VkAccelerationStructureBuildSizesInfoKHR.Empty
 
+            use pBuildGeometryInfo = fixed &buildGeometryInfo
+            use pInfo = fixed &info
             VkRaw.vkGetAccelerationStructureBuildSizesKHR(
                 device.Handle, VkAccelerationStructureBuildTypeKHR.Device,
-                &&buildGeometryInfo, pMaxPrimitiveCounts, &&info
+                pBuildGeometryInfo, pMaxPrimitiveCounts, pInfo
             )
 
             buildSizesInfo <- ValueSome info
