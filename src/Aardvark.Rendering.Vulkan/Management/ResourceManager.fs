@@ -1588,7 +1588,7 @@ module Resources =
             StorageImageViewResource(owner, key, device, imageType, image, levels, slices)
 
         override x.CreateImageView(image : Image, levels : Range1i, slices : Range1i, mapping : VkComponentMapping) =
-            device.CreateStorageView(image, imageType, levels, slices, mapping)
+            device.CreateStorageView(image, imageType, levels, slices)
 
     type IsActiveResource(owner : IResourceCache, key : list<obj>, input : aval<bool>) =
         inherit AbstractPointerResource<int>(owner, key)

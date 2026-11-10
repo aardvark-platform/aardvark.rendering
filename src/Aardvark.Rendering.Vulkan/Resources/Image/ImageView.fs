@@ -192,12 +192,15 @@ module ImageView =
             return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange)
         }
 
-    let createStorageView (componentMapping : VkComponentMapping) (img : Image) (imageType : FShade.GLSL.GLSLImageType)
+    let createStorageView (img : Image) (imageType : FShade.GLSL.GLSLImageType)
                           (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
         let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Layers
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
+
+        // storage images require an identity component mapping
+        let componentMapping = VkComponentMapping.Identity
 
         let aspect = VkFormat.toShaderAspect img.Format
 
@@ -313,24 +316,24 @@ type ContextImageViewExtensions private() =
 
 
     [<Extension>]
-    static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, levelRange : Range1i, arrayRange : Range1i, comp : VkComponentMapping) =
-        this |> ImageView.createStorageView comp image imageType levelRange arrayRange
+    static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, levelRange : Range1i, arrayRange : Range1i) =
+        this |> ImageView.createStorageView image imageType levelRange arrayRange
 
     [<Extension>]
-    static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, baseLevel : int, levels : int, baseSlice : int, slices : int, comp : VkComponentMapping) =
-        this |> ImageView.createStorageView comp image imageType (Range1i(baseLevel, baseLevel + levels - 1)) (Range1i(baseSlice, baseSlice + slices - 1))
+    static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, baseLevel : int, levels : int, baseSlice : int, slices : int) =
+        this |> ImageView.createStorageView image imageType (Range1i(baseLevel, baseLevel + levels - 1)) (Range1i(baseSlice, baseSlice + slices - 1))
 
     [<Extension>]
-    static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, levelRange : Range1i, comp : VkComponentMapping) =
-        this |> ImageView.createStorageView comp image imageType levelRange (Range1i(0, image.Layers - 1))
+    static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, levelRange : Range1i) =
+        this |> ImageView.createStorageView image imageType levelRange (Range1i(0, image.Layers - 1))
 
     [<Extension>]
-    static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, comp : VkComponentMapping) =
-        this |> ImageView.createStorageView comp image imageType (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Layers - 1))
+    static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType) =
+        this |> ImageView.createStorageView image imageType (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Layers - 1))
 
     [<Extension>]
-    static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, level : int, slice : int, comp : VkComponentMapping) =
-        this |> ImageView.createStorageView comp image imageType (Range1i(level, level)) (Range1i(slice, slice))
+    static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, level : int, slice : int) =
+        this |> ImageView.createStorageView image imageType (Range1i(level, level)) (Range1i(slice, slice))
 
 
 
