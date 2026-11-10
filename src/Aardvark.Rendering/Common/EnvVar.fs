@@ -50,6 +50,7 @@ type private EnvVarCell(name : string) =
 type EnvVar private () =
 
     static let vulkanInlineCommands = EnvVarCell "AARDVARK_VULKAN_INLINE_COMMANDS"
+    static let vulkanLibrary = EnvVarCell "AARDVARK_VULKAN_LIBRARY"
 
     /// Returns whether a switch value enables it: "1", "on", "true" and "yes" (ignoring case
     /// and surrounding whitespace) do, everything else, including null, does not.
@@ -73,3 +74,11 @@ type EnvVar private () =
     static member AARDVARK_VULKAN_INLINE_COMMANDS
         with get () = vulkanInlineCommands.Value
         and set (value : string) = vulkanInlineCommands.Value <- value
+
+    /// The Vulkan loader library to load, as a library name or an absolute path, e.g. a specific SDK
+    /// loader on macOS where DYLD_* variables are stripped by SIP and cannot redirect the default.
+    /// Wins over VulkanLoader.LibraryNames and PreferMoltenVK set by the application. Read once when
+    /// the library is loaded.
+    static member AARDVARK_VULKAN_LIBRARY
+        with get () = vulkanLibrary.Value
+        and set (value : string) = vulkanLibrary.Value <- value

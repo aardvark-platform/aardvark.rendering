@@ -2,6 +2,7 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Rendering
 open System.Runtime.InteropServices
 
 /// Static class for loading the Vulkan library.
@@ -16,11 +17,21 @@ type VulkanLoader =
 
     static let library =
         lazy (
-            libraryNames |> Array.tryPickV (fun libraryName ->
-                let ptr = Aardvark.LoadLibrary(libraryName, typeof<VulkanLoader>.Assembly)
-                if ptr <> 0n then ValueSome ptr else ValueNone
-            )
-            |> ValueOption.defaultWith (fun _ -> failwith "Failed to load Vulkan library.")
+            // EnvVar.AARDVARK_VULKAN_LIBRARY (name or absolute path) wins over LibraryNames and
+            // PreferMoltenVK set by application code, e.g. to select a specific loader build
+            // such as KosmicKrisp's SDK loader on macOS, where DYLD_* variables are stripped
+            // by SIP and cannot redirect the default.
+            match EnvVar.AARDVARK_VULKAN_LIBRARY with
+            | path when EnvVar.IsSet path ->
+                let ptr = Aardvark.LoadLibrary(path, typeof<VulkanLoader>.Assembly)
+                if ptr = 0n then failwithf "Failed to load Vulkan library '%s' (AARDVARK_VULKAN_LIBRARY)." path
+                ptr
+            | _ ->
+                libraryNames |> Array.tryPickV (fun libraryName ->
+                    let ptr = Aardvark.LoadLibrary(libraryName, typeof<VulkanLoader>.Assembly)
+                    if ptr <> 0n then ValueSome ptr else ValueNone
+                )
+                |> ValueOption.defaultWith (fun _ -> failwith "Failed to load Vulkan library.")
         )
 
     /// Handle of the Vulkan library.
@@ -38,7 +49,7 @@ type VulkanLoader =
     static member PreferMoltenVK
         with get() = VulkanLoader.LibraryNames |> Array.tryHeadV |> ValueOption.contains MoltenVK
         and set value =
-            let names = VulkanLoader.LibraryNames |> Array.filter ((=) MoltenVK)
+            let names = VulkanLoader.LibraryNames |> Array.filter ((<>) MoltenVK)
 
             if value then
                 VulkanLoader.LibraryNames <- Array.append [| MoltenVK |] names

@@ -290,6 +290,8 @@ On portability-subset devices (MoltenVK) the Vulkan backend behaves differently 
 - spirv-opt is skipped even when `OptimizeShaders` is set: it strips unreferenced buffer declarations and the holes break MoltenVK's argument-buffer layout (`Resources/Shaders/ShaderModule.fs`).
 - With vsync the swapchain prefers FIFO over Mailbox presentation; Mailbox renders uncapped and can saturate the GPU into a hang on MoltenVK (`Swapchain/SwapchainDescription.fs`).
 
+The environment variable `AARDVARK_VULKAN_LIBRARY` names the Vulkan library to load (a library name or an absolute path) and wins over `VulkanLoader.LibraryNames` and `PreferMoltenVK`. It is the only way to select a specific loader on macOS, where `DYLD_*` variables are stripped by SIP. It is read once, when the library is first loaded (`src/Aardvark.Rendering.Vulkan.Wrapper/Loader.fs`).
+
 ### Feature Comparison
 
 | Feature | GL | Vulkan |
