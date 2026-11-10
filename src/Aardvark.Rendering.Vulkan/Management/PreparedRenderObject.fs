@@ -351,7 +351,7 @@ type DevicePreparedRenderObjectExtensions private() =
                 )
 
             let multisampleState =
-                this.CreateMultisampleState(renderPass, ro.RasterizerState.Multisample)
+                this.CreateMultisampleState(renderPass, ro.RasterizerState.Multisample, program)
 
             let pipeline =
                 this.CreatePipeline(

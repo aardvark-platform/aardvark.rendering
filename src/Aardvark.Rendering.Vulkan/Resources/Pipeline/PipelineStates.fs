@@ -259,10 +259,20 @@ module ColorBlendState =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module MultisampleState =
     let create (sampleShading : bool) (samples : int) =
+        let enable = samples > 1 && sampleShading
         {
             samples                 = samples
-            sampleShadingEnable     = samples > 1 && sampleShading
-            minSampleShading        = 0.0
+            sampleShadingEnable     = enable
+            // sampleShadingEnable = true on its own only guarantees
+            //   max(ceil(minSampleShading x samples), 1)
+            // shader invocations per fragment. With minSampleShading = 0 the
+            // implementation may still shade per pixel even when the shader reads
+            // gl_SampleID or gl_SamplePosition: the GL rule "gl_SampleID forces
+            // per-sample shading" has no Vulkan equivalent, Vulkan delegates to
+            // minSampleShading. Forcing 1.0 makes the per-sample invocation
+            // happen, which per-sample resolve passes (for example an A-buffer
+            // resolve deduplicating MSAA edge inserts) rely on.
+            minSampleShading        = if enable then 1.0 else 0.0
             sampleMask              = [||]
             alphaToCoverageEnable   = false
             alphaToOneEnable        = false

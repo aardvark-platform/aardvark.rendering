@@ -136,13 +136,22 @@ module private FShadeAdapter =
         }
 
     let fragmentInfo (iface : GLSLShaderInterface) =
-        let writesDepth = 
+        let writesDepth =
             MapExt.containsKey "gl_Depth" iface.shaderBuiltInOutputs
 
+        // The fragment shader's builtin inputs that require per-sample shading.
+        // `gl_SampleMaskIn` is deliberately not among them: it is available at
+        // pixel rate as well and then gives the primitive's full coverage mask,
+        // which an order-independent transparency insert wants without per-sample
+        // invocation (per-sample inserts would multiply the fragments per pixel).
+        // The `sample` interpolation qualifier on a varying input also requires
+        // per-sample shading (Aardvark.Rendering.Text uses it), but it is encoded
+        // on regular inputs rather than in the builtin-input map, and SPIR-V
+        // marks such a shader as SampleRateShading anyway, which drivers honour
+        // without sampleShadingEnable.
         let sampleShading =
-            MapExt.containsKey "gl_SampleLocation" iface.shaderBuiltInInputs ||
-            MapExt.containsKey "gl_SampleID" iface.shaderBuiltInInputs || 
-            MapExt.containsKey "gl_SampleIndex" iface.shaderBuiltInInputs
+            MapExt.containsKey "gl_SampleID"       iface.shaderBuiltInInputs ||
+            MapExt.containsKey "gl_SamplePosition" iface.shaderBuiltInInputs
 
         {
             flags = (if writesDepth then FragmentFlags.DepthReplacing else FragmentFlags.DepthUnchanged)
