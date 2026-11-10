@@ -1,3 +1,4 @@
+### 5.6.12
 - Fixed adaptive textures and texture arrays to clean up newly created handles when assigning their debug name fails.
 - Reject negative memory-manager resize sizes before changing allocations, preserving live blocks and neighboring payloads.
 - Preserve all scenes and commands from consumable sequences by snapshotting render-command inputs eagerly in a single pass.
