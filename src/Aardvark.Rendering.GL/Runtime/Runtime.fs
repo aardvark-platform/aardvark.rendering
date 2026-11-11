@@ -37,6 +37,11 @@ type Runtime(debug : IDebugConfig) =
 
     member x.DebugLabelsEnabled = debug.DebugLabels
 
+    // GL_ARB_fragment_shader_interlock; absent on most mobile drivers and on
+    // AMD's Windows proprietary stack. The transparency wrapper picks
+    // Weighted-Blended over A-buffer when this is false.
+    member x.FragmentShaderInterlock = Set.contains "GL_ARB_fragment_shader_interlock" ctx.Driver.extensions
+
     member x.ShaderCachePath
         with get() = ctx.ShaderCachePath
         and set(value) = ctx.ShaderCachePath <- value
@@ -101,6 +106,7 @@ type Runtime(debug : IDebugConfig) =
         member x.SupportsLayeredShaderInputs = x.SupportsLayeredShaderInputs
         member x.DebugConfig = x.DebugConfig
         member x.DebugLabelsEnabled = x.DebugLabelsEnabled
+        member x.FragmentShaderInterlock = x.FragmentShaderInterlock
         member x.ContextLock = x.ContextLock
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
@@ -130,7 +136,7 @@ type Runtime(debug : IDebugConfig) =
             x.DownloadDepth(t, target, level, slice, offset)
 
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
-        member x.CompileRender (signature, set : aset<IRenderObject>) = x.CompileRender(signature, set)
+        member x.CompileRender (signature, set, transparency) = x.CompileRender(signature, set, transparency)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         member x.CreateBuffer(size : uint64, _ : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, storage) :> IBackendBuffer
@@ -434,9 +440,13 @@ type Runtime(debug : IDebugConfig) =
 
     member x.ResourceManager = manager
 
-    member x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>) =
-        let set = ShaderDebugger.hookRenderObjects set
-        new RenderTasks.RenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
+    member x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>,
+                            [<Optional; DefaultParameterValue(Transparency.Auto)>] transparency: Transparency) : IRenderTask =
+        if transparency = Transparency.None then
+            let set = ShaderDebugger.hookRenderObjects set
+            new RenderTasks.RenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
+        else
+            TransparencyRenderTask.create x signature transparency set
 
     member x.PrepareRenderObject(signature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
         PreparedCommand.ofRenderObject signature manager rj :> IPreparedRenderObject

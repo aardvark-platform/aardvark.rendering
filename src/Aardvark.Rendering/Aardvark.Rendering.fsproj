@@ -113,6 +113,7 @@
     <Compile Include="Runtime\RuntimeExtensionsCSharp.fs" />
     <Compile Include="Runtime\RuntimeCommand.fs" />
     <Compile Include="RenderTasks\AbstractRenderTask.fs" />
+    <Compile Include="RenderTasks\TransparencyRenderTask.fs" />
     <Compile Include="RenderTasks\EmptyRenderTask.fs" />
     <Compile Include="RenderTasks\SequentialRenderTask.fs" />
     <Compile Include="RenderTasks\AdaptiveRenderTask.fs" />

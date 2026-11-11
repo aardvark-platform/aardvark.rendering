@@ -51,6 +51,8 @@ type EnvVar private () =
 
     static let vulkanInlineCommands = EnvVarCell "AARDVARK_VULKAN_INLINE_COMMANDS"
     static let vulkanLibrary = EnvVarCell "AARDVARK_VULKAN_LIBRARY"
+    static let oit = EnvVarCell "AARDVARK_OIT"
+    static let oitABufferDebug = EnvVarCell "AARDVARK_OIT_ABUFFER_DEBUG"
 
     /// Returns whether a switch value enables it: "1", "on", "true" and "yes" (ignoring case
     /// and surrounding whitespace) do, everything else, including null, does not.
@@ -64,6 +66,24 @@ type EnvVar private () =
     /// Returns whether the value is neither null nor empty.
     static member IsSet (value : string) =
         not (String.IsNullOrEmpty value)
+
+    // Aardvark.Rendering
+
+    /// Overrides the transparency technique requested from IRuntime.CompileRender: "off" (also "0",
+    /// "false") renders without a transparency pass, "auto" picks the best supported technique, "wb"
+    /// weighted-blended, "abuffer" the A-buffer; other values keep the request. Read when a render
+    /// task is compiled, so it can be set programmatically before compiling.
+    static member AARDVARK_OIT
+        with get () = oit.Value
+        and set (value : string) = oit.Value <- value
+
+    /// Diagnostic mode of the A-buffer resolve pass: 1 visualizes the stored sample coverage of
+    /// each pixel, 2 outputs the sample index to check that the pass runs per sample; any other
+    /// value composites normally. Read once when the transparency render task module is
+    /// initialized.
+    static member AARDVARK_OIT_ABUFFER_DEBUG
+        with get () = oitABufferDebug.Value
+        and set (value : string) = oitABufferDebug.Value <- value
 
     // Aardvark.Rendering.Vulkan
 

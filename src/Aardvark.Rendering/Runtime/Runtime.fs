@@ -38,6 +38,19 @@ module DebugLevel =
     let ofBool (enable : bool) =
         if enable then DebugLevel.Normal else DebugLevel.None
 
+/// How render objects marked IsTransparent are rendered by CompileRender.
+type Transparency =
+    /// No transparency pass; transparent objects are rendered like opaque ones.
+    | None = 0
+    /// The best technique the runtime supports: ABuffer where fragment-shader interlock
+    /// is available, WeightedBlended otherwise.
+    | Auto = 1
+    /// Weighted-blended order-independent transparency: approximate, runs everywhere.
+    | WeightedBlended = 2
+    /// Exact per-pixel A-buffer. Requires fragment-shader interlock (see
+    /// IRuntime.FragmentShaderInterlock); requesting it on a runtime without interlock
+    /// throws NotSupportedException.
+    | ABuffer = 3
 
 /// Unique ID for render tasks.
 [<Struct; StructuredFormatDisplay("{AsString}")>]
@@ -76,6 +89,13 @@ and IRuntime =
     /// Returns whether debug labels and markers are enabled.
     abstract member DebugLabelsEnabled : bool
 
+    /// Returns whether fragment-shader pixel interlock is supported (per-pixel
+    /// critical sections in the fragment shader: VK_EXT_fragment_shader_interlock
+    /// on Vulkan, GL_ARB_fragment_shader_interlock on desktop GL). The exact
+    /// A-buffer OIT path needs this; without it the transparency wrapper falls
+    /// back from Transparency.Auto to weighted-blended OIT.
+    abstract member FragmentShaderInterlock : bool
+
     abstract member OnDispose : IEvent<unit>
 
     /// Compiles an effect for the given framebuffer signature and topology.
@@ -88,8 +108,16 @@ and IRuntime =
     /// Compiles a render task for clearing a framebuffer with the given values.
     abstract member CompileClear : signature : IFramebufferSignature * values : aval<ClearValues> -> IRenderTask
 
+    /// <summary>
     /// Compiles a render task for the given render objects.
-    abstract member CompileRender : signature : IFramebufferSignature * objects : aset<IRenderObject> -> IRenderTask
+    /// </summary>
+    /// <param name="signature">The framebuffer signature the task renders to.</param>
+    /// <param name="objects">The render objects to render.</param>
+    /// <param name="transparency">How render objects marked
+    /// <see cref="RenderObject.IsTransparent"/> are rendered. With <see cref="Transparency.None"/>
+    /// they are rendered like opaque ones. Default is <see cref="Transparency.Auto"/>.</param>
+    abstract member CompileRender : signature : IFramebufferSignature * objects : aset<IRenderObject> *
+                                    [<Optional; DefaultParameterValue(Transparency.Auto)>] transparency : Transparency -> IRenderTask
 
     abstract member CreateGeometryPool : Map<Symbol, Type> -> IGeometryPool
 

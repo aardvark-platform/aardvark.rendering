@@ -43,6 +43,12 @@ type Runtime(device : Device) as this =
 
     member x.DebugLabelsEnabled = instance.DebugLabelsEnabled
 
+    // VK_EXT_fragment_shader_interlock. False on AMD's Windows proprietary
+    // driver and most mobile / iGPU drivers; the transparency wrapper falls
+    // back to Weighted-Blended OIT when this is false.
+    member x.FragmentShaderInterlock =
+        x.Device.EnabledFeatures.Shaders.FragmentShaderPixelInterlock
+
     member x.CreateStreamingTexture (mipMaps : bool) : IStreamingTexture =
         raise <| NotImplementedException()
 
@@ -88,9 +94,13 @@ type Runtime(device : Device) as this =
     member x.CompileRender(renderPass : IFramebufferSignature, cmd : RuntimeCommand) =
         new CommandTask(manager, unbox renderPass, cmd)
 
-    member x.CompileRender (renderPass : IFramebufferSignature, set : aset<IRenderObject>) =
-        let set = ShaderDebugger.hookRenderObjects set
-        new CommandTask(manager, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
+    member x.CompileRender (renderPass : IFramebufferSignature, set : aset<IRenderObject>,
+                            [<Optional; DefaultParameterValue(Transparency.Auto)>] transparency : Transparency) : IRenderTask =
+        if transparency = Transparency.None then
+            let set = ShaderDebugger.hookRenderObjects set
+            new CommandTask(manager, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
+        else
+            TransparencyRenderTask.create x renderPass transparency set
 
     member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =
         new ClearTask(manager, unbox signature, values) :> IRenderTask
@@ -564,6 +574,8 @@ type Runtime(device : Device) as this =
 
         member x.DebugLabelsEnabled = x.DebugLabelsEnabled
 
+        member x.FragmentShaderInterlock = x.FragmentShaderInterlock
+
         member x.DeviceCount = x.DeviceCount
 
         member x.ShaderDepthRange = x.ShaderDepthRange
@@ -618,7 +630,7 @@ type Runtime(device : Device) as this =
             x.DownloadStencil(t, target, level, slice, offset)
 
         member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)
-        member x.CompileRender (signature, set) = x.CompileRender(signature, set)
+        member x.CompileRender (signature, set, transparency) = x.CompileRender(signature, set, transparency)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         member x.PrepareEffect(signature, effect, topology) = x.PrepareEffect(signature, effect, topology)
