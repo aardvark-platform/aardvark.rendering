@@ -113,6 +113,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         Monitor.Enter l
 
         if isDisposed then
+            Monitor.Exit l
             failf' (fun msg -> ObjectDisposedException(null, msg)) "cannot use disposed ContextHandle"
 
         match ContextHandle.Current with
