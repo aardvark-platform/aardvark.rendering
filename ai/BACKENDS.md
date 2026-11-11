@@ -98,6 +98,10 @@ let surface = runtime.PrepareEffect(fboSig, myEffect, IndexedGeometryMode.Triang
 // 4. Cache by (signature, effect, topology)
 ```
 
+### Storage Images
+
+Storage images declared by graphics shaders are bound read-write when the pipeline state is applied (`pImageBindings` in `src/Aardvark.Rendering.GL/Management/PreparedRenderObject.fs`), and a memory barrier covering shader image access, texture fetches and texture updates is issued after an object that uses them, so `imageStore` writes are visible to later fetches and downloads.
+
 ### GLVM Integration
 
 GLVM is a **native C++ instruction-based command buffer** that optimizes GL state changes:

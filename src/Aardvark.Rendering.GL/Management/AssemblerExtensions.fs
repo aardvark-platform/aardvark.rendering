@@ -1235,6 +1235,9 @@ module GLAssemblerExtensions =
         member inline x.BindStorageBuffer(slot : int, view : IResource<Buffer, int>) =
             x.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, slot, view.Pointer)
 
+        member inline x.BindImageTexture(slot : int, access : TextureAccess, binding : IResource<ImageBinding, ImageBinding>) =
+            x.BindImageTexture(slot, access, binding.Pointer)
+
         member inline x.BindTexture (texture : IResource<Texture, TextureBinding>) =
             let texturePtr : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt texture.Pointer)
             let targetPtr : nativeptr<TextureTarget> = NativePtr.ofNativeInt (NativePtr.toNativeInt texture.Pointer + 4n)
