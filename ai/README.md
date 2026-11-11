@@ -25,6 +25,7 @@ Index for AI coding assistants. Read only the doc you need.
 ### Scene Graph
 - `ISg`, `IApplicator`, `IGroup` -> SG-CORE.md
 - `Sg.*` (TrafoApplicator, SurfaceApplicator, etc.) -> SG-CORE.md
+- `Sg.transparent`, `Sg.opaque`, `Sg.compile'` -> SG-CORE.md, SG-PATTERNS.md
 - `Ag.Scope`, Semantic Rules -> SG-SEMANTICS.md
 - Picking cache reuse and lifetime tradeoff -> SG-SEMANTICS.md
 - FShade `effect { }` composition -> SG-SEMANTICS.md

@@ -77,6 +77,7 @@ sg |> Sg.camera camera  // Sets both view and proj
 | `PassApplicator` | Render pass | `Sg.pass` |
 | `UniformApplicator` | Shader uniforms | `Sg.uniform` |
 | `TextureApplicator` | Texture uniforms | `Sg.texture`, `Sg.diffuseTexture` |
+| `TransparentApplicator` | Transparency pass membership | `Sg.transparent`, `Sg.opaque` |
 
 ```fsharp
 // Shader effects

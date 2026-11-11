@@ -16,6 +16,7 @@
     <Compile Include="Technique.fs" />
     <Compile Include="Naive.fs" />
     <Compile Include="WeightedBlended.fs" />
+    <Compile Include="BuiltIn.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

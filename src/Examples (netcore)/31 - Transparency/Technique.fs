@@ -1,4 +1,4 @@
-﻿namespace Transparency
+﻿namespace TransparencyExample
 
 open System
 open Aardvark.Base

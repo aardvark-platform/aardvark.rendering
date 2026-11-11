@@ -814,6 +814,15 @@ module SgFSharp =
         let pass (pass : RenderPass) (sg : ISg) =
             Sg.PassApplicator(pass, sg) :> ISg
 
+        /// Marks the subtree's render objects as transparent. They are rendered in the
+        /// transparency pass of the render task (see RenderObject.IsTransparent).
+        let transparent (sg : ISg) =
+            Sg.TransparentApplicator(true, sg) :> ISg
+
+        /// Marks the subtree's render objects as opaque (the default).
+        let opaque (sg : ISg) =
+            Sg.TransparentApplicator(false, sg) :> ISg
+
         /// Creates a single draw call for the given geometry mode.
         let draw (mode : IndexedGeometryMode) =
             Sg.RenderNode(

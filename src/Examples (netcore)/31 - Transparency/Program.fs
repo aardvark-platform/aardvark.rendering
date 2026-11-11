@@ -1,15 +1,17 @@
 ﻿(*
 
-This example demonstrates various techniques for order-independent transparency (OIT).
+This example demonstrates various techniques for order-independent transparency (OIT):
 
-Currently the following techniques are implemented:
- * Weighted Blended Order-Independent Transparency [McGuire2013]
+ * unsorted alpha blending as a reference for the artifacts the other techniques avoid
+ * Weighted Blended Order-Independent Transparency [McGuire2013], implemented in this example
+ * the transparency support built into the runtime (Sg.transparent): weighted blended OIT and,
+   where fragment shader interlock is available, an exact per-pixel A-buffer
 
- The project is organized in a way that makes it possible to easily add more techniques in the future.
+The project is organized in a way that makes it possible to easily add more techniques in the future.
 
 *)
 
-namespace Transparency
+namespace TransparencyExample
 
 open Aardvark.Base
 open Aardvark.Rendering
@@ -52,16 +54,28 @@ module Program =
                 C4f(C3f.Plum, 0.25f)
             ]
 
-        colors
-        |> List.mapi (fun i c ->
-            let offset = V2d(0.25, 0.5) * float i
-            let rotation = 20.0 * float i
+        let windows =
+            colors
+            |> List.mapi (fun i c ->
+                let offset = V2d(0.25, 0.5) * float i
+                let rotation = 20.0 * float i
 
-            windowSg c
-            |> Sg.transform (Trafo3d.RotationYInDegrees rotation)
-            |> Sg.translate offset.X offset.Y 2.0
-        )
-        |> Sg.ofList
+                windowSg c
+                |> Sg.transform (Trafo3d.RotationYInDegrees rotation)
+                |> Sg.translate offset.X offset.Y 2.0
+            )
+
+        // two windows crossing each other (rotated about the up axis): their
+        // intersection line reveals sorting errors
+        let crossed =
+            [ C4f(C3f.Gold, 0.4f), 45.0; C4f(C3f.MediumOrchid, 0.4f), -45.0 ]
+            |> List.map (fun (c, rotation) ->
+                windowSg c
+                |> Sg.transform (Trafo3d.RotationZInDegrees rotation)
+                |> Sg.translate (-3.0) (-2.0) 2.0
+            )
+
+        Sg.ofList (windows @ crossed)
 
     [<EntryPoint>]
     let main _argv =
@@ -107,6 +121,9 @@ module Program =
             [|
                 new Naive.Technique(runtime, framebuffer, scene) :> ITechnique
                 new WeightedBlended.Technique(runtime, framebuffer, scene) :> ITechnique
+                new BuiltIn.Technique(runtime, framebuffer, scene, Transparency.WeightedBlended) :> ITechnique
+                if runtime.FragmentShaderInterlock then
+                    new BuiltIn.Technique(runtime, framebuffer, scene, Transparency.ABuffer) :> ITechnique
             |]
 
         gui.Render <- fun () ->

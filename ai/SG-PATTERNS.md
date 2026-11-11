@@ -116,6 +116,18 @@ let scene =
     |> Sg.onOff isVisible
 ```
 
+### Transparent Objects
+
+```fsharp
+// marks the subtree's render objects for the transparency pass of the render task
+let scene = Sg.ofList [ walls; glass |> Sg.transparent ]
+
+// Sg.compile uses Transparency.Auto; Sg.compile' takes the technique explicitly
+let task = Sg.compile' runtime signature Transparency.WeightedBlended scene
+```
+
+See RENDER-CORE.md (Transparency) for the techniques and the `AARDVARK_OIT` override.
+
 ### Adaptive Collections
 
 ```fsharp

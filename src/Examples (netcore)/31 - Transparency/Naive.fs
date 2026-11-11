@@ -1,4 +1,4 @@
-﻿namespace Transparency
+﻿namespace TransparencyExample
 
 module Naive =
 
