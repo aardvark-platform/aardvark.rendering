@@ -349,6 +349,11 @@ module ``PointCloud Sg Extensions`` =
             member x.Config = config
             member x.Progress = progress
 
+            // Leaf: the render objects are built by PointCloudRenderObjectSemantics, so
+            // this goes through RenderSg.bridge.
+            interface IRenderSg with
+                member self.GetRenderObjects ts = RenderSg.bridge self ts
+
         let pointCloud (data : ILodData) (info : PointCloudInfo) =
             PointCloud(data, info, Progress.empty) :> ISg
 

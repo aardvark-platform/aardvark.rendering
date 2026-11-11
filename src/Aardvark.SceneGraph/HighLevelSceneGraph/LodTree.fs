@@ -62,6 +62,62 @@ module LodTreeRendering =
             member x.SplitFactor = splitfactor
             interface ISg
 
+            /// Shared body for the Ag rule and the IRenderSg path: builds the
+            /// ILodRenderObject around the node and the pipeline state.
+            static member internal BuildROs
+                ( sg : LodTreeNode,
+                  state : PipelineState,
+                  surface : Surface,
+                  pass : RenderPass,
+                  model : aval<Trafo3d>,
+                  view : aval<Trafo3d>,
+                  proj : aval<Trafo3d>,
+                  attributeScope : Ag.Scope ) : aset<IRenderObject> =
+                let id = RenderObjectId.New()
+                let obj =
+                    { new ILodRenderObject with
+                        member x.Id = id
+                        member x.AttributeScope = attributeScope
+                        member x.RenderPass = pass
+                        member x.Prepare(r, fbo) =
+                            let config =
+                                {
+                                    fbo = fbo
+                                    time = sg.Time
+                                    surface = surface
+                                    state = state
+                                    pass = pass
+                                    model = model
+                                    view = view
+                                    proj = proj
+                                    budget = sg.Budget
+                                    renderBounds = sg.RenderBounds
+                                    maxSplits = sg.MaxSplits
+                                    splitfactor = sg.SplitFactor
+                                    stats = sg.Stats
+                                    pickTrees = sg.PickTrees
+                                    alphaToCoverage = sg.AlphaToCoverage
+                                }
+                            r.CreateLodRenderer(config, sg.Clouds)
+                    }
+                ASet.single (obj :> IRenderObject)
+
+            // Direct render path: no bridge needed. AttributeScope is Ag.Scope.Root since
+            // there is no real scope; the LOD renderer queries the state-based provider
+            // in PipelineState.GlobalUniforms with the root scope anyway.
+            interface IRenderSg with
+                member self.GetRenderObjects ts =
+                    LodTreeNode.BuildROs(
+                        self,
+                        PipelineState.ofTraversalState ts,
+                        ts.Surface,
+                        ts.RenderPass,
+                        TraversalState.composedModelTrafo ts,
+                        ts.ViewTrafo,
+                        ts.ProjTrafo,
+                        Ag.Scope.Root
+                    )
+
             new(stats : cval<LodRendererStats>, pickTrees : cmap<ILodTreeNode,SimplePickTree>, alphaToCoverage : bool, budget : aval<int64>, splitfactor : aval<float>, renderBounds : aval<bool>, maxSplits : aval<int>, time : aval<System.DateTime>, clouds : aset<LodTreeInstance>) =
                 LodTreeNode(stats, Some pickTrees, alphaToCoverage, budget, splitfactor, renderBounds, maxSplits, time, clouds)
             new(stats : cval<LodRendererStats>, alphaToCoverage : bool, budget : aval<int64>, splitfactor : aval<float>, renderBounds : aval<bool>, maxSplits : aval<int>, time : aval<System.DateTime>, clouds : aset<LodTreeInstance>) =
@@ -81,41 +137,14 @@ open Aardvark.SceneGraph
 [<Rule>]
 type LodNodeSem() =
     member x.RenderObjects(sg : Sg.LodTreeNode, scope : Ag.Scope) =
-        let state = PipelineState.ofScope scope
-        let surface = scope.Surface
-        let pass = scope.RenderPass
-
-        let model = scope.ModelTrafo
-        let view = scope.ViewTrafo
-        let proj = scope.ProjTrafo
-
-        let id = RenderObjectId.New()
-        let obj =
-            { new ILodRenderObject with
-                member x.Id = id
-                member x.AttributeScope = scope
-                member x.RenderPass = pass
-                member x.Prepare(r, fbo) = 
-                    let config =
-                        {
-                            fbo = fbo
-                            time = sg.Time
-                            surface = surface
-                            state = state
-                            pass = pass
-                            model = model
-                            view = view
-                            proj = proj
-                            budget = sg.Budget
-                            renderBounds = sg.RenderBounds
-                            maxSplits = sg.MaxSplits
-                            splitfactor = sg.SplitFactor
-                            stats = sg.Stats
-                            pickTrees = sg.PickTrees
-                            alphaToCoverage = sg.AlphaToCoverage
-                        }
-
-                    r.CreateLodRenderer(config, sg.Clouds)
-            }
-
-        ASet.single (obj :> IRenderObject)
+        // Delegate to the shared body on LodTreeNode.
+        Sg.LodTreeNode.BuildROs(
+            sg,
+            PipelineState.ofScope scope,
+            scope.Surface,
+            scope.RenderPass,
+            scope.ModelTrafo,
+            scope.ViewTrafo,
+            scope.ProjTrafo,
+            scope
+        )

@@ -740,6 +740,11 @@ module ``Air Sg Interop`` =
             interface ISg
             member x.Content = content
 
+            // Leaf: the render objects are built by the AirNode Ag rule, so this goes
+            // through RenderSg.bridge.
+            interface IRenderSg with
+                member self.GetRenderObjects ts = RenderSg.bridge self ts
+
 
 [<AutoOpen>]
 module ``Air Sg F#`` =

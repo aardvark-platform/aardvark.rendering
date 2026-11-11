@@ -17,6 +17,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Core\Core.fs" />
+    <Compile Include="Core\TraversalState.fs" />
+    <Compile Include="Core\RenderSg.fs" />
     <Compile Include="Core\Sg.fs" />
     <Compile Include="Core\Tools.fs" />
     <Compile Include="Semantics\Cache.fs" />

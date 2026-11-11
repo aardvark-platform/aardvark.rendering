@@ -60,6 +60,7 @@ let tests (targets: TestTarget list) =
             Rendering.SceneGraph.BoundingBox.tests
             Rendering.SceneGraph.Picking.tests
             Rendering.SceneGraph.BufferCache.tests
+            Rendering.SceneGraph.RenderSg.tests
             Rendering.Transparency.tests
         ]
 

@@ -125,6 +125,11 @@ module ``Sg RuntimeCommand Extensions`` =
             interface ISg
             member x.Command = command
 
+            // Leaf: the render objects are built by the RuntimeCommandSem Ag rule, so
+            // this goes through RenderSg.bridge.
+            interface IRenderSg with
+                member self.GetRenderObjects ts = RenderSg.bridge self ts
+
 
         let execute (cmd : RenderCommand) =
             RuntimeCommandNode(cmd) :> ISg

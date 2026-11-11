@@ -119,6 +119,11 @@ module PipelineState =
 [<AutoOpen>]
 module RenderObjectSemantics =
 
+    // ISg.RenderObjects stays on the attribute-grammar entry point even though every
+    // Sg node implements IRenderSg: third-party nodes and rules may depend on Ag
+    // attributes that a TraversalState does not carry. The direct path is taken at the
+    // render-task entry point (SceneGraphRuntimeExtensions) and is available per node
+    // through IRenderSg.GetRenderObjects.
     type ISg with
         member x.RenderObjects(scope : Ag.Scope) : aset<IRenderObject> = x?RenderObjects(scope)
 

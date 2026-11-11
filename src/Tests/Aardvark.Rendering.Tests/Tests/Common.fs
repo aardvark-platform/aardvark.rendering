@@ -63,8 +63,7 @@ module ``Unit Test Utilities`` =
 
             | _ ->
                 fun () ->
-                    IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
-                    Aardvark.Init()
+                    TestApplication.init ()
                     test CpuRuntime.Instance
 
         testCase name run

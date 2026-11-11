@@ -13,9 +13,17 @@ open FSharp.Data.Adaptive
 type SceneGraphRuntimeExtensions private() =
 
     static let toRenderObjects (runtime : IRuntime) (sg : ISg) =
-        let app = Sg.DynamicNode(AVal.constant sg)
-        app?Runtime <- runtime
-        app.RenderObjects(Ag.Scope.Root)
+        // IRenderSg nodes build their render objects directly from a TraversalState
+        // seeded with the runtime; everything else goes through the attribute grammar.
+        // EnvVar.AARDVARK_LEGACY_SG forces the attribute grammar for every scene graph,
+        // e.g. to check whether a rendering problem is caused by the direct path.
+        match sg with
+        | :? IRenderSg as s when not (EnvVar.IsEnabled EnvVar.AARDVARK_LEGACY_SG) ->
+            s.GetRenderObjects (TraversalState.withRuntime runtime TraversalState.empty)
+        | _ ->
+            let app = Sg.DynamicNode(AVal.constant sg)
+            app?Runtime <- runtime
+            app.RenderObjects(Ag.Scope.Root)
 
     /// <summary>
     /// Compiles a render task for the given scene graph.

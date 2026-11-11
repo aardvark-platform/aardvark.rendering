@@ -15,7 +15,12 @@ module NaiveLod =
         member x.High = high
         member x.ViewDecider = viewDecider
 
-        new(viewDecider : System.Func<LodScope, bool>, low : ISg, high : ISg) = 
+        // Leaf: the render objects are built by the LodSem Ag rule, which decides the
+        // level from attributes of the scope, so this goes through RenderSg.bridge.
+        interface IRenderSg with
+            member self.GetRenderObjects ts = RenderSg.bridge self ts
+
+        new(viewDecider : System.Func<LodScope, bool>, low : ISg, high : ISg) =
             LodNode((fun t -> viewDecider.Invoke t), AVal.constant low, AVal.constant high)
 
     module Sg =

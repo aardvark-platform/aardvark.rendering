@@ -202,8 +202,19 @@ module ``Sg Picking Extensions`` =
 
             member x.Pickable = pickable
 
+            // There is no RenderObjects rule for this node: picking (PickObjects and
+            // RequirePicking) are separate Ag attributes, and rendering passes through.
+            interface IRenderSg with
+                member _.GetRenderObjects ts =
+                    child |> ASet.bind (fun c -> RenderSg.get c ts)
+
         type RequirePickingApplicator(child : aval<ISg>) =
             inherit Sg.AbstractApplicator(child)
+
+            // There is no RenderObjects rule for this node: rendering passes through.
+            interface IRenderSg with
+                member _.GetRenderObjects ts =
+                    child |> ASet.bind (fun c -> RenderSg.get c ts)
 
         let pickable (shape : PickShape) (sg : ISg) =
             PickableApplicator(AVal.constant (Pickable.ofShape shape), AVal.constant sg) :> ISg

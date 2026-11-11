@@ -144,13 +144,14 @@ module TestApplication =
                 app, onExit
             )
 
-    let mutable private aardvarkInitialized = false
+    /// Initializes Aardvark. The test assembly is the entry assembly, so rules and plugins
+    /// of every referenced Aardvark assembly (e.g. Aardvark.Rendering.Text) are discovered.
+    let init () =
+        IntrospectionProperties.CustomEntryAssembly <- typeof<ITestApplication>.Assembly
+        Aardvark.Init()
 
     let create' (debug : IDebugConfig) (backend : TestBackend) =
-        if not aardvarkInitialized then
-            IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
-            Aardvark.Init()
-            aardvarkInitialized <- true
+        init ()
 
         match backend with
         | TestBackend.GL f -> GL.create f debug

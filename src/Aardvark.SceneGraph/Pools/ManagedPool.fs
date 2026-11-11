@@ -317,6 +317,31 @@ type IRuntimePoolExtensions private() =
             instanceBufferUsage, instanceBufferStorage
         )
 
+// Declared before the Sg nodes so PoolNode.BuildROs (below) and GeometrySetNode can
+// use it; previously it lived inside `module ``Pool Semantics```.
+module internal DrawCallBuffer =
+
+    let private evaluate (mdc : ManagedDrawCall) =
+        let mutable c = mdc.Call
+        DrawCallInfo.ToggleIndexed(&c)
+        c
+
+    let create (runtime : IRuntime) (storage : BufferStorage) (calls : aset<ManagedDrawCall>) =
+        let buffer =
+            runtime.CreateCompactBuffer(
+                evaluate, calls,
+                BufferUsage.Indirect ||| BufferUsage.ReadWrite,
+                storage
+            )
+
+        if runtime.DebugLabelsEnabled then
+            buffer.Name <- "Indirect Buffer (ManagedPool)"
+
+        (buffer.Count, buffer) ||> AdaptiveResource.map2 (
+            IndirectBuffer.ofBuffer true 0UL sizeof<DrawCallInfo>
+        )
+
+
 [<AutoOpen>]
 module ManagedPoolSg =
 
@@ -329,6 +354,36 @@ module ManagedPoolSg =
             member x.Mode = mode
             member x.Storage = storage
 
+            /// Shared body for the Ag rule and the IRenderSg path.
+            static member internal BuildROs
+                ( p : PoolNode,
+                  isActive : aval<bool>,
+                  newRO : unit -> RenderObject ) : aset<IRenderObject> =
+                let pool = p.Pool
+
+                let calls =
+                    isActive
+                    |> ASet.bind (fun active -> if active then p.Calls else ASet.empty)
+                    |> DrawCallBuffer.create pool.Runtime p.Storage
+
+                let ro = newRO ()
+                ro.Mode <- p.Mode
+                ro.Indices <- Some pool.IndexBuffer
+                ro.VertexAttributes <- pool.VertexAttributes
+                ro.InstanceAttributes <- pool.InstanceAttributes
+                ro.DrawCalls <- DrawCalls.Indirect calls
+
+                ASet.single (ro :> IRenderObject)
+
+            // Direct render path: no bridge needed.
+            interface IRenderSg with
+                member self.GetRenderObjects ts =
+                    PoolNode.BuildROs(
+                        self,
+                        ts.IsActive,
+                        (fun () -> RenderObject.ofTraversalState ts)
+                    )
+
         /// Draws an adaptive set of managed draw calls of the given pool.
         let pool (pool : ManagedPool) (mode : IndexedGeometryMode) (calls : aset<ManagedDrawCall>) =
             PoolNode(pool, calls, mode) :> ISg
@@ -337,45 +392,12 @@ module ManagedPoolSg =
 module ``Pool Semantics`` =
     open Aardvark.SceneGraph.Semantics
 
-    module internal DrawCallBuffer =
-
-        let private evaluate (mdc : ManagedDrawCall) =
-            let mutable c = mdc.Call
-            DrawCallInfo.ToggleIndexed(&c)
-            c
-
-        let create (runtime : IRuntime) (storage : BufferStorage) (calls : aset<ManagedDrawCall>) =
-            let buffer =
-                runtime.CreateCompactBuffer(
-                    evaluate, calls,
-                    BufferUsage.Indirect ||| BufferUsage.ReadWrite,
-                    storage
-                )
-
-            if runtime.DebugLabelsEnabled then
-                buffer.Name <- "Indirect Buffer (ManagedPool)"
-
-            (buffer.Count, buffer) ||> AdaptiveResource.map2 (
-                IndirectBuffer.ofBuffer true 0UL sizeof<DrawCallInfo>
-            )
-
     [<Rule>]
     type PoolSem() =
         member x.RenderObjects(p : Sg.PoolNode, scope : Ag.Scope) : aset<IRenderObject> =
-            let pool = p.Pool
-
-            let calls =
-                scope.IsActive
-                |> ASet.bind (fun isActive -> if isActive then p.Calls else ASet.empty)
-                |> DrawCallBuffer.create pool.Runtime p.Storage
-
-            let mutable ro = Unchecked.defaultof<RenderObject>
-
-            ro <- RenderObject.ofScope scope
-            ro.Mode <- p.Mode
-            ro.Indices <- Some pool.IndexBuffer
-            ro.VertexAttributes <- pool.VertexAttributes
-            ro.InstanceAttributes <- pool.InstanceAttributes
-            ro.DrawCalls <- DrawCalls.Indirect calls
-
-            ASet.single (ro :> IRenderObject)
+            // Delegate to the shared body on PoolNode.
+            Sg.PoolNode.BuildROs(
+                p,
+                scope.IsActive,
+                (fun () -> RenderObject.ofScope scope)
+            )

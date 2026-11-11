@@ -248,4 +248,5 @@ State accumulates as you pipe through applicators.
 **Key Files**:
 - `src/Aardvark.SceneGraph/Core/Core.fs` - ISg interfaces
 - `src/Aardvark.SceneGraph/Core/Sg.fs` - Concrete node types
+- `src/Aardvark.SceneGraph/Core/RenderSg.fs`, `Core/TraversalState.fs` - `IRenderSg` direct render path (see SG-SEMANTICS.md)
 - `src/Aardvark.SceneGraph/SgFSharp.fs` - F# builder API

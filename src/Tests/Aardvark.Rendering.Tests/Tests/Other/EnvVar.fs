@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Tests.Other
 
+open System
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Expecto
@@ -21,9 +22,34 @@ module EnvVar =
             Expect.isTrue (EnvVar.IsSet " ") "whitespace is set"
             Expect.isTrue (EnvVar.IsSet "0") "zero is set"
 
+        /// Uses AARDVARK_LEGACY_SG as a representative registry entry.
+        let overrideAndReset () =
+            let name = "AARDVARK_LEGACY_SG"
+            try
+                EnvVar.AARDVARK_LEGACY_SG <- "1"
+                Expect.equal EnvVar.AARDVARK_LEGACY_SG "1" "override is returned"
+
+                // The process environment is ignored while an override is set ...
+                Environment.SetEnvironmentVariable(name, "on")
+                Expect.equal EnvVar.AARDVARK_LEGACY_SG "1" "override wins over the process environment"
+
+                // ... and read again after a reset.
+                EnvVar.AARDVARK_LEGACY_SG <- null
+                Expect.equal EnvVar.AARDVARK_LEGACY_SG "on" "reset reads the process environment"
+
+                // Later changes to the process environment are not seen until the next reset.
+                Environment.SetEnvironmentVariable(name, null)
+                Expect.equal EnvVar.AARDVARK_LEGACY_SG "on" "value is cached"
+                EnvVar.AARDVARK_LEGACY_SG <- null
+                Expect.isNull EnvVar.AARDVARK_LEGACY_SG "unset after reset"
+            finally
+                Environment.SetEnvironmentVariable(name, null)
+                EnvVar.AARDVARK_LEGACY_SG <- null
+
     let tests (target : TestTarget) =
         [
-            "IsEnabled", Cases.isEnabled
-            "IsSet",     Cases.isSet
+            "IsEnabled",          Cases.isEnabled
+            "IsSet",              Cases.isSet
+            "Override and reset", Cases.overrideAndReset
         ]
         |> prepareCasesCpu "EnvVar" target

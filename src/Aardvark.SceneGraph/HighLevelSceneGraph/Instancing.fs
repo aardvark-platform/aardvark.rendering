@@ -14,6 +14,11 @@ module Instancing =
             member x.Child = child
             member x.Uniforms = uniforms
 
+            // Leaf: the render objects are built by the InstancingSem Ag rule, so this
+            // goes through RenderSg.bridge.
+            interface IRenderSg with
+                member self.GetRenderObjects ts = RenderSg.bridge self ts
+
         let instanced' (attributes : Map<string, System.Type * aval<System.Array>>) (sg : ISg) : ISg =
             if Map.isEmpty attributes then
                 sg

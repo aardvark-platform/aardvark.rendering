@@ -7,7 +7,7 @@ Index for AI coding assistants. Read only the doc you need.
 | Task | Document | Size |
 |------|----------|------|
 | ISg hierarchy, applicators, composition | SG-CORE.md | ~7 KB |
-| Semantic system, picking cache contract, FShade, custom applicators | SG-SEMANTICS.md | ~9 KB |
+| Semantic system, direct render path, picking cache contract, FShade, custom applicators | SG-SEMANTICS.md | ~11 KB |
 | Scene graph usage patterns, gotchas | SG-PATTERNS.md | ~6 KB |
 | IRuntime, resources, render objects, tasks | RENDER-CORE.md | ~11 KB |
 | Rendering usage patterns, offscreen, gotchas | RENDER-PATTERNS.md | ~8 KB |
@@ -27,6 +27,7 @@ Index for AI coding assistants. Read only the doc you need.
 - `Sg.*` (TrafoApplicator, SurfaceApplicator, etc.) -> SG-CORE.md
 - `Sg.transparent`, `Sg.opaque`, `Sg.compile'` -> SG-CORE.md, SG-PATTERNS.md
 - `Ag.Scope`, Semantic Rules -> SG-SEMANTICS.md
+- `IRenderSg`, `TraversalState`, `RenderSg.bridge`, `AARDVARK_LEGACY_SG` -> SG-SEMANTICS.md
 - Picking cache reuse and lifetime tradeoff -> SG-SEMANTICS.md
 - FShade `effect { }` composition -> SG-SEMANTICS.md
 - Custom applicators -> SG-SEMANTICS.md

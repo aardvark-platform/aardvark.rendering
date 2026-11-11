@@ -53,6 +53,7 @@ type EnvVar private () =
     static let vulkanLibrary = EnvVarCell "AARDVARK_VULKAN_LIBRARY"
     static let oit = EnvVarCell "AARDVARK_OIT"
     static let oitABufferDebug = EnvVarCell "AARDVARK_OIT_ABUFFER_DEBUG"
+    static let legacySg = EnvVarCell "AARDVARK_LEGACY_SG"
 
     /// Returns whether a switch value enables it: "1", "on", "true" and "yes" (ignoring case
     /// and surrounding whitespace) do, everything else, including null, does not.
@@ -102,3 +103,12 @@ type EnvVar private () =
     static member AARDVARK_VULKAN_LIBRARY
         with get () = vulkanLibrary.Value
         and set (value : string) = vulkanLibrary.Value <- value
+
+    // Aardvark.SceneGraph
+
+    /// Set to 1 to make IRuntime.CompileRender build the render objects of every scene graph through
+    /// the attribute grammar instead of the direct IRenderSg path, e.g. to check whether a rendering
+    /// problem is caused by the direct path. Read whenever a scene graph is compiled.
+    static member AARDVARK_LEGACY_SG
+        with get () = legacySg.Value
+        and set (value : string) = legacySg.Value <- value

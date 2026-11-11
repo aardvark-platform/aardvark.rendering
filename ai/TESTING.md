@@ -176,6 +176,14 @@ try run ()
 finally EnvVar.SOME_SWITCH <- null
 ```
 
+## Attribute-Grammar Rules
+
+`TestApplication.init` makes the test assembly the introspection entry assembly before
+`Aardvark.Init()`, so Ag rules and plugins of every assembly the test project references
+(for example `Aardvark.Rendering.Text`) are discovered. A test that needs the rules of
+another assembly only needs a project reference to it. Ag builds its rule table once per
+process, so assemblies loaded later are not seen.
+
 ## Validation
 
 Restore and run the test project with the repository commands:

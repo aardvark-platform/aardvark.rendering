@@ -44,6 +44,12 @@ type TrafoSem() =
 
 Source: `src/Aardvark.SceneGraph/Semantics/Trafo.fs`
 
+An inherited rule must assign its attribute on every invocation. Ag invokes the rule of
+the parent node when a child looks the attribute up; if the rule returns without
+assigning, Ag logs `[Ag] bad inherit method` and reports the attribute as missing. For
+an attribute that exists only sometimes, use a separate node type that is inserted only
+when the value exists instead of a conditional rule.
+
 ### Dynamic Member Access
 
 Use `?` operator to access semantic attributes:
@@ -88,6 +94,35 @@ type RenderObjectSem() =
 ```
 
 Source: `src/Aardvark.SceneGraph/Semantics/RenderObject.fs`
+
+### Direct Render Path (IRenderSg)
+
+Every node in `Core/Sg.fs` and the high-level nodes implement `IRenderSg`, whose `GetRenderObjects` builds the
+render objects from an explicit `TraversalState` record instead of an `Ag.Scope`. The
+state carries the same attributes as the inherited Ag attributes (`TraversalState.empty`
+matches the root seeders) and `RenderObject.ofTraversalState` mirrors
+`RenderObject.ofScope`, so both paths yield observationally identical render objects.
+`CompileRender` takes the direct path for an `IRenderSg` root; setting the environment
+variable `AARDVARK_LEGACY_SG=1` forces the attribute-grammar entry point, which helps
+to tell whether a rendering problem is caused by the direct path. Only `RenderObjects`
+takes the direct path; bounding boxes and picking still use the attribute grammar.
+
+Nodes without an `IRenderSg` implementation (`Sg.afterEffect`, custom `AbstractApplicator`
+subclasses), and leaves whose rules read the scope (`Sg.delay`, naive LOD, runtime commands,
+Air, instancing, point clouds), are reached through `RenderSg.bridge`:
+an `IApplicator` node whose inherited rules seed every state field onto the child's
+scope. Two attributes have no root seeder in the attribute grammar and are optional in
+the state: `CameraLocation` exists only below a view trafo applicator, and `Runtime`
+only when the render-task entry point provided one. The bridge inserts a node for each
+of them only when the state has a value.
+
+Custom applicators can stay Ag-only; they are bridged. A custom node that implements
+`IRenderSg` must keep its Ag rules, because an `IRenderSg` node inside a legacy tree
+is evaluated by the attribute grammar.
+
+The equivalence of both paths is tested in `Tests/Rendering/SceneGraph/RenderSg.fs`.
+
+Source: `src/Aardvark.SceneGraph/Core/TraversalState.fs`, `src/Aardvark.SceneGraph/Core/RenderSg.fs`
 
 ### Render-Object Bounding-Box Scope
 
@@ -261,5 +296,6 @@ Source: Attribute grammar semantics in `src/Aardvark.SceneGraph/Semantics/`
 
 **Key Files**:
 - `src/Aardvark.SceneGraph/Semantics/RenderObject.fs` - ISg to IRenderObject
+- `src/Aardvark.SceneGraph/Core/RenderSg.fs` - Direct render path and the bridge to the attribute grammar
 - `src/Aardvark.SceneGraph/Semantics/Trafo.fs` - Transformation semantics
 - `src/Aardvark.SceneGraph/ShaderCompositions.fs` - Effect composition
