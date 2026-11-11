@@ -413,7 +413,9 @@ type IBufferExtensions private() =
     ///<param name="count">The maximum number of elements to retrieve. Default is UInt64.MaxValue.</param>
     ///<param name="offset">Offset (in bytes) into the buffer. Default is 0.</param>
     ///<param name="stride">Number of bytes between elements or 0 for tightly packed data. Default is 0.</param>
-    ///<returns>An array containing the buffer elements.</returns>
+    ///<returns>An array containing at most the requested number of complete buffer elements.</returns>
+    ///<remarks>An effective count of zero returns a typed empty array without accessing buffer content.
+    /// A whole, tightly packed, same-type ArrayBuffer retains its original array, including when empty.</remarks>
     [<Extension>]
     static member ToArray(buffer: IBuffer, elementType: Type,
                           [<Optional; DefaultParameterValue(UInt64.MaxValue)>] count: uint64,
@@ -430,6 +432,8 @@ type IBufferExtensions private() =
 
             if count = uint64 buffer.Data.Length && offset = 0UL && stride = elementSize then
                 buffer.Data
+            elif count = 0UL then
+                Array.CreateInstance(elementType, 0)
             else
                 if stride = elementSize && offset % elementSize = 0UL then
                     let result = Array.CreateInstance(elementType, int64 count)
@@ -441,20 +445,23 @@ type IBufferExtensions private() =
         | :? INativeBuffer as buffer ->
             let available = getAvailableCount elementSize stride offset buffer.SizeInBytes
             let count = min available count
-            buffer.Use(copyToArray elementType elementSize stride offset count)
+            if count = 0UL then Array.CreateInstance(elementType, 0)
+            else buffer.Use(copyToArray elementType elementSize stride offset count)
 
         | :? IBackendBuffer as buffer ->
             let available = getAvailableCount elementSize stride offset buffer.SizeInBytes
             let count = min available count
 
-            if stride = elementSize then
+            if count = 0UL then
+                Array.CreateInstance(elementType, 0)
+            elif stride = elementSize then
                 let result = Array.CreateInstance(elementType, int64 count)
                 result |> NativeInt.pin (fun dst ->
                     buffer.Download(offset, dst, count * elementSize)
                 )
                 result
             else
-                let copySize = if count = 0UL then 0UL else stride * (count - 1UL) + elementSize
+                let copySize = stride * (count - 1UL) + elementSize
                 let tmp = Marshal.AllocHGlobal(nativeint copySize)
                 try
                     buffer.Download(offset, tmp, copySize)
@@ -470,7 +477,9 @@ type IBufferExtensions private() =
     ///<param name="count">The maximum number of elements to retrieve. Default is UInt64.MaxValue.</param>
     ///<param name="offset">Offset (in bytes) into the buffer. Default is 0.</param>
     ///<param name="stride">Number of bytes between elements or 0 for tightly packed data. Default is 0.</param>
-    ///<returns>An array containing the buffer elements.</returns>
+    ///<returns>An array containing at most the requested number of complete buffer elements.</returns>
+    ///<remarks>An effective count of zero returns a typed empty array without accessing buffer content.
+    /// A whole, tightly packed, same-type ArrayBuffer retains its original array, including when empty.</remarks>
     [<Extension>]
     static member inline ToArray<'T when 'T : unmanaged>(buffer: IBuffer,
                                                          [<Optional; DefaultParameterValue(UInt64.MaxValue)>] count: uint64,

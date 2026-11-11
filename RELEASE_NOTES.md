@@ -1,3 +1,5 @@
+- Empty `IBuffer.ToArray` reads now return a correctly typed empty array without accessing host or GPU content, including exhausted offsets and incomplete trailing elements; whole-array reuse is preserved.
+
 ### 5.6.12
 - Fixed adaptive textures and texture arrays to clean up newly created handles when assigning their debug name fails.
 - Reject negative memory-manager resize sizes before changing allocations, preserving live blocks and neighboring payloads.
