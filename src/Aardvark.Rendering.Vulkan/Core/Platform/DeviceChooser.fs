@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open Aardvark.Base
+open Aardvark.Rendering
 open System
 open System.Reflection
 open System.IO
@@ -16,6 +17,8 @@ type IDeviceChooser =
 
 
 /// Base class for device choosers that support caching the selected device.
+/// The environment variable AARDVARK_VULKAN_DEVICE overrides the choice: it accepts
+/// "integrated", "discrete" (or "dedicated"), or a case-insensitive substring of a device name.
 [<AbstractClass>]
 type DeviceChooser() =
 
@@ -79,9 +82,38 @@ type DeviceChooser() =
         with e ->
             Log.warn $"[Vulkan] Failed to write device config file '{configPath}': {e.Message}"
 
+    /// Selects the device named by EnvVar.AARDVARK_VULKAN_DEVICE.
+    /// Returns None if the variable is not set or if its value matches no device.
+    static let tryChooseByEnvironment (devices: PhysicalDevice[]) =
+        match EnvVar.AARDVARK_VULKAN_DEVICE with
+        | value when EnvVar.IsSet value ->
+            let chosen =
+                match value.Trim().ToLowerInvariant() with
+                | "integrated" -> devices |> Array.tryFind (fun d -> d.Type = VkPhysicalDeviceType.IntegratedGpu)
+                | "discrete" | "dedicated" -> devices |> Array.tryFind (fun d -> d.Type = VkPhysicalDeviceType.DiscreteGpu)
+                | name -> devices |> Array.tryFind (fun d -> d.Name.ToLowerInvariant().Contains name)
+
+            match chosen with
+            | Some device ->
+                Log.line "[Vulkan] AARDVARK_VULKAN_DEVICE=%s -> %s" value device.Name
+                Some device
+
+            | None ->
+                Log.warn "[Vulkan] AARDVARK_VULKAN_DEVICE=%s matches no device, available devices are:" value
+                for d in devices do
+                    Log.warn "[Vulkan]     %s (%A)" d.Name d.Type
+                None
+
+        | _ ->
+            None
+
     /// Returns whether stored choice should be ignored even if available.
     abstract member IgnoreCache : bool
     default _.IgnoreCache = false
+
+    /// Returns whether the AARDVARK_VULKAN_DEVICE environment variable may override the choice.
+    abstract member AllowEnvironmentOverride : bool
+    default _.AllowEnvironmentOverride = true
 
     /// Returns a device to use from the given array of devices.
     abstract member Choose : devices: PhysicalDevice[] -> PhysicalDevice
@@ -90,19 +122,30 @@ type DeviceChooser() =
         if devices.Length = 0 then
             failwithf "[Vulkan] No devices to select from"
 
-        elif devices.Length = 1 then
-            devices.[0]
-
         else
-            let chosen =
-                if this.IgnoreCache then
-                    this.Choose devices
-                else
-                    tryReadConfig devices
-                    |> Option.defaultWith (fun _ -> this.Choose devices)
+            // The environment override is not cached, so it does not change the
+            // stored choice of later runs without the variable.
+            let fromEnvironment =
+                if this.AllowEnvironmentOverride then tryChooseByEnvironment devices
+                else None
 
-            writeConfig chosen devices
-            chosen
+            match fromEnvironment with
+            | Some device ->
+                device
+
+            | None ->
+                if devices.Length = 1 then
+                    devices.[0]
+                else
+                    let chosen =
+                        if this.IgnoreCache then
+                            this.Choose devices
+                        else
+                            tryReadConfig devices
+                            |> Option.defaultWith (fun _ -> this.Choose devices)
+
+                    writeConfig chosen devices
+                    chosen
 
     interface IDeviceChooser with
         member this.Run(devices) = this.Run(devices)

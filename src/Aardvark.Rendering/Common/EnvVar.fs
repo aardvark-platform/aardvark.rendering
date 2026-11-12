@@ -54,6 +54,7 @@ type EnvVar private () =
     static let oit = EnvVarCell "AARDVARK_OIT"
     static let oitABufferDebug = EnvVarCell "AARDVARK_OIT_ABUFFER_DEBUG"
     static let legacySg = EnvVarCell "AARDVARK_LEGACY_SG"
+    static let vulkanDevice = EnvVarCell "AARDVARK_VULKAN_DEVICE"
 
     /// Returns whether a switch value enables it: "1", "on", "true" and "yes" (ignoring case
     /// and surrounding whitespace) do, everything else, including null, does not.
@@ -103,6 +104,14 @@ type EnvVar private () =
     static member AARDVARK_VULKAN_LIBRARY
         with get () = vulkanLibrary.Value
         and set (value : string) = vulkanLibrary.Value <- value
+
+    /// Selects the physical device: "integrated", "discrete" (or "dedicated"), or a part of a device
+    /// name (case-insensitive). A value matching no device logs a warning and falls back to the
+    /// regular choice. Read whenever a device is chosen, unless DeviceChooser.AllowEnvironmentOverride
+    /// is false.
+    static member AARDVARK_VULKAN_DEVICE
+        with get () = vulkanDevice.Value
+        and set (value : string) = vulkanDevice.Value <- value
 
     // Aardvark.SceneGraph
 

@@ -165,6 +165,10 @@ let runtime = new Runtime(device)
 // - Validation layers (if debug)
 ```
 
+### Device Selection
+
+`DeviceChooser.Run` (`src/Aardvark.Rendering.Vulkan/Core/Platform/DeviceChooser.fs`) first honours the environment variable `AARDVARK_VULKAN_DEVICE`: `integrated`, `discrete` (or `dedicated`), or a case-insensitive part of a device name. A match is used and not written to the device cache; a value that matches no device logs a warning listing the available devices and falls back to the regular choice. A chooser can opt out with `AllowEnvironmentOverride`. Without the variable a single device is used directly; with several, the cached choice from the config directory is used unless the chooser ignores the cache (`DeviceChooserAuto` does, and ranks dedicated and conformant devices first).
+
 ### Vulkan.Runtime Class Structure
 
 **Key members:**
