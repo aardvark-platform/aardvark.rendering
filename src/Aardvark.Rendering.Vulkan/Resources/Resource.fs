@@ -9,6 +9,12 @@ type Resource =
         val public Device : Device
         val mutable private refCount : int
 
+        // Instrumentation: net count of live (created but not yet destroyed) resources
+        // across the whole device (buffers, images, image views, samplers, query pools,
+        // etc.). Used by leak-detection tests.
+        static let mutable liveCount = 0
+        static member LiveCount = liveCount
+
         member x.ReferenceCount =
             x.refCount
 
@@ -30,6 +36,7 @@ type Resource =
             if refs < 0 then
                 Log.warn $"[Vulkan] Resource {x} has negative reference count ({refs})"
             elif refs = 0 then
+                Interlocked.Decrement &liveCount |> ignore
                 x.Destroy()
 
         abstract member IsValid : bool
@@ -38,8 +45,13 @@ type Resource =
 
         abstract member Destroy : unit -> unit
 
-        new(device: Device) = { Device = device; refCount = 1 }
-        new(device: Device, referenceCount: int) = { Device = device; refCount = referenceCount }
+        new(device: Device) =
+            Interlocked.Increment &liveCount |> ignore
+            { Device = device; refCount = 1 }
+
+        new(device: Device, referenceCount: int) =
+            Interlocked.Increment &liveCount |> ignore
+            { Device = device; refCount = referenceCount }
 
         interface IResource with
             member x.AddReference() = x.AddReference()

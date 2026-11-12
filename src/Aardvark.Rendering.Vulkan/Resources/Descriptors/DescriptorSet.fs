@@ -25,6 +25,12 @@ type DescriptorSet =
         val public Layout : DescriptorSetLayout
         val private onDestroyed : Event<unit>
 
+        // Instrumentation: net count of live (allocated but not yet freed) descriptor
+        // sets across the whole device. Used by leak-detection tests to confirm that
+        // the per-frame compute/render path does not accumulate descriptor sets.
+        static let mutable liveCount = 0
+        static member LiveCount = liveCount
+
         [<CLIEvent>]
         member x.OnDestroyed = x.onDestroyed.Publish
 
@@ -34,9 +40,11 @@ type DescriptorSet =
                     x.Handle <- VkDescriptorSet.Null
                     x.Pool.FreeSet()
                 )
+                System.Threading.Interlocked.Decrement &liveCount |> ignore
                 x.onDestroyed.Trigger()
 
         new(device : Device, pool : DescriptorPool, layout : DescriptorSetLayout, handle : VkDescriptorSet) =
+            System.Threading.Interlocked.Increment &liveCount |> ignore
             { inherit Resource<_>(device, handle); Pool = pool; Layout = layout; onDestroyed = Event<unit>() }
     end
 

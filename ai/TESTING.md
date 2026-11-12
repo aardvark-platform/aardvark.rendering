@@ -176,6 +176,13 @@ try run ()
 finally EnvVar.SOME_SWITCH <- null
 ```
 
+## Leak Checks
+
+The Vulkan backend counts live resources and descriptor sets device-wide in
+`Resource.LiveCount` and `DescriptorSet.LiveCount` (`src/Aardvark.Rendering.Vulkan/Resources/`).
+A leak test renders a few warm-up frames, records both counts, runs the per-frame path
+under test and expects the counts to stay flat.
+
 ## Attribute-Grammar Rules
 
 `TestApplication.init` makes the test assembly the introspection entry assembly before
