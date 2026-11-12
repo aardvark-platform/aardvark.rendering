@@ -173,6 +173,13 @@ Encapsulates all state for a draw call.
 | `Uniforms` | `IUniformProvider` | Shader uniforms |
 | `Activate` | `unit -> IDisposable` | Per-frame activation callback |
 
+### Render Object Kinds
+
+Every object in a render task implements `IRenderObject` (`Id`, `RenderPass`, `AttributeScope`). Besides `RenderObject` the backends handle (all in `src/Aardvark.Rendering/Pipeline/RenderObject/`):
+
+- `MultiRenderObject`: a list of child render objects.
+- `ActivationRenderObject`: renders nothing; the backends call its `Activate` when it enters a render task and dispose the handle when it leaves, which scopes a producer's resource lifetime to the union of the tasks rendering it.
+
 ### Pipeline State Structs
 
 ```fsharp

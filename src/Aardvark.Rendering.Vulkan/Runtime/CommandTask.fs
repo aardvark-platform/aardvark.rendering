@@ -779,6 +779,16 @@ module private RuntimeCommands =
         override x.Compile(_,_) = ()
         override x.Free() = ()
 
+    /// Renders nothing. It only holds the ActivationRenderObject's activation for
+    /// the lifetime of this command, i.e. as long as the object is in the task.
+    and ActivationCommand(o : ActivationRenderObject) =
+        inherit PreparedCommand()
+
+        let activation = o.Activate()
+
+        override x.Compile(_,_) = ()
+        override x.Free() = activation.Dispose()
+
     /// Rendering a single IRenderObject
     and RenderObjectCommand(compiler : Compiler, o : IRenderObject) =
         inherit PreparedCommand()
@@ -1126,6 +1136,7 @@ module private RuntimeCommands =
         let compile (o : IRenderObject) =
             match o with
             | :? CommandRenderObject as o -> compiler.Compile o.Command
+            | :? ActivationRenderObject as o -> new ActivationCommand(o) :> PreparedCommand
             | _ -> new RenderObjectCommand(compiler, o) :> PreparedCommand
 
         let insert (token : AdaptiveToken) (o : IRenderObject) =
