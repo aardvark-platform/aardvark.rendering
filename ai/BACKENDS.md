@@ -410,14 +410,9 @@ task.Run(token, renderToken, output)
 // Context switched: VAO invalidated, regenerates
 ```
 
-### Descriptor Set Caching (Vulkan Only)
+### Descriptor Sets and Pools (Vulkan Only)
 
-Reusable descriptor sets pool:
-
-```fsharp
-// Resources with same layout reuse descriptor sets
-// Reduces VkAllocateDescriptorSets calls
-```
+A descriptor set resource is cached per layout and binding list (`ResourceManager.CreateDescriptorSet`), so only objects whose adaptive descriptor bindings are identical share a `VkDescriptorSet`. Each resource keeps a version per element and rewrites only the descriptors whose version changed. Sets are allocated from a device-wide pool bag (`DescriptorPoolBag` in `src/Aardvark.Rendering.Vulkan/Resources/Descriptors/DescriptorSet.fs`): a pool holds up to 1024 sets and is sized from the layouts it serves, allocation falls back to a new pool on fragmentation or out-of-pool-memory errors, and a pool whose sets have all been freed is reset and kept for reuse while the bag holds at most 8 pools.
 
 ---
 

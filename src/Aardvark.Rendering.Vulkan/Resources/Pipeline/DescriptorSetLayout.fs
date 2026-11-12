@@ -46,14 +46,21 @@ module DescriptorSetLayoutBinding =
 type DescriptorSetLayout =
     class
         inherit Resource<VkDescriptorSetLayout>
-        val public Bindings : array<DescriptorSetLayoutBinding>
+        val public Bindings : DescriptorSetLayoutBinding[]
 
-        override x.Destroy() =
-            if x.Handle.IsValid then
-                VkRaw.vkDestroyDescriptorSetLayout(x.Device.Handle, x.Handle, NativePtr.zero)
-                x.Handle <- VkDescriptorSetLayout.Null
+        /// Total descriptor count per descriptor type over all bindings.
+        member this.GetDescriptorCounts() =
+            (Map.empty, this.Bindings) ||> Array.fold (fun result binding ->
+                let sum = result |> Map.tryFindV binding.DescriptorType |> ValueOption.defaultValue 0
+                result |> Map.add binding.DescriptorType (sum + binding.DescriptorCount)
+            )
 
-        new(device : Device, handle : VkDescriptorSetLayout, bindings) =
+        override this.Destroy() =
+            if this.Handle.IsValid then
+                VkRaw.vkDestroyDescriptorSetLayout(this.Device.Handle, this.Handle, NativePtr.zero)
+                this.Handle <- VkDescriptorSetLayout.Null
+
+        new(device : Device, handle : VkDescriptorSetLayout, bindings : DescriptorSetLayoutBinding[]) =
             { inherit Resource<_>(device, handle); Bindings = bindings }
     end
 

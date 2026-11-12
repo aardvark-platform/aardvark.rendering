@@ -16,6 +16,10 @@ type LockedSet<'T>(elements : seq<'T>) =
     member x.Add(item : 'T) =
         lock x (fun _ -> store.Add item)
 
+    /// Adds the given elements.
+    member x.Add(items : 'T seq) =
+        lock x (fun _ -> store.UnionWith items)
+
     /// Removes the given element and returns if it was actually removed.
     member x.Remove(item : 'T) =
         lock x (fun _ -> store.Remove item)
