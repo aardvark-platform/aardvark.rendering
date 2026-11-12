@@ -9,15 +9,6 @@ open FSharp.Data.Adaptive
 
 module internal ComputeTaskInternals =
 
-    type ComputeInputBinding =
-        {
-            Shader         : IComputeShader
-            DescriptorSets : INativeResourceLocation<DescriptorSetBinding>
-        }
-
-        interface IComputeInputBinding with
-            member x.Shader = x.Shader
-
     type PushConstant(shader: IComputeShader, name: Symbol, inputType: Type) =
         let layout =
             shader.PipelineLayout.PushConstants
@@ -48,18 +39,6 @@ module internal ComputeTaskInternals =
     type PushConstant<'T>(shader: IComputeShader, name: Symbol) =
         inherit PushConstant(shader, name, typeof<'T>)
         interface IComputeConstant<'T>
-
-    type ResourceManager with
-
-        member x.CreateComputeInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
-            let provider = UniformProvider.computeInputs inputs
-
-            let descriptorSets =
-                let sets = x.CreateDescriptorSets(shader.PipelineLayout, provider)
-                x.CreateDescriptorSetBinding(VkPipelineBindPoint.Compute, shader.PipelineLayout, sets)
-
-            { Shader         = shader
-              DescriptorSets = descriptorSets }
 
     [<RequireQualifiedAccess>]
     type private HostCommand =
@@ -446,16 +425,7 @@ module internal ComputeTaskInternals =
             let add (index : Index) (command : ComputeCommand) =
                 match command with
                 | ComputeCommand.SetInputCmd input ->
-                    let input =
-                        match input with
-                        | :? ComputeInputBinding as input ->
-                            input
-
-                        | :? MutableComputeInputBinding as binding ->
-                            manager.CreateComputeInputBinding(binding.Shader, binding)
-
-                        | _ ->
-                            failf "unknown input binding type %A" (input.GetType())
+                    let input = manager.GetComputeInputBinding input
 
                     resources.Add input.DescriptorSets
                     inputs.[index] <- input

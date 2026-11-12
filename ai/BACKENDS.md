@@ -199,6 +199,8 @@ Vulkan records commands into `VkCommandBuffer` via native VKVM library:
 
 A prepared command reports whether its stream changed when it is compiled or updated, and the command task re-records its command buffer only when a command reported a change or the output or the resources changed. A content-only change that marks the tree keeps the recorded buffer (`PrintRenderTaskRecompile` logs the cause of each re-recording).
 
+Compute dispatches of the command API (`RuntimeCommand.Dispatch`) cannot run inside a render pass. Each is recorded into a separate compute stream that the task replays before the pass begins, re-recorded every frame with the current descriptor set and group count, with a barrier for transfer and compute writes before the dispatch and one from compute writes to vertex reads after it.
+
 ### VKVM Integration
 
 VKVM is a **Vulkan helper library** (P/Invoke via `Aardvark.Rendering.Vulkan.Wrapper`):
