@@ -127,6 +127,7 @@ type Runtime(device : Device) as this =
     member x.CompileRender (renderPass : IFramebufferSignature, set : aset<IRenderObject>,
                             [<Optional; DefaultParameterValue(Transparency.Auto)>] transparency : Transparency) : IRenderTask =
         if transparency = Transparency.None then
+            let set = SignatureDependentRenderObject.expand renderPass set
             let set = ShaderDebugger.hookRenderObjects set
             new CommandTask(manager, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
         else

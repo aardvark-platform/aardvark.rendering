@@ -98,6 +98,7 @@
     <Compile Include="Pipeline\RenderObject\RenderObject.fs" />
     <Compile Include="Pipeline\RenderObject\MultiRenderObject.fs" />
     <Compile Include="Pipeline\RenderObject\ActivationRenderObject.fs" />
+    <Compile Include="Pipeline\RenderObject\SignatureDependentRenderObject.fs" />
     <Compile Include="Pipeline\Raytracing\TraceInstance.fs" />
     <Compile Include="Pipeline\Raytracing\RaytracingPipelineState.fs" />
     <Compile Include="Runtime\Lod\Lod.fs" />

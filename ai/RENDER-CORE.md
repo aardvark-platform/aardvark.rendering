@@ -179,6 +179,7 @@ Every object in a render task implements `IRenderObject` (`Id`, `RenderPass`, `A
 
 - `MultiRenderObject`: a list of child render objects.
 - `ActivationRenderObject`: renders nothing; the backends call its `Activate` when it enters a render task and dispose the handle when it leaves, which scopes a producer's resource lifetime to the union of the tasks rendering it.
+- `SignatureDependentRenderObject`: expanded by `CompileRender` into its actual render objects once the framebuffer signature is known (`SignatureDependentRenderObject.expand`); it carries `IsTransparent` and `IsPickable` eagerly so the transparency split and pick routing can decide before the expansion.
 
 ### Pipeline State Structs
 

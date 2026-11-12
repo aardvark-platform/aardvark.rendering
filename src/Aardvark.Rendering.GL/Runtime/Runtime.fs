@@ -492,6 +492,7 @@ type Runtime(debug : IDebugConfig) =
     member x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>,
                             [<Optional; DefaultParameterValue(Transparency.Auto)>] transparency: Transparency) : IRenderTask =
         if transparency = Transparency.None then
+            let set = SignatureDependentRenderObject.expand signature set
             let set = ShaderDebugger.hookRenderObjects set
             new RenderTasks.RenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
         else

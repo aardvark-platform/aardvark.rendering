@@ -424,6 +424,7 @@ module TransparencyRenderTask =
     let private isTransparent (o : IRenderObject) =
         match o with
         | :? RenderObject as r -> r.IsTransparent
+        | :? SignatureDependentRenderObject as s -> s.IsTransparent   // split before the expansion
         | _ -> false
 
     /// Per-attachment blend-mode map for the OIT pass. Only Accum and
@@ -626,6 +627,16 @@ module TransparencyRenderTask =
             |> List.map (fun (_, att) -> att.Name, att.Format)
 
         let opaqueSet = objects |> ASet.filter (not << isTransparent)
+
+        // A `SignatureDependentRenderObject` carries no `Surface.Effect`, so the transparent
+        // transforms below would drop it via `| _ -> None` and its transparent objects would
+        // silently vanish from the transparency pass. Expand those into their concrete render
+        // objects first, against `userSig` (whose color attachments the intermediate
+        // framebuffer mirrors), as on the eager path where render objects are built against
+        // the render signature and then composed. An opaque expansion is dropped by the
+        // `isTransparent` guard. The opaque pass expands separately inside `compileRaw` with
+        // the intermediate signature.
+        let objects = SignatureDependentRenderObject.expand userSig objects
         let transparentSet =
             objects |> ASet.choose (fun o ->
                 if isTransparent o then
