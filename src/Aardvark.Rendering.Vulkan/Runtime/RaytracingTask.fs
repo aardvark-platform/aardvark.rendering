@@ -186,6 +186,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
     let resources = ResourceLocationSet()
     let mutable compiled = new CompiledCommand(manager, resources, pipeline, commands)
     let mutable currentEffect = compiled.Effect
+    let mutable isDisposed = false
 
     let updateCommandResources (t : AdaptiveToken) (rt : RenderToken) =
         let effect = effect.GetValue t
@@ -228,14 +229,23 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
     member val Name : string = null with get, set
 
     member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
-        x.EvaluateIfNeeded token () (fun token ->
-            use _ = renderToken.Use()
-            use _ = getDeviceToken()
-            updateCommandResources token renderToken
+        x.EvaluateAlways token (fun token ->
+            if isDisposed then
+                let name = if isNull x.Name then "" else $" (Name = {x.Name})"
+                raise <| ObjectDisposedException(null, $"Cannot update disposed raytracing task{name}.")
+
+            if x.OutOfDate then
+                use _ = renderToken.Use()
+                use _ = getDeviceToken()
+                updateCommandResources token renderToken
         )
 
     member x.Run(token : AdaptiveToken, renderToken : RenderToken) =
         x.EvaluateAlways token (fun token ->
+            if isDisposed then
+                let name = if isNull x.Name then "" else $" (Name = {x.Name})"
+                raise <| ObjectDisposedException(null, $"Cannot run disposed raytracing task{name}.")
+
             use _ = renderToken.Use()
             use dt = getDeviceToken()
             updateCommandResources token renderToken
@@ -259,9 +269,11 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
     member x.Dispose() =
         transact (fun _ ->
-            compiled.Dispose()
-            inner.Dispose()
-            pool.Dispose()
+            if not isDisposed then
+                isDisposed <- true
+                compiled.Dispose()
+                inner.Dispose()
+                pool.Dispose()
         )
 
     interface IRaytracingTask with

@@ -73,6 +73,7 @@ let tests (targets: TestTarget list) =
             Compute.MutableInputBinding.tests
             Compute.PushConstants.tests
             Compute.Dispatch.tests
+            Compute.ComputeTasks.tests
         ]
 
         testAllTargets "Raytracing" [

@@ -323,7 +323,7 @@ module internal ComputeTaskInternals =
                 State.modify (fun s ->
                     let cmd, p =
                         match s.Commands with
-                        | (CompiledCommand.Program p)::_ -> s.Commands, p
+                        | CompiledCommand.Program p ::_ -> s.Commands, p
                         | _ ->
                             let p = new AssemblerProgram(s.Debug)
                             CompiledCommand.Program p :: s.Commands, p
@@ -547,12 +547,12 @@ module internal ComputeTaskInternals =
 
                 | _ -> command
 
-            let remove (removedInputs : System.Collections.Generic.List<_>) (index : Index) =
+            let remove (removedInputs : List<_>) (index : Index) =
                 match inputs.TryRemove(index) with
-                | (true, input) -> removedInputs.Add input
+                | true, input -> removedInputs.Add input
                 | _ ->
                     match nested.TryRemove(index) with
-                    | (true, other) -> other.Outputs.Remove owner |> ignore
+                    | true, other -> other.Outputs.Remove owner |> ignore
                     | _ -> ()
 
                 match commands.TryGet index with
@@ -567,10 +567,10 @@ module internal ComputeTaskInternals =
 
             member x.Update(token : AdaptiveToken) =
                 let deltas = reader.GetChanges(token)
-                let removedInputs = System.Collections.Generic.List<ComputeInputBinding>()
+                let removedInputs = List<ComputeInputBinding>()
 
                 // Process deltas
-                for (index, op) in deltas do
+                for index, op in deltas do
                     remove removedInputs index
 
                     match op with
@@ -622,6 +622,7 @@ module internal ComputeTaskInternals =
         let ctx = manager.Context
         let resources = new ResourceInputSet()
         let compiler = new CommandCompiler(this, manager, resources, input, debug)
+        let mutable isDisposed = false
 
         let update (token : AdaptiveToken) (renderToken : RenderToken) (action : unit -> unit) =
             use __ = renderToken.Use()
@@ -640,12 +641,21 @@ module internal ComputeTaskInternals =
         member val Name : string = null with get, set
 
         member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
-            x.EvaluateIfNeeded token () (fun token ->
-                update token renderToken ignore
+            x.EvaluateAlways token (fun token ->
+                if isDisposed then
+                    let name = if isNull x.Name then "" else $" (Name = {x.Name})"
+                    raise <| ObjectDisposedException(null, $"Cannot update disposed compute task{name}.")
+
+                if x.OutOfDate then
+                    update token renderToken ignore
             )
 
         member x.Run(token : AdaptiveToken, renderToken : RenderToken) =
             x.EvaluateAlways token (fun token ->
+                if isDisposed then
+                    let name = if isNull x.Name then "" else $" (Name = {x.Name})"
+                    raise <| ObjectDisposedException(null, $"Cannot run disposed compute task{name}.")
+
                 update token renderToken (fun _ ->
                     for cmd in compiler.Commands do
                         cmd.Run(ctx, token, renderToken)
@@ -654,8 +664,10 @@ module internal ComputeTaskInternals =
 
         member x.Dispose() =
             lock x (fun _ ->
-                compiler.Dispose()
-                resources.Dispose()
+                if not isDisposed then
+                    isDisposed <- true
+                    compiler.Dispose()
+                    resources.Dispose()
             )
 
         interface IComputeTask with
