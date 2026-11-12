@@ -78,6 +78,7 @@ module AdaptiveBufferTests =
                     Array.Copy(a.Data, b.Data, int count)
                     match x.Error Copy with Some error -> raise error | None -> ()
                 member _.Copy(_, _, _ : BufferCopyRegion[]) = unexpected()
+                member _.GetMappedPointer(_) = unexpected()
 
         type private Overridden(runtime : Runtime, size, usage, storage, discard) =
             inherit AdaptiveBuffer(runtime, size, usage, storage, discard)

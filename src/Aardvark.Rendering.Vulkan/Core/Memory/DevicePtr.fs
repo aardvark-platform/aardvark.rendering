@@ -95,6 +95,11 @@ type DevicePtr =
     member this.CopyTo(size: uint64, dst: nativeint) =
         this.CopyTo(0UL, size, dst)
 
+    /// Persistent host pointer of the (host-visible, persistently mapped) allocation; 0n otherwise.
+    member this.MappedPointer : nativeint =
+        if this.hostVisible then this.allocationInfo.allocationInfo.pMappedData
+        else 0n
+
     /// Flush a range of a host-visible allocation so host writes through the mapped
     /// pointer become device-visible (no-op for coherent or device-local memory).
     member this.Flush(offset: uint64, size: uint64) =

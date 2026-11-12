@@ -161,3 +161,9 @@ and IBufferRuntime =
     ///<param name="dst">The buffer to copy data to.</param>
     ///<param name="regions">The regions to copy.</param>
     abstract member Copy : src : IBackendBuffer * dst : IBackendBuffer * regions : BufferCopyRegion[] -> unit
+
+    ///<summary>Returns a persistent host pointer to the buffer's memory if it is host-visible
+    /// and mapped, zero otherwise. The pointer stays valid for the buffer's lifetime;
+    /// writes through it become visible to subsequent copy operations.</summary>
+    ///<param name="buffer">The buffer to query.</param>
+    abstract member GetMappedPointer : buffer : IBackendBuffer -> nativeint

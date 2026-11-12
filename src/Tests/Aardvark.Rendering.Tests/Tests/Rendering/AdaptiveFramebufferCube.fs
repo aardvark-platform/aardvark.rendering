@@ -108,6 +108,7 @@ module AdaptiveFramebufferCube =
                 member _.DownloadAsync(_, _, _, _) = unexpected()
                 member _.Copy(_, _, _, _, _, _) = unexpected()
                 member _.Copy(_, _, _ : BufferCopyRegion[]) = unexpected()
+                member _.GetMappedPointer(_) = unexpected()
 
         type private FailureSite = Color | Depth | Framebuffer
 

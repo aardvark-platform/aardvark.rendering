@@ -149,6 +149,11 @@ type Runtime(debug : IDebugConfig) =
         member x.Copy(src : IBackendBuffer, dst : IBackendBuffer, regions : BufferCopyRegion[]) =
             x.Copy(src, dst, regions)
 
+        // GL buffers are not persistently mapped by the runtime; callers fall back
+        // to a pinned host array + Upload.
+        member x.GetMappedPointer(_ : IBackendBuffer) : nativeint =
+            0n
+
         member x.DownloadAsync(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, size : uint64) : unit -> unit =
             raise <| NotImplementedException()
 

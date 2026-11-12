@@ -136,6 +136,8 @@ module BufferViewBoundaries =
             member _.Copy(_, _, _ : BufferCopyRegion[]) =
                 raise <| NotSupportedException()
 
+            member _.GetMappedPointer(_) = 0n
+
     let private expectCalls (runtime : RecordingRuntime) (expected : TransferCall array) =
         Expect.sequenceEqual runtime.Calls expected "unexpected backing-buffer transfer window"
 

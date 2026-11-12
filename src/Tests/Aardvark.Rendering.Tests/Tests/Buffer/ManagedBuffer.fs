@@ -70,6 +70,7 @@ module ManagedBuffer =
 
             member _.Copy(_, _, _, _, _, _) = ()
             member _.Copy(_, _, _ : BufferCopyRegion[]) = ()
+            member _.GetMappedPointer(_) = 0n
 
     module private Helpers =
 

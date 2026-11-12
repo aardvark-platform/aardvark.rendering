@@ -75,6 +75,8 @@ Describes how buffer elements are accessed.
 
 **Multi-region copies:** `IBufferRuntime.Copy(src, dst, regions : BufferCopyRegion[])` copies several regions (`SrcOffset`, `DstOffset`, `SizeInBytes`) in one operation; regions must not overlap when source and destination are the same buffer. Vulkan records one copy command and flushes a host-visible source first.
 
+**Mapped pointers:** `IBufferRuntime.GetMappedPointer(buffer)` returns the persistent host pointer of a host-visible, mapped buffer, or zero (GL buffers are not persistently mapped, so callers fall back to uploads). Writes through the pointer are visible to later copies.
+
 ### ITexture Types
 
 | Type | Members |
