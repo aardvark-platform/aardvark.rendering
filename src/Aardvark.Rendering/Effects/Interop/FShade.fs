@@ -159,6 +159,9 @@ module FShadeInterop =
 
         let (|Array|_|) (sampler : GLSL.GLSLSampler) =
             match sampler.samplerTextures with
+            // unbounded (bindless) array: samplerCount = -1, a single base-named entry
+            | [ (name, state) ] when sampler.samplerCount < 0 ->
+                Some (name, state)
             | [] | [ _ ] ->
                 None
             | (BaseName baseName, state)::xs ->

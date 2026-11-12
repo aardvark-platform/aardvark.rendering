@@ -201,6 +201,28 @@ let shaderWithStorageBuffer (v : Vertex) =
 
 Source: FShade/Aardvark storage buffer conventions
 
+## Unbounded Arrays in Shaders
+
+A sampler array or storage-buffer array without a declared size is indexed with a non-uniform value in the shader and bound as one descriptor array (Vulkan with descriptor indexing only; MoltenVK and GL do not support it).
+
+```fsharp
+// sampler array without a declared size
+let private textures =
+    sampler2d {
+        textureArray uniform?Textures -1
+        filter Filter.MinMagMipLinear
+    }
+
+// storage-buffer array: one buffer per element
+type UniformScope with
+    member x.Geom : V4f[][] = uniform?StorageBuffer?Geom
+
+// supplied as an array of buffers; textures as (int * aval<ITexture>)[] or amap<int, ITexture>
+sg |> Sg.uniform' "Geom" (buffers : IBuffer[])
+```
+
+The capacity of such an array is `RuntimeConfig.UnboundedArrayCapacity` (default 4096, clamped to the device limit); binding a longer array fails. Descriptor sets are allocated at the number of elements actually used and grow on demand.
+
 ## Conditional Shader Features
 
 Use boolean uniforms to toggle shader features at runtime.

@@ -216,6 +216,32 @@ module PipelineLayout =
 
             sets.[accel.accelSet].Add binding
 
+        // Every stage's descriptors across all sets must fit the device's per-stage
+        // limits. The set layouts clamp each unbounded array on its own, so several
+        // unbounded bindings, or one next to many fixed bindings, can exceed a limit
+        // together; fail here with the cause instead of leaving it to the driver.
+        do
+            let limits = device.PhysicalDevice.Limits.Descriptor
+            let bindings = sets |> Seq.collect id |> Seq.toArray
+            let stageBits = bindings |> Array.fold (fun acc b -> acc ||| int b.StageFlags) 0
+            for i in 0 .. 31 do
+                let bit = 1 <<< i
+                if stageBits &&& bit <> 0 then
+                    let stage = enum<VkShaderStageFlags> bit
+                    let inStage = bindings |> Array.filter (fun b -> int b.StageFlags &&& bit <> 0)
+                    let check (what : string) (types : VkDescriptorType list) (limit : uint32) =
+                        let n = inStage |> Array.sumBy (fun b -> if List.contains b.DescriptorType types then b.DescriptorCount else 0)
+                        if uint32 n > limit then
+                            failf $"stage {stage} binds {n} {what} descriptors but the device limit is {limit} (an unbounded array reserves RuntimeConfig.UnboundedArrayCapacity descriptors)"
+                    check "storage buffer" [VkDescriptorType.StorageBuffer; VkDescriptorType.StorageBufferDynamic] limits.MaxPerStageStorageBuffers
+                    check "uniform buffer" [VkDescriptorType.UniformBuffer; VkDescriptorType.UniformBufferDynamic] limits.MaxPerStageUniformBuffers
+                    check "sampled image" [VkDescriptorType.CombinedImageSampler; VkDescriptorType.SampledImage] limits.MaxPerStageSampledImages
+                    check "sampler" [VkDescriptorType.CombinedImageSampler; VkDescriptorType.Sampler] limits.MaxPerStageSamplers
+                    check "storage image" [VkDescriptorType.StorageImage; VkDescriptorType.StorageTexelBuffer] limits.MaxPerStageStorageImages
+                    let total = inStage |> Array.sumBy _.DescriptorCount
+                    if uint32 total > limits.MaxPerStageResources then
+                        failf $"stage {stage} binds {total} descriptors but the device limit is {limits.MaxPerStageResources} (an unbounded array reserves RuntimeConfig.UnboundedArrayCapacity descriptors)"
+
         let setLayouts =
             sets |> Array.map (fun l -> 
                 if l.Count = 0 then

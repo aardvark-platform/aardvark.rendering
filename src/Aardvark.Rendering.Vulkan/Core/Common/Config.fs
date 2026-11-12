@@ -16,6 +16,17 @@ module RuntimeConfig =
     /// </summary>
     let mutable SuppressUpdateAfterBind = false
 
+    /// <summary>
+    /// Capacity of an unbounded sampler or storage-buffer array in a shader (sampler2D X[], buffer X[]),
+    /// i.e. the maximum number of elements that can be bound. Clamped to the per-stage descriptor limit
+    /// of the device. With variable descriptor counts a descriptor set only allocates the elements it
+    /// actually uses, so the capacity mainly bounds the per-stage descriptor budget of a pipeline layout
+    /// (the capacities of all its unbounded arrays are summed against the device limit). Without variable
+    /// descriptor counts, or for an unbounded array that is not the last binding of its set, every
+    /// descriptor set reserves the full capacity.
+    /// </summary>
+    let mutable UnboundedArrayCapacity = 4096
+
 
 type DebugReportVerbosity =
     | Error       = 1

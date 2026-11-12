@@ -309,7 +309,7 @@ The environment variable `AARDVARK_VULKAN_LIBRARY` names the Vulkan library to l
 | Conservative Rasterization | ✓ (NV ext) | ✓ |
 | Multi-queue | ✗ | ✓ |
 | Async Compute | ✗ | ✓ |
-| Bindless Rendering | ✗ | ✓ (VK_EXT_descriptor_indexing) |
+| Unbounded sampler and storage-buffer arrays | ✗ | ✓ (descriptor indexing; not on MoltenVK) |
 | Indirect Rendering | ✓ | ✓ |
 | Fragment Shader Interlock | ✓ (GL_ARB_fragment_shader_interlock) | ✓ (VK_EXT_fragment_shader_interlock, `DeviceFeatures.Shaders.FragmentShader*Interlock`) |
 
@@ -412,7 +412,7 @@ task.Run(token, renderToken, output)
 
 ### Descriptor Sets and Pools (Vulkan Only)
 
-A descriptor set resource is cached per layout and binding list (`ResourceManager.CreateDescriptorSet`), so only objects whose adaptive descriptor bindings are identical share a `VkDescriptorSet`. Each resource keeps a version per element and rewrites only the descriptors whose version changed. Sets are allocated from a device-wide pool bag (`DescriptorPoolBag` in `src/Aardvark.Rendering.Vulkan/Resources/Descriptors/DescriptorSet.fs`): a pool holds up to 1024 sets and is sized from the layouts it serves, allocation falls back to a new pool on fragmentation or out-of-pool-memory errors, and a pool whose sets have all been freed is reset and kept for reuse while the bag holds at most 8 pools.
+A descriptor set resource is cached per layout and binding list (`ResourceManager.CreateDescriptorSet`), so only objects whose adaptive descriptor bindings are identical share a `VkDescriptorSet`. Each resource keeps a version per element and rewrites only the descriptors whose version changed. Sets are allocated from a device-wide pool bag (`DescriptorPoolBag` in `src/Aardvark.Rendering.Vulkan/Resources/Descriptors/DescriptorSet.fs`): a pool holds up to 1024 sets and is sized from the layouts it serves, allocation falls back to a new pool on fragmentation or out-of-pool-memory errors, and a pool whose sets have all been freed is reset and kept for reuse while the bag holds at most 8 pools. A layout whose last binding is an unbounded array uses a variable descriptor count: the set is allocated at the number of elements actually used and reallocated when that number grows. Pipeline layout creation checks each stage's descriptor totals across all sets against the device's per-stage limits and fails with the cause, since several unbounded arrays reserve their full capacity each.
 
 ---
 
@@ -617,6 +617,7 @@ Configure before creating any runtime:
 | `SuppressSparseBuffers` | false | Disable sparse buffer extensions |
 | `UseNewRenderTask` | false | New render task implementation |
 | `PreferHostSideTextureCompression` | true | CPU-side texture compression |
+| `UnboundedArrayCapacity` (Vulkan) | 4096 | Capacity of an unbounded sampler or storage-buffer array, clamped to the device's per-stage limit; a longer array fails to bind |
 
 ```fsharp
 // Example: High-performance configuration

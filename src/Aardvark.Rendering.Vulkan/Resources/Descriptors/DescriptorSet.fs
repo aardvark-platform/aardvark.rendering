@@ -4,6 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.Raytracing
 open Microsoft.FSharp.NativeInterop
+open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open KHRAccelerationStructure
 open Vulkan11
@@ -12,7 +13,7 @@ open Vulkan11
 
 type Descriptor =
     | UniformBuffer         of slot: int * buffer: UniformBuffer
-    | StorageBuffer         of slot: int * buffer: Buffer * offset: uint64 * size: uint64
+    | StorageBuffer         of slot: int * element: int * buffer: Buffer * offset: uint64 * size: uint64
     | CombinedImageSampler  of slot: int * element: int * view: ImageView * sampler: Sampler * layout: VkImageLayout
     | StorageImage          of slot: int * view: ImageView
     | AccelerationStructure of slot: int * accel: AccelerationStructure
@@ -43,13 +44,22 @@ type DescriptorSet =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSet =
 
-    let tryAlloc (layout : DescriptorSetLayout) (pool : DescriptorPool) =
+    let tryAlloc (layout : DescriptorSetLayout) (variableCount : int) (pool : DescriptorPool) =
         lock pool (fun () ->
-            if pool.TryAllocateSet <| layout.GetDescriptorCounts() then
+            if pool.TryAllocateSet <| layout.GetDescriptorCounts variableCount then
                 native {
                     let! pLayoutHandle = layout.Handle
+
+                    // variable descriptor count: allocate only the per-set count for
+                    // the layout's variable binding (an unbounded sampler or
+                    // storage-buffer array) instead of its full (capped) capacity
+                    let! pCounts = [| uint32 variableCount |]
+                    let! pVarInfo = Vulkan12.VkDescriptorSetVariableDescriptorCountAllocateInfo(1u, pCounts)
+                    let pNext = if layout.VariableCountBinding >= 0 then NativePtr.toNativeInt pVarInfo else 0n
+
                     let! pInfo =
                         VkDescriptorSetAllocateInfo(
+                            pNext,
                             pool.Handle,
                             1u,
                             pLayoutHandle
@@ -69,8 +79,8 @@ module DescriptorSet =
                 None
         )
 
-    let alloc (layout : DescriptorSetLayout) (pool : DescriptorPool) =
-        match tryAlloc layout pool with
+    let alloc (layout : DescriptorSetLayout) (variableCount : int) (pool : DescriptorPool) =
+        match tryAlloc layout variableCount pool with
             | Some d -> d
             | None -> failf "cannot allocate DescriptorSet (out of slots)"
 
@@ -95,7 +105,7 @@ module DescriptorSet =
             descriptors
             |> Array.map (fun desc ->
                 match desc with
-                | StorageBuffer (binding, buffer, offset, size) ->
+                | StorageBuffer (binding, element, buffer, offset, size) ->
                     let info =
                         VkDescriptorBufferInfo(
                             buffer.Handle,
@@ -113,7 +123,7 @@ module DescriptorSet =
                     VkWriteDescriptorSet(
                         set.Handle,
                         uint32 binding,
-                        0u, 1u, VkDescriptorType.StorageBuffer,
+                        uint32 element, 1u, VkDescriptorType.StorageBuffer,
                         NativePtr.zero,
                         ptr,
                         NativePtr.zero
@@ -248,7 +258,7 @@ type internal DescriptorPoolBag(device : Device) =
 
     let pools = System.Collections.Generic.HashSet<DescriptorPool>()
 
-    let createPool (layout: DescriptorSetLayout) =
+    let createPool (layout: DescriptorSetLayout) (variableCount: int) =
         let counts =
             let minCounts =
                 if pools.Count = 0 then
@@ -266,7 +276,7 @@ type internal DescriptorPoolBag(device : Device) =
                     |> Map.ofList
 
             let targetCounts =
-                layout.GetDescriptorCounts()
+                layout.GetDescriptorCounts variableCount
                 |> Map.map (fun _ count -> count * TargetCountMultiplier)
 
             (minCounts, targetCounts) ||> Map.fold (fun result typ count ->
@@ -279,9 +289,9 @@ type internal DescriptorPoolBag(device : Device) =
         Log.line "[Vulkan] using %d descriptor pools" pools.Count
         pool
 
-    member this.CreateSet(layout : DescriptorSetLayout) =
+    member this.CreateSet(layout : DescriptorSetLayout, variableCount: int) =
         let tryAllocSet pool =
-            match pool |> DescriptorSet.tryAlloc layout with
+            match pool |> DescriptorSet.tryAlloc layout variableCount with
             | Some set ->
                 set.OnDestroyed.Add(fun _ -> this.RemoveSet set)
                 Some set
@@ -292,7 +302,7 @@ type internal DescriptorPoolBag(device : Device) =
             pools
             |> Seq.tryPick tryAllocSet
             |> Option.defaultWith (fun _ ->
-                let pool = createPool layout
+                let pool = createPool layout variableCount
                 match tryAllocSet pool with
                 | Some set -> set
                 | _ -> failf "Failed to allocate descriptor set"
@@ -327,9 +337,9 @@ type ContextDescriptorSetExtensions private() =
         this |> DescriptorSet.update values set
 
     [<Extension>]
-    static member CreateDescriptorSet(this : Device, layout : DescriptorSetLayout) =
+    static member CreateDescriptorSet(this : Device, layout : DescriptorSetLayout, [<Optional; DefaultParameterValue(0)>] variableCount : int) =
         use bag = this.GetCached(DescriptorPoolBag, 0, fun _ -> new DescriptorPoolBag(this))
-        bag.CreateSet(layout)
+        bag.CreateSet(layout, variableCount)
 
     [<Extension>]
     static member Update(set : DescriptorSet, values : array<Descriptor>) =

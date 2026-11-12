@@ -126,6 +126,38 @@ type DevicePreparedRenderObjectExtensions private() =
                         let buffer = this.CreateUniformBuffer(block, uniforms)
                         AdaptiveDescriptor.UniformBuffer (b.Binding, buffer) :> IAdaptiveDescriptor
 
+                    | StorageBufferParameter block when block.ssbCount < 0 ->
+                        // unbounded (bindless) array of storage buffers (from a T[][]
+                        // storage buffer). Expect an aval<IBuffer[]>; one descriptor per
+                        // element. Count = the (constant) array length -> variable count.
+                        let bufferName = Symbol.Create block.ssbName
+
+                        match uniforms.TryGetUniform(Ag.Scope.Root, bufferName) with
+                        | NullUniform ->
+                            failf "storage buffer array '%A' is null" bufferName
+
+                        | ValueSome (:? aval<IBuffer[]> as buffers) ->
+                            let res = this.CreateStorageBufferArray(bufferName, buffers)
+
+                            let count =
+                                if buffers.IsConstant then
+                                    let length = buffers.GetValue().Length
+
+                                    if length > b.DescriptorCount then
+                                        failf "storage buffer array '%A' has %d elements but the binding capacity is %d (see RuntimeConfig.UnboundedArrayCapacity)" bufferName length b.DescriptorCount
+
+                                    max 1 length
+                                else
+                                    b.DescriptorCount
+
+                            AdaptiveDescriptor.StorageBuffers (b.Binding, count, res) :> IAdaptiveDescriptor
+
+                        | ValueSome value ->
+                            failf "invalid type '%A' for storage buffer array '%A' (expected aval<IBuffer[]>)" value.ContentType bufferName
+
+                        | _ ->
+                            failf "could not find storage buffer array '%A'" bufferName
+
                     | StorageBufferParameter block ->
                         let bufferName = Symbol.Create block.ssbName
 
@@ -149,6 +181,10 @@ type DevicePreparedRenderObjectExtensions private() =
                         AdaptiveDescriptor.StorageBuffer (b.Binding, buffer) :> IAdaptiveDescriptor
 
                     | SamplerParameter sam ->
+                        // returns the (count, resource): for an unbounded binding with a
+                        // constant (int * aval<ITexture>)[] the count is the actual array
+                        // length, used as the variable descriptor count (the set allocates
+                        // exactly that many); otherwise the capped layout descriptorCount.
                         let arraySampler =
                             sam.Array |> Option.bind (fun (textureName, samplerState) ->
                                 let textureName = Symbol.Create textureName
@@ -157,24 +193,58 @@ type DevicePreparedRenderObjectExtensions private() =
                                 | NullUniform ->
                                     failf "texture array '%A' is null" textureName
 
+                                // array of per-texture avals: if the outer array is constant
+                                // its length is known -> use it as the (variable) count.
                                 | ValueSome (:? aval<(int * aval<ITexture>)[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
-                                    let is = this.CreateImageSamplerArray(textureName, sam.samplerCount, sam.samplerType, tex, s)
-                                    Some is
+
+                                    let count =
+                                        if tex.IsConstant then
+                                            let arr = tex.GetValue()
+                                            if arr.Length = 0 then
+                                                b.DescriptorCount
+                                            else
+                                                let maxIndex, _ = arr |> Array.maxBy fst
+
+                                                if maxIndex >= b.DescriptorCount then
+                                                    failf "texture array '%A' has an element at index %d but the binding capacity is %d (unbounded arrays: see RuntimeConfig.UnboundedArrayCapacity)" textureName maxIndex b.DescriptorCount
+
+                                                maxIndex + 1
+                                        else
+                                            b.DescriptorCount
+
+                                    let is = this.CreateImageSamplerArray(textureName, count, sam.samplerType, tex, s)
+                                    Some (count, is)
 
                                 | ValueSome (:? aval<ITexture[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
-                                    let is = this.CreateImageSamplerArray(textureName, sam.samplerCount, sam.samplerType, tex, s)
-                                    Some is
+                                    let is = this.CreateImageSamplerArray(textureName, b.DescriptorCount, sam.samplerType, tex, s)
+                                    Some (b.DescriptorCount, is)
+
+                                // the textures are already an incremental amap (wrapped in a constant
+                                // aval): map to samplers directly so updates stay O(changed) instead
+                                // of diffing the whole array through AMap.ofAVal
+                                | ValueSome (:? aval<amap<int, ITexture>> as map) when map.IsConstant ->
+                                    let s = createSamplerState this textureName uniforms samplerState
+                                    let empty = this.CreateNullImageSampler(sam.samplerType)
+
+                                    let map =
+                                        map.GetValue()
+                                        |> AMap.map (fun _ tex ->
+                                            this.CreateImageSampler(textureName, sam.samplerType, AVal.constant tex, s)
+                                        )
+
+                                    let is = this.CreateImageSamplerArray(b.DescriptorCount, empty, map)
+                                    Some (b.DescriptorCount, is)
 
                                 | ValueSome t ->
-                                    failf "invalid type '%A' for texture array '%A' (expected ITexture[] or (int * aval<ITexture>)[])" t.ContentType textureName
+                                    failf "invalid type '%A' for texture array '%A' (expected ITexture[], (int * aval<ITexture>)[] or a constant amap<int, ITexture>)" t.ContentType textureName
 
                                 | _ ->
                                     None
                             )
 
-                        let sampler =
+                        let samplerCount, sampler =
                             arraySampler |> Option.defaultWith(fun _ ->
                                 match sam.samplerTextures with
                                 | [] ->
@@ -208,10 +278,10 @@ type DevicePreparedRenderObjectExtensions private() =
                                         )
 
                                     let empty = this.CreateNullImageSampler(sam.samplerType)
-                                    this.CreateImageSamplerArray(sam.samplerCount, empty, list)
+                                    sam.samplerCount, this.CreateImageSamplerArray(sam.samplerCount, empty, list)
                             )
 
-                        AdaptiveDescriptor.CombinedImageSampler(b.Binding, b.DescriptorCount, sampler) :> IAdaptiveDescriptor
+                        AdaptiveDescriptor.CombinedImageSampler(b.Binding, samplerCount, sampler) :> IAdaptiveDescriptor
 
                     | ImageParameter image ->
                         let viewSam =
