@@ -153,6 +153,17 @@ type internal LayoutedIndirectData(data: Aardvark.Rendering.IndirectBuffer) =
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskLock : Option<RenderTaskLock>) =
 
+    // GL binds buffers whole, so a range value is only accepted when it covers its
+    // entire buffer, as a typed Buffer<'T> does; a genuine sub-range fails instead
+    // of silently binding its parent from offset zero.
+    static let checkRange (buffer : IBuffer) =
+        match buffer with
+        | :? IBufferRange as range when not (buffer :? IBackendBuffer) ->
+            if range.Offset <> 0UL || range.SizeInBytes <> range.Buffer.SizeInBytes then
+                failf "buffer sub-range binding is not supported on the GL backend"
+        | _ ->
+            ()
+
     let derivedCache (f : ResourceManager -> ResourceCache<'a, 'b>) =
         ResourceCache<'a, 'b>(Option.map f parent, renderTaskLock)
 
@@ -249,12 +260,14 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.Context = ctx
 
+    // the adaptive value stays the cache key; the range check runs on every value
+    // the resource sees, including the ones it unwraps without taking ownership
     member private x.CreateBuffer(name : string, data : aval<#IBuffer>) =
         bufferCache.GetOrCreate<#IBuffer>(data, fun () -> {
-            create = fun b      -> bufferManager.Create(name, b)
-            update = fun h b    -> bufferManager.Update(name, h, b)
+            create = fun b      -> checkRange b; bufferManager.Create(name, b)
+            update = fun h b    -> checkRange b; bufferManager.Update(name, h, b)
             delete = fun h      -> bufferManager.Delete h
-            unwrap = fun b      -> BufferManager.TryUnwrap b
+            unwrap = fun b      -> checkRange b; BufferManager.TryUnwrap b
             info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
             view =   fun h      -> h.Handle
             kind = ResourceKind.Buffer

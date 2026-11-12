@@ -102,6 +102,10 @@ let surface = runtime.PrepareEffect(fboSig, myEffect, IndexedGeometryMode.Triang
 
 Storage images declared by graphics shaders are bound read-write when the pipeline state is applied (`pImageBindings` in `src/Aardvark.Rendering.GL/Management/PreparedRenderObject.fs`), and a memory barrier covering shader image access, texture fetches and texture updates is issued after an object that uses them, so `imageStore` writes are visible to later fetches and downloads.
 
+### Buffer Ranges
+
+GL binds buffers whole: an `IBufferRange` that does not cover its entire buffer is rejected for storage, vertex and index buffers (`checkRange` in `src/Aardvark.Rendering.GL/Management/ResourceManager.fs`) instead of silently binding the parent from offset zero. Vulkan binds sub-ranges at their offset.
+
 ### GLVM Integration
 
 GLVM is a **native C++ instruction-based command buffer** that optimizes GL state changes:

@@ -563,7 +563,11 @@ module Resources =
                 features.BindingStorageBufferUpdateAfterBind
 
             override x.GetDescriptor(buffer) =
-                Descriptor.StorageBuffer(slot, 0, buffer, 0UL, buffer.Size)
+                match buffer with
+                | :? BufferRangeDecorator as r ->
+                    Descriptor.StorageBuffer(slot, 0, buffer, r.RangeOffset, r.RangeSize)
+                | _ ->
+                    Descriptor.StorageBuffer(slot, 0, buffer, 0UL, buffer.Size)
 
         type StorageImage(slot : int, image : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<ImageView>(slot, image)
@@ -635,12 +639,28 @@ module Resources =
         | :? IBufferRange -> false
         | _ -> true
 
+    let private createBuffer (device: Device) (usage: VkBufferUsageFlags) (buffer: IBuffer) =
+        match buffer with
+        | :? IBufferRange as rng when not (buffer :? IBackendBuffer) ->
+            // plain sub-range value: bind the window, not the whole parent;
+            // descriptor writes read the decorator's offset and size.
+            // CreateBuffer adds a reference to the parent, which the
+            // decorator's Destroy releases.
+            let parent = device.CreateBuffer(usage, rng.Buffer)
+            new BufferRangeDecorator(parent, rng.Offset, rng.SizeInBytes) :> Buffer
+        | _ ->
+            device.CreateBuffer(usage, buffer)
+
+    let inline private setNameIfUnset<'T when 'T : (member get_Name : unit -> string)
+                                         and  'T : (member set_Name : string -> unit)> (name: string) (obj: 'T) =
+        if notNull name && isNull <| obj.get_Name() then obj.set_Name name
+
     type BufferResource(owner : IResourceCache, key : list<obj>, name : string, device : Device, usage : VkBufferUsageFlags, input : aval<IBuffer>) =
         inherit MutableResourceLocation<IBuffer, Buffer>(
             owner, key, ResourceKind.Buffer,
             input,
             {
-                mcreate          = fun (b : IBuffer) -> let r = device.CreateBuffer(usage, b) in (if notNull name && isNull r.Name then r.Name <- name); r
+                mcreate          = fun (b : IBuffer) -> let r = createBuffer device usage b in setNameIfUnset name r; r
                 mdestroy         = _.Dispose()
                 mtryUpdate       = Buffer.tryUpdate
                 mownsHandle      = ownsBuffer
@@ -652,7 +672,7 @@ module Resources =
             owner, key, ResourceKind.IndirectBuffer,
             input,
             {
-                mcreate         = fun b -> let r = device.CreateIndirectBuffer(indexed, b) in (if notNull name && isNull r.Name then r.Name <- name); r
+                mcreate         = fun b -> let r = device.CreateIndirectBuffer(indexed, b) in setNameIfUnset name r; r
                 mdestroy        = _.Dispose()
                 mtryUpdate      = IndirectBuffer.tryUpdate indexed
                 mownsHandle     = _.Buffer >> ownsBuffer
@@ -722,7 +742,7 @@ module Resources =
             owner, key, ResourceKind.Texture,
             input,
             {
-                icreate         = fun t -> let r = device.CreateImage(t, properties) in (if notNull name && isNull r.Name then r.Name <- name); r
+                icreate         = fun t -> let r = device.CreateImage(t, properties) in setNameIfUnset name r; r
                 idestroy        = _.Dispose()
                 ieagerDestroy   = true
             }
@@ -2093,10 +2113,17 @@ module Resources =
             let mutable changed = false
 
             for i = 0 to buffers.Length - 1 do
-                let buffer = buffers.[i].Update(user, token, renderToken).handle.Handle
+                let buffer = buffers.[i].Update(user, token, renderToken).handle
 
-                if handle.Buffers.[i] <> buffer then
-                    handle.Buffers.[i] <- buffer
+                // sub-range values (BufferRangeDecorator) bind at their window's base
+                let offset =
+                    match buffer with
+                    | :? BufferRangeDecorator as r -> r.RangeOffset
+                    | _ -> 0UL
+
+                if handle.Buffers.[i] <> buffer.Handle || handle.Offsets.[i] <> offset then
+                    handle.Buffers.[i] <- buffer.Handle
+                    handle.Offsets.[i] <- offset
                     changed <- true
 
             changed

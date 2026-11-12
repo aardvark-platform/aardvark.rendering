@@ -54,6 +54,8 @@ let runtime = new Runtime(device)
 | `IBackendBuffer` | GPU buffer resource | `Runtime`, `Handle`, `Name`, `Offset`, `SizeInBytes` |
 | `IBufferRange` | Buffer sub-range | `Buffer`, `Offset`, `SizeInBytes` |
 
+A range that is not itself a backend buffer is bound as a sub-range on Vulkan: storage descriptors get its offset and size, vertex bindings its offset. GL binds buffers whole and rejects a range that does not cover its entire buffer, for storage, vertex and index buffers alike; a typed `Buffer<'T>` over a whole buffer is accepted.
+
 ### BufferView
 
 Describes how buffer elements are accessed.
