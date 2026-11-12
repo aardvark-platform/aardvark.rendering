@@ -555,9 +555,11 @@ module BlockCompression =
                 let mutable l = values.[0, 0]
                 let mutable h = values.[0, 0]
 
+                // Comparisons, as MinElement: F# 10 rejects Aardvark.Base's SRTP min and max on ^T here in Debug (FS0193).
+                // For the uint8 and int8 BC4/BC5 encode, they select the same values.
                 values.Iter(fun (_ : V2l) value ->
-                    l <- min l value
-                    h <- max h value
+                    if value < l then l <- value
+                    if value > h then h <- value
                 )
 
                 h, l
