@@ -40,7 +40,7 @@ type Runtime(debug : IDebugConfig) =
     // GL_ARB_fragment_shader_interlock; absent on most mobile drivers and on
     // AMD's Windows proprietary stack. The transparency wrapper picks
     // Weighted-Blended over A-buffer when this is false.
-    member x.FragmentShaderInterlock = Set.contains "GL_ARB_fragment_shader_interlock" ctx.Driver.extensions
+    member x.FragmentShaderInterlock = ctx.HasExtension "GL_ARB_fragment_shader_interlock"
 
     member x.ShaderCachePath
         with get() = ctx.ShaderCachePath

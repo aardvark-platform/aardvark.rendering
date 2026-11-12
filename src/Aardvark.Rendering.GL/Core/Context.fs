@@ -296,6 +296,10 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
     member x.Driver =
         getOrQuery "driver info" &driverInfo Driver.readInfo
 
+    /// Returns whether the driver supports the given extension (e.g. "GL_ARB_buffer_storage").
+    member x.HasExtension (name : string) =
+        Set.contains name x.Driver.extensions
+
     /// <summary>
     /// Driver ID of the context.
     /// </summary>

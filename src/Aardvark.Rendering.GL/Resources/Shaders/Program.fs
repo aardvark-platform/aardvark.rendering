@@ -98,7 +98,7 @@ module ProgramExtensions =
 
                 let conservativeDepth =
                     if ctx.Driver.glsl >= Version(4,2) then true
-                    elif Set.contains "GL_ARB_conservative_depth" ctx.Driver.extensions then
+                    elif ctx.HasExtension "GL_ARB_conservative_depth" then
                         enabledGLSLExts <- Set.add "GL_ARB_conservative_depth" enabledGLSLExts
                         true
                     else
@@ -106,7 +106,7 @@ module ProgramExtensions =
 
                 let uniformBuffers =
                     if ctx.Driver.version >= Version(3,1) then true
-                    elif Set.contains "GL_ARB_uniform_buffer_object" ctx.Driver.extensions then
+                    elif ctx.HasExtension "GL_ARB_uniform_buffer_object" then
                         enabledGLSLExts <- Set.add "GL_ARB_uniform_buffer_object" enabledGLSLExts
                         true
                     else

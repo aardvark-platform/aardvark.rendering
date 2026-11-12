@@ -37,8 +37,8 @@ module internal ComputeProgramExtensions =
                     if x.Driver.glsl >= Version(4,3,0) then
                         glsl430
                     elif
-                        x.Driver.extensions |> Set.contains "GL_ARB_compute_shader" &&
-                        x.Driver.extensions |> Set.contains "GL_ARB_shading_language_420pack" &&
+                        x.HasExtension "GL_ARB_compute_shader" &&
+                        x.HasExtension "GL_ARB_shading_language_420pack" &&
                         x.Driver.glsl >= Version(4,1,0) then
                         FShade.GLSL.Backend.Create
                             { glsl410.Config with
