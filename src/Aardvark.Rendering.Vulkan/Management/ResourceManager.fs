@@ -1645,8 +1645,16 @@ module Resources =
 
         override x.Update(handle : DrawCall byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             let buffer = buffer.Update(user, token, renderToken).handle
-            handle <- DrawCall.Indirect(buffer.Handle, buffer.Count, buffer.Offset, buffer.Stride, indexed)
-            true
+
+            // report a change only when the call actually differs
+            if handle.IsIndirect = 1uy && handle.Count = buffer.Count &&
+               handle.DrawCallBuffer.Handle = buffer.Handle &&
+               handle.DrawCallBuffer.Offset = buffer.Offset &&
+               handle.DrawCallBuffer.Stride = buffer.Stride then
+                false
+            else
+                handle <- DrawCall.Indirect(buffer.Handle, buffer.Count, buffer.Offset, buffer.Stride, indexed)
+                true
 
     type BufferBindingResource(owner : IResourceCache, key : list<obj>, buffers : IResourceLocation<Buffer>[]) =
         inherit AbstractPointerResource<VertexBufferBinding>(owner, key)
