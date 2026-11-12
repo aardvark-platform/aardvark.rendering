@@ -95,7 +95,8 @@
     <Compile Include="Pipeline\RenderPass.fs" />
     <Compile Include="Pipeline\DrawCalls.fs" />
     <Compile Include="Pipeline\PipelineState.fs" />
-    <Compile Include="Pipeline\RenderObject.fs" />
+    <Compile Include="Pipeline\RenderObject\RenderObject.fs" />
+    <Compile Include="Pipeline\RenderObject\MultiRenderObject.fs" />
     <Compile Include="Pipeline\Raytracing\TraceInstance.fs" />
     <Compile Include="Pipeline\Raytracing\RaytracingPipelineState.fs" />
     <Compile Include="Runtime\Lod\Lod.fs" />

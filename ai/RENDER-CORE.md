@@ -331,5 +331,5 @@ let attributes = AttributeProvider.ofMap <| Map.ofList [
 
 **Source Files:**
 - `src/Aardvark.Rendering/Runtime/Runtime.fs` (interfaces)
-- `src/Aardvark.Rendering/Pipeline/RenderObject.fs`
+- `src/Aardvark.Rendering/Pipeline/RenderObject/` (one file per render object kind)
 - `src/Aardvark.Rendering/Resources/Adaptive/AdaptiveResource.fs`
